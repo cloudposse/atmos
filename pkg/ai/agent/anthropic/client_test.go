@@ -49,7 +49,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   false,
 				Model:     "claude-sonnet-4-5-20250929",
-				APIKeyEnv: "ANTHROPIC_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 			},
 		},
@@ -62,7 +62,7 @@ func TestExtractConfig(t *testing.T) {
 						Providers: map[string]*schema.AIProviderConfig{
 							"anthropic": {
 								Model:     "claude-4-20250514",
-								ApiKeyEnv: "CUSTOM_API_KEY",
+								ApiKey:    "custom-api-key-value",
 								MaxTokens: 8192,
 							},
 						},
@@ -72,7 +72,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "claude-4-20250514",
-				APIKeyEnv: "CUSTOM_API_KEY",
+				APIKey:    "custom-api-key-value",
 				MaxTokens: 8192,
 			},
 		},
@@ -93,7 +93,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "claude-3-haiku-20240307",
-				APIKeyEnv: "ANTHROPIC_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 			},
 		},
@@ -102,9 +102,9 @@ func TestExtractConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := base.ExtractConfig(tt.atmosConfig, ProviderName, base.ProviderDefaults{
-				Model:     DefaultModel,
-				APIKeyEnv: DefaultAPIKeyEnv,
-				MaxTokens: DefaultMaxTokens,
+				Model:         DefaultModel,
+				DefaultAPIKey: "",
+				MaxTokens:     DefaultMaxTokens,
 			})
 			assert.Equal(t, tt.expectedConfig, config)
 		})
@@ -127,17 +127,12 @@ func TestNewSimpleClient_Disabled(t *testing.T) {
 }
 
 func TestNewSimpleClient_MissingAPIKey(t *testing.T) {
-	// Use a unique env var name that definitely does not exist.
-	envVar := "NONEXISTENT_ANTHROPIC_KEY_XYZZY"
-
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						ApiKeyEnv: envVar,
-					},
+					"anthropic": {},
 				},
 			},
 		},
@@ -157,7 +152,7 @@ func TestSimpleClientGetters(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "claude-sonnet-4-5-20250929",
-		APIKeyEnv: "ANTHROPIC_API_KEY",
+		APIKey:    "",
 		MaxTokens: 4096,
 	}
 
@@ -723,21 +718,21 @@ func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "anthropic", ProviderName)
 	assert.Equal(t, 4096, DefaultMaxTokens)
 	assert.Equal(t, "claude-sonnet-4-5-20250929", DefaultModel)
-	assert.Equal(t, "ANTHROPIC_API_KEY", DefaultAPIKeyEnv)
+	assert.Equal(t, "ANTHROPIC_API_KEY", DefaultAPIKeyEnvVar)
 }
 
 func TestConfig_AllFields(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "test-model",
-		APIKeyEnv: "TEST_KEY",
+		APIKey:    "test-key-value",
 		MaxTokens: 1000,
 		BaseURL:   "https://api.example.com",
 	}
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "test-model", config.Model)
-	assert.Equal(t, "TEST_KEY", config.APIKeyEnv)
+	assert.Equal(t, "test-key-value", config.APIKey)
 	assert.Equal(t, 1000, config.MaxTokens)
 	assert.Equal(t, "https://api.example.com", config.BaseURL)
 }
@@ -753,15 +748,15 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
 	})
 
 	// Should use defaults when providers is nil.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Equal(t, "", config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 }
 
@@ -780,15 +775,15 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
 	})
 
 	// Should use defaults when this provider is not configured.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Equal(t, "", config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 }
 
@@ -805,15 +800,15 @@ func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
 	})
 
 	// Should use defaults when provider config is nil.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Equal(t, "", config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 }
 
@@ -886,7 +881,7 @@ func TestAnthropicModels(t *testing.T) {
 			config := &base.Config{
 				Enabled:   true,
 				Model:     m.modelID,
-				APIKeyEnv: DefaultAPIKeyEnv,
+				APIKey:    "",
 				MaxTokens: DefaultMaxTokens,
 			}
 
@@ -1101,7 +1096,7 @@ func TestExtractConfig_AllOverrides(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
 						Model:     "claude-3-opus-20240229",
-						ApiKeyEnv: "CUSTOM_ANTHROPIC_KEY",
+						ApiKey:    "custom-anthropic-key-value",
 						MaxTokens: 32768,
 						BaseURL:   "https://api.custom.anthropic.com/v1",
 					},
@@ -1111,14 +1106,14 @@ func TestExtractConfig_AllOverrides(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
 	})
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "claude-3-opus-20240229", config.Model)
-	assert.Equal(t, "CUSTOM_ANTHROPIC_KEY", config.APIKeyEnv)
+	assert.Equal(t, "custom-anthropic-key-value", config.APIKey)
 	assert.Equal(t, 32768, config.MaxTokens)
 	assert.Equal(t, "https://api.custom.anthropic.com/v1", config.BaseURL)
 }
@@ -1525,7 +1520,7 @@ func TestSimpleClient_StructFields(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "test-model",
-		APIKeyEnv: "TEST_KEY",
+		APIKey:    "test-key-value",
 		MaxTokens: 2000,
 		BaseURL:   "https://test.api.com",
 	}
@@ -1955,10 +1950,10 @@ func TestDefaultValues_AllConstants(t *testing.T) {
 	assert.NotEmpty(t, DefaultModel)
 	assert.Contains(t, DefaultModel, "claude")
 
-	// DefaultAPIKeyEnv should follow standard naming conventions.
-	assert.NotEmpty(t, DefaultAPIKeyEnv)
-	assert.Contains(t, DefaultAPIKeyEnv, "ANTHROPIC")
-	assert.Contains(t, DefaultAPIKeyEnv, "API_KEY")
+	// DefaultAPIKeyEnvVar should follow standard naming conventions.
+	assert.NotEmpty(t, DefaultAPIKeyEnvVar)
+	assert.Contains(t, DefaultAPIKeyEnvVar, "ANTHROPIC")
+	assert.Contains(t, DefaultAPIKeyEnvVar, "API_KEY")
 }
 
 // TestExtractConfig_PartialOverrides tests partial configuration overrides.
@@ -1967,7 +1962,7 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 		name           string
 		providerConfig *schema.AIProviderConfig
 		expectedModel  string
-		expectedEnv    string
+		expectedKey    string
 		expectedTokens int
 	}{
 		{
@@ -1976,16 +1971,16 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 				Model: "claude-3-opus-20240229",
 			},
 			expectedModel:  "claude-3-opus-20240229",
-			expectedEnv:    DefaultAPIKeyEnv,
+			expectedKey:    "",
 			expectedTokens: DefaultMaxTokens,
 		},
 		{
-			name: "Only API key env override",
+			name: "Only API key override",
 			providerConfig: &schema.AIProviderConfig{
-				ApiKeyEnv: "CUSTOM_KEY",
+				ApiKey: "custom-key-value",
 			},
 			expectedModel:  DefaultModel,
-			expectedEnv:    "CUSTOM_KEY",
+			expectedKey:    "custom-key-value",
 			expectedTokens: DefaultMaxTokens,
 		},
 		{
@@ -1994,7 +1989,7 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 				MaxTokens: 10000,
 			},
 			expectedModel:  DefaultModel,
-			expectedEnv:    DefaultAPIKeyEnv,
+			expectedKey:    "",
 			expectedTokens: 10000,
 		},
 		{
@@ -2004,7 +1999,7 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 				MaxTokens: 16000,
 			},
 			expectedModel:  "claude-4-20250514",
-			expectedEnv:    DefaultAPIKeyEnv,
+			expectedKey:    "",
 			expectedTokens: 16000,
 		},
 	}
@@ -2023,13 +2018,13 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 			}
 
 			config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-				Model:     DefaultModel,
-				APIKeyEnv: DefaultAPIKeyEnv,
-				MaxTokens: DefaultMaxTokens,
+				Model:         DefaultModel,
+				DefaultAPIKey: "",
+				MaxTokens:     DefaultMaxTokens,
 			})
 
 			assert.Equal(t, tt.expectedModel, config.Model)
-			assert.Equal(t, tt.expectedEnv, config.APIKeyEnv)
+			assert.Equal(t, tt.expectedKey, config.APIKey)
 			assert.Equal(t, tt.expectedTokens, config.MaxTokens)
 		})
 	}
@@ -2155,9 +2150,9 @@ func TestExtractConfig_EdgeCases(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
 	})
 
 	// MaxTokens should use default since 0 is not > 0.

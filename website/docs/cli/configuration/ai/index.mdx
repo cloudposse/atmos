@@ -27,8 +27,8 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
 ```
 </File>
@@ -49,7 +49,7 @@ settings:
     providers:
       <provider-name>:
         model: "model-id"
-        api_key_env: "ENV_VAR_NAME"
+        api_key: !env "ENV_VAR_NAME"
         max_tokens: 4096
         base_url: ""                      # Custom endpoint (optional)
         timeout_seconds: 60
@@ -118,8 +118,8 @@ Each provider in the `providers` map supports:
   <dt>`model`</dt>
   <dd>Model identifier (defaults vary by provider)</dd>
 
-  <dt>`api_key_env`</dt>
-  <dd>Environment variable containing the API key</dd>
+  <dt>`api_key`</dt>
+  <dd>API key for the provider. Use `!env` to read from an environment variable (e.g., `api_key: !env "ANTHROPIC_API_KEY"`).</dd>
 
   <dt>`max_tokens`</dt>
   <dd>Maximum tokens per response</dd>

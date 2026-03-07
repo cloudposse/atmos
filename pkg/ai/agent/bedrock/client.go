@@ -47,9 +47,10 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 	// Extract AI configuration using shared utility.
 	// Note: Bedrock uses BaseURL to specify the AWS region.
 	cfg := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultRegion, // Region is stored in BaseURL.
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultRegion, // Region is stored in BaseURL.
 	})
 
 	if !cfg.Enabled {

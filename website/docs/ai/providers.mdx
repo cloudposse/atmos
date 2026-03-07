@@ -23,12 +23,12 @@ For a concise reference of all provider settings, see [CLI Configuration > AI > 
 
 | Provider | Default Model | Authentication | Best For |
 |----------|---------------|----------------|----------|
-| **Anthropic (Claude)** | `claude-sonnet-4-5-20250929` | API Key | Advanced reasoning, default choice |
+| **Anthropic (Claude)** | `claude-sonnet-4-6` | API Key | Advanced reasoning, default choice |
 | **OpenAI (GPT)** | `gpt-4o` | API Key | Widely available, strong general capabilities |
 | **Google (Gemini)** | `gemini-2.5-flash` | API Key | Fast responses, larger context window |
 | **xAI (Grok)** | `grok-4-latest` | API Key | OpenAI-compatible, real-time knowledge |
-| **Ollama (Local)** | `llama3.3:70b` | None (local) | Privacy, offline use, zero API costs |
-| **AWS Bedrock** | `anthropic.claude-sonnet-4-5-20250929-v1:0` | AWS Credentials | Enterprise security, AWS integration |
+| **Ollama (Local)** | `llama4` | None (local) | Privacy, offline use, zero API costs |
+| **AWS Bedrock** | `anthropic.claude-sonnet-4-6` | AWS Credentials | Enterprise security, AWS integration |
 | **Azure OpenAI** | `gpt-4o` | API Key / Azure AD | Enterprise compliance, Azure integration |
 
 ## Provider Comparison
@@ -95,8 +95,8 @@ settings:
   ai:
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
         cache:
           enabled: true              # Enable prompt caching (default)
@@ -123,10 +123,10 @@ Each cloud provider follows the same configuration pattern. Set your API key as 
 ```yaml
 providers:
   anthropic:
-    model: "claude-sonnet-4-5-20250929"  # Recommended default
+    model: "claude-sonnet-4-6"  # Recommended default
     # model: "claude-haiku-4-5-20251001"    # Fastest, most affordable
-    # model: "claude-opus-4-1-20250805"     # Most capable reasoning
-    api_key_env: "ANTHROPIC_API_KEY"
+    # model: "claude-opus-4-6"     # Most capable reasoning
+    api_key: !env "ANTHROPIC_API_KEY"
     max_tokens: 4096
 ```
 </File>
@@ -140,7 +140,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 Get your API key at [console.anthropic.com](https://console.anthropic.com/).
 
 :::tip Model Selection
-Claude Sonnet 4.5 balances performance, speed, and cost for most workloads. Use Haiku 4.5 for high-volume tasks at lower cost, or Opus 4.1 for the highest accuracy on specialized reasoning.
+Claude Sonnet 4.6 balances performance, speed, and cost for most workloads. Use Haiku 4.5 for high-volume tasks at lower cost, or Opus 4.6 for the highest accuracy on specialized reasoning.
 :::
 
 ### OpenAI (GPT)
@@ -150,10 +150,11 @@ Claude Sonnet 4.5 balances performance, speed, and cost for most workloads. Use 
 providers:
   openai:
     model: "gpt-4o"  # Recommended default
-    # model: "o1"              # Flagship reasoning model
-    # model: "o1-mini"         # Faster reasoning
-    # model: "gpt-4o-mini"     # Fast and affordable
-    api_key_env: "OPENAI_API_KEY"
+    # model: "gpt-5.4"         # Most capable model
+    # model: "o3"              # Flagship reasoning model
+    # model: "o4-mini"         # Fast reasoning
+    # model: "gpt-5-mini"     # Fast and affordable
+    api_key: !env "OPENAI_API_KEY"
     max_tokens: 4096
 ```
 </File>
@@ -167,7 +168,7 @@ export OPENAI_API_KEY="sk-..."
 Get your API key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
 
 :::info Max Tokens
-OpenAI's newer models (o1, o1-mini) use `max_completion_tokens` internally. Atmos handles this automatically -- just set `max_tokens` in your configuration.
+OpenAI's reasoning models (o3, o4-mini) use `max_completion_tokens` internally. Atmos handles this automatically -- just set `max_tokens` in your configuration.
 :::
 
 ### Google (Gemini)
@@ -179,7 +180,7 @@ providers:
     model: "gemini-2.5-flash"  # Recommended default
     # model: "gemini-2.5-pro"          # Best reasoning
     # model: "gemini-2.5-flash-lite"   # Fastest, cheapest
-    api_key_env: "GEMINI_API_KEY"
+    api_key: !env "GEMINI_API_KEY"
     max_tokens: 8192
 ```
 </File>
@@ -201,7 +202,7 @@ Gemini offers the most economical pricing among cloud providers while maintainin
 providers:
   grok:
     model: "grok-4-latest"
-    api_key_env: "XAI_API_KEY"
+    api_key: !env "XAI_API_KEY"
     max_tokens: 4096
     base_url: "https://api.x.ai/v1"
 ```
@@ -216,7 +217,7 @@ export XAI_API_KEY="xai-..."
 Get your API key at [console.x.ai](https://console.x.ai).
 
 :::warning Model Availability
-As of 2025, only `grok-4-latest` is accessible via the xAI API. Other model IDs mentioned in xAI's documentation return "Model not found" errors.
+As of early 2026, `grok-4-latest` is the recommended model via the xAI API. Other model IDs mentioned in xAI's documentation return "Model not found" errors.
 :::
 
 Grok offers a 2M token context window, built-in real-time search, and an OpenAI-compatible API. Note that it may exhibit slower response times (20+ seconds) with tool-heavy workloads compared to other providers.
@@ -246,7 +247,7 @@ Start the service and pull a model:
 <Terminal title="shell">
 ```bash
 ollama serve        # Start Ollama (Linux auto-starts as a service)
-ollama pull llama3.3:70b   # Pull recommended model
+ollama pull llama4          # Pull recommended model
 ollama list                # List available models
 ```
 </Terminal>
@@ -255,9 +256,9 @@ ollama list                # List available models
 
 | Model | Size | RAM Required | Best For |
 |-------|------|-------------|----------|
-| `llama3.3:70b` | ~40GB | 64GB+ | Production use (recommended) |
+| `llama4` | ~40GB | 64GB+ | Production use (recommended) |
+| `llama3.3:70b` | ~40GB | 64GB+ | Production use (previous generation) |
 | `llama3.1:8b` | ~5GB | 8GB+ | Quick queries, laptops |
-| `llama3.2` | ~2GB | 4GB+ | Simple tasks only |
 | `codellama:34b` | ~19GB | 32GB+ | Code generation |
 | `codellama:13b` | ~8GB | 16GB+ | Code on mid-range hardware |
 | `mixtral:8x7b` | ~26GB | 32GB+ | Complex reasoning |
@@ -271,9 +272,9 @@ ollama list                # List available models
 ```yaml
 providers:
   ollama:
-    model: "llama3.3:70b"
+    model: "llama4"
     # base_url defaults to http://localhost:11434/v1
-    # No api_key_env needed for local instances
+    # No api_key needed for local instances
 ```
 </File>
 
@@ -283,11 +284,11 @@ providers:
 ```yaml
 providers:
   ollama:
-    model: "llama3.3:70b"
+    model: "llama4"
     base_url: "http://<server-ip>:11434/v1"
     # Or with HTTPS:
     # base_url: "https://ollama.company.com/v1"
-    # api_key_env: "OLLAMA_API_KEY"  # If behind auth proxy
+    # api_key: !env "OLLAMA_API_KEY"  # If behind auth proxy
 ```
 </File>
 
@@ -359,16 +360,17 @@ For production deployments, always put Ollama behind a reverse proxy (nginx, Cad
 #### Performance Tips
 
 Hardware recommendations:
-- **Apple Silicon (M1/M2/M3/M4):** Handles `llama3.3:70b` well with unified memory
+- **Apple Silicon (M1/M2/M3/M4):** Handles `llama4` well with unified memory
 - **16GB RAM:** Use `llama3.1:8b` or `mistral:7b`
-- **32GB+ RAM:** Use `llama3.3:70b` or `mixtral:8x7b`
+- **32GB+ RAM:** Use `mixtral:8x7b` or `llama3.3:70b`
+- **64GB+ RAM:** Use `llama4`
 - **GPU acceleration** (NVIDIA/AMD/Apple Silicon) provides 10-50x faster inference; Ollama detects and uses it automatically
 
 <File title="atmos.yaml">
 ```yaml
 providers:
   ollama:
-    model: "llama3.3:70b"
+    model: "llama4"
     max_tokens: 4096       # Smaller = faster
     timeout_seconds: 120   # Longer timeout for large models
 ```
@@ -387,7 +389,7 @@ providers:
 <dd>Switch to a smaller model, reduce <code>max_tokens</code>, or check that GPU acceleration is active.</dd>
 
 <dt>Out of Memory</dt>
-<dd>Use a smaller model. For example, switch from <code>llama3.3:70b</code> to <code>llama3.1:8b</code>.</dd>
+<dd>Use a smaller model. For example, switch from <code>llama4</code> to <code>llama3.1:8b</code>.</dd>
 </dl>
 
 ## Enterprise Providers
@@ -402,9 +404,9 @@ Run Claude models through AWS infrastructure with IAM-based access, CloudTrail a
 ```yaml
 providers:
   bedrock:
-    model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    model: "anthropic.claude-sonnet-4-6"
     # model: "anthropic.claude-haiku-4-5-20251001-v1:0"
-    # model: "global.anthropic.claude-sonnet-4-5-20250929-v1:0"  # Global endpoint
+    # model: "global.anthropic.claude-sonnet-4-6"  # Global endpoint
     max_tokens: 4096
     base_url: "us-east-1"  # AWS region
 ```
@@ -426,7 +428,7 @@ export AWS_PROFILE="bedrock-profile"
 </Terminal>
 
 :::warning Bedrock Endpoints
-Use the `global.` prefix for dynamic routing across regions, or the `anthropic.` prefix for a specific region. Cross-region inference profiles use IDs like `us.anthropic.claude-3-5-sonnet-20241022-v2:0`.
+Use the `global.` prefix for dynamic routing across regions, or the `anthropic.` prefix for a specific region. Cross-region inference profiles use IDs like `us.anthropic.claude-sonnet-4-6-v1:0`.
 :::
 
 ### Azure OpenAI
@@ -439,8 +441,8 @@ providers:
   azureopenai:
     model: "gpt-4o"  # Your Azure deployment name (NOT the OpenAI model name)
     base_url: "https://<your-resource>.openai.azure.com"  # Required
-    api_version: "2024-02-15-preview"  # Required
-    api_key_env: "AZURE_OPENAI_API_KEY"
+    api_version: "2025-04-01-preview"  # Required
+    api_key: !env "AZURE_OPENAI_API_KEY"
     max_tokens: 4096
 ```
 </File>
@@ -452,7 +454,7 @@ export AZURE_OPENAI_API_KEY="..."
 </Terminal>
 
 :::warning Azure-Specific Configuration
-The `model` field must be your **deployment name** from Azure Portal, not the OpenAI model name. Both `base_url` (your resource endpoint) and `api_version` are required. Like OpenAI, Azure's newer deployments (gpt-5, o1-preview) use `max_completion_tokens` internally -- Atmos handles this automatically. See [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for available API versions.
+The `model` field must be your **deployment name** from Azure Portal, not the OpenAI model name. Both `base_url` (your resource endpoint) and `api_version` are required. Like OpenAI, Azure's reasoning model deployments (o3, o4-mini) use `max_completion_tokens` internally -- Atmos handles this automatically. See [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for available API versions.
 :::
 
 ## Multi-Provider Configuration
@@ -468,27 +470,27 @@ settings:
 
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
       openai:
         model: "gpt-4o"
-        api_key_env: "OPENAI_API_KEY"
+        api_key: !env "OPENAI_API_KEY"
         max_tokens: 4096
 
       ollama:
-        model: "llama3.3:70b"
+        model: "llama4"
 
       bedrock:
-        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        model: "anthropic.claude-sonnet-4-6"
         base_url: "us-east-1"
 
       azureopenai:
         model: "gpt-4o"
-        api_key_env: "AZURE_OPENAI_API_KEY"
+        api_key: !env "AZURE_OPENAI_API_KEY"
         base_url: "https://mycompany.openai.azure.com"
-        api_version: "2024-02-15-preview"
+        api_version: "2025-04-01-preview"
 ```
 </File>
 

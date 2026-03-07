@@ -48,7 +48,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   false,
 				Model:     "gemini-2.5-flash",
-				APIKeyEnv: "GEMINI_API_KEY",
+				APIKey:    "",
 				MaxTokens: 8192,
 			},
 		},
@@ -61,7 +61,7 @@ func TestExtractConfig(t *testing.T) {
 						Providers: map[string]*schema.AIProviderConfig{
 							"gemini": {
 								Model:     "gemini-1.5-pro",
-								ApiKeyEnv: "CUSTOM_GEMINI_KEY",
+								ApiKey:    "custom-gemini-key-value",
 								MaxTokens: 16384,
 							},
 						},
@@ -71,7 +71,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "gemini-1.5-pro",
-				APIKeyEnv: "CUSTOM_GEMINI_KEY",
+				APIKey:    "custom-gemini-key-value",
 				MaxTokens: 16384,
 			},
 		},
@@ -92,7 +92,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "gemini-1.5-flash",
-				APIKeyEnv: "GEMINI_API_KEY",
+				APIKey:    "",
 				MaxTokens: 8192,
 			},
 		},
@@ -104,7 +104,7 @@ func TestExtractConfig(t *testing.T) {
 						Enabled: true,
 						Providers: map[string]*schema.AIProviderConfig{
 							"gemini": {
-								ApiKeyEnv: "MY_GEMINI_API_KEY",
+								ApiKey: "my-gemini-api-key-value",
 							},
 						},
 					},
@@ -113,7 +113,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "gemini-2.5-flash",
-				APIKeyEnv: "MY_GEMINI_API_KEY",
+				APIKey:    "my-gemini-api-key-value",
 				MaxTokens: 8192,
 			},
 		},
@@ -134,7 +134,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "gemini-2.5-flash",
-				APIKeyEnv: "GEMINI_API_KEY",
+				APIKey:    "",
 				MaxTokens: 32768,
 			},
 		},
@@ -143,9 +143,9 @@ func TestExtractConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := base.ExtractConfig(tt.atmosConfig, ProviderName, base.ProviderDefaults{
-				Model:     DefaultModel,
-				APIKeyEnv: DefaultAPIKeyEnv,
-				MaxTokens: DefaultMaxTokens,
+				Model:         DefaultModel,
+				DefaultAPIKey: "",
+				MaxTokens:     DefaultMaxTokens,
 			})
 			assert.Equal(t, tt.expectedConfig, config)
 		})
@@ -168,17 +168,13 @@ func TestNewClient_Disabled(t *testing.T) {
 }
 
 func TestNewClient_MissingAPIKey(t *testing.T) {
-	// Use a unique env var name that definitely does not exist.
-	envVar := "NONEXISTENT_GEMINI_KEY_XYZZY_TEST"
-
+	// Test that NewClient fails when ApiKey is empty.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
-					"gemini": {
-						ApiKeyEnv: envVar,
-					},
+					"gemini": {},
 				},
 			},
 		},
@@ -194,7 +190,7 @@ func TestClientGetters(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "gemini-2.5-flash",
-		APIKeyEnv: "GEMINI_API_KEY",
+		APIKey:    "",
 		MaxTokens: 8192,
 	}
 
@@ -211,21 +207,21 @@ func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "gemini", ProviderName)
 	assert.Equal(t, 8192, DefaultMaxTokens)
 	assert.Equal(t, "gemini-2.5-flash", DefaultModel)
-	assert.Equal(t, "GEMINI_API_KEY", DefaultAPIKeyEnv)
+	assert.Equal(t, "GEMINI_API_KEY", DefaultAPIKeyEnvVar)
 }
 
 func TestConfig_AllFields(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "test-model",
-		APIKeyEnv: "TEST_KEY",
+		APIKey:    "TEST_KEY",
 		MaxTokens: 1000,
 		BaseURL:   "https://api.example.com",
 	}
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "test-model", config.Model)
-	assert.Equal(t, "TEST_KEY", config.APIKeyEnv)
+	assert.Equal(t, "TEST_KEY", config.APIKey)
 	assert.Equal(t, 1000, config.MaxTokens)
 	assert.Equal(t, "https://api.example.com", config.BaseURL)
 }
@@ -696,7 +692,7 @@ func TestGeminiModels(t *testing.T) {
 			config := &base.Config{
 				Enabled:   true,
 				Model:     m.modelID,
-				APIKeyEnv: DefaultAPIKeyEnv,
+				APIKey:    "",
 				MaxTokens: DefaultMaxTokens,
 			}
 
@@ -808,7 +804,7 @@ func TestGeminiMaxTokensVariations(t *testing.T) {
 			config := &base.Config{
 				Enabled:   true,
 				Model:     DefaultModel,
-				APIKeyEnv: DefaultAPIKeyEnv,
+				APIKey:    "",
 				MaxTokens: tt.maxTokens,
 			}
 

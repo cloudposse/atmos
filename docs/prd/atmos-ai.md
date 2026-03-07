@@ -1051,17 +1051,17 @@ Atmos AI supports 7 AI providers, covering cloud, on-premises, and enterprise us
 #### 1. Anthropic (Claude)
 
 **Models:**
-- `claude-sonnet-4-5-20250929` (default) - Most capable
+- `claude-sonnet-4-6` (default) - Most capable
 - `claude-haiku-4-5-20251001` - Fast and cost-effective
-- `claude-opus-4-1-20250805` - Maximum intelligence
+- `claude-opus-4-6` - Maximum intelligence
 
 **Configuration:**
 ```yaml
 settings:
   ai:
     provider: anthropic
-    model: claude-sonnet-4-5-20250929
-    api_key_env: ANTHROPIC_API_KEY
+    model: claude-sonnet-4-6
+    api_key: !env ANTHROPIC_API_KEY
 ```
 
 **Best For:** General infrastructure tasks, complex analysis
@@ -1078,7 +1078,7 @@ settings:
   ai:
     provider: openai
     model: gpt-4o
-    api_key_env: OPENAI_API_KEY
+    api_key: !env OPENAI_API_KEY
 ```
 
 **Best For:** Code generation, refactoring
@@ -1087,8 +1087,8 @@ settings:
 
 **Models:**
 - `gemini-2.5-flash` (default) - Latest experimental model
-- `gemini-1.5-pro` - Most capable stable model
-- `gemini-1.5-flash` - Fast and efficient
+- `gemini-2.5-pro` - Most capable reasoning model
+- `gemini-2.5-flash-lite` - Fastest, most affordable
 
 **Configuration:**
 ```yaml
@@ -1096,7 +1096,7 @@ settings:
   ai:
     provider: gemini
     model: gemini-2.5-flash
-    api_key_env: GEMINI_API_KEY
+    api_key: !env GEMINI_API_KEY
 ```
 
 **Best For:** Large context windows, document analysis
@@ -1113,7 +1113,7 @@ settings:
   ai:
     provider: grok
     model: grok-4-latest
-    api_key_env: XAI_API_KEY
+    api_key: !env XAI_API_KEY
 ```
 
 **Best For:** Alternative to OpenAI, competitive pricing
@@ -1121,7 +1121,7 @@ settings:
 #### 5. Ollama (Local LLMs)
 
 **Models:**
-- `llama3.3:70b` (default) - Production quality
+- `llama4` (default) - Production quality
 - `llama3.1:8b` - Fast and lightweight
 - `codellama` - Code-focused
 
@@ -1130,7 +1130,7 @@ settings:
 settings:
   ai:
     provider: ollama
-    model: llama3.3:70b
+    model: llama4
     base_url: http://localhost:11434/v1
 ```
 
@@ -1140,7 +1140,7 @@ settings:
 curl -fsSL https://ollama.com/install.sh | sh
 
 # Download model
-ollama pull llama3.3:70b
+ollama pull llama4
 
 # Use with Atmos
 atmos ai chat
@@ -1155,16 +1155,16 @@ atmos ai chat
 #### 6. AWS Bedrock (Enterprise)
 
 **Models:**
-- `anthropic.claude-sonnet-4-5-20250929-v1:0` (default)
+- `anthropic.claude-sonnet-4-6` (default)
 - `anthropic.claude-haiku-4-5-20251001-v1:0`
-- `anthropic.claude-opus-4-1-20250805-v1:0`
+- `anthropic.claude-opus-4-6`
 
 **Configuration:**
 ```yaml
 settings:
   ai:
     provider: bedrock
-    model: anthropic.claude-sonnet-4-5-20250929-v1:0
+    model: anthropic.claude-sonnet-4-6
     base_url: us-east-1  # AWS region
 ```
 
@@ -1191,7 +1191,7 @@ settings:
   ai:
     provider: azureopenai
     model: gpt-4o-deployment  # Your deployment name
-    api_key_env: AZURE_OPENAI_API_KEY
+    api_key: !env AZURE_OPENAI_API_KEY
     base_url: https://<resource>.openai.azure.com
 ```
 
@@ -1225,36 +1225,36 @@ settings:
 
     providers:
       anthropic:
-        model: claude-sonnet-4-5-20250929
-        api_key_env: ANTHROPIC_API_KEY
+        model: claude-sonnet-4-6
+        api_key: !env ANTHROPIC_API_KEY
         max_tokens: 4096
 
       openai:
         model: gpt-4o
-        api_key_env: OPENAI_API_KEY
+        api_key: !env OPENAI_API_KEY
         max_tokens: 4096
 
       gemini:
         model: gemini-2.5-flash
-        api_key_env: GEMINI_API_KEY
+        api_key: !env GEMINI_API_KEY
         max_tokens: 4096
 
       grok:
         model: grok-4-latest
-        api_key_env: XAI_API_KEY
+        api_key: !env XAI_API_KEY
         max_tokens: 4096
 
       ollama:
-        model: llama3.3:70b
+        model: llama4
         base_url: http://localhost:11434/v1
 
       bedrock:
-        model: anthropic.claude-sonnet-4-5-20250929-v1:0
+        model: anthropic.claude-sonnet-4-6
         base_url: us-east-1
 
       azureopenai:
         model: gpt-4o-deployment
-        api_key_env: AZURE_OPENAI_API_KEY
+        api_key: !env AZURE_OPENAI_API_KEY
         base_url: https://company.openai.azure.com
 ```
 
@@ -1539,36 +1539,36 @@ settings:
     # Provider configurations
     providers:
       anthropic:
-        model: claude-sonnet-4-5-20250929
-        api_key_env: ANTHROPIC_API_KEY
+        model: claude-sonnet-4-6
+        api_key: !env ANTHROPIC_API_KEY
         max_tokens: 4096
 
       openai:
         model: gpt-4o
-        api_key_env: OPENAI_API_KEY
+        api_key: !env OPENAI_API_KEY
         max_tokens: 4096
 
       gemini:
         model: gemini-2.5-flash
-        api_key_env: GEMINI_API_KEY
+        api_key: !env GEMINI_API_KEY
         max_tokens: 4096
 
       grok:
         model: grok-4-latest
-        api_key_env: XAI_API_KEY
+        api_key: !env XAI_API_KEY
         max_tokens: 4096
 
       ollama:
-        model: llama3.3:70b
+        model: llama4
         base_url: http://localhost:11434/v1
 
       bedrock:
-        model: anthropic.claude-sonnet-4-5-20250929-v1:0
+        model: anthropic.claude-sonnet-4-6
         base_url: us-east-1
 
       azureopenai:
         model: gpt-4o-deployment
-        api_key_env: AZURE_OPENAI_API_KEY
+        api_key: !env AZURE_OPENAI_API_KEY
         base_url: https://company.openai.azure.com
 
     # Session management

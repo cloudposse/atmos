@@ -20,8 +20,8 @@ const (
 	DefaultMaxTokens = 8192
 	// DefaultModel is the default Gemini model.
 	DefaultModel = "gemini-2.5-flash"
-	// DefaultAPIKeyEnv is the default environment variable for the API key.
-	DefaultAPIKeyEnv = "GEMINI_API_KEY"
+	// DefaultAPIKeyEnvVar is the default environment variable name for the API key (used in error hints).
+	DefaultAPIKeyEnvVar = "GEMINI_API_KEY"
 )
 
 // Client provides a simplified interface to the Gemini API for Atmos.
@@ -36,21 +36,21 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 
 	// Extract AI configuration using shared utility.
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
 	})
 
 	if !config.Enabled {
 		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment using shared utility (replaces viper.BindEnv).
-	apiKey := base.GetAPIKey(config.APIKeyEnv)
+	// API key is resolved by !env YAML function during config loading.
+	apiKey := config.APIKey
 	if apiKey == "" {
 		return nil, errUtils.Build(errUtils.ErrAIAPIKeyNotFound).
-			WithContext("env_var", config.APIKeyEnv).
-			WithHint("Set the " + config.APIKeyEnv + " environment variable").
+			WithContext("provider", ProviderName).
+			WithHint("Set api_key with !env in atmos.yaml providers config, e.g. api_key: !env " + DefaultAPIKeyEnvVar).
 			Err()
 	}
 

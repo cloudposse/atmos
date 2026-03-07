@@ -211,7 +211,7 @@ fi
   "response": "Analysis complete...",
   "tool_calls": [{"tool": "atmos_list_stacks", "success": true}],
   "tokens": {"prompt": 120, "completion": 80, "cached": 50},
-  "metadata": {"model": "claude-sonnet-4-5-20250929", "provider": "anthropic"}
+  "metadata": {"model": "claude-sonnet-4-6", "provider": "anthropic"}
 }
 ```
 
@@ -258,8 +258,8 @@ Add to your `atmos.yaml`:
         default_provider: "anthropic"
         providers:
           anthropic:
-            model: "claude-sonnet-4-5-20250929"
-            api_key_env: "ANTHROPIC_API_KEY"
+            model: "claude-sonnet-4-6"
+            api_key: !env "ANTHROPIC_API_KEY"
     ```
 </File>
 
@@ -270,7 +270,7 @@ Add to your `atmos.yaml`:
 export ANTHROPIC_API_KEY="sk-ant-..."
 
 # For Ollama (Local/Offline) - no API key needed
-ollama pull llama3.3:70b
+ollama pull llama4
 ```
 
 See [AI Providers](/ai/providers) for all provider setup instructions.

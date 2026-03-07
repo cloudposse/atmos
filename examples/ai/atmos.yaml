@@ -70,8 +70,8 @@ settings:
       # Anthropic Claude - Best for complex reasoning
       # Docs: https://atmos.tools/ai/providers#anthropic
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
         # Token caching for cost savings (Anthropic-specific)
         # Docs: https://atmos.tools/ai/providers#prompt-caching
@@ -83,21 +83,21 @@ settings:
       # OpenAI GPT - Strong general capabilities
       # Docs: https://atmos.tools/ai/providers#openai
       openai:
-        model: "gpt-4o"
-        api_key_env: "OPENAI_API_KEY"
+        model: "gpt-5.4"
+        api_key: !env "OPENAI_API_KEY"
         max_tokens: 4096
 
       # Google Gemini - Fast with large context
       # Docs: https://atmos.tools/ai/providers#gemini
       gemini:
         model: "gemini-2.5-flash"
-        api_key_env: "GEMINI_API_KEY"
+        api_key: !env "GEMINI_API_KEY"
         max_tokens: 8192
 
       # Ollama - Local, private, no API costs
       # Docs: https://atmos.tools/ai/providers#ollama
       ollama:
-        model: "llama3.3:70b"
+        model: "llama4"
         base_url: "http://localhost:11434/v1"
         timeout_seconds: 120  # Longer timeout for local models
 

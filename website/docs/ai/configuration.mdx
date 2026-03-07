@@ -30,8 +30,8 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
 ```
 </File>
@@ -58,42 +58,42 @@ settings:
     providers:
       # Cloud Providers
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
       openai:
-        model: "gpt-5"
-        api_key_env: "OPENAI_API_KEY"
+        model: "gpt-5.4"
+        api_key: !env "OPENAI_API_KEY"
         max_tokens: 4096
 
       gemini:
         model: "gemini-2.5-flash"
-        api_key_env: "GEMINI_API_KEY"
+        api_key: !env "GEMINI_API_KEY"
         max_tokens: 8192
 
       grok:
-        model: "grok-4"
-        api_key_env: "XAI_API_KEY"
+        model: "grok-4-latest"
+        api_key: !env "XAI_API_KEY"
         max_tokens: 4096
         base_url: "https://api.x.ai/v1"
 
       # Local Provider (no API key needed)
       ollama:
-        model: "llama3.3:70b"
+        model: "llama4"
         base_url: "http://localhost:11434/v1"
 
       # Enterprise Providers
       bedrock:
-        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        model: "anthropic.claude-sonnet-4-6"
         base_url: "us-east-1"              # AWS region
-        # Uses AWS credentials (no api_key_env needed)
+        # Uses AWS credentials (no api_key needed)
 
       azureopenai:
         model: "gpt-4o"                    # Your Azure deployment name
-        api_key_env: "AZURE_OPENAI_API_KEY"
+        api_key: !env "AZURE_OPENAI_API_KEY"
         base_url: "https://your-resource.openai.azure.com"
-        api_version: "2024-02-15-preview"
+        api_version: "2025-04-01-preview"
 ```
 </File>
 
@@ -113,8 +113,8 @@ settings:
   ai:
     enabled: true
     provider: "anthropic"
-    model: "claude-sonnet-4-5-20250929"
-    api_key_env: "ANTHROPIC_API_KEY"
+    model: "claude-sonnet-4-6"
+    api_key: !env "ANTHROPIC_API_KEY"
 
 # New format (recommended)
 settings:
@@ -123,8 +123,8 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
 ```
 </File>
 
@@ -175,8 +175,8 @@ Each provider in the `providers` map supports:
   <dt>`model`</dt>
   <dd>Model to use (defaults vary by provider)</dd>
 
-  <dt>`api_key_env`</dt>
-  <dd>Environment variable containing the API key (not needed for Ollama or Bedrock with IAM)</dd>
+  <dt>`api_key`</dt>
+  <dd>API key for the provider. Use `!env` to read from an environment variable (e.g., `api_key: !env "ANTHROPIC_API_KEY"`). Not needed for Ollama or Bedrock with IAM.</dd>
 
   <dt>`max_tokens`</dt>
   <dd>Maximum tokens per response (defaults vary by provider). Roughly 1000 tokens = 750 words.</dd>
@@ -211,7 +211,7 @@ settings:
         compact_ratio: 0.4             # Compact 40% of messages
         preserve_recent: 10            # Always keep last 10 messages
         use_ai_summary: true           # Use AI for summaries (default: true)
-        summary_model: "claude-3-haiku-20240307"  # Faster/cheaper model
+        summary_model: "claude-haiku-4-5-20251001"  # Faster/cheaper model
 ```
 </File>
 
@@ -381,7 +381,7 @@ infrastructure context (keywords like "my stacks", "this repo", "describe the").
 
 <Terminal title="shell">
 ```bash
-# API Keys (alternative to api_key_env in config)
+# API Keys (alternative to api_key with !env in config)
 export ATMOS_ANTHROPIC_API_KEY="your-key"
 export ATMOS_OPENAI_API_KEY="your-key"
 export ATMOS_GEMINI_API_KEY="your-key"

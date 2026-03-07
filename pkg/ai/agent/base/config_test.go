@@ -16,16 +16,16 @@ func TestExtractConfig_DefaultConfiguration(t *testing.T) {
 	}
 
 	defaults := ProviderDefaults{
-		Model:     "test-model",
-		APIKeyEnv: "TEST_API_KEY",
-		MaxTokens: 4096,
+		Model:         "test-model",
+		DefaultAPIKey: "test-key-value",
+		MaxTokens:     4096,
 	}
 
 	config := ExtractConfig(atmosConfig, "test", defaults)
 
 	assert.False(t, config.Enabled)
 	assert.Equal(t, "test-model", config.Model)
-	assert.Equal(t, "TEST_API_KEY", config.APIKeyEnv)
+	assert.Equal(t, "test-key-value", config.APIKey)
 	assert.Equal(t, 4096, config.MaxTokens)
 	assert.Empty(t, config.BaseURL)
 }
@@ -40,9 +40,9 @@ func TestExtractConfig_EnabledConfiguration(t *testing.T) {
 	}
 
 	defaults := ProviderDefaults{
-		Model:     "default-model",
-		APIKeyEnv: "DEFAULT_API_KEY",
-		MaxTokens: 1024,
+		Model:         "default-model",
+		DefaultAPIKey: "",
+		MaxTokens:     1024,
 	}
 
 	config := ExtractConfig(atmosConfig, "test", defaults)
@@ -59,7 +59,7 @@ func TestExtractConfig_ProviderSpecificOverrides(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"test": {
 						Model:     "custom-model",
-						ApiKeyEnv: "CUSTOM_API_KEY",
+						ApiKey:    "custom-api-key-value",
 						MaxTokens: 8192,
 						BaseURL:   "https://custom.api.example.com",
 					},
@@ -69,17 +69,17 @@ func TestExtractConfig_ProviderSpecificOverrides(t *testing.T) {
 	}
 
 	defaults := ProviderDefaults{
-		Model:     "default-model",
-		APIKeyEnv: "DEFAULT_API_KEY",
-		MaxTokens: 4096,
-		BaseURL:   "",
+		Model:         "default-model",
+		DefaultAPIKey: "default-key",
+		MaxTokens:     4096,
+		BaseURL:       "",
 	}
 
 	config := ExtractConfig(atmosConfig, "test", defaults)
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "custom-model", config.Model)
-	assert.Equal(t, "CUSTOM_API_KEY", config.APIKeyEnv)
+	assert.Equal(t, "custom-api-key-value", config.APIKey)
 	assert.Equal(t, 8192, config.MaxTokens)
 	assert.Equal(t, "https://custom.api.example.com", config.BaseURL)
 }
@@ -92,7 +92,7 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"test": {
 						Model: "partial-model",
-						// ApiKeyEnv, MaxTokens, and BaseURL not specified
+						// ApiKey, MaxTokens, and BaseURL not specified.
 					},
 				},
 			},
@@ -100,19 +100,19 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 	}
 
 	defaults := ProviderDefaults{
-		Model:     "default-model",
-		APIKeyEnv: "DEFAULT_API_KEY",
-		MaxTokens: 4096,
-		BaseURL:   "https://default.api.example.com",
+		Model:         "default-model",
+		DefaultAPIKey: "default-key",
+		MaxTokens:     4096,
+		BaseURL:       "https://default.api.example.com",
 	}
 
 	config := ExtractConfig(atmosConfig, "test", defaults)
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "partial-model", config.Model)
-	assert.Equal(t, "DEFAULT_API_KEY", config.APIKeyEnv)               // Should use default
-	assert.Equal(t, 4096, config.MaxTokens)                            // Should use default
-	assert.Equal(t, "https://default.api.example.com", config.BaseURL) // Should use default
+	assert.Equal(t, "default-key", config.APIKey)                      // Should use default.
+	assert.Equal(t, 4096, config.MaxTokens)                            // Should use default.
+	assert.Equal(t, "https://default.api.example.com", config.BaseURL) // Should use default.
 }
 
 func TestExtractConfig_NilProviders(t *testing.T) {
@@ -126,9 +126,9 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 	}
 
 	defaults := ProviderDefaults{
-		Model:     "default-model",
-		APIKeyEnv: "DEFAULT_API_KEY",
-		MaxTokens: 4096,
+		Model:         "default-model",
+		DefaultAPIKey: "",
+		MaxTokens:     4096,
 	}
 
 	config := ExtractConfig(atmosConfig, "test", defaults)
@@ -152,9 +152,9 @@ func TestExtractConfig_ProviderNotFound(t *testing.T) {
 	}
 
 	defaults := ProviderDefaults{
-		Model:     "default-model",
-		APIKeyEnv: "DEFAULT_API_KEY",
-		MaxTokens: 4096,
+		Model:         "default-model",
+		DefaultAPIKey: "default-key",
+		MaxTokens:     4096,
 	}
 
 	config := ExtractConfig(atmosConfig, "test", defaults)
@@ -162,7 +162,7 @@ func TestExtractConfig_ProviderNotFound(t *testing.T) {
 	// Should use defaults since "test" provider not found.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "default-model", config.Model)
-	assert.Equal(t, "DEFAULT_API_KEY", config.APIKeyEnv)
+	assert.Equal(t, "default-key", config.APIKey)
 }
 
 func TestExtractConfig_NilProviderConfig(t *testing.T) {
@@ -178,9 +178,9 @@ func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	}
 
 	defaults := ProviderDefaults{
-		Model:     "default-model",
-		APIKeyEnv: "DEFAULT_API_KEY",
-		MaxTokens: 4096,
+		Model:         "default-model",
+		DefaultAPIKey: "default-key",
+		MaxTokens:     4096,
 	}
 
 	config := ExtractConfig(atmosConfig, "test", defaults)
@@ -198,7 +198,7 @@ func TestExtractConfig_ZeroMaxTokens(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"test": {
 						Model:     "custom-model",
-						MaxTokens: 0, // Explicitly set to 0
+						MaxTokens: 0, // Explicitly set to 0.
 					},
 				},
 			},
@@ -206,9 +206,9 @@ func TestExtractConfig_ZeroMaxTokens(t *testing.T) {
 	}
 
 	defaults := ProviderDefaults{
-		Model:     "default-model",
-		APIKeyEnv: "DEFAULT_API_KEY",
-		MaxTokens: 4096,
+		Model:         "default-model",
+		DefaultAPIKey: "",
+		MaxTokens:     4096,
 	}
 
 	config := ExtractConfig(atmosConfig, "test", defaults)
@@ -218,45 +218,16 @@ func TestExtractConfig_ZeroMaxTokens(t *testing.T) {
 	assert.Equal(t, 4096, config.MaxTokens)
 }
 
-func TestGetAPIKey_FromEnvironment(t *testing.T) {
-	envVar := "TEST_AI_API_KEY_12345"
-	expectedValue := "sk-test-key-value"
-
-	// Set the environment variable using t.Setenv for automatic cleanup.
-	t.Setenv(envVar, expectedValue)
-
-	result := GetAPIKey(envVar)
-	assert.Equal(t, expectedValue, result)
-}
-
-func TestGetAPIKey_NotSet(t *testing.T) {
-	// Use a unique variable name that won't exist in the environment.
-	envVar := "NONEXISTENT_API_KEY_XYZZY_TEST_" + t.Name()
-
-	result := GetAPIKey(envVar)
-	assert.Empty(t, result)
-}
-
-func TestGetAPIKey_EmptyValue(t *testing.T) {
-	envVar := "EMPTY_API_KEY_TEST"
-
-	// Set to empty string using t.Setenv for automatic cleanup.
-	t.Setenv(envVar, "")
-
-	result := GetAPIKey(envVar)
-	assert.Empty(t, result)
-}
-
 func TestProviderDefaults_Structure(t *testing.T) {
 	defaults := ProviderDefaults{
-		Model:     "test-model",
-		APIKeyEnv: "TEST_KEY",
-		MaxTokens: 8192,
-		BaseURL:   "https://api.example.com",
+		Model:         "test-model",
+		DefaultAPIKey: "test-key",
+		MaxTokens:     8192,
+		BaseURL:       "https://api.example.com",
 	}
 
 	assert.Equal(t, "test-model", defaults.Model)
-	assert.Equal(t, "TEST_KEY", defaults.APIKeyEnv)
+	assert.Equal(t, "test-key", defaults.DefaultAPIKey)
 	assert.Equal(t, 8192, defaults.MaxTokens)
 	assert.Equal(t, "https://api.example.com", defaults.BaseURL)
 }
@@ -265,14 +236,14 @@ func TestConfig_Structure(t *testing.T) {
 	config := Config{
 		Enabled:   true,
 		Model:     "gpt-4",
-		APIKeyEnv: "OPENAI_API_KEY",
+		APIKey:    "sk-test-key",
 		MaxTokens: 4096,
 		BaseURL:   "https://api.openai.com",
 	}
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "gpt-4", config.Model)
-	assert.Equal(t, "OPENAI_API_KEY", config.APIKeyEnv)
+	assert.Equal(t, "sk-test-key", config.APIKey)
 	assert.Equal(t, 4096, config.MaxTokens)
 	assert.Equal(t, "https://api.openai.com", config.BaseURL)
 }
@@ -294,14 +265,14 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 			},
 			providerName: "anthropic",
 			defaults: ProviderDefaults{
-				Model:     "claude-sonnet-4-5-20250929",
-				APIKeyEnv: "ANTHROPIC_API_KEY",
-				MaxTokens: 4096,
+				Model:         "claude-sonnet-4-5-20250929",
+				DefaultAPIKey: "",
+				MaxTokens:     4096,
 			},
 			expectedConfig: &Config{
 				Enabled:   false,
 				Model:     "claude-sonnet-4-5-20250929",
-				APIKeyEnv: "ANTHROPIC_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 			},
 		},
@@ -314,14 +285,14 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 			},
 			providerName: "openai",
 			defaults: ProviderDefaults{
-				Model:     "gpt-4o",
-				APIKeyEnv: "OPENAI_API_KEY",
-				MaxTokens: 4096,
+				Model:         "gpt-4o",
+				DefaultAPIKey: "",
+				MaxTokens:     4096,
 			},
 			expectedConfig: &Config{
 				Enabled:   false,
 				Model:     "gpt-4o",
-				APIKeyEnv: "OPENAI_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 			},
 		},
@@ -334,14 +305,14 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 			},
 			providerName: "gemini",
 			defaults: ProviderDefaults{
-				Model:     "gemini-2.5-flash",
-				APIKeyEnv: "GEMINI_API_KEY",
-				MaxTokens: 8192,
+				Model:         "gemini-2.5-flash",
+				DefaultAPIKey: "",
+				MaxTokens:     8192,
 			},
 			expectedConfig: &Config{
 				Enabled:   false,
 				Model:     "gemini-2.5-flash",
-				APIKeyEnv: "GEMINI_API_KEY",
+				APIKey:    "",
 				MaxTokens: 8192,
 			},
 		},
@@ -361,15 +332,15 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 			},
 			providerName: "grok",
 			defaults: ProviderDefaults{
-				Model:     "grok-4-latest",
-				APIKeyEnv: "XAI_API_KEY",
-				MaxTokens: 4096,
-				BaseURL:   "https://api.x.ai/v1",
+				Model:         "grok-4-latest",
+				DefaultAPIKey: "",
+				MaxTokens:     4096,
+				BaseURL:       "https://api.x.ai/v1",
 			},
 			expectedConfig: &Config{
 				Enabled:   true,
 				Model:     "grok-4-latest",
-				APIKeyEnv: "XAI_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 				BaseURL:   "https://api.x.ai/v1",
 			},

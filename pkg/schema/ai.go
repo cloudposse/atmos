@@ -25,7 +25,7 @@ type AISettings struct {
 // AIProviderConfig contains configuration for a specific AI provider.
 type AIProviderConfig struct {
 	Model     string           `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
-	ApiKeyEnv string           `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty" mapstructure:"api_key_env"`
+	ApiKey    string           `yaml:"api_key,omitempty" json:"api_key,omitempty" mapstructure:"api_key"` //nolint:gosec // G117: not a hardcoded credential, populated from !env YAML function
 	MaxTokens int              `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
 	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"` // For Ollama or custom endpoints
 	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"`   // Token caching settings

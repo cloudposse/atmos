@@ -24,8 +24,8 @@ const (
 	DefaultModel = "llama3.3:70b"
 	// DefaultBaseURL is the default Ollama API endpoint.
 	DefaultBaseURL = "http://localhost:11434/v1"
-	// DefaultAPIKeyEnv is the environment variable for the API key (optional for local Ollama).
-	DefaultAPIKeyEnv = "OLLAMA_API_KEY"
+	// DefaultAPIKeyEnvVar is the default environment variable name for the API key (used in error hints, optional for local Ollama).
+	DefaultAPIKeyEnvVar = "OLLAMA_API_KEY"
 )
 
 // Client provides a simplified interface to the Ollama API for Atmos.
@@ -41,19 +41,19 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 
 	// Extract AI configuration using shared utility.
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	if !config.Enabled {
 		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment using shared utility (replaces viper.BindEnv).
+	// API key is resolved by !env YAML function during config loading.
 	// For Ollama, API key is optional for local usage.
-	apiKey := base.GetAPIKey(config.APIKeyEnv)
+	apiKey := config.APIKey
 	if apiKey == "" {
 		apiKey = "ollama" // Dummy key for local Ollama instances.
 	}

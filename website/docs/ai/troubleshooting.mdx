@@ -128,7 +128,7 @@ This usually means an invalid API key or insufficient credits. Verify your key i
     -H "x-api-key: $ANTHROPIC_API_KEY" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
-    -d '{"model": "claude-sonnet-4-5-20250929", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
+    -d '{"model": "claude-sonnet-4-6", "max_tokens": 1024, "messages": [{"role": "user", "content": "Hello"}]}'
     ```
 </Terminal>
 
@@ -163,7 +163,7 @@ The table below covers the most common provider-specific errors. For detailed pr
 | Provider | Error | Solution |
 |----------|-------|----------|
 | **Anthropic** | "Authentication error" | Ensure key starts with `sk-ant-` and is from [console.anthropic.com](https://console.anthropic.com/) |
-| **Anthropic** | "Model not found" | Use a valid model name like `claude-sonnet-4-5-20250929` |
+| **Anthropic** | "Model not found" | Use a valid model name like `claude-sonnet-4-6` |
 | **OpenAI** | "Invalid API key" | Get a new key from [platform.openai.com](https://platform.openai.com/) |
 | **OpenAI** | "Insufficient quota" | Add billing information or upgrade your account |
 | **Gemini** | "API not enabled" | Enable the Generative AI API in Google Cloud Console |
@@ -195,14 +195,14 @@ providers:
 <Terminal title="shell">
     ```bash
     ollama list
-    ollama pull llama3.3:70b
+    ollama pull llama4
     ```
 </Terminal>
 
 ```yaml
 providers:
   ollama:
-    model: "llama3.3:70b"  # Must match exactly
+    model: "llama4"  # Must match exactly
 ```
 
 **"Out of memory" or slow responses** -- Use a smaller model (`llama3.1:8b` needs ~8GB RAM), reduce `max_tokens`, or check GPU acceleration with `nvidia-smi` or `rocm-smi`.
@@ -244,7 +244,7 @@ You also need to enable model access in AWS Console under Bedrock, then select "
 ```yaml
 providers:
   bedrock:
-    model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    model: "anthropic.claude-sonnet-4-6"
     base_url: "us-east-1"  # us-east-1, us-west-2, ap-southeast-1, eu-central-1
 ```
 
@@ -280,7 +280,7 @@ providers:
 providers:
   azureopenai:
     model: "gpt-4o"  # Your deployment name from Azure Portal
-    api_version: "2024-02-15-preview"
+    api_version: "2025-04-01-preview"
 ```
 
 ## Multi-Provider Issues
@@ -294,11 +294,11 @@ settings:
   ai:
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
       openai:
         model: "gpt-4o"
-        api_key_env: "OPENAI_API_KEY"
+        api_key: !env "OPENAI_API_KEY"
 ```
 
 Note: use `Ctrl+P`, not `Command+P`.
@@ -322,8 +322,8 @@ settings:
   ai:
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
 ```
 
 ## Session Management Issues
@@ -442,7 +442,7 @@ If `use_ai_summary: true` and summaries aren't appearing, make sure the AI provi
 sessions:
   auto_compact:
     summary_provider: "anthropic"
-    summary_model: "claude-3-haiku-20240307"  # ~$0.01 per compaction vs ~$0.10 for Sonnet
+    summary_model: "claude-haiku-4-5-20251001"  # ~$0.01 per compaction vs ~$0.10 for Sonnet
     # Or disable AI summaries entirely ($0):
     # use_ai_summary: false
 ```
@@ -634,7 +634,7 @@ settings:
     providers:
       anthropic:
         model: "claude-sonnet-4-5"
-        api_key_env: "ANTHROPIC_API_KEY"
+        api_key: !env "ANTHROPIC_API_KEY"
     skills:
       test-skill:
         display_name: "Test"
@@ -838,7 +838,7 @@ settings:
 
 Try these in order:
 
-1. **Use a faster model** -- `claude-3-haiku-20240307`, `gpt-3.5-turbo`, or `gemini-1.5-flash`
+1. **Use a faster model** -- `claude-haiku-4-5-20251001`, `gpt-5-mini`, or `gemini-2.5-flash`
 2. **Go local** -- Ollama eliminates network latency entirely
 3. **Reduce `max_tokens`** -- Smaller responses generate faster
 4. **Limit conversation history** -- Set `max_history_messages: 20` to reduce tokens sent per request

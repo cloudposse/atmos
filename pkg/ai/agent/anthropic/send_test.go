@@ -94,7 +94,7 @@ func newTestSimpleClient(t *testing.T, handler http.Handler) *SimpleClient {
 		config: &base.Config{
 			Enabled:   true,
 			Model:     DefaultModel,
-			APIKeyEnv: DefaultAPIKeyEnv,
+			APIKey:    "test-api-key",
 			MaxTokens: DefaultMaxTokens,
 		},
 		cache: &cacheConfig{
@@ -569,18 +569,16 @@ func TestSendMessageWithSystemPromptAndTools_CacheDisabled(t *testing.T) {
 
 // TestNewSimpleClient_WithAPIKey tests that NewSimpleClient succeeds when API key is set.
 func TestNewSimpleClient_WithAPIKey(t *testing.T) {
-	// This test directly tests the NewSimpleClient success path by setting
-	// the API key environment variable. Since Anthropic client creation
+	// This test directly tests the NewSimpleClient success path by passing
+	// the API key directly. Since Anthropic client creation
 	// does not validate the key (no network call), it should succeed.
-	t.Setenv("TEST_ANTHROPIC_API_KEY_NEWCLIENT", "sk-test-valid-key")
-
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
-						ApiKeyEnv: "TEST_ANTHROPIC_API_KEY_NEWCLIENT",
+						ApiKey: "sk-test-valid-key",
 					},
 				},
 			},

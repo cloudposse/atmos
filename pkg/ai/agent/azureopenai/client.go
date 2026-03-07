@@ -22,8 +22,8 @@ const (
 	DefaultMaxTokens = 4096
 	// DefaultModel is the default Azure OpenAI model deployment name.
 	DefaultModel = "gpt-4o"
-	// DefaultAPIKeyEnv is the default environment variable for Azure OpenAI API key.
-	DefaultAPIKeyEnv = "AZURE_OPENAI_API_KEY"
+	// DefaultAPIKeyEnvVar is the default environment variable name for the API key (used in error hints).
+	DefaultAPIKeyEnvVar = "AZURE_OPENAI_API_KEY"
 	// DefaultAPIVersion is the default Azure OpenAI API version.
 	DefaultAPIVersion = "2024-02-15-preview"
 )
@@ -41,10 +41,10 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 
 	// Extract AI configuration using shared utility.
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   "", // Required for Azure, no default.
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       "", // Required for Azure, no default.
 	})
 
 	if !config.Enabled {
@@ -59,12 +59,12 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 			Err()
 	}
 
-	// Get API key from environment using shared utility (replaces viper.BindEnv).
-	apiKey := base.GetAPIKey(config.APIKeyEnv)
+	// API key is resolved by !env YAML function during config loading.
+	apiKey := config.APIKey
 	if apiKey == "" {
 		return nil, errUtils.Build(errUtils.ErrAIAPIKeyNotFound).
-			WithContext("env_var", config.APIKeyEnv).
-			WithHint("Set the " + config.APIKeyEnv + " environment variable").
+			WithContext("provider", ProviderName).
+			WithHint("Set api_key with !env in atmos.yaml providers config, e.g. api_key: !env " + DefaultAPIKeyEnvVar).
 			Err()
 	}
 

@@ -72,7 +72,7 @@ settings:
         preserve_recent: 10               # Always keep last 10 messages verbatim
         use_ai_summary: true              # Use AI for smart summaries
         summary_provider: "anthropic"     # Optional: provider for summaries
-        summary_model: "claude-3-haiku-20240307"  # Optional: cheaper model
+        summary_model: "claude-haiku-4-5-20251001"  # Optional: cheaper model
         summary_max_tokens: 2048          # Max tokens for summaries
         show_summary_markers: false       # Show [SUMMARY] tags for debugging
 ```
@@ -100,7 +100,7 @@ settings:
   <dd>AI provider for generating summaries. Defaults to `default_provider`. Use a cheaper provider to reduce costs.</dd>
 
   <dt>`auto_compact.summary_model`</dt>
-  <dd>Model for summary generation. Defaults to the provider's default model. Use faster/cheaper models like `claude-3-haiku-20240307` to optimize costs.</dd>
+  <dd>Model for summary generation. Defaults to the provider's default model. Use faster/cheaper models like `claude-haiku-4-5-20251001` to optimize costs.</dd>
 
   <dt>`auto_compact.summary_max_tokens`</dt>
   <dd>Maximum tokens for generated summaries (default: `2048`). Controls summary length and cost.</dd>
@@ -122,7 +122,7 @@ settings:
       enabled: true
       auto_compact:
         enabled: true
-        summary_model: "claude-3-haiku-20240307"
+        summary_model: "claude-haiku-4-5-20251001"
 ```
 </File>
 

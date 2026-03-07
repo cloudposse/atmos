@@ -27,7 +27,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   false,
 				Model:     "grok-4-latest",
-				APIKeyEnv: "XAI_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 				BaseURL:   "https://api.x.ai/v1",
 			},
@@ -41,7 +41,7 @@ func TestExtractConfig(t *testing.T) {
 						Providers: map[string]*schema.AIProviderConfig{
 							"grok": {
 								Model:     "grok-4",
-								ApiKeyEnv: "CUSTOM_XAI_KEY",
+								ApiKey:    "custom-xai-key-value",
 								MaxTokens: 8192,
 								BaseURL:   "https://custom.api.x.ai/v1",
 							},
@@ -52,7 +52,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "grok-4",
-				APIKeyEnv: "CUSTOM_XAI_KEY",
+				APIKey:    "custom-xai-key-value",
 				MaxTokens: 8192,
 				BaseURL:   "https://custom.api.x.ai/v1",
 			},
@@ -74,7 +74,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "grok-2",
-				APIKeyEnv: "XAI_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 				BaseURL:   "https://api.x.ai/v1",
 			},
@@ -84,10 +84,10 @@ func TestExtractConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := base.ExtractConfig(tt.atmosConfig, ProviderName, base.ProviderDefaults{
-				Model:     DefaultModel,
-				APIKeyEnv: DefaultAPIKeyEnv,
-				MaxTokens: DefaultMaxTokens,
-				BaseURL:   DefaultBaseURL,
+				Model:         DefaultModel,
+				DefaultAPIKey: "",
+				MaxTokens:     DefaultMaxTokens,
+				BaseURL:       DefaultBaseURL,
 			})
 			assert.Equal(t, tt.expectedConfig, config)
 		})
@@ -113,7 +113,7 @@ func TestClientGetters(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "grok-4-latest",
-		APIKeyEnv: "XAI_API_KEY",
+		APIKey:    "",
 		MaxTokens: 4096,
 		BaseURL:   "https://api.x.ai/v1",
 	}
@@ -129,16 +129,13 @@ func TestClientGetters(t *testing.T) {
 }
 
 func TestNewClient_MissingAPIKey(t *testing.T) {
-	// Use a unique env var name that definitely does not exist.
-	envVar := "NONEXISTENT_GROK_KEY_XYZZY_12345"
-
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
 					"grok": {
-						ApiKeyEnv: envVar,
+						// ApiKey is empty - should fail.
 					},
 				},
 			},
@@ -155,7 +152,7 @@ func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "grok", ProviderName)
 	assert.Equal(t, 4096, DefaultMaxTokens)
 	assert.Equal(t, "grok-4-latest", DefaultModel)
-	assert.Equal(t, "XAI_API_KEY", DefaultAPIKeyEnv)
+	assert.Equal(t, "XAI_API_KEY", DefaultAPIKeyEnvVar)
 	assert.Equal(t, "https://api.x.ai/v1", DefaultBaseURL)
 }
 
@@ -163,14 +160,14 @@ func TestConfig_AllFields(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "test-model",
-		APIKeyEnv: "TEST_KEY",
+		APIKey:    "test-key-value",
 		MaxTokens: 1000,
 		BaseURL:   "https://test.example.com/v1",
 	}
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "test-model", config.Model)
-	assert.Equal(t, "TEST_KEY", config.APIKeyEnv)
+	assert.Equal(t, "test-key-value", config.APIKey)
 	assert.Equal(t, 1000, config.MaxTokens)
 	assert.Equal(t, "https://test.example.com/v1", config.BaseURL)
 }
@@ -186,16 +183,16 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Should use defaults when providers is nil.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Empty(t, config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 	assert.Equal(t, DefaultBaseURL, config.BaseURL)
 }
@@ -215,16 +212,16 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Should use defaults when this provider is not configured.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Empty(t, config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 	assert.Equal(t, DefaultBaseURL, config.BaseURL)
 }
@@ -242,16 +239,16 @@ func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Should use defaults when provider config is nil.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Empty(t, config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 	assert.Equal(t, DefaultBaseURL, config.BaseURL)
 }
@@ -326,7 +323,7 @@ func TestGrokModels(t *testing.T) {
 			config := &base.Config{
 				Enabled:   true,
 				Model:     m.modelID,
-				APIKeyEnv: DefaultAPIKeyEnv,
+				APIKey:    "",
 				MaxTokens: DefaultMaxTokens,
 				BaseURL:   DefaultBaseURL,
 			}
@@ -356,10 +353,10 @@ func TestExtractConfig_CustomBaseURL(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	assert.Equal(t, "https://custom.xai.example.com/v1", config.BaseURL)
@@ -373,7 +370,7 @@ func TestExtractConfig_AllOverrides(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"grok": {
 						Model:     "grok-2-vision-1212",
-						ApiKeyEnv: "CUSTOM_GROK_KEY",
+						ApiKey:    "custom-grok-key-value",
 						MaxTokens: 32768,
 						BaseURL:   "https://api.custom.xai.com/v2",
 					},
@@ -383,31 +380,27 @@ func TestExtractConfig_AllOverrides(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "grok-2-vision-1212", config.Model)
-	assert.Equal(t, "CUSTOM_GROK_KEY", config.APIKeyEnv)
+	assert.Equal(t, "custom-grok-key-value", config.APIKey)
 	assert.Equal(t, 32768, config.MaxTokens)
 	assert.Equal(t, "https://api.custom.xai.com/v2", config.BaseURL)
 }
 
 func TestNewClient_WithValidAPIKey(t *testing.T) {
-	// Set a valid API key for testing.
-	envVar := "TEST_GROK_API_KEY_12345"
-	t.Setenv(envVar, "test-api-key-value")
-
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
 					"grok": {
-						ApiKeyEnv: envVar,
+						ApiKey: "test-api-key-value",
 					},
 				},
 			},
@@ -425,9 +418,6 @@ func TestNewClient_WithValidAPIKey(t *testing.T) {
 }
 
 func TestNewClient_CustomConfiguration(t *testing.T) {
-	envVar := "TEST_GROK_CUSTOM_KEY_99999"
-	t.Setenv(envVar, "custom-key")
-
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
@@ -435,7 +425,7 @@ func TestNewClient_CustomConfiguration(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"grok": {
 						Model:     "grok-2-1212",
-						ApiKeyEnv: envVar,
+						ApiKey:    "custom-key",
 						MaxTokens: 8192,
 						BaseURL:   "https://custom.api.x.ai/v1",
 					},
@@ -456,7 +446,7 @@ func TestClient_StructFields(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "test-model",
-		APIKeyEnv: "TEST_KEY",
+		APIKey:    "test-key-value",
 		MaxTokens: 2000,
 		BaseURL:   "https://test.api.com",
 	}
@@ -488,10 +478,10 @@ func TestExtractConfig_EdgeCases(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// MaxTokens should use default since 0 is not > 0.
@@ -503,7 +493,7 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 		name           string
 		providerConfig *schema.AIProviderConfig
 		expectedModel  string
-		expectedEnv    string
+		expectedKey    string
 		expectedTokens int
 		expectedURL    string
 	}{
@@ -513,17 +503,17 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 				Model: "grok-2-vision-1212",
 			},
 			expectedModel:  "grok-2-vision-1212",
-			expectedEnv:    DefaultAPIKeyEnv,
+			expectedKey:    "",
 			expectedTokens: DefaultMaxTokens,
 			expectedURL:    DefaultBaseURL,
 		},
 		{
-			name: "Only API key env override",
+			name: "Only API key override",
 			providerConfig: &schema.AIProviderConfig{
-				ApiKeyEnv: "CUSTOM_KEY",
+				ApiKey: "custom-key-value",
 			},
 			expectedModel:  DefaultModel,
-			expectedEnv:    "CUSTOM_KEY",
+			expectedKey:    "custom-key-value",
 			expectedTokens: DefaultMaxTokens,
 			expectedURL:    DefaultBaseURL,
 		},
@@ -533,7 +523,7 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 				MaxTokens: 10000,
 			},
 			expectedModel:  DefaultModel,
-			expectedEnv:    DefaultAPIKeyEnv,
+			expectedKey:    "",
 			expectedTokens: 10000,
 			expectedURL:    DefaultBaseURL,
 		},
@@ -543,7 +533,7 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 				BaseURL: "https://proxy.example.com/xai",
 			},
 			expectedModel:  DefaultModel,
-			expectedEnv:    DefaultAPIKeyEnv,
+			expectedKey:    "",
 			expectedTokens: DefaultMaxTokens,
 			expectedURL:    "https://proxy.example.com/xai",
 		},
@@ -554,7 +544,7 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 				MaxTokens: 16000,
 			},
 			expectedModel:  "grok-4",
-			expectedEnv:    DefaultAPIKeyEnv,
+			expectedKey:    "",
 			expectedTokens: 16000,
 			expectedURL:    DefaultBaseURL,
 		},
@@ -574,14 +564,14 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 			}
 
 			config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-				Model:     DefaultModel,
-				APIKeyEnv: DefaultAPIKeyEnv,
-				MaxTokens: DefaultMaxTokens,
-				BaseURL:   DefaultBaseURL,
+				Model:         DefaultModel,
+				DefaultAPIKey: "",
+				MaxTokens:     DefaultMaxTokens,
+				BaseURL:       DefaultBaseURL,
 			})
 
 			assert.Equal(t, tt.expectedModel, config.Model)
-			assert.Equal(t, tt.expectedEnv, config.APIKeyEnv)
+			assert.Equal(t, tt.expectedKey, config.APIKey)
 			assert.Equal(t, tt.expectedTokens, config.MaxTokens)
 			assert.Equal(t, tt.expectedURL, config.BaseURL)
 		})
@@ -605,10 +595,10 @@ func TestDefaultValues_AllConstants(t *testing.T) {
 	assert.NotEmpty(t, DefaultModel)
 	assert.Contains(t, DefaultModel, "grok")
 
-	// DefaultAPIKeyEnv should follow standard naming conventions.
-	assert.NotEmpty(t, DefaultAPIKeyEnv)
-	assert.Contains(t, DefaultAPIKeyEnv, "XAI")
-	assert.Contains(t, DefaultAPIKeyEnv, "API_KEY")
+	// DefaultAPIKeyEnvVar should follow standard naming conventions.
+	assert.NotEmpty(t, DefaultAPIKeyEnvVar)
+	assert.Contains(t, DefaultAPIKeyEnvVar, "XAI")
+	assert.Contains(t, DefaultAPIKeyEnvVar, "API_KEY")
 
 	// DefaultBaseURL should be xAI's official endpoint.
 	assert.NotEmpty(t, DefaultBaseURL)
@@ -620,14 +610,14 @@ func TestConfig_BaseURLField(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "test-model",
-		APIKeyEnv: "TEST_KEY",
+		APIKey:    "test-key-value",
 		MaxTokens: 1000,
 		BaseURL:   "https://test.example.com/v1",
 	}
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "test-model", config.Model)
-	assert.Equal(t, "TEST_KEY", config.APIKeyEnv)
+	assert.Equal(t, "test-key-value", config.APIKey)
 	assert.Equal(t, 1000, config.MaxTokens)
 	assert.Equal(t, "https://test.example.com/v1", config.BaseURL)
 }
@@ -699,24 +689,24 @@ func TestExtractConfig_EmptyModel(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Empty model should use default.
 	assert.Equal(t, DefaultModel, config.Model)
 }
 
-func TestExtractConfig_EmptyAPIKeyEnv(t *testing.T) {
+func TestExtractConfig_EmptyAPIKey(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
 					"grok": {
-						ApiKeyEnv: "", // Empty API key env should use default.
+						ApiKey: "", // Empty API key should use default.
 					},
 				},
 			},
@@ -724,14 +714,14 @@ func TestExtractConfig_EmptyAPIKeyEnv(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
-	// Empty API key env should use default.
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	// Empty API key should use default (empty).
+	assert.Empty(t, config.APIKey)
 }
 
 func TestExtractConfig_EmptyBaseURL(t *testing.T) {
@@ -749,10 +739,10 @@ func TestExtractConfig_EmptyBaseURL(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Empty base URL should use default.
@@ -800,10 +790,10 @@ func TestExtractConfig_NegativeMaxTokens(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Negative MaxTokens should use default since -100 is not > 0.
@@ -831,7 +821,7 @@ func TestGrokModels_VariousVersions(t *testing.T) {
 				config: &base.Config{
 					Enabled:   true,
 					Model:     modelID,
-					APIKeyEnv: DefaultAPIKeyEnv,
+					APIKey:    "",
 					MaxTokens: DefaultMaxTokens,
 					BaseURL:   DefaultBaseURL,
 				},
@@ -911,43 +901,36 @@ func TestClient_ConfigVariations(t *testing.T) {
 
 func TestNewClient_MultipleAPIKeyFormats(t *testing.T) {
 	tests := []struct {
-		name   string
-		envVar string
-		value  string
+		name  string
+		value string
 	}{
 		{
-			name:   "Standard format",
-			envVar: "TEST_GROK_KEY_1",
-			value:  "xai-abc123def456",
+			name:  "Standard format",
+			value: "xai-abc123def456",
 		},
 		{
-			name:   "Long key",
-			envVar: "TEST_GROK_KEY_2",
-			value:  "xai-" + strings.Repeat("abcdefghij", 10), // 100 character key.
+			name:  "Long key",
+			value: "xai-" + strings.Repeat("abcdefghij", 10), // 100 character key.
 		},
 		{
-			name:   "Short key",
-			envVar: "TEST_GROK_KEY_3",
-			value:  "key",
+			name:  "Short key",
+			value: "key",
 		},
 		{
-			name:   "Key with special chars",
-			envVar: "TEST_GROK_KEY_4",
-			value:  "xai_key-123.test",
+			name:  "Key with special chars",
+			value: "xai_key-123.test",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(tt.envVar, tt.value)
-
 			atmosConfig := &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Enabled: true,
 						Providers: map[string]*schema.AIProviderConfig{
 							"grok": {
-								ApiKeyEnv: tt.envVar,
+								ApiKey: tt.value,
 							},
 						},
 					},
@@ -984,16 +967,16 @@ func TestExtractConfig_MultipleProviders(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Should extract only Grok config, not others.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "grok-2-vision-1212", config.Model)
 	assert.Equal(t, 8192, config.MaxTokens)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Empty(t, config.APIKey)
 	assert.Equal(t, DefaultBaseURL, config.BaseURL)
 }

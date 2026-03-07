@@ -1097,7 +1097,7 @@ func TestGetModelFromConfig_EdgeCases(t *testing.T) {
 						"anthropic": {
 							Model:     "claude-sonnet-4-5-20250929",
 							MaxTokens: 4096,
-							ApiKeyEnv: "ANTHROPIC_API_KEY",
+							ApiKey:    "test-anthropic-key",
 							BaseURL:   "https://api.anthropic.com/v1",
 						},
 					},

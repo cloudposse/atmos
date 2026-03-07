@@ -26,12 +26,12 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
       openai:
         model: "gpt-4o"
-        api_key_env: "OPENAI_API_KEY"
+        api_key: !env "OPENAI_API_KEY"
         max_tokens: 4096
 ```
 </File>
@@ -44,11 +44,11 @@ Each provider in the `providers` map supports the following settings:
   <dt>`model`</dt>
   <dd>Model identifier to use for this provider. Defaults vary by provider (see below).</dd>
 
-  <dt>`api_key_env`</dt>
-  <dd>Name of the environment variable containing the API key. Not required for Ollama (local) or Bedrock (uses AWS credentials).</dd>
+  <dt>`api_key`</dt>
+  <dd>API key for the provider. Use the `!env` YAML function to read from an environment variable (e.g., `api_key: !env "ANTHROPIC_API_KEY"`). Not required for Ollama (local) or Bedrock (uses AWS credentials).</dd>
 
   <dt>`max_tokens`</dt>
-  <dd>Maximum tokens per response (default: `4096`). OpenAI reasoning models (o1, o1-mini) use `max_completion_tokens` internally -- Atmos handles this automatically.</dd>
+  <dd>Maximum tokens per response (default: `4096`). OpenAI reasoning models (o3, o4-mini) use `max_completion_tokens` internally -- Atmos handles this automatically.</dd>
 
   <dt>`base_url`</dt>
   <dd>Custom API endpoint. Required for Grok (`https://api.x.ai/v1`) and Azure OpenAI (`https://<resource>.openai.azure.com`). For Bedrock, set to the AWS region (e.g., `us-east-1`). Ollama defaults to `http://localhost:11434/v1`.</dd>
@@ -57,14 +57,14 @@ Each provider in the `providers` map supports the following settings:
   <dd>Per-provider request timeout override in seconds. Overrides the global `settings.ai.timeout_seconds` value.</dd>
 
   <dt>`api_version`</dt>
-  <dd>API version string. **Required** for Azure OpenAI (e.g., `2024-02-15-preview`).</dd>
+  <dd>API version string. **Required** for Azure OpenAI (e.g., `2025-04-01-preview`).</dd>
 </dl>
 
 ## Supported Providers
 
 <dl>
   <dt>**Anthropic (Claude)**</dt>
-  <dd>Default model: `claude-sonnet-4-5-20250929`. Advanced reasoning, recommended default. 200K token context window. Authenticate with `ANTHROPIC_API_KEY`.</dd>
+  <dd>Default model: `claude-sonnet-4-6`. Advanced reasoning, recommended default. 200K token context window. Authenticate with `ANTHROPIC_API_KEY`.</dd>
 
   <dt>**OpenAI (GPT)**</dt>
   <dd>Default model: `gpt-4o`. Widely available, strong general capabilities. 128K token context window. Authenticate with `OPENAI_API_KEY`.</dd>
@@ -76,10 +76,10 @@ Each provider in the `providers` map supports the following settings:
   <dd>Default model: `grok-4-latest`. 2M token context window, built-in real-time search. Requires `base_url: "https://api.x.ai/v1"`. Authenticate with `XAI_API_KEY`.</dd>
 
   <dt>**Ollama (Local)**</dt>
-  <dd>Default model: `llama3.3:70b`. Runs entirely on your machine -- no API costs, no data leaves your computer. No authentication required for local instances.</dd>
+  <dd>Default model: `llama4`. Runs entirely on your machine -- no API costs, no data leaves your computer. No authentication required for local instances.</dd>
 
   <dt>**AWS Bedrock**</dt>
-  <dd>Default model: `anthropic.claude-sonnet-4-5-20250929-v1:0`. Enterprise security with IAM-based access, CloudTrail audit logging, and VPC endpoint support. Uses AWS SDK credential chain (IAM roles, profiles, environment variables). Set `base_url` to your AWS region.</dd>
+  <dd>Default model: `anthropic.claude-sonnet-4-6`. Enterprise security with IAM-based access, CloudTrail audit logging, and VPC endpoint support. Uses AWS SDK credential chain (IAM roles, profiles, environment variables). Set `base_url` to your AWS region.</dd>
 
   <dt>**Azure OpenAI**</dt>
   <dd>Default model: `gpt-4o`. Enterprise compliance with Azure AD integration and private endpoints. The `model` field must be your **deployment name** from Azure Portal. Both `base_url` and `api_version` are required.</dd>
@@ -96,23 +96,23 @@ settings:
   ai:
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
       openai:
         model: "gpt-4o"
-        api_key_env: "OPENAI_API_KEY"
+        api_key: !env "OPENAI_API_KEY"
         max_tokens: 4096
 
       gemini:
         model: "gemini-2.5-flash"
-        api_key_env: "GEMINI_API_KEY"
+        api_key: !env "GEMINI_API_KEY"
         max_tokens: 8192
 
       grok:
         model: "grok-4-latest"
-        api_key_env: "XAI_API_KEY"
+        api_key: !env "XAI_API_KEY"
         base_url: "https://api.x.ai/v1"
         max_tokens: 4096
 ```
@@ -127,13 +127,13 @@ settings:
   ai:
     providers:
       ollama:
-        model: "llama3.3:70b"
+        model: "llama4"
         # base_url defaults to http://localhost:11434/v1
-        # No api_key_env needed for local instances
+        # No api_key needed for local instances
 
       # Remote Ollama server
       ollama-remote:
-        model: "llama3.3:70b"
+        model: "llama4"
         base_url: "http://<server-ip>:11434/v1"
 ```
 </File>
@@ -147,15 +147,15 @@ settings:
   ai:
     providers:
       bedrock:
-        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        model: "anthropic.claude-sonnet-4-6"
         max_tokens: 4096
         base_url: "us-east-1"  # AWS region
 
       azureopenai:
         model: "gpt-4o"  # Azure deployment name
-        api_key_env: "AZURE_OPENAI_API_KEY"
+        api_key: !env "AZURE_OPENAI_API_KEY"
         base_url: "https://<your-resource>.openai.azure.com"
-        api_version: "2024-02-15-preview"
+        api_version: "2025-04-01-preview"
         max_tokens: 4096
 ```
 </File>
@@ -173,8 +173,8 @@ settings:
   ai:
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         cache:
           enabled: true              # Enable prompt caching (default)
           cache_system_prompt: true  # Cache skill system prompt
@@ -206,15 +206,15 @@ settings:
 
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
+        model: "claude-sonnet-4-6"
+        api_key: !env "ANTHROPIC_API_KEY"
         max_tokens: 4096
       openai:
         model: "gpt-4o"
-        api_key_env: "OPENAI_API_KEY"
+        api_key: !env "OPENAI_API_KEY"
         max_tokens: 4096
       ollama:
-        model: "llama3.3:70b"
+        model: "llama4"
 ```
 </File>
 

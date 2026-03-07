@@ -25,7 +25,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   false,
 				Model:     "llama3.3:70b",
-				APIKeyEnv: "OLLAMA_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 				BaseURL:   "http://localhost:11434/v1",
 			},
@@ -39,7 +39,7 @@ func TestExtractConfig(t *testing.T) {
 						Providers: map[string]*schema.AIProviderConfig{
 							"ollama": {
 								Model:     "llama3.1:8b",
-								ApiKeyEnv: "CUSTOM_API_KEY",
+								ApiKey:    "custom-api-key-value",
 								MaxTokens: 8192,
 								BaseURL:   "http://custom-ollama:11434/v1",
 							},
@@ -50,7 +50,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "llama3.1:8b",
-				APIKeyEnv: "CUSTOM_API_KEY",
+				APIKey:    "custom-api-key-value",
 				MaxTokens: 8192,
 				BaseURL:   "http://custom-ollama:11434/v1",
 			},
@@ -72,7 +72,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "codellama:13b",
-				APIKeyEnv: "OLLAMA_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 				BaseURL:   "http://localhost:11434/v1",
 			},
@@ -94,7 +94,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "llama3.3:70b",
-				APIKeyEnv: "OLLAMA_API_KEY",
+				APIKey:    "",
 				MaxTokens: 4096,
 				BaseURL:   "https://ollama.example.com/v1",
 			},
@@ -108,7 +108,7 @@ func TestExtractConfig(t *testing.T) {
 						Providers: map[string]*schema.AIProviderConfig{
 							"ollama": {
 								Model:     "llama3.3:70b",
-								ApiKeyEnv: "OLLAMA_REMOTE_KEY",
+								ApiKey:    "ollama-remote-key-value",
 								BaseURL:   "https://api.ollama-cloud.com/v1",
 								MaxTokens: 16384,
 							},
@@ -119,7 +119,7 @@ func TestExtractConfig(t *testing.T) {
 			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "llama3.3:70b",
-				APIKeyEnv: "OLLAMA_REMOTE_KEY",
+				APIKey:    "ollama-remote-key-value",
 				MaxTokens: 16384,
 				BaseURL:   "https://api.ollama-cloud.com/v1",
 			},
@@ -129,10 +129,10 @@ func TestExtractConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := base.ExtractConfig(tt.atmosConfig, ProviderName, base.ProviderDefaults{
-				Model:     DefaultModel,
-				APIKeyEnv: DefaultAPIKeyEnv,
-				MaxTokens: DefaultMaxTokens,
-				BaseURL:   DefaultBaseURL,
+				Model:         DefaultModel,
+				DefaultAPIKey: "",
+				MaxTokens:     DefaultMaxTokens,
+				BaseURL:       DefaultBaseURL,
 			})
 			assert.Equal(t, tt.expectedConfig, config)
 		})
@@ -158,7 +158,7 @@ func TestClientGetters(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "llama3.3:70b",
-		APIKeyEnv: "OLLAMA_API_KEY",
+		APIKey:    "",
 		MaxTokens: 4096,
 		BaseURL:   "http://localhost:11434/v1",
 	}
@@ -176,21 +176,21 @@ func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, 4096, DefaultMaxTokens)
 	assert.Equal(t, "llama3.3:70b", DefaultModel)
 	assert.Equal(t, "http://localhost:11434/v1", DefaultBaseURL)
-	assert.Equal(t, "OLLAMA_API_KEY", DefaultAPIKeyEnv)
+	assert.Equal(t, "OLLAMA_API_KEY", DefaultAPIKeyEnvVar)
 }
 
 func TestConfig_AllFields(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "test-model",
-		APIKeyEnv: "TEST_KEY",
+		APIKey:    "test-key-value",
 		MaxTokens: 1000,
 		BaseURL:   "http://test:1234/v1",
 	}
 
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "test-model", config.Model)
-	assert.Equal(t, "TEST_KEY", config.APIKeyEnv)
+	assert.Equal(t, "test-key-value", config.APIKey)
 	assert.Equal(t, 1000, config.MaxTokens)
 	assert.Equal(t, "http://test:1234/v1", config.BaseURL)
 }
@@ -199,7 +199,7 @@ func TestClientGetters_GetBaseURL(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
 		Model:     "llama3.3:70b",
-		APIKeyEnv: "OLLAMA_API_KEY",
+		APIKey:    "",
 		MaxTokens: 4096,
 		BaseURL:   "http://localhost:11434/v1",
 	}
@@ -223,16 +223,16 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Should use defaults when providers is nil.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Empty(t, config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 	assert.Equal(t, DefaultBaseURL, config.BaseURL)
 }
@@ -252,16 +252,16 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Should use defaults when this provider is not configured.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Empty(t, config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 	assert.Equal(t, DefaultBaseURL, config.BaseURL)
 }
@@ -279,16 +279,16 @@ func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	}
 
 	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
-		Model:     DefaultModel,
-		APIKeyEnv: DefaultAPIKeyEnv,
-		MaxTokens: DefaultMaxTokens,
-		BaseURL:   DefaultBaseURL,
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+		BaseURL:       DefaultBaseURL,
 	})
 
 	// Should use defaults when provider config is nil.
 	assert.True(t, config.Enabled)
 	assert.Equal(t, DefaultModel, config.Model)
-	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Empty(t, config.APIKey)
 	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
 	assert.Equal(t, DefaultBaseURL, config.BaseURL)
 }
@@ -368,7 +368,7 @@ func TestOllamaModels(t *testing.T) {
 			config := &base.Config{
 				Enabled:   true,
 				Model:     m.modelID,
-				APIKeyEnv: DefaultAPIKeyEnv,
+				APIKey:    "",
 				MaxTokens: DefaultMaxTokens,
 				BaseURL:   DefaultBaseURL,
 			}
@@ -411,10 +411,10 @@ func TestOllamaBaseURLVariants(t *testing.T) {
 					},
 				},
 			}, ProviderName, base.ProviderDefaults{
-				Model:     DefaultModel,
-				APIKeyEnv: DefaultAPIKeyEnv,
-				MaxTokens: DefaultMaxTokens,
-				BaseURL:   DefaultBaseURL,
+				Model:         DefaultModel,
+				DefaultAPIKey: "",
+				MaxTokens:     DefaultMaxTokens,
+				BaseURL:       DefaultBaseURL,
 			})
 
 			assert.Equal(t, tt.baseURL, config.BaseURL)

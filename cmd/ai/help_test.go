@@ -969,6 +969,9 @@ settings:
     enabled: true
     default_provider: "anthropic"
     timeout_seconds: 5
+    providers:
+      anthropic:
+        api_key: "fake-api-key-for-testing"
 `
 
 	// Write the config file.
@@ -991,8 +994,6 @@ settings:
 
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
-	// Set a fake API key to allow client creation.
-	t.Setenv("ANTHROPIC_API_KEY", "fake-api-key-for-testing")
 
 	// Change to temp dir.
 	t.Chdir(tempDir)
@@ -1032,6 +1033,9 @@ settings:
     enabled: true
     default_provider: "anthropic"
     timeout_seconds: 120
+    providers:
+      anthropic:
+        api_key: "fake-api-key-for-testing"
 `
 
 	// Write the config file.
@@ -1054,8 +1058,6 @@ settings:
 
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
-	// Set a fake API key to allow client creation.
-	t.Setenv("ANTHROPIC_API_KEY", "fake-api-key-for-testing")
 
 	// Change to temp dir.
 	t.Chdir(tempDir)
@@ -1094,6 +1096,9 @@ settings:
   ai:
     enabled: true
     default_provider: "anthropic"
+    providers:
+      anthropic:
+        api_key: "fake-api-key-for-testing"
 `
 
 	// Write the config file.
@@ -1116,8 +1121,6 @@ settings:
 
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
-	// Set a fake API key to allow client creation.
-	t.Setenv("ANTHROPIC_API_KEY", "fake-api-key-for-testing")
 
 	// Change to temp dir.
 	t.Chdir(tempDir)

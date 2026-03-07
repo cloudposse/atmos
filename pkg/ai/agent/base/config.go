@@ -2,24 +2,22 @@
 package base
 
 import (
-	"github.com/spf13/viper"
-
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ProviderDefaults contains default values for a provider.
 type ProviderDefaults struct {
-	Model     string
-	APIKeyEnv string
-	MaxTokens int
-	BaseURL   string
+	Model         string
+	DefaultAPIKey string
+	MaxTokens     int
+	BaseURL       string
 }
 
 // Config holds common configuration for AI clients.
 type Config struct {
 	Enabled   bool
 	Model     string
-	APIKeyEnv string
+	APIKey    string //nolint:gosec // G117: not a hardcoded credential, populated from config
 	MaxTokens int
 	BaseURL   string
 }
@@ -45,7 +43,7 @@ func ExtractConfig(atmosConfig *schema.AtmosConfiguration, providerName string, 
 	config := &Config{
 		Enabled:   false,
 		Model:     defaults.Model,
-		APIKeyEnv: defaults.APIKeyEnv,
+		APIKey:    defaults.DefaultAPIKey,
 		MaxTokens: defaults.MaxTokens,
 		BaseURL:   defaults.BaseURL,
 	}
@@ -70,8 +68,8 @@ func applyProviderOverrides(config *Config, providerConfig *schema.AIProviderCon
 	if providerConfig.Model != "" {
 		config.Model = providerConfig.Model
 	}
-	if providerConfig.ApiKeyEnv != "" {
-		config.APIKeyEnv = providerConfig.ApiKeyEnv
+	if providerConfig.ApiKey != "" {
+		config.APIKey = providerConfig.ApiKey
 	}
 	if providerConfig.MaxTokens > 0 {
 		config.MaxTokens = providerConfig.MaxTokens
@@ -79,14 +77,4 @@ func applyProviderOverrides(config *Config, providerConfig *schema.AIProviderCon
 	if providerConfig.BaseURL != "" {
 		config.BaseURL = providerConfig.BaseURL
 	}
-}
-
-// GetAPIKey retrieves the API key from environment using the specified env var name.
-// Uses a fresh viper instance with AutomaticEnv to read the environment variable.
-func GetAPIKey(envVarName string) string {
-	v := viper.New()
-	v.AutomaticEnv()
-	// Set a default empty string to ensure the key exists for viper to look up.
-	v.SetDefault(envVarName, "")
-	return v.GetString(envVarName)
 }
