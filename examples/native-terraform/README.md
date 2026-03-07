@@ -13,7 +13,7 @@ The example shows two migration strategies side by side:
 
 ## Directory Structure
 
-```
+```text
 ├── atmos.yaml                        # Atmos configuration
 ├── components/terraform/vpc/         # Your Terraform root module
 │   ├── main.tf

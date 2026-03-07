@@ -162,7 +162,7 @@ For deploying across multiple regions, see the [Multi-Region Configuration](/des
 
 ### Directory Structure
 
-Azure organizes resources as **Management Groups → Subscriptions → Resource Groups → Locations**. The directory layout mirrors this hierarchy. Only the first folder (`management-groups/`) is named after the resource type — everything below it is a name, and its position in the tree tells you what kind of resource it is.
+Azure deployments are commonly organized around **Management Groups → Subscriptions**, with resource groups and locations modeled in stack/component configuration. This directory layout reflects that workflow. Only the first folder (`management-groups/`) is named after the resource type — everything below it is a name, and its position in the tree tells you what kind of resource it is.
 
 Each Azure subscription is the primary boundary for billing, access control, and resource limits, with its own RBAC policies and cost tracking. When you see `dev/` and `prod/` nested under a management group, you immediately know these are separate subscriptions targeting different billing and security contexts.
 

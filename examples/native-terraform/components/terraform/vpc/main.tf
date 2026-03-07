@@ -1,3 +1,12 @@
+terraform {
+  required_providers {
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
+  }
+}
+
 # Mock VPC component for demonstrating Atmos migration from native Terraform.
 # Uses null_resource so no cloud credentials are needed.
 

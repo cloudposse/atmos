@@ -10,7 +10,7 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-The `overrides` section provides **file-scoped variable overrides**. Unlike regular `vars` which apply to all components in the entire top-level stack after import resolution, `overrides` apply only to components defined in the current manifest file and its imports.
+The `overrides` section provides **file-scoped overrides**. Unlike global or component-type configuration such as `vars`, which can affect every component in the resolved top-level stack, `overrides` apply only to components defined in the current manifest file and its imports.
 </Intro>
 
 ## Why Overrides Exist
@@ -22,7 +22,9 @@ The `overrides` section solves this by staying scoped to the file boundary. Valu
 Overrides also have the **highest merge priority**, making them useful when you need a value to win regardless of where else it's defined.
 
 :::tip When You Don't Need Overrides
-If each top-level stack imports a single blueprint (no competing manifests), you don't need `overrides`. Plain `vars` at the same scope level is sufficient — the importing file's values override the imported file's values. See the [Blueprint Configuration](/design-patterns/stack-organization/blueprint-configuration) pattern.
+If you're only customizing `vars` and each top-level stack imports a single blueprint (no competing manifests), you usually don't need `overrides`. Plain `vars` at the same scope level is sufficient — the importing file's values override the imported file's values. See the [Blueprint Configuration](/design-patterns/stack-organization/blueprint-configuration) pattern.
+
+For file-scoped changes to `command`, `env`, `hooks`, `providers`, or `settings`, keep using `overrides`.
 :::
 
 ## What Can Be Overridden
@@ -309,7 +311,8 @@ terraform:
 :::important Import order matters
 - **Imported overrides** apply to components imported _after_ them. In the example above, `teams/testing-overrides` applies to `test-component` and `test-component-override`, but **not** to `test-component-2` (listed before it).
 - **Inline overrides** apply to _all_ components in the file and its imports, regardless of order.
-- **Inline wins** over imported overrides when they conflict.
+- **Inline wins** over imported overrides when they conflict at the same scope level.
+- **Scope level still beats import order.** For example, imported `terraform.overrides` can override inline global `overrides` for Terraform components.
 :::
 
 :::tip
