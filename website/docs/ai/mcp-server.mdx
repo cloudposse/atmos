@@ -104,8 +104,8 @@ atmos mcp start
 # HTTP on default port (localhost:8080)
 atmos mcp start --transport http
 
-# HTTP on a custom host/port, accessible from the network
-atmos mcp start --transport http --host 0.0.0.0 --port 3000
+# HTTP on a custom host/port
+atmos mcp start --transport http --host 127.0.0.1 --port 3000
 ```
 </Terminal>
 
@@ -485,6 +485,7 @@ COPY components/ /atmos/components/
 WORKDIR /atmos
 EXPOSE 8080
 
+# Binding to 0.0.0.0 inside a container is safe; Docker port mapping controls external access.
 CMD ["atmos", "mcp", "start", "--transport", "http", "--host", "0.0.0.0", "--port", "8080"]
 ```
 </File>

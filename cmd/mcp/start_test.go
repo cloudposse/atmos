@@ -846,7 +846,7 @@ func TestStartCmd_ExampleComprehensive(t *testing.T) {
 	// Check for all example scenarios.
 	assert.Contains(t, cmd.Example, "stdio", "example should show stdio transport")
 	assert.Contains(t, cmd.Example, "--host", "example should show host flag")
-	assert.Contains(t, cmd.Example, "0.0.0.0", "example should show binding to all interfaces")
+	assert.Contains(t, cmd.Example, "127.0.0.1", "example should show binding to a custom host")
 }
 
 // TestGetPermissionMode_EmptyConfig tests getPermissionMode with minimal config.

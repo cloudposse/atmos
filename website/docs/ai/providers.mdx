@@ -289,6 +289,10 @@ providers:
 
 To enable remote access on the server, set `OLLAMA_HOST=0.0.0.0:11434` before starting Ollama.
 
+:::caution
+Binding to `0.0.0.0` exposes the Ollama API to all network interfaces. Ensure the server is behind a firewall or reverse proxy with authentication in production environments.
+:::
+
 **Linux (systemd):**
 
 <Terminal title="shell">

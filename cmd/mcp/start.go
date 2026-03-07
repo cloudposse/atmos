@@ -72,7 +72,7 @@ The server runs until interrupted (Ctrl+C) or the client disconnects.`,
   atmos mcp start --transport http --port 8080
 
   # Start HTTP server on custom host and port
-  atmos mcp start --transport http --host 0.0.0.0 --port 3000`,
+  atmos mcp start --transport http --host 127.0.0.1 --port 3000`,
 	RunE: executeMCPServer,
 }
 

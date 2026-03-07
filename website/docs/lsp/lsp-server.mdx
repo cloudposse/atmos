@@ -176,8 +176,8 @@ atmos lsp start --transport tcp --address localhost:9000
 # Start WebSocket server
 atmos lsp start --transport websocket --address localhost:8080
 
-# Start WebSocket on all interfaces (for remote access)
-atmos lsp start --transport websocket --address 0.0.0.0:8080
+# Start WebSocket on a specific interface
+atmos lsp start --transport websocket --address 127.0.0.1:8080
 ```
 </Terminal>
 
@@ -787,8 +787,8 @@ atmos lsp start --transport stdio
 # Start server
 atmos lsp start --transport tcp --address localhost:7777
 
-# Or bind to all interfaces for remote access
-atmos lsp start --transport tcp --address 0.0.0.0:7777
+# Or bind to a specific interface
+atmos lsp start --transport tcp --address 127.0.0.1:7777
 ```
 
 **Pros:**
@@ -1149,7 +1149,7 @@ nvim stacks/prod/vpc.yaml
 ```bash
 # 1. Start LSP server on shared development server
 # (on dev.example.com)
-atmos lsp start --transport tcp --address 0.0.0.0:7777
+atmos lsp start --transport tcp --address localhost:7777
 
 # 2. Team members connect via SSH tunnel
 ssh -L 7777:localhost:7777 user@dev.example.com
