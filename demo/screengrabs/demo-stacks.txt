@@ -3,6 +3,12 @@
 #
 atmos about
 atmos about --help
+atmos ai --help
+atmos ai ask --help
+atmos ai chat --help
+atmos ai exec --help
+atmos ai help --help
+atmos ai sessions --help
 atmos packer --help
 atmos packer build --help
 atmos packer init --help
