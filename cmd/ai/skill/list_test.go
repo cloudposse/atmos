@@ -968,6 +968,8 @@ func TestListCmd_EmptySkillsList(t *testing.T) {
 	assert.Contains(t, output, "No skills installed")
 	assert.Contains(t, output, "Install a skill with")
 	assert.Contains(t, output, "atmos ai skill install")
+	assert.Contains(t, output, "github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform")
+	assert.Contains(t, output, "Browse all available skills")
 }
 
 // TestListCmd_WithInstalledSkills tests listing skills when they are present.

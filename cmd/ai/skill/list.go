@@ -57,7 +57,10 @@ var listCmd = &cobra.Command{
 		if len(skills) == 0 {
 			fmt.Println("No skills installed.")
 			fmt.Println("\nInstall a skill with:")
-			fmt.Println("  atmos ai skill install github.com/user/skill-name")
+			fmt.Println("  atmos ai skill install github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform")
+			fmt.Println("")
+			fmt.Println("Browse all available skills:")
+			fmt.Println("  https://github.com/cloudposse/atmos/tree/main/agent-skills/skills")
 			return nil
 		}
 

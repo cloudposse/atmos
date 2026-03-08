@@ -1,7 +1,7 @@
 ---
 title: Claude Code Integration
 sidebar_label: Claude Code Integration
-description: Use Claude Code IDE with Atmos via MCP server for development workflows
+description: Use Claude Code with Atmos via MCP server for development workflows
 id: claude-code-integration
 ---
 import Terminal from '@site/src/components/Terminal'
@@ -10,7 +10,7 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Use Claude Code IDE with the Atmos MCP server to access your infrastructure directly from your development environment. Create specialized `atmos-expert` subagents that provide deep infrastructure expertise while you code.
+Use Claude Code with the Atmos MCP server to access your infrastructure directly from your development environment. Create specialized `atmos-expert` subagents that provide deep infrastructure expertise while you code.
 </Intro>
 
 <Experimental />
@@ -21,9 +21,9 @@ Claude Code subagents are specialized AI assistants that enhance your developmen
 
 ### Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
-│ Claude Code IDE                                 │
+│ Claude Code                                     │
 │                                                 │
 │  You: @atmos-expert "List my stacks"            │
 │         ↓                                       │
@@ -160,7 +160,7 @@ You can also create `.claude/agents/atmos-expert.md` in your project root for pr
 
 ### Step 3: Use the Subagent
 
-In Claude Code IDE, invoke the subagent with `@`:
+In Claude Code, invoke the subagent with `@`:
 
 ```
 @atmos-expert List all available stacks in my infrastructure

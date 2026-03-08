@@ -2,9 +2,5 @@
   "label": "lsp",
   "className": "command",
   "collapsible": true,
-  "collapsed": true,
-  "link": {
-    "type": "doc",
-    "id": "start"
-  }
+  "collapsed": true
 }

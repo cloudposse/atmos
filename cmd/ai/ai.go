@@ -27,9 +27,6 @@ func isAIEnabled(atmosConfig *schema.AtmosConfiguration) bool {
 }
 
 func init() {
-	// Attach subcommands to ai command.
-	// These will be added in the init() functions of each subcommand file.
-
 	// Register this built-in command with the registry.
 	// This happens during package initialization via blank import.
 	internal.Register(&AICommandProvider{})

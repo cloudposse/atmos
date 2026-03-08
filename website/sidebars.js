@@ -203,6 +203,7 @@ module.exports = {
                 {type: 'doc', id: 'cli/environment-variables', label: 'Environment Variables'},
                 {type: 'doc', id: 'cli/versioning', label: 'Versioning'},
                 {type: 'doc', id: 'projects/layout', label: 'Folder Structure'},
+                {type: 'doc', id: 'ai/ai', label: 'Atmos AI'},
                 {
                     type: 'category',
                     label: 'Setup Editor (IDE)',
@@ -213,7 +214,7 @@ module.exports = {
                         {type: 'doc', id: 'ai/mcp-server', label: 'MCP Server'},
                         {
                             type: 'category',
-                            label: 'IDE Integration (LSP)',
+                            label: 'LSP',
                             link: {type: 'doc', id: 'lsp/lsp'},
                             items: [
                                 {type: 'doc', id: 'lsp/lsp-server', label: 'LSP Server'},
@@ -443,15 +444,6 @@ module.exports = {
                     dirName: 'integrations/github-actions',
                 }
             ]
-        },
-        {
-            type: 'category',
-            label: 'Atmos AI',
-            className: 'sidebar-title',
-            collapsible: false,
-            collapsed: false,
-            link: {type: 'doc', id: 'ai/ai'},
-            items: []
         },
         {
             type: 'category',
