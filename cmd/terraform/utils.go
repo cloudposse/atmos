@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -351,18 +353,19 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		return nil
 	}
 
-	// Verify stored planfile matches current state before applying.
-	if subCommand == "apply" && info.VerifyPlan {
-		storedPlan := info.StoredPlanFile // Set by CI download hook.
-		if storedPlan == "" && info.UseTerraformPlan {
-			storedPlan = info.PlanFile // Manual --from-plan usage.
-		}
-		if storedPlan != "" {
-			if verifyErr := e.VerifyPlanfile(&info, storedPlan); verifyErr != nil {
-				return verifyErr
+	// Verify stored planfile matches current state before deploying.
+	if subCommand == "deploy" && info.VerifyPlan {
+		verifyAtmosConfig, configErr := cfg.InitCliConfig(info, true)
+		if configErr == nil {
+			canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, &info)
+			componentDir := filepath.Dir(canonicalPlanPath)
+			storedPlanPath := filepath.Join(componentDir, planfile.StoredPlanPrefix+planfile.PlanFilename)
+
+			if _, statErr := os.Stat(storedPlanPath); statErr == nil {
+				if verifyErr := e.VerifyPlanfile(&info, storedPlanPath); verifyErr != nil {
+					return verifyErr
+				}
 			}
-			// Verification passed — apply will use the fresh plan generated during verification.
-			// info.PlanFile and info.UseTerraformPlan are set by VerifyPlanfile.
 		}
 	}
 

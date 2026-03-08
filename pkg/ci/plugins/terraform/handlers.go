@@ -72,16 +72,20 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 }
 
 // onBeforeApply handles the before.terraform.apply event.
-// Downloads planfile from storage.
+// Creates a check run with in_progress status.
 func (p *Plugin) onBeforeApply(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeApply")()
 
-	// Download -- FATAL (apply depends on it).
-	return p.downloadPlanfile(ctx)
+	if isCheckEnabled(ctx.Config) {
+		if err := p.createCheckRun(ctx); err != nil {
+			log.Warn("CI check run creation failed", "error", err)
+		}
+	}
+	return nil
 }
 
 // onAfterApply handles the after.terraform.apply event.
-// Writes summary and outputs.
+// Writes summary, outputs, and updates check run.
 func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterApply")()
 
@@ -103,6 +107,91 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 			log.Warn("CI output failed", "error", err)
 		}
 	}
+
+	// Check -- warn-only.
+	if isCheckEnabled(ctx.Config) {
+		if err := p.updateCheckRun(ctx, result); err != nil {
+			log.Warn("CI check run update failed", "error", err)
+		}
+	}
+
+	return nil
+}
+
+// onBeforeDeploy handles the before.terraform.deploy event.
+// Downloads planfile from storage with stored prefix for verification.
+func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeDeploy")()
+
+	// Download planfile for verification -- FATAL (deploy depends on it).
+	return p.downloadPlanfileForVerification(ctx)
+}
+
+// onAfterDeploy handles the after.terraform.deploy event.
+// Deploy is semantically apply for CI purposes — delegates to onAfterApply
+// so that apply.md template is used and terraform outputs are fetched.
+func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterDeploy")()
+
+	ctx.Command = "apply"
+	return p.onAfterApply(ctx)
+}
+
+// downloadPlanfileForVerification downloads a planfile from storage with a stored prefix
+// so terraform can generate a fresh plan at the canonical path for comparison.
+func (p *Plugin) downloadPlanfileForVerification(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.downloadPlanfileForVerification")()
+
+	planfilePath := ctx.Info.PlanFile
+	if planfilePath == "" {
+		planfilePath = p.resolveArtifactPath(ctx)
+	}
+	if planfilePath == "" {
+		log.Debug("No planfile path specified, skipping download")
+		return nil
+	}
+
+	key, err := p.getArtifactKey(ctx.Info, ctx.CICtx)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+			WithExplanation("Failed to generate artifact key for planfile download").Err()
+	}
+
+	storeAny, err := ctx.CreatePlanfileStore()
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+			WithExplanation("Failed to create planfile store").Err()
+	}
+
+	store, ok := storeAny.(planfile.Store)
+	if !ok {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).
+			WithExplanation("Invalid planfile store type").Err()
+	}
+
+	results, _, err := store.Download(context.Background(), key)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+			WithExplanation("Failed to download planfile from store").
+			WithContext("key", key).WithContext("store", store.Name()).Err()
+	}
+	defer func() {
+		for _, r := range results {
+			r.Data.Close()
+		}
+	}()
+
+	// Always write with stored prefix so terraform can generate a fresh plan
+	// at the canonical path for comparison during verification.
+	dir := filepath.Dir(planfilePath)
+	storedPlanPath := filepath.Join(dir, planfile.StoredPlanPrefix+planfile.PlanFilename)
+
+	if err := planfile.WritePlanfileResultsForVerification(results, storedPlanPath, planfilePath); err != nil {
+		return err
+	}
+
+	ctx.Info.StoredPlanFile = storedPlanPath
+	logArtifactOperation("Downloaded (stored for verification)", key, store.Name(), storedPlanPath, ctx.Info)
 
 	return nil
 }
@@ -376,26 +465,11 @@ func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
 		}
 	}()
 
-	// When plan verification is enabled, download the stored planfile with a prefix
-	// so terraform can generate a fresh plan at the canonical path for comparison.
-	if ctx.Info.VerifyPlan {
-		dir := filepath.Dir(planfilePath)
-		storedPlanPath := filepath.Join(dir, planfile.StoredPlanPrefix+planfile.PlanFilename)
-
-		if err := planfile.WritePlanfileResultsForVerification(results, storedPlanPath, planfilePath); err != nil {
-			return err
-		}
-
-		// Store the stored plan path on info for the verification step in RunE.
-		ctx.Info.StoredPlanFile = storedPlanPath
-		logArtifactOperation("Downloaded (stored for verification)", key, store.Name(), storedPlanPath, ctx.Info)
-	} else {
-		// Write downloaded files to disk using the shared helper.
-		if err := planfile.WritePlanfileResults(results, planfilePath); err != nil {
-			return err
-		}
-		logArtifactOperation("Downloaded", key, store.Name(), planfilePath, ctx.Info)
+	// Write downloaded files to disk using the shared helper.
+	if err := planfile.WritePlanfileResults(results, planfilePath); err != nil {
+		return err
 	}
+	logArtifactOperation("Downloaded", key, store.Name(), planfilePath, ctx.Info)
 
 	return nil
 }

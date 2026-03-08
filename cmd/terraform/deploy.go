@@ -28,7 +28,7 @@ var deployCmd = &cobra.Command{
 
 This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformApply, cmd, args)
+		return runHooks(h.BeforeTerraformDeploy, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset captured output for this run.
@@ -38,7 +38,7 @@ This ensures that the changes defined in your Terraform configuration are applie
 		// are updated to failure status. Cobra skips PostRunE on error.
 		defer func() {
 			if runErr != nil {
-				runHooksOnErrorWithOutput(h.AfterTerraformApply, cmd, args, runErr, capturedDeployOutput)
+				runHooksOnErrorWithOutput(h.AfterTerraformDeploy, cmd, args, runErr, capturedDeployOutput)
 			}
 		}()
 
@@ -93,7 +93,7 @@ This ensures that the changes defined in your Terraform configuration are applie
 		return err
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooksWithOutput(h.AfterTerraformApply, cmd, args, capturedDeployOutput)
+		return runHooksWithOutput(h.AfterTerraformDeploy, cmd, args, capturedDeployOutput)
 	},
 }
 

@@ -43,8 +43,6 @@ FLAGS
 
       --planfile string                    Set the plan file to use
 
-      --verify-plan                        Verify stored planfile matches current state before applying
-
 
 GLOBAL FLAGS
 

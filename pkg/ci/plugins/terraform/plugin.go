@@ -60,6 +60,14 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Event:   "after.terraform.apply",
 			Handler: p.onAfterApply,
 		},
+		{
+			Event:   "before.terraform.deploy",
+			Handler: p.onBeforeDeploy,
+		},
+		{
+			Event:   "after.terraform.deploy",
+			Handler: p.onAfterDeploy,
+		},
 	}
 }
 
