@@ -120,9 +120,11 @@ func hasCredentialFiles(awsDir string) bool {
 	return false
 }
 
-// deleteLegacyKeyringEntry removes a pre-realm keyring entry after credentials
-// have been successfully stored under the current realm. This prevents the
-// realm mismatch warning from firing on subsequent commands.
+// deleteLegacyKeyringEntry removes a pre-realm keyring entry during the early
+// cleanup phase of the Authenticate flow. This runs before authenticateChain,
+// so legacy credentials are removed unconditionally even if subsequent
+// authentication fails. This prevents the realm mismatch warning from firing
+// on subsequent commands.
 func (m *manager) deleteLegacyKeyringEntry(alias string) {
 	if m.realm.Value == "" || m.credentialStore == nil {
 		return
@@ -134,9 +136,11 @@ func (m *manager) deleteLegacyKeyringEntry(alias string) {
 	}
 }
 
-// deleteLegacyCredentialFiles removes pre-realm credential files after credentials
-// have been successfully stored under the current realm. This prevents the file-based
-// realm mismatch warning from firing on subsequent commands.
+// deleteLegacyCredentialFiles removes pre-realm credential files during the early
+// cleanup phase of the Authenticate flow. This runs before authenticateChain,
+// so legacy files are removed unconditionally even if subsequent authentication
+// fails. This prevents the file-based realm mismatch warning from firing on
+// subsequent commands.
 // Scans {baseDir}/aws/{provider}/ for credential and config files and removes them.
 func (m *manager) deleteLegacyCredentialFiles() {
 	if m.realm.Value == "" {
