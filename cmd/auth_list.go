@@ -137,7 +137,7 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load auth manager.
-	authManager, atmosConfig, err := loadAuthManagerForList()
+	authManager, atmosConfig, err := loadAuthManagerForList(cmd)
 	if err != nil {
 		return err
 	}
@@ -400,10 +400,21 @@ func suggestProfilesForAuth(atmosConfig *schema.AtmosConfiguration) error {
 }
 
 // loadAuthManagerForList loads the auth manager and returns the atmos config for profile discovery.
-func loadAuthManagerForList() (authTypes.AuthManager, *schema.AtmosConfiguration, error) {
+func loadAuthManagerForList(cmd *cobra.Command) (authTypes.AuthManager, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "cmd.loadAuthManagerForList")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
+		configAndStacksInfo.AtmosBasePath = bp
+	}
+	if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
+		configAndStacksInfo.AtmosConfigFilesFromArg = cfgFiles
+	}
+	if cfgDirs, _ := cmd.Flags().GetStringSlice("config-path"); len(cfgDirs) > 0 {
+		configAndStacksInfo.AtmosConfigDirsFromArg = cfgDirs
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
