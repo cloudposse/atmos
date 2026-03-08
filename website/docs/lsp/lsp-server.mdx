@@ -8,6 +8,8 @@ description: Language Server Protocol (LSP) server that enables IDE integration 
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 # Atmos LSP Server
 
@@ -195,7 +197,8 @@ atmos lsp start --transport websocket --address 127.0.0.1:8080
 
 Configure your editor to connect to the Atmos LSP Server. The configuration varies by editor but follows a similar pattern: specify the command to start the server and which file types to activate for.
 
-### VS Code
+<Tabs>
+  <TabItem value="vscode" label="VS Code" default>
 
 Create or update `.vscode/settings.json` in your workspace or use a VS Code extension.
 
@@ -352,7 +355,8 @@ export function deactivate(): Thenable<void> | undefined {
 ```
 </File>
 
-### Neovim
+  </TabItem>
+  <TabItem value="neovim" label="Neovim">
 
 Neovim has excellent built-in LSP support. Configure using `nvim-lspconfig` or manually.
 
@@ -455,7 +459,8 @@ vim.api.nvim_create_autocmd('FileType', {
 ```
 </File>
 
-### Vim with vim-lsp
+  </TabItem>
+  <TabItem value="vim-lsp" label="Vim (vim-lsp)">
 
 Install [vim-lsp](https://github.com/prabirshrestha/vim-lsp) for LSP support in Vim.
 
@@ -504,7 +509,8 @@ augroup END
 ```
 </File>
 
-### Vim with coc.nvim
+  </TabItem>
+  <TabItem value="coc-nvim" label="Vim (coc.nvim)">
 
 If you use [coc.nvim](https://github.com/neoclide/coc.nvim), configure it via `:CocConfig`:
 
@@ -525,7 +531,8 @@ If you use [coc.nvim](https://github.com/neoclide/coc.nvim), configure it via `:
 ```
 </File>
 
-### Emacs (lsp-mode)
+  </TabItem>
+  <TabItem value="emacs-lsp" label="Emacs (lsp-mode)">
 
 Configure using [lsp-mode](https://emacs-lsp.github.io/lsp-mode/):
 
@@ -577,7 +584,8 @@ Configure using [lsp-mode](https://emacs-lsp.github.io/lsp-mode/):
 ```
 </File>
 
-### Emacs (eglot)
+  </TabItem>
+  <TabItem value="emacs-eglot" label="Emacs (eglot)">
 
 Configure using [eglot](https://github.com/joaotavora/eglot) (built-in to Emacs 29+):
 
@@ -606,7 +614,8 @@ Configure using [eglot](https://github.com/joaotavora/eglot) (built-in to Emacs 
 ```
 </File>
 
-### Sublime Text
+  </TabItem>
+  <TabItem value="sublime" label="Sublime Text">
 
 Install the [LSP package](https://packagecontrol.io/packages/LSP) for Sublime Text:
 
@@ -636,7 +645,8 @@ Then configure Atmos LSP server:
 ```
 </File>
 
-### IntelliJ IDEA / WebStorm / PyCharm
+  </TabItem>
+  <TabItem value="jetbrains" label="IntelliJ IDEA">
 
 Install the LSP Support plugin:
 
@@ -673,9 +683,10 @@ Configure the Atmos LSP server:
 ```
 </File>
 
-### Cursor (VS Code Fork)
+  </TabItem>
+  <TabItem value="cursor" label="Cursor">
 
-Cursor uses the same configuration as VS Code. Follow the [VS Code](#vs-code) instructions above.
+Cursor uses the same configuration as VS Code. Follow the instructions in the **VS Code** tab.
 
 <File title=".vscode/settings.json">
 ```json
@@ -690,7 +701,8 @@ Cursor uses the same configuration as VS Code. Follow the [VS Code](#vs-code) in
 ```
 </File>
 
-### Zed Editor
+  </TabItem>
+  <TabItem value="zed" label="Zed">
 
 Zed has built-in LSP support. Configure in `~/.config/zed/settings.json`:
 
@@ -720,7 +732,8 @@ Zed has built-in LSP support. Configure in `~/.config/zed/settings.json`:
 ```
 </File>
 
-### Helix Editor
+  </TabItem>
+  <TabItem value="helix" label="Helix">
 
 Configure Helix in `~/.config/helix/languages.toml`:
 
@@ -735,6 +748,9 @@ command = "atmos"
 args = ["lsp", "start", "--transport", "stdio"]
 ```
 </File>
+
+  </TabItem>
+</Tabs>
 
 ## Editor Feature Matrix
 
@@ -1272,33 +1288,6 @@ The LSP Server and LSP Client validate **completely different things**:
 - **Code Actions**: Not yet implemented
 - **Semantic Tokens**: Not yet implemented
 
-### Roadmap
-
-Future enhancements planned:
-
-- **v1.0** (Current)
-  - Real-time syntax validation
-  - Autocomplete for top-level keywords
-  - Hover documentation
-  - Error diagnostics
-
-- **v1.1** (Planned)
-  - Go to definition (follow import paths)
-  - Find all references
-  - Component validation against catalog
-  - Schema-based validation
-
-- **v1.2** (Future)
-  - Code actions (quick fixes)
-  - Rename symbol refactoring
-  - Semantic highlighting
-  - Call hierarchy
-
-- **v1.3** (Future)
-  - Integration with Atmos Pro
-  - Remote stack validation
-  - Team-shared validation rules
-  - Advanced diagnostics
 
 ## Related Documentation
 
@@ -1328,29 +1317,6 @@ The Atmos LSP Server is open source and contributions are welcome!
 - **Request features**: [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
 - **Contribute code**: [Contributing Guide](https://github.com/cloudposse/atmos/blob/main/CONTRIBUTING.md)
 
-### Development
-
-The LSP server is implemented in Go using the [GLSP library](https://github.com/tliron/glsp):
-
-```bash
-# Clone repository
-git clone https://github.com/cloudposse/atmos.git
-cd atmos
-
-# Build
-make build
-
-# Test LSP server
-./build/atmos lsp start --transport stdio
-
-# Run tests
-go test ./pkg/lsp/server/...
-
-# Run linter
-make lint
-```
-
-Source code location: `pkg/lsp/server/`
 
 ## Next Steps
 
@@ -1358,7 +1324,3 @@ Source code location: `pkg/lsp/server/`
 - Configure your [editor](#editor-configuration) to connect to the server
 - Open Atmos stack files and enjoy real-time validation and autocomplete!
 - Check out the [LSP Client](/lsp/lsp-client) for AI-powered validation
-
----
-
-**Questions or issues?** Ask in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or report bugs in [GitHub Issues](https://github.com/cloudposse/atmos/issues).
