@@ -120,6 +120,20 @@ func hasCredentialFiles(awsDir string) bool {
 	return false
 }
 
+// deleteLegacyKeyringEntry removes a pre-realm keyring entry after credentials
+// have been successfully stored under the current realm. This prevents the
+// realm mismatch warning from firing on subsequent commands.
+func (m *manager) deleteLegacyKeyringEntry(alias string) {
+	if m.realm.Value == "" || m.credentialStore == nil {
+		return
+	}
+	if err := m.credentialStore.Delete(alias, ""); err != nil {
+		log.Debug("No legacy keyring entry to delete", "alias", alias)
+	} else {
+		log.Debug("Deleted legacy keyring entry (pre-realm)", "alias", alias)
+	}
+}
+
 // logRealmMismatchWarning emits a warning about credentials existing under a different realm.
 func logRealmMismatchWarning(currentRealm, alternateRealm string) {
 	currentDisplay := currentRealm

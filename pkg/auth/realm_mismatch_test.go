@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/auth/realm"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 )
 
 func TestCheckRealmMismatchFiles_NonEmptyRealm_FindsNoRealmCreds(t *testing.T) {
@@ -291,6 +292,62 @@ func TestCheckNoRealmCredentials(t *testing.T) {
 	})
 }
 
+func TestDeleteLegacyKeyringEntry_CleansUpEmptyRealm(t *testing.T) {
+	// Store has credentials under both realms.
+	store := &realmAwareTestStore{
+		data: map[string]map[string]types.ICredentials{
+			"my-identity": {
+				"":         &testCreds{},
+				"my-realm": &testCreds{},
+			},
+		},
+	}
+	m := &manager{
+		credentialStore: store,
+		realm:           realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+
+	m.deleteLegacyKeyringEntry("my-identity")
+
+	// Legacy (empty-realm) entry should be deleted.
+	_, err := store.Retrieve("my-identity", "")
+	assert.Error(t, err, "legacy entry should have been deleted")
+
+	// Current realm entry should be preserved.
+	_, err = store.Retrieve("my-identity", "my-realm")
+	assert.NoError(t, err, "current realm entry should remain")
+}
+
+func TestDeleteLegacyKeyringEntry_NoOpForEmptyRealm(t *testing.T) {
+	// When realm is empty, no cleanup should happen.
+	store := &realmAwareTestStore{
+		data: map[string]map[string]types.ICredentials{
+			"my-identity": {
+				"": &testCreds{},
+			},
+		},
+	}
+	m := &manager{
+		credentialStore: store,
+		realm:           realm.RealmInfo{Value: "", Source: "auto"},
+	}
+
+	m.deleteLegacyKeyringEntry("my-identity")
+
+	// Entry should still exist — no cleanup for empty realm.
+	_, err := store.Retrieve("my-identity", "")
+	assert.NoError(t, err, "entry should not be deleted when realm is empty")
+}
+
+func TestDeleteLegacyKeyringEntry_NilStore(t *testing.T) {
+	m := &manager{
+		credentialStore: nil,
+		realm:           realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+	// Should not panic.
+	m.deleteLegacyKeyringEntry("my-identity")
+}
+
 func TestLogRealmMismatchWarning_NonEmptyToEmpty(t *testing.T) {
 	// Verify it doesn't panic. The actual log output goes to the logger.
 	logRealmMismatchWarning("my-realm", "(no realm)")
@@ -300,3 +357,50 @@ func TestLogRealmMismatchWarning_EmptyToNonEmpty(t *testing.T) {
 	// Verify it doesn't panic.
 	logRealmMismatchWarning("", "my-project")
 }
+
+// realmAwareTestStore is a test credential store that tracks realm for each entry.
+// Unlike testStore, this distinguishes between credentials stored under different realms.
+type realmAwareTestStore struct {
+	data map[string]map[string]types.ICredentials // alias -> realm -> creds.
+}
+
+func (s *realmAwareTestStore) Store(alias string, creds types.ICredentials, realmValue string) error {
+	if s.data == nil {
+		s.data = map[string]map[string]types.ICredentials{}
+	}
+	if s.data[alias] == nil {
+		s.data[alias] = map[string]types.ICredentials{}
+	}
+	s.data[alias][realmValue] = creds
+	return nil
+}
+
+func (s *realmAwareTestStore) Retrieve(alias string, realmValue string) (types.ICredentials, error) {
+	if s.data == nil {
+		return nil, assert.AnError
+	}
+	realms, ok := s.data[alias]
+	if !ok {
+		return nil, assert.AnError
+	}
+	creds, ok := realms[realmValue]
+	if !ok {
+		return nil, assert.AnError
+	}
+	return creds, nil
+}
+
+func (s *realmAwareTestStore) Delete(alias string, realmValue string) error {
+	if s.data != nil {
+		if realms, ok := s.data[alias]; ok {
+			delete(realms, realmValue)
+		}
+	}
+	return nil
+}
+
+func (s *realmAwareTestStore) List(realmValue string) ([]string, error) { return nil, nil }
+func (s *realmAwareTestStore) IsExpired(alias string, realmValue string) (bool, error) {
+	return false, nil
+}
+func (s *realmAwareTestStore) Type() string { return "realm-aware-test" }
