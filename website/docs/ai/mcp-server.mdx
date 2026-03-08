@@ -8,6 +8,8 @@ import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
@@ -18,6 +20,20 @@ an open standard that lets any compatible AI client -- Claude Desktop, Claude Co
 </Intro>
 
 <Experimental />
+
+<ActionCard title="MCP Command Reference">
+    See flag details, transport modes, and HTTP endpoints for `atmos mcp start`.
+    <div>
+      <PrimaryCTA to="/cli/commands/mcp/start">Command Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<ActionCard title="MCP Configuration">
+    Configure AI tools and permissions for the MCP server in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/mcp">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 :::danger Security Warning
 The MCP server has no built-in authentication or encryption.
@@ -84,78 +100,38 @@ Claude will call `atmos_list_stacks` and return your actual stack names.
 
 If something goes wrong, check the [Troubleshooting](#troubleshooting) section.
 
-## Transport Modes
-
-Atmos MCP supports two transports. You can only use one at a time.
-
-| | stdio (default) | HTTP |
-|---|---|---|
-| **How it works** | Client spawns Atmos as a subprocess; communication over stdin/stdout | Atmos listens on an HTTP port with SSE |
-| **Best for** | Desktop apps, local development | Remote access, shared servers, CI/CD |
-| **Multiple clients** | No (1:1 with client) | Yes |
-| **Network exposure** | None | Requires security measures |
-| **Lifecycle** | Tied to client process | Runs independently |
-
-### Starting the Server
-
-<Terminal title="atmos mcp start">
-```bash
-# stdio (default) -- used by desktop clients automatically
-atmos mcp start
-
-# HTTP on default port (localhost:8080)
-atmos mcp start --transport http
-
-# HTTP on a custom host/port
-atmos mcp start --transport http --host 127.0.0.1 --port 3000
-```
-</Terminal>
-
-### Command Flags
-
-<dl>
-  <dt>`--transport`</dt>
-  <dd>Transport type: `stdio` (default) or `http`.</dd>
-
-  <dt>`--host`</dt>
-  <dd>Host to bind (HTTP only). Default: `localhost`.</dd>
-
-  <dt>`--port`</dt>
-  <dd>Port to bind (HTTP only). Default: `8080`.</dd>
-</dl>
-
-### HTTP Endpoints
-
-When running with `--transport http`, the server exposes:
-
-<dl>
-  <dt>`GET /sse`</dt>
-  <dd>Server-Sent Events stream for client communication.</dd>
-
-  <dt>`POST /message`</dt>
-  <dd>JSON-RPC 2.0 message endpoint.</dd>
-
-  <dt>`GET /health`</dt>
-  <dd>Returns `{"status":"healthy","clients":N}`. Use for monitoring and liveness probes.</dd>
-</dl>
-
 ## Available Tools
 
 When connected, the MCP server exposes all enabled Atmos AI tools. For full details on each tool, its parameters,
-and the permission system, see [AI Tools](/ai/tools).
+and the permission system, see [AI Tools Configuration](/cli/configuration/ai/tools).
 
-| Tool | Description |
-|------|-------------|
-| `atmos_describe_component` | Get detailed component configuration for a stack |
-| `atmos_list_stacks` | List and filter stacks |
-| `atmos_validate_stacks` | Validate stack configurations |
-| `atmos_terraform_plan` | Generate Terraform plans |
-| `atmos_read_component_file` | Read a component source file |
-| `atmos_read_stack_file` | Read a stack configuration file |
-| `atmos_write_component_file` | Modify a component file (requires permission) |
-| `atmos_write_stack_file` | Modify a stack file (requires permission) |
+<dl>
+  <dt>`atmos_describe_component`</dt>
+  <dd>Get detailed component configuration for a stack.</dd>
 
-All tools respect your configured [permission settings](/ai/tools#permission-system).
+  <dt>`atmos_list_stacks`</dt>
+  <dd>List and filter stacks.</dd>
+
+  <dt>`atmos_validate_stacks`</dt>
+  <dd>Validate stack configurations.</dd>
+
+  <dt>`atmos_terraform_plan`</dt>
+  <dd>Generate Terraform plans.</dd>
+
+  <dt>`atmos_read_component_file`</dt>
+  <dd>Read a component source file.</dd>
+
+  <dt>`atmos_read_stack_file`</dt>
+  <dd>Read a stack configuration file.</dd>
+
+  <dt>`atmos_write_component_file`</dt>
+  <dd>Modify a component file (requires permission).</dd>
+
+  <dt>`atmos_write_stack_file`</dt>
+  <dd>Modify a stack file (requires permission).</dd>
+</dl>
+
+All tools respect your configured [permission settings](/cli/configuration/ai/tools).
 
 ## Client Setup
 
@@ -365,85 +341,37 @@ grok mcp add atmos --transport stdio --command "atmos" --args "mcp,start"
 
 ### Client Comparison
 
-| Client | Config Location | Best For |
-|--------|----------------|----------|
-| **Claude Desktop** | `~/.config/claude/claude_desktop_config.json` | General infrastructure queries |
-| **VS Code Copilot** | `.vscode/mcp.json` | Coding with infrastructure context |
-| **Cursor** | `~/.cursor/mcp.json` | AI-first development |
-| **Cline** | GUI + `cline_mcp_settings.json` | Autonomous coding |
-| **Continue.dev** | `.continue/mcpServers/atmos.yaml` | Multi-model workflows |
-| **Windsurf** | `~/.windsurf/mcp.json` | AI-powered development |
-| **Claude Code** | `.mcp.json` or CLI | Terminal-based workflows |
-| **Gemini CLI** | `~/.gemini/settings.json` | Google Cloud users |
-| **Codex CLI** | `~/.codex/config.json` | OpenAI ecosystem |
-| **Grok CLI** | `.grok/settings.json` | xAI users |
+<dl>
+  <dt>**Claude Desktop** — `~/.config/claude/claude_desktop_config.json`</dt>
+  <dd>General infrastructure queries.</dd>
 
-## Configuration
+  <dt>**VS Code Copilot** — `.vscode/mcp.json`</dt>
+  <dd>Coding with infrastructure context.</dd>
 
-### Minimal Setup
+  <dt>**Cursor** — `~/.cursor/mcp.json`</dt>
+  <dd>AI-first development.</dd>
 
-The only required configuration is enabling AI tools in `atmos.yaml`:
+  <dt>**Cline** — GUI + `cline_mcp_settings.json`</dt>
+  <dd>Autonomous coding.</dd>
 
-<File title="atmos.yaml">
-```yaml
-settings:
-  ai:
-    enabled: true
-    tools:
-      enabled: true
-```
-</File>
+  <dt>**Continue.dev** — `.continue/mcpServers/atmos.yaml`</dt>
+  <dd>Multi-model workflows.</dd>
 
-### Full Configuration
+  <dt>**Windsurf** — `~/.windsurf/mcp.json`</dt>
+  <dd>AI-powered development.</dd>
 
-For more control, you can specify providers, tool restrictions, and confirmation behavior:
+  <dt>**Claude Code** — `.mcp.json` or CLI</dt>
+  <dd>Terminal-based workflows.</dd>
 
-<File title="atmos.yaml">
-```yaml
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
+  <dt>**Gemini CLI** — `~/.gemini/settings.json`</dt>
+  <dd>Google Cloud users.</dd>
 
-    tools:
-      enabled: true
-      require_confirmation: true
-      allowed_tools:
-        - atmos_describe_component
-        - atmos_list_stacks
-        - atmos_validate_stacks
-```
-</File>
+  <dt>**Codex CLI** — `~/.codex/config.json`</dt>
+  <dd>OpenAI ecosystem.</dd>
 
-:::note
-The MCP server itself does not require an API key. The tools it exposes use your configured AI provider settings.
-:::
-
-### Advanced Claude Desktop Options
-
-If `atmos` is not in your PATH, or you need environment variables:
-
-<File title="claude_desktop_config.json">
-```json
-{
-  "mcpServers": {
-    "atmos": {
-      "command": "/usr/local/bin/atmos",
-      "args": ["mcp", "start"],
-      "cwd": "/home/user/infrastructure",
-      "env": {
-        "ANTHROPIC_API_KEY": "your-key-here",
-        "ATMOS_BASE_PATH": "/home/user/infrastructure"
-      }
-    }
-  }
-}
-```
-</File>
+  <dt>**Grok CLI** — `.grok/settings.json`</dt>
+  <dd>xAI users.</dd>
+</dl>
 
 ## Example Queries
 
@@ -605,14 +533,25 @@ server {
 
 ## Comparison with `atmos ai chat`
 
-| Feature | `atmos ai chat` | `atmos mcp start` |
-|---------|----------------|-------------------|
-| **Access** | Built-in CLI | Any MCP client |
-| **Interface** | Terminal TUI | Client-dependent |
-| **Session management** | Built-in | Client-managed |
-| **Project instructions** | Built-in | Not available |
-| **Portability** | Atmos CLI only | Universal (MCP standard) |
-| **Setup** | None | Requires client configuration |
+<dl>
+  <dt>Access</dt>
+  <dd>**`atmos ai chat`:** Built-in CLI. **`atmos mcp start`:** Any MCP client.</dd>
+
+  <dt>Interface</dt>
+  <dd>**`atmos ai chat`:** Terminal TUI. **`atmos mcp start`:** Client-dependent.</dd>
+
+  <dt>Session management</dt>
+  <dd>**`atmos ai chat`:** Built-in. **`atmos mcp start`:** Client-managed.</dd>
+
+  <dt>Project instructions</dt>
+  <dd>**`atmos ai chat`:** Built-in. **`atmos mcp start`:** Not available.</dd>
+
+  <dt>Portability</dt>
+  <dd>**`atmos ai chat`:** Atmos CLI only. **`atmos mcp start`:** Universal (MCP standard).</dd>
+
+  <dt>Setup</dt>
+  <dd>**`atmos ai chat`:** None. **`atmos mcp start`:** Requires client configuration.</dd>
+</dl>
 
 Use `atmos ai chat` for quick terminal queries. Use `atmos mcp start` when you want Atmos tools
 inside Claude Desktop, VS Code, or other AI assistants. They work well together.
@@ -681,8 +620,9 @@ check network latency. Monitor resource usage via `/health`.
 
 ## Related Documentation
 
-- [AI Configuration](/ai/configuration) -- Configure AI provider settings
-- [AI Tools](/ai/tools) -- Tool details and permission system
+- [MCP Command Reference](/cli/commands/mcp/start) -- Command flags and transport modes
+- [MCP Configuration](/cli/configuration/mcp) -- Configure tools and permissions
+- [AI Tools Configuration](/cli/configuration/ai/tools) -- Tool details and permission system
 - [MCP Specification](https://modelcontextprotocol.io) -- Official protocol documentation
 - [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) -- SDK used by the Atmos MCP Server
 - [MCP Clients](https://modelcontextprotocol.io/clients) -- 100+ compatible applications

@@ -42,29 +42,70 @@ that skill, and only pulls in reference files when deep detail is needed.
 
 Atmos includes 21 skills covering every major subsystem:
 
-| Skill | Description |
-|-------|-------------|
-| `atmos-ansible` | Ansible playbook execution, variable passing, inventory management |
-| `atmos-auth` | Multi-provider auth (SSO/SAML/OIDC), identities, keyring, login/exec/shell |
-| `atmos-components` | Terraform root modules, abstract components, component inheritance, versioning |
-| `atmos-config` | Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles |
-| `atmos-custom-commands` | User-defined CLI commands in atmos.yaml with arguments, flags, and steps |
-| `atmos-design-patterns` | Stack organization, component catalogs, inheritance, version management patterns |
-| `atmos-devcontainer` | Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration |
-| `atmos-gitops` | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based workflows |
-| `atmos-helmfile` | Helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration |
-| `atmos-introspection` | describe/list commands for querying stacks, components, dependencies, and change impact |
-| `atmos-packer` | Packer init/build/validate, machine image building, template management |
-| `atmos-schemas` | JSON Schema for stack manifests, IDE auto-completion, schema validation |
-| `atmos-stacks` | Stack YAML manifests, imports, inheritance, deep merging, vars, settings, metadata |
-| `atmos-stores` | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory) |
-| `atmos-templates` | Go templates, Sprig/Gomplate functions, `atmos.Component`, datasources |
-| `atmos-terraform` | Terraform plan/apply/deploy/destroy, workspace management, backend config |
-| `atmos-toolchain` | CLI tool version management via Aqua registries, .tool-versions, install/exec |
-| `atmos-validation` | OPA/Rego policies, JSON Schema validation, `atmos validate` commands |
-| `atmos-vendoring` | Vendor manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry |
-| `atmos-workflows` | Multi-step workflows, Go template support, cross-component orchestration |
-| `atmos-yaml-functions` | YAML functions: `!terraform.state`, `!store`, `!env`, `!exec`, `!include`, `!aws.*` |
+<dl>
+  <dt>`atmos-ansible`</dt>
+  <dd>Ansible playbook execution, variable passing, inventory management.</dd>
+
+  <dt>`atmos-auth`</dt>
+  <dd>Multi-provider auth (SSO/SAML/OIDC), identities, keyring, login/exec/shell.</dd>
+
+  <dt>`atmos-components`</dt>
+  <dd>Terraform root modules, abstract components, component inheritance, versioning.</dd>
+
+  <dt>`atmos-config`</dt>
+  <dd>Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles.</dd>
+
+  <dt>`atmos-custom-commands`</dt>
+  <dd>User-defined CLI commands in atmos.yaml with arguments, flags, and steps.</dd>
+
+  <dt>`atmos-design-patterns`</dt>
+  <dd>Stack organization, component catalogs, inheritance, version management patterns.</dd>
+
+  <dt>`atmos-devcontainer`</dt>
+  <dd>Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration.</dd>
+
+  <dt>`atmos-gitops`</dt>
+  <dd>GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based workflows.</dd>
+
+  <dt>`atmos-helmfile`</dt>
+  <dd>Helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration.</dd>
+
+  <dt>`atmos-introspection`</dt>
+  <dd>describe/list commands for querying stacks, components, dependencies, and change impact.</dd>
+
+  <dt>`atmos-packer`</dt>
+  <dd>Packer init/build/validate, machine image building, template management.</dd>
+
+  <dt>`atmos-schemas`</dt>
+  <dd>JSON Schema for stack manifests, IDE auto-completion, schema validation.</dd>
+
+  <dt>`atmos-stacks`</dt>
+  <dd>Stack YAML manifests, imports, inheritance, deep merging, vars, settings, metadata.</dd>
+
+  <dt>`atmos-stores`</dt>
+  <dd>Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory).</dd>
+
+  <dt>`atmos-templates`</dt>
+  <dd>Go templates, Sprig/Gomplate functions, `atmos.Component`, datasources.</dd>
+
+  <dt>`atmos-terraform`</dt>
+  <dd>Terraform plan/apply/deploy/destroy, workspace management, backend config.</dd>
+
+  <dt>`atmos-toolchain`</dt>
+  <dd>CLI tool version management via Aqua registries, .tool-versions, install/exec.</dd>
+
+  <dt>`atmos-validation`</dt>
+  <dd>OPA/Rego policies, JSON Schema validation, `atmos validate` commands.</dd>
+
+  <dt>`atmos-vendoring`</dt>
+  <dd>Vendor manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry.</dd>
+
+  <dt>`atmos-workflows`</dt>
+  <dd>Multi-step workflows, Go template support, cross-component orchestration.</dd>
+
+  <dt>`atmos-yaml-functions`</dt>
+  <dd>YAML functions: `!terraform.state`, `!store`, `!env`, `!exec`, `!include`, `!aws.*`.</dd>
+</dl>
 
 ## Folder Structure
 

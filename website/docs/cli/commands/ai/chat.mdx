@@ -96,7 +96,7 @@ The chat interface supports:
 - **Syntax highlighting**: Code blocks displayed with language-specific syntax highlighting
 - **History navigation**: Navigate through previous messages with ↑/↓ arrow keys (like Bash history)
 - **Multi-line input**: Press `Shift+Enter` or `Alt+Enter` to add newlines in your messages
-- **Skill switching**: Press `Ctrl+A` to switch between [21+ specialized AI skills](/ai/skills) (e.g., `atmos-terraform`, `atmos-stacks`, `atmos-validation`)
+- **Skill switching**: Press `Ctrl+A` to switch between [21+ specialized AI skills](/cli/configuration/ai/skills) (e.g., `atmos-terraform`, `atmos-stacks`, `atmos-validation`)
 - **Session management**: Press `Ctrl+L` to switch between sessions without leaving the chat
 - **Provider switching**: Press `Ctrl+P` to switch between configured AI providers mid-conversation
 - **Session history**: See session metadata (name, created date, message count) in the header
@@ -104,17 +104,34 @@ The chat interface supports:
 
 ### Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Enter` | Send message |
-| `Shift+Enter` or `Alt+Enter` | Add newline (multi-line input) |
-| `↑` | Navigate to previous message in history |
-| `↓` | Navigate to next message in history |
-| `Ctrl+L` | Open session picker |
-| `Ctrl+N` | Create new session |
-| `Ctrl+A` | Switch AI skill |
-| `Ctrl+P` | Switch AI provider |
-| `Ctrl+C` | Quit chat |
+<dl>
+  <dt>`Enter`</dt>
+  <dd>Send message.</dd>
+
+  <dt>`Shift+Enter` or `Alt+Enter`</dt>
+  <dd>Add newline (multi-line input).</dd>
+
+  <dt>`↑`</dt>
+  <dd>Navigate to previous message in history.</dd>
+
+  <dt>`↓`</dt>
+  <dd>Navigate to next message in history.</dd>
+
+  <dt>`Ctrl+L`</dt>
+  <dd>Open session picker.</dd>
+
+  <dt>`Ctrl+N`</dt>
+  <dd>Create new session.</dd>
+
+  <dt>`Ctrl+A`</dt>
+  <dd>Switch AI skill.</dd>
+
+  <dt>`Ctrl+P`</dt>
+  <dd>Switch AI provider.</dd>
+
+  <dt>`Ctrl+C`</dt>
+  <dd>Quit chat.</dd>
+</dl>
 
 ### History Navigation
 
@@ -271,5 +288,5 @@ AI: [Suggests organizational patterns and best practices]
   {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
   {type: 'link', href: '/cli/commands/ai/ai-help', label: 'atmos ai help', description: 'Get help on specific Atmos topics'},
   {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
-  {type: 'link', href: '/ai/skills', label: 'AI Skills', description: 'Install and switch between 21+ specialized AI skills'},
+  {type: 'link', href: '/cli/configuration/ai/skills', label: 'AI Skills', description: 'Install and switch between 21+ specialized AI skills'},
 ]} />

@@ -94,6 +94,71 @@ $ atmos ai ask "what stacks and components do we have in the infra?"
   include VPC components for network isolation.
 ```
 
+### Validate Stacks
+
+Ask the AI to validate all stacks and present the results in a table:
+
+```text
+$ atmos ai ask "validate all stacks, show issues in a table"
+
+👽 Thinking...
+
+  I'll validate all Atmos stacks right away!
+
+  Here are the validation results for all stacks:
+
+   # | Check                                | Status    | Details
+  ---|--------------------------------------|-----------|---------------------------------------
+   1 | Stack Schema Validation (jsonschema) | ✅ Passed | All stacks conform to the JSON schema
+
+  --------
+
+  **Summary:** All stacks passed validation with **0 issues found**. Your Atmos stack
+  configurations are valid and well-formed. 🎉
+
+  If you'd like deeper validation, I can also:
+
+  • 🔍 **Validate with OPA policies** (opa schema type) for policy-as-code checks
+  • 📋 **List all stacks and components** to review configurations manually
+  • 🔄 **Check affected components** based on recent git changes
+```
+
+### Automation with JSON Output
+
+Use `atmos ai exec` for scripting and CI/CD pipelines. The `--format json` flag returns structured output
+with tool call details, token usage, and metadata:
+
+```text
+$ atmos ai exec "validate stacks" --format json
+{
+  "success": true,
+  "response": "I'll validate your Atmos stack configurations right away!\n\n✅ **Stack Validation Passed!**\n\nAll Atmos stack configurations are valid. The stacks were validated against the **JSON Schema** (`jsonschema`) and no issues were found.\n\nYour stack configurations are well-formed and ready to use",
+  "tool_calls": [
+    {
+      "tool": "atmos_validate_stacks",
+      "duration_ms": 15,
+      "success": true,
+      "result": {
+        "schema_type": "jsonschema"
+      }
+    }
+  ],
+  "tokens": {
+    "prompt": 7077,
+    "completion": 188,
+    "total": 7265
+  },
+  "metadata": {
+    "model": "claude-sonnet-4-6",
+    "provider": "anthropic",
+    "duration_ms": 5852,
+    "timestamp": "2026-03-07T22:36:24.167201-05:00",
+    "tools_enabled": true,
+    "stop_reason": "end_turn"
+  }
+}
+```
+
 ## Features Demonstrated
 
 ### Multi-Region Hub-Spoke Architecture

@@ -89,11 +89,16 @@ The prompt can be provided as:
 
 The command uses standard Unix exit codes for automation:
 
-| Code | Description |
-|------|-------------|
-| `0` | Success |
-| `1` | AI error (API failure, invalid response, configuration error) |
-| `2` | Tool execution error |
+<dl>
+  <dt>`0`</dt>
+  <dd>Success.</dd>
+
+  <dt>`1`</dt>
+  <dd>AI error (API failure, invalid response, configuration error).</dd>
+
+  <dt>`2`</dt>
+  <dd>Tool execution error.</dd>
+</dl>
 
 ## Output Formats
 
@@ -382,11 +387,16 @@ fi
 
 ## Comparison with Other Commands
 
-| Command | Interactive | Output Format | Use Case |
-|---------|------------|---------------|----------|
-| `atmos ai ask` | No | Human-readable text | Quick terminal questions |
-| `atmos ai chat` | Yes | Rich TUI with markdown | Extended conversations |
-| `atmos ai exec` | No | JSON/Text/Markdown | Automation, scripting, CI/CD |
+<dl>
+  <dt>`atmos ai ask`</dt>
+  <dd>Non-interactive. Human-readable text output. Best for quick terminal questions.</dd>
+
+  <dt>`atmos ai chat`</dt>
+  <dd>Interactive. Rich TUI with markdown. Best for extended conversations.</dd>
+
+  <dt>`atmos ai exec`</dt>
+  <dd>Non-interactive. JSON/Text/Markdown output. Best for automation, scripting, CI/CD.</dd>
+</dl>
 
 ## Best Practices
 
@@ -406,5 +416,5 @@ fi
   {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Interactive chat sessions'},
   {type: 'link', href: '/cli/commands/ai/ai-help', label: 'atmos ai help', description: 'Topic-specific help'},
   {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
-  {type: 'link', href: '/ai/skills', label: 'AI Skills', description: 'Install and use 21+ specialized AI skills'},
+  {type: 'link', href: '/cli/configuration/ai/skills', label: 'AI Skills', description: 'Install and use 21+ specialized AI skills'},
 ]} />

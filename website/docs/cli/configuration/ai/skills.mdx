@@ -5,12 +5,13 @@ sidebar_class_name: command
 description: Configure custom AI skills in the `settings.ai.skills` section of your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 The `settings.ai.skills` section defines custom AI skills with specialized system prompts, tool permissions,
-and behavior for different tasks.
+and behavior for different tasks. Skills follow the [Agent Skills open standard](https://agentskills.io) governed by the Linux Foundation's Agentic AI Foundation (AAIF).
 </Intro>
 
 <Experimental />
@@ -74,25 +75,231 @@ Each skill in the `skills` map supports the following settings:
   <dd>Default skill to activate when starting a new chat session (default: `general`). Set at the `settings.ai` level.</dd>
 </dl>
 
+## Installing Skills
+
+Atmos AI skills are distributed via the [Agent Skills marketplace](https://agentskills.io). The official Atmos skills package contains 21+ specialized skills covering all aspects of infrastructure orchestration.
+
+<Terminal title="shell">
+```bash
+# Install all official Atmos skills from the marketplace
+atmos ai skill install cloudposse/atmos
+
+# Install with a specific version
+atmos ai skill install cloudposse/atmos@v1.200.0
+
+# List installed skills
+atmos ai skill list
+
+# Uninstall a specific skill
+atmos ai skill uninstall atmos-terraform
+
+# Force reinstall all skills
+atmos ai skill install cloudposse/atmos --force
+```
+</Terminal>
+
+If no skills are installed, `atmos ai chat` works with a minimal fallback prompt and displays a hint to install specialized skills.
+
+## Using Skills in the TUI
+
+Press **Ctrl+A** in the chat interface to open the skill selector:
+
+```
++-- Switch AI Skill -------------------------------------------+
+|                                                              |
+| Up/Down: Navigate | Enter: Select | Esc/q: Cancel           |
+|                                                              |
+|   atmos-components                                           |
+|      Component management and best practices                 |
+|                                                              |
+|   atmos-config                                               |
+|      Configuration validation and management                 |
+|                                                              |
+| > atmos-terraform (current)                                  |
+|      Terraform operations and troubleshooting                |
+|                                                              |
+|   atmos-security                                             |
+|      Security review of infrastructure configs               |
+|                                                              |
+|   atmos-stacks                                               |
+|      Stack analysis and dependency management                |
+|                                                              |
++--------------------------------------------------------------+
+```
+
+Use **Up/Down** or **j/k** to navigate, **Enter** to select, **Esc** or **q** to cancel.
+
+:::tip Skill Display Order
+Skills are displayed in alphabetical order for consistent, predictable navigation.
+:::
+
+### Skill Persistence in Sessions
+
+Skills are persisted per session. When you resume a named session, the previously selected skill is automatically restored:
+
+<Terminal title="shell">
+```bash
+atmos ai chat --session vpc-review
+# Press Ctrl+A, select atmos-validation
+# ... do work ...
+
+# Next time, skill is automatically restored
+atmos ai chat --session vpc-review
+```
+</Terminal>
+
+:::info Skill Availability
+If you resume a session that was using a custom skill that is no longer available in your
+configuration, Atmos falls back to the default skill and logs a debug message.
+:::
+
+## Skill Prompt System
+
+Atmos AI uses SKILL.md files that follow the [Agent Skills open standard](https://agentskills.io). Skills are installed from the marketplace and stored in `~/.atmos/skills/`.
+
+### Architecture
+
+The system separates Go code (`pkg/ai/skills/`) for infrastructure and tool execution from SKILL.md files (`~/.atmos/skills/`) for skill metadata and instructions. This means you can update skills without recompiling Atmos by running `atmos ai skill install --force`, and the community can contribute improvements via pull requests.
+
+Skills are loaded when the TUI initializes, and each skill's instructions are only sent to the model when that skill is active (progressive disclosure for token efficiency).
+
+### SKILL.md File Structure
+
+Each skill follows this format with YAML frontmatter and Markdown body:
+
+```markdown
+---
+name: skill-name
+display_name: "Skill Display Name"
+description: Brief description of the skill
+version: 1.0.0
+category: general|analysis|refactor|security|validation|optimization
+icon: wrench
+
+tools:
+  allowed:
+    - tool_name1
+    - tool_name2
+  restricted:
+    - tool_name3
+---
+
+# Skill: [Name]
+
+## Role
+Brief description of the skill's purpose and expertise
+
+## Your Expertise
+- Domain knowledge areas
+- Key competencies
+
+## Instructions
+Step-by-step guidance for the skill to follow
+
+## Best Practices
+Extracted from Atmos documentation
+
+## Example Workflows
+Common usage patterns and examples
+
+## Response Style
+How the skill should format and present information
+```
+
 ## Available Tools for Skills
 
+### Atmos Commands
+
 <dl>
-  <dt>Atmos Commands</dt>
-  <dd>`atmos_describe_component`, `atmos_describe_affected`, `atmos_describe_stacks`, `atmos_describe_config`, `atmos_list_stacks`, `atmos_list_components`, `atmos_validate_stacks`, `atmos_get_template_context`</dd>
+  <dt>`atmos_describe_component`</dt>
+  <dd>Describe a component's configuration in a stack. Read-only.</dd>
 
-  <dt>File Operations</dt>
-  <dd>`read_file`, `edit_file`, `write_file`, `read_stack_file`, `read_component_file`, `list_component_files`, `search_files`</dd>
+  <dt>`atmos_describe_affected`</dt>
+  <dd>Show components affected by git changes. Read-only.</dd>
 
-  <dt>Execution</dt>
-  <dd>`execute_bash`, `execute_atmos_command`</dd>
+  <dt>`atmos_describe_stacks`</dt>
+  <dd>List and describe all stacks. Read-only.</dd>
 
-  <dt>Validation</dt>
-  <dd>`validate_file_lsp` (if LSP is enabled)</dd>
+  <dt>`atmos_describe_config`</dt>
+  <dd>Show Atmos configuration. Read-only.</dd>
+
+  <dt>`atmos_list_stacks`</dt>
+  <dd>List all available stacks. Read-only.</dd>
+
+  <dt>`atmos_list_components`</dt>
+  <dd>List all available components. Read-only.</dd>
+
+  <dt>`atmos_validate_stacks`</dt>
+  <dd>Validate stack configurations against schemas and policies. Read-only.</dd>
+
+  <dt>`atmos_get_template_context`</dt>
+  <dd>Debug Go template variable context. Read-only.</dd>
+
+  <dt>`execute_atmos_command`</dt>
+  <dd>Execute any Atmos CLI command. Permissions vary by command.</dd>
+</dl>
+
+### File Operations
+
+<dl>
+  <dt>`read_file`</dt>
+  <dd>Read any file from the repository. Read-only.</dd>
+
+  <dt>`edit_file`</dt>
+  <dd>Edit an existing file with targeted changes. Requires confirmation by default.</dd>
+
+  <dt>`write_file`</dt>
+  <dd>Create a new file or overwrite an existing file. Requires confirmation by default.</dd>
+
+  <dt>`read_stack_file`</dt>
+  <dd>Read a file from the stacks directory. Read-only.</dd>
+
+  <dt>`read_component_file`</dt>
+  <dd>Read a file from the components directory. Read-only.</dd>
+
+  <dt>`list_component_files`</dt>
+  <dd>List files in a component directory. Read-only.</dd>
+
+  <dt>`search_files`</dt>
+  <dd>Search for patterns across files. Read-only.</dd>
+</dl>
+
+### Execution
+
+<dl>
+  <dt>`execute_bash`</dt>
+  <dd>Execute shell commands. Requires confirmation by default.</dd>
+
+  <dt>`execute_atmos_command`</dt>
+  <dd>Execute any Atmos CLI command. Permissions vary by command.</dd>
+</dl>
+
+### Validation
+
+<dl>
+  <dt>`validate_file_lsp`</dt>
+  <dd>Validate files using LSP diagnostics ([requires LSP](/lsp/lsp-client)). Read-only.</dd>
 </dl>
 
 ## Tool Safety Patterns
 
-**Read-only custom skill** -- omit write and execute tools entirely:
+**Allowed Tools** control which tools a skill can access. An empty list means all tools are available:
+
+```yaml
+allowed_tools: []  # Skill can use any tool
+```
+
+**Restricted Tools** require user confirmation before execution:
+
+```yaml
+allowed_tools:
+  - read_file
+  - edit_file
+restricted_tools:
+  - edit_file  # User must confirm before skill can edit files
+```
+
+**Read-Only Skill** -- omit write and execute tools entirely:
 
 <File title="atmos.yaml">
 ```yaml
@@ -131,13 +338,42 @@ skills:
 ```
 </File>
 
+## Performance Tips
+
+Choosing the right skill improves both response quality and speed:
+
+<dl>
+  <dt>**General**</dt>
+  <dd>Exploration, cross-domain questions, quick queries. Example: "What is Atmos?", "Help me debug this error"</dd>
+
+  <dt>**atmos-stacks**</dt>
+  <dd>Stack configs, imports, inheritance, dependencies. Example: "Analyze dependencies between prod stacks"</dd>
+
+  <dt>**atmos-components**</dt>
+  <dd>Terraform module design, component refactoring. Example: "Refactor VPC component to use Terraform 1.5 syntax"</dd>
+
+  <dt>**atmos-validation**</dt>
+  <dd>OPA/Rego policies, JSON Schema, config errors. Example: "Write an OPA policy to enforce tagging standards"</dd>
+
+  <dt>**atmos-terraform**</dt>
+  <dd>Plan/apply orchestration, workspace management. Example: "Debug this Terraform state lock issue"</dd>
+
+  <dt>**atmos-config**</dt>
+  <dd>YAML structure, configuration merging. Example: "Validate my atmos.yaml configuration"</dd>
+
+  <dt>**atmos-security**</dt>
+  <dd>Security review, access controls. Example: "Audit my infrastructure for security issues"</dd>
+</dl>
+
+:::tip Switch skills as your workflow progresses
+Start with **atmos-stacks** to understand architecture, switch to **atmos-components** to make improvements, then use **atmos-validation** to verify changes. Specialized skills make fewer tool calls and produce more accurate results than using the general skill for everything.
+:::
+
+For custom skills, keep them focused on a single domain. A skill that tries to handle security, cost, compliance, and refactoring at once will perform poorly at all of them. Give skills only the tools they need -- a smaller tool set means the AI makes better tool choices.
+
 ## Marketplace Skills
 
-Atmos includes 21 marketplace skills covering all aspects of infrastructure orchestration. Install them with:
-
-```bash
-atmos ai skill install cloudposse/atmos
-```
+Atmos includes 21 marketplace skills covering all aspects of infrastructure orchestration:
 
 <dl>
   <dt>`atmos-terraform`</dt>
@@ -177,33 +413,68 @@ atmos ai skill install cloudposse/atmos
   <dd>Design patterns: stack organization, component catalogs, inheritance, configuration composition.</dd>
 </dl>
 
-See [AI Skills](/ai/skills) for the full list and usage details.
-
 ## Custom Skill Examples
 
 Custom skills complement marketplace skills for organization-specific needs.
 
-### Security Reviewer
+### Cost Optimizer
 
 <File title="atmos.yaml">
 ```yaml
 settings:
   ai:
     skills:
-      security-reviewer:
-        display_name: "Security Reviewer"
-        description: "Reviews infrastructure for security best practices"
-        category: "security"
+      cost-optimizer:
+        display_name: "Cost Optimizer"
+        description: "Analyzes infrastructure for cost savings opportunities"
+        category: "analysis"
         system_prompt: |
-          You are a security expert reviewing Atmos infrastructure.
+          You are a cost optimization expert for Atmos infrastructure.
 
           FOCUS AREAS:
-          - Network security (security groups, NACLs, VPC design)
-          - Encryption (at rest and in transit)
-          - IAM policies and least-privilege access
-          - Compliance requirements (SOC2, HIPAA)
+          - Identify overprovisioned resources
+          - Suggest rightsizing opportunities
+          - Find unused or idle resources
+          - Recommend reserved instances
 
-          Always use tools to gather actual config before making recommendations.
+          Always use tools to gather data before making recommendations.
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_describe_stacks
+          - atmos_list_stacks
+          - read_stack_file
+          - read_component_file
+          - read_file
+          - search_files
+        restricted_tools: []
+```
+</File>
+
+### Compliance Auditor
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    skills:
+      compliance-auditor:
+        display_name: "Compliance Auditor"
+        description: "Ensures infrastructure meets regulatory requirements"
+        category: "security"
+        system_prompt: |
+          You are a compliance expert for regulated industries (HIPAA, SOC2, PCI-DSS).
+
+          COMPLIANCE CHECKS:
+          - Data encryption (at rest and in transit)
+          - Audit logging and monitoring
+          - Access controls and authentication
+          - Data residency requirements
+
+          REPORTING:
+          - Categorize by compliance framework
+          - Cite specific requirements (e.g., "HIPAA 164.312(a)(2)(iv)")
+          - Mark findings as Pass/Fail/Partial
+          - Provide remediation with compliance rationale
         allowed_tools:
           - atmos_describe_component
           - atmos_list_stacks
@@ -249,4 +520,34 @@ settings:
 ```
 </File>
 
-For skill usage in the TUI, skill persistence in sessions, SKILL.md file format, and performance tips, see [AI Skills](/ai/skills).
+## Comparison with Claude Code Subagents
+
+Atmos has two types of AI assistants serving different purposes:
+
+<dl>
+  <dt>Location</dt>
+  <dd>**Atmos AI Skills:** Inside Atmos AI. **[Claude Code Integration](/ai/claude-code-integration):** External (IDE).</dd>
+
+  <dt>Activation</dt>
+  <dd>**Atmos AI Skills:** Ctrl+A in `atmos ai chat`. **Claude Code:** `@atmos-expert` in IDE.</dd>
+
+  <dt>Purpose</dt>
+  <dd>**Atmos AI Skills:** Task specialization. **Claude Code:** Development integration.</dd>
+
+  <dt>Tool Access</dt>
+  <dd>**Atmos AI Skills:** Direct Atmos tools. **Claude Code:** Via MCP protocol.</dd>
+
+  <dt>Configuration</dt>
+  <dd>**Atmos AI Skills:** `atmos.yaml` skills section. **Claude Code:** `.claude/agents/*.md`.</dd>
+
+  <dt>Use Case</dt>
+  <dd>**Atmos AI Skills:** Operations workflows. **Claude Code:** Code development.</dd>
+</dl>
+
+## Related Documentation
+
+- [AI Chat Command](/cli/commands/ai/chat) - Interactive AI chat interface
+- [AI Configuration](/cli/configuration/ai) - Configure AI providers and settings
+- [Claude Code Integration](/ai/claude-code-integration) - Use Atmos with Claude Code IDE
+- [Tools Configuration](/cli/configuration/ai/tools) - Tool execution and permissions
+- [Skill Marketplace](/ai/skill-marketplace) - Install and share community skills

@@ -5,6 +5,7 @@ sidebar_class_name: command
 description: Configure AI providers in the `settings.ai.providers` section of your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import Tabs from '@theme/Tabs'
@@ -63,27 +64,108 @@ Each provider in the `providers` map supports the following settings:
 ## Supported Providers
 
 <dl>
-  <dt>**Anthropic (Claude)**</dt>
-  <dd>Default model: `claude-sonnet-4-6`. Advanced reasoning, recommended default. 200K token context window. Authenticate with `ANTHROPIC_API_KEY`.</dd>
+  <dt>**Anthropic (Claude)** — `claude-sonnet-4-6`</dt>
+  <dd>API Key authentication. Advanced reasoning, default choice.</dd>
 
-  <dt>**OpenAI (GPT)**</dt>
-  <dd>Default model: `gpt-4o`. Widely available, strong general capabilities. 128K token context window. Authenticate with `OPENAI_API_KEY`.</dd>
+  <dt>**OpenAI (GPT)** — `gpt-4o`</dt>
+  <dd>API Key authentication. Widely available, strong general capabilities.</dd>
 
-  <dt>**Google (Gemini)**</dt>
-  <dd>Default model: `gemini-2.5-flash`. Fast responses, up to 2M token context window. Most economical cloud pricing. Authenticate with `GEMINI_API_KEY`.</dd>
+  <dt>**Google (Gemini)** — `gemini-2.5-flash`</dt>
+  <dd>API Key authentication. Fast responses, larger context window.</dd>
 
-  <dt>**xAI (Grok)**</dt>
-  <dd>Default model: `grok-4-latest`. 2M token context window, built-in real-time search. Requires `base_url: "https://api.x.ai/v1"`. Authenticate with `XAI_API_KEY`.</dd>
+  <dt>**xAI (Grok)** — `grok-4-latest`</dt>
+  <dd>API Key authentication. OpenAI-compatible, real-time knowledge.</dd>
 
-  <dt>**Ollama (Local)**</dt>
-  <dd>Default model: `llama4`. Runs entirely on your machine -- no API costs, no data leaves your computer. No authentication required for local instances.</dd>
+  <dt>**Ollama (Local)** — `llama4`</dt>
+  <dd>No authentication (local). Privacy, offline use, zero API costs.</dd>
 
-  <dt>**AWS Bedrock**</dt>
-  <dd>Default model: `anthropic.claude-sonnet-4-6`. Enterprise security with IAM-based access, CloudTrail audit logging, and VPC endpoint support. Uses AWS SDK credential chain (IAM roles, profiles, environment variables). Set `base_url` to your AWS region.</dd>
+  <dt>**AWS Bedrock** — `anthropic.claude-sonnet-4-6`</dt>
+  <dd>AWS Credentials authentication. Enterprise security, AWS integration.</dd>
+
+  <dt>**Azure OpenAI** — `gpt-4o`</dt>
+  <dd>API Key / Azure AD authentication. Enterprise compliance, Azure integration.</dd>
+</dl>
+
+## Provider Comparison
+
+<dl>
+  <dt>Setup</dt>
+  <dd>**Cloud:** Easy (API key). **Ollama:** Medium (install + download model). **Enterprise:** Complex (cloud config).</dd>
+
+  <dt>Cost</dt>
+  <dd>**Cloud:** Per-token pricing. **Ollama:** Free. **Enterprise:** Per-token + cloud costs.</dd>
+
+  <dt>Data Privacy</dt>
+  <dd>**Cloud:** Sent to provider. **Ollama:** 100% local. **Enterprise:** Stays in your cloud.</dd>
+
+  <dt>Offline</dt>
+  <dd>**Cloud:** No. **Ollama:** Yes. **Enterprise:** No.</dd>
+
+  <dt>Rate Limits</dt>
+  <dd>**Cloud:** Yes. **Ollama:** No. **Enterprise:** Yes (configurable).</dd>
+
+  <dt>Compliance</dt>
+  <dd>**Cloud:** Provider-dependent. **Ollama:** Your control. **Enterprise:** SOC2, HIPAA, ISO.</dd>
+
+  <dt>Private Network</dt>
+  <dd>**Cloud:** No. **Ollama:** Yes. **Enterprise:** Yes (VPC/VNet).</dd>
+</dl>
+
+### Performance and Cost
+
+<dl>
+  <dt>**Anthropic (Claude)** — 200K token context</dt>
+  <dd>$3-$15 per 1M tokens (input/output).</dd>
+
+  <dt>**OpenAI (GPT-4o)** — 128K token context</dt>
+  <dd>$2.50-$10 per 1M tokens (input/output).</dd>
+
+  <dt>**Google (Gemini)** — up to 2M token context</dt>
+  <dd>$0.075-$0.30 per 1M tokens (input/output).</dd>
+
+  <dt>**xAI (Grok)** — 2M token context</dt>
+  <dd>$3-$15 per 1M tokens (input/output).</dd>
+
+  <dt>**Ollama** — 128K token context</dt>
+  <dd>$0 (hardware only).</dd>
+
+  <dt>**AWS Bedrock** — 200K token context</dt>
+  <dd>$3-$15 + AWS costs per 1M tokens.</dd>
+
+  <dt>**Azure OpenAI** — 128K token context</dt>
+  <dd>$2.50-$10 + Azure costs per 1M tokens.</dd>
+</dl>
+
+:::tip Cost Optimization
+For budget-conscious usage, try Gemini (cheapest cloud) or Ollama (free). For balanced cost and quality, Claude Sonnet or GPT-4o work well. Enterprise providers can leverage committed-use discounts.
+:::
+
+### Privacy and Security
+
+<dl>
+  <dt>**Anthropic**</dt>
+  <dd>Data location: US (cloud). Compliance: SOC 2, GDPR.</dd>
+
+  <dt>**OpenAI**</dt>
+  <dd>Data location: US (cloud). Compliance: SOC 2, GDPR.</dd>
+
+  <dt>**Gemini**</dt>
+  <dd>Data location: US (cloud). Compliance: SOC 2, GDPR.</dd>
+
+  <dt>**Grok**</dt>
+  <dd>Data location: US (cloud). Compliance: Standard.</dd>
+
+  <dt>**Ollama**</dt>
+  <dd>Data location: Your machine. Compliance: Your control.</dd>
+
+  <dt>**Bedrock**</dt>
+  <dd>Data location: Your AWS region. Compliance: SOC 2, HIPAA, ISO.</dd>
 
   <dt>**Azure OpenAI**</dt>
-  <dd>Default model: `gpt-4o`. Enterprise compliance with Azure AD integration and private endpoints. The `model` field must be your **deployment name** from Azure Portal. Both `base_url` and `api_version` are required.</dd>
+  <dd>Data location: Your Azure region. Compliance: SOC 2, HIPAA, ISO.</dd>
 </dl>
+
+For sensitive infrastructure data, consider Ollama (never leaves your machine) or enterprise providers (stays in your cloud account).
 
 ## Provider Examples
 
@@ -138,6 +220,93 @@ settings:
 ```
 </File>
 
+#### Ollama Installation
+
+<Terminal title="shell">
+```bash
+# macOS
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Windows: download from https://ollama.com/download
+```
+</Terminal>
+
+Start the service and pull a model:
+
+<Terminal title="shell">
+```bash
+ollama serve        # Start Ollama (Linux auto-starts as a service)
+ollama pull llama4          # Pull recommended model
+ollama list                # List available models
+```
+</Terminal>
+
+#### Model Selection
+
+<dl>
+  <dt>`llama4` — ~40GB, 64GB+ RAM</dt>
+  <dd>Production use (recommended).</dd>
+
+  <dt>`llama3.3:70b` — ~40GB, 64GB+ RAM</dt>
+  <dd>Production use (previous generation).</dd>
+
+  <dt>`llama3.1:8b` — ~5GB, 8GB+ RAM</dt>
+  <dd>Quick queries, laptops.</dd>
+
+  <dt>`codellama:34b` — ~19GB, 32GB+ RAM</dt>
+  <dd>Code generation.</dd>
+
+  <dt>`codellama:13b` — ~8GB, 16GB+ RAM</dt>
+  <dd>Code on mid-range hardware.</dd>
+
+  <dt>`mixtral:8x7b` — ~26GB, 32GB+ RAM</dt>
+  <dd>Complex reasoning.</dd>
+
+  <dt>`mistral:7b` — ~4GB, 8GB+ RAM</dt>
+  <dd>Fast responses, consumer hardware.</dd>
+</dl>
+
+#### Performance Tips
+
+Hardware recommendations:
+- **Apple Silicon (M1/M2/M3/M4):** Handles `llama4` well with unified memory
+- **16GB RAM:** Use `llama3.1:8b` or `mistral:7b`
+- **32GB+ RAM:** Use `mixtral:8x7b` or `llama3.3:70b`
+- **64GB+ RAM:** Use `llama4`
+- **GPU acceleration** (NVIDIA/AMD/Apple Silicon) provides 10-50x faster inference; Ollama detects and uses it automatically
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  ollama:
+    model: "llama4"
+    max_tokens: 4096       # Smaller = faster
+    timeout_seconds: 120   # Longer timeout for large models
+```
+</File>
+
+#### Remote Deployment
+
+To enable remote access on the server, set `OLLAMA_HOST=0.0.0.0:11434` before starting Ollama.
+
+:::caution
+Binding to `0.0.0.0` exposes the Ollama API to all network interfaces. Ensure the server is behind a firewall or reverse proxy with authentication in production environments.
+:::
+
+<dl>
+  <dt>`OLLAMA_HOST`</dt>
+  <dd>Server bind address (default: `127.0.0.1:11434`).</dd>
+
+  <dt>`OLLAMA_ORIGINS`</dt>
+  <dd>CORS allowed origins (default: `*` — allow all).</dd>
+
+  <dt>`OLLAMA_MODELS`</dt>
+  <dd>Model storage path (default: `~/.ollama/models`).</dd>
+</dl>
+
 </TabItem>
 <TabItem value="enterprise" label="Enterprise">
 
@@ -160,12 +329,64 @@ settings:
 ```
 </File>
 
+#### AWS Bedrock
+
+Authentication uses the standard AWS SDK credential chain (IAM roles, profiles, environment variables):
+
+<Terminal title="shell">
+```bash
+# Option 1: Environment variables
+export AWS_ACCESS_KEY_ID="AKIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+
+# Option 2: AWS Profile
+export AWS_PROFILE="bedrock-profile"
+
+# Option 3: IAM role (automatic in EC2/ECS/EKS)
+```
+</Terminal>
+
+:::warning Bedrock Endpoints
+Use the `global.` prefix for dynamic routing across regions, or the `anthropic.` prefix for a specific region. Cross-region inference profiles use IDs like `us.anthropic.claude-sonnet-4-6-v1:0`.
+:::
+
+#### Azure OpenAI
+
+:::warning Azure-Specific Configuration
+The `model` field must be your **deployment name** from Azure Portal, not the OpenAI model name. Both `base_url` (your resource endpoint) and `api_version` are required. See [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for available API versions.
+:::
+
 </TabItem>
 </Tabs>
 
 ## Token Caching
 
-Most providers implement prompt caching automatically. Only Anthropic requires explicit configuration:
+Token caching (prompt caching) reduces costs by reusing frequently-sent content like system prompts.
+
+<dl>
+  <dt>**Anthropic** — 90% discount</dt>
+  <dd>Manual markers. Configuration required (see below).</dd>
+
+  <dt>**OpenAI** — 50% discount</dt>
+  <dd>Automatic. No configuration required.</dd>
+
+  <dt>**Gemini** — Free (included)</dt>
+  <dd>Automatic. No configuration required.</dd>
+
+  <dt>**Grok** — 75% discount</dt>
+  <dd>Automatic. No configuration required.</dd>
+
+  <dt>**Bedrock** — Up to 90% discount</dt>
+  <dd>Automatic. No configuration required.</dd>
+
+  <dt>**Azure OpenAI** — 50-100% discount</dt>
+  <dd>Automatic. No configuration required.</dd>
+
+  <dt>**Ollama** — N/A</dt>
+  <dd>Local processing, caching not applicable.</dd>
+</dl>
+
+Most providers implement caching automatically. Only Anthropic requires explicit configuration:
 
 <File title="atmos.yaml">
 ```yaml
@@ -193,31 +414,33 @@ settings:
   <dd>Cache the ATMOS.md project instructions content (default: `true`).</dd>
 </dl>
 
+:::tip Maximize Cache Savings
+For Anthropic, keep your ATMOS.md content stable during conversations and use named sessions for extended work on the same topic. For all other providers, caching works transparently with no action required.
+:::
+
 ## Multi-Provider Configuration
 
 Configure multiple providers and switch between them. Set `default_provider` for CLI commands, and press `Ctrl+P` during a chat session to switch mid-conversation.
 
-<File title="atmos.yaml">
-```yaml
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"
+### Provider Isolation
 
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
-        max_tokens: 4096
-      openai:
-        model: "gpt-4o"
-        api_key: !env "OPENAI_API_KEY"
-        max_tokens: 4096
-      ollama:
-        model: "llama4"
-```
-</File>
+Each provider maintains its own completely isolated conversation history. When you switch providers, the new provider only sees messages from its own thread. When you switch back, it picks up right where you left off. UI notifications like "Switched to..." are never sent to any provider.
 
-Each provider maintains its own completely isolated conversation history. When you switch providers, the new provider only sees messages from its own thread.
+## Security Best Practices
 
-For provider-specific setup guides, model comparisons, and security best practices, see [AI Providers](/ai/providers).
+<dl>
+<dt>Cloud Providers (Anthropic, OpenAI, Google, xAI)</dt>
+<dd>Use environment variables for API keys (never commit to git), rotate keys regularly, and review each provider's data retention policies.</dd>
+
+<dt>Local Provider (Ollama)</dt>
+<dd>All processing is local. Keep Ollama updated and use disk encryption for sensitive data.</dd>
+
+<dt>Enterprise Providers (Bedrock, Azure OpenAI)</dt>
+<dd>Use IAM roles or managed identities instead of API keys, enable audit logging (CloudTrail or Azure Monitor), configure private endpoints, and use customer-managed encryption keys where available.</dd>
+</dl>
+
+## Related Documentation
+
+- [AI Configuration](/cli/configuration/ai) - Top-level AI settings
+- [MCP Server](/ai/mcp-server) - Universal MCP integration
+- [Claude Code Integration](/ai/claude-code-integration) - IDE integration with Claude Code

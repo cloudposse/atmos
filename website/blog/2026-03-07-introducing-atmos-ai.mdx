@@ -104,7 +104,7 @@ AI: Let me check your configuration...
     private subnets, and NAT Gateways enabled in all AZs.
 ```
 
-Available tools include `atmos_describe_component`, `atmos_list_stacks`, `atmos_validate_stacks`, `validate_file_lsp`, file operations, and web search. See [Tool System documentation](/ai/tools) for the full list.
+Available tools include `atmos_describe_component`, `atmos_list_stacks`, `atmos_validate_stacks`, `validate_file_lsp`, file operations, and web search. See [Tool System documentation](/cli/configuration/ai/tools) for the full list.
 
 ### 2. Real-Time Validation with LSP
 
@@ -118,7 +118,7 @@ Unlike basic chatbots that forget context, Atmos AI **remembers everything** wit
 atmos ai chat --session vpc-migration
 ```
 
-Sessions are stored in SQLite with visual session picker (Ctrl+L), provider awareness, and auto-compact for extended conversations. See [Sessions documentation](/ai/sessions).
+Sessions are stored in SQLite with visual session picker (Ctrl+L), provider awareness, and auto-compact for extended conversations. See [Sessions documentation](/cli/configuration/ai/sessions).
 
 ### 4. Specialized AI Skills
 
@@ -131,7 +131,7 @@ atmos ai skill install cloudposse/atmos
 
 Skills include **atmos-terraform**, **atmos-stacks**, **atmos-validation**, **atmos-components**, **atmos-config**, and many more — each with tailored prompts and tool access for its domain.
 
-**Switch skills with Ctrl+A** during conversations! See [AI Skills documentation](/ai/skills).
+**Switch skills with Ctrl+A** during conversations! See [AI Skills documentation](/cli/configuration/ai/skills).
 
 ### 5. Multi-Provider Support
 
@@ -147,15 +147,15 @@ Choose the right AI for your needs:
 | **AWS Bedrock** | Enterprise, AWS-native | AWS |
 | **Azure OpenAI** | Enterprise, Azure-native | Azure |
 
-[Ollama](/ai/providers#ollama) runs AI models **entirely on your machine** — zero API costs, complete privacy, offline capable, and compliance ready. Enterprise teams can use AWS Bedrock or Azure OpenAI for data residency, VPC isolation, and audit logging.
+[Ollama](/cli/configuration/ai/providers#ollama-installation) runs AI models **entirely on your machine** — zero API costs, complete privacy, offline capable, and compliance ready. Enterprise teams can use AWS Bedrock or Azure OpenAI for data residency, VPC isolation, and audit logging.
 
-See [AI Providers documentation](/ai/providers) for setup instructions.
+See [AI Providers documentation](/cli/configuration/ai/providers) for setup instructions.
 
 ### 6. Project Instructions (ATMOS.md)
 
 Provide **project-specific context** to the AI across all sessions via an `ATMOS.md` file — human-readable Markdown that's version-controlled with your repo. Include your organization's naming conventions, common commands, stack patterns, and CIDR allocations.
 
-See [Project Instructions documentation](/ai/instructions).
+See [Project Instructions documentation](/cli/configuration/ai/instructions).
 
 ### 7. Model Context Protocol (MCP) Integration
 
@@ -184,7 +184,7 @@ A **three-tier security model** protects your infrastructure:
 
 Permission decisions persist across sessions in `.atmos/ai.settings.local.json`, reducing prompt fatigue by 80%+. Every tool execution is logged with timestamp, user, and context.
 
-See [Tool System documentation](/ai/tools) for configuration details.
+See [Tool System documentation](/cli/configuration/ai/tools) for configuration details.
 
 ### 9. Non-Interactive Execution and CI/CD Integration
 
@@ -242,7 +242,7 @@ settings:
           cache_project_instructions: true
 ```
 
-Learn more: [Token Caching documentation](/ai/providers#token-caching-prompt-caching)
+Learn more: [Token Caching documentation](/cli/configuration/ai/providers#token-caching)
 
 ## Getting Started
 
@@ -273,7 +273,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 ollama pull llama4
 ```
 
-See [AI Providers](/ai/providers) for all provider setup instructions.
+See [AI Providers](/cli/configuration/ai/providers) for all provider setup instructions.
 
 ### 3. Start Using Atmos AI
 
@@ -315,12 +315,12 @@ We're continuously improving Atmos AI. Here's what's shipped and what's coming:
 
 ## Learn More
 
-- [Configuration Guide](/ai/configuration) - Complete configuration reference
-- [AI Providers](/ai/providers) - All 7 providers with setup instructions
-- [Tool System](/ai/tools) - Tool execution and permissions
-- [AI Skills](/ai/skills) - Marketplace-installed skills
-- [Sessions](/ai/sessions) - Session management and auto-compact
-- [Project Instructions](/ai/instructions) - ATMOS.md documentation
+- [Configuration Guide](/cli/configuration/ai) - Complete configuration reference
+- [AI Providers](/cli/configuration/ai/providers) - All 7 providers with setup instructions
+- [Tool System](/cli/configuration/ai/tools) - Tool execution and permissions
+- [AI Skills](/cli/configuration/ai/skills) - Marketplace-installed skills
+- [Sessions](/cli/configuration/ai/sessions) - Session management and auto-compact
+- [Project Instructions](/cli/configuration/ai/instructions) - ATMOS.md documentation
 - [MCP Server](/ai/mcp-server) - Claude Desktop integration
 - [Troubleshooting](/ai/troubleshooting) - Common issues and solutions
 - [Atmos Documentation](https://atmos.tools)

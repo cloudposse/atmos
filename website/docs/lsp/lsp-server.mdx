@@ -27,14 +27,19 @@ The **Atmos LSP Server** enables IDE and editor integration for Atmos stack file
 
 The LSP Server and LSP Client validate **completely different things**:
 
-| What Gets Validated          | Atmos LSP Server    | External LSP Servers (via Client) |
-|------------------------------|---------------------|-----------------------------------|
-| **Atmos structure**          | Yes - Import arrays     | No                                 |
-| **Atmos structure**          | Yes - Component maps    | No                                 |
-| **Atmos structure**          | Yes - Stack inheritance | No                                 |
-| **Generic YAML syntax**      | No                   | Yes - YAML schemas                    |
-| **Terraform syntax**         | No                   | Yes - HCL parsing                     |
-| **Typos/unknown properties** | No                   | Yes - Schema validation               |
+<dl>
+  <dt>**Atmos structure** (import arrays, component maps, stack inheritance)</dt>
+  <dd>**Atmos LSP Server:** Yes. **External LSP Servers (via Client):** No.</dd>
+
+  <dt>**Generic YAML syntax** (YAML schemas)</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers (via Client):** Yes.</dd>
+
+  <dt>**Terraform syntax** (HCL parsing)</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers (via Client):** Yes.</dd>
+
+  <dt>**Typos/unknown properties** (schema validation)</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers (via Client):** Yes.</dd>
+</dl>
 
 **Example:**
 
@@ -49,11 +54,16 @@ vpc_ciddr: "10.0.0.0/16"      # ← yaml-language-server catches this
 
 ### Component Comparison
 
-| Component | Validates | Used By | Connects To |
-|-----------|-----------|---------|-------------|
-| **LSP Client** | Generic syntax (YAML/TF/HCL) | Atmos AI | External LSP servers |
-| **LSP Server** | Atmos structure | IDEs (VS Code, Neovim) | N/A (IDEs connect TO it) |
-| **Direct Validation** | Atmos structure | Atmos AI | N/A (same process) |
+<dl>
+  <dt>**LSP Client**</dt>
+  <dd>Validates generic syntax (YAML/TF/HCL). Used by Atmos AI. Connects to external LSP servers.</dd>
+
+  <dt>**LSP Server**</dt>
+  <dd>Validates Atmos structure. Used by IDEs (VS Code, Neovim). N/A (IDEs connect TO it).</dd>
+
+  <dt>**Direct Validation**</dt>
+  <dd>Validates Atmos structure. Used by Atmos AI. N/A (same process).</dd>
+</dl>
 
 **Why both exist:**
 - **LSP Server** (this doc): IDEs need to validate Atmos-specific structure (imports, components, stack inheritance), so they connect to Atmos' LSP server for real-time validation and autocomplete
@@ -728,24 +738,42 @@ args = ["lsp", "start", "--transport", "stdio"]
 
 ## Editor Feature Matrix
 
-| Editor | Setup | Autocomplete | Diagnostics | Hover | Go to Definition | Recommended |
-|--------|-------|--------------|-------------|-------|------------------|-------------|
-| **VS Code** | Easy | Yes | Yes | Yes | Planned | Excellent |
-| **Neovim** | Moderate | Yes | Yes | Yes | Planned | Excellent |
-| **Vim (vim-lsp)** | Moderate | Yes | Yes | Yes | Planned | Great |
-| **Vim (coc.nvim)** | Easy | Yes | Yes | Yes | Planned | Excellent |
-| **Emacs (lsp-mode)** | Moderate | Yes | Yes | Yes | Planned | Excellent |
-| **Emacs (eglot)** | Easy | Yes | Yes | Yes | Planned | Great |
-| **Sublime Text** | Easy | Yes | Yes | Yes | Planned | Great |
-| **IntelliJ IDEA** | Moderate | Yes | Yes | Yes | Planned | Good |
-| **Cursor** | Easy | Yes | Yes | Yes | Planned | Excellent |
-| **Zed** | Easy | Yes | Yes | Yes | Planned | Great |
-| **Helix** | Easy | Yes | Yes | Yes | Planned | Great |
+<dl>
+  <dt>**VS Code**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
 
-**Legend:**
-- Yes: Fully supported
-- Planned: Stub implemented, will be enhanced in future versions
-- Recommended column: Excellent (highly recommended), Great (recommended), Good (acceptable)
+  <dt>**Neovim**</dt>
+  <dd>Setup: Moderate. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Vim (vim-lsp)**</dt>
+  <dd>Setup: Moderate. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+
+  <dt>**Vim (coc.nvim)**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Emacs (lsp-mode)**</dt>
+  <dd>Setup: Moderate. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Emacs (eglot)**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+
+  <dt>**Sublime Text**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+
+  <dt>**IntelliJ IDEA**</dt>
+  <dd>Setup: Moderate. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Good.</dd>
+
+  <dt>**Cursor**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Zed**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+
+  <dt>**Helix**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+</dl>
+
+**Legend:** Yes = Fully supported. Planned = Stub implemented, will be enhanced in future versions. Rating: Excellent (highly recommended), Great (recommended), Good (acceptable).
 
 ## Transport Options Explained
 
@@ -1168,36 +1196,63 @@ ssh -L 7777:localhost:7777 user@dev.example.com
 
 The LSP Server and LSP Client validate **completely different things**:
 
-| What Gets Validated | Atmos LSP Server | External LSP Servers (via Client) |
-|---------------------|------------------|-----------------------------------|
-| **Atmos structure** | Yes - Import arrays | No |
-| **Atmos structure** | Yes - Component maps | No |
-| **Atmos structure** | Yes - Stack inheritance | No |
-| **Generic YAML syntax** | No | Yes - YAML schemas |
-| **Terraform syntax** | No | Yes - HCL parsing |
-| **Typos/unknown properties** | No | Yes - Schema validation |
+<dl>
+  <dt>**Atmos structure** (import arrays, component maps, stack inheritance)</dt>
+  <dd>**Atmos LSP Server:** Yes. **External LSP Servers (via Client):** No.</dd>
+
+  <dt>**Generic YAML syntax** (YAML schemas)</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers (via Client):** Yes.</dd>
+
+  <dt>**Terraform syntax** (HCL parsing)</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers (via Client):** Yes.</dd>
+
+  <dt>**Typos/unknown properties** (schema validation)</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers (via Client):** Yes.</dd>
+</dl>
 
 ### Feature Comparison
 
-| Feature | LSP Server (this doc) | LSP Client |
-|---------|----------------------|------------|
-| **Purpose** | IDE integration for Atmos files | AI validation of infrastructure files |
-| **Direction** | IDEs connect TO Atmos | Atmos connects TO language servers |
-| **Provides** | Atmos-specific features | Generic YAML/TF/HCL validation |
-| **Use Case** | Editing Atmos stack files | Atmos AI file validation |
-| **Autocomplete** | Atmos keywords & components | No autocomplete (validation only) |
-| **Hover Docs** | Atmos-specific documentation | No hover (validation only) |
-| **Diagnostics** | Atmos structure validation | Generic syntax validation |
-| **Implementation** | `pkg/lsp/server/` | `pkg/lsp/client/` |
-| **Configuration** | Editor config | `atmos.yaml` |
+<dl>
+  <dt>**Purpose**</dt>
+  <dd>**LSP Server:** IDE integration for Atmos files. **LSP Client:** AI validation of infrastructure files.</dd>
+
+  <dt>**Direction**</dt>
+  <dd>**LSP Server:** IDEs connect TO Atmos. **LSP Client:** Atmos connects TO language servers.</dd>
+
+  <dt>**Provides**</dt>
+  <dd>**LSP Server:** Atmos-specific features. **LSP Client:** Generic YAML/TF/HCL validation.</dd>
+
+  <dt>**Use Case**</dt>
+  <dd>**LSP Server:** Editing Atmos stack files. **LSP Client:** Atmos AI file validation.</dd>
+
+  <dt>**Autocomplete**</dt>
+  <dd>**LSP Server:** Atmos keywords & components. **LSP Client:** No autocomplete (validation only).</dd>
+
+  <dt>**Hover Docs**</dt>
+  <dd>**LSP Server:** Atmos-specific documentation. **LSP Client:** No hover (validation only).</dd>
+
+  <dt>**Diagnostics**</dt>
+  <dd>**LSP Server:** Atmos structure validation. **LSP Client:** Generic syntax validation.</dd>
+
+  <dt>**Implementation**</dt>
+  <dd>**LSP Server:** `pkg/lsp/server/`. **LSP Client:** `pkg/lsp/client/`.</dd>
+
+  <dt>**Configuration**</dt>
+  <dd>**LSP Server:** Editor config. **LSP Client:** `atmos.yaml`.</dd>
+</dl>
 
 ### Component Overview
 
-| Component | Validates | Used By | Connects To |
-|-----------|-----------|---------|-------------|
-| **LSP Client** | Generic syntax (YAML/TF/HCL) | Atmos AI | External LSP servers |
-| **LSP Server** | Atmos structure | IDEs (VS Code, Neovim) | N/A (IDEs connect TO it) |
-| **Direct Validation** | Atmos structure | Atmos AI | N/A (same process) |
+<dl>
+  <dt>**LSP Client**</dt>
+  <dd>Validates generic syntax (YAML/TF/HCL). Used by Atmos AI. Connects to external LSP servers.</dd>
+
+  <dt>**LSP Server**</dt>
+  <dd>Validates Atmos structure. Used by IDEs (VS Code, Neovim). N/A (IDEs connect TO it).</dd>
+
+  <dt>**Direct Validation**</dt>
+  <dd>Validates Atmos structure. Used by Atmos AI. N/A (same process).</dd>
+</dl>
 
 ### When to Use Which
 

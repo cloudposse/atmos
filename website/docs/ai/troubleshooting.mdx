@@ -40,7 +40,7 @@ ai:
     [ -n "$XAI_API_KEY" ] && echo "XAI_API_KEY is set" || echo "XAI_API_KEY is NOT set"
     [ -n "$AZURE_OPENAI_API_KEY" ] && echo "AZURE_OPENAI_API_KEY is set" || echo "AZURE_OPENAI_API_KEY is NOT set"
     aws sts get-caller-identity # AWS Bedrock
-    curl http://localhost:11434/api/version  # Ollama (local, no key needed)
+    # Ollama requires no key — just ensure the server is running (see Ollama section below)
     ```
 </Terminal>
 
@@ -142,7 +142,7 @@ settings:
     default_provider: "anthropic"  # anthropic | openai | gemini | grok | ollama | bedrock | azureopenai
 ```
 
-See [AI Providers](/ai/providers) for complete provider documentation.
+See [AI Providers](/cli/configuration/ai/providers) for complete provider documentation.
 
 ### Rate Limiting (429 Errors)
 
@@ -158,18 +158,33 @@ If that doesn't help, wait for the rate limit to reset (usually 1 minute), check
 
 ## Provider-Specific Issues
 
-The table below covers the most common provider-specific errors. For detailed provider setup, see [AI Providers](/ai/providers).
+The table below covers the most common provider-specific errors. For detailed provider setup, see [AI Providers](/cli/configuration/ai/providers).
 
-| Provider | Error | Solution |
-|----------|-------|----------|
-| **Anthropic** | "Authentication error" | Ensure key starts with `sk-ant-` and is from [console.anthropic.com](https://console.anthropic.com/) |
-| **Anthropic** | "Model not found" | Use a valid model name like `claude-sonnet-4-6` |
-| **OpenAI** | "Invalid API key" | Get a new key from [platform.openai.com](https://platform.openai.com/) |
-| **OpenAI** | "Insufficient quota" | Add billing information or upgrade your account |
-| **Gemini** | "API not enabled" | Enable the Generative AI API in Google Cloud Console |
-| **Gemini** | "Context length exceeded" | Reduce input size or use a model with larger context window |
-| **Grok** | "Connection failed" | Verify `base_url` is set to `https://api.x.ai/v1` |
-| **Grok** | "Invalid endpoint" | Ensure you're using a valid Grok model name |
+<dl>
+  <dt>**Anthropic** — "Authentication error"</dt>
+  <dd>Ensure key starts with `sk-ant-` and is from [console.anthropic.com](https://console.anthropic.com/).</dd>
+
+  <dt>**Anthropic** — "Model not found"</dt>
+  <dd>Use a valid model name like `claude-sonnet-4-6`.</dd>
+
+  <dt>**OpenAI** — "Invalid API key"</dt>
+  <dd>Get a new key from [platform.openai.com](https://platform.openai.com/).</dd>
+
+  <dt>**OpenAI** — "Insufficient quota"</dt>
+  <dd>Add billing information or upgrade your account.</dd>
+
+  <dt>**Gemini** — "API not enabled"</dt>
+  <dd>Enable the Generative AI API in Google Cloud Console.</dd>
+
+  <dt>**Gemini** — "Context length exceeded"</dt>
+  <dd>Reduce input size or use a model with larger context window.</dd>
+
+  <dt>**Grok** — "Connection failed"</dt>
+  <dd>Verify `base_url` is set to `https://api.x.ai/v1`.</dd>
+
+  <dt>**Grok** — "Invalid endpoint"</dt>
+  <dd>Ensure you're using a valid Grok model name.</dd>
+</dl>
 
 ### Ollama (Local)
 
@@ -379,16 +394,23 @@ If the AI doesn't remember previous messages, verify sessions are enabled with `
 
 Common causes and fixes:
 
-| Issue | Solution |
-|-------|----------|
-| Anonymous sessions | Use `--session name` for persistence |
-| SQLite not configured | Add `sessions.storage: "sqlite"` to atmos.yaml |
-| Database permissions | `chmod 755 .atmos/sessions` |
-| Switched sessions | Press `Ctrl+L` to check current session |
+<dl>
+  <dt>Anonymous sessions</dt>
+  <dd>Use `--session name` for persistence.</dd>
+
+  <dt>SQLite not configured</dt>
+  <dd>Add `sessions.storage: "sqlite"` to atmos.yaml.</dd>
+
+  <dt>Database permissions</dt>
+  <dd>`chmod 755 .atmos/sessions`</dd>
+
+  <dt>Switched sessions</dt>
+  <dd>Press `Ctrl+L` to check current session.</dd>
+</dl>
 
 **Privacy note**: When conversation memory is working, the complete message history is sent to the AI provider. For sensitive work, use Ollama (fully local) or disable sessions.
 
-See [Conversation Memory](/ai/sessions#conversation-memory) for details.
+See [Conversation Memory](/cli/configuration/ai/sessions#conversation-memory) for details.
 
 ### Auto-Compact Issues
 
@@ -447,7 +469,7 @@ sessions:
     # use_ai_summary: false
 ```
 
-See [Auto-Compact](/ai/sessions#auto-compact-extended-conversations) for detailed configuration.
+See [Auto-Compact](/cli/configuration/ai/sessions#auto-compact-configuration) for detailed configuration.
 
 ## MCP Server Issues
 
@@ -603,7 +625,7 @@ If a skill says it can't use a specific tool, that tool isn't in the skill's `al
 
 Some skills intentionally restrict tools for safety (e.g., validation skills are read-only).
 
-Available tool names use underscores and the `atmos_` prefix: `atmos_describe_component`, `atmos_list_stacks`, `atmos_validate_stacks`, `read_file`, `edit_file`, `write_file`, `execute_bash`, `search_files`, etc. See [AI Tools](/ai/tools) for the complete list.
+Available tool names use underscores and the `atmos_` prefix: `atmos_describe_component`, `atmos_list_stacks`, `atmos_validate_stacks`, `read_file`, `edit_file`, `write_file`, `execute_bash`, `search_files`, etc. See [AI Tools](/cli/configuration/ai/tools) for the complete list.
 
 ### Default Skill Not Applying
 
@@ -633,7 +655,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-5"
+        model: "claude-sonnet-4-6"
         api_key: !env "ANTHROPIC_API_KEY"
     skills:
       test-skill:
@@ -851,6 +873,6 @@ AI commands have a 60-second default timeout. For complex questions, break them 
 
 If you're still stuck:
 
-1. Review [AI Configuration](/ai/configuration)
+1. Review [AI Configuration](/cli/configuration/ai)
 2. Search [GitHub Issues](https://github.com/cloudposse/atmos/issues) for similar problems
 3. Open a new issue with your Atmos version (`atmos version`), provider/model, full error message, and reproduction steps

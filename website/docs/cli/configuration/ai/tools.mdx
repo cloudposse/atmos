@@ -15,6 +15,39 @@ confirmation is required.
 
 <Experimental />
 
+## How Tool Calling Works
+
+When you ask a question that requires infrastructure data, the AI decides which tool to call, requests permission (if configured), executes the tool locally, and uses the result to answer your question.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant AtmosAI as Atmos AI Chat
+    participant LLM as AI Provider (Claude)
+    participant Tools as Local Tools
+    participant Files as Local Files
+
+    User->>AtmosAI: "What's the VPC CIDR in prod-use1?"
+    AtmosAI->>LLM: Send message + tool definitions (metadata only)
+    Note over LLM: AI analyzes question<br/>Determines it needs tool
+    LLM->>AtmosAI: Response: "I need atmos_describe_component"
+    AtmosAI->>User: Request permission (if required)
+    User->>AtmosAI: Approve
+    AtmosAI->>Tools: Execute: describe_component(vpc, prod-use1)
+    Tools->>Files: Read local stack/component files
+    Files-->>Tools: Component configuration
+    Tools-->>AtmosAI: Tool result with CIDR info
+    AtmosAI->>LLM: Send tool results
+    LLM->>AtmosAI: Final answer with CIDR
+    AtmosAI->>User: "The VPC CIDR is 10.0.0.0/16"
+```
+
+### What Gets Sent to the AI Provider
+
+Only **metadata** is sent initially — tool definitions (names, parameters, descriptions) and your question. No actual infrastructure data leaves your machine until the AI specifically requests it by calling a tool.
+
+When the AI calls a tool, it runs **locally** and only the tool's output is sent back. You control this through the [permission system](#permission-modes).
+
 ## Configuration
 
 <File title="atmos.yaml">
@@ -129,6 +162,19 @@ settings:
 
 All file operations include **path traversal protection** -- files can only be accessed within configured directories.
 
+### Web Search Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    web_search:
+      enabled: true
+      max_results: 10
+      engine: "duckduckgo"     # or "google" (requires API key)
+```
+</File>
+
 ## Permission Modes
 
 <dl>
@@ -152,6 +198,29 @@ All file operations include **path traversal protection** -- files can only be a
 5. Default        → Prompt if require_confirmation is true
 ```
 
+### Permission Prompts
+
+When a tool requires confirmation:
+
+```
+Tool Execution Request
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tool: atmos_describe_component
+Description: Describe an Atmos component configuration in a specific stack
+
+Parameters:
+  component: vpc
+  stack: prod-use1
+
+Options:
+  [a] Always allow (save to .atmos/ai.settings.local.json)
+  [y] Allow once
+  [n] Deny once
+  [d] Always deny (save to .atmos/ai.settings.local.json)
+
+Choice (a/y/n/d):
+```
+
 ## Wildcard Patterns
 
 Tool lists support glob-style wildcard patterns:
@@ -169,20 +238,32 @@ allowed_tools:
 
 **Priority order:** Blocked tools (config) > Cached denials > Allowed tools (config) > Cached allowances > Restricted tools > Default behavior.
 
-## Web Search Configuration
+## Skill-Specific Tool Access
 
-<File title="atmos.yaml">
-```yaml
-settings:
-  ai:
-    web_search:
-      enabled: true
-      max_results: 10
-      engine: "duckduckgo"     # or "google" (requires API key)
-```
-</File>
+Each [AI skill](/cli/configuration/ai/skills) defines which tools it can use, creating a safety layer where specialized skills only perform actions relevant to their purpose.
 
-## Example Configurations
+<dl>
+  <dt>**General**</dt>
+  <dd>Can read all, write all, execute all. Full access (respects global config).</dd>
+
+  <dt>**atmos-stacks**</dt>
+  <dd>Can read stacks, components, files. No write or execute. Analysis only.</dd>
+
+  <dt>**atmos-components**</dt>
+  <dd>Can read components, files. Can write and execute (with confirmation). Code-focused.</dd>
+
+  <dt>**atmos-terraform**</dt>
+  <dd>Can read stacks, components, files. No write. Can execute (with confirmation). Plan/review only.</dd>
+
+  <dt>**atmos-validation**</dt>
+  <dd>Can read stacks, files, LSP. No write or execute. Validation only.</dd>
+</dl>
+
+**Workflow tip:** Use different skills for different phases — analyze with `atmos-stacks`, refactor with `atmos-components`, validate with `atmos-validation`. Switch skills with **Ctrl+A** in the chat TUI.
+
+## Security Best Practices
+
+**Start conservative.** The default (prompt for everything) is the most secure. Relax permissions over time as you build trust:
 
 <File title="atmos.yaml">
 ```yaml
@@ -210,4 +291,20 @@ settings:
 ```
 </File>
 
-For tool execution workflow, permission prompts, and skill-specific tool access, see [AI Tools](/ai/tools).
+:::warning YOLO Mode
+Never use `yolo_mode` in production, shared environments, or workstations with production access. Reserve it for isolated CI/CD runners and sandboxed testing.
+:::
+
+## Troubleshooting
+
+**Tools not executing:** Check `tools.enabled: true` in your config and verify the tool isn't in `blocked_tools`.
+
+**No permission prompts:** The tool may be in `allowed_tools` or you may have previously chosen "always allow" in `.atmos/ai.settings.local.json`. Delete the cache file to reset.
+
+**Timeouts:** Tools have a 30-second timeout. Long-running operations are automatically cancelled. Run them manually if needed.
+
+## Related Documentation
+
+- [AI Configuration](/cli/configuration/ai) - Configure AI providers and settings
+- [AI Skills](/cli/configuration/ai/skills) - Skill system and custom skill creation
+- [AI Sessions](/cli/configuration/ai/sessions) - Persistent conversation sessions

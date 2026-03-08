@@ -5,6 +5,7 @@ sidebar_class_name: command
 description: Configure project-specific AI instructions in the `settings.ai.instructions` section of your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
@@ -14,6 +15,19 @@ instructions to the AI assistant.
 </Intro>
 
 <Experimental />
+
+## What are Project Instructions?
+
+Project Instructions are stored in a markdown file (`ATMOS.md`) in your project root that contains:
+- **Project Context**: Organization name, Atmos version, regions, environments
+- **Common Commands**: Frequently used Atmos commands for your project
+- **Stack Patterns**: Naming conventions and YAML structure patterns
+- **Infrastructure Patterns**: Multi-region setups, component dependencies
+- **Component Catalog**: Your component organization and structure
+- **Team Conventions**: Development practices and documentation standards
+- **Recent Learnings**: AI-discovered insights about your project
+
+These instructions are automatically included with every AI request when enabled, providing consistent context across all conversations.
 
 ## Configuration
 
@@ -87,15 +101,33 @@ settings:
   <dd>AI-discovered insights about your project (populated when `auto_update: true`).</dd>
 </dl>
 
+## Creating Your Instructions File
+
+When you enable project instructions with `create_if_missing: true`, Atmos automatically creates a template `ATMOS.md` file on first use:
+
+<Terminal title="atmos ai chat">
+```bash
+$ atmos ai chat
+
+# If ATMOS.md doesn't exist, it will be created automatically
+Created default ATMOS.md template
+
+# The AI will now include project instructions in all requests
+```
+</Terminal>
+
+You can also create the file manually with any text editor.
+
 ## ATMOS.md File Structure
 
-The instructions file uses Markdown with `##` section headers:
+The `ATMOS.md` file uses markdown with specific section headers:
 
 <File title="ATMOS.md">
 ````markdown
 # Atmos Project Instructions
 
-> This file provides project-specific context to the Atmos AI Assistant.
+> This file provides project-specific context, patterns, and conventions to the
+> Atmos AI Assistant. Edit freely - AI will preserve manual changes.
 
 ## Project Context
 
@@ -104,23 +136,89 @@ The instructions file uses Markdown with `##` section headers:
 **Primary Regions:** us-east-1, us-west-2
 **Environments:** dev, staging, prod
 
+**Stack Naming Pattern:**
+```
+{org}-{tenant}-{environment}-{region}-{stage}
+Example: acme-core-prod-use1-network
+```
+
 ## Common Commands
 
+### Describe and Validate
 ```bash
+# Describe a component
 atmos describe component <component> -s <stack>
+
+# List all stacks
+atmos list stacks
+
+# Validate stacks
+atmos validate stacks
+```
+
+### Terraform Operations
+```bash
+# Plan a component
 atmos terraform plan <component> -s <stack>
+
+# Apply a component
+atmos terraform apply <component> -s <stack>
 ```
 
 ## Stack Patterns
 
+### Stack Structure
+```yaml
+# Common import pattern
+import:
+  - catalog/stacks/baseline
+  - catalog/stacks/network
+```
+
+### CIDR Blocks
 - dev: 10.0.0.0/16
 - staging: 10.1.0.0/16
 - prod: 10.2.0.0/16
+
+## Frequent Issues & Solutions
+
+### Stack not found error
+**Problem:** `Error: stack 'my-stack' not found`
+**Solution:** Check stack naming and verify config exists in stacks/ directory
+
+### YAML validation fails
+**Problem:** `invalid YAML: mapping values are not allowed`
+**Solution:** Check indentation - YAML requires consistent 2-space indents
+
+## Infrastructure Patterns
+
+### Multi-Region Setup
+- Primary region for production workloads
+- DR region with replication
+- Cross-region networking configured
+
+### Component Dependencies
+```
+vpc → subnets → security-groups → rds → eks
+```
+
+## Component Catalog Structure
+
+```
+components/
+  terraform/
+    vpc/           # VPC and networking
+    rds/           # RDS databases
+    eks/           # EKS clusters
+    s3/            # S3 buckets
+```
 
 ## Team Conventions
 
 - All infrastructure changes require PR review
 - Use `atmos validate` before committing
+- Tag all resources appropriately
+- Document component changes
 
 ## Recent Learnings
 
@@ -128,7 +226,27 @@ atmos terraform plan <component> -s <stack>
 ````
 </File>
 
-## Update Modes
+## Customizing Instruction Sections
+
+You can control which sections are included in AI context:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    instructions:
+      enabled: true
+      # Only include essential sections for faster performance
+      sections:
+        - project_context
+        - common_commands
+        - frequent_issues
+```
+</File>
+
+This reduces token usage while keeping the most relevant context.
+
+## Manual vs Auto-Update
 
 <dl>
   <dt>**Manual** (recommended)</dt>
@@ -138,9 +256,32 @@ atmos terraform plan <component> -s <stack>
   <dd>Set `auto_update: true`. The AI can append insights to the "Recent Learnings" section as it discovers patterns. Other sections remain read-only.</dd>
 </dl>
 
+## Instructions vs Context Sharing
+
+<dl>
+  <dt>Content</dt>
+  <dd>**Project Instructions:** High-level patterns, conventions, common commands. **Context Sharing:** Actual stack YAML files and configurations.</dd>
+
+  <dt>Update frequency</dt>
+  <dd>**Project Instructions:** Rarely (manual or learned insights). **Context Sharing:** Every request (real-time).</dd>
+
+  <dt>Size</dt>
+  <dd>**Project Instructions:** Small (few KB). **Context Sharing:** Large (multiple files).</dd>
+
+  <dt>Privacy</dt>
+  <dd>**Project Instructions:** Low risk (you control content). **Context Sharing:** Higher risk (may contain secrets).</dd>
+
+  <dt>Use case</dt>
+  <dd>**Project Instructions:** Consistent AI behavior across chats. **Context Sharing:** Deep analysis of specific configs.</dd>
+</dl>
+
+**Best Practice:** Enable both for optimal results:
+- Instructions provide consistent baseline knowledge
+- Context sharing adds real-time specifics when needed
+
 ## Performance Considerations
 
-Project instructions add tokens to every AI request. Keep the file concise:
+Project instructions add tokens to every AI request:
 
 <dl>
   <dt>Small file (1-2 KB)</dt>
@@ -153,4 +294,43 @@ Project instructions add tokens to every AI request. Keep the file concise:
   <dd>~2000+ tokens per request. Consider limiting sections to reduce usage.</dd>
 </dl>
 
-For ATMOS.md file structure examples, version control guidance, and privacy considerations, see [Project Instructions](/ai/instructions).
+**Optimization tips:**
+1. Only enable sections you actively use
+2. Keep descriptions concise
+3. Remove outdated information
+4. Use `auto_update: false` to prevent growth
+
+## Privacy
+
+The contents of your `ATMOS.md` file are sent to your AI provider with every request when instructions
+are enabled. Only include information you are comfortable sharing with your configured AI provider.
+
+## Troubleshooting
+
+**Instructions not loading:**
+```bash
+# Check if file exists
+ls -la ATMOS.md
+
+# Verify configuration
+grep -A5 "instructions:" atmos.yaml
+
+# Test with explicit enable
+ATMOS_AI_INSTRUCTIONS_ENABLED=true atmos ai chat
+```
+
+**AI not using instructions:**
+- Verify `instructions.enabled: true` in atmos.yaml
+- Check that `ATMOS.md` exists in project root
+- Ensure sections are properly formatted with `##` headers
+
+**Instructions file not created:**
+- Set `create_if_missing: true`
+- Check file permissions in project directory
+- Verify Atmos has write access to project root
+
+## Related Documentation
+
+- [AI Configuration](/cli/configuration/ai) - Configure AI provider settings
+- [AI Sessions](/cli/configuration/ai/sessions) - Persistent conversation management
+- [AI Tools](/cli/configuration/ai/tools) - Available tools and permissions

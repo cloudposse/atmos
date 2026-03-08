@@ -28,14 +28,19 @@ This enables **Atmos AI** to detect syntax errors, validate YAML structure, and 
 
 The LSP Client and LSP Server validate **completely different things**:
 
-| What Gets Validated          | Atmos LSP Server    | External LSP Servers (via Client) |
-|------------------------------|---------------------|-----------------------------------|
-| **Atmos structure**          | Yes: Import arrays     | No                                 |
-| **Atmos structure**          | Yes: Component maps    | No                                 |
-| **Atmos structure**          | Yes: Stack inheritance | No                                 |
-| **Generic YAML syntax**      | No                   | Yes: YAML schemas                    |
-| **Terraform syntax**         | No                   | Yes: HCL parsing                     |
-| **Typos/unknown properties** | No                   | Yes: Schema validation               |
+<dl>
+  <dt>Atmos structure (import arrays, component maps, stack inheritance)</dt>
+  <dd>**Atmos LSP Server:** Yes. **External LSP Servers:** No.</dd>
+
+  <dt>Generic YAML syntax</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers:** Yes (YAML schemas).</dd>
+
+  <dt>Terraform syntax</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers:** Yes (HCL parsing).</dd>
+
+  <dt>Typos/unknown properties</dt>
+  <dd>**Atmos LSP Server:** No. **External LSP Servers:** Yes (schema validation).</dd>
+</dl>
 
 **Example:**
 
@@ -50,11 +55,16 @@ vpc_ciddr: "10.0.0.0/16"      # ← yaml-language-server catches this
 
 ### Component Comparison
 
-| Component | Validates | Used By | Connects To |
-|-----------|-----------|---------|-------------|
-| **LSP Client** | Generic syntax (YAML/TF/HCL) | Atmos AI | External LSP servers |
-| **LSP Server** | Atmos structure | IDEs (VS Code, Neovim) | N/A (IDEs connect TO it) |
-| **Direct Validation** | Atmos structure | Atmos AI | N/A (same process) |
+<dl>
+  <dt>**LSP Client**</dt>
+  <dd>Validates generic syntax (YAML/TF/HCL). Used by Atmos AI. Connects to external LSP servers.</dd>
+
+  <dt>**LSP Server**</dt>
+  <dd>Validates Atmos structure. Used by IDEs (VS Code, Neovim). IDEs connect TO it.</dd>
+
+  <dt>**Direct Validation**</dt>
+  <dd>Validates Atmos structure. Used by Atmos AI. Same process (no LSP needed).</dd>
+</dl>
 
 **Why both exist:**
 - **LSP Client**: Atmos doesn't have built-in Terraform/HCL parsers, so it connects to external LSP servers (terraform-ls, yaml-language-server) to validate generic syntax
@@ -343,11 +353,16 @@ The Terraform Language Server provides validation and intelligence for Terraform
 
 ## Available LSP Servers
 
-| Language Server | File Types | Installation | Purpose |
-|----------------|------------|--------------|---------|
-| **yaml-language-server** | YAML, YML | `npm install -g yaml-language-server` | YAML validation and schemas |
-| **terraform-ls** | TF, TFVARS, HCL | `brew install terraform-ls` | Terraform/HCL validation |
-| **vscode-json-languageserver** | JSON | `npm install -g vscode-json-languageserver` | JSON validation and schemas |
+<dl>
+  <dt>**yaml-language-server** — YAML, YML</dt>
+  <dd>Install: `npm install -g yaml-language-server`. YAML validation and schemas.</dd>
+
+  <dt>**terraform-ls** — TF, TFVARS, HCL</dt>
+  <dd>Install: `brew install terraform-ls`. Terraform/HCL validation.</dd>
+
+  <dt>**vscode-json-languageserver** — JSON</dt>
+  <dd>Install: `npm install -g vscode-json-languageserver`. JSON validation and schemas.</dd>
+</dl>
 
 ## Optional: Using LSP in Your Editor
 
@@ -661,16 +676,31 @@ Zed has built-in LSP support. Configure in `~/.config/zed/settings.json`:
 
 ### Editor Comparison
 
-| Editor | Setup Complexity | LSP Support | Best For |
-|--------|------------------|-------------|----------|
-| **VS Code** | Easy | Excellent | Beginners, full-featured IDE experience |
-| **Neovim** | Moderate | Excellent | Power users, keyboard-driven workflow |
-| **Vim (coc.nvim)** | Moderate | Good | Vim users wanting modern LSP features |
-| **Emacs** | Moderate | Excellent | Emacs users, highly customizable |
-| **Sublime Text** | Easy | Good | Lightweight, fast startup |
-| **IntelliJ/PyCharm** | Easy | Good | JetBrains IDE users |
-| **Cursor** | Easy | Excellent | AI-enhanced coding |
-| **Zed** | Easy | Good | High performance, modern editor |
+<dl>
+  <dt>**VS Code** — Easy setup, Excellent LSP support</dt>
+  <dd>Beginners, full-featured IDE experience.</dd>
+
+  <dt>**Neovim** — Moderate setup, Excellent LSP support</dt>
+  <dd>Power users, keyboard-driven workflow.</dd>
+
+  <dt>**Vim (coc.nvim)** — Moderate setup, Good LSP support</dt>
+  <dd>Vim users wanting modern LSP features.</dd>
+
+  <dt>**Emacs** — Moderate setup, Excellent LSP support</dt>
+  <dd>Emacs users, highly customizable.</dd>
+
+  <dt>**Sublime Text** — Easy setup, Good LSP support</dt>
+  <dd>Lightweight, fast startup.</dd>
+
+  <dt>**IntelliJ/PyCharm** — Easy setup, Good LSP support</dt>
+  <dd>JetBrains IDE users.</dd>
+
+  <dt>**Cursor** — Easy setup, Excellent LSP support</dt>
+  <dd>AI-enhanced coding.</dd>
+
+  <dt>**Zed** — Easy setup, Good LSP support</dt>
+  <dd>High performance, modern editor.</dd>
+</dl>
 
 :::tip Which Editor Should I Use?
 - **New to LSP**: VS Code (easiest setup, best documentation)
@@ -735,7 +765,7 @@ The LSP client is automatically available to Atmos AI when enabled. AI can use i
     ```
 </Terminal>
 
-See [AI Configuration](/ai/configuration#lsp-integration) for more details on AI integration.
+See [AI Configuration](/cli/configuration/ai#multi-provider-configuration) for more details on AI integration.
 
 ## Troubleshooting
 
@@ -993,8 +1023,8 @@ ATMOS_LOGS_LEVEL=Debug atmos <command>
     ## Related Documentation
 
 ### Atmos Documentation
-- [AI Configuration](/ai/configuration) - Configure AI to use LSP
-- [AI Tools](/ai/tools) - Learn about AI tool execution
+- [AI Configuration](/cli/configuration/ai) - Configure AI to use LSP
+- [AI Tools](/cli/configuration/ai/tools) - Learn about AI tool execution
 - [Troubleshooting](/ai/troubleshooting) - Common LSP issues
 
 ### LSP Protocol Resources

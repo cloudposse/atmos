@@ -23,13 +23,13 @@ for understanding configurations, analyzing stacks, troubleshooting issues, and 
 
 <dl>
   <dt>**AI Assistant**</dt>
-  <dd>Interactive terminal agent for conversations and guided help. See [Configuration](/ai/configuration).</dd>
+  <dd>Interactive terminal agent for conversations and guided help. See [Configuration](/cli/configuration/ai).</dd>
 
-  <dt>**[Tool Execution](/ai/tools)**</dt>
-  <dd>AI inspects your infrastructure using read-only Atmos commands. See [Tools Reference](/ai/tools).</dd>
+  <dt>**[Tool Execution](/cli/configuration/ai/tools)**</dt>
+  <dd>AI inspects your infrastructure using read-only Atmos commands. See [Tools Reference](/cli/configuration/ai/tools).</dd>
 
-  <dt>**[AI Skills](/ai/skills)**</dt>
-  <dd>21+ specialized assistants for infrastructure management. See [Skills Guide](/ai/skills).</dd>
+  <dt>**[AI Skills](/cli/configuration/ai/skills)**</dt>
+  <dd>21+ specialized assistants for infrastructure management. See [Skills Guide](/cli/configuration/ai/skills).</dd>
 
   <dt>**[MCP Server](/ai/mcp-server)**</dt>
   <dd>Expose Atmos tools to Claude Desktop and other MCP clients. See [MCP Setup](/ai/mcp-server).</dd>
@@ -66,7 +66,7 @@ for understanding configurations, analyzing stacks, troubleshooting issues, and 
   <dd>Enterprise compliance, Azure integration. Data stays in your cloud.</dd>
 </dl>
 
-See [AI Providers](/ai/providers) for configuration details.
+See [AI Providers](/cli/configuration/ai/providers) for configuration details.
 
 ## Quick Start
 
@@ -164,11 +164,11 @@ atmos ai exec "List all available stacks" --format json
 ### Security and Privacy
 
 - Store API keys securely -- never commit to version control
-- Use [Ollama](/ai/providers#ollama) for complete data privacy (nothing leaves your machine)
+- Use [Ollama](/cli/configuration/ai/providers#ollama-installation) for complete data privacy (nothing leaves your machine)
 - Use AWS Bedrock or Azure OpenAI for enterprise-grade security and compliance
 - The AI does not store configuration data beyond the current session
 
-See [AI Providers](/ai/providers) for detailed privacy considerations.
+See [AI Providers](/cli/configuration/ai/providers) for detailed privacy considerations.
 
 ---
 

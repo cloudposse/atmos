@@ -1,0 +1,105 @@
+---
+title: LSP Configuration
+sidebar_label: lsp
+sidebar_class_name: command
+id: lsp
+description: Configure the Atmos LSP server and client settings in your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `settings.lsp` section of the `atmos.yaml` configures the built-in LSP server and external LSP server
+connections used by the Atmos AI assistant for validation.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  lsp:
+    enabled: true
+```
+</File>
+
+## Configuration Reference
+
+### Top-Level Structure
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  lsp:
+    enabled: true                          # Enable LSP integration
+    servers:                               # External LSP server connections
+      yaml-ls:
+        command: "yaml-language-server"
+        args: ["--stdio"]
+        filetypes: ["yaml", "yml"]
+        root_patterns: ["atmos.yaml", ".git"]
+        initialization_options:
+          yaml:
+            schemas:
+              "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": "stacks/**/*.yaml"
+
+      terraform-ls:
+        command: "terraform-ls"
+        args: ["serve"]
+        filetypes: ["tf", "tfvars"]
+        root_patterns: [".terraform", ".git"]
+
+  ai:
+    use_lsp: true                          # Enable AI LSP integration
+```
+</File>
+
+### LSP Settings
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Enable or disable LSP integration (default: `false`)</dd>
+</dl>
+
+### Server Configuration
+
+Each server in the `servers` map configures an external LSP server connection:
+
+<dl>
+  <dt>`command`</dt>
+  <dd>The executable command to run the LSP server (e.g., `yaml-language-server`, `terraform-ls`)</dd>
+
+  <dt>`args`</dt>
+  <dd>Command-line arguments passed to the server (e.g., `["--stdio"]`)</dd>
+
+  <dt>`filetypes`</dt>
+  <dd>List of file extensions this server handles (e.g., `["yaml", "yml"]`)</dd>
+
+  <dt>`root_patterns`</dt>
+  <dd>Patterns used to identify the workspace root directory (e.g., `["atmos.yaml", ".git"]`)</dd>
+
+  <dt>`initialization_options`</dt>
+  <dd>Custom LSP initialization options passed to the server on startup. The structure depends on the specific LSP server.</dd>
+</dl>
+
+### AI Integration
+
+<dl>
+  <dt>`settings.ai.use_lsp`</dt>
+  <dd>When enabled, the Atmos AI assistant uses connected LSP servers for enhanced validation of YAML, Terraform, and HCL files (default: `false`)</dd>
+</dl>
+
+## Guides
+
+- **[LSP Server](/lsp/lsp-server)** — Set up IDE integration with the Atmos LSP server
+- **[LSP Client](/lsp/lsp-client)** — Connect external LSP servers for AI-powered validation
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/lsp/start', label: 'atmos lsp start', description: 'Start the Atmos LSP server for IDE integration'},
+]} />

@@ -50,16 +50,31 @@ Claude Code subagents are specialized AI assistants that enhance your developmen
 
 ## When to Use Subagents vs Built-in AI
 
-| If you want to... | Use this |
-|-------------------|----------|
-| Write Terraform code | Claude Code Subagent (in IDE) |
-| Edit component files | Claude Code Subagent (in IDE) |
-| Get help while coding | Claude Code Subagent (in IDE) |
-| Analyze infrastructure | Built-in Atmos AI (`atmos ai chat`) |
-| Use Ollama/GPT/Gemini | Built-in Atmos AI (7 providers) |
-| Multi-day project discussion | Built-in Atmos AI (persistent sessions) |
-| Quick one-off question | Built-in Atmos AI (`atmos ai ask`) |
-| Team collaboration | Built-in Atmos AI (shareable sessions) |
+<dl>
+  <dt>Write Terraform code</dt>
+  <dd>Claude Code Subagent (in IDE)</dd>
+
+  <dt>Edit component files</dt>
+  <dd>Claude Code Subagent (in IDE)</dd>
+
+  <dt>Get help while coding</dt>
+  <dd>Claude Code Subagent (in IDE)</dd>
+
+  <dt>Analyze infrastructure</dt>
+  <dd>Built-in Atmos AI (`atmos ai chat`)</dd>
+
+  <dt>Use Ollama/GPT/Gemini</dt>
+  <dd>Built-in Atmos AI (7 providers)</dd>
+
+  <dt>Multi-day project discussion</dt>
+  <dd>Built-in Atmos AI (persistent sessions)</dd>
+
+  <dt>Quick one-off question</dt>
+  <dd>Built-in Atmos AI (`atmos ai ask`)</dd>
+
+  <dt>Team collaboration</dt>
+  <dd>Built-in Atmos AI (shareable sessions)</dd>
+</dl>
 
 ## Setup Guide
 
@@ -216,23 +231,38 @@ Update Claude Desktop config to use the correct path.
 
 ## Comparison with Built-in Atmos AI
 
-| Feature | Claude Code Subagent | Built-in Atmos AI |
-|---------|---------------------|-------------------|
-| **Access Method** | `@atmos-expert` in IDE | `atmos ai chat` in terminal |
-| **Tool Protocol** | MCP (slight overhead) | Direct (faster) |
-| **Context** | Independent per subagent | Persistent SQLite sessions |
-| **AI Provider** | Claude (Sonnet/Opus/Haiku) | 7 providers (Claude, GPT, Gemini, Grok, Ollama, Bedrock, Azure) |
-| **IDE Integration** | Full code access | CLI only |
-| **Code Editing** | Can modify files | Read-only |
-| **Session Persistence** | Per-conversation | Across CLI invocations |
-| **Best For** | Development workflow | Operations workflow |
+<dl>
+  <dt>Access Method</dt>
+  <dd>**Claude Code Subagent:** `@atmos-expert` in IDE. **Built-in Atmos AI:** `atmos ai chat` in terminal.</dd>
+
+  <dt>Tool Protocol</dt>
+  <dd>**Claude Code Subagent:** MCP (slight overhead). **Built-in Atmos AI:** Direct (faster).</dd>
+
+  <dt>Context</dt>
+  <dd>**Claude Code Subagent:** Independent per subagent. **Built-in Atmos AI:** Persistent SQLite sessions.</dd>
+
+  <dt>AI Provider</dt>
+  <dd>**Claude Code Subagent:** Claude (Sonnet/Opus/Haiku). **Built-in Atmos AI:** 7 providers (Claude, GPT, Gemini, Grok, Ollama, Bedrock, Azure).</dd>
+
+  <dt>IDE Integration</dt>
+  <dd>**Claude Code Subagent:** Full code access. **Built-in Atmos AI:** CLI only.</dd>
+
+  <dt>Code Editing</dt>
+  <dd>**Claude Code Subagent:** Can modify files. **Built-in Atmos AI:** Read-only.</dd>
+
+  <dt>Session Persistence</dt>
+  <dd>**Claude Code Subagent:** Per-conversation. **Built-in Atmos AI:** Across CLI invocations.</dd>
+
+  <dt>Best For</dt>
+  <dd>**Claude Code Subagent:** Development workflow. **Built-in Atmos AI:** Operations workflow.</dd>
+</dl>
 
 ## Related Documentation
 
 - [MCP Server Setup](/ai/mcp-server) - Configure the Atmos MCP server
 - [Built-in AI Chat](/cli/commands/ai/chat) - Use the integrated AI assistant
-- [Tool Execution](/ai/tools) - How AI uses Atmos tools
-- [Configuration](/ai/configuration) - AI configuration options
+- [Tool Execution](/cli/configuration/ai/tools) - How AI uses Atmos tools
+- [Configuration](/cli/configuration/ai) - AI configuration options
 
 ## External Resources
 

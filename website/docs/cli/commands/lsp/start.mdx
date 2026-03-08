@@ -1,0 +1,100 @@
+---
+title: atmos lsp start
+sidebar_label: start
+sidebar_class_name: command
+id: start
+description: Start the Atmos LSP server for IDE integration
+---
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to start the Atmos Language Server Protocol (LSP) server for IDE integration. The LSP server provides syntax validation, auto-completion, hover documentation, and go-to-definition for Atmos stack files.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure LSP">
+    Learn how to configure LSP server and client settings in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/lsp">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos lsp start --help" slug="atmos-lsp-start--help" />
+
+## Description
+
+The `atmos lsp start` command starts the Atmos LSP server, enabling IDE integration for Atmos stack files.
+
+The LSP server provides:
+- Syntax validation and diagnostics
+- Auto-completion for Atmos keywords and components
+- Hover documentation for Atmos-specific syntax
+- Go to definition for stack references
+
+The server supports multiple transport protocols for different use cases:
+- **stdio** — Standard input/output (default, for IDE integration)
+- **tcp** — TCP server for remote connections
+- **websocket** — WebSocket server for web-based editors
+
+## Usage
+
+```shell
+atmos lsp start [flags]
+```
+
+### Flags
+
+<dl>
+  <dt>`--transport`</dt>
+  <dd>Transport protocol to use: `stdio`, `tcp`, or `websocket` (default: `stdio`)</dd>
+
+  <dt>`--address`</dt>
+  <dd>Address for tcp/websocket transports in `host:port` format (default: `localhost:7777`)</dd>
+</dl>
+
+### Examples
+
+```shell
+# Start LSP server with stdio transport (default, for IDE integration)
+atmos lsp start
+
+# Start LSP server with TCP transport
+atmos lsp start --transport=tcp
+
+# Start LSP server with TCP on a custom address
+atmos lsp start --transport=tcp --address=localhost:9999
+
+# Start LSP server with WebSocket transport
+atmos lsp start --transport=websocket --address=localhost:8080
+```
+
+## Editor Setup
+
+### VS Code
+
+Configure your VS Code LSP client to run the Atmos LSP server:
+
+```json
+{
+  "atmos.lsp.command": "atmos",
+  "atmos.lsp.args": ["lsp", "start", "--transport=stdio"]
+}
+```
+
+### Other Editors
+
+For detailed editor-specific setup instructions, see the [LSP Server Guide](/lsp/lsp-server).
+
+## Related
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/configuration/lsp', label: 'LSP Configuration', description: 'Configure LSP server and client settings in atmos.yaml'},
+  {type: 'link', href: '/lsp/lsp-server', label: 'LSP Server Guide', description: 'Detailed guide for setting up IDE integration with the Atmos LSP server'},
+  {type: 'link', href: '/lsp/lsp-client', label: 'LSP Client Guide', description: 'Use external LSP servers for AI-powered validation'},
+]} />

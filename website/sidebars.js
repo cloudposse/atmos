@@ -209,6 +209,8 @@ module.exports = {
                     link: {type: 'doc', id: 'projects/setup-editor/index'},
                     items: [
                         {type: 'doc', id: 'projects/setup-editor/setup-ai-assistants', label: 'AI Assistants'},
+                        {type: 'doc', id: 'ai/claude-code-integration', label: 'Claude Code'},
+                        {type: 'doc', id: 'ai/mcp-server', label: 'MCP Server'},
                         {
                             type: 'category',
                             label: 'IDE Integration (LSP)',
