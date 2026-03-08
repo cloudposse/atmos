@@ -120,11 +120,10 @@ func hasCredentialFiles(awsDir string) bool {
 	return false
 }
 
-// deleteLegacyKeyringEntry removes a pre-realm keyring entry during the early
-// cleanup phase of the Authenticate flow. This runs before authenticateChain,
-// so legacy credentials are removed unconditionally even if subsequent
-// authentication fails. This prevents the realm mismatch warning from firing
-// on subsequent commands.
+// deleteLegacyKeyringEntry removes a pre-realm keyring entry after successful
+// authentication. This runs in the post-success path of the Authenticate flow,
+// after authenticateChain and PostAuthenticate have completed, so legacy
+// credentials remain as a fallback if authentication fails.
 func (m *manager) deleteLegacyKeyringEntry(alias string) {
 	if m.realm.Value == "" || m.credentialStore == nil {
 		return
@@ -136,12 +135,13 @@ func (m *manager) deleteLegacyKeyringEntry(alias string) {
 	}
 }
 
-// deleteLegacyCredentialFiles removes pre-realm credential files during the early
-// cleanup phase of the Authenticate flow. This runs before authenticateChain,
-// so legacy files are removed unconditionally even if subsequent authentication
-// fails. This prevents the file-based realm mismatch warning from firing on
-// subsequent commands.
+// deleteLegacyCredentialFiles removes pre-realm credential files after successful
+// authentication. This runs in the post-success path of the Authenticate flow,
+// after authenticateChain and PostAuthenticate have completed, so legacy files
+// remain as a fallback if authentication fails.
 // Scans {baseDir}/aws/{provider}/ for credential and config files and removes them.
+// TODO: Refactor to use a provider/store-owned cleanup hook instead of hardcoding
+// AWS-specific paths here, keeping the auth manager cloud-agnostic.
 func (m *manager) deleteLegacyCredentialFiles() {
 	if m.realm.Value == "" {
 		return

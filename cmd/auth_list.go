@@ -154,7 +154,8 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 
 	// When no providers or identities are configured, check if profiles exist
 	// that might contain auth configuration and suggest using --profile.
-	if len(filteredProviders) == 0 && len(filteredIdentities) == 0 {
+	// Use the unfiltered lists to avoid false positives when filters narrow results to empty.
+	if len(providers) == 0 && len(identities) == 0 {
 		if suggestion := suggestProfilesForAuth(atmosConfig); suggestion != nil {
 			return suggestion
 		}
