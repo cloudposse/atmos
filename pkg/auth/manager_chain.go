@@ -328,8 +328,6 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 			log.Debug("Failed to cache provider credentials", "error", err)
 		} else {
 			log.Debug("Cached provider credentials", "providerName", providerName)
-			// Clean up legacy (pre-realm) keyring entry to prevent realm mismatch warnings.
-			m.deleteLegacyKeyringEntry(providerName)
 		}
 	}
 
@@ -506,8 +504,6 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 				log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
 			} else {
 				log.Debug("Cached credentials", "identityStep", identityStep)
-				// Clean up legacy (pre-realm) keyring entry to prevent realm mismatch warnings.
-				m.deleteLegacyKeyringEntry(identityStep)
 			}
 		}
 

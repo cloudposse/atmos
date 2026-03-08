@@ -134,6 +134,45 @@ func (m *manager) deleteLegacyKeyringEntry(alias string) {
 	}
 }
 
+// deleteLegacyCredentialFiles removes pre-realm credential files after credentials
+// have been successfully stored under the current realm. This prevents the file-based
+// realm mismatch warning from firing on subsequent commands.
+// Scans {baseDir}/aws/{provider}/ for credential and config files and removes them.
+func (m *manager) deleteLegacyCredentialFiles() {
+	if m.realm.Value == "" {
+		return
+	}
+
+	baseDir := xdg.LookupXDGConfigDir("")
+	if baseDir == "" {
+		return
+	}
+
+	awsDir := filepath.Join(baseDir, awsDirNameForMismatch)
+	providerDirs, err := os.ReadDir(awsDir)
+	if err != nil {
+		return
+	}
+
+	for _, provider := range providerDirs {
+		if !provider.IsDir() {
+			continue
+		}
+		providerDir := filepath.Join(awsDir, provider.Name())
+		// Remove credential, config, and lock files from legacy (no-realm) path.
+		for _, filename := range []string{"credentials", "config", "credentials.lock", "config.lock"} {
+			filePath := filepath.Join(providerDir, filename)
+			if err := os.Remove(filePath); err == nil {
+				log.Debug("Deleted legacy credential file (pre-realm)", "path", filePath)
+			}
+		}
+		// Remove provider directory if now empty.
+		_ = os.Remove(providerDir)
+	}
+	// Remove aws directory if now empty.
+	_ = os.Remove(awsDir)
+}
+
 // logRealmMismatchWarning emits a warning about credentials existing under a different realm.
 func logRealmMismatchWarning(currentRealm, alternateRealm string) {
 	currentDisplay := currentRealm

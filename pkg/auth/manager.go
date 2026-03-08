@@ -231,6 +231,14 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	m.chain = chain
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
+	// Clean up legacy (pre-realm) keyring and file entries to prevent realm mismatch warnings.
+	// This runs early in the Authenticate flow so it executes even when cached credentials
+	// allow the provider authentication step to be skipped.
+	m.deleteLegacyCredentialFiles()
+	for _, step := range chain {
+		m.deleteLegacyKeyringEntry(step)
+	}
+
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {

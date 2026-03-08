@@ -348,6 +348,48 @@ func TestDeleteLegacyKeyringEntry_NilStore(t *testing.T) {
 	m.deleteLegacyKeyringEntry("my-identity")
 }
 
+func TestDeleteLegacyCredentialFiles_CleansUpNoRealmFiles(t *testing.T) {
+	// Setup: credential files at {baseDir}/aws/{provider}/credentials (no realm).
+	parent := t.TempDir()
+	atmosDir := filepath.Join(parent, "atmos")
+	providerDir := filepath.Join(atmosDir, "aws", "my-provider")
+	require.NoError(t, os.MkdirAll(providerDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "credentials"), []byte("test"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "config"), []byte("test"), 0o600))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", parent)
+
+	m := &manager{
+		realm: realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+
+	m.deleteLegacyCredentialFiles()
+
+	// Legacy files should be deleted.
+	_, err := os.Stat(filepath.Join(providerDir, "credentials"))
+	assert.True(t, os.IsNotExist(err), "legacy credentials file should be deleted")
+	_, err = os.Stat(filepath.Join(providerDir, "config"))
+	assert.True(t, os.IsNotExist(err), "legacy config file should be deleted")
+}
+
+func TestDeleteLegacyCredentialFiles_NoOpForEmptyRealm(t *testing.T) {
+	parent := t.TempDir()
+	atmosDir := filepath.Join(parent, "atmos")
+	providerDir := filepath.Join(atmosDir, "aws", "my-provider")
+	require.NoError(t, os.MkdirAll(providerDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "credentials"), []byte("test"), 0o600))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", parent)
+
+	m := &manager{
+		realm: realm.RealmInfo{Value: "", Source: "auto"},
+	}
+
+	m.deleteLegacyCredentialFiles()
+
+	// Files should NOT be deleted when realm is empty.
+	_, err := os.Stat(filepath.Join(providerDir, "credentials"))
+	assert.NoError(t, err, "files should not be deleted when realm is empty")
+}
+
 func TestLogRealmMismatchWarning_NonEmptyToEmpty(t *testing.T) {
 	// Verify it doesn't panic. The actual log output goes to the logger.
 	logRealmMismatchWarning("my-realm", "(no realm)")
