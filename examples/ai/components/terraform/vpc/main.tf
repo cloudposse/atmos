@@ -1,6 +1,9 @@
 # VPC Component
 # Mock Terraform component for demonstrating Atmos AI features.
 # This does not create any real cloud resources.
+#
+# For production use, see the Cloud Posse VPC component:
+# https://github.com/cloudposse-terraform-components/aws-vpc
 
 terraform {
   required_version = ">= 1.0.0"

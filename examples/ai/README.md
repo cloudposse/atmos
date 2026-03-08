@@ -163,7 +163,17 @@ $ atmos ai exec "validate stacks" --format json
 
 ### Multi-Region Hub-Spoke Architecture
 
-This example models a real-world multi-region AWS networking setup:
+This example models a real-world multi-region AWS networking setup using mock Terraform components
+that don't create any real cloud resources. For production infrastructure, use the
+[Cloud Posse Terraform components](https://github.com/cloudposse-terraform-components):
+
+- [`aws-vpc`](https://github.com/cloudposse-terraform-components/aws-vpc)
+- [`aws-tgw-hub`](https://github.com/cloudposse-terraform-components/aws-tgw-hub)
+- [`aws-tgw-attachment`](https://github.com/cloudposse-terraform-components/aws-tgw-attachment)
+- [`aws-tgw-hub-connector`](https://github.com/cloudposse-terraform-components/aws-tgw-hub-connector)
+- [`aws-tgw-routes`](https://github.com/cloudposse-terraform-components/aws-tgw-routes)
+
+The example architecture:
 
 - **us-east-1 (hub)** — Transit Gateway hub with VPC and attachments
 - **us-west-2 (spoke)** — Cross-region connector peering back to the hub
@@ -335,8 +345,8 @@ atmos workflow ai-demo
 
 ## Learn More
 
-- [AI Assistant Documentation](https://atmos.tools/ai/)
-- [AI Configuration](https://atmos.tools/ai/configuration)
-- [AI Providers](https://atmos.tools/ai/providers)
-- [AI Skills](https://atmos.tools/ai/skills)
-- [Session Management](https://atmos.tools/ai/sessions)
+- [AI Assistant Documentation](https://atmos.tools/ai)
+- [AI Configuration](https://atmos.tools/cli/configuration/ai)
+- [AI Providers](https://atmos.tools/cli/configuration/ai/providers)
+- [AI Skills](https://atmos.tools/cli/configuration/ai/skills)
+- [Session Management](https://atmos.tools/cli/configuration/ai/sessions)

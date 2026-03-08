@@ -170,10 +170,16 @@ settings:
   ai:
     web_search:
       enabled: true
+      engine: "duckduckgo"           # or "google" (requires API key)
       max_results: 10
-      engine: "duckduckgo"     # or "google" (requires API key)
+      timeout_seconds: 30
+      # Google Custom Search (only needed when engine: "google")
+      # google_api_key: !env "GOOGLE_API_KEY"
+      # google_cse_id: !env "GOOGLE_CSE_ID"
 ```
 </File>
+
+See [Web Search](/cli/configuration/ai#web-search) in the AI configuration reference for all settings.
 
 ## Permission Modes
 

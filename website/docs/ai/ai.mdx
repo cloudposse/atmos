@@ -9,64 +9,16 @@ id: ai
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Atmos integrates AI capabilities directly into infrastructure management, providing intelligent assistance
+Atmos integrates AI directly into infrastructure management, providing intelligent assistance
 for understanding configurations, analyzing stacks, troubleshooting issues, and automating workflows.
 </Intro>
 
 <Experimental />
-
-## AI Capabilities
-
-<dl>
-  <dt>**AI Assistant**</dt>
-  <dd>Interactive terminal agent for conversations and guided help. See [Configuration](/cli/configuration/ai).</dd>
-
-  <dt>**[Tool Execution](/cli/configuration/ai/tools)**</dt>
-  <dd>AI inspects your infrastructure using read-only Atmos commands. See [Tools Reference](/cli/configuration/ai/tools).</dd>
-
-  <dt>**[AI Skills](/cli/configuration/ai/skills)**</dt>
-  <dd>21+ specialized assistants for infrastructure management. See [Skills Guide](/cli/configuration/ai/skills).</dd>
-
-  <dt>**[MCP Server](/ai/mcp-server)**</dt>
-  <dd>Expose Atmos tools to Claude Desktop and other MCP clients. See [MCP Setup](/ai/mcp-server).</dd>
-
-  <dt>**[Claude Code](/ai/claude-code-integration)**</dt>
-  <dd>Use Atmos with Claude Code IDE via MCP protocol. See [Integration Guide](/ai/claude-code-integration).</dd>
-
-  <dt>**[LSP Client](/lsp/lsp-client)**</dt>
-  <dd>AI validation using external language servers. See [LSP Client](/lsp/lsp-client).</dd>
-</dl>
-
-## Supported Providers
-
-<dl>
-  <dt>**Anthropic (Claude)**</dt>
-  <dd>Advanced reasoning, default choice. Cloud-hosted.</dd>
-
-  <dt>**OpenAI (GPT)**</dt>
-  <dd>Widely available, fast. Cloud-hosted.</dd>
-
-  <dt>**Google (Gemini)**</dt>
-  <dd>Large context window. Cloud-hosted.</dd>
-
-  <dt>**xAI (Grok)**</dt>
-  <dd>Real-time knowledge. Cloud-hosted.</dd>
-
-  <dt>**Ollama**</dt>
-  <dd>Complete privacy, offline use. 100% local -- no data leaves your machine.</dd>
-
-  <dt>**AWS Bedrock**</dt>
-  <dd>Enterprise security, AWS integration. Data stays in your cloud.</dd>
-
-  <dt>**Azure OpenAI**</dt>
-  <dd>Enterprise compliance, Azure integration. Data stays in your cloud.</dd>
-</dl>
-
-See [AI Providers](/cli/configuration/ai/providers) for configuration details.
 
 ## Quick Start
 
@@ -90,88 +42,95 @@ atmos ai chat
 ```
 </Terminal>
 
----
+<ActionCard title="Try the Example">
+    Explore a complete multi-region infrastructure example with 4 providers, custom skills, sessions, and tool execution.
+    <div>
+      <PrimaryCTA to="/examples">Browse Examples</PrimaryCTA>
+    </div>
+</ActionCard>
 
-## AI Assistant
+## Atmos AI Assistant
 
-The Atmos AI Assistant is an interactive terminal agent for infrastructure management. It provides
-conversations, Q&A, configuration analysis, and guided troubleshooting.
+The AI assistant is an interactive terminal agent that understands your Atmos stacks, components,
+inheritance patterns, and infrastructure workflows. It supports 7 providers including Anthropic,
+OpenAI, Google, xAI, Ollama (fully local), AWS Bedrock, and Azure OpenAI.
 
-### Using the Assistant
+<ActionCard title="AI Configuration">
+    Configure providers, skills, tools, sessions, and instructions in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
-<Terminal title="atmos ai">
-```bash
-# Interactive chat
-atmos ai chat
-
-# Named session (persistent across invocations)
-atmos ai chat --session vpc-refactor
-
-# Quick question
-atmos ai ask "What components are available?"
-
-# Non-interactive execution (scripting/CI-CD)
-atmos ai exec "List all available stacks" --format json
-```
-</Terminal>
-
-### TUI Keyboard Shortcuts
-
-**Chat View:**
+### Commands
 
 <dl>
-  <dt>**Ctrl+N**</dt>
-  <dd>Create new session</dd>
+  <dt>[`atmos ai chat`](/cli/commands/ai/chat)</dt>
+  <dd>Interactive chat with session management, provider switching, and skill selection.</dd>
 
-  <dt>**Ctrl+L**</dt>
-  <dd>Switch session</dd>
+  <dt>[`atmos ai ask`](/cli/commands/ai/ask)</dt>
+  <dd>Ask a single question and get an immediate response. Ideal for scripting and CI/CD.</dd>
 
-  <dt>**Ctrl+P**</dt>
-  <dd>Switch AI provider</dd>
+  <dt>[`atmos ai exec`](/cli/commands/ai/exec)</dt>
+  <dd>Execute Atmos and shell commands via AI prompts with structured output.</dd>
 
-  <dt>**Ctrl+A**</dt>
-  <dd>Switch AI skill</dd>
+  <dt>[`atmos ai help`](/cli/commands/ai/ai-help)</dt>
+  <dd>Get contextual help on specific Atmos topics.</dd>
 
-  <dt>**Ctrl+J**</dt>
-  <dd>Add newline</dd>
+  <dt>[`atmos ai sessions`](/cli/commands/ai/sessions)</dt>
+  <dd>Manage chat sessions: list, clean, export, and import.</dd>
 
-  <dt>**Up/Down**</dt>
-  <dd>Navigate message history</dd>
+  <dt>[`atmos ai skill`](/cli/commands/ai/skill)</dt>
+  <dd>Install, list, and uninstall community AI skills from GitHub.</dd>
 </dl>
 
-**Session Picker:**
+## MCP Server
+
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server exposes Atmos AI tools
+to any compatible client -- Claude Desktop, Claude Code, VS Code, Cursor, Gemini CLI, and
+[many others](https://modelcontextprotocol.io/clients). This lets you use Atmos tools inside your
+preferred AI assistant without custom integrations.
+
+<ActionCard title="MCP Setup">
+    Configure MCP clients and manage tool permissions.
+    <div>
+      <PrimaryCTA to="/ai/mcp-server">MCP Server Setup</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <dl>
-  <dt>**Up/Down** or **j/k**</dt>
-  <dd>Navigate sessions</dd>
-
-  <dt>**Enter**</dt>
-  <dd>Switch to session</dd>
-
-  <dt>**d**</dt>
-  <dd>Delete session</dd>
-
-  <dt>**r**</dt>
-  <dd>Rename session</dd>
-
-  <dt>**f**</dt>
-  <dd>Filter by provider</dd>
-
-  <dt>**n**</dt>
-  <dd>Create new session</dd>
+  <dt>[`atmos mcp start`](/cli/commands/mcp/start)</dt>
+  <dd>Start the MCP server with stdio (default) or HTTP transport.</dd>
 </dl>
 
-### Security and Privacy
+## LSP Server
 
-- Store API keys securely -- never commit to version control
-- Use [Ollama](/cli/configuration/ai/providers#ollama-installation) for complete data privacy (nothing leaves your machine)
-- Use AWS Bedrock or Azure OpenAI for enterprise-grade security and compliance
-- The AI does not store configuration data beyond the current session
+The Language Server Protocol (LSP) server provides IDE integration for Atmos stack files, including
+syntax validation, auto-completion, hover documentation, and go-to-definition.
 
-See [AI Providers](/cli/configuration/ai/providers) for detailed privacy considerations.
+<ActionCard title="LSP Setup">
+    Configure your editor for Atmos LSP integration.
+    <div>
+      <PrimaryCTA to="/lsp/lsp">LSP Setup</PrimaryCTA>
+    </div>
+</ActionCard>
 
----
+<dl>
+  <dt>[`atmos lsp start`](/cli/commands/lsp/start)</dt>
+  <dd>Start the LSP server with stdio, TCP, or WebSocket transport.</dd>
+</dl>
 
-## Related Documentation
+## Agent Skills
 
-<DocCardList/>
+Atmos ships 21+ agent skills that give AI coding assistants deep knowledge of Atmos conventions.
+Skills follow the [Agent Skills](https://agentskills.io) open standard and work across Claude Code,
+Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
+
+- [Agent Skills Overview](/ai/agent-skills) -- How skills work, available skills, and the SKILL.md format
+- [Skill Marketplace](/ai/skill-marketplace) -- Install and share community skills from GitHub
+- [Skills Configuration](/cli/configuration/ai/skills) -- Configure skills in `atmos.yaml`
+
+## Troubleshooting
+
+Having issues? See the [Troubleshooting Guide](/ai/troubleshooting) for solutions to common problems
+with providers, tools, sessions, and connectivity.

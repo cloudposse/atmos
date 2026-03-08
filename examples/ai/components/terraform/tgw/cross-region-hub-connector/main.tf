@@ -1,6 +1,9 @@
 # Transit Gateway Cross-Region Hub Connector Component
 # Mock Terraform component for demonstrating Atmos AI features.
 # This does not create any real cloud resources.
+#
+# For production use, see the Cloud Posse Transit Gateway component:
+# https://github.com/cloudposse-terraform-components/aws-tgw-hub-connector
 
 terraform {
   required_version = ">= 1.0.0"

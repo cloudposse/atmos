@@ -83,6 +83,22 @@ settings:
       enabled: true
       file: "ATMOS.md"
 
+    # Automatic context discovery
+    context:
+      enabled: true
+      auto_include: ["stacks/**/*.yaml"]
+      exclude: ["**/node_modules/**"]
+      max_files: 100
+      max_size_mb: 10
+
+    # Web search
+    web_search:
+      enabled: false
+      engine: "duckduckgo"
+
+    # LSP integration
+    use_lsp: false
+
     # Custom skills
     skills:
       <skill-name>:
@@ -125,6 +141,9 @@ settings:
 
   <dt>`max_context_lines`</dt>
   <dd>Maximum lines per file when sending context (default: `500`)</dd>
+
+  <dt>`use_lsp`</dt>
+  <dd>Enable LSP integration for AI-powered file validation via external language servers (default: `false`). See [LSP Configuration](/cli/configuration/lsp).</dd>
 </dl>
 
 ### Provider Settings
@@ -273,6 +292,63 @@ export ATMOS_AI_SEND_CONTEXT=true
 atmos ai ask "Hello, are you working?"
 ```
 </Terminal>
+
+## Context Discovery
+
+The `context` section controls automatic file discovery for AI context:
+
+<dl>
+  <dt>`context.enabled`</dt>
+  <dd>Enable automatic context loading (default: `true`)</dd>
+
+  <dt>`context.auto_include`</dt>
+  <dd>Glob patterns for files to automatically include (e.g., `["stacks/**/*.yaml"]`)</dd>
+
+  <dt>`context.exclude`</dt>
+  <dd>Glob patterns to exclude from context (e.g., `["**/node_modules/**"]`)</dd>
+
+  <dt>`context.max_files`</dt>
+  <dd>Maximum files to include (default: `100`)</dd>
+
+  <dt>`context.max_size_mb`</dt>
+  <dd>Maximum total size in MB (default: `10`)</dd>
+
+  <dt>`context.follow_gitignore`</dt>
+  <dd>Respect `.gitignore` patterns (default: `true`)</dd>
+
+  <dt>`context.show_files`</dt>
+  <dd>Show included files in UI output (default: `false`)</dd>
+
+  <dt>`context.cache_enabled`</dt>
+  <dd>Cache discovered files for faster subsequent requests (default: `true`)</dd>
+
+  <dt>`context.cache_ttl`</dt>
+  <dd>Cache time-to-live in seconds (default: `300`)</dd>
+</dl>
+
+## Web Search
+
+The `web_search` section enables the AI to search the web for documentation and solutions:
+
+<dl>
+  <dt>`web_search.enabled`</dt>
+  <dd>Enable web search tool (default: `false`)</dd>
+
+  <dt>`web_search.engine`</dt>
+  <dd>Search engine: `duckduckgo` (default, no API key needed) or `google` (requires API key)</dd>
+
+  <dt>`web_search.max_results`</dt>
+  <dd>Maximum search results to return (default: `10`)</dd>
+
+  <dt>`web_search.timeout_seconds`</dt>
+  <dd>Web search timeout in seconds</dd>
+
+  <dt>`web_search.google_api_key`</dt>
+  <dd>Google Custom Search API key (only needed when `engine: "google"`)</dd>
+
+  <dt>`web_search.google_cse_id`</dt>
+  <dd>Google Custom Search Engine ID (only needed when `engine: "google"`)</dd>
+</dl>
 
 ## Security Best Practices
 
