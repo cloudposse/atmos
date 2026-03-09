@@ -925,6 +925,16 @@ var (
 	ErrAIComponentPathNotFound        = errors.New("component path not found")
 	ErrAIComponentPathNotDirectory    = errors.New("component path is not a directory")
 
+	// AI security and compliance errors.
+	ErrAISecurityNotEnabled       = errors.New("AI security features are not enabled: add 'ai.security.enabled: true' to atmos.yaml")
+	ErrAISecurityNoFindings       = errors.New("no security findings found matching the specified filters")
+	ErrAISecurityFetchFailed      = errors.New("failed to fetch security findings from AWS")
+	ErrAISecurityMappingFailed    = errors.New("failed to map security finding to Atmos component")
+	ErrAISecurityInvalidSeverity  = errors.New("invalid severity filter: valid values are CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL")
+	ErrAISecurityInvalidSource    = errors.New("invalid finding source: valid values are security-hub, config, inspector, guardduty, macie, access-analyzer, all")
+	ErrAISecurityInvalidFramework = errors.New("invalid compliance framework: valid values are cis-aws, pci-dss, soc2, hipaa, nist")
+	ErrAISecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv")
+
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")
 	ErrWebSearchParseFailed = errors.New("failed to parse web search results")
