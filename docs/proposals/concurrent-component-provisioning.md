@@ -189,6 +189,13 @@ The orchestrator would accept the same high-level selectors users already unders
 - `--components`
 - `--query`
 
+Recommended target-expansion policy for Phase 1:
+
+- selected roots should be expanded to a prerequisite-closed set by default
+- `settings.depends_on` prerequisites should therefore be auto-included before scheduling begins
+- `--include-dependents` should remain the explicit opt-in for reverse-edge expansion
+- `--require-closure` should be the strict validation flag for users who want the command to fail instead of auto-including omitted prerequisites
+
 The result should be normalized into unique executable nodes keyed by:
 
 - component type
@@ -196,6 +203,19 @@ The result should be normalized into unique executable nodes keyed by:
 - component instance name
 
 Using the stack plus component instance is important because the same base component can appear many times across stacks.
+
+Example command shapes:
+
+```shell
+atmos terraform plan --components eks --stack tenant1-ue2-dev
+# Auto-includes declared prerequisites before scheduling.
+
+atmos terraform plan --components vpc,iam,eks --stack tenant1-ue2-dev --require-closure
+# Fails if the explicit target set is not already closed over prerequisites.
+
+atmos terraform apply --affected --include-dependents --max-concurrency 8 -- -auto-approve
+# Includes prerequisites by default and adds reverse dependents only when requested.
+```
 
 This proposal should reuse the existing graph-building and filtering logic from PR #1516 rather than replace it.
 
@@ -210,6 +230,15 @@ Edges come from `settings.depends_on`, and the graph layer already handles the m
 - transitive prerequisite inclusion
 - cycle detection
 - deterministic ordering
+
+Closure and validation rules should be explicit:
+
+- if a prerequisite is missing only from the user-selected target set, auto-include it by default
+- if `--require-closure` is set, treat omitted prerequisites as a validation error instead of auto-expanding them
+- if a `settings.depends_on` edge cannot be resolved to a unique component instance, fail validation
+- if graph construction detects a cycle, fail validation
+
+Cycle detection, missing-dependency checks, ambiguous-component resolution, and closure validation should all complete before any node execution begins.
 
 If additional expansion is needed for `--include-dependents`, that should also happen as a graph operation rather than as a separate execution model.
 
@@ -252,9 +281,10 @@ Failure semantics must be explicit.
 
 Recommended default behavior:
 
-- If a node fails, do not run nodes that depend on it
-- Continue running already-started or otherwise independent nodes
-- Return a non-zero exit code at the end
+- for `plan`, `apply`, and similar forward-order commands, if a node fails, do not run nodes that depend on it
+- for `terraform destroy --all`, if destruction of a dependent node fails, block destruction of that node's prerequisites in the reversed graph
+- continue running already-started or otherwise independent nodes where safe
+- return a non-zero exit code at the end
 
 Recommended aggregate exit-code rule:
 
@@ -320,6 +350,18 @@ This is especially important for CI, where users need to understand:
 - what failed
 - what was blocked by upstream failures
 - what never became eligible to run
+
+Phase 1 should also define a stable machine-readable CI contract, not just a best-effort JSON dump.
+
+Recommended Phase 1 JSON summary contract:
+
+- transport may be stdout or an explicit output file, but the document shape should remain stable within v1
+- top-level fields should include at least `version`, `command`, `started_at`, `finished_at`, `overall_status`, `exit_code`, and `nodes`
+- `overall_status` should be constrained to stable values such as `completed`, `failed`, or `interrupted`
+- each node entry should include at least `id`, `component`, `stack`, `status`, `exit_code`, `started_at`, and `finished_at`
+- node `status` values should be limited to `pending`, `running`, `completed`, `failed`, `blocked`, and `skipped`
+- timestamps should use RFC 3339 format
+- v1 compatibility should be additive only: new fields may be added, but existing field names and meanings should not change
 
 ## Output Isolation
 
@@ -439,6 +481,8 @@ Under concurrent scheduling, this means:
 
 This preserves the reverse-topological semantics already defined by PR #1516.
 
+If a destroy node fails, the scheduler should block destruction of its prerequisites while still allowing unrelated or already-running reverse-order branches to complete safely.
+
 ## Plan Output Aggregation
 
 Concurrent `plan` is operationally different from concurrent `apply` because users need to review the results.
@@ -513,7 +557,10 @@ Suggested initial surface:
 - `terraform apply --all`
 - `terraform plan --all`
 - `terraform destroy --all`
-- `terraform --affected` once it is routed through the same scheduler path
+- `terraform plan --affected`
+- `terraform apply --affected`
+
+`terraform plan --affected` and `terraform apply --affected` already map to the existing DescribeAffected behavior through the dynamic affected-flag bridge in `cmd/terraform/utils.go`. The concurrent scheduler should reuse that path rather than introduce a separate selector surface.
 
 Recommended Phase 1 constraints:
 
@@ -528,7 +575,7 @@ If concurrent mode is requested without workdir support, the CLI should fail fas
 
 ### Phase 2
 
-Add better reporting, resumability, and machine-readable execution summaries for CI.
+Add richer live reporting, resumability, and more advanced scheduling optimizations such as a streaming ready-queue.
 
 ### Phase 3
 
