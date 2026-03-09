@@ -166,6 +166,7 @@ flowchart TD
         I --> J{"Level Complete?"}
         J -->|Yes| K["Level N"]
         H -->|Failure| L["Mark downstream nodes blocked"]
+        J -->|Failure| L
     end
 
     subgraph reportPhase ["Reporting Phase"]
@@ -174,6 +175,8 @@ flowchart TD
         M --> N["Summary Output"]
     end
 ```
+
+For simplicity, the diagram shows a linear sequence of levels, but the same blocked-path behavior applies if any execution level fails.
 
 ## Execution Model
 
@@ -220,6 +223,8 @@ PR #1516 already uses topological sorting and introduces `GetExecutionLevels()`.
 
 This is simpler, deterministic, easier to debug, and directly matches the graph API introduced by PR #1516.
 
+The trade-off is utilization: if one node in a level is much slower than its peers, downstream work still waits for the entire level to finish, which can leave workers idle.
+
 A streaming ready-queue remains a valid Phase 2 optimization for unbalanced graphs, but it should not be the initial scheduler model.
 
 ### 4. Concurrent Scheduling
@@ -250,6 +255,11 @@ Recommended default behavior:
 - If a node fails, do not run nodes that depend on it
 - Continue running already-started or otherwise independent nodes
 - Return a non-zero exit code at the end
+
+Recommended aggregate exit-code rule:
+
+- for `plan`, return `1` if any node failed, `2` if no nodes failed and at least one node returned Terraform's "changes detected" exit code, otherwise `0`
+- for other commands, return non-zero if any node failed or execution was interrupted
 
 This gives better CI behavior than either extreme:
 
@@ -302,6 +312,7 @@ Recommended reporting model:
 - live progress line per component instance or a compact event stream
 - per-node result states: `pending`, `running`, `completed`, `failed`, `blocked`, `skipped`
 - final summary table or JSON output
+- structured per-node log fields such as `component`, `stack`, and execution level or node ID
 
 This is especially important for CI, where users need to understand:
 
@@ -326,6 +337,8 @@ Recommended Phase 1 model:
 - live event stream or compact progress lines in the terminal
 - per-component detailed logs on disk
 - final summary that links each failed node to its captured output
+
+Per-node structured log context should be injected at the worker boundary so shared logger output remains attributable even when multiple workers are active.
 
 ## Interactive Approval
 
@@ -510,6 +523,8 @@ Recommended Phase 1 constraints:
 - non-interactive apply and destroy only
 - global concurrency cap only
 - machine-readable summary output available from the start
+
+If concurrent mode is requested without workdir support, the CLI should fail fast during validation before any node execution begins.
 
 ### Phase 2
 
