@@ -17,11 +17,14 @@ Atmos fires two independent hook systems at the same lifecycle points:
 2. **CI hooks (automatic)** — Triggered by `RunCIHooks()`, which delegates to `ci.Execute()`. Controlled only through the `ci:` config section (enable/disable features). Not user-configurable at the hook level.
 
 ```
-Terraform Command (plan/apply)
+Terraform Command (plan/apply/deploy)
   │
-  ├── PreRunE / PostRunE
+  ├── PreRunE / PostRunE (plan, apply) or terraformRunWithOptions (deploy)
   │     ├── hooks.RunAll()     → User-defined hooks (store command, YAML-configured)
   │     └── hooks.RunCIHooks() → ci.Execute() → Plugin hook callbacks
+  │           │
+  │           └── Gate: ci.enabled must be true in atmos.yaml (hard kill switch)
+  │                     --ci / ATMOS_CI / CI only controls provider fallback, cannot override
   │
   └── defer (on error)
         └── hooks.RunCIHooks() → ci.Execute() (with CommandError set)
@@ -91,7 +94,7 @@ Error severity is handler-controlled. Each plugin handler decides which operatio
 | Action | Behavior | Rationale |
 |--------|----------|-----------|
 | Upload | **Fatal** — handler returns error | Apply workflow depends on artifacts |
-| Download | **Fatal** — handler returns error | Deploy can't proceed without planfile |
+| Download | **Warn-only** — deploy continues without planfile | Deploy can proceed; `--verify-plan` gate checks disk |
 | Summary | Warn, continue | Nice-to-have CI feature |
 | Output | Warn, continue | Nice-to-have CI feature |
 | Status check | Warn, continue | Nice-to-have CI feature |
@@ -104,10 +107,10 @@ CI behaviors integrate at existing hook points. Each event maps to a handler cal
 ```go
 "before.terraform.plan"   → onBeforePlan()    // createCheckRun (in_progress)
 "after.terraform.plan"    → onAfterPlan()     // writeSummary + writeOutputs + uploadPlanfile + updateCheckRun
-"before.terraform.apply"  → onBeforeApply()   // (no planfile interaction — apply does not use planfile storage)
-"after.terraform.apply"   → onAfterApply()    // writeSummary + writeOutputs
-"before.terraform.deploy" → onBeforeDeploy()  // downloadPlanfile (with stored.* prefix for verification)
-"after.terraform.deploy"  → onAfterDeploy()   // writeSummary + writeOutputs
+"before.terraform.apply"  → onBeforeApply()   // createCheckRun (in_progress)
+"after.terraform.apply"   → onAfterApply()    // writeSummary + writeOutputs + updateCheckRun
+"before.terraform.deploy" → onBeforeDeploy()  // createCheckRun + downloadPlanfile (with stored.* prefix for verification)
+"after.terraform.deploy"  → onAfterDeploy()   // writeSummary + writeOutputs + updateCheckRun (delegates to onAfterApply)
 ```
 
 ### Command Responsibility
@@ -120,7 +123,7 @@ CI behaviors integrate at existing hook points. Each event maps to a handler cal
 
 **Key design decision:** `apply` does NOT interact with planfile storage. It is a thin wrapper around `terraform apply` with CI cosmetics (summaries, checks, outputs). `deploy` is the CI-native command that downloads stored planfiles, verifies them against fresh plans, and applies only if they match.
 
-> **Wiring status**: All three terraform commands (`plan.go`, `apply.go`, `deploy.go`) fully wire the CI lifecycle. `plan.go` fires `before/after.terraform.plan`. `apply.go` fires `before/after.terraform.apply`. `deploy.go` fires `before/after.terraform.deploy`. Each uses `PreRunE` → `RunE` with output capture + error defer → `PostRunE` with captured output.
+> **Wiring status**: All three terraform commands fully wire the CI lifecycle. `plan.go` fires `before/after.terraform.plan` from `PreRunE`/`PostRunE`. `apply.go` fires `before/after.terraform.apply` from `PreRunE`/`PostRunE`. `deploy.go` fires `before.terraform.deploy` from inside `terraformRunWithOptions` (after `ProcessCommandLineArgs` resolves stacks — firing from `PreRunE` would eagerly resolve `!store` YAML functions before dependencies are deployed) and `after.terraform.deploy` from `PostRunE`.
 
 ## Terraform Plugin Hook Bindings (IMPLEMENTED)
 
@@ -171,5 +174,5 @@ func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
 | `pkg/ci/checkrun_store.go` | `CheckRunStore` interface + `sync.Map`-backed singleton for cross-event check run ID correlation |
 | `pkg/ci/internal/plugin/types.go` | Plugin interface (2 methods), `HookHandler` callback type, `HookContext` dependency bag, `CheckRunStore` interface |
 | `pkg/ci/plugins/terraform/plugin.go` | Terraform plugin: `GetType()`, `GetHookBindings()` with handler callbacks + private helpers |
-| `pkg/ci/plugins/terraform/handlers.go` | All handler implementations: `onBeforePlan`, `onAfterPlan`, `onBeforeApply`, `onAfterApply` + sub-handlers |
+| `pkg/ci/plugins/terraform/handlers.go` | All handler implementations: `onBeforePlan`, `onAfterPlan`, `onBeforeApply`, `onAfterApply`, `onBeforeDeploy`, `onAfterDeploy` + sub-handlers |
 | `pkg/hooks/hooks.go` | Calls `RunCIHooks()` which delegates to `ci.Execute()` |

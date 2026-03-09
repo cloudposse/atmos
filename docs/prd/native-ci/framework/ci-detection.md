@@ -8,41 +8,39 @@
 
 **Behavior**:
 - Detect GitHub Actions via `GITHUB_ACTIONS=true` environment variable
-- Detect other CI providers via standard `CI=true` environment variable
+- Detect other CI providers via standard provider-specific environment variables
 - Allow explicit override via `--ci` flag for local testing
 - Gracefully degrade when CI features unavailable (e.g., missing `$GITHUB_STEP_SUMMARY`)
 
-**`ci.enabled` controls auto-detection gate:**
+### `ci.enabled` is a hard kill switch
 
 `ci.enabled` in `atmos.yaml` is a `bool` field (not `*bool`), so "unset" and `false` are identical (both `false`). The `RunCIHooks()` check in `pkg/hooks/hooks.go` is:
 
 ```go
-if !forceCIMode && atmosConfig != nil && !atmosConfig.CI.Enabled {
-    return nil  // Skip CI hooks
+if atmosConfig != nil && !atmosConfig.CI.Enabled {
+    return nil  // Skip CI hooks — ci.enabled is the authority
 }
 ```
 
-This means `--ci` flag (`forceCIMode`) **bypasses** the `ci.enabled` check. When `forceCIMode` is true, CI hooks run regardless of `ci.enabled`.
+`ci.enabled` is the **authority** for CI hooks. When `ci.enabled` is `false` (or not set, which defaults to `false`), CI hooks are disabled regardless of the `--ci` flag or any environment variables. The `--ci` flag / `ATMOS_CI` env var only controls provider fallback behavior (generic vs auto-detect) but cannot override a disabled config.
 
-> **Note**: The `--ci` flag is bound to `CI` and `ATMOS_CI` env vars via `flags.WithEnvVars("ci", "ATMOS_CI", "CI")`. In CI environments where `CI=true` is set (GitHub Actions, GitLab CI, etc.), `forceCIMode` is automatically true.
+> **Note**: The `--ci` flag is bound to both `ATMOS_CI` and the generic `CI` env var via `flags.WithEnvVars("ci", "ATMOS_CI", "CI")`. The generic `CI` env var (set by all CI runners) implicitly activates `--ci` on every CI run — this is safe because `ci.enabled` in `atmos.yaml` is the hard kill switch that gates all CI hooks.
 
-| `ci.enabled` config | `--ci` flag / `CI` env var | Platform detected | Result |
-|--------------------:|:--------------------------:|:-----------------:|--------|
-| false/unset | true | yes | CI enabled (detected provider) |
-| false/unset | true | no | CI enabled (generic fallback) |
-| false/unset | false | any | **CI disabled** (both gates fail) |
+| `ci.enabled` config | `--ci` flag / `ATMOS_CI` / `CI` | Platform detected | Result |
+|--------------------:|:------------------------:|:-----------------:|--------|
+| false/unset | true | yes | **CI disabled** (`ci.enabled` is the authority) |
+| false/unset | true | no | **CI disabled** (`ci.enabled` is the authority) |
+| false/unset | false | any | **CI disabled** (`ci.enabled` is the authority) |
 | true | true | yes | CI enabled (detected provider) |
 | true | true | no | CI enabled (generic fallback) |
 | true | false | yes | CI enabled (auto-detected provider) |
 | true | false | no | CI disabled (no provider available) |
 
-> **Design note**: The original PRD intended `ci.enabled: false` to be a "hard kill switch" that overrides `--ci`. The current implementation does not enforce this — `--ci` always bypasses `ci.enabled`. This may be revisited in a future refactoring to use `*bool` for `Enabled` and check it independently of `forceCIMode`.
-
 **Validation**:
-- Running in GitHub Actions automatically enables CI mode (via `CI=true` env var → `--ci` flag)
-- Running locally with `--ci` produces identical output format
-- `ci.enabled: false` without `--ci` disables CI hooks (but `--ci` bypasses this check)
-- Missing CI environment variables do not cause errors
+- `ci.enabled: true` + running in GitHub Actions enables CI hooks (provider auto-detected)
+- `ci.enabled: true` + `--ci` flag locally enables CI hooks with generic provider fallback
+- `ci.enabled: false` (or unset) disables CI hooks unconditionally — `--ci` flag cannot override
+- Missing CI environment variables do not cause errors (graceful degradation)
 
 ## FR-7: Command Parity
 
@@ -51,7 +49,7 @@ This means `--ci` flag (`forceCIMode`) **bypasses** the `ci.enabled` check. When
 **Behavior**:
 - `atmos terraform plan vpc -s prod` works identically everywhere
 - CI mode adds outputs (summary, variables) without changing core behavior
-- Local `--ci` flag enables CI output for testing
+- Local `--ci` flag enables CI output for testing (requires `ci.enabled: true` in config)
 - No CI-specific command variations
 
 **Validation**:
@@ -64,10 +62,10 @@ This means `--ci` flag (`forceCIMode`) **bypasses** the `ci.enabled` check. When
 The same command works identically in CI and locally:
 
 ```bash
-# In GitHub Actions (auto-detected)
+# In GitHub Actions (requires ci.enabled: true in atmos.yaml)
 atmos terraform plan vpc -s plat-ue2-dev
 
-# Local development (force CI mode)
+# Local development (force CI mode — also requires ci.enabled: true)
 atmos terraform plan vpc -s plat-ue2-dev --ci
 ```
 
@@ -78,10 +76,10 @@ CI behaviors are triggered via `RunCIHooks()` (defined in `pkg/hooks/hooks.go`, 
 ```go
 "before.terraform.plan"   → onBeforePlan()    // createCheckRun (in_progress)
 "after.terraform.plan"    → onAfterPlan()     // writeSummary + writeOutputs + uploadPlanfile + updateCheckRun
-"before.terraform.apply"  → onBeforeApply()   // (no planfile interaction — apply does not use planfile storage)
-"after.terraform.apply"   → onAfterApply()    // writeSummary + writeOutputs
-"before.terraform.deploy" → onBeforeDeploy()  // downloadPlanfile (with stored.* prefix for verification)
-"after.terraform.deploy"  → onAfterDeploy()   // writeSummary + writeOutputs
+"before.terraform.apply"  → onBeforeApply()   // createCheckRun (in_progress)
+"after.terraform.apply"   → onAfterApply()    // writeSummary + writeOutputs + updateCheckRun
+"before.terraform.deploy" → onBeforeDeploy()  // createCheckRun + downloadPlanfile (with stored.* prefix for verification)
+"after.terraform.deploy"  → onAfterDeploy()   // writeSummary + writeOutputs + updateCheckRun (delegates to onAfterApply)
 ```
 
 This keeps CI behaviors modular — each plugin defines its own hook bindings with handler callbacks.
@@ -91,7 +89,7 @@ This keeps CI behaviors modular — each plugin defines its own hook bindings wi
 - **`apply`** writes summaries/checks/outputs only — does NOT interact with planfile storage
 - **`deploy`** downloads stored planfiles, verifies, applies — the CI-native apply command
 
-> **Wiring status**: All three commands (`plan.go`, `apply.go`, `deploy.go`) fully wire the CI lifecycle: `PreRunE` fires `before.terraform.*` hooks, `PostRunE` fires `after.terraform.*` hooks with captured stdout/stderr output, and an error defer updates check runs on failure. All three commands support `--ci` flag with `ATMOS_CI`/`CI` env var bindings. Deploy fires its own `before/after.terraform.deploy` events (not apply events).
+> **Wiring status**: All three commands (`plan.go`, `apply.go`, `deploy.go`) fully wire the CI lifecycle. `plan` and `apply` fire CI hooks from `PreRunE`/`PostRunE`. `deploy` fires `before.terraform.deploy` from inside `terraformRunWithOptions` (after `ProcessCommandLineArgs` resolves stacks) because `PreRunE` would eagerly resolve `!store` YAML functions for all stacks before dependencies are deployed. All three commands support `--ci` flag with `ATMOS_CI` env var binding. Deploy fires its own `before/after.terraform.deploy` events (not apply events).
 
 ## Flag Changes
 
@@ -99,12 +97,12 @@ This keeps CI behaviors modular — each plugin defines its own hook bindings wi
 
 | Flag | Environment Variable | Description |
 |------|---------------------|-------------|
-| `--ci` | `CI` | Enable CI mode (auto-detected from `CI` env var) |
+| `--ci` | `ATMOS_CI`, `CI` | Enable CI mode (force provider detection / generic fallback) |
 
-The `--ci` flag is bound to the `CI` environment variable, which is set by all major CI providers (GitHub Actions, GitLab CI, CircleCI, Jenkins, etc.). This means CI behaviors are automatically enabled when running in CI without requiring explicit flags.
+The `--ci` flag is bound to both `ATMOS_CI` and the generic `CI` environment variable (set by all major CI providers like GitHub Actions, GitLab CI, etc.). This means `--ci` is implicitly `true` on every CI run. This is safe because `ci.enabled` in `atmos.yaml` is the hard kill switch — when `ci.enabled` is `false` (or not set), CI hooks are disabled unconditionally regardless of the `--ci` flag value.
 
 ```go
 // pkg/flags binding
 flags.WithBoolFlag("ci", "", false, "Enable CI mode"),
-flags.WithEnvVars("ci", "ATMOS_CI", "CI"),  // ATMOS_CI takes precedence over CI
+flags.WithEnvVars("ci", "ATMOS_CI", "CI"),  // Both ATMOS_CI and generic CI — safe because ci.enabled is the authority
 ```
