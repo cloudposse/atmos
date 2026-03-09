@@ -149,6 +149,22 @@ var securityCmd = &cobra.Command{
 			return errors.Join(errUtils.ErrAISecurityMappingFailed, err)
 		}
 
+		// AI analysis (unless --no-ai is set).
+		if !noAI {
+			if outputFormat == security.FormatMarkdown {
+				ui.Writef("🤖 Analyzing findings with AI...\n")
+			}
+			analyzer, analyzerErr := security.NewFindingAnalyzer(ctx, &atmosConfig)
+			if analyzerErr != nil {
+				log.Debug("AI analyzer creation failed, skipping AI analysis", "error", analyzerErr)
+			} else {
+				findings, err = analyzer.AnalyzeFindings(ctx, findings)
+				if err != nil {
+					return errors.Join(errUtils.ErrAISecurityAnalysisFailed, err)
+				}
+			}
+		}
+
 		// Build report.
 		report := buildSecurityReport(findings, stack, component)
 

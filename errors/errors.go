@@ -934,6 +934,7 @@ var (
 	ErrAISecurityInvalidSource    = errors.New("invalid finding source: valid values are security-hub, config, inspector, guardduty, macie, access-analyzer, all")
 	ErrAISecurityInvalidFramework = errors.New("invalid compliance framework: valid values are cis-aws, pci-dss, soc2, hipaa, nist")
 	ErrAISecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv")
+	ErrAISecurityAnalysisFailed   = errors.New("AI analysis of security findings failed")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")
