@@ -678,6 +678,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 					workspaceSelectRedirectStdErr = info.RedirectStdErr
 				}
 
+				// For data-producing subcommands (output, show), redirect workspace select
+				// stdout to stderr. Terraform writes "Switched to workspace..." to stdout,
+				// which pollutes captured output in $() shell substitutions.
+				var wsOpts []ShellCommandOption
+				if info.SubCommand == "output" || info.SubCommand == "show" {
+					wsOpts = append(wsOpts, WithStdoutOverride(os.Stderr))
+				}
+
 				err = ExecuteShellCommand(
 					atmosConfig,
 					info.Command,
@@ -686,6 +694,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 					info.ComponentEnvList,
 					info.DryRun,
 					workspaceSelectRedirectStdErr,
+					wsOpts...,
 				)
 				if err != nil {
 					// Check if it's an ExitCodeError with code 1 (workspace doesn't exist)

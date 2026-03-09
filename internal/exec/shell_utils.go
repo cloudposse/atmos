@@ -38,8 +38,9 @@ type ShellCommandOption func(*shellCommandConfig)
 
 // shellCommandConfig holds optional configuration for shell command execution.
 type shellCommandConfig struct {
-	stdoutCapture io.Writer
-	stderrCapture io.Writer
+	stdoutCapture  io.Writer
+	stderrCapture  io.Writer
+	stdoutOverride io.Writer
 }
 
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
@@ -55,6 +56,15 @@ func WithStdoutCapture(w io.Writer) ShellCommandOption {
 func WithStderrCapture(w io.Writer) ShellCommandOption {
 	return func(c *shellCommandConfig) {
 		c.stderrCapture = w
+	}
+}
+
+// WithStdoutOverride returns a ShellCommandOption that replaces the default stdout
+// (os.Stdout) with a different writer. Used to redirect noisy commands (e.g.,
+// workspace select) to stderr so they don't pollute data-producing commands like output.
+func WithStdoutOverride(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stdoutOverride = w
 	}
 }
 
@@ -103,7 +113,13 @@ func ExecuteShellCommand(
 	cmd.Stdin = os.Stdin
 
 	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
-	maskedStdout := ioLayer.MaskWriter(os.Stdout)
+	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
+	// for workspace select so it doesn't pollute data-producing commands like output).
+	var stdoutTarget io.Writer = os.Stdout
+	if cfg.stdoutOverride != nil {
+		stdoutTarget = cfg.stdoutOverride
+	}
+	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
 	if cfg.stdoutCapture != nil {
 		cmd.Stdout = io.MultiWriter(maskedStdout, cfg.stdoutCapture)
 	} else {
