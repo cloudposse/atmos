@@ -152,6 +152,11 @@ func setupMCPServer() (*mcp.Server, error) {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
+	// Check if MCP server is explicitly enabled.
+	if !atmosConfig.MCP.Enabled {
+		return nil, errUtils.ErrMCPNotEnabled
+	}
+
 	// Check if AI is enabled.
 	if !atmosConfig.AI.Enabled {
 		return nil, errUtils.ErrAINotEnabled

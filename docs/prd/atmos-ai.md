@@ -922,15 +922,18 @@ atmos mcp start --transport http --port 3000
 #### Configuration
 
 ```yaml
-ai:
-  mcp:
-    enabled: true
-    transport: stdio  # or http
+# MCP is a top-level config section, separate from ai.
+# It must be explicitly enabled — ai.enabled alone does NOT enable MCP.
+mcp:
+  enabled: true
 
-    http:
-      port: 3000
-      host: localhost
+ai:
+  enabled: true
+  tools:
+    enabled: true
 ```
+
+Transport and port are set via CLI flags: `atmos mcp start --transport http --port 3000`.
 
 #### Technical Implementation
 

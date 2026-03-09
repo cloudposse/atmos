@@ -2567,6 +2567,11 @@ func TestErrorIs_MCPErrors(t *testing.T) {
 			target: errUtils.ErrMCPUnsupportedTransport,
 		},
 		{
+			name:   "mcp_not_enabled",
+			err:    fmt.Errorf("failed: %w", errUtils.ErrMCPNotEnabled),
+			target: errUtils.ErrMCPNotEnabled,
+		},
+		{
 			name:   "ai_not_enabled",
 			err:    fmt.Errorf("failed: %w", errUtils.ErrAINotEnabled),
 			target: errUtils.ErrAINotEnabled,
@@ -2904,6 +2909,14 @@ func TestInitializeAIComponents_ToolRegistrationOrder(t *testing.T) {
 // Returns the temp directory path.
 func createTestAtmosDir(t *testing.T, aiEnabled, toolsEnabled bool) string {
 	t.Helper()
+	return createTestAtmosDirWithMCP(t, true, aiEnabled, toolsEnabled)
+}
+
+// createTestAtmosDirWithMCP creates a temporary directory with a minimal valid atmos setup
+// including explicit MCP enabled control.
+// Returns the temp directory path.
+func createTestAtmosDirWithMCP(t *testing.T, mcpEnabled, aiEnabled, toolsEnabled bool) string {
+	t.Helper()
 
 	tmpDir := t.TempDir()
 
@@ -2925,6 +2938,8 @@ func createTestAtmosDir(t *testing.T, aiEnabled, toolsEnabled bool) string {
 	// Create atmos.yaml.
 	atmosConfig := fmt.Sprintf(`
 base_path: "%s"
+mcp:
+  enabled: %t
 ai:
   enabled: %t
   tools:
@@ -2937,7 +2952,7 @@ stacks:
 components:
   terraform:
     base_path: "%s"
-`, filepath.ToSlash(tmpDir), aiEnabled, toolsEnabled, filepath.ToSlash(stacksDir), filepath.ToSlash(componentsDir))
+`, filepath.ToSlash(tmpDir), mcpEnabled, aiEnabled, toolsEnabled, filepath.ToSlash(stacksDir), filepath.ToSlash(componentsDir))
 
 	configPath := filepath.Join(tmpDir, "atmos.yaml")
 	err = os.WriteFile(configPath, []byte(atmosConfig), 0o644)
@@ -2946,9 +2961,22 @@ components:
 	return tmpDir
 }
 
+// TestSetupMCPServer_MCPNotEnabled tests setupMCPServer when MCP is not enabled.
+func TestSetupMCPServer_MCPNotEnabled(t *testing.T) {
+	tmpDir := createTestAtmosDirWithMCP(t, false, true, true)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+	// setupMCPServer should return error because MCP is not enabled.
+	server, err := setupMCPServer()
+
+	assert.Error(t, err)
+	assert.Nil(t, server)
+	assert.True(t, errors.Is(err, errUtils.ErrMCPNotEnabled))
+}
+
 // TestSetupMCPServer_AINotEnabled tests setupMCPServer when AI is not enabled.
 func TestSetupMCPServer_AINotEnabled(t *testing.T) {
-	tmpDir := createTestAtmosDir(t, false, true)
+	tmpDir := createTestAtmosDirWithMCP(t, true, false, true)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
 	// setupMCPServer should return error because AI is not enabled.

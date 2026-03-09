@@ -11,8 +11,8 @@ import Experimental from '@site/src/components/Experimental'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-The Atmos MCP server uses the `ai` section of your `atmos.yaml` to determine which tools are available and how
-they behave. The MCP server itself requires no additional configuration beyond enabling AI tools.
+The Atmos MCP server exposes Atmos AI tools via the Model Context Protocol. It must be **explicitly enabled**
+separately from AI features, since it opens a communication channel that external clients can connect to.
 </Intro>
 
 <Experimental />
@@ -21,6 +21,8 @@ they behave. The MCP server itself requires no additional configuration beyond e
 
 <File title="atmos.yaml">
 ```yaml
+mcp:
+  enabled: true       # Required — MCP is off by default
 ai:
   enabled: true
   tools:
@@ -28,18 +30,26 @@ ai:
 ```
 </File>
 
+:::info Opt-In Only
+The MCP server is **disabled by default** and must be explicitly enabled with `mcp.enabled: true`.
+Enabling AI features (`ai.enabled: true`) does **not** enable MCP. The default **stdio** transport
+runs as a local subprocess with no network exposure.
+:::
+
 ## Configuration Reference
 
 ### Minimal Setup
 
-The only required configuration is enabling AI tools in `atmos.yaml`:
+Three settings are required to start the MCP server:
 
 <File title="atmos.yaml">
 ```yaml
+mcp:
+  enabled: true       # Enable the MCP server
 ai:
-  enabled: true
+  enabled: true       # Enable AI features
   tools:
-    enabled: true
+    enabled: true     # Enable tool execution
 ```
 </File>
 
@@ -49,6 +59,8 @@ For more control, you can specify providers, tool restrictions, and confirmation
 
 <File title="atmos.yaml">
 ```yaml
+mcp:
+  enabled: true
 ai:
   enabled: true
   default_provider: "anthropic"
@@ -68,6 +80,13 @@ ai:
       - execute_bash_command
 ```
 </File>
+
+### MCP Settings
+
+<dl>
+  <dt>`mcp.enabled`</dt>
+  <dd>Enable the MCP server (default: `false`). Must be explicitly set to `true` before `atmos mcp start` will work.</dd>
+</dl>
 
 :::note
 The MCP server itself does not require an API key. The tools it exposes use your configured AI provider settings.

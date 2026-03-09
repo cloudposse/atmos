@@ -22,13 +22,10 @@ an open standard that lets any compatible AI client -- Claude Desktop, Claude Co
 **See also:** [MCP Command Reference](/cli/commands/mcp/start) for flag details and transport modes |
 [MCP Configuration](/cli/configuration/mcp) for tool and permission settings in `atmos.yaml`
 
-:::danger Security Warning
-The MCP server has no built-in authentication or encryption.
+:::tip Safe by Default
+The default **stdio transport** runs as a local subprocess with no network exposure -- the same security model as running `atmos` from your terminal. No ports are opened and no remote connections are accepted.
 
-- **stdio transport** (default) is safe for local use -- it runs as a subprocess with no network exposure.
-- **HTTP transport** exposes your infrastructure data to anyone who can reach the port. Always add firewall rules, VPN, or a reverse proxy with auth before exposing it on a network.
-
-See [Security Considerations](#security-considerations) for detailed guidance.
+If you use [HTTP transport](#http-transport) for remote access, see [Security Considerations](#security-considerations) for recommended safeguards.
 :::
 
 ## Quick Start
@@ -37,10 +34,12 @@ This walkthrough gets you from zero to querying stacks in Claude Desktop.
 
 **Prerequisites:** Atmos v1.63.0+ and [Claude Desktop](https://claude.ai/download) v0.7.0+.
 
-### 1. Enable AI in atmos.yaml
+### 1. Enable MCP and AI in atmos.yaml
 
 <File title="atmos.yaml">
 ```yaml
+mcp:
+  enabled: true                 # required — MCP is off by default
 ai:
   enabled: true
   tools:
@@ -48,6 +47,11 @@ ai:
     require_confirmation: false  # optional, smoother experience
 ```
 </File>
+
+:::info
+The MCP server is **disabled by default**. You must explicitly set `mcp.enabled: true` in addition to
+enabling AI. This ensures that enabling AI chat features does not inadvertently expose an MCP endpoint.
+:::
 
 ### 2. Configure Claude Desktop
 
@@ -375,14 +379,18 @@ What are the differences between dev and prod for vpc?
 
 ## Security Considerations
 
-### stdio Transport
+### stdio Transport (Default)
 
-Runs as a local subprocess under your user account with no network exposure. This is the safest option
-for everyday use.
+Runs as a local subprocess under your user account with no network exposure. This is the recommended
+transport for desktop apps and local development -- no additional security configuration is needed.
 
 ### HTTP Transport
 
-Has no authentication or encryption by default. For any deployment beyond `localhost`:
+:::warning HTTP Transport Security
+HTTP transport has no built-in authentication or encryption. Only use it when you need remote or multi-client access, and always add network-level security.
+:::
+
+For any deployment beyond `localhost`:
 
 <dl>
   <dt>Network isolation</dt>

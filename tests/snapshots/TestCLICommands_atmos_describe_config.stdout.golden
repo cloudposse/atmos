@@ -272,5 +272,6 @@
     "web_search": {},
     "context": {}
   },
+  "mcp": {},
   "lsp": {}
 }

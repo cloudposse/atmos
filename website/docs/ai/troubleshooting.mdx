@@ -268,6 +268,19 @@ See [Auto-Compact](/cli/configuration/ai/sessions#auto-compact-configuration) fo
 
 ## MCP Server
 
+### "MCP server is not enabled"
+
+The MCP server is disabled by default and must be explicitly enabled:
+
+```yaml
+mcp:
+  enabled: true
+ai:
+  enabled: true
+  tools:
+    enabled: true
+```
+
 ### Not Starting
 
 Test the MCP server directly:

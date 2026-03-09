@@ -27,6 +27,21 @@ Use this command to start the Atmos Model Context Protocol (MCP) server. The MCP
 
 <Screengrab title="atmos mcp start --help" slug="atmos-mcp-start--help" />
 
+## Prerequisites
+
+The MCP server must be explicitly enabled in `atmos.yaml`:
+
+```yaml
+mcp:
+  enabled: true
+ai:
+  enabled: true
+  tools:
+    enabled: true
+```
+
+The MCP server is **disabled by default**. Enabling AI features alone (`ai.enabled: true`) does not enable MCP.
+
 ## Description
 
 The `atmos mcp start` command starts the Atmos MCP server, enabling AI clients to query your infrastructure using Atmos tools.
@@ -98,11 +113,8 @@ When running with `--transport http`, the server exposes:
   <dd>Returns `{"status":"healthy","clients":N}`. Use for monitoring and liveness probes.</dd>
 </dl>
 
-:::danger Security Warning
-The MCP server has no built-in authentication or encryption.
-
-- **stdio transport** (default) is safe for local use — it runs as a subprocess with no network exposure.
-- **HTTP transport** exposes your infrastructure data to anyone who can reach the port. Always add firewall rules, VPN, or a reverse proxy with auth before exposing it on a network.
+:::warning HTTP Transport
+When using `--transport http`, the server has no built-in authentication. Always add firewall rules, VPN, or a reverse proxy before exposing it on a network. The default **stdio** transport has no network exposure.
 :::
 
 ## Related

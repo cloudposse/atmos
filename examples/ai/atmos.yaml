@@ -34,6 +34,12 @@ templates:
     gomplate:
       enabled: true
 
+# MCP Server Configuration (disabled by default)
+# Docs: https://atmos.tools/cli/configuration/mcp
+# Enable to allow external AI clients (Claude Desktop, VS Code, Cursor) to connect.
+# mcp:
+#   enabled: true
+
 # AI Assistant Configuration
 # Docs: https://atmos.tools/cli/configuration/ai
 ai:
