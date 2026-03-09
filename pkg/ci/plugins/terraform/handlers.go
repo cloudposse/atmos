@@ -120,11 +120,23 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 
 // onBeforeDeploy handles the before.terraform.deploy event.
 // Downloads planfile from storage with stored prefix for verification.
+// Download is warn-only: deploy can proceed without a stored planfile.
+// The --verify-plan gate in RunE checks if the stored file exists on disk.
 func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeDeploy")()
 
-	// Download planfile for verification -- FATAL (deploy depends on it).
-	return p.downloadPlanfileForVerification(ctx)
+	// Create check run if enabled.
+	if isCheckEnabled(ctx.Config) {
+		if err := p.createCheckRun(ctx); err != nil {
+			log.Warn("CI check run creation failed", "error", err)
+		}
+	}
+
+	// Download -- warn-only (deploy works without a stored planfile).
+	if err := p.downloadPlanfileForVerification(ctx); err != nil {
+		log.Warn("CI hook handler failed", "event", "before.terraform.deploy", "error", err)
+	}
+	return nil
 }
 
 // onAfterDeploy handles the after.terraform.deploy event.

@@ -686,6 +686,10 @@ func TestMain(m *testing.M) {
 	// Tests should only use their fixture directories, not the user's working environment.
 	os.Unsetenv("ATMOS_CHDIR")
 
+	// Disable CI auto-detection so deploy/apply hooks don't try to
+	// download planfiles from GitHub Artifacts during tests.
+	os.Unsetenv("GITHUB_ACTIONS")
+
 	// Configure logger verbosity based on test flags
 	switch {
 	case os.Getenv("ATMOS_TEST_DEBUG") != "":
