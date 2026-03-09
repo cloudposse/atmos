@@ -33,6 +33,7 @@ func NewFindingFetcher(atmosConfig *schema.AtmosConfiguration) FindingFetcher {
 	return &awsFindingFetcher{
 		atmosConfig: atmosConfig,
 		clients:     newAWSClientCache(),
+		cache:       NewFindingsCache(),
 	}
 }
 
@@ -48,11 +49,19 @@ const (
 type awsFindingFetcher struct {
 	atmosConfig *schema.AtmosConfiguration
 	clients     *awsClientCache
+	cache       *findingsCache
 }
 
 // FetchFindings retrieves security findings from Security Hub with the given filters.
+// Results are cached by query options to reduce redundant AWS API calls.
 func (f *awsFindingFetcher) FetchFindings(ctx context.Context, opts *QueryOptions) ([]Finding, error) {
 	defer perf.Track(nil, "security.awsFindingFetcher.FetchFindings")()
+
+	// Check cache first.
+	if cached, hit := f.cache.GetFindings(opts); hit {
+		log.Debug("Returning cached Security Hub findings", "count", len(cached))
+		return cached, nil
+	}
 
 	region := f.resolveRegion(opts.Region)
 
@@ -76,6 +85,9 @@ func (f *awsFindingFetcher) FetchFindings(ctx context.Context, opts *QueryOption
 	}
 
 	log.Debug("Fetched Security Hub findings", "count", len(allFindings))
+
+	// Store results in cache.
+	f.cache.SetFindings(opts, allFindings)
 
 	return allFindings, nil
 }
@@ -138,8 +150,15 @@ func trimToLimit(findings []Finding, maxFindings int) []Finding {
 }
 
 // FetchComplianceStatus retrieves compliance status for a specific framework from Security Hub.
+// Results are cached by framework and stack to reduce redundant AWS API calls.
 func (f *awsFindingFetcher) FetchComplianceStatus(ctx context.Context, framework string, stack string) (*ComplianceReport, error) {
 	defer perf.Track(nil, "security.awsFindingFetcher.FetchComplianceStatus")()
+
+	// Check cache first.
+	if cached, hit := f.cache.GetCompliance(framework, stack); hit {
+		log.Debug("Returning cached compliance report", "framework", framework, "stack", stack)
+		return cached, nil
+	}
 
 	region := f.resolveRegion("")
 
@@ -175,6 +194,9 @@ func (f *awsFindingFetcher) FetchComplianceStatus(ctx context.Context, framework
 	// Build compliance report from findings.
 	report := buildComplianceReport(findings, framework, title, stack)
 	_ = standardARN // Used for standard resolution above.
+
+	// Store report in cache.
+	f.cache.SetCompliance(framework, stack, report)
 
 	return report, nil
 }

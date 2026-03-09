@@ -1,7 +1,7 @@
 # Atmos AI Security & Compliance - Product Requirements Document
 
 **Status:** Draft
-**Version:** 0.1
+**Version:** 0.2
 **Last Updated:** 2026-03-09
 
 ---
@@ -13,9 +13,15 @@ detect, review, analyze, and ask questions about any security and compliance fin
 security and compliance services — directly from the Atmos CLI.
 
 It connects to AWS Security Hub, AWS Config, Amazon Inspector, Amazon GuardDuty, Amazon Macie, and
-IAM Access Analyzer via Atmos Auth, uses AWS Bedrock as the AI provider to analyze findings, maps
-them back to Atmos components and stacks, and generates actionable remediation reports with concrete
+IAM Access Analyzer via Atmos Auth, uses **any AI provider that Atmos AI supports** to analyze findings,
+maps them back to Atmos components and stacks, and generates actionable remediation reports with concrete
 Terraform/Atmos changes.
+
+**Supported AI providers:** Anthropic (Claude), OpenAI (GPT), Google Gemini, Azure OpenAI, AWS Bedrock,
+Ollama (local/on-premise), and Grok (xAI). Enterprise customers who require data residency within their
+AWS account should use **AWS Bedrock** — all data stays in-account with no external API calls. All other
+providers work equally well for AI analysis; the choice depends on your organization's security posture,
+compliance requirements, and preference.
 
 The key differentiator: Atmos owns the component-to-stack relationship, so it can trace a security
 finding on an AWS resource all the way back to the exact Terraform code and stack configuration that
@@ -46,13 +52,14 @@ notifications, or compliance reporting tools.
 
 1. **Discover** — Pull security findings from all AWS security services for a given stack (or all stacks)
 2. **Trace** — Map each finding's affected AWS resource back to the Atmos component and stack that manages it
-3. **Analyze** — Use AWS Bedrock (Claude on Bedrock) to understand the finding, read the component source code,
-   and determine the root cause in the Terraform/Atmos configuration
+3. **Analyze** — Use the configured AI provider (Anthropic, OpenAI, Gemini, Azure OpenAI, Bedrock, Ollama, or Grok)
+   to understand the finding, read the component source code, and determine the root cause in the Terraform/Atmos
+   configuration
 4. **Report** — Generate reports in multiple formats (Markdown for humans, JSON/YAML/CSV for automation)
    with findings, severity, affected components, and step-by-step remediation instructions
 5. **Ask** — Enable interactive AI-powered Q&A about findings (`atmos ai chat` with security context)
-6. **Authenticate** — Use Atmos Auth for all AWS access (Bedrock, Security Hub, Config, Inspector, GuardDuty,
-   Macie, Access Analyzer)
+6. **Authenticate** — Use Atmos Auth for AWS access (Security Hub, Config, Inspector, GuardDuty,
+   Macie, Access Analyzer) and use the configured AI provider's credentials for AI analysis
 
 ### Non-Goals (v1)
 
@@ -73,8 +80,8 @@ notifications, or compliance reporting tools.
 │                                                                     │
 │  ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐   │
 │  │  Atmos    │    │  AWS      │    │  AWS      │    │  Atmos    │   │
-│  │  Auth     │───▶│  Security │───▶│  Bedrock  │───▶│  AI       │   │
-│  │           │    │  Services │    │  (LLM)    │    │  Report   │   │
+│  │  Auth     │───▶│  Security │───▶│    AI     │───▶│  Atmos    │   │
+│  │           │    │  Services │    │ Provider  │    │  Report   │   │
 │  └───────────┘    └───────────┘    └───────────┘    └───────────┘   │
 │       │                │                │                │          │
 │       ▼                ▼                ▼                ▼          │
@@ -97,7 +104,7 @@ notifications, or compliance reporting tools.
 1. **Authenticate** — Atmos Auth obtains AWS credentials (SSO, assume-role, etc.)
 2. **Fetch Findings** — Query Security Hub / Config / Inspector / GuardDuty for the target stack's resources
 3. **Map to Components** — Use resource tags (`atmos:stack`, `atmos:component`) to trace findings back to IaC
-4. **AI Analysis** — Send finding details + component source + stack config to Bedrock for root cause analysis
+4. **AI Analysis** — Send finding details + component source + stack config to the configured AI provider for root cause analysis
 5. **Generate Report** — Render findings with remediation steps as Markdown in the terminal
 
 ---
@@ -224,7 +231,7 @@ the search space significantly.
 #### Strategy 4: AI-Assisted Inference
 
 When strategies 1-3 produce no confident match, or produce multiple candidates, send the finding
-details + candidate list + component catalog to Bedrock for AI-assisted resolution:
+details + candidate list + component catalog to the configured AI provider for AI-assisted resolution:
 
 ```text
 Prompt to AI:
@@ -288,7 +295,7 @@ Finding arrives with resource ARN
         │                          │           │
         │                          ▼           ▼
         │                     Use best    AI inference
-        │                     match       (Bedrock)
+        │                     match       (AI provider)
         │                          │           │
         │                          │      Match found?
         │                          │      │         │
@@ -305,8 +312,9 @@ Finding arrives with resource ARN
 ## Authentication: Atmos Auth + AWS
 
 All AWS API calls use Atmos Auth for credential management. This provides a unified authentication
-experience — the same credentials used for `atmos terraform apply` are used for security scanning
-and Bedrock AI.
+experience — the same credentials used for `atmos terraform apply` are used for security scanning.
+AI analysis uses whatever provider is configured in `ai.default_provider` (Bedrock for enterprise
+customers who need data residency, or any other supported provider).
 
 ### Required AWS Permissions
 
@@ -350,7 +358,8 @@ The IAM role/user needs these permissions:
         "bedrock:InvokeModel",
         "bedrock:InvokeModelWithResponseStream"
       ],
-      "Resource": "arn:aws:bedrock:*::foundation-model/*"
+      "Resource": "arn:aws:bedrock:*::foundation-model/*",
+      "Comment": "Only required when using Bedrock as the AI provider"
     }
   ]
 }
@@ -374,6 +383,7 @@ auth:
       config:
         permission_set: "SecurityAudit"
         account_id: "123456789012"
+    # Only needed when using Bedrock as the AI provider
     bedrock-user:
       provider: aws-security
       type: permission-set
@@ -384,12 +394,67 @@ auth:
 
 ---
 
-## AWS Bedrock Setup
+## AI Provider Configuration
 
-AWS Bedrock is the AI provider for security analysis. It runs within your AWS account, so data never
-leaves your cloud environment — a key requirement for security-sensitive workloads.
+Atmos AI Security & Compliance works with **all AI providers supported by Atmos AI**:
 
-### Option A: Manual Setup (AWS Console)
+| Provider         | Best For                                                    | Data Residency           |
+|------------------|-------------------------------------------------------------|--------------------------|
+| **Anthropic**    | Best overall quality (Claude models direct API)             | Anthropic servers        |
+| **OpenAI**       | GPT models for organizations standardized on OpenAI         | OpenAI servers           |
+| **Google Gemini**| Large context windows, cost-effective                       | Google Cloud             |
+| **Azure OpenAI** | Enterprise Azure customers with existing deployments        | Your Azure tenant        |
+| **AWS Bedrock**  | **Enterprise/compliance** — data stays in your AWS account  | **Your AWS account**     |
+| **Ollama**       | Air-gapped/offline environments, no external API calls      | **Your infrastructure**  |
+| **Grok (xAI)**   | Alternative provider                                        | xAI servers              |
+
+### Provider Selection Guide
+
+- **Enterprise customers** requiring data residency and compliance (SOC 2, HIPAA, PCI DSS, FedRAMP)
+  should use **AWS Bedrock** — all data stays within your AWS account with IAM-based access control
+  and CloudTrail audit logging.
+- **Air-gapped environments** should use **Ollama** for fully local inference with no external API calls.
+- **General use** can use any provider — the AI analysis quality depends on the model, not the provider.
+  Anthropic Claude models (via direct API or Bedrock) are recommended for best security analysis quality.
+
+### Multi-Provider Configuration Example
+
+```yaml
+# atmos.yaml
+ai:
+  enabled: true
+  default_provider: "anthropic"  # or "bedrock" for enterprise
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 8192
+    bedrock:
+      model: "anthropic.claude-sonnet-4-6-20250514-v1:0"
+      base_url: "us-east-1"
+      max_tokens: 8192
+    openai:
+      model: "gpt-4o"
+      api_key: !env "OPENAI_API_KEY"
+    gemini:
+      model: "gemini-2.5-flash"
+      api_key: !env "GEMINI_API_KEY"
+    ollama:
+      model: "llama3.3:70b"
+      base_url: "http://localhost:11434/v1"
+```
+
+The `--no-ai` flag skips AI analysis entirely (zero AI cost) and shows raw findings with
+tag-based component mapping only. This is useful for CI/CD pipelines that only need structured
+finding data.
+
+### AWS Bedrock Setup (Enterprise)
+
+AWS Bedrock is the recommended AI provider for enterprise security workloads. It runs within your
+AWS account, so data never leaves your cloud environment — a key requirement for security-sensitive
+workloads.
+
+#### Option A: Manual Setup (AWS Console)
 
 1. **Navigate to Amazon Bedrock** in the AWS Console
 2. **Request model access:**
@@ -407,7 +472,7 @@ leaves your cloud environment — a key requirement for security-sensitive workl
 4. **Note the region** — Bedrock model availability varies by region. Use `us-east-1` or `us-west-2`
    for the broadest model selection
 
-### Option B: Atmos/Terraform Setup
+#### Option B: Atmos/Terraform Setup
 
 Create a Bedrock component that enables model access and sets up the required IAM permissions:
 
@@ -489,7 +554,7 @@ Deploy with:
 atmos terraform apply bedrock -s prod-us-east-1
 ```
 
-### Atmos AI Bedrock Provider Configuration
+#### Atmos AI Bedrock Provider Configuration
 
 ```yaml
 # atmos.yaml
@@ -509,7 +574,7 @@ ai:
 Bedrock uses AWS credentials from Atmos Auth — no API key is needed. The `base_url` field specifies
 the AWS region where Bedrock is available.
 
-### Bedrock Pricing
+#### Bedrock Pricing
 
 Bedrock uses **on-demand, pay-per-token** pricing with no upfront commitments. There is no charge for
 Bedrock itself — you only pay for model invocations. Pricing varies by model and region.
@@ -553,7 +618,7 @@ A typical security analysis run processes ~50 findings. Each finding analysis in
 | 200 findings, all stacks      | Opus 4.6   | ~$10.00–$30.00 |
 | Raw findings only (`--no-ai`) | N/A        | $0.00          |
 
-The `--no-ai` flag skips Bedrock entirely (zero AI cost) and shows raw findings with tag-based
+The `--no-ai` flag skips AI analysis entirely (zero AI cost) and shows raw findings with tag-based
 component mapping only.
 
 **Other Pricing Tiers:**
@@ -569,7 +634,7 @@ For most Atmos security analysis workloads, on-demand pricing with prompt cachin
 cost-effective option. Reserved throughput is only needed for organizations running continuous
 compliance scans at high frequency.
 
-### Bedrock Regional Availability
+#### Bedrock Regional Availability
 
 Claude models on Bedrock are available in multiple regions. For security workloads, deploy Bedrock
 in the same region as your Security Hub aggregation region to minimize latency:
@@ -595,7 +660,7 @@ FedRAMP and government compliance workloads.
 > For the most current regional availability, see
 > [Bedrock Model Support by Region](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html).
 
-### Why Bedrock for Security Workloads
+#### Why Bedrock for Enterprise Security Workloads
 
 | Requirement           | Bedrock Advantage                                               |
 |-----------------------|-----------------------------------------------------------------|
@@ -999,9 +1064,9 @@ read_component_file(component: "s3-bucket", file: "variables.tf")
 read_component_file(component: "s3-bucket", file: "outputs.tf")
 ```
 
-### AI Analysis (Bedrock)
+### AI Analysis
 
-Send to Bedrock for root cause analysis and remediation:
+Send to the configured AI provider for root cause analysis and remediation:
 
 **Input context:**
 
@@ -1030,13 +1095,31 @@ Send to Bedrock for root cause analysis and remediation:
 # atmos.yaml
 ai:
   enabled: true
-  default_provider: "bedrock"
+  default_provider: "anthropic"  # or "bedrock", "openai", "gemini", "azureopenai", "ollama", "grok"
 
   providers:
+    # Direct Anthropic API (recommended for general use)
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 8192
+
+    # AWS Bedrock (recommended for enterprise/compliance)
     bedrock:
       model: "anthropic.claude-sonnet-4-6-20250514-v1:0"
       base_url: "us-east-1"
       max_tokens: 8192
+
+    # Other providers (configure as needed)
+    # openai:
+    #   model: "gpt-4o"
+    #   api_key: !env "OPENAI_API_KEY"
+    # gemini:
+    #   model: "gemini-2.5-flash"
+    #   api_key: !env "GEMINI_API_KEY"
+    # ollama:
+    #   model: "llama3.3:70b"
+    #   base_url: "http://localhost:11434/v1"
 
   tools:
     enabled: true
@@ -1092,7 +1175,7 @@ ai:
 5. **Finding fetcher** — Implement finding retrieval from each AWS security service
 6. **Component mapper** — Implement the full mapping algorithm (tags → heuristic → AI fallback)
 7. **Report generator** — Implement Markdown report rendering using `pkg/ui/`
-8. **Bedrock integration** — Build the prompt templates for finding analysis
+8. **AI provider integration** — Build the prompt templates for finding analysis (works with all Atmos AI providers)
 
 ### Phase 3: AI Tools
 
@@ -1112,14 +1195,18 @@ ai:
 
 ## Security Considerations
 
-- **Data stays in your AWS account** — Bedrock runs within your AWS environment; no data is sent
-  to third-party AI services
+- **Data residency options** — When using **AWS Bedrock**, data stays in your AWS account with no
+  external API calls. When using other providers (Anthropic, OpenAI, etc.), finding data is sent to
+  the provider's API for analysis. Choose the provider that matches your security requirements.
 - **Atmos Auth credentials** — All AWS access uses Atmos Auth; no hardcoded keys
 - **Read-only by default** — The security commands only read findings and source code; they never
   modify infrastructure. Users must manually apply remediation steps
 - **AI cost control** — The `max_findings` setting limits how many findings are sent to AI for
-  analysis, controlling Bedrock costs
-- **Audit trail** — All Bedrock invocations can be logged via CloudWatch (see Bedrock setup)
+  analysis, controlling costs across all providers
+- **Audit trail** — When using Bedrock, all invocations are logged via CloudTrail + optional
+  CloudWatch. For other providers, consult the provider's audit logging capabilities.
+- **`--no-ai` flag** — Skips AI analysis entirely for environments where sending data to any AI
+  provider is not permitted. Shows raw findings with tag-based component mapping only.
 
 ---
 
@@ -1333,9 +1420,8 @@ multiple sources:
 
 ## Dependencies
 
-- **Atmos AI** — Provider system, tool registry, Markdown rendering
+- **Atmos AI** — Provider system (Anthropic, OpenAI, Gemini, Azure OpenAI, Bedrock, Ollama, Grok), tool registry, Markdown rendering
 - **Atmos Auth** — AWS credential management (SSO, assume-role)
-- **AWS Bedrock** — AI provider (Claude on Bedrock)
 - **AWS Security Hub** — Central finding aggregation (primary source)
 - **AWS Config** — Resource compliance evaluations
 - **Amazon Inspector v2** — Package vulnerability and network reachability findings
@@ -1372,4 +1458,4 @@ The following components must be deployed for the security services to generate 
 - `github.com/aws/aws-sdk-go-v2/service/macie2`
 - `github.com/aws/aws-sdk-go-v2/service/accessanalyzer`
 - `github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi`
-- `github.com/aws/aws-sdk-go-v2/service/bedrockruntime`
+- AI providers use existing Atmos AI provider SDKs (no additional dependencies needed)

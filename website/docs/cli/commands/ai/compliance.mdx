@@ -1,0 +1,155 @@
+---
+title: atmos ai compliance
+sidebar_label: compliance
+sidebar_class_name: command
+id: compliance
+description: Generate compliance posture reports against industry frameworks like CIS AWS, PCI DSS, SOC2, HIPAA, and NIST
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Generate compliance posture reports against industry frameworks. Retrieves compliance status from AWS Security Hub enabled standards, maps failing controls to Atmos components, and generates reports with remediation guidance.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure AI">
+    Learn how to configure AI providers, skills, tools, and sessions in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos ai compliance --help" slug="atmos-ai-compliance--help" />
+
+## Description
+
+The `atmos ai compliance` command retrieves compliance status from AWS Security Hub enabled standards, maps failing controls to Atmos components that manage the affected resources, and generates reports with AI-powered remediation guidance. It supports multiple compliance frameworks and produces actionable reports that identify exactly which Terraform components need changes to achieve compliance.
+
+Use it for:
+- **Compliance Audits**: Generate reports showing your posture against specific compliance frameworks
+- **Remediation Planning**: Get AI-generated guidance on how to fix failing controls in your Atmos components
+- **Multi-Framework Assessment**: Evaluate your infrastructure against multiple standards simultaneously
+- **Continuous Compliance**: Integrate into CI/CD pipelines to track compliance drift over time
+
+## Usage
+
+```shell
+atmos ai compliance [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack, -s`</dt>
+  <dd>Filter compliance results to a specific Atmos stack (e.g., `prod-us-east-1`).</dd>
+
+  <dt>`--framework`</dt>
+  <dd>Compliance framework to evaluate against: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist`. When omitted, reports on all enabled frameworks.</dd>
+
+  <dt>`--format, -f`</dt>
+  <dd>Output format: `text`, `json`, `markdown` (default: `text`).</dd>
+
+  <dt>`--controls`</dt>
+  <dd>Comma-separated list of specific control IDs to evaluate (e.g., `CIS.1.1,CIS.1.2`).</dd>
+</dl>
+
+## Examples
+
+### Basic Usage
+
+<Terminal title="basic examples">
+```bash
+# CIS AWS Foundations Benchmark report
+atmos ai compliance --framework cis-aws --stack prod-us-east-1
+
+# PCI DSS compliance status
+atmos ai compliance --framework pci-dss
+
+# All frameworks for a stack
+atmos ai compliance --stack prod-us-east-1
+```
+</Terminal>
+
+### Output Formats
+
+<Terminal title="output format examples">
+```bash
+# Output as JSON for automation
+atmos ai compliance --framework cis-aws --format json
+
+# Markdown report for documentation
+atmos ai compliance --framework soc2 --stack prod-us-east-1 --format markdown
+
+# Save report to file
+atmos ai compliance --framework hipaa --format markdown > hipaa-report.md
+```
+</Terminal>
+
+### Targeted Evaluation
+
+<Terminal title="targeted examples">
+```bash
+# Check specific controls
+atmos ai compliance --framework cis-aws --controls CIS.1.1,CIS.1.2,CIS.2.1
+
+# NIST framework for production
+atmos ai compliance --framework nist --stack prod-us-east-1
+
+# Multiple stacks comparison
+for stack in dev-us-east-1 staging-us-east-1 prod-us-east-1; do
+  echo "=== $stack ==="
+  atmos ai compliance --framework cis-aws --stack "$stack" --format json > "compliance-${stack}.json"
+done
+```
+</Terminal>
+
+### CI/CD Integration
+
+<Terminal title="ci/cd examples">
+```bash
+# Compliance gate in pipeline
+atmos ai compliance --framework pci-dss --stack prod-us-east-1 --format json > compliance.json
+if jq -e '.failing_controls | length > 0' compliance.json; then
+  echo "PCI DSS compliance failures detected"
+  exit 1
+fi
+
+# Generate compliance report as a deployment artifact
+atmos ai compliance --stack prod-us-east-1 \
+  --format markdown > compliance-report.md
+```
+</Terminal>
+
+## Supported Frameworks
+
+<dl>
+  <dt>`cis-aws`</dt>
+  <dd>CIS AWS Foundations Benchmark. Industry-standard security configuration guidelines for AWS accounts.</dd>
+
+  <dt>`pci-dss`</dt>
+  <dd>Payment Card Industry Data Security Standard. Required for organizations that handle credit card data.</dd>
+
+  <dt>`soc2`</dt>
+  <dd>SOC 2 (Service Organization Control 2). Trust service criteria for security, availability, processing integrity, confidentiality, and privacy.</dd>
+
+  <dt>`hipaa`</dt>
+  <dd>Health Insurance Portability and Accountability Act. Required for organizations handling protected health information (PHI).</dd>
+
+  <dt>`nist`</dt>
+  <dd>NIST Cybersecurity Framework (CSF). Voluntary framework for managing and reducing cybersecurity risk.</dd>
+</dl>
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/security', label: 'atmos ai security', description: 'Analyze AWS security findings'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run commands via AI for automation'},
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Quick command-line questions'},
+]} />

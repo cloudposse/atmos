@@ -226,6 +226,391 @@ func TestExtractRegionFromARN(t *testing.T) {
 	}
 }
 
+func TestMapFinding_TagsThenHeuristicsFallback(t *testing.T) {
+	tests := []struct {
+		name           string
+		finding        Finding
+		tagCache       map[string]*tagLookupResult
+		wantMapped     bool
+		wantMethod     string
+		wantConfidence MappingConfidence
+		wantComponent  string
+	}{
+		{
+			name: "mapped via tags (Path A)",
+			finding: Finding{
+				ResourceARN:  "arn:aws:ec2:us-east-1:123:instance/i-abc",
+				Region:       "us-east-1",
+				ResourceType: "AwsEc2Instance",
+			},
+			tagCache: map[string]*tagLookupResult{
+				"arn:aws:ec2:us-east-1:123:instance/i-abc": {
+					tags:   map[string]string{"atmos:stack": "prod-ue1", "atmos:component": "vpc"},
+					exists: true,
+				},
+			},
+			wantMapped:     true,
+			wantMethod:     "tag",
+			wantConfidence: ConfidenceExact,
+			wantComponent:  "vpc",
+		},
+		{
+			name: "falls back to naming convention (Path B)",
+			finding: Finding{
+				ResourceARN:  "arn:aws:ec2:us-east-1:123:instance/acme-ue1-prod-alb",
+				Region:       "us-east-1",
+				ResourceType: "AwsElbv2LoadBalancer",
+			},
+			tagCache: map[string]*tagLookupResult{
+				"arn:aws:ec2:us-east-1:123:instance/acme-ue1-prod-alb": {
+					tags:   map[string]string{"Name": "acme-ue1-prod-alb"},
+					exists: true,
+				},
+			},
+			wantMapped:     true,
+			wantMethod:     "naming-convention",
+			wantConfidence: ConfidenceMedium,
+			wantComponent:  "alb",
+		},
+		{
+			name: "falls back to resource type (Path B)",
+			finding: Finding{
+				ResourceARN:  "arn:aws:s3:::my-bucket",
+				Region:       "us-east-1",
+				ResourceType: "AwsS3Bucket",
+			},
+			tagCache: map[string]*tagLookupResult{
+				"arn:aws:s3:::my-bucket": {exists: false},
+			},
+			wantMapped:     true,
+			wantMethod:     "resource-type",
+			wantConfidence: ConfidenceLow,
+			wantComponent:  "s3-bucket",
+		},
+		{
+			name: "unmatched - no tags no naming no resource type",
+			finding: Finding{
+				ResourceARN:  "arn:aws:custom:us-east-1:123:thing/x",
+				Region:       "us-east-1",
+				ResourceType: "AwsSomeUnknownService",
+			},
+			tagCache: map[string]*tagLookupResult{
+				"arn:aws:custom:us-east-1:123:thing/x": {exists: false},
+			},
+			wantMapped:     false,
+			wantMethod:     "unmatched",
+			wantConfidence: ConfidenceNone,
+			wantComponent:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mapper := &dualPathMapper{
+				atmosConfig: &schema.AtmosConfiguration{},
+				tagMapping:  schema.DefaultAISecurityTagMapping(),
+				clients:     newAWSClientCache(),
+				tagCache:    tt.tagCache,
+			}
+
+			mapping, err := mapper.MapFinding(context.Background(), &tt.finding)
+			require.NoError(t, err)
+			require.NotNil(t, mapping)
+			assert.Equal(t, tt.wantMapped, mapping.Mapped)
+			assert.Equal(t, tt.wantMethod, mapping.Method)
+			assert.Equal(t, tt.wantConfidence, mapping.Confidence)
+			if tt.wantComponent != "" {
+				assert.Equal(t, tt.wantComponent, mapping.Component)
+			}
+		})
+	}
+}
+
+func TestMapFindings_Batch(t *testing.T) {
+	mockClient := &mockTaggingClient{
+		resources: []tagtypes.ResourceTagMapping{
+			{
+				ResourceARN: aws.String("arn:aws:ec2:us-east-1:123:instance/acme-ue1-prod-vpc"),
+				Tags: []tagtypes.Tag{
+					{Key: aws.String("atmos:stack"), Value: aws.String("prod-ue1")},
+					{Key: aws.String("atmos:component"), Value: aws.String("vpc")},
+				},
+			},
+		},
+	}
+
+	mapper := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		clients:     newAWSClientCache(),
+		tagCache:    make(map[string]*tagLookupResult),
+	}
+	// Set mock client so batch fetch populates cache correctly.
+	mapper.clients.tagging["us-east-1"] = mockClient
+
+	findings := []Finding{
+		{
+			ResourceARN:  "arn:aws:ec2:us-east-1:123:instance/acme-ue1-prod-vpc",
+			Region:       "us-east-1",
+			ResourceType: "AwsEc2Instance",
+		},
+		{
+			ResourceARN:  "arn:aws:s3:::plain-bucket",
+			Region:       "us-east-1",
+			ResourceType: "AwsS3Bucket",
+		},
+		{
+			ResourceARN:  "",
+			ResourceType: "AwsSomeUnknownService",
+		},
+	}
+
+	result, err := mapper.MapFindings(context.Background(), findings)
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+
+	// First finding: mapped via tags.
+	require.NotNil(t, result[0].Mapping)
+	assert.True(t, result[0].Mapping.Mapped)
+	assert.Equal(t, "tag", result[0].Mapping.Method)
+
+	// Second finding: no tags, falls to resource type.
+	require.NotNil(t, result[1].Mapping)
+	assert.True(t, result[1].Mapping.Mapped)
+	assert.Equal(t, "resource-type", result[1].Mapping.Method)
+	assert.Equal(t, "s3-bucket", result[1].Mapping.Component)
+
+	// Third finding: empty ARN and unknown type → unmatched.
+	require.NotNil(t, result[2].Mapping)
+	assert.False(t, result[2].Mapping.Mapped)
+	assert.Equal(t, "unmatched", result[2].Mapping.Method)
+}
+
+func TestMapByHeuristics(t *testing.T) {
+	mapper := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAISecurityTagMapping(),
+	}
+
+	tests := []struct {
+		name           string
+		finding        Finding
+		wantMapped     bool
+		wantMethod     string
+		wantConfidence MappingConfidence
+	}{
+		{
+			name: "naming convention match",
+			finding: Finding{
+				ResourceARN:  "arn:aws:ec2:us-east-1:123:instance/acme-ue1-prod-eks",
+				ResourceType: "AwsEc2Instance",
+			},
+			wantMapped:     true,
+			wantMethod:     "naming-convention",
+			wantConfidence: ConfidenceMedium,
+		},
+		{
+			name: "resource type match when naming fails",
+			finding: Finding{
+				ResourceARN:  "arn:aws:ec2:us-east-1:123:instance/i-12345",
+				ResourceType: "AwsEksCluster",
+			},
+			wantMapped:     true,
+			wantMethod:     "resource-type",
+			wantConfidence: ConfidenceLow,
+		},
+		{
+			name: "unmatched - no naming and unknown type",
+			finding: Finding{
+				ResourceARN:  "arn:aws:custom:us-east-1:123:thing/x",
+				ResourceType: "AwsUnknownThing",
+			},
+			wantMapped:     false,
+			wantMethod:     "unmatched",
+			wantConfidence: ConfidenceNone,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mapping, err := mapper.mapByHeuristics(context.Background(), &tt.finding)
+			require.NoError(t, err)
+			require.NotNil(t, mapping)
+			assert.Equal(t, tt.wantMapped, mapping.Mapped)
+			assert.Equal(t, tt.wantMethod, mapping.Method)
+			assert.Equal(t, tt.wantConfidence, mapping.Confidence)
+		})
+	}
+}
+
+func TestGetResourceTags(t *testing.T) {
+	tests := []struct {
+		name     string
+		arn      string
+		region   string
+		tagCache map[string]*tagLookupResult
+		mockTags []tagtypes.ResourceTagMapping
+		mockErr  error
+		wantTags map[string]string
+		wantErr  bool
+	}{
+		{
+			name:   "cache hit with tags",
+			arn:    "arn:aws:ec2:us-east-1:123:instance/i-abc",
+			region: "us-east-1",
+			tagCache: map[string]*tagLookupResult{
+				"arn:aws:ec2:us-east-1:123:instance/i-abc": {
+					tags:   map[string]string{"atmos:stack": "prod"},
+					exists: true,
+				},
+			},
+			wantTags: map[string]string{"atmos:stack": "prod"},
+		},
+		{
+			name:   "cache hit with no resource",
+			arn:    "arn:aws:ec2:us-east-1:123:instance/i-gone",
+			region: "us-east-1",
+			tagCache: map[string]*tagLookupResult{
+				"arn:aws:ec2:us-east-1:123:instance/i-gone": {exists: false},
+			},
+			wantTags: nil,
+		},
+		{
+			name:     "cache miss - API returns tags",
+			arn:      "arn:aws:ec2:us-east-1:123:instance/i-new",
+			region:   "us-east-1",
+			tagCache: map[string]*tagLookupResult{},
+			mockTags: []tagtypes.ResourceTagMapping{
+				{
+					ResourceARN: aws.String("arn:aws:ec2:us-east-1:123:instance/i-new"),
+					Tags: []tagtypes.Tag{
+						{Key: aws.String("atmos:component"), Value: aws.String("vpc")},
+					},
+				},
+			},
+			wantTags: map[string]string{"atmos:component": "vpc"},
+		},
+		{
+			name:     "cache miss - API returns empty",
+			arn:      "arn:aws:ec2:us-east-1:123:instance/i-empty",
+			region:   "us-east-1",
+			tagCache: map[string]*tagLookupResult{},
+			mockTags: []tagtypes.ResourceTagMapping{},
+			wantTags: nil,
+		},
+		{
+			name:     "cache miss - API error",
+			arn:      "arn:aws:ec2:us-east-1:123:instance/i-err",
+			region:   "us-east-1",
+			tagCache: map[string]*tagLookupResult{},
+			mockErr:  assert.AnError,
+			wantErr:  true,
+		},
+		{
+			name:     "empty region defaults to us-east-1",
+			arn:      "arn:aws:ec2:us-east-1:123:instance/i-noreg",
+			region:   "",
+			tagCache: map[string]*tagLookupResult{},
+			mockTags: []tagtypes.ResourceTagMapping{
+				{
+					ResourceARN: aws.String("arn:aws:ec2:us-east-1:123:instance/i-noreg"),
+					Tags: []tagtypes.Tag{
+						{Key: aws.String("env"), Value: aws.String("prod")},
+					},
+				},
+			},
+			wantTags: map[string]string{"env": "prod"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockTaggingClient{
+				resources: tt.mockTags,
+				err:       tt.mockErr,
+			}
+
+			mapper := &dualPathMapper{
+				atmosConfig: &schema.AtmosConfiguration{},
+				tagMapping:  schema.DefaultAISecurityTagMapping(),
+				clients:     newAWSClientCache(),
+				tagCache:    tt.tagCache,
+			}
+			// Pre-populate the client for the resolved region.
+			resolvedRegion := tt.region
+			if resolvedRegion == "" {
+				resolvedRegion = "us-east-1"
+			}
+			mapper.clients.tagging[resolvedRegion] = mock
+
+			tags, err := mapper.getResourceTags(context.Background(), tt.arn, tt.region)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if tt.wantTags == nil {
+				assert.Nil(t, tags)
+			} else {
+				assert.Equal(t, tt.wantTags, tags)
+			}
+		})
+	}
+}
+
+func TestResolveTagMapping(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  schema.AtmosConfiguration
+		wantTag string // Check ComponentTag as representative.
+	}{
+		{
+			name:    "all defaults when empty",
+			config:  schema.AtmosConfiguration{},
+			wantTag: "atmos:component",
+		},
+		{
+			name: "custom overrides",
+			config: schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Security: schema.AISecuritySettings{
+						TagMapping: schema.AISecurityTagMapping{
+							ComponentTag: "custom:component",
+							StackTag:     "custom:stack",
+						},
+					},
+				},
+			},
+			wantTag: "custom:component",
+		},
+		{
+			name: "partial override fills remaining defaults",
+			config: schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Security: schema.AISecuritySettings{
+						TagMapping: schema.AISecurityTagMapping{
+							StackTag: "my:stack",
+						},
+					},
+				},
+			},
+			wantTag: "atmos:component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveTagMapping(&tt.config)
+			assert.Equal(t, tt.wantTag, result.ComponentTag)
+			// Verify all fields are filled.
+			assert.NotEmpty(t, result.StackTag)
+			assert.NotEmpty(t, result.TenantTag)
+			assert.NotEmpty(t, result.EnvironmentTag)
+			assert.NotEmpty(t, result.StageTag)
+		})
+	}
+}
+
 func TestBatchFetchTags(t *testing.T) {
 	mockClient := &mockTaggingClient{
 		resources: []tagtypes.ResourceTagMapping{
