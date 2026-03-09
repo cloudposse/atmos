@@ -1,0 +1,143 @@
+---
+slug: ai-agent-skills
+title: "AI Agent Skills for Atmos"
+authors: [aknysh]
+tags: [feature, dx]
+---
+
+Atmos now ships 21 agent skills that give AI coding assistants deep knowledge of Atmos conventions, stack configuration, Terraform orchestration, authentication, validation, and more. Skills build on two open standards -- [AGENTS.md](https://agents.md/) and [Agent Skills](https://agentskills.io/specification) -- and work across Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and other AI tools.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos includes a new `agent-skills/` directory at the repository root containing 21 domain-specific skills packaged as a single Claude Code plugin:
+
+`atmos-terraform`, `atmos-helmfile`, `atmos-packer`, `atmos-ansible`, `atmos-workflows`, `atmos-custom-commands`, `atmos-config`, `atmos-introspection`, `atmos-auth`, `atmos-stores`, `atmos-toolchain`, `atmos-devcontainer`, `atmos-stacks`, `atmos-components`, `atmos-vendoring`, `atmos-validation`, `atmos-schemas`, `atmos-gitops`, `atmos-yaml-functions`, `atmos-templates`, `atmos-design-patterns`
+
+Each skill is a self-contained package with a primary `SKILL.md` instruction file (under 500 lines) and a `references/` directory with deeper reference material. An `AGENTS.md` router file maps user tasks to the right skill, so AI tools load only the context they need.
+
+The skills are built on two open standards:
+
+- **[AGENTS.md](https://agents.md/)** -- The cross-tool instruction file standard created by OpenAI with Google, Cursor, and others. Governed by the Linux Foundation's Agentic AI Foundation (AAIF). Adopted by 60,000+ GitHub repos.
+- **[Agent Skills](https://agentskills.io/specification)** -- The directory-based skill packaging format (`SKILL.md`) created by Anthropic. Adopted by Microsoft, OpenAI, Cursor, and GitHub.
+
+## Why This Matters
+
+AI coding assistants are increasingly part of infrastructure workflows. Without domain-specific context, they rely on general training data that may be outdated, incomplete, or wrong. Common issues include:
+
+- Generating invalid YAML that doesn't match the Atmos schema
+- Using incorrect CLI commands or flags
+- Missing Atmos-specific patterns like deep merging, abstract components, or YAML functions
+- Not knowing about features like `!store`, `!terraform.output`, or multi-provider authentication
+
+Agent skills solve this by providing structured, up-to-date knowledge directly in the repository. The AI loads the relevant skill before answering, ensuring accurate and current guidance.
+
+## How to Use It
+
+Every major AI tool has its own configuration directory. The skills live in a tool-agnostic `agent-skills/` folder, and you symlink or reference them from each tool's expected location.
+
+### Claude Code
+
+Install from the Cloud Posse plugin marketplace:
+
+```bash
+# Add the Cloud Posse marketplace (one-time setup)
+/plugin marketplace add cloudposse/atmos
+
+# Install the Atmos skills plugin (all 21 skills)
+/plugin install atmos@cloudposse
+```
+
+One plugin, one install command, all 21 skills. The `cloudposse/atmos` GitHub repo serves as the marketplace -- Claude Code fetches the plugin manifest directly from the repo. No central registry or approval is involved. Once installed, the plugin is cached locally and skills activate automatically when you ask Atmos-related questions.
+
+To uninstall:
+
+```bash
+# Remove the plugin
+/plugin uninstall atmos@cloudposse
+
+# Remove the marketplace (optional)
+/plugin marketplace remove cloudposse
+```
+
+For Atmos contributors working directly in the repo, skills are also auto-discovered via `.claude/skills/` symlinks.
+
+### OpenAI Codex
+
+Codex natively reads `AGENTS.md` from the repository root (it co-created this standard). Copy the router to the repo root for automatic discovery:
+
+```bash
+cp agent-skills/AGENTS.md AGENTS.md
+```
+
+### Gemini CLI, Cursor, Windsurf, GitHub Copilot
+
+Each tool has its own integration path:
+
+```bash
+# Gemini CLI -- symlink to .gemini/skills
+ln -s agent-skills .gemini/skills
+
+# Cursor -- create .cursor/rules/atmos.mdc (frontmatter required for auto-loading)
+mkdir -p .cursor/rules && cat > .cursor/rules/atmos.mdc << 'RULE'
+---
+description: Atmos infrastructure orchestration guidance
+globs: "*.yaml, *.tf"
+alwaysApply: false
+---
+@agent-skills/AGENTS.md
+RULE
+
+# Windsurf -- add reference in .windsurfrules (also auto-discovers AGENTS.md)
+echo 'Always refer to agent-skills/AGENTS.md for Atmos commands and configuration patterns.' >> .windsurfrules
+
+# GitHub Copilot -- reference in .github/copilot-instructions.md
+mkdir -p .github && echo 'Always refer to agent-skills/AGENTS.md for Atmos commands and configuration patterns.' >> .github/copilot-instructions.md
+```
+
+### Other Tools
+
+Antigravity reads from `.agent/skills/`, JetBrains Junie reads `AGENTS.md` as a fallback alongside `.junie/guidelines.md`, and Amazon Q uses JSON configs in `.amazonq/cli-agents/`. The skills use standard Markdown with YAML frontmatter, which is universally compatible.
+
+### In Your Infrastructure Project
+
+You install the `atmos` binary -- you don't need to clone the Atmos repository. Skills are installed separately through your AI tool.
+
+For Claude Code, install skills via the plugin marketplace (see above). For other AI tools that don't have Atmos marketplace support, use Atmos vendoring to pull the skills into your project:
+
+```yaml
+# Add to vendor.yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: atmos-agent-skills
+  description: Vendor Atmos AI agent skills
+spec:
+  sources:
+    - component: "agent-skills"
+      source: "github.com/cloudposse/atmos.git//agent-skills?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "agent-skills"
+```
+
+```bash
+atmos vendor pull --component agent-skills
+```
+
+This downloads the `agent-skills/` directory with the correct structure intact. To update skills later, run the same command again.
+
+See the [AI Agent Skills documentation](/integrations/ai/agent-skills) for the full skill reference and [Configure AI Assistants](/projects/setup-editor/ai-assistants) for tool-specific setup instructions.
+
+## How Skills Are Activated
+
+You don't invoke skills manually. When you ask your AI assistant a question about Atmos, it automatically activates the right skill based on your question. At session start, the AI loads lightweight metadata from each installed skill. When your question matches a skill's description, the full skill content loads on demand.
+
+For example, asking *"How do I configure stack imports?"* automatically activates the `atmos-stacks` skill. No special syntax needed.
+
+## Get Involved
+
+We welcome contributions to expand and improve the skills. Each skill follows a simple structure: one `SKILL.md` file with YAML frontmatter and a `references/` directory for detailed content.
+
+Open an issue or pull request on [GitHub](https://github.com/cloudposse/atmos) to suggest improvements or add new skills.

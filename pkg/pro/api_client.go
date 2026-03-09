@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -35,6 +36,11 @@ const (
 	logKeyContext                    = "context"
 	logKeyErrorMessage               = "error_message"
 )
+
+// oidcHTTPClientOverride may be set by tests to inject a custom TLS-aware HTTP
+// client for the GitHub OIDC token request. It is nil by default and should
+// only be set in test code (package pro is used by tests directly).
+var oidcHTTPClientOverride *http.Client //nolint:gochecknoglobals
 
 func logProAPIResponse(operation string, apiResponse dtos.AtmosApiResponse) {
 	log.Debug("Pro API Response",
@@ -311,7 +317,9 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
-func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, error) {
+// An optional *http.Client can be passed as the second argument; when omitted,
+// getHTTPClientWithTimeout is used. This is primarily for test injection.
+func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings, clients ...*http.Client) (string, error) {
 	requestURL := githubOIDCSettings.RequestURL
 	requestToken := githubOIDCSettings.RequestToken
 
@@ -319,8 +327,24 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 		return "", errUtils.ErrNotInGitHubActions
 	}
 
-	// Add audience parameter to the request URL
-	requestOIDCTokenURL := fmt.Sprintf("%s&audience=atmos-pro.com", requestURL)
+	// Parse and validate the URL to prevent SSRF: scheme must be https and host must
+	// be non-empty.
+	u, err := url.Parse(requestURL)
+	if err != nil {
+		return "", fmt.Errorf("%w: invalid ACTIONS_ID_TOKEN_REQUEST_URL: %w", errUtils.ErrFailedToGetGitHubOIDCToken, err)
+	}
+	if u.Scheme != "https" {
+		return "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must use https scheme, got %q", errUtils.ErrFailedToGetGitHubOIDCToken, u.Scheme)
+	}
+	if u.Hostname() == "" {
+		return "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must have a non-empty host", errUtils.ErrFailedToGetGitHubOIDCToken)
+	}
+
+	// Add audience parameter to the request URL using proper URL manipulation.
+	q := u.Query()
+	q.Set("audience", "atmos-pro.com")
+	u.RawQuery = q.Encode()
+	requestOIDCTokenURL := u.String()
 	log.Debug("requestOIDCTokenURL", "requestOIDCTokenURL", requestOIDCTokenURL)
 
 	req, err := http.NewRequest("GET", requestOIDCTokenURL, nil)
@@ -330,7 +354,14 @@ func getGitHubOIDCToken(githubOIDCSettings schema.GithubOIDCSettings) (string, e
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", requestToken))
 
-	client := getHTTPClientWithTimeout()
+	var client *http.Client
+	if len(clients) > 0 && clients[0] != nil {
+		client = clients[0]
+	} else if oidcHTTPClientOverride != nil {
+		client = oidcHTTPClientOverride
+	} else {
+		client = getHTTPClientWithTimeout()
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Debug("getGitHubOIDCToken", "error", err)

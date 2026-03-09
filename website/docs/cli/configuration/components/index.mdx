@@ -4,13 +4,13 @@ sidebar_position: 1
 sidebar_label: components
 sidebar_class_name: command
 id: components
-description: Configure how Atmos locates and executes your Terraform, Helmfile, and Packer components.
+description: Configure how Atmos locates and executes your Terraform, Helmfile, Packer, and Ansible components.
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `components` section in `atmos.yaml` defines how Atmos locates and executes your infrastructure components. Each component type (Terraform, Helmfile, Packer) has its own configuration for paths, commands, and behaviors.
+The `components` section in `atmos.yaml` defines how Atmos locates and executes your infrastructure components. Each component type (Terraform, Helmfile, Packer, Ansible) has its own configuration for paths, commands, and behaviors.
 </Intro>
 
 :::important
@@ -20,7 +20,7 @@ This configuration is defined in `atmos.yaml` and specifies default behaviors li
 
 ## Supported Component Types
 
-Atmos supports three built-in component types:
+Atmos supports four built-in component types:
 
 <dl>
   <dt>[Terraform](/cli/configuration/components/terraform)</dt>
@@ -31,6 +31,9 @@ Atmos supports three built-in component types:
 
   <dt>[Packer](/cli/configuration/components/packer)</dt>
   <dd>Machine image building for AMIs, VM images, and container images.</dd>
+
+  <dt>[Ansible](/cli/configuration/components/ansible)</dt>
+  <dd>Configuration management and infrastructure automation using Ansible playbooks.</dd>
 </dl>
 
 ## Configuration Structure
@@ -54,6 +57,11 @@ components:
     base_path: components/packer
     command: packer
     # ... packer-specific settings
+
+  ansible:
+    base_path: components/ansible
+    command: ansible
+    # ... ansible-specific settings
 ```
 </File>
 
@@ -74,4 +82,5 @@ All component types share these common configuration options:
 - [Terraform Configuration](/cli/configuration/components/terraform)
 - [Helmfile Configuration](/cli/configuration/components/helmfile)
 - [Packer Configuration](/cli/configuration/components/packer)
+- [Ansible Configuration](/cli/configuration/components/ansible)
 - [Stack Configuration](/cli/configuration/stacks)
