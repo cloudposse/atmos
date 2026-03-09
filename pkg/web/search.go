@@ -296,11 +296,11 @@ func NewSearchEngine(atmosConfig *schema.AtmosConfiguration) SearchEngine {
 
 	// Check for Google Custom Search configuration.
 	if atmosConfig != nil &&
-		atmosConfig.Settings.AI.WebSearch.GoogleAPIKey != "" &&
-		atmosConfig.Settings.AI.WebSearch.GoogleCSEID != "" {
+		atmosConfig.AI.WebSearch.GoogleAPIKey != "" &&
+		atmosConfig.AI.WebSearch.GoogleCSEID != "" {
 		return NewGoogleEngine(
-			atmosConfig.Settings.AI.WebSearch.GoogleAPIKey,
-			atmosConfig.Settings.AI.WebSearch.GoogleCSEID,
+			atmosConfig.AI.WebSearch.GoogleAPIKey,
+			atmosConfig.AI.WebSearch.GoogleCSEID,
 		)
 	}
 

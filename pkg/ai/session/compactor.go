@@ -22,8 +22,6 @@ const (
 	defaultMinMessages = 10
 	// Maximum character length for message content in simple summaries.
 	defaultMaxTokensPerMessage = 200
-	// Default maximum number of tokens for AI-generated summaries.
-	defaultSummaryMaxTokens = 2048
 )
 
 // Compactor handles intelligent conversation history compaction.
@@ -273,8 +271,6 @@ func DefaultCompactConfig() CompactConfig {
 		CompactRatio:       defaultCompactRatio,     // Compact oldest 40%
 		PreserveRecent:     defaultMinMessages,      // Always keep last 10 messages
 		UseAISummary:       true,                    // Use AI (when implemented in Phase 2)
-		SummaryMaxTokens:   defaultSummaryMaxTokens, // Max 2048 tokens for summary
 		ShowSummaryMarkers: false,                   // Don't show markers by default
-		CompactOnResume:    false,                   // Don't compact on resume by default
 	}
 }

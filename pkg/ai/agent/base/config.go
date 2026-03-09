@@ -25,11 +25,11 @@ type Config struct {
 // GetProviderConfig returns the provider-specific configuration from AtmosConfiguration.
 // Returns nil if no provider configuration is found.
 func GetProviderConfig(atmosConfig *schema.AtmosConfiguration, providerName string) *schema.AIProviderConfig {
-	if atmosConfig.Settings.AI.Providers == nil {
+	if atmosConfig.AI.Providers == nil {
 		return nil
 	}
 
-	providerConfig, exists := atmosConfig.Settings.AI.Providers[providerName]
+	providerConfig, exists := atmosConfig.AI.Providers[providerName]
 	if !exists || providerConfig == nil {
 		return nil
 	}
@@ -49,7 +49,7 @@ func ExtractConfig(atmosConfig *schema.AtmosConfiguration, providerName string, 
 	}
 
 	// Check if AI is enabled.
-	if atmosConfig.Settings.AI.Enabled {
+	if atmosConfig.AI.Enabled {
 		config.Enabled = true
 	}
 

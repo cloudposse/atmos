@@ -2,14 +2,14 @@
 title: AI Tools
 sidebar_label: tools
 sidebar_class_name: command
-description: Configure AI tool execution and permissions in the `settings.ai.tools` section of your `atmos.yaml`.
+description: Configure AI tool execution and permissions in the `ai.tools` section of your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-The `settings.ai.tools` section controls which Atmos commands the AI assistant can execute and whether user
+The `ai.tools` section controls which Atmos commands the AI assistant can execute and whether user
 confirmation is required.
 </Intro>
 
@@ -52,24 +52,22 @@ When the AI calls a tool, it runs **locally** and only the tool's output is sent
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    tools:
-      enabled: true
-      require_confirmation: true
-      allowed_tools:
-        - atmos_describe_component
-        - atmos_list_stacks
-        - atmos_validate_stacks
-        - atmos_describe_*            # Wildcard patterns supported
-      restricted_tools:
-        - write_component_file
-        - write_stack_file
-        - atmos_terraform_plan
-      blocked_tools:
-        - atmos_terraform_destroy
-        - atmos_terraform_apply
-      yolo_mode: false                # Skip all confirmations (DANGEROUS!)
+ai:
+  tools:
+    enabled: true
+    require_confirmation: true
+    allowed_tools:
+      - atmos_describe_component
+      - atmos_list_stacks
+      - atmos_validate_stacks
+      - atmos_describe_*            # Wildcard patterns supported
+    restricted_tools:
+      - write_component_file
+      - write_stack_file
+      - edit_file
+    blocked_tools:
+      - execute_bash_command
+    yolo_mode: false                # Skip all confirmations (DANGEROUS!)
 ```
 </File>
 
@@ -106,19 +104,13 @@ settings:
   <dt>`atmos_list_stacks`</dt>
   <dd>List all available stacks. Read-only.</dd>
 
-  <dt>`atmos_list_components`</dt>
-  <dd>List all available components. Read-only.</dd>
-
   <dt>`atmos_validate_stacks`</dt>
   <dd>Validate stack configurations against schemas and policies. Read-only.</dd>
 
-  <dt>`atmos_describe_affected`</dt>
+  <dt>`describe_affected`</dt>
   <dd>Show components affected by git changes. Read-only.</dd>
 
-  <dt>`atmos_describe_config`</dt>
-  <dd>Show Atmos configuration. Read-only.</dd>
-
-  <dt>`atmos_get_template_context`</dt>
+  <dt>`get_template_context`</dt>
   <dd>Debug Go template variable context. Read-only.</dd>
 
   <dt>`execute_atmos_command`</dt>
@@ -143,11 +135,21 @@ settings:
   <dt>`search_files`</dt>
   <dd>Search for patterns across files. Read-only.</dd>
 
+  <dt>`edit_file`</dt>
+  <dd>Edit an existing file with targeted changes. Requires confirmation by default.</dd>
+
   <dt>`write_component_file`</dt>
   <dd>Write or modify a component file. Requires confirmation by default.</dd>
 
   <dt>`write_stack_file`</dt>
   <dd>Write or modify a stack file. Requires confirmation by default.</dd>
+</dl>
+
+### Execution
+
+<dl>
+  <dt>`execute_bash_command`</dt>
+  <dd>Execute shell commands. Requires confirmation by default.</dd>
 </dl>
 
 ### Validation and Web
@@ -166,16 +168,13 @@ All file operations include **path traversal protection** -- files can only be a
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    web_search:
-      enabled: true
-      engine: "duckduckgo"           # or "google" (requires API key)
-      max_results: 10
-      timeout_seconds: 30
-      # Google Custom Search (only needed when engine: "google")
-      # google_api_key: !env "GOOGLE_API_KEY"
-      # google_cse_id: !env "GOOGLE_CSE_ID"
+ai:
+  web_search:
+    enabled: true
+    max_results: 10
+    # Google Custom Search (optional)
+    # google_api_key: !env "GOOGLE_API_KEY"
+    # google_cse_id: !env "GOOGLE_CSE_ID"
 ```
 </File>
 
@@ -274,26 +273,24 @@ Each [AI skill](/cli/configuration/ai/skills) defines which tools it can use, cr
 <File title="atmos.yaml">
 ```yaml
 # Production: very restrictive
-settings:
-  ai:
-    tools:
-      enabled: true
-      allowed_tools: []              # Prompt for everything
-      blocked_tools:
-        - atmos_terraform_*          # Block all Terraform operations
-        - write_*                    # Block all write operations
+ai:
+  tools:
+    enabled: true
+    allowed_tools: []              # Prompt for everything
+    blocked_tools:
+      - execute_*                  # Block all execution tools
+      - write_*                    # Block all write operations
 
 # Development: more permissive
-settings:
-  ai:
-    tools:
-      enabled: true
-      allowed_tools:
-        - atmos_describe_*           # Auto-approve read-only
-        - atmos_list_*
-        - atmos_validate_*
-      blocked_tools:
-        - atmos_terraform_destroy    # Still block destroy
+ai:
+  tools:
+    enabled: true
+    allowed_tools:
+      - atmos_describe_*           # Auto-approve read-only
+      - atmos_list_*
+      - atmos_validate_*
+    blocked_tools:
+      - execute_bash_command       # Block shell execution
 ```
 </File>
 

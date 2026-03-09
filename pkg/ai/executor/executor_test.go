@@ -141,10 +141,8 @@ func TestNewExecutor(t *testing.T) {
 			client:       &mockClient{},
 			toolExecutor: nil,
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "mock",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "mock",
 				},
 			},
 		},
@@ -186,10 +184,8 @@ func TestExecutor_ExecuteSimple(t *testing.T) {
 			name:   "successful simple execution",
 			client: &mockClient{sendMessageResponse: "Test response"},
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "mock",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "mock",
 				},
 			},
 			opts: Options{
@@ -205,10 +201,8 @@ func TestExecutor_ExecuteSimple(t *testing.T) {
 			name:   "execution with session ID",
 			client: &mockClient{sendMessageResponse: "Response with session"},
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "mock",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "mock",
 				},
 			},
 			opts: Options{
@@ -256,10 +250,8 @@ func TestExecutor_ExecuteSimpleError(t *testing.T) {
 		sendMessageError: errors.New("AI service unavailable"),
 	}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "mock",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
 		},
 	}
 
@@ -282,10 +274,8 @@ func TestExecutor_ExecuteWithToolsNoTools(t *testing.T) {
 	// This test documents the current behavior.
 	client := &mockClient{sendMessageResponse: "Fallback response"}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "mock",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
 		},
 	}
 
@@ -305,10 +295,8 @@ func TestExecutor_ExecuteWithToolsEmptyRegistry(t *testing.T) {
 	// Test with an empty tool registry.
 	client := &mockClient{sendMessageResponse: "Fallback response"}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "mock",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
 		},
 	}
 
@@ -336,10 +324,8 @@ func TestExecutor_GetProviderName(t *testing.T) {
 		{
 			name: "returns configured provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "anthropic",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "anthropic",
 				},
 			},
 			expected: "anthropic",
@@ -347,10 +333,8 @@ func TestExecutor_GetProviderName(t *testing.T) {
 		{
 			name: "returns unknown for empty provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "",
 				},
 			},
 			expected: "unknown",
@@ -549,10 +533,8 @@ func TestFormatToolResults(t *testing.T) {
 func TestExecutor_ExecuteMetadata(t *testing.T) {
 	client := &mockClient{sendMessageResponse: "Test response"}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "test-provider",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "test-provider",
 		},
 	}
 
@@ -586,10 +568,8 @@ func TestExecutor_ExecuteToolsEnabled(t *testing.T) {
 	t.Run("tools enabled false", func(t *testing.T) {
 		client := &mockClient{sendMessageResponse: "Test response"}
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					DefaultProvider: "mock",
-				},
+			AI: schema.AISettings{
+				DefaultProvider: "mock",
 			},
 		}
 
@@ -613,10 +593,8 @@ func TestExecutor_ExecuteToolsEnabled(t *testing.T) {
 			},
 		}
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					DefaultProvider: "mock",
-				},
+			AI: schema.AISettings{
+				DefaultProvider: "mock",
 			},
 		}
 
@@ -658,10 +636,8 @@ func TestOptions_Fields(t *testing.T) {
 func TestExecutor_ContextCancellation(t *testing.T) {
 	client := &mockClient{sendMessageResponse: "Response"}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "mock",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
 		},
 	}
 
@@ -687,10 +663,8 @@ func TestExecutor_ExecuteWithToolsError(t *testing.T) {
 		sendMessageWithError: errors.New("API error"),
 	}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "mock",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
 		},
 	}
 
@@ -735,10 +709,8 @@ func TestExecutor_ExecuteWithToolsAndUsage(t *testing.T) {
 		},
 	}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "mock",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
 		},
 	}
 
@@ -801,10 +773,8 @@ func TestExecutor_ExecuteWithToolsMultipleRounds(t *testing.T) {
 		},
 	}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "mock",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
 		},
 	}
 
@@ -866,10 +836,8 @@ func TestExecutor_ExecuteWithToolsToolError(t *testing.T) {
 		},
 	}
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "mock",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "mock",
 		},
 	}
 

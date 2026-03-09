@@ -15,11 +15,9 @@ import (
 
 func TestWebSearchTool_Name(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -30,11 +28,9 @@ func TestWebSearchTool_Name(t *testing.T) {
 
 func TestWebSearchTool_Description(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -47,11 +43,9 @@ func TestWebSearchTool_Description(t *testing.T) {
 
 func TestWebSearchTool_Parameters(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -75,11 +69,9 @@ func TestWebSearchTool_Parameters(t *testing.T) {
 
 func TestWebSearchTool_RequiresPermission(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -91,11 +83,9 @@ func TestWebSearchTool_RequiresPermission(t *testing.T) {
 
 func TestWebSearchTool_IsRestricted(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -106,11 +96,9 @@ func TestWebSearchTool_IsRestricted(t *testing.T) {
 
 func TestWebSearchTool_Execute_NotEnabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: false,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: false,
 			},
 		},
 	}
@@ -129,11 +117,9 @@ func TestWebSearchTool_Execute_NotEnabled(t *testing.T) {
 
 func TestWebSearchTool_Execute_MissingQuery(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -152,12 +138,10 @@ func TestWebSearchTool_Execute_Success(t *testing.T) {
 	t.Skip("Skipping integration test that requires internet connection")
 
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled:    true,
-					MaxResults: 5,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled:    true,
+				MaxResults: 5,
 			},
 		},
 	}
@@ -188,12 +172,10 @@ func TestWebSearchTool_Execute_MaxResultsCapped(t *testing.T) {
 	t.Skip("Skipping integration test that requires internet connection")
 
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled:    true,
-					MaxResults: 3, // Cap at 3
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled:    true,
+				MaxResults: 3, // Cap at 3
 			},
 		},
 	}
@@ -216,11 +198,9 @@ func TestWebSearchTool_Execute_MaxResultsCapped(t *testing.T) {
 
 func TestWebSearchTool_Execute_InvalidQueryType(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -241,11 +221,9 @@ func TestWebSearchTool_Execute_InvalidQueryType(t *testing.T) {
 
 func TestWebSearchTool_Execute_EmptyQuery(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -305,12 +283,10 @@ func TestWebSearchTool_Execute_MaxResultsEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						WebSearch: schema.AIWebSearchSettings{
-							Enabled:    true,
-							MaxResults: tt.configMaxResult,
-						},
+				AI: schema.AISettings{
+					WebSearch: schema.AIWebSearchSettings{
+						Enabled:    true,
+						MaxResults: tt.configMaxResult,
 					},
 				},
 			}
@@ -322,7 +298,7 @@ func TestWebSearchTool_Execute_MaxResultsEdgeCases(t *testing.T) {
 
 			// Verify tool was created successfully with the config.
 			if tt.configMaxResult > 0 {
-				assert.Equal(t, tt.configMaxResult, atmosConfig.Settings.AI.WebSearch.MaxResults)
+				assert.Equal(t, tt.configMaxResult, atmosConfig.AI.WebSearch.MaxResults)
 			}
 		})
 	}
@@ -331,28 +307,24 @@ func TestWebSearchTool_Execute_MaxResultsEdgeCases(t *testing.T) {
 func TestWebSearchTool_Execute_DifferentEngines(t *testing.T) {
 	tests := []struct {
 		name          string
-		engine        string
 		googleAPIKey  string
 		googleCSEID   string
 		expectSuccess bool
 	}{
 		{
 			name:          "DuckDuckGo engine (default)",
-			engine:        "",
 			googleAPIKey:  "",
 			googleCSEID:   "",
 			expectSuccess: true,
 		},
 		{
 			name:          "Google engine with credentials",
-			engine:        "google",
 			googleAPIKey:  "test-key",
 			googleCSEID:   "test-cse",
 			expectSuccess: true,
 		},
 		{
 			name:          "explicit DuckDuckGo",
-			engine:        "duckduckgo",
 			googleAPIKey:  "",
 			googleCSEID:   "",
 			expectSuccess: true,
@@ -362,14 +334,11 @@ func TestWebSearchTool_Execute_DifferentEngines(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						WebSearch: schema.AIWebSearchSettings{
-							Enabled:      true,
-							Engine:       tt.engine,
-							GoogleAPIKey: tt.googleAPIKey,
-							GoogleCSEID:  tt.googleCSEID,
-						},
+				AI: schema.AISettings{
+					WebSearch: schema.AIWebSearchSettings{
+						Enabled:      true,
+						GoogleAPIKey: tt.googleAPIKey,
+						GoogleCSEID:  tt.googleCSEID,
 					},
 				},
 			}
@@ -401,11 +370,9 @@ func (m *mockSearchEngine) Search(ctx context.Context, query string, maxResults 
 
 func TestWebSearchTool_Execute_WithMockEngine_Success(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -460,11 +427,9 @@ func TestWebSearchTool_Execute_WithMockEngine_Success(t *testing.T) {
 
 func TestWebSearchTool_Execute_WithMockEngine_NoResults(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -497,11 +462,9 @@ func TestWebSearchTool_Execute_WithMockEngine_NoResults(t *testing.T) {
 
 func TestWebSearchTool_Execute_WithMockEngine_SearchError(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -592,12 +555,10 @@ func TestWebSearchTool_Execute_MaxResultsValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						WebSearch: schema.AIWebSearchSettings{
-							Enabled:    true,
-							MaxResults: tt.configMaxResults,
-						},
+				AI: schema.AISettings{
+					WebSearch: schema.AIWebSearchSettings{
+						Enabled:    true,
+						MaxResults: tt.configMaxResults,
 					},
 				},
 			}
@@ -662,11 +623,9 @@ func TestWebSearchTool_Execute_MaxResultsTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						WebSearch: schema.AIWebSearchSettings{
-							Enabled: true,
-						},
+				AI: schema.AISettings{
+					WebSearch: schema.AIWebSearchSettings{
+						Enabled: true,
 					},
 				},
 			}
@@ -704,11 +663,9 @@ func TestWebSearchTool_Execute_MaxResultsTypes(t *testing.T) {
 
 func TestWebSearchTool_Execute_OutputFormatting(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -792,11 +749,9 @@ func TestWebSearchTool_Execute_NilConfig(t *testing.T) {
 
 func TestWebSearchTool_Execute_ErrorChecking(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: false,
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: false,
 			},
 		},
 	}
@@ -865,11 +820,9 @@ func TestWebSearchTool_Execute_QueryValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						WebSearch: schema.AIWebSearchSettings{
-							Enabled: true,
-						},
+				AI: schema.AISettings{
+					WebSearch: schema.AIWebSearchSettings{
+						Enabled: true,
 					},
 				},
 			}

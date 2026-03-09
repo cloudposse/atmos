@@ -264,12 +264,12 @@ func (m *Manager) combineMessagesAndSummaries(summaries []*Summary, messages []*
 
 // getCompactConfig returns the auto-compact configuration.
 func (m *Manager) getCompactConfig() *CompactConfig {
-	if m.atmosConfig == nil || !m.atmosConfig.Settings.AI.Sessions.AutoCompact.Enabled {
+	if m.atmosConfig == nil || !m.atmosConfig.AI.Sessions.AutoCompact.Enabled {
 		cfg := DefaultCompactConfig()
 		return &cfg
 	}
 
-	config := m.atmosConfig.Settings.AI.Sessions.AutoCompact
+	config := m.atmosConfig.AI.Sessions.AutoCompact
 
 	// Convert schema config to session config.
 	return &CompactConfig{
@@ -278,11 +278,7 @@ func (m *Manager) getCompactConfig() *CompactConfig {
 		CompactRatio:       getOrDefault(config.CompactRatio, defaultCompactRatio),
 		PreserveRecent:     getOrDefaultInt(config.PreserveRecent, defaultMinMessages),
 		UseAISummary:       getOrDefaultBool(config.UseAISummary, true),
-		SummaryProvider:    config.SummaryProvider,
-		SummaryModel:       config.SummaryModel,
-		SummaryMaxTokens:   getOrDefaultInt(config.SummaryMaxTokens, defaultSummaryMaxTokens),
 		ShowSummaryMarkers: config.ShowSummaryMarkers,
-		CompactOnResume:    config.CompactOnResume,
 	}
 }
 
@@ -292,7 +288,7 @@ func (m *Manager) getMaxMessages() int {
 		return 0 // Unlimited
 	}
 
-	return m.atmosConfig.Settings.AI.MaxHistoryMessages
+	return m.atmosConfig.AI.MaxHistoryMessages
 }
 
 // Helper functions for config defaults.

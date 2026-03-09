@@ -12,7 +12,7 @@ import Experimental from '@site/src/components/Experimental'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-The `settings.ai` section of the `atmos.yaml` configures the built-in AI assistant, including providers,
+The `ai` section of the `atmos.yaml` configures the built-in AI assistant, including providers,
 skills, tool execution, sessions, and project instructions.
 </Intro>
 
@@ -22,15 +22,14 @@ skills, tool execution, sessions, and project instructions.
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
-        max_tokens: 4096
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
 ```
 </File>
 
@@ -47,65 +46,57 @@ atmos ai chat
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    enabled: true                         # Enable AI features
-    default_provider: "anthropic"         # Default provider for CLI commands
-    default_skill: "general"              # Default AI skill
+ai:
+  enabled: true                         # Enable AI features
+  default_provider: "anthropic"         # Default provider for CLI commands
+  default_skill: "general"              # Default AI skill
 
-    # Provider connections
-    providers:
-      <provider-name>:
-        model: "model-id"
-        api_key: !env "ENV_VAR_NAME"
-        max_tokens: 4096
-        base_url: ""                      # Custom endpoint (optional)
-        timeout_seconds: 60
+  # Provider connections
+  providers:
+    <provider-name>:
+      model: "model-id"
+      api_key: !env "ENV_VAR_NAME"
+      max_tokens: 4096
+      base_url: ""                      # Custom endpoint (optional)
 
-    # Tool execution
-    tools:
-      enabled: true
-      require_confirmation: true
+  # Tool execution
+  tools:
+    enabled: true
+    require_confirmation: true
+    allowed_tools: []
+    restricted_tools: []
+    blocked_tools: []
+
+  # Session persistence
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 10
+
+  # Project instructions
+  instructions:
+    enabled: true
+    file: "ATMOS.md"
+
+  # Automatic context discovery
+  context:
+    enabled: true
+    auto_include: ["stacks/**/*.yaml"]
+    exclude: ["**/node_modules/**"]
+    max_files: 100
+    max_size_mb: 10
+
+  # Web search
+  web_search:
+    enabled: false
+
+  # Custom skills
+  skills:
+    <skill-name>:
+      display_name: "Display Name"
+      description: "What this skill does"
+      system_prompt: "..."
       allowed_tools: []
-      restricted_tools: []
-      blocked_tools: []
-
-    # Session persistence
-    sessions:
-      enabled: true
-      storage: "sqlite"
-      path: ".atmos/sessions"
-      max_sessions: 10
-      retention_days: 30
-
-    # Project instructions
-    instructions:
-      enabled: true
-      file: "ATMOS.md"
-
-    # Automatic context discovery
-    context:
-      enabled: true
-      auto_include: ["stacks/**/*.yaml"]
-      exclude: ["**/node_modules/**"]
-      max_files: 100
-      max_size_mb: 10
-
-    # Web search
-    web_search:
-      enabled: false
-      engine: "duckduckgo"
-
-    # LSP integration
-    use_lsp: false
-
-    # Custom skills
-    skills:
-      <skill-name>:
-        display_name: "Display Name"
-        description: "What this skill does"
-        system_prompt: "..."
-        allowed_tools: []
 ```
 </File>
 
@@ -141,9 +132,6 @@ settings:
 
   <dt>`max_context_lines`</dt>
   <dd>Maximum lines per file when sending context (default: `500`)</dd>
-
-  <dt>`use_lsp`</dt>
-  <dd>Enable LSP integration for AI-powered file validation via external language servers (default: `false`). See [LSP Configuration](/cli/configuration/lsp).</dd>
 </dl>
 
 ### Provider Settings
@@ -174,76 +162,48 @@ or set `default_provider` for CLI commands.
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"
+ai:
+  enabled: true
+  default_provider: "anthropic"
 
-    providers:
-      # Cloud Providers
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
-        max_tokens: 4096
+  providers:
+    # Cloud Providers
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
 
-      openai:
-        model: "gpt-5.4"
-        api_key: !env "OPENAI_API_KEY"
-        max_tokens: 4096
+    openai:
+      model: "gpt-5.4"
+      api_key: !env "OPENAI_API_KEY"
+      max_tokens: 4096
 
-      gemini:
-        model: "gemini-2.5-flash"
-        api_key: !env "GEMINI_API_KEY"
-        max_tokens: 8192
+    gemini:
+      model: "gemini-2.5-flash"
+      api_key: !env "GEMINI_API_KEY"
+      max_tokens: 8192
 
-      grok:
-        model: "grok-4-latest"
-        api_key: !env "XAI_API_KEY"
-        max_tokens: 4096
-        base_url: "https://api.x.ai/v1"
+    grok:
+      model: "grok-4-latest"
+      api_key: !env "XAI_API_KEY"
+      max_tokens: 4096
+      base_url: "https://api.x.ai/v1"
 
-      # Local Provider (no API key needed)
-      ollama:
-        model: "llama4"
-        base_url: "http://localhost:11434/v1"
+    # Local Provider (no API key needed)
+    ollama:
+      model: "llama4"
+      base_url: "http://localhost:11434/v1"
 
-      # Enterprise Providers
-      bedrock:
-        model: "anthropic.claude-sonnet-4-6"
-        base_url: "us-east-1"              # AWS region
+    # Enterprise Providers
+    bedrock:
+      model: "anthropic.claude-sonnet-4-6"
+      base_url: "us-east-1"              # AWS region
 
-      azureopenai:
-        model: "gpt-4o"                    # Your Azure deployment name
-        api_key: !env "AZURE_OPENAI_API_KEY"
-        base_url: "https://your-resource.openai.azure.com"
-        api_version: "2025-04-01-preview"
-```
-</File>
-
-## Migration from Old Configuration
-
-The old single-provider format (`provider:` + `model:` at the top level) still works but limits you
-to one provider. Migrate to the `providers:` map for multi-provider support:
-
-<File title="atmos.yaml">
-```yaml
-# Old format (still works)
-settings:
-  ai:
-    enabled: true
-    provider: "anthropic"
-    model: "claude-sonnet-4-6"
-    api_key: !env "ANTHROPIC_API_KEY"
-
-# New format (recommended)
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
+    azureopenai:
+      model: "gpt-4o"                    # Your Azure deployment name
+      api_key: !env "AZURE_OPENAI_API_KEY"
+      base_url: "https://your-resource.openai.azure.com"
+      api_version: "2025-04-01-preview"
 ```
 </File>
 
@@ -334,20 +294,14 @@ The `web_search` section enables the AI to search the web for documentation and 
   <dt>`web_search.enabled`</dt>
   <dd>Enable web search tool (default: `false`)</dd>
 
-  <dt>`web_search.engine`</dt>
-  <dd>Search engine: `duckduckgo` (default, no API key needed) or `google` (requires API key)</dd>
-
   <dt>`web_search.max_results`</dt>
   <dd>Maximum search results to return (default: `10`)</dd>
 
-  <dt>`web_search.timeout_seconds`</dt>
-  <dd>Web search timeout in seconds</dd>
-
   <dt>`web_search.google_api_key`</dt>
-  <dd>Google Custom Search API key (only needed when `engine: "google"`)</dd>
+  <dd>Google Custom Search API key (for Google Custom Search)</dd>
 
   <dt>`web_search.google_cse_id`</dt>
-  <dd>Google Custom Search Engine ID (only needed when `engine: "google"`)</dd>
+  <dd>Google Custom Search Engine ID (for Google Custom Search)</dd>
 </dl>
 
 ## Security Best Practices

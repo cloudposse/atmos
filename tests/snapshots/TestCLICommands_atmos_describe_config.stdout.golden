@@ -175,16 +175,6 @@
       "token": "phc_TEST_TOKEN_PLACEHOLDER",
       "logging": false
     },
-    "ai": {
-      "sessions": {
-        "auto_compact": {}
-      },
-      "tools": {},
-      "instructions": {},
-      "web_search": {},
-      "context": {}
-    },
-    "lsp": {},
     "provision": {
       "workdir": {}
     }
@@ -272,5 +262,15 @@
       "format": "",
       "columns": null
     }
-  }
+  },
+  "ai": {
+    "sessions": {
+      "auto_compact": {}
+    },
+    "tools": {},
+    "instructions": {},
+    "web_search": {},
+    "context": {}
+  },
+  "lsp": {}
 }

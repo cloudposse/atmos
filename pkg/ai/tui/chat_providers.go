@@ -80,7 +80,7 @@ func (m *ChatModel) getConfiguredProviders() []struct {
 	Name        string
 	Description string
 } {
-	if m.atmosConfig == nil || m.atmosConfig.Settings.AI.Providers == nil {
+	if m.atmosConfig == nil || m.atmosConfig.AI.Providers == nil {
 		return availableProviders
 	}
 
@@ -91,7 +91,7 @@ func (m *ChatModel) getConfiguredProviders() []struct {
 
 	for _, provider := range availableProviders {
 		// Check if this provider is configured.
-		if _, exists := m.atmosConfig.Settings.AI.Providers[provider.Name]; exists {
+		if _, exists := m.atmosConfig.AI.Providers[provider.Name]; exists {
 			configured = append(configured, provider)
 		}
 	}
@@ -135,14 +135,14 @@ var defaultProviderModels = []ProviderWithModel{
 
 // getConfiguredProvidersForCreate returns configured providers with their models from atmos.yaml.
 func (m *ChatModel) getConfiguredProvidersForCreate() []ProviderWithModel {
-	if m.atmosConfig == nil || m.atmosConfig.Settings.AI.Providers == nil {
+	if m.atmosConfig == nil || m.atmosConfig.AI.Providers == nil {
 		return defaultProviderModels
 	}
 
 	configured := make([]ProviderWithModel, 0)
 
 	for _, provider := range availableProviders {
-		providerConfig, exists := m.atmosConfig.Settings.AI.Providers[provider.Name]
+		providerConfig, exists := m.atmosConfig.AI.Providers[provider.Name]
 		if !exists {
 			continue
 		}
@@ -205,8 +205,8 @@ func (m *ChatModel) getCurrentProvider() string {
 	switch {
 	case m.sess != nil && m.sess.Provider != "":
 		return m.sess.Provider
-	case m.atmosConfig.Settings.AI.DefaultProvider != "":
-		return m.atmosConfig.Settings.AI.DefaultProvider
+	case m.atmosConfig.AI.DefaultProvider != "":
+		return m.atmosConfig.AI.DefaultProvider
 	default:
 		return providerAnthropic
 	}

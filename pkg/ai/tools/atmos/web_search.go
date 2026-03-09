@@ -83,9 +83,9 @@ func (t *WebSearchTool) extractMaxResults(params map[string]interface{}) int {
 	}
 
 	// Override max_results from configuration if set.
-	if t.atmosConfig != nil && t.atmosConfig.Settings.AI.WebSearch.MaxResults > 0 {
-		if maxResults > t.atmosConfig.Settings.AI.WebSearch.MaxResults {
-			maxResults = t.atmosConfig.Settings.AI.WebSearch.MaxResults
+	if t.atmosConfig != nil && t.atmosConfig.AI.WebSearch.MaxResults > 0 {
+		if maxResults > t.atmosConfig.AI.WebSearch.MaxResults {
+			maxResults = t.atmosConfig.AI.WebSearch.MaxResults
 		}
 	}
 
@@ -118,7 +118,7 @@ func formatSearchResults(query string, response *web.SearchResponse) string {
 func (t *WebSearchTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
 	defer perf.Track(t.atmosConfig, "pkg.ai.tools.atmos.WebSearchTool.Execute")()
 
-	if t.atmosConfig != nil && !t.atmosConfig.Settings.AI.WebSearch.Enabled {
+	if t.atmosConfig != nil && !t.atmosConfig.AI.WebSearch.Enabled {
 		return &tools.Result{
 			Success: false,
 			Error:   errUtils.ErrWebSearchNotEnabled,

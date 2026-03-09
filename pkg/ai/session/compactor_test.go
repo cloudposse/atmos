@@ -323,9 +323,7 @@ func TestCompactor_DefaultCompactConfig(t *testing.T) {
 	assert.Equal(t, 0.4, config.CompactRatio, "Default ratio should be 0.4")
 	assert.Equal(t, 10, config.PreserveRecent, "Default preserve should be 10")
 	assert.True(t, config.UseAISummary, "Should use AI by default")
-	assert.Equal(t, 2048, config.SummaryMaxTokens, "Default max tokens should be 2048")
 	assert.False(t, config.ShowSummaryMarkers, "Should not show markers by default")
-	assert.False(t, config.CompactOnResume, "Should not compact on resume by default")
 }
 
 func TestCompactor_Compact_WithNilPlan(t *testing.T) {

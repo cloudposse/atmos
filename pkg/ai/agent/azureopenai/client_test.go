@@ -46,9 +46,7 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
@@ -61,16 +59,14 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"azureopenai": {
-								Model:     "gpt-4-turbo",
-								ApiKey:    "custom-azure-key-value",
-								MaxTokens: 8192,
-								BaseURL:   "https://myresource.openai.azure.com",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"azureopenai": {
+							Model:     "gpt-4-turbo",
+							ApiKey:    "custom-azure-key-value",
+							MaxTokens: 8192,
+							BaseURL:   "https://myresource.openai.azure.com",
 						},
 					},
 				},
@@ -86,14 +82,12 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Partial configuration with endpoint",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"azureopenai": {
-								Model:   "gpt-35-turbo",
-								BaseURL: "https://company.openai.azure.com",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"azureopenai": {
+							Model:   "gpt-35-turbo",
+							BaseURL: "https://company.openai.azure.com",
 						},
 					},
 				},
@@ -109,14 +103,12 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Custom deployment name",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"azureopenai": {
-								Model:   "my-gpt4-deployment",
-								BaseURL: "https://prod-ai.openai.azure.com",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"azureopenai": {
+							Model:   "my-gpt4-deployment",
+							BaseURL: "https://prod-ai.openai.azure.com",
 						},
 					},
 				},
@@ -132,14 +124,12 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Custom API key env only",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"azureopenai": {
-								ApiKey:  "my-azure-api-key-value",
-								BaseURL: "https://test.openai.azure.com",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"azureopenai": {
+							ApiKey:  "my-azure-api-key-value",
+							BaseURL: "https://test.openai.azure.com",
 						},
 					},
 				},
@@ -169,10 +159,8 @@ func TestExtractConfig(t *testing.T) {
 
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -184,14 +172,12 @@ func TestNewClient_Disabled(t *testing.T) {
 
 func TestNewClient_MissingBaseURL(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"azureopenai": {
-						ApiKey: "test-api-key",
-						// BaseURL is missing.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"azureopenai": {
+					ApiKey: "test-api-key",
+					// BaseURL is missing.
 				},
 			},
 		},
@@ -205,14 +191,12 @@ func TestNewClient_MissingBaseURL(t *testing.T) {
 
 func TestNewClient_MissingAPIKey(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"azureopenai": {
-						// ApiKey is empty - should fail.
-						BaseURL: "https://test.openai.azure.com",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"azureopenai": {
+					// ApiKey is empty - should fail.
+					BaseURL: "https://test.openai.azure.com",
 				},
 			},
 		},
@@ -226,16 +210,14 @@ func TestNewClient_MissingAPIKey(t *testing.T) {
 
 func TestNewClient_WithAPIKeyAndBaseURL(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"azureopenai": {
-						ApiKey:    "test-azure-api-key",
-						BaseURL:   "https://test.openai.azure.com",
-						Model:     "gpt-4o",
-						MaxTokens: 4096,
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"azureopenai": {
+					ApiKey:    "test-azure-api-key",
+					BaseURL:   "https://test.openai.azure.com",
+					Model:     "gpt-4o",
+					MaxTokens: 4096,
 				},
 			},
 		},
@@ -1065,14 +1047,12 @@ func TestClient_WithDifferentModels(t *testing.T) {
 
 func TestExtractConfig_DefaultValuesApplied(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"azureopenai": {
-						BaseURL: "https://test.openai.azure.com",
-						// Model and MaxTokens not specified - should use defaults.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"azureopenai": {
+					BaseURL: "https://test.openai.azure.com",
+					// Model and MaxTokens not specified - should use defaults.
 				},
 			},
 		},

@@ -31,8 +31,8 @@ func NewClientWithContext(ctx context.Context, atmosConfig *schema.AtmosConfigur
 
 // getProvider returns the active provider name.
 func getProvider(atmosConfig *schema.AtmosConfiguration) string {
-	if atmosConfig.Settings.AI.DefaultProvider != "" {
-		return atmosConfig.Settings.AI.DefaultProvider
+	if atmosConfig.AI.DefaultProvider != "" {
+		return atmosConfig.AI.DefaultProvider
 	}
 
 	// Default to anthropic.
@@ -41,11 +41,11 @@ func getProvider(atmosConfig *schema.AtmosConfiguration) string {
 
 // GetProviderConfig returns the configuration for a specific provider.
 func GetProviderConfig(atmosConfig *schema.AtmosConfiguration, provider string) (*schema.AIProviderConfig, error) {
-	if atmosConfig.Settings.AI.Providers == nil {
+	if atmosConfig.AI.Providers == nil {
 		return nil, fmt.Errorf("%w: no providers configured", errUtils.ErrAIUnsupportedProvider)
 	}
 
-	config, exists := atmosConfig.Settings.AI.Providers[provider]
+	config, exists := atmosConfig.AI.Providers[provider]
 	if !exists {
 		return nil, fmt.Errorf("%w: provider %s not configured in atmos.yaml", errUtils.ErrAIUnsupportedProvider, provider)
 	}

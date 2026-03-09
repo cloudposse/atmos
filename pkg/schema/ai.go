@@ -19,7 +19,6 @@ type AISettings struct {
 	Instructions       AIInstructionsSettings       `yaml:"instructions,omitempty" json:"instructions,omitempty" mapstructure:"instructions"`
 	WebSearch          AIWebSearchSettings          `yaml:"web_search,omitempty" json:"web_search,omitempty" mapstructure:"web_search"`
 	Context            AIContextSettings            `yaml:"context,omitempty" json:"context,omitempty" mapstructure:"context"`
-	UseLSP             bool                         `yaml:"use_lsp,omitempty" json:"use_lsp,omitempty" mapstructure:"use_lsp"` // Enable LSP integration for diagnostics
 }
 
 // AIProviderConfig contains configuration for a specific AI provider.
@@ -40,13 +39,10 @@ type AICacheSettings struct {
 
 // AISessionSettings contains session management configuration.
 type AISessionSettings struct {
-	Enabled       bool                `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	Storage       string              `yaml:"storage,omitempty" json:"storage,omitempty" mapstructure:"storage"` // sqlite, json
-	Path          string              `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`          // Storage path
-	MaxSessions   int                 `yaml:"max_sessions,omitempty" json:"max_sessions,omitempty" mapstructure:"max_sessions"`
-	AutoSave      bool                `yaml:"auto_save,omitempty" json:"auto_save,omitempty" mapstructure:"auto_save"`
-	RetentionDays int                 `yaml:"retention_days,omitempty" json:"retention_days,omitempty" mapstructure:"retention_days"`
-	AutoCompact   AIAutoCompactConfig `yaml:"auto_compact,omitempty" json:"auto_compact,omitempty" mapstructure:"auto_compact"`
+	Enabled     bool                `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Path        string              `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"` // Storage path
+	MaxSessions int                 `yaml:"max_sessions,omitempty" json:"max_sessions,omitempty" mapstructure:"max_sessions"`
+	AutoCompact AIAutoCompactConfig `yaml:"auto_compact,omitempty" json:"auto_compact,omitempty" mapstructure:"auto_compact"`
 }
 
 // AIAutoCompactConfig contains auto-compact configuration for session history.
@@ -56,11 +52,7 @@ type AIAutoCompactConfig struct {
 	CompactRatio       float64 `yaml:"compact_ratio,omitempty" json:"compact_ratio,omitempty" mapstructure:"compact_ratio"`
 	PreserveRecent     int     `yaml:"preserve_recent,omitempty" json:"preserve_recent,omitempty" mapstructure:"preserve_recent"`
 	UseAISummary       bool    `yaml:"use_ai_summary,omitempty" json:"use_ai_summary,omitempty" mapstructure:"use_ai_summary"`
-	SummaryProvider    string  `yaml:"summary_provider,omitempty" json:"summary_provider,omitempty" mapstructure:"summary_provider"`
-	SummaryModel       string  `yaml:"summary_model,omitempty" json:"summary_model,omitempty" mapstructure:"summary_model"`
-	SummaryMaxTokens   int     `yaml:"summary_max_tokens,omitempty" json:"summary_max_tokens,omitempty" mapstructure:"summary_max_tokens"`
 	ShowSummaryMarkers bool    `yaml:"show_summary_markers,omitempty" json:"show_summary_markers,omitempty" mapstructure:"show_summary_markers"`
-	CompactOnResume    bool    `yaml:"compact_on_resume,omitempty" json:"compact_on_resume,omitempty" mapstructure:"compact_on_resume"`
 }
 
 // AIToolSettings contains tool execution configuration.
@@ -75,21 +67,16 @@ type AIToolSettings struct {
 
 // AIInstructionsSettings contains project instructions configuration.
 type AIInstructionsSettings struct {
-	Enabled      bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	FilePath     string   `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"` // Path to ATMOS.md
-	AutoUpdate   bool     `yaml:"auto_update,omitempty" json:"auto_update,omitempty" mapstructure:"auto_update"`
-	CreateIfMiss bool     `yaml:"create_if_missing,omitempty" json:"create_if_missing,omitempty" mapstructure:"create_if_missing"`
-	Sections     []string `yaml:"sections,omitempty" json:"sections,omitempty" mapstructure:"sections"` // Sections to include in context
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	FilePath string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"` // Path to ATMOS.md
 }
 
 // AIWebSearchSettings contains web search configuration.
 type AIWebSearchSettings struct {
-	Enabled        bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	Engine         string `yaml:"engine,omitempty" json:"engine,omitempty" mapstructure:"engine"`                         // duckduckgo, google
-	GoogleAPIKey   string `yaml:"google_api_key,omitempty" json:"google_api_key,omitempty" mapstructure:"google_api_key"` // For Google Custom Search
-	GoogleCSEID    string `yaml:"google_cse_id,omitempty" json:"google_cse_id,omitempty" mapstructure:"google_cse_id"`    // Google Custom Search Engine ID
-	MaxResults     int    `yaml:"max_results,omitempty" json:"max_results,omitempty" mapstructure:"max_results"`          // Maximum results to return
-	TimeoutSeconds int    `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" mapstructure:"timeout_seconds"`
+	Enabled      bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	GoogleAPIKey string `yaml:"google_api_key,omitempty" json:"google_api_key,omitempty" mapstructure:"google_api_key"` // For Google Custom Search
+	GoogleCSEID  string `yaml:"google_cse_id,omitempty" json:"google_cse_id,omitempty" mapstructure:"google_cse_id"`    // Google Custom Search Engine ID
+	MaxResults   int    `yaml:"max_results,omitempty" json:"max_results,omitempty" mapstructure:"max_results"`          // Maximum results to return
 }
 
 // AIContextSettings contains automatic context discovery configuration.
@@ -115,11 +102,3 @@ type AISkillConfig struct {
 	RestrictedTools []string `yaml:"restricted_tools,omitempty" json:"restricted_tools,omitempty" mapstructure:"restricted_tools"` // Tools requiring extra confirmation
 	Category        string   `yaml:"category,omitempty" json:"category,omitempty" mapstructure:"category"`                         // "analysis", "refactor", "security", etc.
 }
-
-// AIAgentConfig is deprecated. Use AISkillConfig instead.
-// Kept for backward compatibility during migration period.
-type AIAgentConfig = AISkillConfig
-
-// AIMemorySettings is deprecated. Use AIInstructionsSettings instead.
-// Kept for backward compatibility during migration period.
-type AIMemorySettings = AIInstructionsSettings

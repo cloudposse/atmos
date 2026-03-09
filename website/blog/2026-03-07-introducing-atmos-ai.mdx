@@ -178,9 +178,9 @@ Learn more: [MCP Server documentation](/ai/mcp-server)
 
 A **three-tier security model** protects your infrastructure:
 
-- **Allowed Tools** — Execute without prompting (e.g., `atmos_describe_*`, `atmos_list_*`, `file_read`)
-- **Restricted Tools** — Require confirmation (e.g., `file_write`, `atmos_terraform_plan`)
-- **Blocked Tools** — Never execute (e.g., `atmos_terraform_apply`, `atmos_terraform_destroy`)
+- **Allowed Tools** — Execute without prompting (e.g., `atmos_describe_component`, `atmos_list_stacks`, `read_file`)
+- **Restricted Tools** — Require confirmation (e.g., `edit_file`, `write_stack_file`, `write_component_file`)
+- **Blocked Tools** — Never execute (e.g., `execute_bash_command`, `execute_atmos_command`)
 
 Permission decisions persist across sessions in `.atmos/ai.settings.local.json`, reducing prompt fatigue by 80%+. Every tool execution is logged with timestamp, user, and context.
 
@@ -232,14 +232,13 @@ Atmos AI supports **prompt caching** to dramatically reduce API costs — up to 
 Most providers cache automatically. For Anthropic, enable explicit cache markers in `atmos.yaml`:
 
 ```yaml
-settings:
-  ai:
-    providers:
-      anthropic:
-        cache:
-          enabled: true
-          cache_system_prompt: true
-          cache_project_instructions: true
+ai:
+  providers:
+    anthropic:
+      cache:
+        enabled: true
+        cache_system_prompt: true
+        cache_project_instructions: true
 ```
 
 Learn more: [Token Caching documentation](/cli/configuration/ai/providers#token-caching)
@@ -251,16 +250,15 @@ Learn more: [Token Caching documentation](/cli/configuration/ai/providers#token-
 Add to your `atmos.yaml`:
 
 <File title="atmos.yaml">
-    ```yaml
-    settings:
-      ai:
-        enabled: true
-        default_provider: "anthropic"
-        providers:
-          anthropic:
-            model: "claude-sonnet-4-6"
-            api_key: !env "ANTHROPIC_API_KEY"
-    ```
+```yaml
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+```
 </File>
 
 ### 2. Set Up Your Provider

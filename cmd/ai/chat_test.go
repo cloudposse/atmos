@@ -65,19 +65,15 @@ func TestGetProviderFromConfig(t *testing.T) {
 		{
 			name: "default provider when not configured",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedResult: "anthropic",
 		},
 		{
 			name: "custom provider configured",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "openai",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "openai",
 				},
 			},
 			expectedResult: "openai",
@@ -85,10 +81,8 @@ func TestGetProviderFromConfig(t *testing.T) {
 		{
 			name: "gemini provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "gemini",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "gemini",
 				},
 			},
 			expectedResult: "gemini",
@@ -96,10 +90,8 @@ func TestGetProviderFromConfig(t *testing.T) {
 		{
 			name: "grok provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "grok",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "grok",
 				},
 			},
 			expectedResult: "grok",
@@ -107,10 +99,8 @@ func TestGetProviderFromConfig(t *testing.T) {
 		{
 			name: "ollama provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "ollama",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "ollama",
 				},
 			},
 			expectedResult: "ollama",
@@ -118,10 +108,8 @@ func TestGetProviderFromConfig(t *testing.T) {
 		{
 			name: "bedrock provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "bedrock",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "bedrock",
 				},
 			},
 			expectedResult: "bedrock",
@@ -129,10 +117,8 @@ func TestGetProviderFromConfig(t *testing.T) {
 		{
 			name: "azureopenai provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "azureopenai",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "azureopenai",
 				},
 			},
 			expectedResult: "azureopenai",
@@ -140,10 +126,8 @@ func TestGetProviderFromConfig(t *testing.T) {
 		{
 			name: "empty string provider uses default",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "",
 				},
 			},
 			expectedResult: "anthropic",
@@ -167,14 +151,12 @@ func TestGetModelFromConfig(t *testing.T) {
 		{
 			name: "returns model from configured provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "anthropic",
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model:     "claude-sonnet-4-5-20250929",
-								MaxTokens: 4096,
-							},
+				AI: schema.AISettings{
+					DefaultProvider: "anthropic",
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model:     "claude-sonnet-4-5-20250929",
+							MaxTokens: 4096,
 						},
 					},
 				},
@@ -184,14 +166,12 @@ func TestGetModelFromConfig(t *testing.T) {
 		{
 			name: "returns empty string when provider not found",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "openai",
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model:     "claude-sonnet-4-5-20250929",
-								MaxTokens: 4096,
-							},
+				AI: schema.AISettings{
+					DefaultProvider: "openai",
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model:     "claude-sonnet-4-5-20250929",
+							MaxTokens: 4096,
 						},
 					},
 				},
@@ -201,10 +181,8 @@ func TestGetModelFromConfig(t *testing.T) {
 		{
 			name: "returns empty string when no providers configured",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "anthropic",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "anthropic",
 				},
 			},
 			expectedResult: "",
@@ -212,13 +190,11 @@ func TestGetModelFromConfig(t *testing.T) {
 		{
 			name: "returns model for default provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model:     "claude-3-5-sonnet-20241022",
-								MaxTokens: 8192,
-							},
+				AI: schema.AISettings{
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model:     "claude-3-5-sonnet-20241022",
+							MaxTokens: 8192,
 						},
 					},
 				},
@@ -228,14 +204,12 @@ func TestGetModelFromConfig(t *testing.T) {
 		{
 			name: "returns model from openai provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "openai",
-						Providers: map[string]*schema.AIProviderConfig{
-							"openai": {
-								Model:     "gpt-4-turbo",
-								MaxTokens: 4096,
-							},
+				AI: schema.AISettings{
+					DefaultProvider: "openai",
+					Providers: map[string]*schema.AIProviderConfig{
+						"openai": {
+							Model:     "gpt-4-turbo",
+							MaxTokens: 4096,
 						},
 					},
 				},
@@ -245,14 +219,12 @@ func TestGetModelFromConfig(t *testing.T) {
 		{
 			name: "returns model from gemini provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "gemini",
-						Providers: map[string]*schema.AIProviderConfig{
-							"gemini": {
-								Model:     "gemini-pro",
-								MaxTokens: 2048,
-							},
+				AI: schema.AISettings{
+					DefaultProvider: "gemini",
+					Providers: map[string]*schema.AIProviderConfig{
+						"gemini": {
+							Model:     "gemini-pro",
+							MaxTokens: 2048,
 						},
 					},
 				},
@@ -262,14 +234,12 @@ func TestGetModelFromConfig(t *testing.T) {
 		{
 			name: "returns empty model when provider config has empty model",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "anthropic",
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model:     "",
-								MaxTokens: 4096,
-							},
+				AI: schema.AISettings{
+					DefaultProvider: "anthropic",
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model:     "",
+							MaxTokens: 4096,
 						},
 					},
 				},
@@ -279,11 +249,9 @@ func TestGetModelFromConfig(t *testing.T) {
 		{
 			name: "returns empty string with nil providers map",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "anthropic",
-						Providers:       nil,
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "anthropic",
+					Providers:       nil,
 				},
 			},
 			expectedResult: "",
@@ -305,11 +273,9 @@ func TestGetSessionStoragePath(t *testing.T) {
 	t.Run("default path", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: basePath,
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: "",
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: "",
 				},
 			},
 		}
@@ -321,11 +287,9 @@ func TestGetSessionStoragePath(t *testing.T) {
 	t.Run("custom relative path", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: basePath,
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: filepath.Join("data", "ai-sessions"),
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: filepath.Join("data", "ai-sessions"),
 				},
 			},
 		}
@@ -339,11 +303,9 @@ func TestGetSessionStoragePath(t *testing.T) {
 		absolutePath := t.TempDir()
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: basePath,
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: absolutePath,
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: absolutePath,
 				},
 			},
 		}
@@ -355,11 +317,9 @@ func TestGetSessionStoragePath(t *testing.T) {
 	t.Run("path with nested directories", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: basePath,
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: filepath.Join(".config", "atmos", "ai", "sessions"),
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: filepath.Join(".config", "atmos", "ai", "sessions"),
 				},
 			},
 		}
@@ -371,11 +331,9 @@ func TestGetSessionStoragePath(t *testing.T) {
 	t.Run("single directory relative path", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: basePath,
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: "sessions",
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: "sessions",
 				},
 			},
 		}
@@ -387,11 +345,9 @@ func TestGetSessionStoragePath(t *testing.T) {
 	t.Run("empty base path with relative session path", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: "",
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: "my-sessions",
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: "my-sessions",
 				},
 			},
 		}
@@ -404,11 +360,9 @@ func TestGetSessionStoragePath(t *testing.T) {
 		// This test verifies cross-platform behavior.
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: basePath,
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: "relative-path",
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: "relative-path",
 				},
 			},
 		}
@@ -428,11 +382,9 @@ func TestGetPermissionMode(t *testing.T) {
 		{
 			name: "YOLO mode enabled",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							YOLOMode: true,
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						YOLOMode: true,
 					},
 				},
 			},
@@ -441,11 +393,9 @@ func TestGetPermissionMode(t *testing.T) {
 		{
 			name: "require confirmation explicitly enabled",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							RequireConfirmation: boolPtr(true),
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						RequireConfirmation: boolPtr(true),
 					},
 				},
 			},
@@ -454,11 +404,9 @@ func TestGetPermissionMode(t *testing.T) {
 		{
 			name: "default prompt mode (not configured)",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							// RequireConfirmation not set (nil) - defaults to prompt.
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						// RequireConfirmation not set (nil) - defaults to prompt.
 					},
 				},
 			},
@@ -467,12 +415,10 @@ func TestGetPermissionMode(t *testing.T) {
 		{
 			name: "YOLO takes precedence over confirmation",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							YOLOMode:            true,
-							RequireConfirmation: boolPtr(true),
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						YOLOMode:            true,
+						RequireConfirmation: boolPtr(true),
 					},
 				},
 			},
@@ -481,12 +427,10 @@ func TestGetPermissionMode(t *testing.T) {
 		{
 			name: "explicitly disabled (opt-out) defaults to allow",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							YOLOMode:            false,
-							RequireConfirmation: boolPtr(false),
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						YOLOMode:            false,
+						RequireConfirmation: boolPtr(false),
 					},
 				},
 			},
@@ -495,12 +439,10 @@ func TestGetPermissionMode(t *testing.T) {
 		{
 			name: "YOLO mode with nil require confirmation",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							YOLOMode:            true,
-							RequireConfirmation: nil,
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						YOLOMode:            true,
+						RequireConfirmation: nil,
 					},
 				},
 			},
@@ -509,21 +451,17 @@ func TestGetPermissionMode(t *testing.T) {
 		{
 			name: "empty AI settings defaults to prompt",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedMode: permission.ModePrompt,
 		},
 		{
 			name: "YOLO false with nil require confirmation defaults to prompt",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							YOLOMode:            false,
-							RequireConfirmation: nil,
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						YOLOMode:            false,
+						RequireConfirmation: nil,
 					},
 				},
 			},
@@ -565,11 +503,9 @@ func TestGetSessionStoragePathCrossPlatform(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath: basePath,
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Sessions: schema.AISessionSettings{
-							Path: tt.sessionPath,
-						},
+				AI: schema.AISettings{
+					Sessions: schema.AISessionSettings{
+						Path: tt.sessionPath,
 					},
 				},
 			}
@@ -591,22 +527,20 @@ func TestGetSessionStoragePathCrossPlatform(t *testing.T) {
 // TestGetModelFromConfigWithMultipleProviders tests model retrieval with multiple providers configured.
 func TestGetModelFromConfigWithMultipleProviders(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "openai",
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						Model:     "claude-sonnet-4-5-20250929",
-						MaxTokens: 4096,
-					},
-					"openai": {
-						Model:     "gpt-4-turbo",
-						MaxTokens: 8192,
-					},
-					"gemini": {
-						Model:     "gemini-pro",
-						MaxTokens: 2048,
-					},
+		AI: schema.AISettings{
+			DefaultProvider: "openai",
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					Model:     "claude-sonnet-4-5-20250929",
+					MaxTokens: 4096,
+				},
+				"openai": {
+					Model:     "gpt-4-turbo",
+					MaxTokens: 8192,
+				},
+				"gemini": {
+					Model:     "gemini-pro",
+					MaxTokens: 2048,
 				},
 			},
 		},
@@ -617,12 +551,12 @@ func TestGetModelFromConfigWithMultipleProviders(t *testing.T) {
 	assert.Equal(t, "gpt-4-turbo", result)
 
 	// Change default provider and verify.
-	atmosConfig.Settings.AI.DefaultProvider = "anthropic"
+	atmosConfig.AI.DefaultProvider = "anthropic"
 	result = getModelFromConfig(atmosConfig)
 	assert.Equal(t, "claude-sonnet-4-5-20250929", result)
 
 	// Change to gemini.
-	atmosConfig.Settings.AI.DefaultProvider = "gemini"
+	atmosConfig.AI.DefaultProvider = "gemini"
 	result = getModelFromConfig(atmosConfig)
 	assert.Equal(t, "gemini-pro", result)
 }
@@ -637,11 +571,9 @@ func TestGetProviderFromConfigWithEmptySettings(t *testing.T) {
 		{
 			name: "nil providers map",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "anthropic",
-						Providers:       nil,
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "anthropic",
+					Providers:       nil,
 				},
 			},
 			expectedResult: "anthropic",
@@ -649,11 +581,9 @@ func TestGetProviderFromConfigWithEmptySettings(t *testing.T) {
 		{
 			name: "empty providers map",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "openai",
-						Providers:       map[string]*schema.AIProviderConfig{},
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "openai",
+					Providers:       map[string]*schema.AIProviderConfig{},
 				},
 			},
 			expectedResult: "openai",
@@ -661,10 +591,8 @@ func TestGetProviderFromConfigWithEmptySettings(t *testing.T) {
 		{
 			name: "whitespace provider name",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						DefaultProvider: "   ",
-					},
+				AI: schema.AISettings{
+					DefaultProvider: "   ",
 				},
 			},
 			expectedResult: "   ", // Function does not trim whitespace.
@@ -744,11 +672,9 @@ func TestGetSessionStoragePathWithSpecialCharacters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath: basePath,
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Sessions: schema.AISessionSettings{
-							Path: tt.sessionPath,
-						},
+				AI: schema.AISettings{
+					Sessions: schema.AISessionSettings{
+						Path: tt.sessionPath,
 					},
 				},
 			}
@@ -783,10 +709,8 @@ func TestChatCmd_RunE_ConfigError(t *testing.T) {
 func TestChatCmd_RunE_AINotEnabled(t *testing.T) {
 	t.Run("isAIEnabled returns false when AI is disabled", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: false,
-				},
+			AI: schema.AISettings{
+				Enabled: false,
 			},
 		}
 		assert.False(t, isAIEnabled(atmosConfig))
@@ -794,10 +718,8 @@ func TestChatCmd_RunE_AINotEnabled(t *testing.T) {
 
 	t.Run("isAIEnabled returns true when AI is enabled", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-				},
+			AI: schema.AISettings{
+				Enabled: true,
 			},
 		}
 		assert.True(t, isAIEnabled(atmosConfig))
@@ -806,15 +728,13 @@ func TestChatCmd_RunE_AINotEnabled(t *testing.T) {
 	t.Run("AI error message format when not enabled", func(t *testing.T) {
 		// Test the expected error message format.
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: false,
-				},
+			AI: schema.AISettings{
+				Enabled: false,
 			},
 		}
 		if !isAIEnabled(atmosConfig) {
 			// This matches the error path in chat.go RunE.
-			expectedText := "settings.ai.enabled"
+			expectedText := "ai.enabled"
 			// Verify our error message contains the expected guidance.
 			assert.True(t, true, "AI is disabled, would show error with '%s'", expectedText)
 		}
@@ -827,15 +747,13 @@ func TestChatCmd_RunE_AIClientCreationError(t *testing.T) {
 	t.Run("provider config determines client creation", func(t *testing.T) {
 		// Test that provider configuration is properly parsed.
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled:         true,
-					DefaultProvider: "anthropic",
-					Providers: map[string]*schema.AIProviderConfig{
-						"anthropic": {
-							Model:     "claude-sonnet-4-5-20250929",
-							MaxTokens: 4096,
-						},
+			AI: schema.AISettings{
+				Enabled:         true,
+				DefaultProvider: "anthropic",
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {
+						Model:     "claude-sonnet-4-5-20250929",
+						MaxTokens: 4096,
 					},
 				},
 			},
@@ -847,12 +765,10 @@ func TestChatCmd_RunE_AIClientCreationError(t *testing.T) {
 
 	t.Run("missing provider config returns empty model", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled:         true,
-					DefaultProvider: "nonexistent",
-					Providers:       map[string]*schema.AIProviderConfig{},
-				},
+			AI: schema.AISettings{
+				Enabled:         true,
+				DefaultProvider: "nonexistent",
+				Providers:       map[string]*schema.AIProviderConfig{},
 			},
 		}
 		model := getModelFromConfig(atmosConfig)
@@ -974,12 +890,10 @@ func TestChatCmd_FlagUsage(t *testing.T) {
 func TestGetPermissionMode_AdditionalCases(t *testing.T) {
 	t.Run("returns ModePrompt when RequireConfirmation is true", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            false,
-						RequireConfirmation: boolPtr(true),
-					},
+			AI: schema.AISettings{
+				Tools: schema.AIToolSettings{
+					YOLOMode:            false,
+					RequireConfirmation: boolPtr(true),
 				},
 			},
 		}
@@ -989,12 +903,10 @@ func TestGetPermissionMode_AdditionalCases(t *testing.T) {
 
 	t.Run("returns ModeAllow when RequireConfirmation is false and YOLOMode is false", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            false,
-						RequireConfirmation: boolPtr(false),
-					},
+			AI: schema.AISettings{
+				Tools: schema.AIToolSettings{
+					YOLOMode:            false,
+					RequireConfirmation: boolPtr(false),
 				},
 			},
 		}
@@ -1004,12 +916,10 @@ func TestGetPermissionMode_AdditionalCases(t *testing.T) {
 
 	t.Run("YOLO mode takes precedence even when RequireConfirmation is false", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            true,
-						RequireConfirmation: boolPtr(false),
-					},
+			AI: schema.AISettings{
+				Tools: schema.AIToolSettings{
+					YOLOMode:            true,
+					RequireConfirmation: boolPtr(false),
 				},
 			},
 		}
@@ -1024,11 +934,9 @@ func TestGetSessionStoragePath_EdgeCases(t *testing.T) {
 		basePath := t.TempDir()
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: basePath,
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: "",
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: "",
 				},
 			},
 		}
@@ -1044,11 +952,9 @@ func TestGetSessionStoragePath_EdgeCases(t *testing.T) {
 		absolutePath := t.TempDir()
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: basePath,
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Path: absolutePath,
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: absolutePath,
 				},
 			},
 		}
@@ -1063,10 +969,8 @@ func TestGetSessionStoragePath_EdgeCases(t *testing.T) {
 func TestGetProviderFromConfig_UnknownProviders(t *testing.T) {
 	t.Run("returns custom provider name as-is", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					DefaultProvider: "custom-provider",
-				},
+			AI: schema.AISettings{
+				DefaultProvider: "custom-provider",
 			},
 		}
 		result := getProviderFromConfig(atmosConfig)
@@ -1075,10 +979,8 @@ func TestGetProviderFromConfig_UnknownProviders(t *testing.T) {
 
 	t.Run("returns provider with special characters", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					DefaultProvider: "my_custom-provider.v2",
-				},
+			AI: schema.AISettings{
+				DefaultProvider: "my_custom-provider.v2",
 			},
 		}
 		result := getProviderFromConfig(atmosConfig)
@@ -1090,16 +992,14 @@ func TestGetProviderFromConfig_UnknownProviders(t *testing.T) {
 func TestGetModelFromConfig_EdgeCases(t *testing.T) {
 	t.Run("returns model from provider with all fields set", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					DefaultProvider: "anthropic",
-					Providers: map[string]*schema.AIProviderConfig{
-						"anthropic": {
-							Model:     "claude-sonnet-4-5-20250929",
-							MaxTokens: 4096,
-							ApiKey:    "test-anthropic-key",
-							BaseURL:   "https://api.anthropic.com/v1",
-						},
+			AI: schema.AISettings{
+				DefaultProvider: "anthropic",
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {
+						Model:     "claude-sonnet-4-5-20250929",
+						MaxTokens: 4096,
+						ApiKey:    "test-anthropic-key",
+						BaseURL:   "https://api.anthropic.com/v1",
 					},
 				},
 			},
@@ -1110,13 +1010,11 @@ func TestGetModelFromConfig_EdgeCases(t *testing.T) {
 
 	t.Run("returns model from provider with minimal fields", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					DefaultProvider: "anthropic",
-					Providers: map[string]*schema.AIProviderConfig{
-						"anthropic": {
-							Model: "claude-3-opus-20240229",
-						},
+			AI: schema.AISettings{
+				DefaultProvider: "anthropic",
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {
+						Model: "claude-3-opus-20240229",
 					},
 				},
 			},
@@ -1175,10 +1073,8 @@ func TestChatCmd_InitFunction(t *testing.T) {
 func TestChatCmd_AIEnabled_ConfigValidation(t *testing.T) {
 	t.Run("AI enabled with minimal config", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-				},
+			AI: schema.AISettings{
+				Enabled: true,
 			},
 		}
 		assert.True(t, isAIEnabled(atmosConfig))
@@ -1186,10 +1082,8 @@ func TestChatCmd_AIEnabled_ConfigValidation(t *testing.T) {
 
 	t.Run("AI disabled explicitly", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: false,
-				},
+			AI: schema.AISettings{
+				Enabled: false,
 			},
 		}
 		assert.False(t, isAIEnabled(atmosConfig))
@@ -1208,23 +1102,15 @@ func TestChatCmd_InstructionsConfig(t *testing.T) {
 	t.Run("instructions config fields", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: t.TempDir(),
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Instructions: schema.AIInstructionsSettings{
-						Enabled:      true,
-						FilePath:     "ATMOS.md",
-						AutoUpdate:   true,
-						CreateIfMiss: true,
-						Sections:     []string{"context", "commands", "patterns"},
-					},
+			AI: schema.AISettings{
+				Instructions: schema.AIInstructionsSettings{
+					Enabled:  true,
+					FilePath: "ATMOS.md",
 				},
 			},
 		}
-		assert.True(t, atmosConfig.Settings.AI.Instructions.Enabled)
-		assert.Equal(t, "ATMOS.md", atmosConfig.Settings.AI.Instructions.FilePath)
-		assert.True(t, atmosConfig.Settings.AI.Instructions.AutoUpdate)
-		assert.True(t, atmosConfig.Settings.AI.Instructions.CreateIfMiss)
-		assert.Equal(t, []string{"context", "commands", "patterns"}, atmosConfig.Settings.AI.Instructions.Sections)
+		assert.True(t, atmosConfig.AI.Instructions.Enabled)
+		assert.Equal(t, "ATMOS.md", atmosConfig.AI.Instructions.FilePath)
 	})
 }
 
@@ -1233,19 +1119,17 @@ func TestChatCmd_SessionConfig(t *testing.T) {
 	t.Run("session config fields", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: t.TempDir(),
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Sessions: schema.AISessionSettings{
-						Enabled:     true,
-						Path:        ".atmos/sessions",
-						MaxSessions: 100,
-					},
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Enabled:     true,
+					Path:        ".atmos/sessions",
+					MaxSessions: 100,
 				},
 			},
 		}
-		assert.True(t, atmosConfig.Settings.AI.Sessions.Enabled)
-		assert.Equal(t, ".atmos/sessions", atmosConfig.Settings.AI.Sessions.Path)
-		assert.Equal(t, 100, atmosConfig.Settings.AI.Sessions.MaxSessions)
+		assert.True(t, atmosConfig.AI.Sessions.Enabled)
+		assert.Equal(t, ".atmos/sessions", atmosConfig.AI.Sessions.Path)
+		assert.Equal(t, 100, atmosConfig.AI.Sessions.MaxSessions)
 	})
 }
 
@@ -1254,25 +1138,23 @@ func TestChatCmd_ToolsConfig(t *testing.T) {
 	t.Run("tools config with all settings", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: t.TempDir(),
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						Enabled:             true,
-						YOLOMode:            false,
-						RequireConfirmation: boolPtr(true),
-						AllowedTools:        []string{"read_file", "list_files"},
-						RestrictedTools:     []string{"execute_bash_command"},
-						BlockedTools:        []string{"dangerous_tool"},
-					},
+			AI: schema.AISettings{
+				Tools: schema.AIToolSettings{
+					Enabled:             true,
+					YOLOMode:            false,
+					RequireConfirmation: boolPtr(true),
+					AllowedTools:        []string{"read_file", "list_files"},
+					RestrictedTools:     []string{"execute_bash_command"},
+					BlockedTools:        []string{"dangerous_tool"},
 				},
 			},
 		}
-		assert.True(t, atmosConfig.Settings.AI.Tools.Enabled)
-		assert.False(t, atmosConfig.Settings.AI.Tools.YOLOMode)
-		assert.True(t, *atmosConfig.Settings.AI.Tools.RequireConfirmation)
-		assert.Equal(t, []string{"read_file", "list_files"}, atmosConfig.Settings.AI.Tools.AllowedTools)
-		assert.Equal(t, []string{"execute_bash_command"}, atmosConfig.Settings.AI.Tools.RestrictedTools)
-		assert.Equal(t, []string{"dangerous_tool"}, atmosConfig.Settings.AI.Tools.BlockedTools)
+		assert.True(t, atmosConfig.AI.Tools.Enabled)
+		assert.False(t, atmosConfig.AI.Tools.YOLOMode)
+		assert.True(t, *atmosConfig.AI.Tools.RequireConfirmation)
+		assert.Equal(t, []string{"read_file", "list_files"}, atmosConfig.AI.Tools.AllowedTools)
+		assert.Equal(t, []string{"execute_bash_command"}, atmosConfig.AI.Tools.RestrictedTools)
+		assert.Equal(t, []string{"dangerous_tool"}, atmosConfig.AI.Tools.BlockedTools)
 	})
 }
 
@@ -1314,10 +1196,9 @@ stacks:
 components:
   terraform:
     base_path: components/terraform
-settings:
-  ai:
-    enabled: ` + enabledStr + `
-    default_provider: anthropic
+ai:
+  enabled: ` + enabledStr + `
+  default_provider: anthropic
 ` + extraConfig
 
 	err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
@@ -1429,8 +1310,6 @@ func TestChatCmd_RunE_InstructionsEnabled(t *testing.T) {
     instructions:
       enabled: true
       file: "ATMOS.md"
-      auto_update: false
-      create_if_missing: true
 `
 	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
 
@@ -1459,8 +1338,6 @@ func TestChatCmd_RunE_AllFeaturesEnabled(t *testing.T) {
     instructions:
       enabled: true
       file: "ATMOS.md"
-      auto_update: true
-      create_if_missing: true
 `
 	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
 
@@ -1707,8 +1584,6 @@ func TestChatCmd_RunE_InstructionsWithCustomFilePath(t *testing.T) {
     instructions:
       enabled: true
       file: "custom-instructions.md"
-      auto_update: true
-      create_if_missing: false
 `
 	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
 
@@ -1724,17 +1599,12 @@ func TestChatCmd_RunE_InstructionsWithCustomFilePath(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestChatCmd_RunE_InstructionsWithSections tests instructions with custom sections.
-func TestChatCmd_RunE_InstructionsWithSections(t *testing.T) {
+// TestChatCmd_RunE_InstructionsWithFile tests instructions with file configuration.
+func TestChatCmd_RunE_InstructionsWithFile(t *testing.T) {
 	extraConfig := `
     instructions:
       enabled: true
       file: "ATMOS.md"
-      sections:
-        - context
-        - commands
-        - patterns
-        - custom
 `
 	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
 
@@ -1784,14 +1654,13 @@ stacks:
 components:
   terraform:
     base_path: components/terraform
-settings:
-  ai:
-    enabled: true
-    default_provider: ollama
-    providers:
-      ollama:
-        model: "llama3.3:70b"
-        max_tokens: 4096
+ai:
+  enabled: true
+  default_provider: ollama
+  providers:
+    ollama:
+      model: "llama3.3:70b"
+      max_tokens: 4096
 ` + extraConfig
 
 	err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
@@ -1866,8 +1735,6 @@ func TestChatCmd_RunE_OllamaWithInstructions(t *testing.T) {
     instructions:
       enabled: true
       file: "ATMOS.md"
-      auto_update: false
-      create_if_missing: true
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
 
@@ -1899,11 +1766,6 @@ func TestChatCmd_RunE_OllamaAllFeatures(t *testing.T) {
     instructions:
       enabled: true
       file: "ATMOS.md"
-      auto_update: true
-      create_if_missing: true
-      sections:
-        - context
-        - commands
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
 
@@ -1947,9 +1809,11 @@ func TestChatCmd_RunE_OllamaSessionStorageInitError(t *testing.T) {
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Should fail at session storage initialization.
+	// Should fail at session storage initialization or TTY initialization.
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "session storage")
+	errMsg := err.Error()
+	assert.True(t, strings.Contains(errMsg, "session storage") || strings.Contains(errMsg, "chat session failed"),
+		"Expected session storage or chat session error, got: %s", errMsg)
 }
 
 // TestChatCmd_RunE_OllamaInstructionsLoadError tests instructions loading error handling.
@@ -1961,8 +1825,6 @@ func TestChatCmd_RunE_OllamaInstructionsLoadError(t *testing.T) {
     instructions:
       enabled: true
       file: "nonexistent-instructions.md"
-      auto_update: false
-      create_if_missing: false
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
 
@@ -2109,10 +1971,8 @@ func TestChatCmd_RunE_OllamaWithSessionsDisabled(t *testing.T) {
 func TestGetProviderFromConfig_DefaultFallback(t *testing.T) {
 	// Test that empty DefaultProvider falls back to "anthropic".
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultProvider: "",
-			},
+		AI: schema.AISettings{
+			DefaultProvider: "",
 		},
 	}
 	result := getProviderFromConfig(atmosConfig)
@@ -2124,11 +1984,9 @@ func TestGetSessionStoragePath_EmptyPath(t *testing.T) {
 	basePath := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: basePath,
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Sessions: schema.AISessionSettings{
-					Path: "", // Empty path should default to ".atmos/sessions".
-				},
+		AI: schema.AISettings{
+			Sessions: schema.AISessionSettings{
+				Path: "", // Empty path should default to ".atmos/sessions".
 			},
 		},
 	}
@@ -2144,12 +2002,10 @@ func TestGetSessionStoragePath_EmptyPath(t *testing.T) {
 // TestGetPermissionMode_RequireConfirmationTrue tests when RequireConfirmation is explicitly true.
 func TestGetPermissionMode_RequireConfirmationTrue(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            false,
-					RequireConfirmation: boolPtr(true),
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				YOLOMode:            false,
+				RequireConfirmation: boolPtr(true),
 			},
 		},
 	}
@@ -2160,12 +2016,10 @@ func TestGetPermissionMode_RequireConfirmationTrue(t *testing.T) {
 // TestGetPermissionMode_RequireConfirmationFalse tests when RequireConfirmation is explicitly false.
 func TestGetPermissionMode_RequireConfirmationFalse(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            false,
-					RequireConfirmation: boolPtr(false),
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				YOLOMode:            false,
+				RequireConfirmation: boolPtr(false),
 			},
 		},
 	}
@@ -2182,8 +2036,6 @@ func TestChatCmd_RunE_OllamaWithInstructionsSuccess(t *testing.T) {
     instructions:
       enabled: true
       file: "ATMOS.md"
-      auto_update: false
-      create_if_missing: true
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
 
@@ -2263,19 +2115,16 @@ stacks:
 components:
   terraform:
     base_path: components/terraform
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: ollama
+  providers:
+    ollama:
+      model: "llama3.3:70b"
+      max_tokens: 4096
+  instructions:
     enabled: true
-    default_provider: ollama
-    providers:
-      ollama:
-        model: "llama3.3:70b"
-        max_tokens: 4096
-    instructions:
-      enabled: true
-      file: "` + instructionsFilePathSlash + `"
-      auto_update: false
-      create_if_missing: false
+    file: "` + instructionsFilePathSlash + `"
 `
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
 

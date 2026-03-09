@@ -23,7 +23,7 @@ var aiCmd = &cobra.Command{
 
 // isAIEnabled checks if AI features are enabled in the configuration.
 func isAIEnabled(atmosConfig *schema.AtmosConfiguration) bool {
-	return atmosConfig.Settings.AI.Enabled
+	return atmosConfig.AI.Enabled
 }
 
 func init() {

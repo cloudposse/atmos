@@ -41,9 +41,7 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
@@ -55,15 +53,13 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"bedrock": {
-								Model:     "anthropic.claude-3-haiku-20240307-v1:0",
-								MaxTokens: 8192,
-								BaseURL:   "us-west-2",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"bedrock": {
+							Model:     "anthropic.claude-3-haiku-20240307-v1:0",
+							MaxTokens: 8192,
+							BaseURL:   "us-west-2",
 						},
 					},
 				},
@@ -78,13 +74,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"bedrock": {
-								Model: "anthropic.claude-3-opus-20240229-v1:0",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"bedrock": {
+							Model: "anthropic.claude-3-opus-20240229-v1:0",
 						},
 					},
 				},
@@ -99,13 +93,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Custom region only",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"bedrock": {
-								BaseURL: "eu-west-1",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"bedrock": {
+							BaseURL: "eu-west-1",
 						},
 					},
 				},
@@ -120,15 +112,13 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Asia Pacific region",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"bedrock": {
-								BaseURL:   "ap-southeast-1",
-								Model:     "anthropic.claude-3-sonnet-20240229-v1:0",
-								MaxTokens: 2048,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"bedrock": {
+							BaseURL:   "ap-southeast-1",
+							Model:     "anthropic.claude-3-sonnet-20240229-v1:0",
+							MaxTokens: 2048,
 						},
 					},
 				},
@@ -156,10 +146,8 @@ func TestExtractConfig(t *testing.T) {
 
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -752,13 +740,11 @@ func TestAWSRegionValidation(t *testing.T) {
 	for _, region := range validRegions {
 		t.Run(region, func(t *testing.T) {
 			config := base.ExtractConfig(&schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"bedrock": {
-								BaseURL: region,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"bedrock": {
+							BaseURL: region,
 						},
 					},
 				},
@@ -775,11 +761,9 @@ func TestAWSRegionValidation(t *testing.T) {
 
 func TestExtractConfig_NilProviders(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled:   true,
-				Providers: nil,
-			},
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: nil,
 		},
 	}
 
@@ -798,13 +782,11 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 
 func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model: "gpt-4o",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model: "gpt-4o",
 				},
 			},
 		},
@@ -825,12 +807,10 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 
 func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"bedrock": nil, // Explicitly nil provider config.
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"bedrock": nil, // Explicitly nil provider config.
 			},
 		},
 	}
@@ -1021,15 +1001,13 @@ func TestClientGetters_CustomMaxTokens(t *testing.T) {
 
 func TestExtractConfig_AllOverrides(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"bedrock": {
-						Model:     "anthropic.claude-3-opus-20240229-v1:0",
-						MaxTokens: 32768,
-						BaseURL:   "eu-central-1",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"bedrock": {
+					Model:     "anthropic.claude-3-opus-20240229-v1:0",
+					MaxTokens: 32768,
+					BaseURL:   "eu-central-1",
 				},
 			},
 		},
@@ -1050,13 +1028,11 @@ func TestExtractConfig_AllOverrides(t *testing.T) {
 func TestNewClient_EmptyRegion(t *testing.T) {
 	// Test that empty region falls back to default.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"bedrock": {
-						BaseURL: "", // Empty region.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"bedrock": {
+					BaseURL: "", // Empty region.
 				},
 			},
 		},
@@ -1074,10 +1050,8 @@ func TestNewClient_EmptyRegion(t *testing.T) {
 func TestNewClient_NilConfig(t *testing.T) {
 	// Test nil configuration.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -1664,13 +1638,11 @@ func TestRequestBodyMarshaling(t *testing.T) {
 func TestExtractConfig_ZeroMaxTokens(t *testing.T) {
 	// Test that zero max tokens uses default.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"bedrock": {
-						MaxTokens: 0, // Zero should use default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"bedrock": {
+					MaxTokens: 0, // Zero should use default.
 				},
 			},
 		},
@@ -1688,13 +1660,11 @@ func TestExtractConfig_ZeroMaxTokens(t *testing.T) {
 func TestExtractConfig_NegativeMaxTokens(t *testing.T) {
 	// Test that negative max tokens uses default (base.ExtractConfig treats 0 and negative as "use default").
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"bedrock": {
-						MaxTokens: -100, // Negative should use default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"bedrock": {
+					MaxTokens: -100, // Negative should use default.
 				},
 			},
 		},
@@ -1907,13 +1877,11 @@ func TestClientGetters_VariousModels(t *testing.T) {
 func TestExtractConfig_EmptyModel(t *testing.T) {
 	// Test that empty model uses default.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"bedrock": {
-						Model: "", // Empty model.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"bedrock": {
+					Model: "", // Empty model.
 				},
 			},
 		},
@@ -1931,13 +1899,11 @@ func TestExtractConfig_EmptyModel(t *testing.T) {
 func TestExtractConfig_WhitespaceModel(t *testing.T) {
 	// Test that whitespace-only model uses default.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"bedrock": {
-						Model: "   ", // Whitespace only.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"bedrock": {
+					Model: "   ", // Whitespace only.
 				},
 			},
 		},
@@ -2089,23 +2055,21 @@ func TestRequestBodyMarshaling_SpecialCharacters(t *testing.T) {
 func TestExtractConfig_MultipleProviders(t *testing.T) {
 	// Test that bedrock config is extracted correctly when multiple providers exist.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model:     "gpt-4o",
-						MaxTokens: 2000,
-					},
-					"bedrock": {
-						Model:     "anthropic.claude-3-haiku-20240307-v1:0",
-						MaxTokens: 8000,
-						BaseURL:   "ap-southeast-1",
-					},
-					"anthropic": {
-						Model:     "claude-3-opus-20240229",
-						MaxTokens: 1000,
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model:     "gpt-4o",
+					MaxTokens: 2000,
+				},
+				"bedrock": {
+					Model:     "anthropic.claude-3-haiku-20240307-v1:0",
+					MaxTokens: 8000,
+					BaseURL:   "ap-southeast-1",
+				},
+				"anthropic": {
+					Model:     "claude-3-opus-20240229",
+					MaxTokens: 1000,
 				},
 			},
 		},

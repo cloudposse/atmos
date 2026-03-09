@@ -41,10 +41,8 @@ func TestLoadSkills_WithNilConfig(t *testing.T) {
 func TestLoadSkills_WithEmptyConfig(t *testing.T) {
 	// Arrange - config with no custom skills, no marketplace loader.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Skills: map[string]*schema.AISkillConfig{},
-			},
+		AI: schema.AISettings{
+			Skills: map[string]*schema.AISkillConfig{},
 		},
 	}
 
@@ -82,24 +80,22 @@ func TestLoadSkills_WithMarketplaceSkills(t *testing.T) {
 func TestLoadSkills_WithCustomSkills(t *testing.T) {
 	// Arrange - config with custom skills.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Skills: map[string]*schema.AISkillConfig{
-					"custom-analyzer": {
-						DisplayName:  "Custom Analyzer",
-						Description:  "Custom skill for specific analysis",
-						SystemPrompt: "You are a custom analyzer",
-						AllowedTools: []string{"read_file", "search_files"},
-						Category:     "analysis",
-					},
-					"custom-refactor": {
-						DisplayName:     "Custom Refactor",
-						Description:     "Custom refactoring skill",
-						SystemPrompt:    "You are a custom refactoring assistant",
-						AllowedTools:    []string{"read_file", "edit_file"},
-						RestrictedTools: []string{"execute_command"},
-						Category:        "refactor",
-					},
+		AI: schema.AISettings{
+			Skills: map[string]*schema.AISkillConfig{
+				"custom-analyzer": {
+					DisplayName:  "Custom Analyzer",
+					Description:  "Custom skill for specific analysis",
+					SystemPrompt: "You are a custom analyzer",
+					AllowedTools: []string{"read_file", "search_files"},
+					Category:     "analysis",
+				},
+				"custom-refactor": {
+					DisplayName:     "Custom Refactor",
+					Description:     "Custom refactoring skill",
+					SystemPrompt:    "You are a custom refactoring assistant",
+					AllowedTools:    []string{"read_file", "edit_file"},
+					RestrictedTools: []string{"execute_command"},
+					Category:        "refactor",
 				},
 			},
 		},
@@ -133,20 +129,18 @@ func TestLoadSkills_WithCustomSkills(t *testing.T) {
 func TestLoadSkills_WithInvalidCustomSkill_ShouldContinue(t *testing.T) {
 	// Arrange - config with invalid custom skills (empty name).
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Skills: map[string]*schema.AISkillConfig{
-					"": { // Empty name - invalid.
-						DisplayName:  "Invalid Skill",
-						Description:  "This skill has an empty name",
-						SystemPrompt: "This should be skipped",
-					},
-					"valid-skill": {
-						DisplayName:  "Valid Skill",
-						Description:  "This skill should be registered",
-						SystemPrompt: "This should work",
-						Category:     "test",
-					},
+		AI: schema.AISettings{
+			Skills: map[string]*schema.AISkillConfig{
+				"": { // Empty name - invalid.
+					DisplayName:  "Invalid Skill",
+					Description:  "This skill has an empty name",
+					SystemPrompt: "This should be skipped",
+				},
+				"valid-skill": {
+					DisplayName:  "Valid Skill",
+					Description:  "This skill should be registered",
+					SystemPrompt: "This should work",
+					Category:     "test",
 				},
 			},
 		},
@@ -180,13 +174,11 @@ func TestLoadSkills_MarketplaceAndCustom(t *testing.T) {
 	}
 
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Skills: map[string]*schema.AISkillConfig{
-					"custom-skill": {
-						DisplayName: "Custom",
-						Description: "From config",
-					},
+		AI: schema.AISettings{
+			Skills: map[string]*schema.AISkillConfig{
+				"custom-skill": {
+					DisplayName: "Custom",
+					Description: "From config",
 				},
 			},
 		},
@@ -211,13 +203,11 @@ func TestLoadSkills_DuplicateCustomSkillSkipped(t *testing.T) {
 	}
 
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Skills: map[string]*schema.AISkillConfig{
-					"my-skill": { // Duplicate of marketplace skill.
-						DisplayName: "Custom Version",
-						Description: "This conflicts with marketplace skill",
-					},
+		AI: schema.AISettings{
+			Skills: map[string]*schema.AISkillConfig{
+				"my-skill": { // Duplicate of marketplace skill.
+					DisplayName: "Custom Version",
+					Description: "This conflicts with marketplace skill",
 				},
 			},
 		},
@@ -242,10 +232,8 @@ func TestGetDefaultSkill_WithNilConfig(t *testing.T) {
 
 func TestGetDefaultSkill_WithEmptyDefaultSkill(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultSkill: "",
-			},
+		AI: schema.AISettings{
+			DefaultSkill: "",
 		},
 	}
 	defaultSkill := GetDefaultSkill(atmosConfig)
@@ -254,10 +242,8 @@ func TestGetDefaultSkill_WithEmptyDefaultSkill(t *testing.T) {
 
 func TestGetDefaultSkill_WithCustomDefaultSkill(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultSkill: "atmos-terraform",
-			},
+		AI: schema.AISettings{
+			DefaultSkill: "atmos-terraform",
 		},
 	}
 	defaultSkill := GetDefaultSkill(atmosConfig)
@@ -266,10 +252,8 @@ func TestGetDefaultSkill_WithCustomDefaultSkill(t *testing.T) {
 
 func TestGetDefaultSkill_WithUserDefinedDefaultSkill(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				DefaultSkill: "my-custom-skill",
-			},
+		AI: schema.AISettings{
+			DefaultSkill: "my-custom-skill",
 		},
 	}
 	defaultSkill := GetDefaultSkill(atmosConfig)
@@ -279,24 +263,22 @@ func TestGetDefaultSkill_WithUserDefinedDefaultSkill(t *testing.T) {
 func TestLoadSkills_RegistryIntegrity(t *testing.T) {
 	// Arrange - config with multiple custom skills.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Skills: map[string]*schema.AISkillConfig{
-					"skill-1": {
-						DisplayName: "Skill 1",
-						Description: "First skill",
-						Category:    "test",
-					},
-					"skill-2": {
-						DisplayName: "Skill 2",
-						Description: "Second skill",
-						Category:    "test",
-					},
-					"skill-3": {
-						DisplayName: "Skill 3",
-						Description: "Third skill",
-						Category:    "test",
-					},
+		AI: schema.AISettings{
+			Skills: map[string]*schema.AISkillConfig{
+				"skill-1": {
+					DisplayName: "Skill 1",
+					Description: "First skill",
+					Category:    "test",
+				},
+				"skill-2": {
+					DisplayName: "Skill 2",
+					Description: "Second skill",
+					Category:    "test",
+				},
+				"skill-3": {
+					DisplayName: "Skill 3",
+					Description: "Third skill",
+					Category:    "test",
 				},
 			},
 		},
@@ -327,13 +309,11 @@ func TestLoadSkills_RegistryIntegrity(t *testing.T) {
 
 func TestLoadSkills_NilSkillConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Skills: map[string]*schema.AISkillConfig{
-					"valid-skill": {
-						DisplayName: "Valid Skill",
-						Description: "This should work",
-					},
+		AI: schema.AISettings{
+			Skills: map[string]*schema.AISkillConfig{
+				"valid-skill": {
+					DisplayName: "Valid Skill",
+					Description: "This should work",
 				},
 			},
 		},

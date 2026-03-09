@@ -147,7 +147,7 @@ func (m *ChatModel) handleChatControlKeys(keyStr string) tea.Cmd {
 // handleCtrlL opens the session list.
 func (m *ChatModel) handleCtrlL() tea.Cmd {
 	if m.manager == nil {
-		m.addMessage(roleSystem, "Sessions are not enabled. Enable them in your atmos.yaml config: settings.ai.sessions.enabled: true")
+		m.addMessage(roleSystem, "Sessions are not enabled. Enable them in your atmos.yaml config: ai.sessions.enabled: true")
 		return noopCmd()
 	}
 	return m.loadSessionList()
@@ -156,7 +156,7 @@ func (m *ChatModel) handleCtrlL() tea.Cmd {
 // handleCtrlN opens the create session form.
 func (m *ChatModel) handleCtrlN() tea.Cmd {
 	if m.manager == nil {
-		m.addMessage(roleSystem, "Sessions are not enabled. Enable them in your atmos.yaml config: settings.ai.sessions.enabled: true")
+		m.addMessage(roleSystem, "Sessions are not enabled. Enable them in your atmos.yaml config: ai.sessions.enabled: true")
 		return noopCmd()
 	}
 	m.currentView = viewModeCreateSession
@@ -178,8 +178,8 @@ func (m *ChatModel) handleCtrlP() tea.Cmd {
 	switch {
 	case m.sess != nil && m.sess.Provider != "":
 		currentProvider = m.sess.Provider
-	case m.atmosConfig.Settings.AI.DefaultProvider != "":
-		currentProvider = m.atmosConfig.Settings.AI.DefaultProvider
+	case m.atmosConfig.AI.DefaultProvider != "":
+		currentProvider = m.atmosConfig.AI.DefaultProvider
 	}
 
 	configuredProviders := m.getConfiguredProviders()

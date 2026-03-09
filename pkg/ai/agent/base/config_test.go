@@ -10,9 +10,7 @@ import (
 
 func TestExtractConfig_DefaultConfiguration(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{},
-		},
+		AI: schema.AISettings{},
 	}
 
 	defaults := ProviderDefaults{
@@ -32,10 +30,8 @@ func TestExtractConfig_DefaultConfiguration(t *testing.T) {
 
 func TestExtractConfig_EnabledConfiguration(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-			},
+		AI: schema.AISettings{
+			Enabled: true,
 		},
 	}
 
@@ -53,16 +49,14 @@ func TestExtractConfig_EnabledConfiguration(t *testing.T) {
 
 func TestExtractConfig_ProviderSpecificOverrides(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"test": {
-						Model:     "custom-model",
-						ApiKey:    "custom-api-key-value",
-						MaxTokens: 8192,
-						BaseURL:   "https://custom.api.example.com",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"test": {
+					Model:     "custom-model",
+					ApiKey:    "custom-api-key-value",
+					MaxTokens: 8192,
+					BaseURL:   "https://custom.api.example.com",
 				},
 			},
 		},
@@ -86,14 +80,12 @@ func TestExtractConfig_ProviderSpecificOverrides(t *testing.T) {
 
 func TestExtractConfig_PartialOverrides(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"test": {
-						Model: "partial-model",
-						// ApiKey, MaxTokens, and BaseURL not specified.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"test": {
+					Model: "partial-model",
+					// ApiKey, MaxTokens, and BaseURL not specified.
 				},
 			},
 		},
@@ -117,11 +109,9 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 
 func TestExtractConfig_NilProviders(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled:   true,
-				Providers: nil,
-			},
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: nil,
 		},
 	}
 
@@ -139,13 +129,11 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 
 func TestExtractConfig_ProviderNotFound(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"other-provider": {
-						Model: "other-model",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"other-provider": {
+					Model: "other-model",
 				},
 			},
 		},
@@ -167,12 +155,10 @@ func TestExtractConfig_ProviderNotFound(t *testing.T) {
 
 func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"test": nil,
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"test": nil,
 			},
 		},
 	}
@@ -192,14 +178,12 @@ func TestExtractConfig_NilProviderConfig(t *testing.T) {
 
 func TestExtractConfig_ZeroMaxTokens(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"test": {
-						Model:     "custom-model",
-						MaxTokens: 0, // Explicitly set to 0.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"test": {
+					Model:     "custom-model",
+					MaxTokens: 0, // Explicitly set to 0.
 				},
 			},
 		},
@@ -259,9 +243,7 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 		{
 			name: "anthropic defaults",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			providerName: "anthropic",
 			defaults: ProviderDefaults{
@@ -279,9 +261,7 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 		{
 			name: "openai defaults",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			providerName: "openai",
 			defaults: ProviderDefaults{
@@ -299,9 +279,7 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 		{
 			name: "gemini defaults",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			providerName: "gemini",
 			defaults: ProviderDefaults{
@@ -319,13 +297,11 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 		{
 			name: "grok with base URL",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"grok": {
-								Model: "grok-4-latest",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"grok": {
+							Model: "grok-4-latest",
 						},
 					},
 				},

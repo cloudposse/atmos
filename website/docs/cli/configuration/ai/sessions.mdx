@@ -2,7 +2,7 @@
 title: AI Sessions
 sidebar_label: sessions
 sidebar_class_name: command
-description: Configure AI session persistence in the `settings.ai.sessions` section of your `atmos.yaml`.
+description: Configure AI session persistence in the `ai.sessions` section of your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
@@ -10,7 +10,7 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-The `settings.ai.sessions` section configures persistent conversation sessions, including storage backend,
+The `ai.sessions` section configures persistent conversation sessions, including storage backend,
 retention, auto-compact, and session limits.
 </Intro>
 
@@ -20,15 +20,11 @@ retention, auto-compact, and session limits.
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    sessions:
-      enabled: true
-      storage: "sqlite"
-      path: ".atmos/sessions"
-      max_sessions: 10
-      auto_save: true
-      retention_days: 30
+ai:
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 10
 ```
 </File>
 
@@ -38,20 +34,11 @@ settings:
   <dt>`sessions.enabled`</dt>
   <dd>Enable or disable persistent sessions (default: `false`). When enabled, conversation history is stored locally and can be resumed across CLI invocations.</dd>
 
-  <dt>`sessions.storage`</dt>
-  <dd>Storage backend type. Currently only `sqlite` is supported (default: `sqlite`). Uses Write-Ahead Logging (WAL) for optimal performance.</dd>
-
   <dt>`sessions.path`</dt>
   <dd>Directory path where the session database is stored, relative to project root (default: `.atmos/sessions`). The SQLite database is created automatically at `<path>/sessions.db`.</dd>
 
   <dt>`sessions.max_sessions`</dt>
   <dd>Maximum number of sessions to keep per project (default: `10`). When this limit is reached, the oldest sessions are automatically cleaned up.</dd>
-
-  <dt>`sessions.auto_save`</dt>
-  <dd>Automatically save messages after each exchange (default: `true`). If disabled, messages are only saved when you exit the chat.</dd>
-
-  <dt>`sessions.retention_days`</dt>
-  <dd>Number of days to retain sessions before automatic cleanup (default: `30`). Set to `0` to keep sessions indefinitely.</dd>
 </dl>
 
 ## Conversation Memory
@@ -173,22 +160,18 @@ Auto-compact summarizes older messages instead of dropping them, allowing sessio
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    max_history_messages: 50
+ai:
+  max_history_messages: 50
 
-    sessions:
-      enabled: true
-      auto_compact:
-        enabled: true                     # Enable auto-compact (default: false)
-        trigger_threshold: 0.75           # Compact at 75% capacity
-        compact_ratio: 0.4                # Summarize oldest 40%
-        preserve_recent: 10               # Always keep last 10 messages verbatim
-        use_ai_summary: true              # Use AI for smart summaries
-        summary_provider: "anthropic"     # Optional: provider for summaries
-        summary_model: "claude-haiku-4-5-20251001"  # Optional: cheaper model
-        summary_max_tokens: 2048          # Max tokens for summaries
-        show_summary_markers: false       # Show [SUMMARY] tags for debugging
+  sessions:
+    enabled: true
+    auto_compact:
+      enabled: true                     # Enable auto-compact (default: false)
+      trigger_threshold: 0.75           # Compact at 75% capacity
+      compact_ratio: 0.4                # Summarize oldest 40%
+      preserve_recent: 10               # Always keep last 10 messages verbatim
+      use_ai_summary: true              # Use AI for smart summaries
+      show_summary_markers: false       # Show [SUMMARY] tags for debugging
 ```
 </File>
 
@@ -209,15 +192,6 @@ settings:
 
   <dt>`auto_compact.use_ai_summary`</dt>
   <dd>Use AI to generate intelligent summaries that preserve infrastructure decisions and technical details (default: `true`). If `false`, uses simple concatenation.</dd>
-
-  <dt>`auto_compact.summary_provider`</dt>
-  <dd>AI provider for generating summaries. Defaults to `default_provider`. Use a cheaper provider to reduce costs.</dd>
-
-  <dt>`auto_compact.summary_model`</dt>
-  <dd>Model for summary generation. Defaults to the provider's default model. Use faster/cheaper models like `claude-haiku-4-5-20251001` to optimize costs.</dd>
-
-  <dt>`auto_compact.summary_max_tokens`</dt>
-  <dd>Maximum tokens for generated summaries (default: `2048`). Controls summary length and cost.</dd>
 
   <dt>`auto_compact.show_summary_markers`</dt>
   <dd>Display visual markers `[SUMMARY: Messages 1-20]` around summaries (default: `false`). Enable for debugging.</dd>
@@ -254,47 +228,17 @@ call (~8,000 input + 500 output tokens), but every subsequent message saves ~7,5
 
 ## Example Configurations
 
-**Cost-optimized** -- use a cheaper model for summaries:
-
-<File title="atmos.yaml">
-```yaml
-settings:
-  ai:
-    max_history_messages: 50
-    sessions:
-      enabled: true
-      auto_compact:
-        enabled: true
-        summary_model: "claude-haiku-4-5-20251001"
-```
-</File>
-
 **Privacy-first** -- keep everything local with Ollama:
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    default_provider: "ollama"
-    max_history_messages: 100
-    sessions:
+ai:
+  default_provider: "ollama"
+  max_history_messages: 100
+  sessions:
+    enabled: true
+    auto_compact:
       enabled: true
-      auto_compact:
-        enabled: true
-        summary_provider: "ollama"
-```
-</File>
-
-**Retention examples:**
-
-<File title="atmos.yaml">
-```yaml
-settings:
-  ai:
-    sessions:
-      retention_days: 7    # Active development (keep recent only)
-      retention_days: 90   # Long-term projects
-      retention_days: 0    # Never auto-delete (manual cleanup only)
 ```
 </File>
 

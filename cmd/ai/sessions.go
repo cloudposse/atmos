@@ -159,12 +159,12 @@ func initSessionManager() (*session.Manager, func(), error) {
 
 	// Check if AI is enabled.
 	if !isAIEnabled(&atmosConfig) {
-		return nil, nil, fmt.Errorf("%w: Set 'settings.ai.enabled: true' in atmos.yaml", errUtils.ErrAINotEnabled)
+		return nil, nil, fmt.Errorf("%w: Set 'ai.enabled: true' in atmos.yaml", errUtils.ErrAINotEnabled)
 	}
 
 	// Check if sessions are enabled.
-	if !atmosConfig.Settings.AI.Sessions.Enabled {
-		return nil, nil, fmt.Errorf("%w. Set 'settings.ai.sessions.enabled: true' in atmos.yaml", errUtils.ErrAISessionsNotEnabled)
+	if !atmosConfig.AI.Sessions.Enabled {
+		return nil, nil, fmt.Errorf("%w. Set 'ai.sessions.enabled: true' in atmos.yaml", errUtils.ErrAISessionsNotEnabled)
 	}
 
 	// Initialize session storage.
@@ -175,7 +175,7 @@ func initSessionManager() (*session.Manager, func(), error) {
 	}
 
 	// Create session manager.
-	manager := session.NewManager(storage, atmosConfig.BasePath, atmosConfig.Settings.AI.Sessions.MaxSessions, &atmosConfig)
+	manager := session.NewManager(storage, atmosConfig.BasePath, atmosConfig.AI.Sessions.MaxSessions, &atmosConfig)
 
 	// Return cleanup function.
 	cleanup := func() {

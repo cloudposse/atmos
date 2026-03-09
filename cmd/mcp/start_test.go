@@ -31,12 +31,10 @@ import (
 // createTestAtmosConfig creates a test AtmosConfiguration with the given AI tool settings.
 func createTestAtmosConfig(yoloMode bool, requireConfirmation *bool) *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            yoloMode,
-					RequireConfirmation: requireConfirmation,
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				YOLOMode:            yoloMode,
+				RequireConfirmation: requireConfirmation,
 			},
 		},
 	}
@@ -45,13 +43,11 @@ func createTestAtmosConfig(yoloMode bool, requireConfirmation *bool) *schema.Atm
 // createFullTestAtmosConfig creates a test AtmosConfiguration with full AI settings.
 func createFullTestAtmosConfig(aiEnabled, toolsEnabled, yoloMode bool) *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: aiEnabled,
-				Tools: schema.AIToolSettings{
-					Enabled:  toolsEnabled,
-					YOLOMode: yoloMode,
-				},
+		AI: schema.AISettings{
+			Enabled: aiEnabled,
+			Tools: schema.AIToolSettings{
+				Enabled:  toolsEnabled,
+				YOLOMode: yoloMode,
 			},
 		},
 	}
@@ -593,15 +589,13 @@ func TestGetPermissionMode_AllCombinations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							YOLOMode:            tt.yoloMode,
-							RequireConfirmation: tt.requireConfirmation,
-							AllowedTools:        tt.allowedTools,
-							RestrictedTools:     tt.restrictedTools,
-							BlockedTools:        tt.blockedTools,
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						YOLOMode:            tt.yoloMode,
+						RequireConfirmation: tt.requireConfirmation,
+						AllowedTools:        tt.allowedTools,
+						RestrictedTools:     tt.restrictedTools,
+						BlockedTools:        tt.blockedTools,
 					},
 				},
 			}
@@ -711,15 +705,13 @@ func TestInitializeAIComponents_YOLOMode(t *testing.T) {
 // TestInitializeAIComponents_WithToolLists tests that initializeAIComponents handles tool lists.
 func TestInitializeAIComponents_WithToolLists(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Tools: schema.AIToolSettings{
-					Enabled:         true,
-					AllowedTools:    []string{"describe_component", "list_stacks"},
-					RestrictedTools: []string{"write_component_file"},
-					BlockedTools:    []string{"dangerous_tool"},
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Tools: schema.AIToolSettings{
+				Enabled:         true,
+				AllowedTools:    []string{"describe_component", "list_stacks"},
+				RestrictedTools: []string{"write_component_file"},
+				BlockedTools:    []string{"dangerous_tool"},
 			},
 		},
 	}
@@ -1074,15 +1066,13 @@ func TestInitializeAIComponents_PermissionCheckerConfiguration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Tools: schema.AIToolSettings{
-							Enabled:      true,
-							YOLOMode:     tt.yoloMode,
-							AllowedTools: tt.allowedTools,
-							BlockedTools: tt.blockedTools,
-						},
+				AI: schema.AISettings{
+					Enabled: true,
+					Tools: schema.AIToolSettings{
+						Enabled:      true,
+						YOLOMode:     tt.yoloMode,
+						AllowedTools: tt.allowedTools,
+						BlockedTools: tt.blockedTools,
 					},
 				},
 			}
@@ -1296,12 +1286,10 @@ func TestGetTransportConfig_DefaultsFromStartCmd(t *testing.T) {
 func TestInitializeAIComponents_NilConfig(t *testing.T) {
 	// Test with minimal config - tools enabled but nothing else.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
+		AI: schema.AISettings{
+			Enabled: true,
+			Tools: schema.AIToolSettings{
 				Enabled: true,
-				Tools: schema.AIToolSettings{
-					Enabled: true,
-				},
 			},
 		},
 	}
@@ -1341,12 +1329,10 @@ func TestWaitForShutdown_MultipleSignals(t *testing.T) {
 // TestGetPermissionMode_WithRequireConfirmationNilAndFalseYOLO tests the fallthrough case.
 func TestGetPermissionMode_WithRequireConfirmationNilAndFalseYOLO(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            false,
-					RequireConfirmation: nil,
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				YOLOMode:            false,
+				RequireConfirmation: nil,
 			},
 		},
 	}
@@ -1601,14 +1587,12 @@ func TestWaitForShutdown_WrappedError(t *testing.T) {
 // TestInitializeAIComponents_WithRestrictedTools tests initializeAIComponents with restricted tools.
 func TestInitializeAIComponents_WithRestrictedTools(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Tools: schema.AIToolSettings{
-					Enabled:         true,
-					RestrictedTools: []string{"write_component_file", "write_stack_file"},
-					YOLOMode:        false,
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Tools: schema.AIToolSettings{
+				Enabled:         true,
+				RestrictedTools: []string{"write_component_file", "write_stack_file"},
+				YOLOMode:        false,
 			},
 		},
 	}
@@ -1829,12 +1813,10 @@ func TestGetPermissionMode_FullCoverage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							YOLOMode:            tt.yoloMode,
-							RequireConfirmation: tt.requireConfirmation,
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						YOLOMode:            tt.yoloMode,
+						RequireConfirmation: tt.requireConfirmation,
 					},
 				},
 			}
@@ -1986,15 +1968,13 @@ func TestInitializeAIComponents_PermissionConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Tools: schema.AIToolSettings{
-							Enabled:         true,
-							AllowedTools:    tt.allowedTools,
-							RestrictedTools: tt.restrictedTools,
-							BlockedTools:    tt.blockedTools,
-						},
+				AI: schema.AISettings{
+					Enabled: true,
+					Tools: schema.AIToolSettings{
+						Enabled:         true,
+						AllowedTools:    tt.allowedTools,
+						RestrictedTools: tt.restrictedTools,
+						BlockedTools:    tt.blockedTools,
 					},
 				},
 			}
@@ -2356,15 +2336,13 @@ func TestWaitForShutdown_ConcurrentSignalAndError(t *testing.T) {
 // TestInitializeAIComponents_EmptyToolLists tests initializeAIComponents with empty tool lists.
 func TestInitializeAIComponents_EmptyToolLists(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Tools: schema.AIToolSettings{
-					Enabled:         true,
-					AllowedTools:    []string{},
-					RestrictedTools: []string{},
-					BlockedTools:    []string{},
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Tools: schema.AIToolSettings{
+				Enabled:         true,
+				AllowedTools:    []string{},
+				RestrictedTools: []string{},
+				BlockedTools:    []string{},
 			},
 		},
 	}
@@ -2546,13 +2524,11 @@ func TestMCPServerEndpoints_HTTPFormat(t *testing.T) {
 func TestInitializeAIComponents_YOLOModeOverride(t *testing.T) {
 	// Even if YOLOMode is false in config, it should be set to true for MCP.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Tools: schema.AIToolSettings{
-					Enabled:  true,
-					YOLOMode: false, // Explicitly set to false.
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Tools: schema.AIToolSettings{
+				Enabled:  true,
+				YOLOMode: false, // Explicitly set to false.
 			},
 		},
 	}
@@ -2678,17 +2654,15 @@ func TestStartHTTPServer_ServerConfiguration(t *testing.T) {
 func TestInitializeAIComponents_WithAllSettings(t *testing.T) {
 	boolTrue := true
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Tools: schema.AIToolSettings{
-					Enabled:             true,
-					YOLOMode:            true,
-					RequireConfirmation: &boolTrue,
-					AllowedTools:        []string{"tool1", "tool2"},
-					RestrictedTools:     []string{"tool3"},
-					BlockedTools:        []string{"tool4"},
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Tools: schema.AIToolSettings{
+				Enabled:             true,
+				YOLOMode:            true,
+				RequireConfirmation: &boolTrue,
+				AllowedTools:        []string{"tool1", "tool2"},
+				RestrictedTools:     []string{"tool3"},
+				BlockedTools:        []string{"tool4"},
 			},
 		},
 	}
@@ -2769,17 +2743,15 @@ func TestSignalSetup_MultipleSignals(t *testing.T) {
 func TestGetPermissionMode_DeepNesting(t *testing.T) {
 	boolFalse := false
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Tools: schema.AIToolSettings{
-					Enabled:             true,
-					YOLOMode:            false,
-					RequireConfirmation: &boolFalse,
-					AllowedTools:        []string{"a", "b", "c"},
-					RestrictedTools:     []string{"d", "e"},
-					BlockedTools:        []string{"f"},
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Tools: schema.AIToolSettings{
+				Enabled:             true,
+				YOLOMode:            false,
+				RequireConfirmation: &boolFalse,
+				AllowedTools:        []string{"a", "b", "c"},
+				RestrictedTools:     []string{"d", "e"},
+				BlockedTools:        []string{"f"},
 			},
 		},
 	}
@@ -2953,12 +2925,11 @@ func createTestAtmosDir(t *testing.T, aiEnabled, toolsEnabled bool) string {
 	// Create atmos.yaml.
 	atmosConfig := fmt.Sprintf(`
 base_path: "%s"
-settings:
-  ai:
+ai:
+  enabled: %t
+  tools:
     enabled: %t
-    tools:
-      enabled: %t
-      yolo_mode: true
+    yolo_mode: true
 stacks:
   base_path: "%s"
   included_paths:

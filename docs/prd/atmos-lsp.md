@@ -459,32 +459,31 @@ type ManagerInterface interface {
 
 **Configuration Example:**
 ```yaml
-settings:
-  lsp:
-    enabled: true
-    servers:
-      yaml-ls:
-        command: "yaml-language-server"
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
-        root_patterns: ["atmos.yaml", ".git"]
-        initialization_options:
-          yaml:
-            schemas:
-              https://json.schemastore.org/github-workflow.json:
-                ".github/workflows/*.{yml,yaml}"
-            format:
-              enable: true
-            validation: true
+lsp:
+  enabled: true
+  servers:
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
+      root_patterns: ["atmos.yaml", ".git"]
+      initialization_options:
+        yaml:
+          schemas:
+            https://json.schemastore.org/github-workflow.json:
+              ".github/workflows/*.{yml,yaml}"
+          format:
+            enable: true
+          validation: true
 
-      terraform-ls:
-        command: "terraform-ls"
-        args: ["serve"]
-        filetypes: ["tf", "tfvars", "hcl"]
-        root_patterns: [".terraform", ".git"]
-        initialization_options:
-          experimentalFeatures:
-            validateOnSave: true
+    terraform-ls:
+      command: "terraform-ls"
+      args: ["serve"]
+      filetypes: ["tf", "tfvars", "hcl"]
+      root_patterns: [".terraform", ".git"]
+      initialization_options:
+        experimentalFeatures:
+          validateOnSave: true
 ```
 
 #### 2.3 Diagnostic Aggregation
@@ -857,41 +856,40 @@ Flags:
 **Configuration Location:** `atmos.yaml`
 
 ```yaml
-settings:
-  lsp:
-    # Enable/disable LSP client
-    enabled: true
+lsp:
+  # Enable/disable LSP client
+  enabled: true
 
-    # LSP server configurations
-    servers:
-      # YAML Language Server
-      yaml-ls:
-        command: "yaml-language-server"
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
-        root_patterns: ["atmos.yaml", ".git"]
-        initialization_options:
-          yaml:
-            schemas:
-              # JSON Schema mappings
-              https://json.schemastore.org/github-workflow.json:
-                ".github/workflows/*.{yml,yaml}"
-            format:
-              enable: true
-            validation: true
-            hover: true
-            completion: true
+  # LSP server configurations
+  servers:
+    # YAML Language Server
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
+      root_patterns: ["atmos.yaml", ".git"]
+      initialization_options:
+        yaml:
+          schemas:
+            # JSON Schema mappings
+            https://json.schemastore.org/github-workflow.json:
+              ".github/workflows/*.{yml,yaml}"
+          format:
+            enable: true
+          validation: true
+          hover: true
+          completion: true
 
-      # Terraform Language Server
-      terraform-ls:
-        command: "terraform-ls"
-        args: ["serve"]
-        filetypes: ["tf", "tfvars", "hcl"]
-        root_patterns: [".terraform", ".git"]
-        initialization_options:
-          experimentalFeatures:
-            validateOnSave: true
-            prefillRequiredFields: true
+    # Terraform Language Server
+    terraform-ls:
+      command: "terraform-ls"
+      args: ["serve"]
+      filetypes: ["tf", "tfvars", "hcl"]
+      root_patterns: [".terraform", ".git"]
+      initialization_options:
+        experimentalFeatures:
+          validateOnSave: true
+          prefillRequiredFields: true
 ```
 
 **Configuration Fields:**

@@ -153,7 +153,7 @@ func setupMCPServer() (*mcp.Server, error) {
 	}
 
 	// Check if AI is enabled.
-	if !atmosConfig.Settings.AI.Enabled {
+	if !atmosConfig.AI.Enabled {
 		return nil, errUtils.ErrAINotEnabled
 	}
 
@@ -238,7 +238,7 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 	// Import cmd package will give circular dependency, so we need to inline
 	// the initialization here. This is the same pattern used in cmd/ai_chat.go
 
-	if !atmosConfig.Settings.AI.Tools.Enabled {
+	if !atmosConfig.AI.Tools.Enabled {
 		return nil, nil, errUtils.ErrAIToolsDisabled
 	}
 
@@ -278,10 +278,10 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 	// For MCP server, use a non-interactive prompter since stdio is used for protocol.
 	permConfig := &permission.Config{
 		Mode:            getPermissionMode(atmosConfig),
-		AllowedTools:    atmosConfig.Settings.AI.Tools.AllowedTools,
-		RestrictedTools: atmosConfig.Settings.AI.Tools.RestrictedTools,
-		BlockedTools:    atmosConfig.Settings.AI.Tools.BlockedTools,
-		YOLOMode:        atmosConfig.Settings.AI.Tools.YOLOMode,
+		AllowedTools:    atmosConfig.AI.Tools.AllowedTools,
+		RestrictedTools: atmosConfig.AI.Tools.RestrictedTools,
+		BlockedTools:    atmosConfig.AI.Tools.BlockedTools,
+		YOLOMode:        atmosConfig.AI.Tools.YOLOMode,
 	}
 	// Use YOLO mode for MCP to avoid blocking on prompts (client handles permissions).
 	permConfig.YOLOMode = true
@@ -296,11 +296,11 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 
 // getPermissionMode determines the permission mode from config.
 func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
-	if atmosConfig.Settings.AI.Tools.YOLOMode {
+	if atmosConfig.AI.Tools.YOLOMode {
 		return permission.ModeYOLO
 	}
 
-	if atmosConfig.Settings.AI.Tools.RequireConfirmation != nil && *atmosConfig.Settings.AI.Tools.RequireConfirmation {
+	if atmosConfig.AI.Tools.RequireConfirmation != nil && *atmosConfig.AI.Tools.RequireConfirmation {
 		return permission.ModePrompt
 	}
 

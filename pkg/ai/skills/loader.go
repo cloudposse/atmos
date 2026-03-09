@@ -21,8 +21,8 @@ func LoadSkills(atmosConfig *schema.AtmosConfiguration, marketplaceLoader ...Ski
 	}
 
 	// 2. Load custom skills from configuration if available.
-	if atmosConfig != nil && len(atmosConfig.Settings.AI.Skills) > 0 {
-		for name, config := range atmosConfig.Settings.AI.Skills {
+	if atmosConfig != nil && len(atmosConfig.AI.Skills) > 0 {
+		for name, config := range atmosConfig.AI.Skills {
 			skill := FromConfig(name, config)
 			if err := registry.Register(skill); err != nil {
 				// Log warning but continue - don't fail if custom skill is invalid.
@@ -37,8 +37,8 @@ func LoadSkills(atmosConfig *schema.AtmosConfiguration, marketplaceLoader ...Ski
 // GetDefaultSkill returns the name of the default skill from configuration.
 // Returns empty string if not specified (caller should handle fallback).
 func GetDefaultSkill(atmosConfig *schema.AtmosConfiguration) string {
-	if atmosConfig != nil && atmosConfig.Settings.AI.DefaultSkill != "" {
-		return atmosConfig.Settings.AI.DefaultSkill
+	if atmosConfig != nil && atmosConfig.AI.DefaultSkill != "" {
+		return atmosConfig.AI.DefaultSkill
 	}
 	return ""
 }

@@ -23,14 +23,13 @@ for understanding configurations, analyzing stacks, troubleshooting issues, and 
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
 ```
 </File>
 

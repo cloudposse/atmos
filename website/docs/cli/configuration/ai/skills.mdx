@@ -2,7 +2,7 @@
 title: AI Skills
 sidebar_label: skills
 sidebar_class_name: command
-description: Configure custom AI skills in the `settings.ai.skills` section of your `atmos.yaml`.
+description: Configure custom AI skills in the `ai.skills` section of your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
@@ -10,7 +10,7 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-The `settings.ai.skills` section defines custom AI skills with specialized system prompts, tool permissions,
+The `ai.skills` section defines custom AI skills with specialized system prompts, tool permissions,
 and behavior for different tasks. Skills follow the [Agent Skills open standard](https://agentskills.io) governed by the Linux Foundation's Agentic AI Foundation (AAIF).
 </Intro>
 
@@ -22,25 +22,24 @@ Set the default skill and optionally define custom skills in `atmos.yaml`. Marke
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    default_skill: "atmos-stacks"    # Use a marketplace skill as default
-    skills:
-      # Custom skills are defined here (marketplace skills are loaded automatically)
-      security-reviewer:
-        display_name: "Security Reviewer"
-        description: "Reviews infrastructure for security best practices"
-        category: "security"
-        system_prompt: |
-          You are a security expert for Atmos infrastructure.
-          Focus on access controls, encryption, and network security.
-        allowed_tools:
-          - atmos_describe_component
-          - atmos_list_stacks
-          - atmos_validate_stacks
-          - read_stack_file
-          - read_component_file
-        restricted_tools: []
+ai:
+  default_skill: "atmos-stacks"    # Use a marketplace skill as default
+  skills:
+    # Custom skills are defined here (marketplace skills are loaded automatically)
+    security-reviewer:
+      display_name: "Security Reviewer"
+      description: "Reviews infrastructure for security best practices"
+      category: "security"
+      system_prompt: |
+        You are a security expert for Atmos infrastructure.
+        Focus on access controls, encryption, and network security.
+      allowed_tools:
+        - atmos_describe_component
+        - atmos_list_stacks
+        - atmos_validate_stacks
+        - read_stack_file
+        - read_component_file
+      restricted_tools: []
 ```
 </File>
 
@@ -72,7 +71,7 @@ Each skill in the `skills` map supports the following settings:
 
 <dl>
   <dt>`default_skill`</dt>
-  <dd>Default skill to activate when starting a new chat session (default: `general`). Set at the `settings.ai` level.</dd>
+  <dd>Default skill to activate when starting a new chat session (default: `general`). Set at the `ai` level.</dd>
 </dl>
 
 ## Installing Skills
@@ -104,10 +103,10 @@ If no skills are installed, `atmos ai chat` works with a minimal fallback prompt
 
 Press **Ctrl+A** in the chat interface to open the skill selector:
 
-```
+```text
 +-- Switch AI Skill -------------------------------------------+
 |                                                              |
-| Up/Down: Navigate | Enter: Select | Esc/q: Cancel           |
+| Up/Down: Navigate | Enter: Select | Esc/q: Cancel            |
 |                                                              |
 |   atmos-components                                           |
 |      Component management and best practices                 |
@@ -206,82 +205,9 @@ Common usage patterns and examples
 How the skill should format and present information
 ```
 
-## Available Tools for Skills
-
-### Atmos Commands
-
-<dl>
-  <dt>`atmos_describe_component`</dt>
-  <dd>Describe a component's configuration in a stack. Read-only.</dd>
-
-  <dt>`atmos_describe_affected`</dt>
-  <dd>Show components affected by git changes. Read-only.</dd>
-
-  <dt>`atmos_describe_stacks`</dt>
-  <dd>List and describe all stacks. Read-only.</dd>
-
-  <dt>`atmos_describe_config`</dt>
-  <dd>Show Atmos configuration. Read-only.</dd>
-
-  <dt>`atmos_list_stacks`</dt>
-  <dd>List all available stacks. Read-only.</dd>
-
-  <dt>`atmos_list_components`</dt>
-  <dd>List all available components. Read-only.</dd>
-
-  <dt>`atmos_validate_stacks`</dt>
-  <dd>Validate stack configurations against schemas and policies. Read-only.</dd>
-
-  <dt>`atmos_get_template_context`</dt>
-  <dd>Debug Go template variable context. Read-only.</dd>
-
-  <dt>`execute_atmos_command`</dt>
-  <dd>Execute any Atmos CLI command. Permissions vary by command.</dd>
-</dl>
-
-### File Operations
-
-<dl>
-  <dt>`read_file`</dt>
-  <dd>Read any file from the repository. Read-only.</dd>
-
-  <dt>`edit_file`</dt>
-  <dd>Edit an existing file with targeted changes. Requires confirmation by default.</dd>
-
-  <dt>`write_file`</dt>
-  <dd>Create a new file or overwrite an existing file. Requires confirmation by default.</dd>
-
-  <dt>`read_stack_file`</dt>
-  <dd>Read a file from the stacks directory. Read-only.</dd>
-
-  <dt>`read_component_file`</dt>
-  <dd>Read a file from the components directory. Read-only.</dd>
-
-  <dt>`list_component_files`</dt>
-  <dd>List files in a component directory. Read-only.</dd>
-
-  <dt>`search_files`</dt>
-  <dd>Search for patterns across files. Read-only.</dd>
-</dl>
-
-### Execution
-
-<dl>
-  <dt>`execute_bash`</dt>
-  <dd>Execute shell commands. Requires confirmation by default.</dd>
-
-  <dt>`execute_atmos_command`</dt>
-  <dd>Execute any Atmos CLI command. Permissions vary by command.</dd>
-</dl>
-
-### Validation
-
-<dl>
-  <dt>`validate_file_lsp`</dt>
-  <dd>Validate files using LSP diagnostics ([requires LSP](/lsp/lsp-client)). Read-only.</dd>
-</dl>
-
 ## Tool Safety Patterns
+
+See [Tools Configuration](/cli/configuration/ai/tools) for the full list of available tools.
 
 **Allowed Tools** control which tools a skill can access. An empty list means all tools are available:
 
@@ -331,10 +257,10 @@ skills:
       - read_file
       - edit_file
       - list_component_files
-      - execute_bash
+      - execute_bash_command
     restricted_tools:
-      - edit_file       # Require confirmation before editing
-      - execute_bash    # Require confirmation before executing
+      - edit_file             # Require confirmation before editing
+      - execute_bash_command  # Require confirmation before executing
 ```
 </File>
 
@@ -415,38 +341,40 @@ Atmos includes 21 marketplace skills covering all aspects of infrastructure orch
 
 ## Custom Skill Examples
 
+:::tip Use Existing Skills First
+Atmos ships with 21+ [marketplace skills](/ai/skill-marketplace) covering Terraform, stacks, components, validation, auth, templates, and more. Check the marketplace before creating custom skills — most common use cases are already covered. Reserve custom skills for organization-specific needs that marketplace skills don't address.
+:::
+
 Custom skills complement marketplace skills for organization-specific needs.
 
 ### Cost Optimizer
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    skills:
-      cost-optimizer:
-        display_name: "Cost Optimizer"
-        description: "Analyzes infrastructure for cost savings opportunities"
-        category: "analysis"
-        system_prompt: |
-          You are a cost optimization expert for Atmos infrastructure.
+ai:
+  skills:
+    cost-optimizer:
+      display_name: "Cost Optimizer"
+      description: "Analyzes infrastructure for cost savings opportunities"
+      category: "analysis"
+      system_prompt: |
+        You are a cost optimization expert for Atmos infrastructure.
 
-          FOCUS AREAS:
-          - Identify overprovisioned resources
-          - Suggest rightsizing opportunities
-          - Find unused or idle resources
-          - Recommend reserved instances
+        FOCUS AREAS:
+        - Identify overprovisioned resources
+        - Suggest rightsizing opportunities
+        - Find unused or idle resources
+        - Recommend reserved instances
 
-          Always use tools to gather data before making recommendations.
-        allowed_tools:
-          - atmos_describe_component
-          - atmos_describe_stacks
-          - atmos_list_stacks
-          - read_stack_file
-          - read_component_file
-          - read_file
-          - search_files
-        restricted_tools: []
+        Always use tools to gather data before making recommendations.
+      allowed_tools:
+        - atmos_describe_component
+        - atmos_list_stacks
+        - read_stack_file
+        - read_component_file
+        - read_file
+        - search_files
+      restricted_tools: []
 ```
 </File>
 
@@ -454,35 +382,34 @@ settings:
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    skills:
-      compliance-auditor:
-        display_name: "Compliance Auditor"
-        description: "Ensures infrastructure meets regulatory requirements"
-        category: "security"
-        system_prompt: |
-          You are a compliance expert for regulated industries (HIPAA, SOC2, PCI-DSS).
+ai:
+  skills:
+    compliance-auditor:
+      display_name: "Compliance Auditor"
+      description: "Ensures infrastructure meets regulatory requirements"
+      category: "security"
+      system_prompt: |
+        You are a compliance expert for regulated industries (HIPAA, SOC2, PCI-DSS).
 
-          COMPLIANCE CHECKS:
-          - Data encryption (at rest and in transit)
-          - Audit logging and monitoring
-          - Access controls and authentication
-          - Data residency requirements
+        COMPLIANCE CHECKS:
+        - Data encryption (at rest and in transit)
+        - Audit logging and monitoring
+        - Access controls and authentication
+        - Data residency requirements
 
-          REPORTING:
-          - Categorize by compliance framework
-          - Cite specific requirements (e.g., "HIPAA 164.312(a)(2)(iv)")
-          - Mark findings as Pass/Fail/Partial
-          - Provide remediation with compliance rationale
-        allowed_tools:
-          - atmos_describe_component
-          - atmos_list_stacks
-          - atmos_validate_stacks
-          - read_stack_file
-          - read_component_file
-          - read_file
-          - search_files
+        REPORTING:
+        - Categorize by compliance framework
+        - Cite specific requirements (e.g., "HIPAA 164.312(a)(2)(iv)")
+        - Mark findings as Pass/Fail/Partial
+        - Provide remediation with compliance rationale
+      allowed_tools:
+        - atmos_describe_component
+        - atmos_list_stacks
+        - atmos_validate_stacks
+        - read_stack_file
+        - read_component_file
+        - read_file
+        - search_files
 ```
 </File>
 
@@ -490,59 +417,34 @@ settings:
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    skills:
-      migration-assistant:
-        display_name: "Migration Assistant"
-        description: "Assists with infrastructure migrations and upgrades"
-        category: "refactor"
-        system_prompt: |
-          You are an infrastructure migration expert.
+ai:
+  skills:
+    migration-assistant:
+      display_name: "Migration Assistant"
+      description: "Assists with infrastructure migrations and upgrades"
+      category: "refactor"
+      system_prompt: |
+        You are an infrastructure migration expert.
 
-          MIGRATION FOCUS:
-          - Upgrade deprecated Terraform syntax
-          - Update provider version constraints
-          - Modernize component configurations
-          - Ensure backward compatibility
+        MIGRATION FOCUS:
+        - Upgrade deprecated Terraform syntax
+        - Update provider version constraints
+        - Modernize component configurations
+        - Ensure backward compatibility
 
-          Make incremental changes and verify at each step.
-        allowed_tools:
-          - read_file
-          - edit_file
-          - list_component_files
-          - read_component_file
-          - search_files
-          - execute_bash
-        restricted_tools:
-          - edit_file       # Require confirmation before editing
-          - execute_bash    # Require confirmation before executing
+        Make incremental changes and verify at each step.
+      allowed_tools:
+        - read_file
+        - edit_file
+        - list_component_files
+        - read_component_file
+        - search_files
+        - execute_bash_command
+      restricted_tools:
+        - edit_file             # Require confirmation before editing
+        - execute_bash_command  # Require confirmation before executing
 ```
 </File>
-
-## Comparison with Claude Code Subagents
-
-Atmos has two types of AI assistants serving different purposes:
-
-<dl>
-  <dt>Location</dt>
-  <dd>**Atmos AI Skills:** Inside Atmos AI. **[Claude Code Integration](/ai/claude-code-integration):** External (IDE).</dd>
-
-  <dt>Activation</dt>
-  <dd>**Atmos AI Skills:** Ctrl+A in `atmos ai chat`. **Claude Code:** `@atmos-expert` in IDE.</dd>
-
-  <dt>Purpose</dt>
-  <dd>**Atmos AI Skills:** Task specialization. **Claude Code:** Development integration.</dd>
-
-  <dt>Tool Access</dt>
-  <dd>**Atmos AI Skills:** Direct Atmos tools. **Claude Code:** Via MCP protocol.</dd>
-
-  <dt>Configuration</dt>
-  <dd>**Atmos AI Skills:** `atmos.yaml` skills section. **Claude Code:** `.claude/agents/*.md`.</dd>
-
-  <dt>Use Case</dt>
-  <dd>**Atmos AI Skills:** Operations workflows. **Claude Code:** Code development.</dd>
-</dl>
 
 ## Related Documentation
 

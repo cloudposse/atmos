@@ -222,27 +222,26 @@ Atmos LSP Client manages external language servers for unified validation:
 **Configuration:**
 ```yaml
 # atmos.yaml
-settings:
-  lsp:
-    enabled: true
-    servers:
-      yaml-ls:
-        command: "yaml-language-server"
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
-        initialization_options:
-          yaml:
-            validation: true
-            hover: true
-            completion: true
+lsp:
+  enabled: true
+  servers:
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
+      initialization_options:
+        yaml:
+          validation: true
+          hover: true
+          completion: true
 
-      terraform-ls:
-        command: "terraform-ls"
-        args: ["serve"]
-        filetypes: ["tf", "tfvars", "hcl"]
-        initialization_options:
-          experimentalFeatures:
-            validateOnSave: true
+    terraform-ls:
+      command: "terraform-ls"
+      args: ["serve"]
+      filetypes: ["tf", "tfvars", "hcl"]
+      initialization_options:
+        experimentalFeatures:
+          validateOnSave: true
 ```
 
 **Benefits:**
@@ -448,31 +447,30 @@ require('lspconfig').atmos.setup{
 Add to `atmos.yaml` for YAML and Terraform validation:
 
 ```yaml
-settings:
-  lsp:
-    enabled: true
-    servers:
-      # YAML validation
-      yaml-ls:
-        command: "yaml-language-server"
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
-        root_patterns: ["atmos.yaml", ".git"]
-        initialization_options:
-          yaml:
-            validation: true
-            hover: true
-            completion: true
+lsp:
+  enabled: true
+  servers:
+    # YAML validation
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
+      root_patterns: ["atmos.yaml", ".git"]
+      initialization_options:
+        yaml:
+          validation: true
+          hover: true
+          completion: true
 
-      # Terraform validation
-      terraform-ls:
-        command: "terraform-ls"
-        args: ["serve"]
-        filetypes: ["tf", "tfvars", "hcl"]
-        root_patterns: [".terraform", ".git"]
-        initialization_options:
-          experimentalFeatures:
-            validateOnSave: true
+    # Terraform validation
+    terraform-ls:
+      command: "terraform-ls"
+      args: ["serve"]
+      filetypes: ["tf", "tfvars", "hcl"]
+      root_patterns: [".terraform", ".git"]
+      initialization_options:
+        experimentalFeatures:
+          validateOnSave: true
 ```
 
 **Install External Servers:**
@@ -747,12 +745,11 @@ terraform-ls version
 **Check configuration:**
 ```yaml
 # atmos.yaml - verify paths are correct
-settings:
-  lsp:
-    servers:
-      yaml-ls:
-        command: "yaml-language-server"  # Must be in PATH
-        args: ["--stdio"]
+lsp:
+  servers:
+    yaml-ls:
+      command: "yaml-language-server"  # Must be in PATH
+      args: ["--stdio"]
 ```
 
 **Enable debug logging:**

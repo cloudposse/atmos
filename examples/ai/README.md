@@ -7,7 +7,6 @@ infrastructure project.
 - **Multi-region infrastructure** — Hub-spoke Transit Gateway topology across us-east-1 and us-west-2
 - **Session management** — Persistent conversation history with auto-compact
 - **Tool execution** — AI-powered infrastructure inspection with component dependencies
-- **Custom skills** — Specialized AI skills for cost optimization and security review
 - **Project instructions** — Persistent context via ATMOS.md
 
 ## Prerequisites
@@ -185,19 +184,18 @@ The example architecture:
 Four AI providers are configured in `atmos.yaml`:
 
 ```yaml
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-      openai:
-        model: "gpt-5.4"
-      gemini:
-        model: "gemini-2.5-flash"
-      ollama:
-        model: "llama4"
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+    openai:
+      model: "gpt-5.4"
+    gemini:
+      model: "gemini-2.5-flash"
+    ollama:
+      model: "llama4"
 ```
 
 Switch between providers during a chat session by pressing `Ctrl+P`.
@@ -218,17 +216,6 @@ AI: [Uses atmos_describe_component tool]
     The VPC in ue1-network uses CIDR 10.1.0.0/16 with 3 availability zones
     (us-east-1a, us-east-1b, us-east-1c) and NAT Gateways enabled...
 ```
-
-### Custom Skills
-
-This example includes custom "cost-optimizer" and "security-reviewer" skills:
-
-```bash
-# Press Ctrl+A during chat to switch skills
-# Or set default skill in atmos.yaml
-```
-
-Skills provide specialized behavior and restricted tool access for specific tasks.
 
 ### Project Instructions (ATMOS.md)
 

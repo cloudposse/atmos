@@ -18,19 +18,15 @@ func TestIsAIEnabled(t *testing.T) {
 		{
 			name: "AI not configured",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expected: false,
 		},
 		{
 			name: "AI explicitly disabled",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: false,
-					},
+				AI: schema.AISettings{
+					Enabled: false,
 				},
 			},
 			expected: false,
@@ -38,10 +34,8 @@ func TestIsAIEnabled(t *testing.T) {
 		{
 			name: "AI enabled",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-					},
+				AI: schema.AISettings{
+					Enabled: true,
 				},
 			},
 			expected: true,
@@ -49,14 +43,12 @@ func TestIsAIEnabled(t *testing.T) {
 		{
 			name: "AI enabled with provider configured",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model:     "claude-sonnet-4-5-20250929",
-								MaxTokens: 4096,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model:     "claude-sonnet-4-5-20250929",
+							MaxTokens: 4096,
 						},
 					},
 				},
@@ -66,10 +58,8 @@ func TestIsAIEnabled(t *testing.T) {
 		{
 			name: "AI with invalid enabled value (defaults to false)",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: false,
-					},
+				AI: schema.AISettings{
+					Enabled: false,
 				},
 			},
 			expected: false,

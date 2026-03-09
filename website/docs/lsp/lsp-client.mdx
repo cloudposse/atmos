@@ -95,21 +95,20 @@ Add LSP configuration to your `atmos.yaml`:
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  lsp:
-    enabled: true
-    servers:
-      yaml-ls:
-        command: "yaml-language-server"
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
-        root_patterns: ["atmos.yaml", ".git"]
+lsp:
+  enabled: true
+  servers:
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
+      root_patterns: ["atmos.yaml", ".git"]
 
-      terraform-ls:
-        command: "terraform-ls"
-        args: ["serve"]
-        filetypes: ["tf", "tfvars", "hcl"]
-        root_patterns: [".terraform", ".git"]
+    terraform-ls:
+      command: "terraform-ls"
+      args: ["serve"]
+      filetypes: ["tf", "tfvars", "hcl"]
+      root_patterns: [".terraform", ".git"]
 ```
 </File>
 
@@ -196,23 +195,21 @@ The LSP client is automatically available to Atmos AI when enabled. AI can use i
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  # LSP configuration (independent)
-  lsp:
-    enabled: true
-    servers:
-      yaml-ls:
-        command: "yaml-language-server"
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
+# LSP configuration (independent)
+lsp:
+  enabled: true
+  servers:
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
 
-  # AI configuration
-  ai:
-    enabled: true
-    provider: "anthropic"
-    use_lsp: true  # Allow AI to use LSP (default: false)
-    tools:
-      enabled: true  # Enable tool execution
+# AI configuration
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  tools:
+    enabled: true  # Enable tool execution
 ```
 </File>
 
@@ -289,15 +286,13 @@ ATMOS_LOGS_LEVEL=Debug atmos <command>
 - `validate_file_lsp` tool not available
 
 **Solutions:**
-1. Verify `ai.use_lsp: true` in `atmos.yaml`
-2. Enable AI tools: `ai.tools.enabled: true`
-3. Ensure `validate_file_lsp` is not in `blocked_tools` list:
+1. Enable AI tools: `ai.tools.enabled: true`
+2. Ensure `validate_file_lsp` is not in `blocked_tools` list:
 ```yaml
-settings:
-  ai:
-    tools:
-      enabled: true
-      blocked_tools: []  # Don't block validate_file_lsp
+ai:
+  tools:
+    enabled: true
+    blocked_tools: []  # Don't block validate_file_lsp
 ```
 
 ### LSP Server Crashes
@@ -360,24 +355,23 @@ You can run multiple LSP servers simultaneously:
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  lsp:
-    enabled: true
-    servers:
-      yaml-ls:
-        command: "yaml-language-server"
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
+lsp:
+  enabled: true
+  servers:
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
 
-      terraform-ls:
-        command: "terraform-ls"
-        args: ["serve"]
-        filetypes: ["tf", "tfvars"]
+    terraform-ls:
+      command: "terraform-ls"
+      args: ["serve"]
+      filetypes: ["tf", "tfvars"]
 
-      json-ls:
-        command: "vscode-json-languageserver"
-        args: ["--stdio"]
-        filetypes: ["json"]
+    json-ls:
+      command: "vscode-json-languageserver"
+      args: ["--stdio"]
+      filetypes: ["json"]
 ```
 </File>
 

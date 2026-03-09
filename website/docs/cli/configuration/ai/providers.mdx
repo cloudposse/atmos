@@ -2,7 +2,7 @@
 title: AI Providers
 sidebar_label: providers
 sidebar_class_name: command
-description: Configure AI providers in the `settings.ai.providers` section of your `atmos.yaml`.
+description: Configure AI providers in the `ai.providers` section of your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
@@ -12,7 +12,7 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
-The `settings.ai.providers` section configures connections to AI model providers like Anthropic, OpenAI, Google Gemini,
+The `ai.providers` section configures connections to AI model providers like Anthropic, OpenAI, Google Gemini,
 Grok, Ollama, AWS Bedrock, and Azure OpenAI.
 </Intro>
 
@@ -22,18 +22,17 @@ Grok, Ollama, AWS Bedrock, and Azure OpenAI.
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    default_provider: "anthropic"
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
-        max_tokens: 4096
-      openai:
-        model: "gpt-4o"
-        api_key: !env "OPENAI_API_KEY"
-        max_tokens: 4096
+ai:
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
+    openai:
+      model: "gpt-4o"
+      api_key: !env "OPENAI_API_KEY"
+      max_tokens: 4096
 ```
 </File>
 
@@ -53,9 +52,6 @@ Each provider in the `providers` map supports the following settings:
 
   <dt>`base_url`</dt>
   <dd>Custom API endpoint. Required for Grok (`https://api.x.ai/v1`) and Azure OpenAI (`https://<resource>.openai.azure.com`). For Bedrock, set to the AWS region (e.g., `us-east-1`). Ollama defaults to `http://localhost:11434/v1`.</dd>
-
-  <dt>`timeout_seconds`</dt>
-  <dd>Per-provider request timeout override in seconds. Overrides the global `settings.ai.timeout_seconds` value.</dd>
 
   <dt>`api_version`</dt>
   <dd>API version string. **Required** for Azure OpenAI (e.g., `2025-04-01-preview`).</dd>
@@ -174,29 +170,28 @@ For sensitive infrastructure data, consider Ollama (never leaves your machine) o
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
-        max_tokens: 4096
+ai:
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
 
-      openai:
-        model: "gpt-4o"
-        api_key: !env "OPENAI_API_KEY"
-        max_tokens: 4096
+    openai:
+      model: "gpt-4o"
+      api_key: !env "OPENAI_API_KEY"
+      max_tokens: 4096
 
-      gemini:
-        model: "gemini-2.5-flash"
-        api_key: !env "GEMINI_API_KEY"
-        max_tokens: 8192
+    gemini:
+      model: "gemini-2.5-flash"
+      api_key: !env "GEMINI_API_KEY"
+      max_tokens: 8192
 
-      grok:
-        model: "grok-4-latest"
-        api_key: !env "XAI_API_KEY"
-        base_url: "https://api.x.ai/v1"
-        max_tokens: 4096
+    grok:
+      model: "grok-4-latest"
+      api_key: !env "XAI_API_KEY"
+      base_url: "https://api.x.ai/v1"
+      max_tokens: 4096
 ```
 </File>
 
@@ -205,18 +200,17 @@ settings:
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    providers:
-      ollama:
-        model: "llama4"
-        # base_url defaults to http://localhost:11434/v1
-        # No api_key needed for local instances
+ai:
+  providers:
+    ollama:
+      model: "llama4"
+      # base_url defaults to http://localhost:11434/v1
+      # No api_key needed for local instances
 
-      # Remote Ollama server
-      ollama-remote:
-        model: "llama4"
-        base_url: "http://<server-ip>:11434/v1"
+    # Remote Ollama server
+    ollama-remote:
+      model: "llama4"
+      base_url: "http://<server-ip>:11434/v1"
 ```
 </File>
 
@@ -284,7 +278,6 @@ providers:
   ollama:
     model: "llama4"
     max_tokens: 4096       # Smaller = faster
-    timeout_seconds: 120   # Longer timeout for large models
 ```
 </File>
 
@@ -312,20 +305,19 @@ Binding to `0.0.0.0` exposes the Ollama API to all network interfaces. Ensure th
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    providers:
-      bedrock:
-        model: "anthropic.claude-sonnet-4-6"
-        max_tokens: 4096
-        base_url: "us-east-1"  # AWS region
+ai:
+  providers:
+    bedrock:
+      model: "anthropic.claude-sonnet-4-6"
+      max_tokens: 4096
+      base_url: "us-east-1"  # AWS region
 
-      azureopenai:
-        model: "gpt-4o"  # Azure deployment name
-        api_key: !env "AZURE_OPENAI_API_KEY"
-        base_url: "https://<your-resource>.openai.azure.com"
-        api_version: "2025-04-01-preview"
-        max_tokens: 4096
+    azureopenai:
+      model: "gpt-4o"  # Azure deployment name
+      api_key: !env "AZURE_OPENAI_API_KEY"
+      base_url: "https://<your-resource>.openai.azure.com"
+      api_version: "2025-04-01-preview"
+      max_tokens: 4096
 ```
 </File>
 
@@ -390,16 +382,15 @@ Most providers implement caching automatically. Only Anthropic requires explicit
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-6"
-        api_key: !env "ANTHROPIC_API_KEY"
-        cache:
-          enabled: true              # Enable prompt caching (default)
-          cache_system_prompt: true  # Cache skill system prompt
-          cache_project_instructions: true # Cache ATMOS.md content
+ai:
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      cache:
+        enabled: true              # Enable prompt caching (default)
+        cache_system_prompt: true  # Cache skill system prompt
+        cache_project_instructions: true # Cache ATMOS.md content
 ```
 </File>
 

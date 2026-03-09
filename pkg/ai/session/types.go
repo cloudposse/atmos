@@ -72,11 +72,7 @@ type CompactConfig struct {
 	CompactRatio       float64 `json:"compact_ratio" yaml:"compact_ratio"`               // 0.0-1.0, default 0.4
 	PreserveRecent     int     `json:"preserve_recent" yaml:"preserve_recent"`           // Default 10
 	UseAISummary       bool    `json:"use_ai_summary" yaml:"use_ai_summary"`             // Default true
-	SummaryProvider    string  `json:"summary_provider" yaml:"summary_provider"`         // Optional
-	SummaryModel       string  `json:"summary_model" yaml:"summary_model"`               // Optional
-	SummaryMaxTokens   int     `json:"summary_max_tokens" yaml:"summary_max_tokens"`     // Default 2048
 	ShowSummaryMarkers bool    `json:"show_summary_markers" yaml:"show_summary_markers"` // Default false
-	CompactOnResume    bool    `json:"compact_on_resume" yaml:"compact_on_resume"`       // Default false
 }
 
 // CompactPlan describes what will be compacted.

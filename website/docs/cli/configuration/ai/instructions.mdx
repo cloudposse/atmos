@@ -2,7 +2,7 @@
 title: Project Instructions
 sidebar_label: instructions
 sidebar_class_name: command
-description: Configure project-specific AI instructions in the `settings.ai.instructions` section of your `atmos.yaml`.
+description: Configure project-specific AI instructions in the `ai.instructions` section of your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
@@ -10,7 +10,7 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-The `settings.ai.instructions` section configures the `ATMOS.md` file that provides persistent, project-specific
+The `ai.instructions` section configures the `ATMOS.md` file that provides persistent, project-specific
 instructions to the AI assistant.
 </Intro>
 
@@ -18,39 +18,24 @@ instructions to the AI assistant.
 
 ## What are Project Instructions?
 
-Project Instructions are stored in a markdown file (`ATMOS.md`) in your project root that contains:
+Project Instructions are stored in a markdown file (`ATMOS.md`) in your project root. You create and maintain this file yourself. When enabled, its contents are automatically included with every AI request, providing consistent context across all conversations.
+
+Common things to include:
 - **Project Context**: Organization name, Atmos version, regions, environments
 - **Common Commands**: Frequently used Atmos commands for your project
 - **Stack Patterns**: Naming conventions and YAML structure patterns
 - **Infrastructure Patterns**: Multi-region setups, component dependencies
 - **Component Catalog**: Your component organization and structure
 - **Team Conventions**: Development practices and documentation standards
-- **Recent Learnings**: AI-discovered insights about your project
-
-These instructions are automatically included with every AI request when enabled, providing consistent context across all conversations.
 
 ## Configuration
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
-    instructions:
-      enabled: true                        # Enable project instructions (default: false)
-      file: "ATMOS.md"                     # Instructions file location (default: ATMOS.md)
-      auto_update: false                   # Let AI update instructions (default: false)
-      create_if_missing: true              # Auto-create template (default: true)
-
-      # Sections to include in AI context
-      sections:
-        - project_context
-        - common_commands
-        - stack_patterns
-        - frequent_issues
-        - infrastructure_patterns
-        - component_catalog_structure
-        - team_conventions
-        - recent_learnings
+ai:
+  instructions:
+    enabled: true                        # Enable project instructions (default: false)
+    file: "ATMOS.md"                     # Instructions file location (default: ATMOS.md)
 ```
 </File>
 
@@ -61,73 +46,16 @@ settings:
   <dd>Enable project instructions (default: `false`). When enabled, the contents of the instructions file are automatically included with every AI request.</dd>
 
   <dt>`instructions.file`</dt>
-  <dd>Path to the instructions file, relative to project root or absolute (default: `ATMOS.md`). The file uses Markdown format with specific section headers.</dd>
-
-  <dt>`instructions.auto_update`</dt>
-  <dd>Allow AI to automatically update instructions with learned insights (default: `false`). When enabled, the AI can append discoveries to the "Recent Learnings" section. Other sections remain read-only.</dd>
-
-  <dt>`instructions.create_if_missing`</dt>
-  <dd>Automatically create a template instructions file if it doesn't exist on first use (default: `true`). The template includes all standard sections with placeholder content.</dd>
-
-  <dt>`instructions.sections`</dt>
-  <dd>List of instruction sections to include in AI context (default: all sections). Order matters -- sections appear in the specified order. Limiting sections reduces token usage.</dd>
-</dl>
-
-## Available Sections
-
-<dl>
-  <dt>`project_context`</dt>
-  <dd>Basic project info: organization name, Atmos version, regions, environments, stack naming patterns.</dd>
-
-  <dt>`common_commands`</dt>
-  <dd>Frequently used Atmos commands for your project (describe, validate, plan, apply).</dd>
-
-  <dt>`stack_patterns`</dt>
-  <dd>Stack naming conventions, import patterns, and YAML structure patterns.</dd>
-
-  <dt>`frequent_issues`</dt>
-  <dd>Known issues and their solutions (e.g., stack not found, YAML validation errors).</dd>
-
-  <dt>`infrastructure_patterns`</dt>
-  <dd>Multi-region setups, component dependencies, DR configurations.</dd>
-
-  <dt>`component_catalog_structure`</dt>
-  <dd>Your component directory organization and structure.</dd>
-
-  <dt>`team_conventions`</dt>
-  <dd>Development practices, PR requirements, documentation standards.</dd>
-
-  <dt>`recent_learnings`</dt>
-  <dd>AI-discovered insights about your project (populated when `auto_update: true`).</dd>
+  <dd>Path to the instructions file, relative to project root or absolute (default: `ATMOS.md`). The file uses Markdown format. If the file does not exist, instructions are silently skipped.</dd>
 </dl>
 
 ## Creating Your Instructions File
 
-When you enable project instructions with `create_if_missing: true`, Atmos automatically creates a template `ATMOS.md` file on first use:
-
-<Terminal title="atmos ai chat">
-```bash
-$ atmos ai chat
-
-# If ATMOS.md doesn't exist, it will be created automatically
-Created default ATMOS.md template
-
-# The AI will now include project instructions in all requests
-```
-</Terminal>
-
-You can also create the file manually with any text editor.
-
-## ATMOS.md File Structure
-
-The `ATMOS.md` file uses markdown with specific section headers:
+Create an `ATMOS.md` file in your project root with any content relevant to your project:
 
 <File title="ATMOS.md">
 ````markdown
 # Atmos Project Instructions
-
-> This file provides project-specific context, patterns, and conventions to the
-> Atmos AI Assistant. Edit freely - AI will preserve manual changes.
 
 ## Project Context
 
@@ -144,7 +72,6 @@ Example: acme-core-prod-use1-network
 
 ## Common Commands
 
-### Describe and Validate
 ```bash
 # Describe a component
 atmos describe component <component> -s <stack>
@@ -154,20 +81,13 @@ atmos list stacks
 
 # Validate stacks
 atmos validate stacks
-```
 
-### Terraform Operations
-```bash
 # Plan a component
 atmos terraform plan <component> -s <stack>
-
-# Apply a component
-atmos terraform apply <component> -s <stack>
 ```
 
 ## Stack Patterns
 
-### Stack Structure
 ```yaml
 # Common import pattern
 import:
@@ -180,37 +100,10 @@ import:
 - staging: 10.1.0.0/16
 - prod: 10.2.0.0/16
 
-## Frequent Issues & Solutions
+## Component Dependencies
 
-### Stack not found error
-**Problem:** `Error: stack 'my-stack' not found`
-**Solution:** Check stack naming and verify config exists in stacks/ directory
-
-### YAML validation fails
-**Problem:** `invalid YAML: mapping values are not allowed`
-**Solution:** Check indentation - YAML requires consistent 2-space indents
-
-## Infrastructure Patterns
-
-### Multi-Region Setup
-- Primary region for production workloads
-- DR region with replication
-- Cross-region networking configured
-
-### Component Dependencies
 ```
 vpc → subnets → security-groups → rds → eks
-```
-
-## Component Catalog Structure
-
-```
-components/
-  terraform/
-    vpc/           # VPC and networking
-    rds/           # RDS databases
-    eks/           # EKS clusters
-    s3/            # S3 buckets
 ```
 
 ## Team Conventions
@@ -219,42 +112,8 @@ components/
 - Use `atmos validate` before committing
 - Tag all resources appropriately
 - Document component changes
-
-## Recent Learnings
-
-*AI will add notes here as it learns about the project*
 ````
 </File>
-
-## Customizing Instruction Sections
-
-You can control which sections are included in AI context:
-
-<File title="atmos.yaml">
-```yaml
-settings:
-  ai:
-    instructions:
-      enabled: true
-      # Only include essential sections for faster performance
-      sections:
-        - project_context
-        - common_commands
-        - frequent_issues
-```
-</File>
-
-This reduces token usage while keeping the most relevant context.
-
-## Manual vs Auto-Update
-
-<dl>
-  <dt>**Manual** (recommended)</dt>
-  <dd>Set `auto_update: false`. You edit `ATMOS.md` directly. The AI reads it but never modifies it. Full control over project instructions.</dd>
-
-  <dt>**Auto-update** (experimental)</dt>
-  <dd>Set `auto_update: true`. The AI can append insights to the "Recent Learnings" section as it discovers patterns. Other sections remain read-only.</dd>
-</dl>
 
 ## Instructions vs Context Sharing
 
@@ -263,7 +122,7 @@ This reduces token usage while keeping the most relevant context.
   <dd>**Project Instructions:** High-level patterns, conventions, common commands. **Context Sharing:** Actual stack YAML files and configurations.</dd>
 
   <dt>Update frequency</dt>
-  <dd>**Project Instructions:** Rarely (manual or learned insights). **Context Sharing:** Every request (real-time).</dd>
+  <dd>**Project Instructions:** Updated manually by you. **Context Sharing:** Every request (real-time).</dd>
 
   <dt>Size</dt>
   <dd>**Project Instructions:** Small (few KB). **Context Sharing:** Large (multiple files).</dd>
@@ -291,14 +150,8 @@ Project instructions add tokens to every AI request:
   <dd>~500-1000 tokens per request.</dd>
 
   <dt>Large file (20+ KB)</dt>
-  <dd>~2000+ tokens per request. Consider limiting sections to reduce usage.</dd>
+  <dd>~2000+ tokens per request. Keep your instructions concise.</dd>
 </dl>
-
-**Optimization tips:**
-1. Only enable sections you actively use
-2. Keep descriptions concise
-3. Remove outdated information
-4. Use `auto_update: false` to prevent growth
 
 ## Privacy
 
@@ -313,21 +166,13 @@ are enabled. Only include information you are comfortable sharing with your conf
 ls -la ATMOS.md
 
 # Verify configuration
-grep -A5 "instructions:" atmos.yaml
-
-# Test with explicit enable
-ATMOS_AI_INSTRUCTIONS_ENABLED=true atmos ai chat
+grep -A3 "instructions:" atmos.yaml
 ```
 
 **AI not using instructions:**
 - Verify `instructions.enabled: true` in atmos.yaml
 - Check that `ATMOS.md` exists in project root
-- Ensure sections are properly formatted with `##` headers
-
-**Instructions file not created:**
-- Set `create_if_missing: true`
-- Check file permissions in project directory
-- Verify Atmos has write access to project root
+- Ensure the file is readable
 
 ## Related Documentation
 

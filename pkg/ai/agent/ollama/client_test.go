@@ -18,9 +18,7 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
@@ -33,16 +31,14 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"ollama": {
-								Model:     "llama3.1:8b",
-								ApiKey:    "custom-api-key-value",
-								MaxTokens: 8192,
-								BaseURL:   "http://custom-ollama:11434/v1",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"ollama": {
+							Model:     "llama3.1:8b",
+							ApiKey:    "custom-api-key-value",
+							MaxTokens: 8192,
+							BaseURL:   "http://custom-ollama:11434/v1",
 						},
 					},
 				},
@@ -58,13 +54,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"ollama": {
-								Model: "codellama:13b",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"ollama": {
+							Model: "codellama:13b",
 						},
 					},
 				},
@@ -80,13 +74,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Custom base URL only",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"ollama": {
-								BaseURL: "https://ollama.example.com/v1",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"ollama": {
+							BaseURL: "https://ollama.example.com/v1",
 						},
 					},
 				},
@@ -102,16 +94,14 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Remote Ollama with API key",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"ollama": {
-								Model:     "llama3.3:70b",
-								ApiKey:    "ollama-remote-key-value",
-								BaseURL:   "https://api.ollama-cloud.com/v1",
-								MaxTokens: 16384,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"ollama": {
+							Model:     "llama3.3:70b",
+							ApiKey:    "ollama-remote-key-value",
+							BaseURL:   "https://api.ollama-cloud.com/v1",
+							MaxTokens: 16384,
 						},
 					},
 				},
@@ -141,10 +131,8 @@ func TestExtractConfig(t *testing.T) {
 
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -214,11 +202,9 @@ func TestClientGetters_GetBaseURL(t *testing.T) {
 
 func TestExtractConfig_NilProviders(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled:   true,
-				Providers: nil,
-			},
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: nil,
 		},
 	}
 
@@ -239,13 +225,11 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 
 func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model: "gpt-4o",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model: "gpt-4o",
 				},
 			},
 		},
@@ -268,12 +252,10 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 
 func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"ollama": nil, // Explicitly nil provider config.
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"ollama": nil, // Explicitly nil provider config.
 			},
 		},
 	}
@@ -400,13 +382,11 @@ func TestOllamaBaseURLVariants(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := base.ExtractConfig(&schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"ollama": {
-								BaseURL: tt.baseURL,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"ollama": {
+							BaseURL: tt.baseURL,
 						},
 					},
 				},

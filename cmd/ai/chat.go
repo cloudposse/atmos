@@ -31,8 +31,8 @@ var chatParser *flags.StandardParser
 
 // getProviderFromConfig returns the current provider from configuration.
 func getProviderFromConfig(atmosConfig *schema.AtmosConfiguration) string {
-	if atmosConfig.Settings.AI.DefaultProvider != "" {
-		return atmosConfig.Settings.AI.DefaultProvider
+	if atmosConfig.AI.DefaultProvider != "" {
+		return atmosConfig.AI.DefaultProvider
 	}
 	return "anthropic"
 }
@@ -67,7 +67,7 @@ var chatCmd = &cobra.Command{
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: Set 'settings.ai.enabled: true' in your atmos.yaml configuration",
+			return fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration",
 				errUtils.ErrAINotEnabled)
 		}
 
@@ -84,7 +84,7 @@ var chatCmd = &cobra.Command{
 		var sess *session.Session
 		var storage session.Storage
 
-		if atmosConfig.Settings.AI.Sessions.Enabled {
+		if atmosConfig.AI.Sessions.Enabled {
 			// Initialize session storage.
 			storagePath := getSessionStoragePath(&atmosConfig)
 			storage, err = session.NewSQLiteStorage(storagePath)
@@ -94,7 +94,7 @@ var chatCmd = &cobra.Command{
 			defer storage.Close()
 
 			// Create session manager.
-			manager = session.NewManager(storage, atmosConfig.BasePath, atmosConfig.Settings.AI.Sessions.MaxSessions, &atmosConfig)
+			manager = session.NewManager(storage, atmosConfig.BasePath, atmosConfig.AI.Sessions.MaxSessions, &atmosConfig)
 
 			// Get session flag from Viper (supports CLI > ENV > config > defaults).
 			sessionName := v.GetString("session")
@@ -127,7 +127,7 @@ var chatCmd = &cobra.Command{
 
 		// Initialize tool registry and executor if tools are enabled.
 		var executor *tools.Executor
-		if atmosConfig.Settings.AI.Tools.Enabled {
+		if atmosConfig.AI.Tools.Enabled {
 			_, executor, err = initializeAIToolsAndExecutor(&atmosConfig)
 			if err != nil {
 				log.Warnf("Failed to initialize AI tools: %v", err)
@@ -137,22 +137,19 @@ var chatCmd = &cobra.Command{
 		// Initialize project instructions if enabled.
 		ctx := context.Background()
 		var memoryMgr *instructions.Manager
-		if atmosConfig.Settings.AI.Instructions.Enabled {
+		if atmosConfig.AI.Instructions.Enabled {
 			log.Debug("Initializing project instructions")
 
 			// Create instructions config.
 			memConfig := &instructions.Config{
-				Enabled:      atmosConfig.Settings.AI.Instructions.Enabled,
-				FilePath:     atmosConfig.Settings.AI.Instructions.FilePath,
-				AutoUpdate:   atmosConfig.Settings.AI.Instructions.AutoUpdate,
-				CreateIfMiss: atmosConfig.Settings.AI.Instructions.CreateIfMiss,
-				Sections:     atmosConfig.Settings.AI.Instructions.Sections,
+				Enabled:  atmosConfig.AI.Instructions.Enabled,
+				FilePath: atmosConfig.AI.Instructions.FilePath,
 			}
 
 			// Create instructions manager.
 			memoryMgr = instructions.NewManager(atmosConfig.BasePath, memConfig)
 
-			// Load instructions (creates default if missing and CreateIfMiss is true).
+			// Load instructions from ATMOS.md.
 			_, err := memoryMgr.Load(ctx)
 			if err != nil {
 				log.Warnf("Failed to load project instructions: %v", err)
@@ -198,7 +195,7 @@ func init() {
 
 // getSessionStoragePath returns the path to the session storage file.
 func getSessionStoragePath(atmosConfig *schema.AtmosConfiguration) string {
-	sessionPath := atmosConfig.Settings.AI.Sessions.Path
+	sessionPath := atmosConfig.AI.Sessions.Path
 	if sessionPath == "" {
 		sessionPath = ".atmos/sessions"
 	}
@@ -213,18 +210,18 @@ func getSessionStoragePath(atmosConfig *schema.AtmosConfiguration) string {
 
 // getPermissionMode returns the permission mode from configuration.
 func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
-	if atmosConfig.Settings.AI.Tools.YOLOMode {
+	if atmosConfig.AI.Tools.YOLOMode {
 		return permission.ModeYOLO
 	}
 
 	// Default behavior: require confirmation (prompt user).
 	// Users can opt-out by setting require_confirmation: false.
-	if atmosConfig.Settings.AI.Tools.RequireConfirmation == nil {
+	if atmosConfig.AI.Tools.RequireConfirmation == nil {
 		// Not set - default to prompting for security.
 		return permission.ModePrompt
 	}
 
-	if *atmosConfig.Settings.AI.Tools.RequireConfirmation {
+	if *atmosConfig.AI.Tools.RequireConfirmation {
 		// Explicitly set to true - prompt.
 		return permission.ModePrompt
 	}

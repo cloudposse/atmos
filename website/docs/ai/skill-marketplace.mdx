@@ -217,9 +217,8 @@ Skills declare which tools they need. Review the `tools.allowed` section before 
 
 :::danger Review Before Installing
 **Always review skill source code on GitHub before installing skills that request:**
-- File write access (`edit_file`, `write_file`)
-- Command execution (`execute_bash`)
-- Infrastructure changes (`terraform_apply`, `terraform_destroy`, `helmfile_apply`)
+- File write access (`edit_file`, `write_stack_file`, `write_component_file`)
+- Command execution (`execute_bash_command`, `execute_atmos_command`)
 :::
 
 Use the `restricted` field to require user confirmation for sensitive operations. A tool listed in both `allowed` and `restricted` means the skill can use it, but the user must approve each invocation.

@@ -41,12 +41,11 @@ This walkthrough gets you from zero to querying stacks in Claude Desktop.
 
 <File title="atmos.yaml">
 ```yaml
-settings:
-  ai:
+ai:
+  enabled: true
+  tools:
     enabled: true
-    tools:
-      enabled: true
-      require_confirmation: false  # optional, smoother experience
+    require_confirmation: false  # optional, smoother experience
 ```
 </File>
 
@@ -102,19 +101,19 @@ and the permission system, see [AI Tools Configuration](/cli/configuration/ai/to
   <dt>`atmos_validate_stacks`</dt>
   <dd>Validate stack configurations.</dd>
 
-  <dt>`atmos_terraform_plan`</dt>
-  <dd>Generate Terraform plans.</dd>
+  <dt>`describe_affected`</dt>
+  <dd>Show components affected by git changes.</dd>
 
-  <dt>`atmos_read_component_file`</dt>
+  <dt>`read_component_file`</dt>
   <dd>Read a component source file.</dd>
 
-  <dt>`atmos_read_stack_file`</dt>
+  <dt>`read_stack_file`</dt>
   <dd>Read a stack configuration file.</dd>
 
-  <dt>`atmos_write_component_file`</dt>
+  <dt>`write_component_file`</dt>
   <dd>Modify a component file (requires permission).</dd>
 
-  <dt>`atmos_write_stack_file`</dt>
+  <dt>`write_stack_file`</dt>
   <dd>Modify a stack file (requires permission).</dd>
 </dl>
 
@@ -453,7 +452,7 @@ atmos mcp start   # should start without errors; Ctrl+C to exit
 
 **Tools not appearing in conversations:**
 
-Make sure `settings.ai.tools.enabled` is `true` in `atmos.yaml` and that you have not added the tools
+Make sure `ai.tools.enabled` is `true` in `atmos.yaml` and that you have not added the tools
 to `blocked_tools`. If tools still do not appear, try asking Claude explicitly:
 "Use the atmos_list_stacks tool to show my stacks."
 
@@ -482,13 +481,13 @@ or add `atmos` to the macOS application firewall).
 
 ### Common Configuration Errors
 
-**"AI tools are not enabled"** -- Set `settings.ai.enabled: true` and `settings.ai.tools.enabled: true`
+**"AI tools are not enabled"** -- Set `ai.enabled: true` and `ai.tools.enabled: true`
 in `atmos.yaml`.
 
 **Tools not executing** -- Check `allowed_tools` and `blocked_tools` in your AI tool config. Remove overly
 restrictive entries.
 
-**Slow responses** -- Increase `settings.ai.timeout_seconds` (default varies by provider). For HTTP transport,
+**Slow responses** -- Increase `ai.timeout_seconds` (default varies by provider). For HTTP transport,
 check network latency. Monitor resource usage via `/health`.
 
 ## Related Documentation

@@ -22,28 +22,15 @@ type Section struct {
 
 // Config holds configuration for project instructions.
 type Config struct {
-	Enabled      bool
-	FilePath     string   // Path to ATMOS.md (relative to base path)
-	AutoUpdate   bool     // Auto-update memory based on AI learnings
-	Sections     []string // Sections to include in AI context
-	CreateIfMiss bool     // Create ATMOS.md if it doesn't exist
+	Enabled  bool
+	FilePath string // Path to ATMOS.md (relative to base path).
 }
 
-// DefaultConfig returns the default memory configuration.
+// DefaultConfig returns the default instructions configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled:      false,
-		FilePath:     "ATMOS.md",
-		AutoUpdate:   false,
-		CreateIfMiss: true,
-		Sections: []string{
-			"project_context",
-			"common_commands",
-			"stack_patterns",
-			"frequent_issues",
-			"infrastructure_patterns",
-			"recent_learnings",
-		},
+		Enabled:  false,
+		FilePath: "ATMOS.md",
 	}
 }
 

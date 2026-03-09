@@ -55,19 +55,19 @@ var askCmd = &cobra.Command{
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: Set 'settings.ai.enabled: true' in your atmos.yaml configuration",
+			return fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration",
 				errUtils.ErrAINotEnabled)
 		}
 
 		// Apply context discovery overrides.
 		if noAutoContext {
-			atmosConfig.Settings.AI.Context.Enabled = false
+			atmosConfig.AI.Context.Enabled = false
 		}
 		if len(includePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+			atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
 		}
 		if len(excludePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+			atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
 		}
 
 		// Join all arguments as the question.
@@ -83,7 +83,7 @@ var askCmd = &cobra.Command{
 
 		// Gather context if explicitly configured (skip interactive prompt since tools handle introspection).
 		finalQuestion := question
-		if atmosConfig.Settings.AI.SendContext {
+		if atmosConfig.AI.SendContext {
 			stackContext, err := ai.GatherStackContext(&atmosConfig)
 			if err != nil {
 				log.Debug("Could not gather stack context", "error", err)
@@ -95,7 +95,7 @@ var askCmd = &cobra.Command{
 		// Create read-only tool executor (if tools are enabled).
 		// The ask command uses only in-process, read-only tools (no subprocess execution).
 		var toolExecutor *tools.Executor
-		if !noTools && atmosConfig.Settings.AI.Tools.Enabled {
+		if !noTools && atmosConfig.AI.Tools.Enabled {
 			_, toolExecutor, err = initializeAIReadOnlyTools(&atmosConfig)
 			if err != nil {
 				log.Warn("Failed to initialize tools", "error", err)
@@ -109,8 +109,8 @@ var askCmd = &cobra.Command{
 
 		// Create context with timeout (default 60 seconds if not configured).
 		timeoutSeconds := 60
-		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
-			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		if atmosConfig.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 		defer cancel()

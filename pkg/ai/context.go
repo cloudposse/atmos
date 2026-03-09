@@ -68,13 +68,13 @@ func formatFileContent(file string, maxLines int) string {
 // gatherDiscoveredContext attempts automatic context discovery and returns the context string.
 // Returns empty string if discovery is not enabled, fails, or finds no files.
 func gatherDiscoveredContext(atmosConfig *schema.AtmosConfiguration) string {
-	if !atmosConfig.Settings.AI.Context.Enabled {
+	if !atmosConfig.AI.Context.Enabled {
 		return ""
 	}
 
 	log.Debug("Using automatic context discovery")
 
-	discoverer, err := aiContext.NewDiscoverer(atmosConfig.BasePath, &atmosConfig.Settings.AI.Context)
+	discoverer, err := aiContext.NewDiscoverer(atmosConfig.BasePath, &atmosConfig.AI.Context)
 	if err != nil {
 		log.Warnf("Failed to create context discoverer: %v", err)
 		return ""
@@ -96,7 +96,7 @@ func gatherDiscoveredContext(atmosConfig *schema.AtmosConfiguration) string {
 	}
 
 	// Show file list if configured.
-	if atmosConfig.Settings.AI.Context.ShowFiles {
+	if atmosConfig.AI.Context.ShowFiles {
 		log.Infof("Auto-discovered %d files for context", len(result.Files))
 		for _, file := range result.Files {
 			log.Debugf("  - %s (%d bytes)", file.RelativePath, file.Size)
@@ -124,8 +124,8 @@ func gatherLegacyStackContext(atmosConfig *schema.AtmosConfiguration) (string, e
 	// Limit the number of files to prevent overwhelming the AI.
 	// Use configured value or default.
 	maxFiles := DefaultMaxContextFiles
-	if atmosConfig.Settings.AI.MaxContextFiles > 0 {
-		maxFiles = atmosConfig.Settings.AI.MaxContextFiles
+	if atmosConfig.AI.MaxContextFiles > 0 {
+		maxFiles = atmosConfig.AI.MaxContextFiles
 	}
 
 	if len(stackFiles) > maxFiles {
@@ -137,8 +137,8 @@ func gatherLegacyStackContext(atmosConfig *schema.AtmosConfiguration) (string, e
 
 	// Get max lines configuration.
 	maxLines := DefaultMaxContextLines
-	if atmosConfig.Settings.AI.MaxContextLines > 0 {
-		maxLines = atmosConfig.Settings.AI.MaxContextLines
+	if atmosConfig.AI.MaxContextLines > 0 {
+		maxLines = atmosConfig.AI.MaxContextLines
 	}
 
 	for _, file := range stackFiles {
@@ -192,9 +192,9 @@ func ShouldSendContext(atmosConfig *schema.AtmosConfiguration, question string) 
 	}
 
 	// Check atmos.yaml configuration.
-	if atmosConfig.Settings.AI.SendContext {
+	if atmosConfig.AI.SendContext {
 		// If prompt_on_send is true, ask for confirmation each time.
-		if atmosConfig.Settings.AI.PromptOnSend {
+		if atmosConfig.AI.PromptOnSend {
 			consent, err := PromptForConsent()
 			return consent, false, err
 		}

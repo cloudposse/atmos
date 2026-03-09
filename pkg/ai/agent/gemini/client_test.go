@@ -41,9 +41,7 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
@@ -55,15 +53,13 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"gemini": {
-								Model:     "gemini-1.5-pro",
-								ApiKey:    "custom-gemini-key-value",
-								MaxTokens: 16384,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"gemini": {
+							Model:     "gemini-1.5-pro",
+							ApiKey:    "custom-gemini-key-value",
+							MaxTokens: 16384,
 						},
 					},
 				},
@@ -78,13 +74,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"gemini": {
-								Model: "gemini-1.5-flash",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"gemini": {
+							Model: "gemini-1.5-flash",
 						},
 					},
 				},
@@ -99,13 +93,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Custom API key only",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"gemini": {
-								ApiKey: "my-gemini-api-key-value",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"gemini": {
+							ApiKey: "my-gemini-api-key-value",
 						},
 					},
 				},
@@ -120,13 +112,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Max tokens only",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"gemini": {
-								MaxTokens: 32768,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"gemini": {
+							MaxTokens: 32768,
 						},
 					},
 				},
@@ -154,10 +144,8 @@ func TestExtractConfig(t *testing.T) {
 
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -170,12 +158,10 @@ func TestNewClient_Disabled(t *testing.T) {
 func TestNewClient_MissingAPIKey(t *testing.T) {
 	// Test that NewClient fails when ApiKey is empty.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"gemini": {},
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"gemini": {},
 			},
 		},
 	}

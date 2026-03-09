@@ -42,9 +42,7 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
@@ -56,15 +54,13 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model:     "claude-4-20250514",
-								ApiKey:    "custom-api-key-value",
-								MaxTokens: 8192,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model:     "claude-4-20250514",
+							ApiKey:    "custom-api-key-value",
+							MaxTokens: 8192,
 						},
 					},
 				},
@@ -79,13 +75,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model: "claude-3-haiku-20240307",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model: "claude-3-haiku-20240307",
 						},
 					},
 				},
@@ -113,10 +107,8 @@ func TestExtractConfig(t *testing.T) {
 
 func TestNewSimpleClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -128,12 +120,10 @@ func TestNewSimpleClient_Disabled(t *testing.T) {
 
 func TestNewSimpleClient_MissingAPIKey(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {},
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {},
 			},
 		},
 	}
@@ -446,13 +436,11 @@ func TestExtractCacheConfig(t *testing.T) {
 		{
 			name: "Default cache enabled",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model: "claude-sonnet-4-5-20250929",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model: "claude-sonnet-4-5-20250929",
 						},
 					},
 				},
@@ -466,15 +454,13 @@ func TestExtractCacheConfig(t *testing.T) {
 		{
 			name: "Cache explicitly disabled",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model: "claude-sonnet-4-5-20250929",
-								Cache: &schema.AICacheSettings{
-									Enabled: false,
-								},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model: "claude-sonnet-4-5-20250929",
+							Cache: &schema.AICacheSettings{
+								Enabled: false,
 							},
 						},
 					},
@@ -489,17 +475,15 @@ func TestExtractCacheConfig(t *testing.T) {
 		{
 			name: "Cache enabled with fine-grained control",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model: "claude-sonnet-4-5-20250929",
-								Cache: &schema.AICacheSettings{
-									Enabled:                  true,
-									CacheSystemPrompt:        true,
-									CacheProjectInstructions: false, // Only cache system prompt.
-								},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model: "claude-sonnet-4-5-20250929",
+							Cache: &schema.AICacheSettings{
+								Enabled:                  true,
+								CacheSystemPrompt:        true,
+								CacheProjectInstructions: false, // Only cache system prompt.
 							},
 						},
 					},
@@ -514,11 +498,9 @@ func TestExtractCacheConfig(t *testing.T) {
 		{
 			name: "No provider config",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled:   true,
-						Providers: nil,
-					},
+				AI: schema.AISettings{
+					Enabled:   true,
+					Providers: nil,
 				},
 			},
 			expectedCache: &cacheConfig{
@@ -530,13 +512,11 @@ func TestExtractCacheConfig(t *testing.T) {
 		{
 			name: "Different provider only",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"openai": {
-								Model: "gpt-4o",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"openai": {
+							Model: "gpt-4o",
 						},
 					},
 				},
@@ -550,17 +530,15 @@ func TestExtractCacheConfig(t *testing.T) {
 		{
 			name: "Cache enabled with both options true by default",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {
-								Model: "claude-sonnet-4-5-20250929",
-								Cache: &schema.AICacheSettings{
-									Enabled:                  true,
-									CacheSystemPrompt:        false,
-									CacheProjectInstructions: false,
-								},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {
+							Model: "claude-sonnet-4-5-20250929",
+							Cache: &schema.AICacheSettings{
+								Enabled:                  true,
+								CacheSystemPrompt:        false,
+								CacheProjectInstructions: false,
 							},
 						},
 					},
@@ -739,11 +717,9 @@ func TestConfig_AllFields(t *testing.T) {
 
 func TestExtractConfig_NilProviders(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled:   true,
-				Providers: nil,
-			},
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: nil,
 		},
 	}
 
@@ -762,13 +738,11 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 
 func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model: "gpt-4o",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model: "gpt-4o",
 				},
 			},
 		},
@@ -789,12 +763,10 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 
 func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": nil, // Explicitly nil provider config.
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": nil, // Explicitly nil provider config.
 			},
 		},
 	}
@@ -910,11 +882,9 @@ func TestCacheConfig_Fields(t *testing.T) {
 
 func TestExtractCacheConfig_EmptyProviders(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled:   true,
-				Providers: map[string]*schema.AIProviderConfig{},
-			},
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{},
 		},
 	}
 
@@ -928,16 +898,14 @@ func TestExtractCacheConfig_EmptyProviders(t *testing.T) {
 
 func TestExtractCacheConfig_OnlySystemPrompt(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						Cache: &schema.AICacheSettings{
-							Enabled:                  true,
-							CacheSystemPrompt:        true,
-							CacheProjectInstructions: false,
-						},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					Cache: &schema.AICacheSettings{
+						Enabled:                  true,
+						CacheSystemPrompt:        true,
+						CacheProjectInstructions: false,
 					},
 				},
 			},
@@ -953,16 +921,14 @@ func TestExtractCacheConfig_OnlySystemPrompt(t *testing.T) {
 
 func TestExtractCacheConfig_OnlyProjectInstructions(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						Cache: &schema.AICacheSettings{
-							Enabled:                  true,
-							CacheSystemPrompt:        false,
-							CacheProjectInstructions: true,
-						},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					Cache: &schema.AICacheSettings{
+						Enabled:                  true,
+						CacheSystemPrompt:        false,
+						CacheProjectInstructions: true,
 					},
 				},
 			},
@@ -1090,16 +1056,14 @@ func TestConvertMessagesToAnthropicFormat_UnknownRole(t *testing.T) {
 
 func TestExtractConfig_AllOverrides(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						Model:     "claude-3-opus-20240229",
-						ApiKey:    "custom-anthropic-key-value",
-						MaxTokens: 32768,
-						BaseURL:   "https://api.custom.anthropic.com/v1",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					Model:     "claude-3-opus-20240229",
+					ApiKey:    "custom-anthropic-key-value",
+					MaxTokens: 32768,
+					BaseURL:   "https://api.custom.anthropic.com/v1",
 				},
 			},
 		},
@@ -1620,14 +1584,12 @@ func TestConvertToolsToAnthropicFormat_ManyTools(t *testing.T) {
 // TestExtractCacheConfig_NilCache tests when cache config is nil.
 func TestExtractCacheConfig_NilCache(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						Model: "claude-sonnet-4-5-20250929",
-						Cache: nil, // Explicitly nil.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					Model: "claude-sonnet-4-5-20250929",
+					Cache: nil, // Explicitly nil.
 				},
 			},
 		},
@@ -1826,12 +1788,10 @@ func TestConvertMessagesToAnthropicFormat_ConsecutiveSameRole(t *testing.T) {
 // TestExtractCacheConfig_NilProviderInMap tests when provider value is nil in the map.
 func TestExtractCacheConfig_NilProviderInMap(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": nil,
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": nil,
 			},
 		},
 	}
@@ -2007,12 +1967,10 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": tt.providerConfig,
-						},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": tt.providerConfig,
 					},
 				},
 			}
@@ -2034,16 +1992,14 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 func TestCacheConfig_BothFalseDefaultsToTrue(t *testing.T) {
 	// When cache is enabled but both options are false, they default to true.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						Cache: &schema.AICacheSettings{
-							Enabled:                  true,
-							CacheSystemPrompt:        false,
-							CacheProjectInstructions: false,
-						},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					Cache: &schema.AICacheSettings{
+						Enabled:                  true,
+						CacheSystemPrompt:        false,
+						CacheProjectInstructions: false,
 					},
 				},
 			},
@@ -2137,13 +2093,11 @@ func TestConvertToolsToAnthropicFormat_ToolWithSpecialNames(t *testing.T) {
 func TestExtractConfig_EdgeCases(t *testing.T) {
 	// Test with MaxTokens = 0 (should use default).
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						MaxTokens: 0, // Zero should not override default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					MaxTokens: 0, // Zero should not override default.
 				},
 			},
 		},

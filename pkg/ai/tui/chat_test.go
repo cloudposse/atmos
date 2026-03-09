@@ -1081,15 +1081,13 @@ func TestGetConfiguredProvidersForCreate(t *testing.T) {
 	t.Run("returns configured providers with models from atmos.yaml", func(t *testing.T) {
 		// Create mock config with specific providers
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Providers: map[string]*schema.AIProviderConfig{
-						"anthropic": {
-							Model: "claude-3-opus-20240229",
-						},
-						"openai": {
-							Model: "gpt-4-turbo",
-						},
+			AI: schema.AISettings{
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {
+						Model: "claude-3-opus-20240229",
+					},
+					"openai": {
+						Model: "gpt-4-turbo",
 					},
 				},
 			},
@@ -1137,13 +1135,11 @@ func TestGetConfiguredProvidersForCreate(t *testing.T) {
 func TestChatModel_ProviderSelectNavigation(t *testing.T) {
 	// Create mock config with multiple providers
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {Model: "claude-3-opus-20240229"},
-					"openai":    {Model: "gpt-4-turbo"},
-					"gemini":    {Model: "gemini-pro"},
-				},
+		AI: schema.AISettings{
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {Model: "claude-3-opus-20240229"},
+				"openai":    {Model: "gpt-4-turbo"},
+				"gemini":    {Model: "gemini-pro"},
 			},
 		},
 	}
@@ -2796,10 +2792,8 @@ func TestSlidingWindowConfiguration(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 10,
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 10,
 			},
 		}
 
@@ -2826,10 +2820,8 @@ func TestSlidingWindowConfiguration(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 0,
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 0,
 			},
 		}
 
@@ -2867,10 +2859,8 @@ func TestSlidingWindowBehavior(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 4, // Keep only 4 messages from history
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 4, // Keep only 4 messages from history
 			},
 		}
 
@@ -2927,10 +2917,8 @@ func TestSlidingWindowBehavior(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 10, // Limit is higher than actual messages
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 10, // Limit is higher than actual messages
 			},
 		}
 
@@ -2982,10 +2970,8 @@ func TestSlidingWindowBehavior(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 0, // Unlimited
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 0, // Unlimited
 			},
 		}
 
@@ -3047,11 +3033,9 @@ func TestSlidingWindowBehavior(t *testing.T) {
 				}
 
 				atmosConfig := &schema.AtmosConfiguration{
-					Settings: schema.AtmosSettings{
-						AI: schema.AISettings{
-							MaxHistoryMessages: tc.maxHistoryMessages,
-							MaxHistoryTokens:   tc.maxHistoryTokens,
-						},
+					AI: schema.AISettings{
+						MaxHistoryMessages: tc.maxHistoryMessages,
+						MaxHistoryTokens:   tc.maxHistoryTokens,
 					},
 				}
 
@@ -3094,10 +3078,8 @@ func TestSlidingWindowBehavior(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 2, // Very small window
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 2, // Very small window
 			},
 		}
 
@@ -3153,10 +3135,8 @@ func TestSlidingWindowBehavior(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 4,
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 4,
 			},
 		}
 
@@ -3261,10 +3241,8 @@ func TestTokenBasedConfiguration(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryTokens: 1000,
-				},
+			AI: schema.AISettings{
+				MaxHistoryTokens: 1000,
 			},
 		}
 
@@ -3291,11 +3269,9 @@ func TestTokenBasedConfiguration(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 20,
-					MaxHistoryTokens:   1000,
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 20,
+				MaxHistoryTokens:   1000,
 			},
 		}
 
@@ -3320,10 +3296,8 @@ func TestTokenBasedPruning(t *testing.T) {
 		// Set a low token limit to force pruning.
 		// Each message is ~3-4 words × 1.3 = ~4-5 tokens
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryTokens: 20, // Keep approximately 4-5 messages worth of tokens
-				},
+			AI: schema.AISettings{
+				MaxHistoryTokens: 20, // Keep approximately 4-5 messages worth of tokens
 			},
 		}
 
@@ -3374,10 +3348,8 @@ func TestTokenBasedPruning(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryTokens: 1000, // High limit
-				},
+			AI: schema.AISettings{
+				MaxHistoryTokens: 1000, // High limit
 			},
 		}
 
@@ -3422,11 +3394,9 @@ func TestTokenBasedPruning(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 2,    // Very restrictive
-					MaxHistoryTokens:   1000, // Not restrictive
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 2,    // Very restrictive
+				MaxHistoryTokens:   1000, // Not restrictive
 			},
 		}
 
@@ -3475,11 +3445,9 @@ func TestTokenBasedPruning(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					MaxHistoryMessages: 10, // Not restrictive
-					MaxHistoryTokens:   10, // Very restrictive (only ~7-8 words)
-				},
+			AI: schema.AISettings{
+				MaxHistoryMessages: 10, // Not restrictive
+				MaxHistoryTokens:   10, // Very restrictive (only ~7-8 words)
 			},
 		}
 

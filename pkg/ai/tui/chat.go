@@ -271,7 +271,7 @@ func getHistoryLimits(atmosConfig *schema.AtmosConfiguration) (int, int) {
 	if atmosConfig == nil {
 		return 0, 0
 	}
-	return atmosConfig.Settings.AI.MaxHistoryMessages, atmosConfig.Settings.AI.MaxHistoryTokens
+	return atmosConfig.AI.MaxHistoryMessages, atmosConfig.AI.MaxHistoryTokens
 }
 
 // initSkills loads the skill registry and determines the current skill.
@@ -394,17 +394,17 @@ func (m *ChatModel) switchProviderAsync(provider string) tea.Cmd {
 		}
 
 		// Store old provider for rollback on failure.
-		oldDefaultProvider := m.atmosConfig.Settings.AI.DefaultProvider
+		oldDefaultProvider := m.atmosConfig.AI.DefaultProvider
 
 		// Update atmosConfig to use the new provider.
-		m.atmosConfig.Settings.AI.DefaultProvider = provider
+		m.atmosConfig.AI.DefaultProvider = provider
 
 		// Create new client with the updated provider.
 		// PERFORMANCE: This can take 1-3 seconds, which is why we run it async.
 		newClient, err := ai.NewClient(m.atmosConfig)
 		if err != nil {
 			// Restore old settings on failure.
-			m.atmosConfig.Settings.AI.DefaultProvider = oldDefaultProvider
+			m.atmosConfig.AI.DefaultProvider = oldDefaultProvider
 			return providerSwitchedMsg{
 				provider: provider,
 				err:      fmt.Errorf("failed to create new client for provider %s: %w", provider, err),

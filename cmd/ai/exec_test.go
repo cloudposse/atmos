@@ -377,10 +377,9 @@ func TestExecCommand_ErrorCases(t *testing.T) {
 
 		// Create minimal atmos.yaml with AI enabled.
 		atmosYaml := `
-settings:
-  ai:
-    enabled: true
-    default_provider: anthropic
+ai:
+  enabled: true
+  default_provider: anthropic
 `
 		err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
 		require.NoError(t, err)
@@ -635,10 +634,8 @@ func TestExecCommand_AIEnabledCheck(t *testing.T) {
 	t.Run("isAIEnabled returns false when AI is disabled", func(t *testing.T) {
 		// Test the isAIEnabled function directly with a mock config.
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: false,
-				},
+			AI: schema.AISettings{
+				Enabled: false,
 			},
 		}
 		assert.False(t, isAIEnabled(atmosConfig))
@@ -646,10 +643,8 @@ func TestExecCommand_AIEnabledCheck(t *testing.T) {
 
 	t.Run("isAIEnabled returns true when AI is enabled", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-				},
+			AI: schema.AISettings{
+				Enabled: true,
 			},
 		}
 		assert.True(t, isAIEnabled(atmosConfig))
@@ -658,7 +653,7 @@ func TestExecCommand_AIEnabledCheck(t *testing.T) {
 	t.Run("AI not enabled error is config_error type", func(t *testing.T) {
 		// Test that when AI is not enabled, the error is properly constructed.
 		err := exitWithError(1, "config_error",
-			fmt.Errorf("%w: Set 'settings.ai.enabled: true' in your atmos.yaml configuration", errUtils.ErrAINotEnabled))
+			fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration", errUtils.ErrAINotEnabled))
 
 		var execErr *execError
 		require.True(t, errors.As(err, &execErr))
@@ -1487,10 +1482,9 @@ stacks:
 components:
   terraform:
     base_path: components/terraform
-settings:
-  ai:
-    enabled: ` + enabledStr + `
-    default_provider: anthropic
+ai:
+  enabled: ` + enabledStr + `
+  default_provider: anthropic
 ` + extraConfig
 
 	err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
@@ -2144,7 +2138,7 @@ func TestExecCommand_ToolsEnabledFlag(t *testing.T) {
 		noTools, _ := testCmd.Flags().GetBool("no-tools")
 		assert.False(t, noTools)
 
-		// This exercises line 129: !noTools && atmosConfig.Settings.AI.Tools.Enabled.
+		// This exercises line 129: !noTools && atmosConfig.AI.Tools.Enabled.
 		err = execCmd.RunE(testCmd, []string{"test prompt"})
 		require.Error(t, err)
 	})
@@ -2416,7 +2410,7 @@ func TestExecCommand_ToolsInitializationCondition(t *testing.T) {
 		noTools := true
 		toolsConfigEnabled := true
 
-		// Line 129: !noTools && atmosConfig.Settings.AI.Tools.Enabled
+		// Line 129: !noTools && atmosConfig.AI.Tools.Enabled
 		shouldInitTools := !noTools && toolsConfigEnabled
 		assert.False(t, shouldInitTools)
 	})
@@ -2604,7 +2598,7 @@ func TestExecCommand_AIEnabledCheckLogic(t *testing.T) {
 
 		if !aiEnabled {
 			err := exitWithError(1, "config_error",
-				fmt.Errorf("%w: Set 'settings.ai.enabled: true' in your atmos.yaml configuration", errUtils.ErrAINotEnabled))
+				fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration", errUtils.ErrAINotEnabled))
 
 			var execErr *execError
 			require.True(t, errors.As(err, &execErr))
@@ -2707,15 +2701,14 @@ stacks:
 components:
   terraform:
     base_path: components/terraform
-settings:
-  ai:
-    enabled: true
-    default_provider: ollama
-    providers:
-      ollama:
-        base_url: "` + mockServerURL + `"
-        model: "llama3.3:70b"
-        max_tokens: 4096
+ai:
+  enabled: true
+  default_provider: ollama
+  providers:
+    ollama:
+      base_url: "` + mockServerURL + `"
+      model: "llama3.3:70b"
+      max_tokens: 4096
 ` + extraConfig
 
 		err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
@@ -2874,7 +2867,7 @@ settings:
 		defer mockServer.Close()
 
 		extraConfig := `
-    timeout_seconds: 120
+  timeout_seconds: 120
 `
 		tmpDir := createConfigWithMockServer(t, mockServer.URL, extraConfig)
 
@@ -2968,14 +2961,13 @@ stacks:
 components:
   terraform:
     base_path: components/terraform
-settings:
-  ai:
-    enabled: true
-    default_provider: ollama
-    providers:
-      ollama:
-        base_url: "` + mockServerURL + `"
-        model: "llama3.3:70b"
+ai:
+  enabled: true
+  default_provider: ollama
+  providers:
+    ollama:
+      base_url: "` + mockServerURL + `"
+      model: "llama3.3:70b"
 `
 		err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
 		require.NoError(t, err)
@@ -3084,16 +3076,15 @@ stacks:
 components:
   terraform:
     base_path: components/terraform
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: ollama
+  tools:
     enabled: true
-    default_provider: ollama
-    tools:
-      enabled: true
-    providers:
-      ollama:
-        base_url: "` + mockServer.URL + `"
-        model: "llama3.3:70b"
+  providers:
+    ollama:
+      base_url: "` + mockServer.URL + `"
+      model: "llama3.3:70b"
 `
 		err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
 		require.NoError(t, err)

@@ -12,7 +12,7 @@ import (
 // initializeAIToolsAndExecutor initializes the AI tool registry and executor.
 // This is shared by both 'atmos ai chat' and 'atmos mcp start' commands.
 func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tools.Registry, *tools.Executor, error) {
-	if !atmosConfig.Settings.AI.Tools.Enabled {
+	if !atmosConfig.AI.Tools.Enabled {
 		return nil, nil, errUtils.ErrAIToolsDisabled
 	}
 
@@ -40,10 +40,10 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 	// Create permission checker with cache-aware prompter.
 	permConfig := &permission.Config{
 		Mode:            getPermissionMode(atmosConfig),
-		AllowedTools:    atmosConfig.Settings.AI.Tools.AllowedTools,
-		RestrictedTools: atmosConfig.Settings.AI.Tools.RestrictedTools,
-		BlockedTools:    atmosConfig.Settings.AI.Tools.BlockedTools,
-		YOLOMode:        atmosConfig.Settings.AI.Tools.YOLOMode,
+		AllowedTools:    atmosConfig.AI.Tools.AllowedTools,
+		RestrictedTools: atmosConfig.AI.Tools.RestrictedTools,
+		BlockedTools:    atmosConfig.AI.Tools.BlockedTools,
+		YOLOMode:        atmosConfig.AI.Tools.YOLOMode,
 	}
 	var prompter permission.Prompter
 	if permCache != nil {
@@ -64,7 +64,7 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 // This is used by non-interactive commands like 'ask' where subprocess tools and write tools
 // are not appropriate.
 func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.Registry, *tools.Executor, error) {
-	if !atmosConfig.Settings.AI.Tools.Enabled {
+	if !atmosConfig.AI.Tools.Enabled {
 		return nil, nil, errUtils.ErrAIToolsDisabled
 	}
 

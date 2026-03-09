@@ -18,9 +18,7 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
@@ -32,15 +30,13 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"openai": {
-								Model:     "gpt-4-turbo",
-								ApiKey:    "custom-api-key-value",
-								MaxTokens: 8192,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"openai": {
+							Model:     "gpt-4-turbo",
+							ApiKey:    "custom-api-key-value",
+							MaxTokens: 8192,
 						},
 					},
 				},
@@ -55,13 +51,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"openai": {
-								Model: "gpt-3.5-turbo",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"openai": {
+							Model: "gpt-3.5-turbo",
 						},
 					},
 				},
@@ -89,10 +83,8 @@ func TestExtractConfig(t *testing.T) {
 
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -122,12 +114,10 @@ func TestClientGetters(t *testing.T) {
 func TestNewClient_MissingAPIKey(t *testing.T) {
 	// Test that NewClient fails when ApiKey is empty.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {},
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {},
 			},
 		},
 	}
@@ -163,11 +153,9 @@ func TestConfig_AllFields(t *testing.T) {
 
 func TestExtractConfig_NilProviders(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled:   true,
-				Providers: nil,
-			},
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: nil,
 		},
 	}
 
@@ -186,13 +174,11 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 
 func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						Model: "claude-sonnet-4-5-20250929",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					Model: "claude-sonnet-4-5-20250929",
 				},
 			},
 		},
@@ -213,12 +199,10 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 
 func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": nil, // Explicitly nil provider config.
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": nil, // Explicitly nil provider config.
 			},
 		},
 	}
@@ -324,13 +308,11 @@ func TestOpenAIModels(t *testing.T) {
 
 func TestExtractConfig_CustomBaseURL(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						BaseURL: "https://custom.openai.azure.com/v1",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					BaseURL: "https://custom.openai.azure.com/v1",
 				},
 			},
 		},
@@ -347,16 +329,14 @@ func TestExtractConfig_CustomBaseURL(t *testing.T) {
 
 func TestExtractConfig_AllOverrides(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model:     "o1-preview",
-						ApiKey:    "custom-openai-key-value",
-						MaxTokens: 32768,
-						BaseURL:   "https://api.custom.openai.com/v2",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model:     "o1-preview",
+					ApiKey:    "custom-openai-key-value",
+					MaxTokens: 32768,
+					BaseURL:   "https://api.custom.openai.com/v2",
 				},
 			},
 		},
@@ -378,15 +358,13 @@ func TestExtractConfig_AllOverrides(t *testing.T) {
 func TestExtractConfig_EmptyStringValues(t *testing.T) {
 	// Test that empty strings use defaults.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model:   "", // Empty should use default.
-						ApiKey:  "", // Empty should use default.
-						BaseURL: "", // Empty should use default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model:   "", // Empty should use default.
+					ApiKey:  "", // Empty should use default.
+					BaseURL: "", // Empty should use default.
 				},
 			},
 		},
@@ -406,13 +384,11 @@ func TestExtractConfig_EmptyStringValues(t *testing.T) {
 func TestNewClient_WithValidAPIKey(t *testing.T) {
 	// This test verifies that NewClient correctly creates a client when API key is present.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						ApiKey: "test-api-key-value",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					ApiKey: "test-api-key-value",
 				},
 			},
 		},
@@ -514,13 +490,11 @@ func TestExtractConfig_MaxTokensEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"openai": {
-								MaxTokens: tt.maxTokens,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"openai": {
+							MaxTokens: tt.maxTokens,
 						},
 					},
 				},
@@ -546,10 +520,8 @@ func TestNewClient_ErrorPaths(t *testing.T) {
 		{
 			name: "AI disabled",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: false,
-					},
+				AI: schema.AISettings{
+					Enabled: false,
 				},
 			},
 			expectedError: "AI features are disabled",
@@ -557,12 +529,10 @@ func TestNewClient_ErrorPaths(t *testing.T) {
 		{
 			name: "Missing API key",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"openai": {},
-						},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"openai": {},
 					},
 				},
 			},
@@ -657,13 +627,11 @@ func TestExtractConfig_BaseURLCustomization(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"openai": {
-								BaseURL: tt.baseURL,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"openai": {
+							BaseURL: tt.baseURL,
 						},
 					},
 				},
@@ -683,16 +651,14 @@ func TestExtractConfig_BaseURLCustomization(t *testing.T) {
 func TestExtractConfig_CompleteOverride(t *testing.T) {
 	// Test overriding all configuration values.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model:     "gpt-4-turbo-preview",
-						ApiKey:    "custom-openai-token-value",
-						MaxTokens: 65536,
-						BaseURL:   "https://custom-api.openai.com/v2",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model:     "gpt-4-turbo-preview",
+					ApiKey:    "custom-openai-token-value",
+					MaxTokens: 65536,
+					BaseURL:   "https://custom-api.openai.com/v2",
 				},
 			},
 		},
@@ -769,20 +735,18 @@ func TestConfig_BooleanFields(t *testing.T) {
 func TestExtractConfig_MultipleProviders(t *testing.T) {
 	// Test that OpenAI config is extracted correctly when multiple providers are configured.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						Model: "claude-sonnet-4-5-20250929",
-					},
-					"openai": {
-						Model:     "gpt-4o",
-						MaxTokens: 8192,
-					},
-					"ollama": {
-						Model: "llama3.3:70b",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					Model: "claude-sonnet-4-5-20250929",
+				},
+				"openai": {
+					Model:     "gpt-4o",
+					MaxTokens: 8192,
+				},
+				"ollama": {
+					Model: "llama3.3:70b",
 				},
 			},
 		},

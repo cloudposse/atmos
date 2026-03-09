@@ -20,9 +20,7 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Default configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
@@ -35,16 +33,14 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Enabled configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"grok": {
-								Model:     "grok-4",
-								ApiKey:    "custom-xai-key-value",
-								MaxTokens: 8192,
-								BaseURL:   "https://custom.api.x.ai/v1",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"grok": {
+							Model:     "grok-4",
+							ApiKey:    "custom-xai-key-value",
+							MaxTokens: 8192,
+							BaseURL:   "https://custom.api.x.ai/v1",
 						},
 					},
 				},
@@ -60,13 +56,11 @@ func TestExtractConfig(t *testing.T) {
 		{
 			name: "Partial configuration",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"grok": {
-								Model: "grok-2",
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"grok": {
+							Model: "grok-2",
 						},
 					},
 				},
@@ -96,10 +90,8 @@ func TestExtractConfig(t *testing.T) {
 
 func TestNewClient_Disabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -130,13 +122,11 @@ func TestClientGetters(t *testing.T) {
 
 func TestNewClient_MissingAPIKey(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						// ApiKey is empty - should fail.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					// ApiKey is empty - should fail.
 				},
 			},
 		},
@@ -174,11 +164,9 @@ func TestConfig_AllFields(t *testing.T) {
 
 func TestExtractConfig_NilProviders(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled:   true,
-				Providers: nil,
-			},
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: nil,
 		},
 	}
 
@@ -199,13 +187,11 @@ func TestExtractConfig_NilProviders(t *testing.T) {
 
 func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model: "gpt-4o",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model: "gpt-4o",
 				},
 			},
 		},
@@ -228,12 +214,10 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 
 func TestExtractConfig_NilProviderConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": nil, // Explicitly nil provider config.
-				},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": nil, // Explicitly nil provider config.
 			},
 		},
 	}
@@ -340,13 +324,11 @@ func TestGrokModels(t *testing.T) {
 
 func TestExtractConfig_CustomBaseURL(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						BaseURL: "https://custom.xai.example.com/v1",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					BaseURL: "https://custom.xai.example.com/v1",
 				},
 			},
 		},
@@ -364,16 +346,14 @@ func TestExtractConfig_CustomBaseURL(t *testing.T) {
 
 func TestExtractConfig_AllOverrides(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						Model:     "grok-2-vision-1212",
-						ApiKey:    "custom-grok-key-value",
-						MaxTokens: 32768,
-						BaseURL:   "https://api.custom.xai.com/v2",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					Model:     "grok-2-vision-1212",
+					ApiKey:    "custom-grok-key-value",
+					MaxTokens: 32768,
+					BaseURL:   "https://api.custom.xai.com/v2",
 				},
 			},
 		},
@@ -395,13 +375,11 @@ func TestExtractConfig_AllOverrides(t *testing.T) {
 
 func TestNewClient_WithValidAPIKey(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						ApiKey: "test-api-key-value",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					ApiKey: "test-api-key-value",
 				},
 			},
 		},
@@ -419,16 +397,14 @@ func TestNewClient_WithValidAPIKey(t *testing.T) {
 
 func TestNewClient_CustomConfiguration(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						Model:     "grok-2-1212",
-						ApiKey:    "custom-key",
-						MaxTokens: 8192,
-						BaseURL:   "https://custom.api.x.ai/v1",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					Model:     "grok-2-1212",
+					ApiKey:    "custom-key",
+					MaxTokens: 8192,
+					BaseURL:   "https://custom.api.x.ai/v1",
 				},
 			},
 		},
@@ -465,13 +441,11 @@ func TestClient_StructFields(t *testing.T) {
 func TestExtractConfig_EdgeCases(t *testing.T) {
 	// Test with MaxTokens = 0 (should use default).
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						MaxTokens: 0, // Zero should not override default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					MaxTokens: 0, // Zero should not override default.
 				},
 			},
 		},
@@ -553,12 +527,10 @@ func TestExtractConfig_PartialOverrides(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"grok": tt.providerConfig,
-						},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"grok": tt.providerConfig,
 					},
 				},
 			}
@@ -676,13 +648,11 @@ func TestClientGetters_EdgeValues(t *testing.T) {
 
 func TestExtractConfig_EmptyModel(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						Model: "", // Empty model should use default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					Model: "", // Empty model should use default.
 				},
 			},
 		},
@@ -701,13 +671,11 @@ func TestExtractConfig_EmptyModel(t *testing.T) {
 
 func TestExtractConfig_EmptyAPIKey(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						ApiKey: "", // Empty API key should use default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					ApiKey: "", // Empty API key should use default.
 				},
 			},
 		},
@@ -726,13 +694,11 @@ func TestExtractConfig_EmptyAPIKey(t *testing.T) {
 
 func TestExtractConfig_EmptyBaseURL(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						BaseURL: "", // Empty base URL should use default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					BaseURL: "", // Empty base URL should use default.
 				},
 			},
 		},
@@ -762,10 +728,8 @@ func TestNewClient_NilAtmosConfig(t *testing.T) {
 
 func TestNewClient_AIDisabledInAtmosConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: false,
-			},
+		AI: schema.AISettings{
+			Enabled: false,
 		},
 	}
 
@@ -777,13 +741,11 @@ func TestNewClient_AIDisabledInAtmosConfig(t *testing.T) {
 
 func TestExtractConfig_NegativeMaxTokens(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"grok": {
-						MaxTokens: -100, // Negative should use default.
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"grok": {
+					MaxTokens: -100, // Negative should use default.
 				},
 			},
 		},
@@ -925,13 +887,11 @@ func TestNewClient_MultipleAPIKeyFormats(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-						Providers: map[string]*schema.AIProviderConfig{
-							"grok": {
-								ApiKey: tt.value,
-							},
+				AI: schema.AISettings{
+					Enabled: true,
+					Providers: map[string]*schema.AIProviderConfig{
+						"grok": {
+							ApiKey: tt.value,
 						},
 					},
 				},
@@ -947,20 +907,18 @@ func TestNewClient_MultipleAPIKeyFormats(t *testing.T) {
 func TestExtractConfig_MultipleProviders(t *testing.T) {
 	// Test that Grok config is extracted correctly when multiple providers are configured.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"openai": {
-						Model: "gpt-4o",
-					},
-					"grok": {
-						Model:     "grok-2-vision-1212",
-						MaxTokens: 8192,
-					},
-					"anthropic": {
-						Model: "claude-sonnet-4-5-20250929",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"openai": {
+					Model: "gpt-4o",
+				},
+				"grok": {
+					Model:     "grok-2-vision-1212",
+					MaxTokens: 8192,
+				},
+				"anthropic": {
+					Model: "claude-sonnet-4-5-20250929",
 				},
 			},
 		},

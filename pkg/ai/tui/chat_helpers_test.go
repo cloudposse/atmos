@@ -2833,7 +2833,7 @@ func TestGetCurrentProvider(t *testing.T) {
 		model, err := NewChatModel(ChatModelParams{Client: client})
 		require.NoError(t, err)
 		model.atmosConfig = &schema.AtmosConfiguration{}
-		model.atmosConfig.Settings.AI.DefaultProvider = "gemini"
+		model.atmosConfig.AI.DefaultProvider = "gemini"
 		model.sess = nil
 
 		result := model.getCurrentProvider()

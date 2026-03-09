@@ -2522,12 +2522,11 @@ components:
   terraform:
     base_path: "%s"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  sessions:
     enabled: true
-    sessions:
-      enabled: true
-      path: "%s"
+    path: "%s"
 `, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
 
 	atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
@@ -2632,12 +2631,11 @@ components:
   terraform:
     base_path: "%s"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  sessions:
     enabled: true
-    sessions:
-      enabled: true
-      path: "%s"
+    path: "%s"
 `, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
 
 	atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
@@ -2763,9 +2761,8 @@ stacks:
     - "deploy/**/*"
   name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
 
-settings:
-  ai:
-    enabled: false
+ai:
+  enabled: false
 `, filepath.ToSlash(tempDir))
 
 		atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
@@ -2804,11 +2801,10 @@ stacks:
     - "deploy/**/*"
   name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
 
-settings:
-  ai:
-    enabled: true
-    sessions:
-      enabled: false
+ai:
+  enabled: true
+  sessions:
+    enabled: false
 `, filepath.ToSlash(tempDir))
 
 		atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
@@ -2892,9 +2888,8 @@ stacks:
   included_paths:
     - "deploy/**/*"
   name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
-settings:
-  ai:
-    enabled: false
+ai:
+  enabled: false
 `, filepath.ToSlash(tempDir))
 
 		err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
@@ -2923,11 +2918,10 @@ stacks:
   included_paths:
     - "deploy/**/*"
   name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
-settings:
-  ai:
-    enabled: true
-    sessions:
-      enabled: false
+ai:
+  enabled: true
+  sessions:
+    enabled: false
 `, filepath.ToSlash(tempDir))
 
 		err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
@@ -3075,13 +3069,12 @@ components:
   terraform:
     base_path: "%s"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  sessions:
     enabled: true
-    sessions:
-      enabled: true
-      path: "%s"
-      max_sessions: 100
+    path: "%s"
+    max_sessions: 100
 `, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
 
 	atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
@@ -3316,12 +3309,11 @@ components:
   terraform:
     base_path: "%s"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  sessions:
     enabled: true
-    sessions:
-      enabled: true
-      path: "%s"
+    path: "%s"
 `, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
 
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
@@ -3471,12 +3463,11 @@ components:
   terraform:
     base_path: "%s"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  sessions:
     enabled: true
-    sessions:
-      enabled: true
-      path: "%s"
+    path: "%s"
 `, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
 
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
@@ -3543,12 +3534,11 @@ stacks:
     - "deploy/**/*"
   name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  sessions:
     enabled: true
-    sessions:
-      enabled: true
-      path: "%s"
+    path: "%s"
 `, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
 
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
@@ -3678,12 +3668,11 @@ components:
   terraform:
     base_path: "%s"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  sessions:
     enabled: true
-    sessions:
-      enabled: true
-      path: "%s"
+    path: "%s"
 `, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
 
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
@@ -3790,12 +3779,11 @@ components:
   terraform:
     base_path: "%s"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  sessions:
     enabled: true
-    sessions:
-      enabled: true
-      path: "%s"
+    path: "%s"
 `, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
 
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)

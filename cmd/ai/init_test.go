@@ -16,11 +16,9 @@ import (
 func TestInitializeAIToolsAndExecutor_ToolsDisabled(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					Enabled: false,
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled: false,
 			},
 		},
 	}
@@ -37,16 +35,14 @@ func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
 	basePath := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: basePath,
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					Enabled:             true,
-					AllowedTools:        []string{"read_file"},
-					RestrictedTools:     []string{"execute_bash_command"},
-					BlockedTools:        []string{"dangerous_tool"},
-					YOLOMode:            false,
-					RequireConfirmation: boolPtr(true),
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled:             true,
+				AllowedTools:        []string{"read_file"},
+				RestrictedTools:     []string{"execute_bash_command"},
+				BlockedTools:        []string{"dangerous_tool"},
+				YOLOMode:            false,
+				RequireConfirmation: boolPtr(true),
 			},
 		},
 	}
@@ -64,12 +60,10 @@ func TestInitializeAIToolsAndExecutor_YOLOMode(t *testing.T) {
 	basePath := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: basePath,
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					Enabled:  true,
-					YOLOMode: true,
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled:  true,
+				YOLOMode: true,
 			},
 		},
 	}
@@ -129,10 +123,8 @@ func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath: basePath,
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: tt.toolConfig,
-					},
+				AI: schema.AISettings{
+					Tools: tt.toolConfig,
 				},
 			}
 
@@ -174,12 +166,10 @@ func TestInitializeAIToolsAndExecutor_RequireConfirmation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath: basePath,
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							Enabled:             true,
-							RequireConfirmation: tt.requireConfirmation,
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						Enabled:             true,
+						RequireConfirmation: tt.requireConfirmation,
 					},
 				},
 			}
@@ -208,12 +198,10 @@ func TestInitializeAIToolsAndExecutor_PermissionCacheFailure(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: basePath,
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					Enabled:             true,
-					RequireConfirmation: boolPtr(true),
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled:             true,
+				RequireConfirmation: boolPtr(true),
 			},
 		},
 	}
@@ -233,12 +221,10 @@ func TestInitializeAIToolsAndExecutor_PermissionCacheFailure(t *testing.T) {
 func TestInitializeAIToolsAndExecutor_EmptyBasePath(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: "", // Empty base path - cache will use home directory.
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					Enabled:  true,
-					YOLOMode: true, // Use YOLO mode to simplify testing.
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled:  true,
+				YOLOMode: true, // Use YOLO mode to simplify testing.
 			},
 		},
 	}
@@ -302,13 +288,11 @@ func TestInitializeAIToolsAndExecutor_PermissionModes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath: basePath,
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{
-							Enabled:             true,
-							YOLOMode:            tt.yoloMode,
-							RequireConfirmation: tt.requireConfirmation,
-						},
+				AI: schema.AISettings{
+					Tools: schema.AIToolSettings{
+						Enabled:             true,
+						YOLOMode:            tt.yoloMode,
+						RequireConfirmation: tt.requireConfirmation,
 					},
 				},
 			}
@@ -327,11 +311,9 @@ func TestInitializeAIToolsAndExecutor_ToolRegistration(t *testing.T) {
 	basePath := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: basePath,
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					Enabled: true,
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled: true,
 			},
 		},
 	}
@@ -362,12 +344,10 @@ func TestInitializeAIToolsAndExecutor_NilPermCacheUsesSimplePrompter(t *testing.
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: basePath,
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					Enabled:  true,
-					YOLOMode: false, // Not YOLO mode - will use prompter
-				},
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled:  true,
+				YOLOMode: false, // Not YOLO mode - will use prompter
 			},
 		},
 	}

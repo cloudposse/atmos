@@ -63,23 +63,23 @@ var execCmd = &cobra.Command{
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
 			return exitWithError(1, "config_error",
-				fmt.Errorf("%w: Set 'settings.ai.enabled: true' in your atmos.yaml configuration", errUtils.ErrAINotEnabled))
+				fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration", errUtils.ErrAINotEnabled))
 		}
 
 		// Override provider if specified.
 		if providerName != "" {
-			atmosConfig.Settings.AI.DefaultProvider = providerName
+			atmosConfig.AI.DefaultProvider = providerName
 		}
 
 		// Apply context discovery overrides.
 		if noAutoContext {
-			atmosConfig.Settings.AI.Context.Enabled = false
+			atmosConfig.AI.Context.Enabled = false
 		}
 		if len(includePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+			atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
 		}
 		if len(excludePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+			atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
 		}
 
 		// Get prompt from args or stdin.
@@ -102,7 +102,7 @@ var execCmd = &cobra.Command{
 
 		// Create tool executor (if tools are enabled).
 		var toolExecutor *tools.Executor
-		if !noTools && atmosConfig.Settings.AI.Tools.Enabled {
+		if !noTools && atmosConfig.AI.Tools.Enabled {
 			// Use shared initialization function.
 			_, toolExecutor, err = initializeAIToolsAndExecutor(&atmosConfig)
 			if err != nil {
@@ -117,8 +117,8 @@ var execCmd = &cobra.Command{
 
 		// Set execution timeout.
 		timeoutSeconds := 60
-		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
-			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		if atmosConfig.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 		defer cancel()

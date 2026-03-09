@@ -217,12 +217,10 @@ func TestWrapSearchError(t *testing.T) {
 
 func TestNewSearchEngine_Google(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					GoogleAPIKey: "test-api-key",
-					GoogleCSEID:  "test-cse-id",
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				GoogleAPIKey: "test-api-key",
+				GoogleCSEID:  "test-cse-id",
 			},
 		},
 	}
@@ -248,12 +246,10 @@ func TestNewSearchEngine_DuckDuckGo_Default(t *testing.T) {
 
 func TestNewSearchEngine_DuckDuckGo_NoGoogleConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				WebSearch: schema.AIWebSearchSettings{
-					Enabled: true,
-					// No Google API key or CSE ID
-				},
+		AI: schema.AISettings{
+			WebSearch: schema.AIWebSearchSettings{
+				Enabled: true,
+				// No Google API key or CSE ID
 			},
 		},
 	}
@@ -295,12 +291,10 @@ func TestNewSearchEngine_DuckDuckGo_PartialGoogleConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						WebSearch: schema.AIWebSearchSettings{
-							GoogleAPIKey: tt.apiKey,
-							GoogleCSEID:  tt.cseID,
-						},
+				AI: schema.AISettings{
+					WebSearch: schema.AIWebSearchSettings{
+						GoogleAPIKey: tt.apiKey,
+						GoogleCSEID:  tt.cseID,
 					},
 				},
 			}

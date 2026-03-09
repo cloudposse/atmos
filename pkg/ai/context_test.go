@@ -220,13 +220,11 @@ func TestGatherStackContext(t *testing.T) {
 					Stacks: schema.Stacks{
 						BasePath: "stacks",
 					},
-					Settings: schema.AtmosSettings{
-						AI: schema.AISettings{
-							MaxContextFiles: 10,
-							MaxContextLines: 500,
-							Context: schema.AIContextSettings{
-								Enabled: false, // Use legacy mode.
-							},
+					AI: schema.AISettings{
+						MaxContextFiles: 10,
+						MaxContextLines: 500,
+						Context: schema.AIContextSettings{
+							Enabled: false, // Use legacy mode.
 						},
 					},
 				}
@@ -247,11 +245,9 @@ func TestGatherStackContext(t *testing.T) {
 					Stacks: schema.Stacks{
 						BasePath: "stacks",
 					},
-					Settings: schema.AtmosSettings{
-						AI: schema.AISettings{
-							Context: schema.AIContextSettings{
-								Enabled: false,
-							},
+					AI: schema.AISettings{
+						Context: schema.AIContextSettings{
+							Enabled: false,
 						},
 					},
 				}
@@ -278,13 +274,11 @@ func TestGatherStackContext(t *testing.T) {
 					Stacks: schema.Stacks{
 						BasePath: "stacks",
 					},
-					Settings: schema.AtmosSettings{
-						AI: schema.AISettings{
-							MaxContextFiles: 5, // Limit to 5 files.
-							MaxContextLines: 500,
-							Context: schema.AIContextSettings{
-								Enabled: false,
-							},
+					AI: schema.AISettings{
+						MaxContextFiles: 5, // Limit to 5 files.
+						MaxContextLines: 500,
+						Context: schema.AIContextSettings{
+							Enabled: false,
 						},
 					},
 				}
@@ -528,11 +522,9 @@ func TestShouldSendContext_WithEnvVar(t *testing.T) {
 			t.Setenv("ATMOS_AI_SEND_CONTEXT", tt.envValue)
 
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						SendContext:  false,
-						PromptOnSend: false,
-					},
+				AI: schema.AISettings{
+					SendContext:  false,
+					PromptOnSend: false,
 				},
 			}
 
@@ -569,11 +561,9 @@ func TestShouldSendContext_WithConfig(t *testing.T) {
 			t.Setenv("ATMOS_AI_SEND_CONTEXT", "")
 
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						SendContext:  tt.sendContext,
-						PromptOnSend: tt.promptOnSend,
-					},
+				AI: schema.AISettings{
+					SendContext:  tt.sendContext,
+					PromptOnSend: tt.promptOnSend,
 				},
 			}
 
@@ -608,14 +598,12 @@ func TestGatherStackContext_WithContextDiscovery(t *testing.T) {
 			Stacks: schema.Stacks{
 				BasePath: "stacks",
 			},
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Context: schema.AIContextSettings{
-						Enabled:     true,
-						AutoInclude: []string{"ATMOS.md"},
-						MaxFiles:    10,
-						MaxSizeMB:   1,
-					},
+			AI: schema.AISettings{
+				Context: schema.AIContextSettings{
+					Enabled:     true,
+					AutoInclude: []string{"ATMOS.md"},
+					MaxFiles:    10,
+					MaxSizeMB:   1,
 				},
 			},
 		}
@@ -641,12 +629,10 @@ func TestGatherStackContext_WithContextDiscovery(t *testing.T) {
 			Stacks: schema.Stacks{
 				BasePath: "stacks",
 			},
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Context: schema.AIContextSettings{
-						Enabled:     true,
-						AutoInclude: []string{}, // Empty, will produce no results.
-					},
+			AI: schema.AISettings{
+				Context: schema.AIContextSettings{
+					Enabled:     true,
+					AutoInclude: []string{}, // Empty, will produce no results.
 				},
 			},
 		}
@@ -678,13 +664,11 @@ func TestGatherStackContext_UsesConfiguredLimits(t *testing.T) {
 		Stacks: schema.Stacks{
 			BasePath: "stacks",
 		},
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				MaxContextFiles: 1,
-				MaxContextLines: 10, // Limit to 10 lines.
-				Context: schema.AIContextSettings{
-					Enabled: false,
-				},
+		AI: schema.AISettings{
+			MaxContextFiles: 1,
+			MaxContextLines: 10, // Limit to 10 lines.
+			Context: schema.AIContextSettings{
+				Enabled: false,
 			},
 		},
 	}

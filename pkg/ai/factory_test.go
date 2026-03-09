@@ -28,9 +28,7 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "No AI settings",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expectError: true,
 			errorMsg:    "AI features are disabled in configuration",
@@ -38,13 +36,11 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "Anthropic provider (explicit)",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled:         true,
-						DefaultProvider: "anthropic",
-						Providers: map[string]*schema.AIProviderConfig{
-							"anthropic": {},
-						},
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "anthropic",
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {},
 					},
 				},
 			},
@@ -53,10 +49,8 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "Anthropic provider (default)",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-					},
+				AI: schema.AISettings{
+					Enabled: true,
 				},
 			},
 			expectError: false,
@@ -64,13 +58,11 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "Unsupported provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled:         true,
-						DefaultProvider: "unsupported",
-						Providers: map[string]*schema.AIProviderConfig{
-							"unsupported": {},
-						},
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "unsupported",
+					Providers: map[string]*schema.AIProviderConfig{
+						"unsupported": {},
 					},
 				},
 			},
@@ -80,13 +72,11 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "OpenAI provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled:         true,
-						DefaultProvider: "openai",
-						Providers: map[string]*schema.AIProviderConfig{
-							"openai": {},
-						},
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "openai",
+					Providers: map[string]*schema.AIProviderConfig{
+						"openai": {},
 					},
 				},
 			},
@@ -95,13 +85,11 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "Gemini provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled:         true,
-						DefaultProvider: "gemini",
-						Providers: map[string]*schema.AIProviderConfig{
-							"gemini": {},
-						},
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "gemini",
+					Providers: map[string]*schema.AIProviderConfig{
+						"gemini": {},
 					},
 				},
 			},
@@ -110,13 +98,11 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "Grok provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled:         true,
-						DefaultProvider: "grok",
-						Providers: map[string]*schema.AIProviderConfig{
-							"grok": {},
-						},
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "grok",
+					Providers: map[string]*schema.AIProviderConfig{
+						"grok": {},
 					},
 				},
 			},
@@ -125,13 +111,11 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "Ollama provider",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled:         true,
-						DefaultProvider: "ollama",
-						Providers: map[string]*schema.AIProviderConfig{
-							"ollama": {},
-						},
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "ollama",
+					Providers: map[string]*schema.AIProviderConfig{
+						"ollama": {},
 					},
 				},
 			},
@@ -140,10 +124,8 @@ func TestNewClient(t *testing.T) {
 		{
 			name: "Disabled AI",
 			atmosConfig: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: false,
-					},
+				AI: schema.AISettings{
+					Enabled: false,
 				},
 			},
 			expectError: true,

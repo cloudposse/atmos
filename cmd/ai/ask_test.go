@@ -264,9 +264,8 @@ stacks:
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
-    enabled: false
+ai:
+  enabled: false
 `
 
 	// Write the config file.
@@ -315,12 +314,10 @@ func TestAskCommand_ContextOverrides(t *testing.T) {
 
 	t.Run("no-auto-context flag disables context", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
 					Enabled: true,
-					Context: schema.AIContextSettings{
-						Enabled: true,
-					},
 				},
 			},
 		}
@@ -328,20 +325,18 @@ func TestAskCommand_ContextOverrides(t *testing.T) {
 		// Simulate what the ask command does when no-auto-context is true.
 		noAutoContext := true
 		if noAutoContext {
-			atmosConfig.Settings.AI.Context.Enabled = false
+			atmosConfig.AI.Context.Enabled = false
 		}
 
-		assert.False(t, atmosConfig.Settings.AI.Context.Enabled)
+		assert.False(t, atmosConfig.AI.Context.Enabled)
 	})
 
 	t.Run("include patterns are appended", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						AutoInclude: []string{"*.yaml"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					AutoInclude: []string{"*.yaml"},
 				},
 			},
 		}
@@ -349,23 +344,21 @@ func TestAskCommand_ContextOverrides(t *testing.T) {
 		// Simulate what the ask command does when include patterns are provided.
 		includePatterns := []string{"*.yml", "*.json"}
 		if len(includePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+			atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
 		}
 
-		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 3)
-		assert.Contains(t, atmosConfig.Settings.AI.Context.AutoInclude, "*.yaml")
-		assert.Contains(t, atmosConfig.Settings.AI.Context.AutoInclude, "*.yml")
-		assert.Contains(t, atmosConfig.Settings.AI.Context.AutoInclude, "*.json")
+		assert.Len(t, atmosConfig.AI.Context.AutoInclude, 3)
+		assert.Contains(t, atmosConfig.AI.Context.AutoInclude, "*.yaml")
+		assert.Contains(t, atmosConfig.AI.Context.AutoInclude, "*.yml")
+		assert.Contains(t, atmosConfig.AI.Context.AutoInclude, "*.json")
 	})
 
 	t.Run("exclude patterns are appended", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						Exclude: []string{"*.tmp"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					Exclude: []string{"*.tmp"},
 				},
 			},
 		}
@@ -373,13 +366,13 @@ func TestAskCommand_ContextOverrides(t *testing.T) {
 		// Simulate what the ask command does when exclude patterns are provided.
 		excludePatterns := []string{"*.bak", "*.log"}
 		if len(excludePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+			atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
 		}
 
-		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 3)
-		assert.Contains(t, atmosConfig.Settings.AI.Context.Exclude, "*.tmp")
-		assert.Contains(t, atmosConfig.Settings.AI.Context.Exclude, "*.bak")
-		assert.Contains(t, atmosConfig.Settings.AI.Context.Exclude, "*.log")
+		assert.Len(t, atmosConfig.AI.Context.Exclude, 3)
+		assert.Contains(t, atmosConfig.AI.Context.Exclude, "*.tmp")
+		assert.Contains(t, atmosConfig.AI.Context.Exclude, "*.bak")
+		assert.Contains(t, atmosConfig.AI.Context.Exclude, "*.log")
 	})
 }
 
@@ -508,10 +501,8 @@ func TestAskCommand_IsAIEnabled(t *testing.T) {
 		{
 			name: "AI enabled",
 			config: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: true,
-					},
+				AI: schema.AISettings{
+					Enabled: true,
 				},
 			},
 			expected: true,
@@ -519,10 +510,8 @@ func TestAskCommand_IsAIEnabled(t *testing.T) {
 		{
 			name: "AI disabled",
 			config: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Enabled: false,
-					},
+				AI: schema.AISettings{
+					Enabled: false,
 				},
 			},
 			expected: false,
@@ -530,9 +519,7 @@ func TestAskCommand_IsAIEnabled(t *testing.T) {
 		{
 			name: "AI not configured (defaults to false)",
 			config: &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{},
-				},
+				AI: schema.AISettings{},
 			},
 			expected: false,
 		},
@@ -593,10 +580,9 @@ stacks:
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
-    enabled: true
-    default_provider: "nonexistent_provider"
+ai:
+  enabled: true
+  default_provider: "nonexistent_provider"
 `
 
 	// Write the config file.
@@ -656,16 +642,15 @@ stacks:
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: "invalid_provider"
+  context:
     enabled: true
-    default_provider: "invalid_provider"
-    context:
-      enabled: true
-      auto_include:
-        - "*.yaml"
-      exclude:
-        - "*.tmp"
+    auto_include:
+      - "*.yaml"
+    exclude:
+      - "*.tmp"
 `
 
 	// Write the config file.
@@ -773,12 +758,11 @@ stacks:
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: "invalid_provider"
+  context:
     enabled: true
-    default_provider: "invalid_provider"
-    context:
-      enabled: true
 `
 
 	// Write the config file.
@@ -873,18 +857,16 @@ func TestAskCommand_TimeoutConfiguration(t *testing.T) {
 	// Test the timeout configuration logic.
 	t.Run("default timeout is 60 seconds", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled:        true,
-					TimeoutSeconds: 0, // Not configured.
-				},
+			AI: schema.AISettings{
+				Enabled:        true,
+				TimeoutSeconds: 0, // Not configured.
 			},
 		}
 
 		// Simulate the logic from ask.go.
 		timeoutSeconds := 60
-		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
-			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		if atmosConfig.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
 
 		assert.Equal(t, 60, timeoutSeconds)
@@ -892,18 +874,16 @@ func TestAskCommand_TimeoutConfiguration(t *testing.T) {
 
 	t.Run("custom timeout is used when configured", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled:        true,
-					TimeoutSeconds: 120,
-				},
+			AI: schema.AISettings{
+				Enabled:        true,
+				TimeoutSeconds: 120,
 			},
 		}
 
 		// Simulate the logic from ask.go.
 		timeoutSeconds := 60
-		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
-			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		if atmosConfig.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
 
 		assert.Equal(t, 120, timeoutSeconds)
@@ -923,16 +903,14 @@ func TestAskCommand_TimeoutConfiguration(t *testing.T) {
 
 		for _, tt := range tests {
 			atmosConfig := &schema.AtmosConfiguration{
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						TimeoutSeconds: tt.configured,
-					},
+				AI: schema.AISettings{
+					TimeoutSeconds: tt.configured,
 				},
 			}
 
 			timeoutSeconds := 60
-			if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
-				timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+			if atmosConfig.AI.TimeoutSeconds > 0 {
+				timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 			}
 
 			assert.Equal(t, tt.expected, timeoutSeconds)
@@ -944,12 +922,10 @@ func TestAskCommand_ContextOverridesWithEmptyPatterns(t *testing.T) {
 	// Test that empty patterns don't affect the configuration.
 	t.Run("empty include patterns don't change config", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						AutoInclude: []string{"*.yaml"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					AutoInclude: []string{"*.yaml"},
 				},
 			},
 		}
@@ -957,22 +933,20 @@ func TestAskCommand_ContextOverridesWithEmptyPatterns(t *testing.T) {
 		// Simulate with empty patterns.
 		includePatterns := []string{}
 		if len(includePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+			atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
 		}
 
 		// Should remain unchanged.
-		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 1)
-		assert.Contains(t, atmosConfig.Settings.AI.Context.AutoInclude, "*.yaml")
+		assert.Len(t, atmosConfig.AI.Context.AutoInclude, 1)
+		assert.Contains(t, atmosConfig.AI.Context.AutoInclude, "*.yaml")
 	})
 
 	t.Run("empty exclude patterns don't change config", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						Exclude: []string{"*.tmp"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					Exclude: []string{"*.tmp"},
 				},
 			},
 		}
@@ -980,12 +954,12 @@ func TestAskCommand_ContextOverridesWithEmptyPatterns(t *testing.T) {
 		// Simulate with empty patterns.
 		excludePatterns := []string{}
 		if len(excludePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+			atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
 		}
 
 		// Should remain unchanged.
-		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 1)
-		assert.Contains(t, atmosConfig.Settings.AI.Context.Exclude, "*.tmp")
+		assert.Len(t, atmosConfig.AI.Context.Exclude, 1)
+		assert.Contains(t, atmosConfig.AI.Context.Exclude, "*.tmp")
 	})
 }
 
@@ -993,12 +967,10 @@ func TestAskCommand_NoAutoContextFalsePreservesContext(t *testing.T) {
 	// Test that when no-auto-context is false, context remains enabled.
 	t.Run("no-auto-context false preserves context enabled", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
 					Enabled: true,
-					Context: schema.AIContextSettings{
-						Enabled: true,
-					},
 				},
 			},
 		}
@@ -1006,11 +978,11 @@ func TestAskCommand_NoAutoContextFalsePreservesContext(t *testing.T) {
 		// Simulate what the ask command does when no-auto-context is false.
 		noAutoContext := false
 		if noAutoContext {
-			atmosConfig.Settings.AI.Context.Enabled = false
+			atmosConfig.AI.Context.Enabled = false
 		}
 
 		// Context should still be enabled.
-		assert.True(t, atmosConfig.Settings.AI.Context.Enabled)
+		assert.True(t, atmosConfig.AI.Context.Enabled)
 	})
 }
 
@@ -1018,44 +990,40 @@ func TestAskCommand_ContextAppendBehavior(t *testing.T) {
 	// Test that patterns are appended, not replaced.
 	t.Run("include patterns are appended to existing patterns", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						AutoInclude: []string{"existing.yaml"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					AutoInclude: []string{"existing.yaml"},
 				},
 			},
 		}
 
 		includePatterns := []string{"new1.yaml", "new2.yaml"}
-		atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+		atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
 
-		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 3)
-		assert.Equal(t, "existing.yaml", atmosConfig.Settings.AI.Context.AutoInclude[0])
-		assert.Equal(t, "new1.yaml", atmosConfig.Settings.AI.Context.AutoInclude[1])
-		assert.Equal(t, "new2.yaml", atmosConfig.Settings.AI.Context.AutoInclude[2])
+		assert.Len(t, atmosConfig.AI.Context.AutoInclude, 3)
+		assert.Equal(t, "existing.yaml", atmosConfig.AI.Context.AutoInclude[0])
+		assert.Equal(t, "new1.yaml", atmosConfig.AI.Context.AutoInclude[1])
+		assert.Equal(t, "new2.yaml", atmosConfig.AI.Context.AutoInclude[2])
 	})
 
 	t.Run("exclude patterns are appended to existing patterns", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						Exclude: []string{"existing.tmp"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					Exclude: []string{"existing.tmp"},
 				},
 			},
 		}
 
 		excludePatterns := []string{"new1.tmp", "new2.tmp"}
-		atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+		atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
 
-		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 3)
-		assert.Equal(t, "existing.tmp", atmosConfig.Settings.AI.Context.Exclude[0])
-		assert.Equal(t, "new1.tmp", atmosConfig.Settings.AI.Context.Exclude[1])
-		assert.Equal(t, "new2.tmp", atmosConfig.Settings.AI.Context.Exclude[2])
+		assert.Len(t, atmosConfig.AI.Context.Exclude, 3)
+		assert.Equal(t, "existing.tmp", atmosConfig.AI.Context.Exclude[0])
+		assert.Equal(t, "new1.tmp", atmosConfig.AI.Context.Exclude[1])
+		assert.Equal(t, "new2.tmp", atmosConfig.AI.Context.Exclude[2])
 	})
 }
 
@@ -1081,13 +1049,12 @@ func TestAskCommand_SendContextEnvVar(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"
-    send_context: false
-    context:
-      enabled: false
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  send_context: false
+  context:
+    enabled: false
 `
 
 	// Write the config file.
@@ -1174,16 +1141,15 @@ func TestAskCommand_AllFlagsApplied(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: "invalid_provider"
+  context:
     enabled: true
-    default_provider: "invalid_provider"
-    context:
-      enabled: true
-      auto_include:
-        - "*.yaml"
-      exclude:
-        - "*.tmp"
+    auto_include:
+      - "*.yaml"
+    exclude:
+      - "*.tmp"
 `
 
 	// Write the config file.
@@ -1251,10 +1217,9 @@ func TestAskCommand_MultiWordQuestion(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
-    enabled: true
-    default_provider: "invalid_provider"
+ai:
+  enabled: true
+  default_provider: "invalid_provider"
 `
 
 	// Write the config file.
@@ -1302,14 +1267,12 @@ func TestAskCommand_ContextOverridesInOrder(t *testing.T) {
 
 	t.Run("no-auto-context takes precedence", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						Enabled:     true,
-						AutoInclude: []string{"*.yaml"},
-						Exclude:     []string{"*.tmp"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					Enabled:     true,
+					AutoInclude: []string{"*.yaml"},
+					Exclude:     []string{"*.tmp"},
 				},
 			},
 		}
@@ -1321,20 +1284,20 @@ func TestAskCommand_ContextOverridesInOrder(t *testing.T) {
 
 		// Apply in the same order as ask.go.
 		if noAutoContext {
-			atmosConfig.Settings.AI.Context.Enabled = false
+			atmosConfig.AI.Context.Enabled = false
 		}
 		if len(includePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+			atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
 		}
 		if len(excludePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+			atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
 		}
 
 		// Context should be disabled.
-		assert.False(t, atmosConfig.Settings.AI.Context.Enabled)
+		assert.False(t, atmosConfig.AI.Context.Enabled)
 		// But patterns should still be appended (in case context is re-enabled elsewhere).
-		assert.Contains(t, atmosConfig.Settings.AI.Context.AutoInclude, "*.json")
-		assert.Contains(t, atmosConfig.Settings.AI.Context.Exclude, "*.bak")
+		assert.Contains(t, atmosConfig.AI.Context.AutoInclude, "*.json")
+		assert.Contains(t, atmosConfig.AI.Context.Exclude, "*.bak")
 	})
 }
 
@@ -1342,44 +1305,40 @@ func TestAskCommand_NilPatterns(t *testing.T) {
 	// Test behavior when patterns are nil (not set).
 	t.Run("nil include patterns don't modify config", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						AutoInclude: []string{"original.yaml"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					AutoInclude: []string{"original.yaml"},
 				},
 			},
 		}
 
 		var includePatterns []string // nil slice.
 		if len(includePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+			atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
 		}
 
-		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 1)
-		assert.Equal(t, "original.yaml", atmosConfig.Settings.AI.Context.AutoInclude[0])
+		assert.Len(t, atmosConfig.AI.Context.AutoInclude, 1)
+		assert.Equal(t, "original.yaml", atmosConfig.AI.Context.AutoInclude[0])
 	})
 
 	t.Run("nil exclude patterns don't modify config", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						Exclude: []string{"original.tmp"},
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					Exclude: []string{"original.tmp"},
 				},
 			},
 		}
 
 		var excludePatterns []string // nil slice.
 		if len(excludePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+			atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
 		}
 
-		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 1)
-		assert.Equal(t, "original.tmp", atmosConfig.Settings.AI.Context.Exclude[0])
+		assert.Len(t, atmosConfig.AI.Context.Exclude, 1)
+		assert.Equal(t, "original.tmp", atmosConfig.AI.Context.Exclude[0])
 	})
 }
 
@@ -1387,44 +1346,40 @@ func TestAskCommand_InitialContextNil(t *testing.T) {
 	// Test behavior when initial context arrays are nil.
 	t.Run("include patterns create new slice when nil", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						AutoInclude: nil, // nil slice.
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					AutoInclude: nil, // nil slice.
 				},
 			},
 		}
 
 		includePatterns := []string{"new.yaml"}
 		if len(includePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+			atmosConfig.AI.Context.AutoInclude = append(atmosConfig.AI.Context.AutoInclude, includePatterns...)
 		}
 
-		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 1)
-		assert.Equal(t, "new.yaml", atmosConfig.Settings.AI.Context.AutoInclude[0])
+		assert.Len(t, atmosConfig.AI.Context.AutoInclude, 1)
+		assert.Equal(t, "new.yaml", atmosConfig.AI.Context.AutoInclude[0])
 	})
 
 	t.Run("exclude patterns create new slice when nil", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled: true,
-					Context: schema.AIContextSettings{
-						Exclude: nil, // nil slice.
-					},
+			AI: schema.AISettings{
+				Enabled: true,
+				Context: schema.AIContextSettings{
+					Exclude: nil, // nil slice.
 				},
 			},
 		}
 
 		excludePatterns := []string{"new.tmp"}
 		if len(excludePatterns) > 0 {
-			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+			atmosConfig.AI.Context.Exclude = append(atmosConfig.AI.Context.Exclude, excludePatterns...)
 		}
 
-		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 1)
-		assert.Equal(t, "new.tmp", atmosConfig.Settings.AI.Context.Exclude[0])
+		assert.Len(t, atmosConfig.AI.Context.Exclude, 1)
+		assert.Equal(t, "new.tmp", atmosConfig.AI.Context.Exclude[0])
 	})
 }
 
@@ -1470,18 +1425,16 @@ func TestAskCommand_TimeoutNegativeValue(t *testing.T) {
 	// Test that negative timeout values are handled correctly.
 	t.Run("negative timeout uses default", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				AI: schema.AISettings{
-					Enabled:        true,
-					TimeoutSeconds: -10, // Negative value.
-				},
+			AI: schema.AISettings{
+				Enabled:        true,
+				TimeoutSeconds: -10, // Negative value.
 			},
 		}
 
 		// Simulate the logic from ask.go.
 		timeoutSeconds := 60
-		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
-			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		if atmosConfig.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
 
 		assert.Equal(t, 60, timeoutSeconds) // Should use default.
@@ -1530,15 +1483,14 @@ func TestAskCommand_ContextEnabledConfig(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: "invalid_provider"
+  send_context: true
+  context:
     enabled: true
-    default_provider: "invalid_provider"
-    send_context: true
-    context:
-      enabled: true
-      auto_include:
-        - "*.yaml"
+    auto_include:
+      - "*.yaml"
 `
 
 	// Write the config file.
@@ -1667,18 +1619,17 @@ func TestAskCommand_OllamaProviderSendMessageError(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
-    enabled: true
-    default_provider: "ollama"
-    send_context: false
-    timeout_seconds: 5
-    context:
-      enabled: false
-    providers:
-      ollama:
-        base_url: "http://127.0.0.1:65535/v1"
-        model: "llama3"
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: false
+  timeout_seconds: 5
+  context:
+    enabled: false
+  providers:
+    ollama:
+      base_url: "http://127.0.0.1:65535/v1"
+      model: "llama3"
 `
 
 	// Write the config file.
@@ -1742,22 +1693,21 @@ func TestAskCommand_OllamaWithContext(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: true
+  prompt_on_send: false
+  timeout_seconds: 5
+  context:
     enabled: true
-    default_provider: "ollama"
-    send_context: true
-    prompt_on_send: false
-    timeout_seconds: 5
-    context:
-      enabled: true
-      show_files: false
-      auto_include:
-        - "*.yaml"
-    providers:
-      ollama:
-        base_url: "http://127.0.0.1:65535/v1"
-        model: "llama3"
+    show_files: false
+    auto_include:
+      - "*.yaml"
+  providers:
+    ollama:
+      base_url: "http://127.0.0.1:65535/v1"
+      model: "llama3"
 `
 
 	// Write the config file.
@@ -1820,18 +1770,17 @@ func TestAskCommand_OllamaWithCustomTimeout(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
-    enabled: true
-    default_provider: "ollama"
-    send_context: false
-    timeout_seconds: 120
-    context:
-      enabled: false
-    providers:
-      ollama:
-        base_url: "http://127.0.0.1:65535/v1"
-        model: "llama3"
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: false
+  timeout_seconds: 120
+  context:
+    enabled: false
+  providers:
+    ollama:
+      base_url: "http://127.0.0.1:65535/v1"
+      model: "llama3"
 `
 
 	// Write the config file.
@@ -1894,22 +1843,21 @@ func TestAskCommand_OllamaWithIncludeExcludeFlags(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: false
+  timeout_seconds: 5
+  context:
     enabled: true
-    default_provider: "ollama"
-    send_context: false
-    timeout_seconds: 5
-    context:
-      enabled: true
-      auto_include:
-        - "*.yaml"
-      exclude:
-        - "*.tmp"
-    providers:
-      ollama:
-        base_url: "http://127.0.0.1:65535/v1"
-        model: "llama3"
+    auto_include:
+      - "*.yaml"
+    exclude:
+      - "*.tmp"
+  providers:
+    ollama:
+      base_url: "http://127.0.0.1:65535/v1"
+      model: "llama3"
 `
 
 	// Write the config file.
@@ -1978,18 +1926,17 @@ func TestAskCommand_OllamaWithNoAutoContext(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: false
+  timeout_seconds: 5
+  context:
     enabled: true
-    default_provider: "ollama"
-    send_context: false
-    timeout_seconds: 5
-    context:
-      enabled: true
-    providers:
-      ollama:
-        base_url: "http://127.0.0.1:65535/v1"
-        model: "llama3"
+  providers:
+    ollama:
+      base_url: "http://127.0.0.1:65535/v1"
+      model: "llama3"
 `
 
 	// Write the config file.
@@ -2057,22 +2004,21 @@ func TestAskCommand_OllamaWithContextThatRequiresPrompt(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: true
+  prompt_on_send: false
+  timeout_seconds: 5
+  context:
     enabled: true
-    default_provider: "ollama"
-    send_context: true
-    prompt_on_send: false
-    timeout_seconds: 5
-    context:
-      enabled: true
-      show_files: false
-      auto_include:
-        - "*.yaml"
-    providers:
-      ollama:
-        base_url: "http://127.0.0.1:65535/v1"
-        model: "llama3"
+    show_files: false
+    auto_include:
+      - "*.yaml"
+  providers:
+    ollama:
+      base_url: "http://127.0.0.1:65535/v1"
+      model: "llama3"
 `
 
 	// Write the config file.
@@ -2152,19 +2098,18 @@ func TestAskCommand_GatherContextWarningPath(t *testing.T) {
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
-    enabled: true
-    default_provider: "ollama"
-    send_context: true
-    prompt_on_send: false
-    timeout_seconds: 5
-    context:
-      enabled: false
-    providers:
-      ollama:
-        base_url: "http://127.0.0.1:65535/v1"
-        model: "llama3"
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: true
+  prompt_on_send: false
+  timeout_seconds: 5
+  context:
+    enabled: false
+  providers:
+    ollama:
+      base_url: "http://127.0.0.1:65535/v1"
+      model: "llama3"
 `
 
 	// Write the config file.
@@ -2247,19 +2192,18 @@ components:
     - "**/*"
   name_pattern: "{stage}"
 
-settings:
-  ai:
-    enabled: true
-    default_provider: "ollama"
-    send_context: true
-    prompt_on_send: false
-    timeout_seconds: 5
-    context:
-      enabled: false
-    providers:
-      ollama:
-        base_url: "http://127.0.0.1:65535/v1"
-        model: "llama3"
+ai:
+  enabled: true
+  default_provider: "ollama"
+  send_context: true
+  prompt_on_send: false
+  timeout_seconds: 5
+  context:
+    enabled: false
+  providers:
+    ollama:
+      base_url: "http://127.0.0.1:65535/v1"
+      model: "llama3"
 `
 
 	// Write the config file.

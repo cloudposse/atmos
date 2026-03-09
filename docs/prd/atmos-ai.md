@@ -28,7 +28,6 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **LSP Integration** - YAML/Terraform validation with real-time diagnostics
 - **Enhanced TUI** - Markdown rendering, syntax highlighting, session management
 - **Token Caching** - Save up to 90% on API costs with prompt caching (6/7 providers)
-- **GitHub Actions Integration** - Automated PR reviews, security scans, and cost analysis in CI/CD
 
 ---
 
@@ -282,25 +281,20 @@ f       - Filter by provider
 #### Configuration
 
 ```yaml
-settings:
-  ai:
-    sessions:
-      enabled: true
-      storage: sqlite
-      path: .atmos/sessions
-      max_sessions: 10
-      auto_save: true
-      retention_days: 30
-      max_history_messages: 50
+ai:
+  sessions:
+    enabled: true
+    path: .atmos/sessions
+    max_sessions: 10
+    max_history_messages: 50
 
-      auto_compact:
-        enabled: false  # Opt-in
-        trigger_threshold: 0.75
-        compact_ratio: 0.4
-        preserve_recent: 10
-        use_ai_summary: true
-        summary_provider: anthropic
-        summary_model: claude-haiku-4-5-20251001
+    auto_compact:
+      enabled: false  # Opt-in
+      trigger_threshold: 0.75
+      compact_ratio: 0.4
+      preserve_recent: 10
+      use_ai_summary: true
+      show_summary_markers: false
 ```
 
 #### Auto-Compact Feature
@@ -322,8 +316,7 @@ Intelligent conversation history compaction enables extended multi-day conversat
 - `compact_ratio` - Ratio of old messages to compact (default: 0.4)
 - `preserve_recent` - Number of recent messages to always keep (default: 10)
 - `use_ai_summary` - Use AI for summarization vs simple truncation (default: true)
-- `summary_provider` - AI provider for summaries (default: anthropic)
-- `summary_model` - Model for summaries (default: claude-haiku-4-5-20251001)
+- `show_summary_markers` - Show [SUMMARY] markers around summaries for debugging (default: false)
 
 **Benefits:**
 - Extended conversations without context loss
@@ -479,31 +472,30 @@ AI can execute Atmos commands and file operations with granular permission contr
 **Configuration:**
 
 ```yaml
-settings:
-  ai:
-    tools:
+ai:
+  tools:
+    enabled: true
+    # require_confirmation: true    # Default: true (secure by default)
+                                     # Set to false to opt-out of prompts
+
+    allowed_tools:
+      - atmos_describe_*
+      - atmos_list_*
+      - file_read
+
+    restricted_tools:
+      - file_write
+      - atmos_terraform_plan
+
+    blocked_tools:
+      - atmos_terraform_apply
+      - atmos_terraform_destroy
+
+    yolo_mode: false
+
+    audit:
       enabled: true
-      # require_confirmation: true    # Default: true (secure by default)
-                                       # Set to false to opt-out of prompts
-
-      allowed_tools:
-        - atmos_describe_*
-        - atmos_list_*
-        - file_read
-
-      restricted_tools:
-        - file_write
-        - atmos_terraform_plan
-
-      blocked_tools:
-        - atmos_terraform_apply
-        - atmos_terraform_destroy
-
-      yolo_mode: false
-
-      audit:
-        enabled: true
-        path: .atmos/ai-audit.log
+      path: .atmos/ai-audit.log
 ```
 
 #### Permission Prompt Example
@@ -930,15 +922,14 @@ atmos mcp start --transport http --port 3000
 #### Configuration
 
 ```yaml
-settings:
-  ai:
-    mcp:
-      enabled: true
-      transport: stdio  # or http
+ai:
+  mcp:
+    enabled: true
+    transport: stdio  # or http
 
-      http:
-        port: 3000
-        host: localhost
+    http:
+      port: 3000
+      host: localhost
 ```
 
 #### Technical Implementation
@@ -982,31 +973,30 @@ LSP integration provides real-time validation of YAML and Terraform files using 
 #### Configuration
 
 ```yaml
-settings:
-  lsp:
-    enabled: true
-    servers:
-      yaml-ls:
-        command: "yaml-language-server"
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
-        root_patterns: ["atmos.yaml", ".git"]
-        initialization_options:
-          yaml:
-            schemas:
-              https://json.schemastore.org/github-workflow.json: ".github/workflows/*.{yml,yaml}"
-            format:
-              enable: true
-            validation: true
+lsp:
+  enabled: true
+  servers:
+    yaml-ls:
+      command: "yaml-language-server"
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
+      root_patterns: ["atmos.yaml", ".git"]
+      initialization_options:
+        yaml:
+          schemas:
+            https://json.schemastore.org/github-workflow.json: ".github/workflows/*.{yml,yaml}"
+          format:
+            enable: true
+          validation: true
 
-      terraform-ls:
-        command: "terraform-ls"
-        args: ["serve"]
-        filetypes: ["tf", "tfvars", "hcl"]
-        root_patterns: [".terraform", ".git"]
-        initialization_options:
-          experimentalFeatures:
-            validateOnSave: true
+    terraform-ls:
+      command: "terraform-ls"
+      args: ["serve"]
+      filetypes: ["tf", "tfvars", "hcl"]
+      root_patterns: [".terraform", ".git"]
+      initialization_options:
+        experimentalFeatures:
+          validateOnSave: true
 ```
 
 #### AI Integration
@@ -1057,11 +1047,12 @@ Atmos AI supports 7 AI providers, covering cloud, on-premises, and enterprise us
 
 **Configuration:**
 ```yaml
-settings:
-  ai:
-    provider: anthropic
-    model: claude-sonnet-4-6
-    api_key: !env ANTHROPIC_API_KEY
+ai:
+  default_provider: anthropic
+  providers:
+    anthropic:
+      model: claude-sonnet-4-6
+      api_key: !env ANTHROPIC_API_KEY
 ```
 
 **Best For:** General infrastructure tasks, complex analysis
@@ -1074,11 +1065,12 @@ settings:
 
 **Configuration:**
 ```yaml
-settings:
-  ai:
-    provider: openai
-    model: gpt-4o
-    api_key: !env OPENAI_API_KEY
+ai:
+  default_provider: openai
+  providers:
+    openai:
+      model: gpt-4o
+      api_key: !env OPENAI_API_KEY
 ```
 
 **Best For:** Code generation, refactoring
@@ -1092,11 +1084,12 @@ settings:
 
 **Configuration:**
 ```yaml
-settings:
-  ai:
-    provider: gemini
-    model: gemini-2.5-flash
-    api_key: !env GEMINI_API_KEY
+ai:
+  default_provider: gemini
+  providers:
+    gemini:
+      model: gemini-2.5-flash
+      api_key: !env GEMINI_API_KEY
 ```
 
 **Best For:** Large context windows, document analysis
@@ -1109,11 +1102,12 @@ settings:
 
 **Configuration:**
 ```yaml
-settings:
-  ai:
-    provider: grok
-    model: grok-4-latest
-    api_key: !env XAI_API_KEY
+ai:
+  default_provider: grok
+  providers:
+    grok:
+      model: grok-4-latest
+      api_key: !env XAI_API_KEY
 ```
 
 **Best For:** Alternative to OpenAI, competitive pricing
@@ -1127,11 +1121,12 @@ settings:
 
 **Configuration:**
 ```yaml
-settings:
-  ai:
-    provider: ollama
-    model: llama4
-    base_url: http://localhost:11434/v1
+ai:
+  default_provider: ollama
+  providers:
+    ollama:
+      model: llama4
+      base_url: http://localhost:11434/v1
 ```
 
 **Setup:**
@@ -1161,11 +1156,12 @@ atmos ai chat
 
 **Configuration:**
 ```yaml
-settings:
-  ai:
-    provider: bedrock
-    model: anthropic.claude-sonnet-4-6
-    base_url: us-east-1  # AWS region
+ai:
+  default_provider: bedrock
+  providers:
+    bedrock:
+      model: anthropic.claude-sonnet-4-6
+      base_url: us-east-1  # AWS region
 ```
 
 **Authentication:**
@@ -1187,12 +1183,13 @@ settings:
 
 **Configuration:**
 ```yaml
-settings:
-  ai:
-    provider: azureopenai
-    model: gpt-4o-deployment  # Your deployment name
-    api_key: !env AZURE_OPENAI_API_KEY
-    base_url: https://<resource>.openai.azure.com
+ai:
+  default_provider: azureopenai
+  providers:
+    azureopenai:
+      model: gpt-4o-deployment  # Your deployment name
+      api_key: !env AZURE_OPENAI_API_KEY
+      base_url: https://<resource>.openai.azure.com
 ```
 
 **Best For:**
@@ -1218,44 +1215,43 @@ settings:
 **Full Configuration Example:**
 
 ```yaml
-settings:
-  ai:
-    enabled: true
-    default_provider: anthropic
+ai:
+  enabled: true
+  default_provider: anthropic
 
-    providers:
-      anthropic:
-        model: claude-sonnet-4-6
-        api_key: !env ANTHROPIC_API_KEY
-        max_tokens: 4096
+  providers:
+    anthropic:
+      model: claude-sonnet-4-6
+      api_key: !env ANTHROPIC_API_KEY
+      max_tokens: 4096
 
-      openai:
-        model: gpt-4o
-        api_key: !env OPENAI_API_KEY
-        max_tokens: 4096
+    openai:
+      model: gpt-4o
+      api_key: !env OPENAI_API_KEY
+      max_tokens: 4096
 
-      gemini:
-        model: gemini-2.5-flash
-        api_key: !env GEMINI_API_KEY
-        max_tokens: 4096
+    gemini:
+      model: gemini-2.5-flash
+      api_key: !env GEMINI_API_KEY
+      max_tokens: 4096
 
-      grok:
-        model: grok-4-latest
-        api_key: !env XAI_API_KEY
-        max_tokens: 4096
+    grok:
+      model: grok-4-latest
+      api_key: !env XAI_API_KEY
+      max_tokens: 4096
 
-      ollama:
-        model: llama4
-        base_url: http://localhost:11434/v1
+    ollama:
+      model: llama4
+      base_url: http://localhost:11434/v1
 
-      bedrock:
-        model: anthropic.claude-sonnet-4-6
-        base_url: us-east-1
+    bedrock:
+      model: anthropic.claude-sonnet-4-6
+      base_url: us-east-1
 
-      azureopenai:
-        model: gpt-4o-deployment
-        api_key: !env AZURE_OPENAI_API_KEY
-        base_url: https://company.openai.azure.com
+    azureopenai:
+      model: gpt-4o-deployment
+      api_key: !env AZURE_OPENAI_API_KEY
+      base_url: https://company.openai.azure.com
 ```
 
 **Provider Switching:**
@@ -1302,13 +1298,12 @@ All core features described in this document are production-ready. See the [Road
 
 **Audit Logging:**
 ```yaml
-settings:
-  ai:
-    tools:
-      audit:
-        enabled: true
-        path: .atmos/ai-audit.log
-        retention_days: 90
+ai:
+  tools:
+    audit:
+      enabled: true
+      path: .atmos/ai-audit.log
+      retention_days: 90
 ```
 
 #### Data Privacy
@@ -1362,30 +1357,29 @@ settings:
 
 **Configuration:**
 ```yaml
-settings:
-  ai:
-    # Restrict tool access
-    tools:
-      allowed_tools:
-        - atmos_describe_*
-        - atmos_list_*
-      blocked_tools:
-        - atmos_terraform_destroy
-        - atmos_terraform_apply
+ai:
+  # Restrict tool access
+  tools:
+    allowed_tools:
+      - atmos_describe_*
+      - atmos_list_*
+    blocked_tools:
+      - atmos_terraform_destroy
+      - atmos_terraform_apply
 
-    # Enable audit logging
-    tools:
-      audit:
-        enabled: true
-        path: .atmos/ai-audit.log
+  # Enable audit logging
+  tools:
+    audit:
+      enabled: true
+      path: .atmos/ai-audit.log
 
-    # Use enterprise provider
-    provider: bedrock  # or azureopenai
+  # Use enterprise provider
+  default_provider: bedrock  # or azureopenai
 
-    # Limit context exposure
-    context:
-      send_by_default: false
-      prompt_on_send: true
+  # Limit context exposure
+  context:
+    send_by_default: false
+    prompt_on_send: true
 ```
 
 **Recommendations:**
@@ -1530,111 +1524,107 @@ atmos mcp start --transport http --port 3000
 
 ```yaml
 # atmos.yaml
-settings:
-  ai:
-    # Core settings
+ai:
+  # Core settings
+  enabled: true
+  default_provider: anthropic
+
+  # Provider configurations
+  providers:
+    anthropic:
+      model: claude-sonnet-4-6
+      api_key: !env ANTHROPIC_API_KEY
+      max_tokens: 4096
+
+    openai:
+      model: gpt-4o
+      api_key: !env OPENAI_API_KEY
+      max_tokens: 4096
+
+    gemini:
+      model: gemini-2.5-flash
+      api_key: !env GEMINI_API_KEY
+      max_tokens: 4096
+
+    grok:
+      model: grok-4-latest
+      api_key: !env XAI_API_KEY
+      max_tokens: 4096
+
+    ollama:
+      model: llama4
+      base_url: http://localhost:11434/v1
+
+    bedrock:
+      model: anthropic.claude-sonnet-4-6
+      base_url: us-east-1
+
+    azureopenai:
+      model: gpt-4o-deployment
+      api_key: !env AZURE_OPENAI_API_KEY
+      base_url: https://company.openai.azure.com
+
+  # Session management
+  sessions:
     enabled: true
-    default_provider: anthropic
+    path: .atmos/sessions
+    max_sessions: 10
+    max_history_messages: 50
 
-    # Provider configurations
-    providers:
-      anthropic:
-        model: claude-sonnet-4-6
-        api_key: !env ANTHROPIC_API_KEY
-        max_tokens: 4096
+  # Project instructions (ATMOS.md auto-detected from project root)
 
-      openai:
-        model: gpt-4o
-        api_key: !env OPENAI_API_KEY
-        max_tokens: 4096
-
-      gemini:
-        model: gemini-2.5-flash
-        api_key: !env GEMINI_API_KEY
-        max_tokens: 4096
-
-      grok:
-        model: grok-4-latest
-        api_key: !env XAI_API_KEY
-        max_tokens: 4096
-
-      ollama:
-        model: llama4
-        base_url: http://localhost:11434/v1
-
-      bedrock:
-        model: anthropic.claude-sonnet-4-6
-        base_url: us-east-1
-
-      azureopenai:
-        model: gpt-4o-deployment
-        api_key: !env AZURE_OPENAI_API_KEY
-        base_url: https://company.openai.azure.com
-
-    # Session management
-    sessions:
-      enabled: true
-      storage: sqlite
-      path: .atmos/sessions
-      max_sessions: 10
-      auto_save: true
-      retention_days: 30
-      max_history_messages: 50
-
-    # Project instructions (ATMOS.md auto-detected from project root)
-
-    # Tool execution
-    tools:
-      enabled: true
-      # require_confirmation: true    # Default: true (secure by default)
-                                       # Set to false to opt-out of prompts
-
-      allowed_tools:
-        - atmos_describe_*
-        - atmos_list_*
-        - file_read
-
-      restricted_tools:
-        - file_write
-        - atmos_terraform_plan
-
-      blocked_tools:
-        - atmos_terraform_apply
-        - atmos_terraform_destroy
-
-      yolo_mode: false
-
-      audit:
-        enabled: true
-        path: .atmos/ai-audit.log
-        retention_days: 90
-
-    # Skills (custom skills can be added)
-    default_skill: general
-
-    # MCP server
-    mcp:
-      enabled: true
-      transport: stdio  # or http
-      http:
-        port: 3000
-        host: localhost
-
-  # LSP integration (independent from AI)
-  lsp:
+  # Tool execution
+  tools:
     enabled: true
-    servers:
-      yaml-ls:
-        command: yaml-language-server
-        args: ["--stdio"]
-        filetypes: ["yaml", "yml"]
-        root_patterns: ["atmos.yaml", ".git"]
+    # require_confirmation: true    # Default: true (secure by default)
+                                     # Set to false to opt-out of prompts
 
-      terraform-ls:
-        command: terraform-ls
-        args: ["serve"]
-        filetypes: ["tf", "tfvars", "hcl"]
-        root_patterns: [".terraform", ".git"]
+    allowed_tools:
+      - atmos_describe_*
+      - atmos_list_*
+      - file_read
+
+    restricted_tools:
+      - file_write
+      - atmos_terraform_plan
+
+    blocked_tools:
+      - atmos_terraform_apply
+      - atmos_terraform_destroy
+
+    yolo_mode: false
+
+    audit:
+      enabled: true
+      path: .atmos/ai-audit.log
+      retention_days: 90
+
+  # Skills (custom skills can be added)
+  default_skill: general
+
+  # MCP server
+  mcp:
+    enabled: true
+    transport: stdio  # or http
+    http:
+      port: 3000
+      host: localhost
+
+# LSP integration (independent from AI)
+lsp:
+  enabled: true
+  servers:
+    yaml-ls:
+      command: yaml-language-server
+      args: ["--stdio"]
+      filetypes: ["yaml", "yml"]
+      root_patterns: ["atmos.yaml", ".git"]
+
+    terraform-ls:
+      command: terraform-ls
+      args: ["serve"]
+      filetypes: ["tf", "tfvars", "hcl"]
+      root_patterns: [".terraform", ".git"]
 ```
 
 ---
@@ -1745,119 +1735,6 @@ atmos ai sessions import session.json --overwrite
 - Implementation: `pkg/ai/session/{checkpoint.go,export.go,import.go}`
 - Tests: `pkg/ai/session/checkpoint_test.go` (comprehensive coverage)
 
-**GitHub Actions Integration** - *Completed: October 2025*
-- **Purpose:** Automate infrastructure analysis, PR reviews, security scans, and cost analysis in CI/CD pipelines
-- **Action:** `.github/actions/atmos-ai/action.yml`
-- **Features:** Automated PR reviews, security scanning, cost analysis, compliance checks
-- **Providers:** Works with all 7 AI providers
-
-**Implementation:**
-- Composite GitHub Action with automatic Atmos installation
-- Supports all 7 AI providers (Anthropic, OpenAI, Gemini, Grok, Bedrock, Azure OpenAI, Ollama)
-- Posts results as PR comments with detailed analysis
-- JSON output with structured data (response, tool calls, tokens, exit code)
-- Configurable failure behavior (`fail-on-error`)
-- Session support for multi-turn analysis
-- Token usage tracking and caching metrics
-
-**Action Inputs:**
-```yaml
-- prompt: AI command/question (required)
-- provider: AI provider (optional, from atmos.yaml)
-- model: AI model (optional, from atmos.yaml)
-- api-key: API key from secrets
-- format: json | text | markdown (default: json)
-- post-comment: Post as PR comment (default: false)
-- fail-on-error: Fail on errors (default: true)
-- atmos-version: Atmos version (default: latest)
-- working-directory: Project directory (default: .)
-- session: Session name for multi-turn
-- token: GitHub token for comments
-- comment-header: PR comment header
-```
-
-**Action Outputs:**
-```yaml
-- response: AI response text
-- success: Execution success (true/false)
-- tool-calls: Number of tool calls
-- tokens-used: Total tokens
-- cached-tokens: Cached tokens
-- exit-code: Exit code (0/1/2)
-```
-
-**Use Cases:**
-- **Automated PR Reviews:** Review every PR for configuration errors, security issues, best practices
-- **Security Scanning:** Daily security audits with findings posted as issues
-- **Cost Analysis:** Estimate cost impact of infrastructure changes
-- **Compliance Checks:** Validate against company policies before merge
-- **Multi-Provider Analysis:** Run analysis with multiple AI providers for comparison
-
-**Example Workflows:**
-```yaml
-# PR Review
-name: AI PR Review
-on:
-  pull_request:
-    types: [opened, synchronize]
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/atmos-ai
-        with:
-          prompt: "Review for errors, security issues, and best practices"
-          provider: anthropic
-          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          post-comment: true
-
-# Security Scan
-name: Security Scan
-on:
-  schedule:
-    - cron: '0 2 * * *'  # Daily at 2 AM
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/atmos-ai
-        with:
-          prompt: "Perform comprehensive security audit"
-          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          format: json
-
-# Cost Analysis
-name: Cost Analysis
-on:
-  pull_request:
-    paths: ['stacks/**', 'components/**']
-jobs:
-  cost:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/atmos-ai
-        with:
-          prompt: "Analyze cost impact and flag expensive changes"
-          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          post-comment: true
-          comment-header: '💰 Cost Analysis'
-```
-
-**Benefits:**
-- ✅ Automated PR reviews catch issues before merge
-- ✅ Continuous security scanning
-- ✅ Cost visibility and optimization
-- ✅ Team-wide visibility via PR comments
-- ✅ Multi-provider support for flexibility
-- ✅ Token caching for cost optimization
-- ✅ No manual Atmos setup required
-
-**Documentation:**
-- Website docs: `website/docs/integrations/github-actions/atmos-ai.mdx` (includes action source and example workflows)
-
 **Automatic Context Discovery** - *Completed: October 2025*
 - **Purpose:** Intelligently discover and include relevant project files in AI conversations using glob patterns and gitignore filtering
 - **Implementation:** `pkg/ai/context/discovery.go`, `gitignore.go`, `cache.go`
@@ -1874,24 +1751,23 @@ jobs:
 
 **Configuration Schema:**
 ```yaml
-settings:
-  ai:
-    context:
-      enabled: true                 # Enable context discovery
-      auto_include:                 # Glob patterns to include
-        - "stacks/**/*.yaml"
-        - "components/**/*.tf"
-        - "README.md"
-        - "docs/**/*.md"
-      exclude:                      # Patterns to exclude
-        - "**/*_test.go"
-        - "**/node_modules/**"
-      max_files: 100                # Max files (default: 100)
-      max_size_mb: 10               # Max size in MB (default: 10)
-      follow_gitignore: true        # Respect .gitignore (default: true)
-      show_files: false             # Show discovered files (default: false)
-      cache_enabled: true           # Enable caching (default: true)
-      cache_ttl_seconds: 300        # Cache TTL (default: 300)
+ai:
+  context:
+    enabled: true                 # Enable context discovery
+    auto_include:                 # Glob patterns to include
+      - "stacks/**/*.yaml"
+      - "components/**/*.tf"
+      - "README.md"
+      - "docs/**/*.md"
+    exclude:                      # Patterns to exclude
+      - "**/*_test.go"
+      - "**/node_modules/**"
+    max_files: 100                # Max files (default: 100)
+    max_size_mb: 10               # Max size in MB (default: 10)
+    follow_gitignore: true        # Respect .gitignore (default: true)
+    show_files: false             # Show discovered files (default: false)
+    cache_enabled: true           # Enable caching (default: true)
+    cache_ttl_seconds: 300        # Cache TTL (default: 300)
 ```
 
 **CLI Usage:**

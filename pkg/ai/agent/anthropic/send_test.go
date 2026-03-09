@@ -573,13 +573,11 @@ func TestNewSimpleClient_WithAPIKey(t *testing.T) {
 	// the API key directly. Since Anthropic client creation
 	// does not validate the key (no network call), it should succeed.
 	atmosConfig := &schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{
-				Enabled: true,
-				Providers: map[string]*schema.AIProviderConfig{
-					"anthropic": {
-						ApiKey: "sk-test-valid-key",
-					},
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {
+					ApiKey: "sk-test-valid-key",
 				},
 			},
 		},

@@ -86,7 +86,7 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 		return &tools.Result{
 			Success: false,
 			Output:  "",
-			Error:   fmt.Errorf("%w - configure settings.lsp in atmos.yaml to use this tool", errUtils.ErrAILSPNotEnabled),
+			Error:   fmt.Errorf("%w - configure lsp in atmos.yaml to use this tool", errUtils.ErrAILSPNotEnabled),
 		}, nil
 	}
 

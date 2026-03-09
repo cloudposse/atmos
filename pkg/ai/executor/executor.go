@@ -103,15 +103,13 @@ func (e *Executor) executeSimple(ctx context.Context, prompt string, result *for
 
 // loadAtmosInstructions loads ATMOS.md content for caching if available.
 func (e *Executor) loadAtmosInstructions(ctx context.Context) string {
-	if e.atmosConfig == nil || !e.atmosConfig.Settings.AI.Instructions.Enabled {
+	if e.atmosConfig == nil || !e.atmosConfig.AI.Instructions.Enabled {
 		return ""
 	}
 
 	memConfig := &instructions.Config{
-		Enabled:      e.atmosConfig.Settings.AI.Instructions.Enabled,
-		FilePath:     e.atmosConfig.Settings.AI.Instructions.FilePath,
-		AutoUpdate:   e.atmosConfig.Settings.AI.Instructions.AutoUpdate,
-		CreateIfMiss: e.atmosConfig.Settings.AI.Instructions.CreateIfMiss,
+		Enabled:  e.atmosConfig.AI.Instructions.Enabled,
+		FilePath: e.atmosConfig.AI.Instructions.FilePath,
 	}
 	memoryMgr := instructions.NewManager(e.atmosConfig.BasePath, memConfig)
 	if memoryMgr == nil {
@@ -297,8 +295,8 @@ func combineUsage(a, b *types.Usage) *types.Usage {
 
 // getProviderName returns the provider name from config.
 func (e *Executor) getProviderName() string {
-	if e.atmosConfig != nil && e.atmosConfig.Settings.AI.DefaultProvider != "" {
-		return e.atmosConfig.Settings.AI.DefaultProvider
+	if e.atmosConfig != nil && e.atmosConfig.AI.DefaultProvider != "" {
+		return e.atmosConfig.AI.DefaultProvider
 	}
 	return "unknown"
 }
