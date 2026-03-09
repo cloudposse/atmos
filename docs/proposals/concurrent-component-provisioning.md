@@ -2,9 +2,9 @@
 
 ## Summary
 
-Add a dependency-aware execution mode that can provision multiple Atmos component instances in parallel from a single `atmos` invocation.
+Add a concurrent execution mode on top of Atmos' dependency-ordered Terraform execution so that multiple ready component instances can run in parallel from a single `atmos` invocation.
 
-The intent is to keep Atmos' existing dependency semantics, but replace strictly sequential bulk execution with graph-based scheduling:
+The intent is to keep Atmos' existing dependency semantics and existing dependency graph work, but replace strictly sequential execution of the graph with bounded concurrent scheduling:
 
 - Independent components run concurrently
 - Dependent components wait until prerequisites complete
@@ -24,7 +24,9 @@ Atmos already supports bulk Terraform execution patterns such as:
 
 It also already models component dependencies through `settings.depends_on`.
 
-However, current bulk execution is effectively sequential. That leaves two gaps:
+PR #1516 already answers a large part of the ordering problem by introducing reusable dependency graph logic, topological sorting, cross-stack dependency support, filtering, and dependency-ordered execution for bulk Terraform paths.
+
+The remaining gap is that execution of the resolved graph is still sequential. That leaves two concrete problems:
 
 1. Large deployments take longer than necessary because independent components are serialized
 2. CI users who want to deploy a dependency tree from one command still need external orchestration, often via a matrix
@@ -55,10 +57,11 @@ The feature matters for both local and CI workflows.
 
 The repo already contains most of the building blocks needed for this feature:
 
+- PR #1516 introduced a reusable dependency graph package, Kahn-based topological sorting, deterministic ordering, cycle detection, cross-stack support, filtering, and shared execution paths for `--all` and `--affected`
 - PR #1876 introduced isolated Terraform component workdirs and positioned them as an enabler for concurrent component execution
 - `settings.depends_on` is part of the stack schema
 - `describe dependents` can already discover reverse edges
-- `terraform --affected` already executes in dependency order, but sequentially
+- graph-backed Terraform bulk execution can already process components in dependency order, but sequentially
 - Terraform workdirs are explicitly positioned as enabling isolated concurrent execution
 
 At the same time, there are important constraints:
@@ -71,6 +74,27 @@ That suggests the right boundary is:
 
 - Build the execution plan sequentially
 - Execute the plan concurrently using immutable per-node inputs
+
+## What PR #1516 Already Settles
+
+This proposal should not reopen design questions that PR #1516 already addressed.
+
+Those decisions include:
+
+- using a reusable dependency graph package instead of keeping graph logic inside one command path
+- using topological sorting to derive execution order
+- detecting circular dependencies up front with actionable errors
+- supporting cross-stack dependencies
+- supporting existing bulk selectors and filters
+- preserving deterministic ordering for reproducible runs
+- handling destroy in reverse dependency order
+
+The proposal in this document is therefore intentionally narrower:
+
+- do not redesign graph construction
+- do not redesign filter semantics
+- do not redesign ordered `--all` or `--affected`
+- add concurrent scheduling on top of the ordered graph that PR #1516 defines
 
 ## Goals
 
@@ -90,14 +114,14 @@ That suggests the right boundary is:
 
 ## Proposed Direction
 
-Introduce a graph-based orchestration layer above single-component execution.
+Extend the graph-based Terraform executor from PR #1516 with concurrent scheduling of ready nodes.
 
 Conceptually, the flow is:
 
 1. Select target component instances from one command
-2. Expand dependency and dependent relationships as needed
-3. Build a directed acyclic graph of executable nodes
-4. Topologically schedule ready nodes in bounded parallel batches
+2. Build and filter the dependency graph using the existing graph package
+3. Derive execution batches or a ready queue from that graph
+4. Schedule ready nodes with bounded concurrency
 5. Aggregate results and stop or continue based on failure policy
 
 This is best introduced as an extension of the existing multi-component Terraform execution path, not as an extension of current workflows.
@@ -109,6 +133,7 @@ The most natural place for the first version is the existing Terraform bulk exec
 - Target selection
 - Affected detection
 - Dependency-aware ordering
+- Graph construction and filtering
 - Per-component execution
 
 By contrast, workflows are list-based and sequential by design. They are a poor fit for dynamic graph scheduling unless their model is substantially expanded.
@@ -132,37 +157,41 @@ The result should be normalized into unique executable nodes keyed by:
 
 Using the stack plus component instance is important because the same base component can appear many times across stacks.
 
-### 2. Build the Dependency Graph
+This proposal should reuse the existing graph-building and filtering logic from PR #1516 rather than replace it.
 
-Each selected node becomes a vertex in a graph.
+### 2. Build and Filter the Dependency Graph
 
-Edges come from `settings.depends_on`.
+Each selected node already becomes a vertex in a graph under the PR #1516 design.
 
-That graph should support:
+Edges come from `settings.depends_on`, and the graph layer already handles the major graph concerns:
 
 - dependencies within a stack
 - dependencies across stacks
-- transitive dependencies
-- reverse expansion for `--include-dependents`
+- transitive prerequisite inclusion
+- cycle detection
+- deterministic ordering
 
-The graph build phase should also validate:
+If additional expansion is needed for `--include-dependents`, that should also happen as a graph operation rather than as a separate execution model.
 
-- missing referenced components
-- ambiguous references
-- cycles
+### 3. Derive Execution Levels
 
-If the graph is invalid, Atmos should fail before executing anything.
+PR #1516 already uses topological sorting. The concurrency layer should build on the same graph and derive one of two execution models:
 
-### 3. Topological Scheduling
+- level-based execution, where nodes in the same execution level run together
+- or a streaming ready-queue, where a worker pool starts nodes as soon as prerequisites complete
 
-Once the graph is built, the scheduler should:
+The existing graph package already includes the concept of execution levels, which makes level-based scheduling the smallest extension.
 
-- identify all nodes with no unresolved prerequisites
-- dispatch them concurrently
-- mark them complete or failed
-- unlock downstream nodes whose prerequisites are satisfied
+### 4. Concurrent Scheduling
 
-At a high level, this is a standard DAG scheduler with a bounded worker pool.
+Once execution levels or ready nodes are known, the scheduler should:
+
+- dispatch ready nodes concurrently
+- cap concurrency with a worker-pool limit
+- mark nodes complete, failed, blocked, or skipped
+- unlock downstream nodes only when all prerequisites succeed
+
+At a high level, this is a standard DAG scheduler layered on top of the graph that already exists.
 
 The user-facing concurrency control could be a flag such as:
 
@@ -171,7 +200,7 @@ The user-facing concurrency control could be a flag such as:
 
 The exact flag name can be decided later, but the meaning should be "maximum number of component instances Atmos may execute at once."
 
-### 4. Failure Handling
+### 5. Failure Handling
 
 Failure semantics must be explicit.
 
@@ -279,17 +308,18 @@ This proposal should rely on workdir isolation rather than attempt to share a si
 
 The lowest-risk path is a staged rollout.
 
-This proposal should be treated as the orchestration layer that builds on top of the workdir foundation from PR #1876, not as a replacement for that work.
+This proposal should be treated as the concurrency layer that builds on top of the dependency graph foundation from PR #1516 and the workdir foundation from PR #1876, not as a replacement for either.
 
 ### Phase 1
 
-Add concurrent orchestration for existing Terraform multi-component commands only.
+Add concurrent scheduling for the existing graph-backed Terraform bulk commands.
 
 Suggested initial surface:
 
-- `terraform apply`
-- `terraform plan`
-- possibly `terraform deploy` if it already follows the same bulk path
+- `terraform apply --all`
+- `terraform plan --all`
+- `terraform destroy --all`
+- `terraform --affected` once it is routed through the same scheduler path
 
 ### Phase 2
 
@@ -322,7 +352,7 @@ This would require workflows to move from an ordered list model to a graph model
 Possible in the long term, but not a good first step because:
 
 - current workflow behavior is sequential
-- the bulk Terraform path already has dependency information and target selectors
+- the bulk Terraform path already has dependency information, graph semantics, and execution order
 
 ### 3. Run Everything in Parallel Without Dependency Awareness
 
@@ -334,21 +364,22 @@ Rejected because it would break one of the main existing guarantees users expect
 
 The maintainers should decide the following before implementation:
 
-1. Should the first version be Terraform-only, or should the abstraction be generic from day one?
-2. What should the user-facing concurrency flag be called?
-3. Should default failure policy be "continue independent branches" or hard fail-fast?
-4. Should the feature require workdirs, or simply recommend them?
-5. Should the execution summary be human-only at first, or JSON-capable from the start?
-6. Do we want a dedicated command name such as `orchestrate`, or should this remain an execution mode on existing commands?
+1. Should concurrency be opt-in at first, or should it become the default once stable?
+2. Should scheduling use execution levels, a streaming ready-queue, or both?
+3. What should the user-facing concurrency flag be called?
+4. Should default failure policy be "continue independent branches" or hard fail-fast?
+5. Should the feature require workdirs, or simply recommend them?
+6. Should the execution summary be human-only at first, or JSON-capable from the start?
+7. Should the concurrency limit be global, or should there also be per-stack or per-component-type controls?
 
 ## Recommendation
 
-Proceed with a Terraform-first orchestration layer that:
+Proceed with a phase-next Terraform concurrency enhancement that builds directly on PR #1516 and PR #1876:
 
-- reuses `settings.depends_on`
-- integrates with existing multi-component selection modes
-- plans sequentially
+- reuses the dependency graph and ordering semantics from PR #1516
+- reuses workdir isolation from PR #1876
+- keeps graph construction and filtering sequential
 - executes ready nodes concurrently with bounded parallelism
 - produces CI-friendly aggregated results
 
-That gives Atmos a practical, high-value improvement without forcing a redesign of workflows or introducing a second dependency model.
+That gives Atmos a practical, high-value improvement without forcing a redesign of workflows, re-litigating graph design that PR #1516 already settled, or introducing a second dependency model.
