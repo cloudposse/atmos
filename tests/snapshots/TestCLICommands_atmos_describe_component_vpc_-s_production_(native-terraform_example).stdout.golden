@@ -156,7 +156,12 @@
         }
       },
       "required_providers": {
-        "null": {}
+        "null": {
+          "source": "hashicorp/null",
+          "version_constraints": [
+            "~/u003e 3.2"
+          ]
+        }
       },
       "managed_resources": {
         "null_resource.vpc": {
@@ -168,7 +173,7 @@
           },
           "pos": {
             "filename": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc/main.tf",
-            "line": 4
+            "line": 13
           }
         }
       },
