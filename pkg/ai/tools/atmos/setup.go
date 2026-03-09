@@ -35,6 +35,9 @@ func registerCoreTools(registry *tools.Registry, atmosConfig *schema.AtmosConfig
 		NewSearchFilesTool(atmosConfig),
 		NewListComponentFilesTool(atmosConfig),
 		NewGetTemplateContextTool(atmosConfig),
+		NewListFindingsTool(atmosConfig),
+		NewDescribeFindingTool(atmosConfig),
+		NewComplianceReportTool(atmosConfig),
 	}
 	return registerAll(registry, coreTools)
 }

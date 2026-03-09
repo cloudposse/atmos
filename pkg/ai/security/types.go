@@ -131,6 +131,9 @@ type QueryOptions struct {
 	NoAI        bool
 }
 
+// MaxFindingsForLookup is the default max findings when looking up a specific finding by ID.
+const MaxFindingsForLookup = 500
+
 // OutputFormat represents the desired output format.
 type OutputFormat string
 
