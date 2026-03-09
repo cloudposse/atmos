@@ -67,6 +67,12 @@ variable "secret_arns_map" {
   }
 }
 
+variable "ipv6" {
+  type        = string
+  description = "An IPv6 address for testing string preservation."
+  default     = ""
+}
+
 output "stage" {
   value = var.stage
 }
@@ -98,4 +104,9 @@ output "test_map" {
 output "secret_arns_map" {
   description = "Map with keys containing special characters like slashes"
   value       = var.secret_arns_map
+}
+
+output "ipv6" {
+  description = "An IPv6 address output for testing string preservation."
+  value       = var.ipv6
 }

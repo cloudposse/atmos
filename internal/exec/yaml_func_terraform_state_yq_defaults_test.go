@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -517,4 +518,88 @@ func TestTerraformState_YqDefaultWithEmptyListFallback(t *testing.T) {
 	assert.NotNil(t, result)
 	// Empty list default should work.
 	assert.Equal(t, []any{}, result["security_groups"])
+}
+
+// TestTerraformState_IPv6StringPreserved verifies that IPv6 address strings returned
+// from Terraform state are preserved as strings and not misinterpreted as YAML maps.
+// This is a regression test for an issue where strings ending in :: (such as
+// "2041:0000:140F::875B::") were being converted to map objects like
+// {"2041:0000:140F::875B:": null} when written to terraform.tfvars.json.
+func TestTerraformState_IPv6StringPreserved(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	tests := []struct {
+		name     string
+		ipv6     string
+		expected string
+	}{
+		{
+			name:     "IPv6 ending with double colon",
+			ipv6:     "2041:0000:140F::875B::",
+			expected: "2041:0000:140F::875B::",
+		},
+		{
+			name:     "IPv6 all-zeros shorthand",
+			ipv6:     "::",
+			expected: "::",
+		},
+		{
+			name:     "IPv6 with trailing double colon",
+			ipv6:     "2001:db8::",
+			expected: "2001:db8::",
+		},
+		{
+			name:     "IPv6 loopback (no trailing colon)",
+			ipv6:     "::1",
+			expected: "::1",
+		},
+		{
+			name:     "IPv6 standard address",
+			ipv6:     "2001:db8::1",
+			expected: "2001:db8::1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Mock GetState to return the IPv6 address as a string.
+			mockStateGetter.EXPECT().
+				GetState(
+					atmosConfig,
+					gomock.Any(),
+					"test-stack",
+					"dummy",
+					"ipv6",
+					false,
+					gomock.Any(),
+					gomock.Any(),
+				).
+				Return(tt.ipv6, nil).
+				Times(1)
+
+			input := schema.AtmosSectionMapType{
+				"ipv6": "!terraform.state dummy test-stack ipv6",
+			}
+
+			result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			// The IPv6 address must be preserved as a string.
+			ipv6Val, ok := result["ipv6"].(string)
+			require.True(t, ok, "IPv6 result should be a string, got %T: %v", result["ipv6"], result["ipv6"])
+			assert.Equal(t, tt.expected, ipv6Val)
+		})
+	}
 }

@@ -65,6 +65,26 @@ func TestIsScalarString(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "IPv6 ending with double colon",
+			input:    "2041:0000:140F::875B::",
+			expected: true,
+		},
+		{
+			name:     "IPv6 all-zeros shorthand",
+			input:    "::",
+			expected: true,
+		},
+		{
+			name:     "IPv6 loopback (does not end with colon)",
+			input:    "::1",
+			expected: false,
+		},
+		{
+			name:     "IPv6 with no trailing colon",
+			input:    "2001:db8::1",
+			expected: false,
+		},
+		{
 			name:     "string with colon space pattern",
 			input:    "key: value:",
 			expected: false,
@@ -350,6 +370,14 @@ func TestIsMisinterpretedScalar(t *testing.T) {
 			originalResult: "key1: value1\nkey2: value2",
 			expected:       false,
 		},
+		{
+			// IPv6 address ending in :: is parsed by YAML as a mapping node
+			// with key "2041:0000:140F::875B:" and null value.
+			name:           "IPv6 address ending with double colon misinterpreted as map",
+			yamlContent:    "2041:0000:140F::875B:\n",
+			originalResult: "2041:0000:140F::875B::",
+			expected:       true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -521,6 +549,40 @@ func TestEvaluateYqExpression_ARNWithTrailingColons(t *testing.T) {
 			yq:       ".value",
 			expected: "test::",
 		},
+		{
+			// Regression test for https://github.com/cloudposse/atmos/issues/XXXX
+			// IPv6 addresses ending in :: were being misinterpreted as YAML maps.
+			name: "IPv6 address ending with double colon",
+			data: map[string]any{
+				"ipv6": "2041:0000:140F::875B::",
+			},
+			yq:       ".ipv6",
+			expected: "2041:0000:140F::875B::",
+		},
+		{
+			name: "IPv6 all-zeros shorthand (double colon only)",
+			data: map[string]any{
+				"ipv6": "::",
+			},
+			yq:       ".ipv6",
+			expected: "::",
+		},
+		{
+			name: "IPv6 loopback address (does not end with colon)",
+			data: map[string]any{
+				"ipv6": "::1",
+			},
+			yq:       ".ipv6",
+			expected: "::1",
+		},
+		{
+			name: "IPv6 standard address without trailing colon",
+			data: map[string]any{
+				"ipv6": "2001:db8::1",
+			},
+			yq:       ".ipv6",
+			expected: "2001:db8::1",
+		},
 	}
 
 	for _, tt := range tests {
@@ -530,6 +592,67 @@ func TestEvaluateYqExpression_ARNWithTrailingColons(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestEvaluateYqExpression_IPv6Scenario tests that IPv6 address strings are correctly
+// preserved as strings when retrieved via !terraform.state, not misinterpreted as YAML maps.
+// This is a regression test for issue #2155 where strings ending in :: were converted
+// to map objects like {"2041:0000:140F::875B:": null}.
+func TestEvaluateYqExpression_IPv6Scenario(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// This simulates what !terraform.state would return for an IPv6 output.
+	data := map[string]any{
+		"ipv6": "2041:0000:140F::875B::",
+	}
+
+	// The IPv6 address should be returned as a string, not a map.
+	result, err := EvaluateYqExpression(atmosConfig, data, ".ipv6")
+	require.NoError(t, err)
+	// Verify the result is a string, not a map (the bug would return map[string]any{"2041:0000:140F::875B:": nil}).
+	ipv6Str, ok := result.(string)
+	require.True(t, ok, "IPv6 address should be a string, got %T: %v", result, result)
+	assert.Equal(t, "2041:0000:140F::875B::", ipv6Str)
+
+	// Test with a map of IPv6 addresses.
+	dataMap := map[string]any{
+		"addresses": map[string]any{
+			"primary":   "2041:0000:140F::875B::",
+			"secondary": "2001:db8::",
+			"loopback":  "::1",
+		},
+	}
+
+	// Extract individual IPv6 values.
+	primary, err := EvaluateYqExpression(atmosConfig, dataMap, ".addresses.primary")
+	require.NoError(t, err)
+	primaryStr, ok := primary.(string)
+	require.True(t, ok, "Primary IPv6 should be a string, got %T", primary)
+	assert.Equal(t, "2041:0000:140F::875B::", primaryStr)
+
+	secondary, err := EvaluateYqExpression(atmosConfig, dataMap, ".addresses.secondary")
+	require.NoError(t, err)
+	secondaryStr, ok := secondary.(string)
+	require.True(t, ok, "Secondary IPv6 should be a string, got %T", secondary)
+	assert.Equal(t, "2001:db8::", secondaryStr)
+
+	loopback, err := EvaluateYqExpression(atmosConfig, dataMap, ".addresses.loopback")
+	require.NoError(t, err)
+	loopbackStr, ok := loopback.(string)
+	require.True(t, ok, "Loopback IPv6 should be a string, got %T", loopback)
+	assert.Equal(t, "::1", loopbackStr)
+
+	// Extract the entire addresses map - values should still be strings.
+	addresses, err := EvaluateYqExpression(atmosConfig, dataMap, ".addresses")
+	require.NoError(t, err)
+
+	addressMap, ok := addresses.(map[string]any)
+	require.True(t, ok, "Addresses result should be a map, got %T", addresses)
+
+	// Verify primary IPv6 is a string, not a map.
+	primaryVal, ok := addressMap["primary"].(string)
+	require.True(t, ok, "Primary IPv6 in map should be a string, got %T: %v", addressMap["primary"], addressMap["primary"])
+	assert.Equal(t, "2041:0000:140F::875B::", primaryVal)
 }
 
 // TestEvaluateYqExpression_MapSecretsScenario tests the exact scenario from issue #2031
