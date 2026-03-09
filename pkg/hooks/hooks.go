@@ -118,9 +118,11 @@ func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *s
 
 	log.Debug("Running CI hooks", "event", event, "force_ci", forceCIMode)
 
-	// Check if CI is enabled in config or forced via flag.
-	if !forceCIMode && atmosConfig != nil && !atmosConfig.CI.Enabled {
-		log.Debug("CI integration disabled in config")
+	// ci.enabled in atmos.yaml is the authority — if not set or false, CI is off.
+	// The --ci flag / ATMOS_CI env var only controls provider fallback (generic vs auto-detect),
+	// it cannot override a disabled config.
+	if atmosConfig != nil && !atmosConfig.CI.Enabled {
+		log.Debug("CI integration disabled in config (ci.enabled is not true)")
 		return nil
 	}
 

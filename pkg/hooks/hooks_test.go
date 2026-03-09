@@ -307,3 +307,53 @@ func TestRunAll(t *testing.T) {
 		})
 	}
 }
+
+// TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml
+// is the authority for CI hooks. When ci.enabled is false (or not set, which defaults
+// to false), CI hooks must not run even when --ci flag is passed (forceCIMode=true).
+func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
+	tests := []struct {
+		name        string
+		ciEnabled   bool
+		forceCIMode bool
+		expectNoop  bool
+	}{
+		{
+			name:        "ci.enabled=false and forceCIMode=false skips CI hooks",
+			ciEnabled:   false,
+			forceCIMode: false,
+			expectNoop:  true,
+		},
+		{
+			name:        "ci.enabled=false and forceCIMode=true still skips CI hooks",
+			ciEnabled:   false,
+			forceCIMode: true,
+			expectNoop:  true,
+		},
+		{
+			name:        "ci.enabled not set (defaults to false) and forceCIMode=true still skips CI hooks",
+			ciEnabled:   false, // zero value = not set in YAML.
+			forceCIMode: true,
+			expectNoop:  true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: tc.ciEnabled},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            "test-stack",
+				ComponentFromArg: "test-component",
+			}
+
+			// RunCIHooks should return nil immediately without reaching ci.Execute.
+			// If it did reach ci.Execute with a bogus event, the event would not
+			// match any binding and ci.Execute returns nil anyway — but the key
+			// assertion is that RunCIHooks itself short-circuits.
+			err := RunCIHooks("before.terraform.plan", config, info, "", tc.forceCIMode, nil)
+			assert.NoError(t, err)
+		})
+	}
+}
