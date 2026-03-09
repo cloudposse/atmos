@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
+	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -87,6 +88,16 @@ func ExecuteShellCommand(
 	cmdEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	cmdEnv = append(cmdEnv, env...)
 	cmdEnv = append(cmdEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+
+	// Propagate TTY state to subprocess.
+	// MaskWriter wraps stderr as a pipe, so the subprocess's TTY detection (e.g., for SSO
+	// device auth) will see a pipe instead of a terminal even when the user is interactive.
+	// When the parent has a real TTY and ATMOS_FORCE_TTY is not already set, inject it so
+	// subprocess commands that depend on TTY detection behave correctly.
+	if xterm.IsTerminal(int(os.Stderr.Fd())) && !envKeyIsSet(cmdEnv, "ATMOS_FORCE_TTY") {
+		cmdEnv = append(cmdEnv, "ATMOS_FORCE_TTY=true")
+	}
+
 	cmd.Env = cmdEnv
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
@@ -590,4 +601,15 @@ func printShellExitMessage(identityName, providerName string) {
 	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n\n",
 		headerStyle.Render("← Exited Atmos shell for identity:"),
 		identityStyle.Render(identityDisplay))
+}
+
+// envKeyIsSet returns true if any entry in env starts with "KEY=".
+func envKeyIsSet(env []string, key string) bool {
+	prefix := key + "="
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			return true
+		}
+	}
+	return false
 }

@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -194,6 +195,12 @@ func ExecutePlaybook(
 		return err
 	}
 	log.Debug("Using ENV", "variables", envVars)
+
+	// In dry-run mode, print the command that would be executed.
+	if info.DryRun {
+		data.Writeln(strings.Join(append([]string{cmdArgs.Command}, cmdArgs.Args...), " "))
+		return nil
+	}
 
 	return e.ExecuteShellCommand(
 		atmosConfig,

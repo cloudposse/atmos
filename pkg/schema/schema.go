@@ -434,6 +434,14 @@ type TemplatesSettingsGomplate struct {
 	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
 }
 
+// SourceSettings holds global source configuration defaults for JIT-vendored components.
+type SourceSettings struct {
+	// TTL is the default cache duration for JIT-vendored sources.
+	// Applied to all components unless overridden per-component.
+	// If not set, cached sources are reused indefinitely.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+}
+
 type Terraform struct {
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
@@ -458,6 +466,8 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 type TerraformInit struct {
@@ -563,6 +573,8 @@ type Helmfile struct {
 	// during Helmfile operations when set to true.
 	// Generated files are defined in the component's generate section.
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 type Packer struct {
@@ -572,6 +584,8 @@ type Packer struct {
 	// during Packer operations when set to true.
 	// Generated files are defined in the component's generate section.
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 // Ansible defines configuration for Ansible components.
@@ -1176,15 +1190,15 @@ type ConfigSources map[string]map[string]ConfigSourcesItem
 // Atmos vendoring (`vendor.yaml` file)
 
 type AtmosVendorSource struct {
-	Component     string       `yaml:"component" json:"component" mapstructure:"component"`
-	Source        string       `yaml:"source" json:"source" mapstructure:"source"`
-	Version       string       `yaml:"version" json:"version" mapstructure:"version"`
-	File          string       `yaml:"file" json:"file" mapstructure:"file"`
-	Targets       []string     `yaml:"targets" json:"targets" mapstructure:"targets"`
-	IncludedPaths []string     `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
-	ExcludedPaths []string     `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
-	Tags          []string     `yaml:"tags" json:"tags" mapstructure:"tags"`
-	Retry         *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	Component     string             `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string             `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string             `yaml:"version" json:"version" mapstructure:"version"`
+	File          string             `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       AtmosVendorTargets `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string           `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string           `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
+	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 }
 
 type AtmosVendorSpec struct {

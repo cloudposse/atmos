@@ -29,7 +29,8 @@ import {
   RiLoopLeftLine,
   RiServerLine,
   RiShipLine,
-  RiHardDriveLine
+  RiHardDriveLine,
+  RiSettings3Line
 } from 'react-icons/ri'
 
 <Intro>
@@ -332,6 +333,19 @@ Designed to be cloud agnostic, Atmos enables you to operate consistently across 
       "Manage image definitions like any other component"
     ]}
     docLink="/components/packer"
+  />
+
+  <FeatureCard
+    icon={<RiSettings3Line />}
+    title="Ansible Components"
+    tagline="Configuration management, unified"
+    description="Run Ansible playbooks with the same stack-based configuration used for Terraform and Helmfile. Stack variables are automatically passed to playbooks, giving you consistent, DRY configuration management across environments."
+    benefits={[
+      "Stack variables passed automatically via --extra-vars",
+      "Same inheritance and catalog patterns as Terraform",
+      "Manage infrastructure provisioning and configuration together"
+    ]}
+    docLink="/components/ansible"
   />
 </FeatureGrid>
 

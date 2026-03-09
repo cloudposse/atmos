@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -17,14 +17,12 @@ type Func func() error
 // Executor handles the retry logic.
 type Executor struct {
 	config schema.RetryConfig
-	rand   *rand.Rand
 }
 
 // New creates a new retry executor with the given config.
 func New(config schema.RetryConfig) *Executor {
 	return &Executor{
 		config: config,
-		rand:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -202,8 +200,8 @@ func (e *Executor) calculateDelay(attempt int) time.Duration {
 		jitterFactor = *e.config.RandomJitter
 	}
 	if jitterFactor > 0 {
-		jitter := time.Duration(e.rand.Float64() * float64(delay) * jitterFactor)
-		if e.rand.Float64() < jitterFlipChance {
+		jitter := time.Duration(rand.Float64() * float64(delay) * jitterFactor)
+		if rand.Float64() < jitterFlipChance {
 			delay += jitter
 		} else {
 			delay -= jitter

@@ -48,6 +48,21 @@ type VersionInstaller interface {
 // ExecFunc is the function signature for syscall.Exec.
 type ExecFunc func(argv0 string, argv []string, envv []string) error
 
+// PRCacheChecker checks PR cache status.
+type PRCacheChecker func(prNumber int) (toolchain.PRCacheStatus, string)
+
+// PRCacheUpdater checks if a PR needs reinstall and updates the cache timestamp.
+type PRCacheUpdater func(ctx context.Context, prNumber int, showProgress bool) (needsReinstall bool, err error)
+
+// PRInstaller installs from a PR artifact.
+type PRInstaller func(prNumber int, showProgress bool) (string, error)
+
+// SHACacheChecker checks SHA cache status.
+type SHACacheChecker func(sha string) (exists bool, binaryPath string)
+
+// SHAInstaller installs from a SHA artifact.
+type SHAInstaller func(sha string, showProgress bool) (string, error)
+
 // ReexecConfig holds dependencies for version re-execution.
 type ReexecConfig struct {
 	Finder    VersionFinder
@@ -57,6 +72,13 @@ type ReexecConfig struct {
 	SetEnv    func(string, string) error
 	Args      []string
 	Environ   func() []string
+
+	// PR/SHA version support (injectable for testing).
+	CheckPRCache   PRCacheChecker
+	CheckPRUpdate  PRCacheUpdater
+	InstallFromPR  PRInstaller
+	CheckSHACache  SHACacheChecker
+	InstallFromSHA SHAInstaller
 }
 
 // DefaultReexecConfig returns the default production configuration.
@@ -65,13 +87,18 @@ func DefaultReexecConfig() *ReexecConfig {
 
 	installer := toolchain.NewInstaller()
 	return &ReexecConfig{
-		Finder:    installer,
-		Installer: &defaultInstaller{},
-		ExecFn:    syscall.Exec,
-		GetEnv:    getEnvWrapper,
-		SetEnv:    os.Setenv,
-		Args:      os.Args,
-		Environ:   os.Environ,
+		Finder:         installer,
+		Installer:      &defaultInstaller{},
+		ExecFn:         syscall.Exec,
+		GetEnv:         getEnvWrapper,
+		SetEnv:         os.Setenv,
+		Args:           os.Args,
+		Environ:        os.Environ,
+		CheckPRCache:   toolchain.CheckPRCacheStatus,
+		CheckPRUpdate:  toolchain.CheckPRCacheAndUpdate,
+		InstallFromPR:  toolchain.InstallFromPR,
+		CheckSHACache:  toolchain.CheckSHACacheStatus,
+		InstallFromSHA: toolchain.InstallFromSHA,
 	}
 }
 
@@ -172,6 +199,14 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 	return false
 }
 
+// fatalFormattedErr writes a pre-formatted error to stderr via the UI layer and exits.
+//
+//nolint:revive // os.Exit is intentional for hard failures.
+func fatalFormattedErr(formatted string) {
+	ui.Writeln(formatted)
+	os.Exit(1)
+}
+
 // executeVersionSwitch performs the actual version switch.
 //
 //nolint:revive // os.Exit is intentional for hard failures on PR/SHA version errors.
@@ -183,24 +218,18 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	if err != nil {
 		// For PR versions, fail hard - don't continue with wrong version.
 		if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
-			os.Exit(1)
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		}
 
 		// For SHA versions, fail hard - don't continue with wrong version.
 		if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
-			os.Exit(1)
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		}
 
 		// Check if this is an invalid version format error - fail hard for those too.
 		_, _, parseErr := toolchain.ParseVersionSpec(requestedVersion)
 		if parseErr != nil {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
-			os.Exit(1)
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		}
 
 		// For regular semver versions, fall back to current (existing behavior).
@@ -250,12 +279,12 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	// Handle PR versions (pr:NNNN or just digits) - install from PR artifact.
 	if vType == toolchain.VersionTypePR {
 		prNumber, _ := toolchain.IsPRVersion(version)
-		return findOrInstallPRVersion(prNumber)
+		return findOrInstallPRVersionWithConfig(prNumber, cfg)
 	}
 
 	// Handle SHA versions (sha:XXXXXXX or auto-detected hex strings) - install from SHA artifact.
 	if vType == toolchain.VersionTypeSHA {
-		return findOrInstallSHAVersion(normalizedVersion)
+		return findOrInstallSHAVersionWithConfig(normalizedVersion, cfg)
 	}
 
 	// For semver versions, try to find existing installation.
@@ -290,18 +319,18 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	return binaryPath, nil
 }
 
-// findOrInstallPRVersion finds the binary for a PR version, installing if needed.
+// findOrInstallPRVersionWithConfig finds the binary for a PR version, installing if needed.
 // Uses TTL caching to minimize GitHub API calls:
 //   - If binary exists and cache is within TTL (1 min) -> use cached binary, no API call.
 //   - If binary exists but TTL expired -> check API for new commits.
 //   - If no binary exists -> fresh install.
-func findOrInstallPRVersion(prNumber int) (string, error) {
-	defer perf.Track(nil, "version.findOrInstallPRVersion")()
+func findOrInstallPRVersionWithConfig(prNumber int, cfg *ReexecConfig) (string, error) {
+	defer perf.Track(nil, "version.findOrInstallPRVersionWithConfig")()
 
 	ctx := context.Background()
 
 	// Check cache status to determine what action to take.
-	cacheStatus, binaryPath := toolchain.CheckPRCacheStatus(prNumber)
+	cacheStatus, binaryPath := cfg.CheckPRCache(prNumber)
 
 	switch cacheStatus {
 	case toolchain.PRCacheValid:
@@ -312,7 +341,7 @@ func findOrInstallPRVersion(prNumber int) (string, error) {
 	case toolchain.PRCacheNeedsCheck:
 		// Binary exists but TTL expired - check if PR has new commits.
 		log.Debug("Cache TTL expired, checking for updates", logFieldPR, prNumber)
-		needsReinstall, err := toolchain.CheckPRCacheAndUpdate(ctx, prNumber, true)
+		needsReinstall, err := cfg.CheckPRUpdate(ctx, prNumber, true)
 		if err != nil {
 			return "", errUtils.Build(errUtils.ErrVersionCheckFailed).
 				WithCause(err).
@@ -333,7 +362,7 @@ func findOrInstallPRVersion(prNumber int) (string, error) {
 	}
 
 	// Install from PR artifact.
-	binaryPath, err := toolchain.InstallFromPR(prNumber, true)
+	binaryPath, err := cfg.InstallFromPR(prNumber, true)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
@@ -345,13 +374,13 @@ func findOrInstallPRVersion(prNumber int) (string, error) {
 	return binaryPath, nil
 }
 
-// findOrInstallSHAVersion finds the binary for a SHA version, installing if needed.
+// findOrInstallSHAVersionWithConfig finds the binary for a SHA version, installing if needed.
 // SHAs are immutable, so if a binary exists, it's always valid.
-func findOrInstallSHAVersion(sha string) (string, error) {
-	defer perf.Track(nil, "version.findOrInstallSHAVersion")()
+func findOrInstallSHAVersionWithConfig(sha string, cfg *ReexecConfig) (string, error) {
+	defer perf.Track(nil, "version.findOrInstallSHAVersionWithConfig")()
 
 	// Check if binary already exists (SHAs are immutable, no TTL check needed).
-	exists, binaryPath := toolchain.CheckSHACacheStatus(sha)
+	exists, binaryPath := cfg.CheckSHACache(sha)
 	if exists {
 		log.Debug("Using cached SHA binary", logFieldSHA, sha, "path", binaryPath)
 		return binaryPath, nil
@@ -361,7 +390,7 @@ func findOrInstallSHAVersion(sha string) (string, error) {
 	log.Debug("SHA version not installed, installing from artifact", logFieldSHA, sha)
 
 	// Install from SHA artifact.
-	binaryPath, err := toolchain.InstallFromSHA(sha, true)
+	binaryPath, err := cfg.InstallFromSHA(sha, true)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).

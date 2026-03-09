@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  ansible:
+    hello-world:
+      vars:
+        app_name: my-app
+        app_version: "1.0.0"
+        app_port: 8080
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory.ini
