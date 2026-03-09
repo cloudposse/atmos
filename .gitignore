@@ -21,6 +21,10 @@
 # Atmos binary (only in root directory)
 /atmos
 
+# Demo binaries and large audio files
+tools/director/director
+demos/audio/
+
 # Module directory
 .terraform
 **/.idea
@@ -38,19 +42,25 @@
 /bin
 
 # Nix
-.envrc
 .direnv/
+
+# Environment files (except .envrc which is tracked for Nix)
+.env*
+!.envrc
 
 # Tool version managers
 .tool-versions
 !examples/toolchain/.tool-versions
 
-# Ignore cache files
+# Ignore cache files and sessions
 **/.atmos/cache.yaml
+**/.atmos/sessions/
 **/cache.*.txt
+**/.atmos/ai.settings.local.json
 
-# Conductor workspace uses pnpm, but project uses npm
+# Website lock files (CI manages dependencies)
 website/pnpm-lock.yaml
+website/package-lock.json
 
 # Development configs - track only specific files
 .atmos.d/*
@@ -61,6 +71,8 @@ website/pnpm-lock.yaml
 examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**
 tests/fixtures/scenarios/vendor/components/**
+tests/fixtures/scenarios/vendor-simple-excludes/components/**
+tests/fixtures/scenarios/complete/components/terraform/infra/account-map/context.tf
 internal/exec/output.*
 
 # Coverage files
@@ -120,6 +132,9 @@ TEST_FAILURE_ANALYSIS.md
 scratch/
 COVERAGE_SUMMARY.md
 TESTABILITY_CHANGES_SUMMARY.md
+
+# Docusaurus build cache
+.docusaurus/
 
 # Conductor scratch/temporary files
 *.log

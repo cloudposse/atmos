@@ -9,7 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // InstallFunc is the function signature for installing a tool.
@@ -89,8 +89,10 @@ func WithBinaryPathFinder(finder BinaryPathFinder) InstallerOption {
 func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOption) *Installer {
 	defer perf.Track(nil, "dependencies.NewInstaller")()
 
-	// Determine binDir based on config or default.
-	toolsDir := ".tools"
+	// Use the same path logic as toolchain installation to ensure binary detection
+	// uses the same directory where tools are actually installed.
+	// Honor explicit InstallPath from passed config; otherwise use toolchain's default path.
+	toolsDir := toolchain.GetInstallPath()
 	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
 		toolsDir = atmosConfig.Toolchain.InstallPath
 	}
@@ -210,8 +212,10 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 		return getPathFromEnv(), nil
 	}
 
-	// Guard against nil atmosConfig.
-	toolsDir := ".tools"
+	// Use the same path logic as toolchain installation to ensure PATH points
+	// to where tools are actually installed (XDG by default, or configured path).
+	// Honor explicit InstallPath from passed config; otherwise use toolchain's default path.
+	toolsDir := toolchain.GetInstallPath()
 	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
 		toolsDir = atmosConfig.Toolchain.InstallPath
 	}
@@ -230,7 +234,13 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 
 		// Add versioned bin directory to PATH.
 		binPath := filepath.Join(toolsDir, "bin", owner, repo, version)
-		paths = append(paths, binPath)
+
+		// Convert to absolute path to avoid Go 1.19+ exec.LookPath security issues.
+		// Go 1.19+ rejects executables found via relative PATH entries.
+		// Note: filepath.Abs rarely fails in practice; we trust it to succeed here.
+		absBinPath, _ := filepath.Abs(binPath)
+
+		paths = append(paths, absBinPath)
 	}
 
 	// Prepend toolchain paths to existing PATH.

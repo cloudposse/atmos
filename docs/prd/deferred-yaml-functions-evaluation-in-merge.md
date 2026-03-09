@@ -998,7 +998,7 @@ See integration example in `pkg/merge/merge_yaml_functions.go` (`MergeWithDeferr
 ## References
 
 - YAML Functions Documentation: https://atmos.tools/functions/yaml/
-- Mergo Library: https://github.com/imdario/mergo
+- Mergo Library: https://github.com/darccio/mergo
 - Implementation: `pkg/merge/deferred.go`, `pkg/merge/merge_yaml_functions.go`
 - Tests: `pkg/merge/*_test.go`, `tests/yaml_functions_merge_test.go`
 - Examples: `pkg/merge/example_deferred_test.go`

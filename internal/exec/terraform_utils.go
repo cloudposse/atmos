@@ -11,10 +11,20 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const commandStr = "command"
+
+// affectedDepOrderParams holds parameters for executing an affected component in dependency order.
+type affectedDepOrderParams struct {
+	AffectedComponent string
+	AffectedStack     string
+	ParentComponent   string
+	ParentStack       string
+	Dependents        []schema.Dependent
+}
 
 // shouldProcessStacks determines whether to process stacks and check stack configuration.
 // Based on the command type and provided arguments.
@@ -217,26 +227,27 @@ func walkTerraformComponents(
 }
 
 // processTerraformComponent performs filtering and execution logic for a single Terraform component.
+// Returns true if the component was processed (passed all filters), false otherwise.
 func processTerraformComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	stackName, componentName string,
 	componentSection map[string]any,
 	logFunc func(msg any, keyvals ...any),
-) error {
+) (bool, error) {
 	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
-		return nil
+		return false, nil
 	}
 
 	// Skip abstract components.
 	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
-		return nil
+		return false, nil
 	}
 
 	// Skip disabled components.
 	if !isComponentEnabled(metadataSection, componentName) {
-		return nil
+		return false, nil
 	}
 
 	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
@@ -244,87 +255,97 @@ func processTerraformComponent(
 	if info.Query != "" {
 		queryResult, err := u.EvaluateYqExpression(atmosConfig, componentSection, info.Query)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
 			logFunc("Skipping the component because the query criteria not satisfied", commandStr, command, "query", info.Query)
-			return nil
+			return false, nil
 		}
 	}
 
 	logFunc("Executing", commandStr, command)
 
-	if !info.DryRun {
-		info.Component = componentName
-		info.ComponentFromArg = componentName
-		info.Stack = stackName
-		info.StackFromArg = stackName
-
-		if err := ExecuteTerraform(*info); err != nil {
-			return err
-		}
+	// Show user-facing progress for dry-run mode.
+	if info.DryRun {
+		ui.Successf("Would %s `%s` in `%s` (dry run)", info.SubCommand, componentName, stackName)
+		return true, nil
 	}
 
-	return nil
+	info.Component = componentName
+	info.ComponentFromArg = componentName
+	info.Stack = stackName
+	info.StackFromArg = stackName
+
+	if err := ExecuteTerraform(*info); err != nil {
+		return true, err
+	}
+
+	return true, nil
+}
+
+// logFuncForDryRun returns log.Info for dry-run mode, log.Debug otherwise.
+func logFuncForDryRun(dryRun bool) func(msg any, keyvals ...any) {
+	if dryRun {
+		return log.Info
+	}
+	return log.Debug
+}
+
+// shouldProcessDependent checks if a dependent should be processed.
+func shouldProcessDependent(dep *schema.Dependent, affectedList []schema.Affected, includeDependents bool) bool {
+	if dep.IncludedInDependents {
+		return false
+	}
+	return includeDependents || isComponentInStackAffected(affectedList, dep.StackSlug)
 }
 
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
 func executeTerraformAffectedComponentInDepOrder(
 	info *schema.ConfigAndStacksInfo,
 	affectedList []schema.Affected,
-	affectedComponent string,
-	affectedStack string,
-	parentComponent string,
-	parentStack string,
-	dependents []schema.Dependent,
+	params *affectedDepOrderParams,
 	args *DescribeAffectedCmdArgs,
 ) error {
-	var logFunc func(msg any, keyvals ...any)
-	if info.DryRun {
-		logFunc = log.Info
-	} else {
-		logFunc = log.Debug
-	}
+	logFunc := logFuncForDryRun(info.DryRun)
 
-	info.Component = affectedComponent
-	info.ComponentFromArg = affectedComponent
-	info.Stack = affectedStack
+	info.Component = params.AffectedComponent
+	info.ComponentFromArg = params.AffectedComponent
+	info.Stack = params.AffectedStack
 
-	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, params.AffectedComponent, params.AffectedStack)
 
-	if args.IncludeDependents && parentComponent != "" && parentStack != "" {
-		logFunc("Executing", commandStr, command, "dependency of component", parentComponent, "in stack", parentStack)
+	if args.IncludeDependents && params.ParentComponent != "" && params.ParentStack != "" {
+		logFunc("Executing", commandStr, command, "dependency of component", params.ParentComponent, "in stack", params.ParentStack)
 	} else {
 		logFunc("Executing", commandStr, command)
 	}
 
 	if !info.DryRun {
-		// Execute the terraform command for the affected component.
-		err := ExecuteTerraform(*info)
-		if err != nil {
+		if err := ExecuteTerraform(*info); err != nil {
 			return err
 		}
 	}
 
-	for i := 0; i < len(dependents); i++ {
-		dep := &dependents[i]
-		if args.IncludeDependents || isComponentInStackAffected(affectedList, dep.StackSlug) {
-			if !dep.IncludedInDependents {
-				err := executeTerraformAffectedComponentInDepOrder(
-					info,
-					affectedList,
-					dep.Component,
-					dep.Stack,
-					affectedComponent,
-					affectedStack,
-					dep.Dependents,
-					args,
-				)
-				if err != nil {
-					return err
-				}
-			}
+	for i := 0; i < len(params.Dependents); i++ {
+		dep := &params.Dependents[i]
+		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {
+			continue
+		}
+		err := executeTerraformAffectedComponentInDepOrder(
+			info,
+			affectedList,
+			&affectedDepOrderParams{
+				AffectedComponent: dep.Component,
+				AffectedStack:     dep.Stack,
+				ParentComponent:   params.AffectedComponent,
+				ParentStack:       params.AffectedStack,
+				Dependents:        dep.Dependents,
+			},
+			args,
+		)
+		if err != nil {
+			return err
 		}
 	}
 

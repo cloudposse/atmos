@@ -67,6 +67,12 @@ const config = {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },
+                    // Core concepts main pages moved to top level
+                    {from: '/core-concepts/stacks', to: '/stacks'},
+                    {from: '/core-concepts/components', to: '/components'},
+                    {from: '/core-concepts/components/terraform', to: '/components/terraform'},
+                    {from: '/core-concepts/components/library', to: '/components'},
+                    {from: '/core-concepts/custom-commands', to: '/cli/configuration/commands'},
                     // Backend documentation reorganization
                     {
                         from: '/core-concepts/components/terraform/state-backend',
@@ -200,14 +206,14 @@ const config = {
                         to: '/howto/catalogs'
                     },
                     // Redirects for workflow pages moved to top level
-//                     {
-//                         from: '/core-concepts/workflows',
-//                         to: '/workflows/workflows'
-//                     },
-//                     {
-//                         from: '/core-concepts/workflows/workflows',
-//                         to: '/workflows/workflows'
-//                     },
+                    {
+                        from: '/core-concepts/workflows',
+                        to: '/workflows'
+                    },
+                    {
+                        from: '/core-concepts/workflows/workflows',
+                        to: '/workflows'
+                    },
                     // Redirects for vendoring pages moved to top level
                     {
                         from: '/core-concepts/vendor',
@@ -279,6 +285,13 @@ const config = {
                         from: '/core-concepts/stacks/templates/datasources',
                         to: '/templates/datasources'
                     },
+                    // Additional core-concepts redirects for documentation links
+                    {from: '/core-concepts/components/helmfile', to: '/components/helmfile'},
+                    {from: '/core-concepts/stacks/naming', to: '/stacks/name'},
+                    {from: '/core-concepts/stacks/templates', to: '/templates'},
+                    {from: '/core-concepts/workflows/workflow-manifest', to: '/workflows'},
+                    {from: '/core-concepts/vendoring', to: '/vendor/'},
+                    {from: '/core-concepts/vendoring/vendor-manifest', to: '/vendor/vendor-config'},
                     // Redirects for directory renames: core-concepts → learn
                     {from: '/core-concepts/why-atmos', to: '/learn/why-atmos'},
                     {from: '/core-concepts/concepts-overview', to: '/learn/concepts-overview'},
@@ -396,6 +409,26 @@ const config = {
                 docs: {
                     routeBasePath: '/',
                     sidebarPath: require.resolve('./sidebars.js'),
+                    async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
+                        const items = await defaultSidebarItemsGenerator(args);
+                        // Sort all sidebar items alphabetically by label,
+                        // treating categories and docs equally so they interleave correctly.
+                        const sortItems = (sidebarItems) => {
+                            return sidebarItems
+                                .map((item) => {
+                                    if (item.type === 'category' && item.items) {
+                                        return {...item, items: sortItems(item.items)};
+                                    }
+                                    return item;
+                                })
+                                .sort((a, b) => {
+                                    const labelA = (a.label || '').toLowerCase();
+                                    const labelB = (b.label || '').toLowerCase();
+                                    return labelA.localeCompare(labelB);
+                                });
+                        };
+                        return sortItems(items);
+                    },
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },

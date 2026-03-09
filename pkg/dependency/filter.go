@@ -1,7 +1,11 @@
 package dependency
 
+import "github.com/cloudposse/atmos/pkg/perf"
+
 // Filter creates a new graph containing only the specified nodes and their relationships.
 func (g *Graph) Filter(filter Filter) *Graph {
+	defer perf.Track(nil, "dependency.Graph.Filter")()
+
 	filtered := NewGraph()
 	toInclude := g.collectNodesToInclude(filter)
 	g.copyNodesToFilteredGraph(filtered, toInclude)
@@ -52,6 +56,8 @@ func (g *Graph) cloneNodeForFilter(node *Node, toInclude map[string]bool) *Node 
 
 // FilterByType creates a new graph containing only nodes of the specified type.
 func (g *Graph) FilterByType(nodeType string) *Graph {
+	defer perf.Track(nil, "dependency.Graph.FilterByType")()
+
 	nodeIDs := []string{}
 	for id, node := range g.Nodes {
 		if node.Type == nodeType {
@@ -68,6 +74,8 @@ func (g *Graph) FilterByType(nodeType string) *Graph {
 
 // FilterByStack creates a new graph containing only nodes from the specified stack.
 func (g *Graph) FilterByStack(stack string) *Graph {
+	defer perf.Track(nil, "dependency.Graph.FilterByStack")()
+
 	nodeIDs := []string{}
 	for id, node := range g.Nodes {
 		if node.Stack == stack {
@@ -84,6 +92,8 @@ func (g *Graph) FilterByStack(stack string) *Graph {
 
 // FilterByComponent creates a new graph containing only nodes with the specified component name.
 func (g *Graph) FilterByComponent(component string) *Graph {
+	defer perf.Track(nil, "dependency.Graph.FilterByComponent")()
+
 	nodeIDs := []string{}
 	for id, node := range g.Nodes {
 		if node.Component == component {
@@ -131,6 +141,8 @@ func (g *Graph) markDependents(nodeID string, toInclude map[string]bool) {
 // GetConnectedComponents returns all connected components in the graph.
 // Each connected component is a subgraph where all nodes are reachable from each other.
 func (g *Graph) GetConnectedComponents() []*Graph {
+	defer perf.Track(nil, "dependency.Graph.GetConnectedComponents")()
+
 	visited := make(map[string]bool)
 	components := []*Graph{}
 
@@ -205,6 +217,8 @@ func (g *Graph) buildComponentGraph(componentNodeIDs map[string]bool) *Graph {
 
 // RemoveNode removes a node and all its relationships from the graph.
 func (g *Graph) RemoveNode(nodeID string) error {
+	defer perf.Track(nil, "dependency.Graph.RemoveNode")()
+
 	node, exists := g.Nodes[nodeID]
 	if !exists {
 		return nil // Node doesn't exist, nothing to remove.

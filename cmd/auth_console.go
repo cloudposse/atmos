@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -124,7 +125,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	if consolePrintOnly {
 		// Print to stdout for piping.
-		fmt.Println(consoleURL)
+		fmt.Fprintln(ioLayer.MaskWriter(os.Stdout), consoleURL)
 		return nil
 	}
 
@@ -137,21 +138,22 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 // handleBrowserOpen handles opening the console URL in the browser or displaying it.
 func handleBrowserOpen(consoleURL string) {
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 	if !consoleSkipOpen && !telemetry.IsCI() {
-		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprintf(maskedStderr, "\n")
 		if err := u.OpenUrl(consoleURL); err != nil {
 			// Show URL on error so user can manually open it.
 			printConsoleURL(consoleURL)
 			warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange)).Bold(true)
-			fmt.Fprintf(os.Stderr, "\n%s Failed to open browser: %v\n", warningStyle.Render("Warning:"), err)
-			fmt.Fprintf(os.Stderr, "Please copy the URL above and open it manually.\n")
+			fmt.Fprintf(maskedStderr, "\n%s Failed to open browser: %v\n", warningStyle.Render("Warning:"), err)
+			fmt.Fprintf(maskedStderr, "Please copy the URL above and open it manually.\n")
 		} else {
 			successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
-			fmt.Fprintf(os.Stderr, "%s\n", successStyle.Render("✓ Opened console in browser"))
+			fmt.Fprintf(maskedStderr, "%s\n", successStyle.Render("✓ Opened console in browser"))
 		}
 	} else {
 		// User explicitly skipped opening or running in CI, so show the URL.
-		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprintf(maskedStderr, "\n")
 		printConsoleURL(consoleURL)
 	}
 }
@@ -162,23 +164,24 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Width(consoleLabelWidth)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWhite))
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 
 	// Print header.
-	fmt.Fprintf(os.Stderr, "\n%s\n\n", headerStyle.Render("Console URL Generated"))
+	fmt.Fprintf(maskedStderr, "\n%s\n\n", headerStyle.Render("Console URL Generated"))
 
 	// Print fields.
-	fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
-	fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
+	fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
+	fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
 
 	if whoami.Account != "" {
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
+		fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
 	}
 
 	if duration > 0 {
 		// Calculate expiration time.
 		expiresAt := time.Now().Add(duration)
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
+		fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
+		fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
 	}
 
 	// Only print URL if requested (for error cases or --no-open).
@@ -191,7 +194,7 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 func printConsoleURL(consoleURL string) {
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
 	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	fmt.Fprintf(os.Stderr, "\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
 }
 
 // getConsoleProvider returns a ConsoleAccessProvider for the given identity.
@@ -230,7 +233,7 @@ func initializeAuthManager() (types.AuthManager, error) {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
 	}
@@ -277,7 +280,8 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 		return whoami.Credentials, nil
 	case whoami.CredentialsRef != "":
 		credStore := credentials.NewCredentialStore()
-		creds, err := credStore.Retrieve(whoami.CredentialsRef)
+		// Use realm from whoami info for credential retrieval.
+		creds, err := credStore.Retrieve(whoami.CredentialsRef, whoami.Realm)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to retrieve credentials from store: %w", errUtils.ErrAuthConsole, err)
 		}

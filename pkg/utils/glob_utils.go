@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +50,9 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		return nil, fmt.Errorf("%w: '%s'\n('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
+		return nil, errUtils.Build(errUtils.ErrFailedToFindImport).
+			WithContext("paths", pattern).
+			Err()
 	}
 
 	var fullMatches []string

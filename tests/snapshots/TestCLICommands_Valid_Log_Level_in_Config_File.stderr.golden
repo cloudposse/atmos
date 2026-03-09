@@ -4,22 +4,22 @@
  TRCE  Checking for atmos.yaml in working directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Using test Git root override path=/mock-git-root
  TRCE  Checking for .atmos.d in git root path=/mock-git-root
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
+ TRCE  No atmos.d directory found path=/mock-git-root/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-git-root/.atmos.d
  TRCE  Checking for .atmos.d in config directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No atmos.d directory found path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-home/.atmos.d
  TRCE  Found atmos.yaml in current directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Checking for atmos.yaml from ATMOS_CLI_CONFIG_PATH path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Using test Git root override path=/mock-git-root
  TRCE  Checking for .atmos.d in git root path=/mock-git-root
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
+ TRCE  No atmos.d directory found path=/mock-git-root/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-git-root/.atmos.d
  TRCE  Checking for .atmos.d in config directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No atmos.d directory found path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-home/.atmos.d
  TRCE  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Preserved case-sensitive map keys paths="[env auth.identities]" files_processed=1
+ TRCE  Preserved case-sensitive map keys paths="[env templates.settings.env auth.identities]" files_processed=1
  TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  TRCE  Checking for atmos.yaml in system config path=/usr/local/etc/atmos
@@ -27,22 +27,22 @@
  TRCE  Checking for atmos.yaml in working directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Using test Git root override path=/mock-git-root
  TRCE  Checking for .atmos.d in git root path=/mock-git-root
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
+ TRCE  No atmos.d directory found path=/mock-git-root/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-git-root/.atmos.d
  TRCE  Checking for .atmos.d in config directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No atmos.d directory found path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-home/.atmos.d
  TRCE  Found atmos.yaml in current directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Checking for atmos.yaml from ATMOS_CLI_CONFIG_PATH path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Using test Git root override path=/mock-git-root
  TRCE  Checking for .atmos.d in git root path=/mock-git-root
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
+ TRCE  No atmos.d directory found path=/mock-git-root/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-git-root/.atmos.d
  TRCE  Checking for .atmos.d in config directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No atmos.d directory found path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-home/.atmos.d
  TRCE  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Preserved case-sensitive map keys paths="[env auth.identities]" files_processed=1
+ TRCE  Preserved case-sensitive map keys paths="[env templates.settings.env auth.identities]" files_processed=1
  TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  TRCE  Checking for atmos.yaml in system config path=/usr/local/etc/atmos
@@ -50,22 +50,22 @@
  TRCE  Checking for atmos.yaml in working directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Using test Git root override path=/mock-git-root
  TRCE  Checking for .atmos.d in git root path=/mock-git-root
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
+ TRCE  No atmos.d directory found path=/mock-git-root/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-git-root/.atmos.d
  TRCE  Checking for .atmos.d in config directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No atmos.d directory found path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-home/.atmos.d
  TRCE  Found atmos.yaml in current directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Checking for atmos.yaml from ATMOS_CLI_CONFIG_PATH path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Using test Git root override path=/mock-git-root
  TRCE  Checking for .atmos.d in git root path=/mock-git-root
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/mock-git-root
+ TRCE  No atmos.d directory found path=/mock-git-root/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-git-root/.atmos.d
  TRCE  Checking for .atmos.d in config directory path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No atmos.d directory found path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.d
+ TRCE  No .atmos.d directory found path=/mock-home/.atmos.d
  TRCE  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
- TRCE  Preserved case-sensitive map keys paths="[env auth.identities]" files_processed=1
+ TRCE  Preserved case-sensitive map keys paths="[env templates.settings.env auth.identities]" files_processed=1
  TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  DEBU  Telemetry event enqueued

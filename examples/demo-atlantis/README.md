@@ -7,7 +7,7 @@ Learn more about [Atlantis Integration](https://atmos.tools/integrations/atlanti
 ## What You'll See
 
 - [Atlantis repo config](https://atmos.tools/integrations/atlantis/repo-config/) generation
-- [Custom commands](https://atmos.tools/core-concepts/custom-commands/) for build automation
+- [Custom commands](https://atmos.tools/cli/configuration/commands) for build automation
 - Varfile generation for Atlantis projects
 
 ## Try It

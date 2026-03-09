@@ -4,17 +4,17 @@
 
 Valid subcommands are:
 
-• console
-• ecr-login
-• env
-• exec
-• list
-• login
-• logout
-• shell
-• user
-• validate
-• whoami
+  • console
+  • ecr-login
+  • env
+  • exec
+  • list
+  • login
+  • logout
+  • shell
+  • user
+  • validate
+  • whoami
 
 ## Hints
 

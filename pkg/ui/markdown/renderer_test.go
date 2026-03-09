@@ -95,7 +95,7 @@ func TestRenderErrorf(t *testing.T) {
 		{
 			name:     "Test with color",
 			input:    "## Hello **world**",
-			expected: "\x1b[;1m\x1b[0m\x1b[;1m\x1b[0m\x1b[;1m## \x1b[0m\x1b[;1mHello \x1b[0m\x1b[;1m**\x1b[0m\x1b[;1mworld\x1b[0m\x1b[;1m**\x1b[0m",
+			expected: "  \x1b[;1m## \x1b[0m\x1b[;1mHello \x1b[0m\x1b[;1m**\x1b[0m\x1b[;1mworld\x1b[0m\x1b[;1m**\x1b[0m",
 			isColor:  true,
 		},
 	}

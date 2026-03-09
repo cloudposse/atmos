@@ -76,10 +76,8 @@ func TestSourceProvisionerList(t *testing.T) {
 
 	cmd.RootCmd.SetArgs([]string{"terraform", "source", "list", "--stack", "dev"})
 
-	// Currently returns "not implemented" error.
 	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not implemented")
+	require.NoError(t, err)
 }
 
 // TestSourceProvisionerDelete_MissingForce tests that delete requires --force flag.

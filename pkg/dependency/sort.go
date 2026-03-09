@@ -3,11 +3,15 @@ package dependency
 import (
 	"fmt"
 	"sort"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // TopologicalSort returns nodes in dependency order using Kahn's algorithm.
 // Nodes with no dependencies are processed first, followed by nodes that depend on them.
 func (g *Graph) TopologicalSort() (ExecutionOrder, error) {
+	defer perf.Track(nil, "dependency.Graph.TopologicalSort")()
+
 	// Create a copy of the graph to avoid modifying the original.
 	workGraph := g.Clone()
 
@@ -30,7 +34,6 @@ func (g *Graph) TopologicalSort() (ExecutionOrder, error) {
 	// Process nodes in topological order.
 	result := ExecutionOrder{}
 	processedCount := 0
-
 	for len(queue) > 0 {
 		// Dequeue the first node.
 		currentID := queue[0]
@@ -72,6 +75,8 @@ func (g *Graph) TopologicalSort() (ExecutionOrder, error) {
 // ReverseTopologicalSort returns nodes in reverse dependency order.
 // Nodes that depend on others are processed first.
 func (g *Graph) ReverseTopologicalSort() (ExecutionOrder, error) {
+	defer perf.Track(nil, "dependency.Graph.ReverseTopologicalSort")()
+
 	order, err := g.TopologicalSort()
 	if err != nil {
 		return nil, err
@@ -89,6 +94,8 @@ func (g *Graph) ReverseTopologicalSort() (ExecutionOrder, error) {
 // GetExecutionLevels returns nodes grouped by execution level.
 // Level 0 contains nodes with no dependencies, level 1 contains nodes that only depend on level 0, etc.
 func (g *Graph) GetExecutionLevels() ([][]Node, error) {
+	defer perf.Track(nil, "dependency.Graph.GetExecutionLevels")()
+
 	// Check for cycles first.
 	if hasCycle, cyclePath := g.HasCycles(); hasCycle {
 		return nil, fmt.Errorf("%w: %v", ErrCircularDependency, cyclePath)
@@ -97,7 +104,6 @@ func (g *Graph) GetExecutionLevels() ([][]Node, error) {
 	levels := [][]Node{}
 	processed := make(map[string]bool)
 	nodeLevel := make(map[string]int)
-
 	// Calculate the level for each node.
 	var calculateLevel func(nodeID string) int
 	calculateLevel = func(nodeID string) int {
@@ -120,7 +126,6 @@ func (g *Graph) GetExecutionLevels() ([][]Node, error) {
 		return level
 	}
 
-	// Calculate levels for all nodes.
 	maxLevel := -1
 	for id := range g.Nodes {
 		level := calculateLevel(id)
@@ -129,7 +134,6 @@ func (g *Graph) GetExecutionLevels() ([][]Node, error) {
 		}
 	}
 
-	// Initialize levels slice.
 	for i := 0; i <= maxLevel; i++ {
 		levels = append(levels, []Node{})
 	}
@@ -153,6 +157,8 @@ func (g *Graph) GetExecutionLevels() ([][]Node, error) {
 
 // FindPath finds a path from one node to another if it exists.
 func (g *Graph) FindPath(fromID, toID string) ([]string, bool) {
+	defer perf.Track(nil, "dependency.Graph.FindPath")()
+
 	if fromID == toID {
 		return []string{fromID}, true
 	}
@@ -196,6 +202,8 @@ func (g *Graph) FindPath(fromID, toID string) ([]string, bool) {
 
 // IsReachable checks if one node is reachable from another.
 func (g *Graph) IsReachable(fromID, toID string) bool {
+	defer perf.Track(nil, "dependency.Graph.IsReachable")()
+
 	_, found := g.FindPath(fromID, toID)
 	return found
 }

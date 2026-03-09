@@ -42,6 +42,7 @@ type ShellOptions struct {
 	Component string
 	Stack     string
 	DryRun    bool
+	Identity  string // AWS identity to use for authentication (from --identity flag).
 	ProcessingOptions
 }
 

@@ -9,10 +9,13 @@ import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Use this command to show a list of the affected Atmos components and stacks given two Git commits.
 </Intro>
+
+<DemoVideo id="describe-affected" title="atmos describe affected" showCaption={false} />
 
 <Screengrab title="atmos describe affected --help" slug="atmos-describe-affected--help" />
 
@@ -125,6 +128,10 @@ atmos describe affected --identity # Interactive selection
 # Disable authentication (use AWS SDK defaults)
 atmos describe affected --identity=false
 atmos describe affected -i my-aws-identity --ref refs/heads/main
+# Filter to show only deleted components (for destruction workflows)
+atmos describe affected --query '[.[] | select(.deleted == true)]'
+# Filter to show only modified components (for apply workflows)
+atmos describe affected --query '[.[] | select(.deleted != true)]'
 ```
 
 # Example Output
@@ -380,7 +387,9 @@ Each object has the following schema:
   "folder": ".....",
   "dependents": [],
   "included_in_dependents": "true | false",
-  "settings": {}
+  "settings": {},
+  "deleted": "true | false",
+  "deletion_type": "component | stack"
 }
 ```
 
@@ -452,6 +461,19 @@ where:
         The `settings` section of the component in the stack. It will be included only if the
         command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
         configuration information to [integrations](/integrations/github-actions).
+    </dd>
+
+    <dt>`deleted`</dt>
+    <dd>
+        A boolean flag set to `true` when the component exists in the BASE branch but has been deleted in HEAD.
+        This enables CI/CD pipelines to identify components that require `terraform destroy`.
+    </dd>
+
+    <dt>`deletion_type`</dt>
+    <dd>
+        The type of deletion when `deleted` is `true`. Possible values:
+        - `component`: The component was removed from the stack (the stack still exists).
+        - `stack`: The entire stack was deleted (all components in it are marked as deleted).
     </dd>
 
     <dt>`included_in_dependents`</dt>
@@ -709,6 +731,72 @@ where:
                         "folder"
                       ],
                       "folder": "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                    }
+                  ]
+                ```
+            </dd>
+
+            <dt>`deleted`</dt>
+            <dd>
+                The component was deleted (exists in BASE but not in HEAD). This happens when a component is removed from
+                a stack configuration. The component's `deleted` field will be set to `true` and `deletion_type` to `component`.
+
+                For example, if you remove the `monitoring` component from the `prod-us-east-1` stack:
+
+                ```json
+                  [
+                    {
+                      "component": "monitoring",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/monitoring",
+                      "stack": "prod-us-east-1",
+                      "stack_slug": "prod-us-east-1-monitoring",
+                      "affected": "deleted",
+                      "affected_all": [
+                        "deleted"
+                      ],
+                      "deleted": true,
+                      "deletion_type": "component"
+                    }
+                  ]
+                ```
+
+                Use this in CI/CD pipelines to trigger `terraform destroy` for removed components.
+            </dd>
+
+            <dt>`deleted.stack`</dt>
+            <dd>
+                The entire stack was deleted. All components in the stack are marked as deleted with `deletion_type: stack`.
+
+                For example, if you delete the entire `staging-us-west-2` stack:
+
+                ```json
+                  [
+                    {
+                      "component": "vpc",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/vpc",
+                      "stack": "staging-us-west-2",
+                      "stack_slug": "staging-us-west-2-vpc",
+                      "affected": "deleted.stack",
+                      "affected_all": [
+                        "deleted.stack"
+                      ],
+                      "deleted": true,
+                      "deletion_type": "stack"
+                    },
+                    {
+                      "component": "eks",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/eks",
+                      "stack": "staging-us-west-2",
+                      "stack_slug": "staging-us-west-2-eks",
+                      "affected": "deleted.stack",
+                      "affected_all": [
+                        "deleted.stack"
+                      ],
+                      "deleted": true,
+                      "deletion_type": "stack"
                     }
                   ]
                 ```
@@ -1015,6 +1103,113 @@ the `dependents` property of the other components, and hence the `included_in_de
 When processing the above output, you might decide to not plan/apply the `component-2` and `component-3` components
 since they are in the `dependents` property of the `component-1` component. Instead, you might just
 trigger `component-1` and then `component-2` and `component-3` in the order of dependencies.
+
+## Detecting Deleted Components in Affected Stacks
+
+The `atmos describe affected` command automatically detects components and stacks that exist in the BASE branch
+but have been deleted in HEAD. This enables CI/CD pipelines to trigger `terraform destroy` for removed infrastructure.
+
+### How it Works
+
+When comparing HEAD (current branch) with BASE (target branch), Atmos not only detects modifications but also:
+
+1. **Deleted components**: Components that exist in BASE but not in HEAD (within the same stack)
+2. **Deleted stacks**: Entire stacks that exist in BASE but not in HEAD
+
+Deleted components are marked with:
+- `deleted: true` - Indicates the component was deleted
+- `deletion_type: component` or `deletion_type: stack` - Specifies whether just the component or the entire stack was removed
+- `affected: deleted` or `affected: deleted.stack` - The affected reason
+
+### Filtering Deleted vs. Modified Components
+
+Use `--query` or `jq` to separate deleted components from modified ones:
+
+```shell
+# Get only deleted components (for destruction)
+atmos describe affected --query '[.[] | select(.deleted == true)]'
+
+# Get only modified components (for apply)
+atmos describe affected --query '[.[] | select(.deleted != true)]'
+
+# Get deleted components in a specific stack
+atmos describe affected --query '[.[] | select(.deleted == true and .stack == "prod-us-east-1")]'
+```
+
+### CI/CD Pipeline Example
+
+Here's a GitHub Actions workflow that separates apply and destroy operations:
+
+```yaml
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      modified: ${{ steps.affected.outputs.modified }}
+      deleted: ${{ steps.affected.outputs.deleted }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Detect affected
+        id: affected
+        run: |
+          # Get all affected components
+          atmos describe affected --format json > affected.json
+
+          # Filter modified components (for apply)
+          jq '[.[] | select(.deleted != true)]' affected.json > modified.json
+          echo "modified=$(cat modified.json | jq -c)" >> $GITHUB_OUTPUT
+
+          # Filter deleted components (for destroy)
+          jq '[.[] | select(.deleted == true)]' affected.json > deleted.json
+          echo "deleted=$(cat deleted.json | jq -c)" >> $GITHUB_OUTPUT
+
+  apply:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.modified != '[]'
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
+
+  destroy:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.deleted != '[]'
+    environment: production  # Requires manual approval via GitHub Environment protection rules
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
+    steps:
+      # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
+      # The deleted component's configuration only exists in BASE.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
+```
+
+:::warning Destroy Operations
+Destruction of cloud resources is irreversible. The example above uses `--auto-approve` for automation but
+includes `environment: production` to require manual approval via
+[GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules).
+Always review the list of deleted components before running `terraform destroy`.
+
+**Important:** The destroy job must check out the **BASE branch** (target branch, e.g., `main`) rather than HEAD.
+This is because `terraform destroy` needs access to the component's stack configuration and Terraform files,
+which only exist in BASE — they've been deleted in HEAD.
+:::
+
+:::note Abstract Components
+[Abstract components](/design-patterns/inheritance-patterns/abstract-component) (`metadata.type: abstract`)
+are not reported as deleted since they are blueprints and are not provisioned.
+:::
 
 ## Working with Private Repositories
 

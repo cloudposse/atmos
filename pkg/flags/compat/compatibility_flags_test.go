@@ -449,6 +449,107 @@ func TestCompatibilityFlagTranslator_EdgeCases(t *testing.T) {
 	}
 }
 
+// TestCompatibilityFlagTranslator_DoubleHyphenSeparator tests the "--" end-of-options handling.
+// This is the fix for GitHub issue #1967 where args after "--" were incorrectly parsed.
+func TestCompatibilityFlagTranslator_DoubleHyphenSeparator(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected translationResult
+	}{
+		{
+			name:  "double-hyphen with terraform flags after",
+			input: []string{"terraform", "plan", "vpc", "--stack", "nonprod", "--", "-consolidate-warnings=false"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--stack", "nonprod", "--"},
+				separatedArgs: []string{"-consolidate-warnings=false"},
+			},
+		},
+		{
+			name:  "double-hyphen with multiple args after",
+			input: []string{"terraform", "plan", "vpc", "-s", "nonprod", "--", "-var=foo=bar", "-var=baz=qux"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "-s", "nonprod", "--"},
+				separatedArgs: []string{"-var=foo=bar", "-var=baz=qux"},
+			},
+		},
+		{
+			name:  "double-hyphen at end (no args after)",
+			input: []string{"terraform", "plan", "vpc", "--stack", "nonprod", "--"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--stack", "nonprod", "--"},
+				separatedArgs: []string{},
+			},
+		},
+		{
+			name:  "no double-hyphen",
+			input: []string{"terraform", "plan", "vpc", "--stack", "nonprod"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--stack", "nonprod"},
+				separatedArgs: []string{},
+			},
+		},
+		{
+			name:  "double-hyphen with compat flag after (should go to separated)",
+			input: []string{"terraform", "plan", "vpc", "--", "-var", "foo=bar"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--"},
+				separatedArgs: []string{"-var", "foo=bar"},
+			},
+		},
+		{
+			name:  "complex component name with hyphens (issue 1967 exact scenario)",
+			input: []string{"terraform", "plan", "10-static-web-app-no-frontdoor", "--stack", "trialintelx-eastus-sbx", "--", "-consolidate-warnings=false"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "10-static-web-app-no-frontdoor", "--stack", "trialintelx-eastus-sbx", "--"},
+				separatedArgs: []string{"-consolidate-warnings=false"},
+			},
+		},
+		{
+			name:  "double-hyphen with -s flag after (should NOT be parsed as stack)",
+			input: []string{"terraform", "plan", "vpc", "--stack", "prod", "--", "-s", "wrongstack"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--stack", "prod", "--"},
+				separatedArgs: []string{"-s", "wrongstack"},
+			},
+		},
+		{
+			name:  "multiple double-hyphens (only first matters)",
+			input: []string{"terraform", "plan", "vpc", "--", "-var=a", "--", "-var=b"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "vpc", "--"},
+				separatedArgs: []string{"-var=a", "--", "-var=b"},
+			},
+		},
+		{
+			name:  "double-hyphen as only arg after command",
+			input: []string{"terraform", "plan", "--"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform", "plan", "--"},
+				separatedArgs: []string{},
+			},
+		},
+		{
+			name:  "double-hyphen first in args",
+			input: []string{"--", "-var=foo"},
+			expected: translationResult{
+				atmosArgs:     []string{"--"},
+				separatedArgs: []string{"-var=foo"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			translator := buildTestCompatibilityTranslator()
+			atmosArgs, separatedArgs := translator.Translate(tt.input)
+
+			assert.Equal(t, tt.expected.atmosArgs, atmosArgs, "atmosArgs mismatch")
+			assert.Equal(t, tt.expected.separatedArgs, separatedArgs, "separatedArgs mismatch")
+		})
+	}
+}
+
 func TestCompatibilityFlagTranslator_ValidateTargets(t *testing.T) {
 	tests := []struct {
 		name        string

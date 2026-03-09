@@ -42,7 +42,7 @@ func shouldSkipNode(node *dependency.Node) bool {
 	}
 
 	// Skip abstract components.
-	if isAbstractComponent(metadata) {
+	if isAbstractMetadata(metadata) {
 		log.Debug("Skipping abstract component", "component", node.Component, "stack", node.Stack)
 		return true
 	}
@@ -56,8 +56,8 @@ func shouldSkipNode(node *dependency.Node) bool {
 	return false
 }
 
-// isAbstractComponent checks if metadata indicates an abstract component.
-func isAbstractComponent(metadata map[string]any) bool {
+// isAbstractMetadata checks if metadata indicates an abstract component.
+func isAbstractMetadata(metadata map[string]any) bool {
 	metadataType, ok := metadata["type"].(string)
 	return ok && metadataType == "abstract"
 }
@@ -87,12 +87,12 @@ func shouldSkipByQuery(node *dependency.Node, info *schema.ConfigAndStacksInfo) 
 func evaluateNodeQueryFilter(node *dependency.Node, info *schema.ConfigAndStacksInfo) (bool, error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		return false, fmt.Errorf("%w: %v", errUtils.ErrInitializeCLIConfig, err)
+		return false, fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	queryResult, err := u.EvaluateYqExpression(&atmosConfig, node.Metadata, info.Query)
 	if err != nil {
-		return false, fmt.Errorf("%w: %v", errUtils.ErrQueryEvaluation, err)
+		return false, fmt.Errorf("%w: %w", errUtils.ErrQueryEvaluation, err)
 	}
 
 	queryPassed, ok := queryResult.(bool)
@@ -120,7 +120,7 @@ func executeNodeCommand(node *dependency.Node, info *schema.ConfigAndStacksInfo)
 
 	// Execute the terraform command.
 	if err := ExecuteTerraform(*info); err != nil {
-		return fmt.Errorf("%w: %v", errUtils.ErrTerraformExecFailed, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrTerraformExecFailed, err)
 	}
 
 	return nil

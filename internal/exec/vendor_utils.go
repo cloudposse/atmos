@@ -51,6 +51,7 @@ type processTargetsParams struct {
 	TemplateData         struct{ Component, Version string }
 	VendorConfigFilePath string
 	URI                  string
+	SourceTemplate       string // Raw un-templated source URL for per-target version re-resolution.
 	PkgType              pkgType
 	SourceIsLocalFile    bool
 }
@@ -321,10 +322,10 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			}
 		}
 
-		// Determine package type
+		// Determine package type from source-level URI.
 		pType := determinePackageType(useOciScheme, useLocalFileSystem)
 
-		// Process each target within the source
+		// Process each target within the source.
 		pkgs, err := processTargets(&processTargetsParams{
 			AtmosConfig:          params.atmosConfig,
 			IndexSource:          indexSource,
@@ -332,6 +333,7 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			TemplateData:         tmplData,
 			VendorConfigFilePath: params.vendorConfigFilePath,
 			URI:                  uri,
+			SourceTemplate:       params.sources[indexSource].Source,
 			PkgType:              pType,
 			SourceIsLocalFile:    sourceIsLocalFile,
 		})
@@ -353,26 +355,98 @@ func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 	return pkgTypeRemote
 }
 
+// resolvedTarget holds the resolved URI, version, template data, and source classification for a single target.
+type resolvedTarget struct {
+	uri               string
+	version           string
+	tmplData          struct{ Component, Version string }
+	pkgType           pkgType
+	sourceIsLocalFile bool
+}
+
+// resolveTargetOverride re-resolves the source URI and classification when a target has a version override.
+func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt schema.AtmosVendorTarget) (*resolvedTarget, error) {
+	tmplData := struct{ Component, Version string }{
+		Component: params.TemplateData.Component,
+		Version:   tgt.Version,
+	}
+
+	// Re-template the source URL with the target-specific version.
+	effectiveURI, err := ProcessTmpl(
+		params.AtmosConfig,
+		fmt.Sprintf("source-%d-target-%d", params.IndexSource, indexTarget),
+		params.SourceTemplate,
+		tmplData,
+		false,
+	)
+	if err != nil {
+		return nil, err
+	}
+	effectiveURI = normalizeVendorURI(effectiveURI)
+
+	// Recompute source classification from the re-resolved URI, since per-target version
+	// overrides may produce a URI with a different scheme or locality than the source-level URI.
+	useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&effectiveURI, params.VendorConfigFilePath)
+	if err != nil {
+		return nil, err
+	}
+	if !useLocalFileSystem {
+		if err := u.ValidateURI(effectiveURI); err != nil {
+			return nil, fmt.Errorf("invalid URI for component %s: %w", params.Source.Component, err)
+		}
+	}
+
+	return &resolvedTarget{
+		uri:               effectiveURI,
+		version:           tgt.Version,
+		tmplData:          tmplData,
+		pkgType:           determinePackageType(useOciScheme, useLocalFileSystem),
+		sourceIsLocalFile: sourceIsLocalFile,
+	}, nil
+}
+
 func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexTarget, tgt := range params.Source.Targets {
-		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
+		// Determine the effective template data and URI for this target.
+		tmplData := params.TemplateData
+		effectiveURI := params.URI
+		effectiveVersion := params.Source.Version
+		// Default to source-level classification.
+		pType := params.PkgType
+		sourceIsLocalFile := params.SourceIsLocalFile
+
+		// If the target has its own version, override template data and re-resolve the source URI.
+		if tgt.Version != "" {
+			resolved, err := resolveTargetOverride(params, indexTarget, tgt)
+			if err != nil {
+				return nil, err
+			}
+			effectiveURI = resolved.uri
+			effectiveVersion = resolved.version
+			tmplData = resolved.tmplData
+			pType = resolved.pkgType
+			sourceIsLocalFile = resolved.sourceIsLocalFile
+		}
+
+		// Template-expand the target path.
+		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt.Path, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
 		targetPath := filepath.Join(filepath.ToSlash(params.VendorConfigFilePath), filepath.ToSlash(target))
 		pkgName := params.Source.Component
 		if pkgName == "" {
-			pkgName = params.URI
+			pkgName = effectiveURI
 		}
-		// Create package struct
+		// Create package struct.
 		p := pkgAtmosVendor{
-			uri:               params.URI,
+			uri:               effectiveURI,
 			name:              pkgName,
 			targetPath:        targetPath,
-			sourceIsLocalFile: params.SourceIsLocalFile,
-			pkgType:           params.PkgType,
-			version:           params.Source.Version,
+			sourceIsLocalFile: sourceIsLocalFile,
+			pkgType:           pType,
+			version:           effectiveVersion,
 			atmosVendorSource: *params.Source,
 		}
 		packages = append(packages, p)
@@ -567,6 +641,16 @@ func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourc
 		PreserveTimes: false,
 		PreserveOwner: false,
 		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+		// OnDirExists handles existing directories at the destination.
+		// We skip .git directories from source, but if the destination already has a .git directory
+		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
+		// on git packfiles which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == ".git" {
+				return cp.Untouchable
+			}
+			return cp.Merge
+		},
 	}
 
 	// Adjust the target path if it's a local file with no extension
@@ -591,27 +675,31 @@ func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourc
 // Returns a function that determines if a file should be skipped during copying.
 func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		// Skip .git directories
+		// Skip .git directories.
 		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
 
-		// Normalize paths
+		// Normalize paths.
 		tempDir = filepath.ToSlash(tempDir)
 		src = filepath.ToSlash(src)
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
-		// Check if the file should be excluded
+		// Check excludes first - if file matches any excluded pattern, skip it immediately.
 		if len(s.ExcludedPaths) > 0 {
-			return shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
+			excluded, err := shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
+			if err != nil || excluded {
+				return excluded, err
+			}
 		}
 
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+		// Then check includes - if specified, file must match to be included.
+		// Only include the files that match the 'included_paths' patterns (if any pattern is specified).
 		if len(s.IncludedPaths) > 0 {
 			return shouldIncludeFile(src, s.IncludedPaths, trimmedSrc)
 		}
 
-		// If 'included_paths' is not provided, include all files that were not excluded
+		// If 'included_paths' is not provided, include all files that were not excluded.
 		StderrLogger.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
@@ -623,11 +711,13 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 // https://github.com/bmatcuk/doublestar#pattern.
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
 	for _, excludePath := range excludedPaths {
-		excludeMatch, err := u.PathMatch(excludePath, src)
+		// Match against trimmedSrc (relative path) instead of src (absolute path).
+		// This allows simple patterns like "providers.tf" to match without needing "**/" prefix.
+		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
 		if err != nil {
 			return true, err
 		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file.
 			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
 			return true, nil
 		}
@@ -639,11 +729,13 @@ func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (b
 func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
 	anyMatches := false
 	for _, includePath := range includedPaths {
-		includeMatch, err := u.PathMatch(includePath, src)
+		// Match against trimmedSrc (relative path) instead of src (absolute path).
+		// This allows patterns to match correctly without needing to account for temp directory paths.
+		includeMatch, err := u.PathMatch(includePath, trimmedSrc)
 		if err != nil {
 			return true, err
 		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file
+			// If the file matches ANY of the 'included_paths' patterns, include the file.
 			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
 
 			anyMatches = true

@@ -42,9 +42,11 @@ func TestVendorComponentPullCommand(t *testing.T) {
 	err = e.ExecuteComponentVendorInternal(&atmosConfig, &componentConfig.Spec, component, componentPath, false)
 	assert.Nil(t, err)
 
-	// Check if the correct files were pulled and written to the correct folder
+	// Check if the correct files were pulled and written to the correct folder.
+	// Note: context.tf is excluded by excluded_paths: ["**/context.tf"] in the component.yaml,
+	// and no mixin is configured to add it back, so it should NOT be present.
 	filesToCheck := []string{
-		"context.tf", "main.tf", "outputs.tf",
+		"main.tf", "outputs.tf",
 		"providers.tf", "variables.tf", "versions.tf",
 	}
 

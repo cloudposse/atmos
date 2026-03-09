@@ -1,7 +1,9 @@
-]11;?\[6n]10;?\[6n]11;?\[6n]11;?\[6n]11;?\[6n [1mComponent    [0m  [1mStack  [0m 
+]11;?\[6n]10;?\[6n]11;?\[6n]11;?\[6n]11;?\[6n
+ [1;38;5;72mComponent    [0m  [1;38;5;72mStack  [0m 
 [90m───────────────[0m[90m─────────[0m
  mock/disabled  nonprod 
  mock/drift     nonprod 
  mock/drift     prod    
  mock/nodrift   nonprod 
  mock/nodrift   prod    
+

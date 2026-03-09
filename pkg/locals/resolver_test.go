@@ -613,3 +613,115 @@ func TestResolver_DependencyGraphWithParentRefs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "p1-p2", result["child"])
 }
+
+func TestResolver_YamlFunctionProcessor_Success(t *testing.T) {
+	// Test YAML function processor that successfully processes a YAML function.
+	locals := map[string]any{
+		"value": "!terraform.state vpc .vpc_id",
+	}
+
+	processor := func(value string) (any, error) {
+		if value == "!terraform.state vpc .vpc_id" {
+			return "vpc-12345", nil
+		}
+		return nil, nil
+	}
+
+	resolver := NewResolver(locals, "test.yaml").WithYamlFunctionProcessor(processor)
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-12345", result["value"])
+}
+
+func TestResolver_YamlFunctionProcessor_Error(t *testing.T) {
+	// Test YAML function processor that returns an error.
+	locals := map[string]any{
+		"bad_value": "!terraform.state nonexistent .output",
+	}
+
+	processor := func(value string) (any, error) {
+		if value == "!terraform.state nonexistent .output" {
+			return nil, errors.New("component 'nonexistent' not found")
+		}
+		return nil, nil
+	}
+
+	resolver := NewResolver(locals, "test.yaml").WithYamlFunctionProcessor(processor)
+	_, err := resolver.Resolve(nil)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrLocalsYamlFunctionFailed), "error should be ErrLocalsYamlFunctionFailed sentinel")
+	assert.Contains(t, err.Error(), "bad_value")
+	assert.Contains(t, err.Error(), "test.yaml")
+	assert.Contains(t, err.Error(), "nonexistent")
+}
+
+func TestResolver_YamlFunctionProcessor_NilResult(t *testing.T) {
+	// Test YAML function processor that returns nil (not a recognized YAML function).
+	// This should fall through to template processing.
+	locals := map[string]any{
+		"value": "!not_a_function foo",
+	}
+
+	processor := func(value string) (any, error) {
+		// Return nil to indicate not a recognized function.
+		return nil, nil
+	}
+
+	resolver := NewResolver(locals, "test.yaml").WithYamlFunctionProcessor(processor)
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	// Value should pass through unchanged since it's not a valid YAML function and has no template.
+	assert.Equal(t, "!not_a_function foo", result["value"])
+}
+
+func TestResolver_YamlFunctionProcessor_ComplexValue(t *testing.T) {
+	// Test YAML function processor that returns a complex value (map).
+	locals := map[string]any{
+		"config": "!store secrets/database .config",
+	}
+
+	processor := func(value string) (any, error) {
+		if value == "!store secrets/database .config" {
+			return map[string]any{
+				"host": "localhost",
+				"port": 5432,
+			}, nil
+		}
+		return nil, nil
+	}
+
+	resolver := NewResolver(locals, "test.yaml").WithYamlFunctionProcessor(processor)
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	config := result["config"].(map[string]any)
+	assert.Equal(t, "localhost", config["host"])
+	assert.Equal(t, 5432, config["port"])
+}
+
+func TestResolver_YamlFunctionProcessor_WithOtherLocals(t *testing.T) {
+	// Test YAML function processor combined with regular locals and templates.
+	locals := map[string]any{
+		"prefix":    "acme",
+		"from_env":  "!env AWS_REGION",
+		"full_name": "{{ .locals.prefix }}-{{ .locals.from_env }}",
+	}
+
+	processor := func(value string) (any, error) {
+		if value == "!env AWS_REGION" {
+			return "us-east-1", nil
+		}
+		return nil, nil
+	}
+
+	resolver := NewResolver(locals, "test.yaml").WithYamlFunctionProcessor(processor)
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "acme", result["prefix"])
+	assert.Equal(t, "us-east-1", result["from_env"])
+	assert.Equal(t, "acme-us-east-1", result["full_name"])
+}

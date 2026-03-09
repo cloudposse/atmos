@@ -11,6 +11,7 @@ import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import SecondaryCTA from '@site/src/components/SecondaryCTA'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <PillBox>Advanced</PillBox>
 
@@ -19,6 +20,8 @@ import SecondaryCTA from '@site/src/components/SecondaryCTA'
     [Atmos Functions](/functions/yaml) are insufficient.
     Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations.
 </Intro>
+
+<DemoVideo id="config-template-functions" title="Template Functions" showCaption={false} />
 
 :::note Template File Validation
 Template files (`.yaml.tmpl`, `.yml.tmpl`, `.tmpl`) are automatically detected and processed during normal operations (imports, etc.).
@@ -41,7 +44,7 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
   </dd>
 
   <dt>`templates.settings.enabled`</dt>
-  <dd>A boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. If set to `false`, Atmos will not process `Go` templates in stack manifests.</dd>
+  <dd>A boolean flag to enable/disable the processing of `Go` templates in Atmos stack manifests. Defaults to `true`. If set to `false`, Atmos will not process `Go` templates in stack manifests.</dd>
 </dl>
 
 
@@ -59,10 +62,10 @@ Templating in Atmos stack manifests is configured in the `atmos.yaml` [CLI confi
   <dd>A list of left and right delimiters to use to process the templates. If not defined, the default `Go` template delimiters `["{{", "}}"]` will be used.</dd>
 
   <dt>`templates.settings.sprig.enabled`</dt>
-  <dd>A boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/) in Atmos stack manifests.</dd>
+  <dd>A boolean flag to enable/disable the [Sprig Functions](https://masterminds.github.io/sprig/) in Atmos stack manifests. Defaults to `true`.</dd>
 
   <dt>`templates.settings.gomplate.enabled`</dt>
-  <dd>A boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests.</dd>
+  <dd>A boolean flag to enable/disable the [Gomplate Functions](https://docs.gomplate.ca/functions/) and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests. Defaults to `true`.</dd>
 
   <dt>`templates.settings.gomplate.timeout`</dt>
   <dd>Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).</dd>

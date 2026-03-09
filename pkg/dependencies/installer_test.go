@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // Sentinel errors for test mocks.
@@ -794,4 +795,185 @@ func TestEnsureTool(t *testing.T) {
 		assert.True(t, cockroachErrors.Is(err, errUtils.ErrToolInstall), "expected ErrToolInstall in chain, got: %v", err)
 		assert.Equal(t, "terraform@1.10.0", calledSpec, "install should be called with correct tool spec")
 	})
+}
+
+// TestBuildToolchainPATH_MatchesToolchainInstallPath verifies that BuildToolchainPATH
+// uses the same path as toolchain.GetInstallPath() to ensure PATH points to where
+// tools are actually installed.
+func TestBuildToolchainPATH_MatchesToolchainInstallPath(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	// Get the expected install path from toolchain package.
+	expectedInstallPath := toolchain.GetInstallPath()
+
+	// Build PATH with a tool dependency.
+	result, err := BuildToolchainPATH(nil, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	// The expected path component for the tool.
+	expectedPathComponent := filepath.Join(expectedInstallPath, "bin", "hashicorp", "terraform", "1.10.0")
+
+	// Verify that the PATH contains the correct directory.
+	assert.Contains(t, result, expectedPathComponent,
+		"PATH should contain the toolchain install path (%s), not a hardcoded default like '.tools'",
+		expectedInstallPath)
+}
+
+// TestBuildToolchainPATH_ConvertsRelativeToAbsolute verifies that BuildToolchainPATH
+// converts relative install paths to absolute paths to avoid Go 1.19+ exec.LookPath issues.
+func TestBuildToolchainPATH_ConvertsRelativeToAbsolute(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	// Use a relative path in config (simulating .tools).
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			InstallPath: ".tools",
+		},
+	}
+
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	// Get the current working directory to construct expected absolute path.
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	// Expected absolute path for the tool.
+	expectedPathComponent := filepath.Join(cwd, ".tools", "bin", "hashicorp", "terraform", "1.10.0")
+
+	// Verify that the PATH contains the absolute path, not the relative path.
+	assert.Contains(t, result, expectedPathComponent,
+		"PATH should contain absolute path (%s), not relative path (.tools/bin/...)",
+		expectedPathComponent)
+
+	// Verify that the path does NOT start with a relative path component.
+	pathEntries := strings.Split(result, string(os.PathListSeparator))
+	for _, entry := range pathEntries {
+		if strings.Contains(entry, "hashicorp/terraform") {
+			assert.Truef(t, filepath.IsAbs(entry),
+				"PATH entry for terraform should be absolute, got: %s", entry)
+		}
+	}
+}
+
+// TestBuildToolchainPATH_WithAbsolutePath verifies that BuildToolchainPATH
+// handles absolute paths correctly and exercises the filepath.Abs() code path.
+func TestBuildToolchainPATH_WithAbsolutePath(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	// Create a temp directory to use as an absolute install path.
+	tmpDir := t.TempDir()
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			InstallPath: tmpDir,
+		},
+	}
+
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	// Expected absolute path for the tool.
+	expectedPathComponent := filepath.Join(tmpDir, "bin", "hashicorp", "terraform", "1.10.0")
+
+	// Verify that the PATH contains the absolute path.
+	assert.Contains(t, result, expectedPathComponent,
+		"PATH should contain absolute path (%s)",
+		expectedPathComponent)
+
+	// Verify that all tool paths are absolute.
+	pathEntries := strings.Split(result, string(os.PathListSeparator))
+	for _, entry := range pathEntries {
+		if strings.Contains(entry, "hashicorp/terraform") {
+			assert.Truef(t, filepath.IsAbs(entry),
+				"PATH entry for terraform should be absolute, got: %s", entry)
+		}
+	}
+}
+
+// TestBuildToolchainPATH_WithMultipleTools verifies PATH construction with multiple tools
+// and exercises the loop that converts paths to absolute.
+func TestBuildToolchainPATH_WithMultipleTools(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	// Use a relative path to exercise the filepath.Abs() conversion.
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			InstallPath: ".tools",
+		},
+	}
+
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+		"cloudposse/atmos":    "1.0.0",
+	})
+	require.NoError(t, err)
+
+	// Get the current working directory.
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	// Expected absolute paths for both tools.
+	expectedTerraformPath := filepath.Join(cwd, ".tools", "bin", "hashicorp", "terraform", "1.10.0")
+	expectedAtmosPath := filepath.Join(cwd, ".tools", "bin", "cloudposse", "atmos", "1.0.0")
+
+	// Verify both paths are included.
+	assert.Contains(t, result, expectedTerraformPath,
+		"PATH should contain terraform absolute path")
+	assert.Contains(t, result, expectedAtmosPath,
+		"PATH should contain atmos absolute path")
+
+	// Verify all entries are absolute paths.
+	pathEntries := strings.Split(result, string(os.PathListSeparator))
+	for _, entry := range pathEntries {
+		if strings.Contains(entry, ".tools") || strings.Contains(entry, "hashicorp") || strings.Contains(entry, "cloudposse") {
+			assert.Truef(t, filepath.IsAbs(entry),
+				"PATH entry should be absolute, got: %s", entry)
+		}
+	}
+}
+
+// TestBuildToolchainPATH_SkipsInvalidTools verifies that invalid tool specifications
+// are skipped without causing errors, and remaining valid tools are included.
+func TestBuildToolchainPATH_SkipsInvalidTools(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			InstallPath: ".tools",
+		},
+	}
+
+	// Mix valid and invalid tool names.
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+		"invalid-tool":        "1.0.0", // Will be skipped by resolver.
+	})
+	require.NoError(t, err)
+
+	// Get the current working directory.
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	// Expected absolute path for valid tool.
+	expectedTerraformPath := filepath.Join(cwd, ".tools", "bin", "hashicorp", "terraform", "1.10.0")
+
+	// Verify the valid tool path is included.
+	assert.Contains(t, result, expectedTerraformPath,
+		"PATH should contain terraform absolute path")
+
+	// Verify invalid tool doesn't cause empty PATH.
+	assert.NotEqual(t, testPath, result,
+		"PATH should include terraform path, not just original PATH")
 }

@@ -91,6 +91,39 @@ Example output:
 }
 ```
 
+### GitHub Actions (GITHUB_PATH)
+
+Native support for GitHub Actions `GITHUB_PATH` environment file:
+
+```shell
+atmos toolchain env --format github
+```
+
+Output (one path per line, compatible with `$GITHUB_PATH`):
+```
+/home/runner/.tools/opentofu/1.7.0/bin
+/home/runner/.tools/terraform-docs/0.18.0/bin
+```
+
+When `$GITHUB_PATH` is set, the `github` format automatically writes to that file:
+
+```yaml
+- name: Install and configure toolchain
+  run: |
+    atmos toolchain install
+    atmos toolchain env --format github
+    # Automatically appends to $GITHUB_PATH
+
+- name: Use tools (next step has updated PATH)
+  run: |
+    tofu version  # Uses toolchain version
+```
+
+Or explicitly specify the output file:
+```shell
+atmos toolchain env --format github --output $GITHUB_PATH
+```
+
 ### Relative Paths
 
 ```shell
@@ -98,16 +131,33 @@ atmos toolchain env --relative
 # Uses relative paths instead of absolute
 ```
 
+### File Output
+
+Append PATH to a file instead of stdout:
+
+```shell
+atmos toolchain env --output /path/to/file
+# Shows: ✓ Appended PATH to /path/to/file
+```
+
+This is useful for CI/CD environments that use file-based environment configuration.
+
 ## Flags
 
 <dl>
     <dt>`--format`, `-f`  <em>(optional)</em></dt>
     <dd>
-        Output format: `bash`, `fish`, `powershell`, `json`, `dotenv`
+        Output format: `bash`, `fish`, `powershell`, `json`, `dotenv`, `github`
 
         Default: `bash`
 
         Environment variable: `ATMOS_TOOLCHAIN_ENV_FORMAT`
+    </dd>
+    <dt>`--output`, `-o`  <em>(optional)</em></dt>
+    <dd>
+        Append output to file instead of stdout. For `github` format, defaults to `$GITHUB_PATH` if set.
+
+        Environment variable: `ATMOS_TOOLCHAIN_ENV_OUTPUT`
     </dd>
     <dt>`--relative`  <em>(optional)</em></dt>
     <dd>
@@ -140,10 +190,24 @@ Invoke-Expression (atmos toolchain env --format powershell)
 
 ### CI/CD Integration
 
-**GitHub Actions**:
+**GitHub Actions** (recommended - native integration):
+```yaml
+- name: Install Atmos Toolchain
+  run: |
+    atmos toolchain install
+    atmos toolchain env --format github
+    # Automatically appends paths to $GITHUB_PATH
+
+- name: Use toolchain (PATH updated from previous step)
+  run: |
+    terraform version  # Uses toolchain version
+```
+
+**GitHub Actions** (legacy - eval in same step):
 ```yaml
 - name: Setup Atmos Toolchain
   run: |
+    atmos toolchain install
     eval "$(atmos toolchain env)"
     terraform version  # Uses toolchain version
 ```
@@ -171,4 +235,5 @@ RUN atmos toolchain env --format dotenv >> /etc/environment
   - **powershell**: Double-quoted assignment with PowerShell escaping
   - **dotenv**: Compatible with `.env` file parsers
   - **json**: Structured data for programmatic use
+  - **github**: One path per line, compatible with GitHub Actions `$GITHUB_PATH`
 - The command respects the `--toolchain-path` flag and `ATMOS_TOOLCHAIN_PATH` environment variable

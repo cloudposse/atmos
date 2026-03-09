@@ -75,3 +75,18 @@ func TestAllowPrompts_UseCaseNonInteractiveWhoami(t *testing.T) {
 	assert.False(t, AllowPrompts(nonInteractiveCtx),
 		"Whoami should use non-interactive context to prevent credential prompts")
 }
+
+// TestSuppressAuthErrors_DefaultFalse verifies default behavior for suppress flag.
+func TestSuppressAuthErrors_DefaultFalse(t *testing.T) {
+	ctx := context.Background()
+	assert.False(t, SuppressAuthErrors(ctx), "SuppressAuthErrors should return false by default")
+}
+
+// TestSuppressAuthErrors_Explicit verifies explicit settings.
+func TestSuppressAuthErrors_Explicit(t *testing.T) {
+	ctx := WithSuppressAuthErrors(context.Background(), true)
+	assert.True(t, SuppressAuthErrors(ctx), "SuppressAuthErrors should return true when explicitly set to true")
+
+	childCtx := WithSuppressAuthErrors(ctx, false)
+	assert.False(t, SuppressAuthErrors(childCtx), "SuppressAuthErrors should return false when explicitly set to false")
+}

@@ -12,6 +12,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
@@ -423,8 +424,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		// Render tree view.
 		// Use showImports parameter from --provenance flag.
 		output := format.RenderInstancesTree(importTrees, opts.ShowImports)
-		fmt.Println(output)
-		return nil
+		return data.Writeln(output)
 	}
 
 	// For non-tree formats, process instances normally.
@@ -475,7 +475,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	if upload {
 		proInstances := filterProEnabledInstances(instances)
 		if len(proInstances) == 0 {
-			_ = ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
+			ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
 			return nil
 		}
 		return uploadInstances(proInstances)

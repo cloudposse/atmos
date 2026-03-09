@@ -74,8 +74,6 @@ func HighlightCode(code string, lexerName string, theme string) (string, error) 
 	return buf.String(), nil
 }
 
-var isTermPresent = termUtils.IsTTYSupportForStdout()
-
 // HighlightCodeWithConfig highlights the given code using the provided configuration.
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	defer perf.Track(config, "utils.HighlightCodeWithConfig")()
@@ -85,15 +83,30 @@ func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, for
 		return code, nil
 	}
 
-	// Check if either stdout or stderr is a terminal (provenance goes to stderr)
-	isTerm := isTermPresent || termUtils.IsTTYSupportForStderr()
+	// Check if either stdout or stderr is a terminal (provenance goes to stderr).
+	// Note: This must be checked dynamically, not at package init time.
+	// Some environments (like VHS) set up the TTY after the binary is loaded.
+	isTerm := termUtils.IsTTYSupportForStdout() || termUtils.IsTTYSupportForStderr()
 
-	// Check if color is explicitly disabled via NoColor flag or Color setting.
-	// NoColor takes precedence (when true, always disable colors).
-	colorDisabled := config.Settings.Terminal.NoColor || !config.Settings.Terminal.Color
+	// Check if color is forced via ForceColor (ATMOS_FORCE_COLOR).
+	// ForceColor acts like isTTY=true for color support checking.
+	forceColor := config.Settings.Terminal.ForceColor
 
-	// Skip highlighting if not in a terminal, disabled, or colors are disabled
-	if !isTerm || !GetHighlightSettings(config).Enabled || colorDisabled {
+	// Skip highlighting if not in a terminal AND color is not forced.
+	// The Color setting enables color when TTY is present but doesn't force it.
+	// ForceColor (ATMOS_FORCE_COLOR) explicitly enables highlighting even without TTY.
+	if !isTerm && !forceColor {
+		return code, nil
+	}
+
+	// Check if color is explicitly disabled via NoColor.
+	// NoColor takes precedence over everything.
+	if config.Settings.Terminal.NoColor {
+		return code, nil
+	}
+
+	// Skip highlighting if syntax highlighting is disabled in settings.
+	if !GetHighlightSettings(config).Enabled {
 		return code, nil
 	}
 

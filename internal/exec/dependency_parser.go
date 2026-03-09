@@ -8,6 +8,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
@@ -29,6 +30,8 @@ type DependencyParser struct {
 
 // NewDependencyParser creates a new dependency parser.
 func NewDependencyParser(builder *dependency.GraphBuilder, nodeMap map[string]string) *DependencyParser {
+	defer perf.Track(nil, "exec.NewDependencyParser")()
+
 	return &DependencyParser{
 		builder: builder,
 		nodeMap: nodeMap,
@@ -41,6 +44,8 @@ func (p *DependencyParser) ParseComponentDependencies(
 	componentName string,
 	componentSection map[string]any,
 ) error {
+	defer perf.Track(nil, "exec.DependencyParser.ParseComponentDependencies")()
+
 	// Skip abstract components.
 	if p.shouldSkipComponent(componentSection) {
 		return nil
@@ -62,11 +67,14 @@ func (p *DependencyParser) ParseComponentDependencies(
 	// Parse different dependency formats.
 	switch deps := dependsOn.(type) {
 	case []any:
-		return p.parseDependencyArray(fromID, stackName, deps)
+		p.parseDependencyArray(fromID, stackName, deps)
+		return nil
 	case map[string]any:
-		return p.parseDependencyMap(fromID, stackName, deps)
+		p.parseDependencyMap(fromID, stackName, deps)
+		return nil
 	case map[any]any:
-		return p.parseDependencyMapAnyAny(fromID, stackName, deps)
+		p.parseDependencyMapAnyAny(fromID, stackName, deps)
+		return nil
 	default:
 		log.Warn("Unknown depends_on format", logFieldType, fmt.Sprintf("%T", deps), logFieldFrom, fromID)
 		return fmt.Errorf("%w: %s -> unsupported depends_on format %T", errUtils.ErrUnsupportedDependencyType, fromID, deps)
@@ -74,33 +82,30 @@ func (p *DependencyParser) ParseComponentDependencies(
 }
 
 // parseDependencyArray parses dependencies in array format.
-func (p *DependencyParser) parseDependencyArray(fromID, defaultStack string, deps []any) error {
+func (p *DependencyParser) parseDependencyArray(fromID, defaultStack string, deps []any) {
 	for _, dep := range deps {
 		if err := p.parseSingleDependency(fromID, defaultStack, dep); err != nil {
 			log.Warn("Failed to parse dependency", logFieldFrom, fromID, logFieldError, err)
 		}
 	}
-	return nil
 }
 
 // parseDependencyMap parses dependencies in map format.
-func (p *DependencyParser) parseDependencyMap(fromID, defaultStack string, deps map[string]any) error {
+func (p *DependencyParser) parseDependencyMap(fromID, defaultStack string, deps map[string]any) {
 	for _, dep := range deps {
 		if err := p.parseSingleDependency(fromID, defaultStack, dep); err != nil {
 			log.Warn("Failed to parse dependency", logFieldFrom, fromID, logFieldError, err)
 		}
 	}
-	return nil
 }
 
 // parseDependencyMapAnyAny parses dependencies in map[any]any format.
-func (p *DependencyParser) parseDependencyMapAnyAny(fromID, defaultStack string, deps map[any]any) error {
+func (p *DependencyParser) parseDependencyMapAnyAny(fromID, defaultStack string, deps map[any]any) {
 	for _, dep := range deps {
 		if err := p.parseSingleDependency(fromID, defaultStack, dep); err != nil {
 			log.Warn("Failed to parse dependency", logFieldFrom, fromID, logFieldError, err)
 		}
 	}
-	return nil
 }
 
 // parseSingleDependency parses a single dependency entry.

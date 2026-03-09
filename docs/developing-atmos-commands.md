@@ -976,4 +976,4 @@ See these commands for reference implementations:
 - [Flag Handler Documentation](../.claude/agents/flag-handler.md) - **Complete flag handler guide**
 - [Command Registry Pattern PRD](prd/command-registry-pattern.md)
 - [Cobra Documentation](https://github.com/spf13/cobra)
-- [Atmos Custom Commands](/core-concepts/custom-commands)
+- [Atmos Custom Commands](https://atmos.tools/cli/configuration/commands)

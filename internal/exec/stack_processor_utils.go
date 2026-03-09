@@ -28,11 +28,20 @@ import (
 // Mutex to serialize writes to importsConfig maps during parallel import processing.
 var importsConfigLock = &sync.Mutex{}
 
+// extractLocalsResult holds the results of parsing raw YAML and extracting locals.
+type extractLocalsResult struct {
+	locals    map[string]any // Resolved locals.
+	settings  map[string]any // Settings section (for template context).
+	vars      map[string]any // Vars section (for template context).
+	env       map[string]any // Env section (for template context).
+	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
+}
+
 // extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
 // This function is called BEFORE template processing to make locals available during template execution.
 // The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
 // The locals resolver handles resolving self-references between locals.
-// Returns the resolved locals map or nil if no locals section exists.
+// Returns the resolved locals and other sections (settings, vars, env) that should be available during template processing.
 //
 // Locals are extracted and merged in order of specificity:
 // 1. Global locals (root level)
@@ -40,14 +49,21 @@ var importsConfigLock = &sync.Mutex{}
 //
 // Section-specific locals inherit from and can override global locals.
 // All resolved locals are flattened into a single map for template processing.
-func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (map[string]any, error) {
+func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
 	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
 
 	// Parse raw YAML to extract the structure.
 	// YAML treats template expressions like {{ .locals.X }} as plain strings,
 	// so parsing succeeds even with unresolved templates.
-	var rawConfig map[string]any
-	if err := yaml.Unmarshal([]byte(yamlContent), &rawConfig); err != nil {
+	// Use Atmos's YAML unmarshaling which properly handles custom tags like !terraform.state
+	// by converting them to strings (e.g., "!terraform.state component .output").
+	// Create a default config if nil (UnmarshalYAMLFromFile requires non-nil config).
+	configToUse := atmosConfig
+	if configToUse == nil {
+		configToUse = &schema.AtmosConfiguration{}
+	}
+	rawConfig, err := u.UnmarshalYAMLFromFile[map[string]any](configToUse, yamlContent, filePath)
+	if err != nil {
 		// Provide a helpful hint if the file might contain Go template directives
 		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
 		// as templates first, which allows non-YAML-valid Go template syntax.
@@ -59,22 +75,101 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	}
 
 	if rawConfig == nil {
-		return nil, nil
+		return &extractLocalsResult{}, nil
 	}
 
 	// Use ProcessStackLocals which handles global and section-level scopes.
-	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath)
+	// Note: At this early stage, stack name is not yet determined, so we pass empty string.
+	// YAML functions that require stack context won't work here, but Go templates will.
+	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath, "")
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
-	return localsCtx.MergeForTemplateContext(), nil
+	return buildLocalsResult(rawConfig, localsCtx), nil
+}
+
+// buildLocalsResult builds an extractLocalsResult from raw config and resolved locals context.
+func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extractLocalsResult {
+	result := &extractLocalsResult{
+		locals: localsCtx.MergeForTemplateContext(),
+	}
+
+	// Detect locals section presence (including empty locals).
+	// This allows empty locals: {} to still enable template context.
+	if _, ok := rawConfig[cfg.LocalsSectionName]; ok {
+		result.hasLocals = true
+	}
+	if localsCtx.HasTerraformLocals || localsCtx.HasHelmfileLocals || localsCtx.HasPackerLocals {
+		result.hasLocals = true
+	}
+
+	// Ensure locals map is never nil when hasLocals is true.
+	if result.hasLocals && result.locals == nil {
+		result.locals = make(map[string]any)
+	}
+
+	// Extract settings, vars, env sections for template context.
+	if settings, ok := rawConfig[cfg.SettingsSectionName].(map[string]any); ok {
+		result.settings = settings
+	}
+	if vars, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
+		result.vars = vars
+	}
+	if env, ok := rawConfig[cfg.EnvSectionName].(map[string]any); ok {
+		result.env = env
+	}
+
+	return result
+}
+
+// processTemplatesInSection processes Go templates in a section (settings, vars, or env) using the provided context.
+// This allows sections to reference resolved locals and other processed sections.
+// Returns the processed section or an error if template processing fails.
+// IMPORTANT: Uses ignoreMissingTemplateValues=false so that templates referencing values not in the
+// current context (like {{ .atmos_component }}) will fail, and the caller can fall back to raw values.
+// This preserves those templates for later processing when the full context is available.
+func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section map[string]any, context map[string]any, filePath string) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.processTemplatesInSection")()
+
+	if len(section) == 0 {
+		return section, nil
+	}
+
+	// Convert section to YAML for template processing.
+	yamlStr, err := u.ConvertToYAML(section)
+	if err != nil {
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to convert section to YAML: %w", err))
+	}
+
+	// Quick check: if no template markers, return as-is.
+	if !strings.Contains(yamlStr, "{{") {
+		return section, nil
+	}
+
+	// Process templates in the YAML string.
+	// Use ignoreMissingTemplateValues=false so templates with missing values fail
+	// (e.g., {{ .atmos_component }} when component context isn't available yet).
+	// The caller will fall back to raw values, preserving templates for later processing.
+	processed, err := ProcessTmpl(atmosConfig, filePath, yamlStr, context, false)
+	if err != nil {
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to process templates in section: %w", err))
+	}
+
+	// Parse the processed YAML back to a map.
+	var result map[string]any
+	if err := yaml.Unmarshal([]byte(processed), &result); err != nil {
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to parse processed section YAML: %w", err))
+	}
+
+	return result, nil
 }
 
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
 // Returns the updated context and any error encountered during locals extraction.
 // Note: The "locals" key in context is reserved for file-scoped locals and will override
 // any user-provided "locals" key in the import context.
+// Settings, vars, and env sections are also added to the context so templates can reference them.
 // For template files (.tmpl), YAML parse errors are logged and the function continues
 // without locals, since template files may contain Go template syntax that isn't valid YAML
 // until after template processing.
@@ -91,10 +186,10 @@ func extractAndAddLocalsToContext(
 	// Locals are file-scoped and should NOT inherit across file boundaries.
 	// This ensures that each file only has access to its own locals.
 	if context != nil {
-		delete(context, "locals")
+		delete(context, cfg.LocalsSectionName)
 	}
 
-	resolvedLocals, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
+	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
 	if localsErr != nil {
 		// For template files (.tmpl), YAML parse errors are expected since the raw content
 		// may contain Go template syntax that isn't valid YAML until after processing.
@@ -118,16 +213,96 @@ func extractAndAddLocalsToContext(
 		return context, localsErr
 	}
 
-	if len(resolvedLocals) == 0 {
+	// Only modify context if a locals section exists in the file.
+	// This preserves the original behavior where files without locals don't trigger
+	// template processing (see the len(context) > 0 check in ProcessBaseStackConfig).
+	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
+	// which should still enable template context.
+	if !extractResult.hasLocals {
 		return context, nil
 	}
 
-	// Add resolved locals to the template context.
+	// Initialize context if nil.
 	if context == nil {
 		context = make(map[string]any)
 	}
-	context["locals"] = resolvedLocals
-	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(resolvedLocals))
+
+	// Add resolved locals to the template context first.
+	// This allows settings/vars/env templates to reference locals.
+	context[cfg.LocalsSectionName] = extractResult.locals
+	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
+
+	// Process templates in settings, vars, env sections using the resolved locals.
+	// This enables bidirectional references between locals and settings:
+	//   locals:
+	//     stage: dev
+	//   settings:
+	//     context:
+	//       stage_from_local: '{{ .locals.stage }}'  # Now resolves to "dev"
+	//   vars:
+	//     setting_value: '{{ .settings.context.stage_from_local }}'  # Now resolves to "dev"
+	//
+	// Note: We need to process these sections AFTER locals are resolved so they can reference .locals,
+	// but BEFORE adding them to the context so vars can reference the resolved settings values.
+	// Seed section context with any external import context so that settings/vars/env
+	// templates referencing import-provided values can resolve during section processing.
+	// Locals are always overridden to ensure file-scoped locality.
+	localsOnlyContext := map[string]any{}
+	for k, v := range context {
+		localsOnlyContext[k] = v
+	}
+	localsOnlyContext[cfg.LocalsSectionName] = extractResult.locals
+
+	// Process templates in settings if it contains template expressions.
+	if extractResult.settings != nil {
+		processedSettings, err := processTemplatesInSection(atmosConfig, extractResult.settings, localsOnlyContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in settings section", "file", relativeFilePath, "error", err)
+			// Fall back to raw settings on error.
+			context[cfg.SettingsSectionName] = extractResult.settings
+		} else {
+			context[cfg.SettingsSectionName] = processedSettings
+		}
+	}
+	if extractResult.vars != nil {
+		// For vars, we need locals, external context, and processed settings available.
+		varsContext := map[string]any{}
+		for k, v := range localsOnlyContext {
+			varsContext[k] = v
+		}
+		if processedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok {
+			varsContext[cfg.SettingsSectionName] = processedSettings
+		}
+		processedVars, err := processTemplatesInSection(atmosConfig, extractResult.vars, varsContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in vars section", "file", relativeFilePath, "error", err)
+			// Fall back to raw vars on error.
+			context[cfg.VarsSectionName] = extractResult.vars
+		} else {
+			context[cfg.VarsSectionName] = processedVars
+		}
+	}
+	if extractResult.env != nil {
+		// For env, we need locals, external context, processed settings, and processed vars.
+		envContext := map[string]any{}
+		for k, v := range localsOnlyContext {
+			envContext[k] = v
+		}
+		if processedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok {
+			envContext[cfg.SettingsSectionName] = processedSettings
+		}
+		if processedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok {
+			envContext[cfg.VarsSectionName] = processedVars
+		}
+		processedEnv, err := processTemplatesInSection(atmosConfig, extractResult.env, envContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in env section", "file", relativeFilePath, "error", err)
+			// Fall back to raw env on error.
+			context[cfg.EnvSectionName] = extractResult.env
+		} else {
+			context[cfg.EnvSectionName] = processedEnv
+		}
+	}
 
 	return context, nil
 }
@@ -152,6 +327,7 @@ func ProcessYAMLConfigFiles(
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
 	packerComponentsBasePath string,
+	ansibleComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -244,6 +420,7 @@ func ProcessYAMLConfigFiles(
 				terraformComponentsBasePath,
 				helmfileComponentsBasePath,
 				packerComponentsBasePath,
+				ansibleComponentsBasePath,
 				p,
 				deepMergedStackConfig,
 				processStackDeps,
@@ -523,6 +700,14 @@ func processYAMLConfigFileWithContextInternal(
 		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil, nil
 	}
 
+	// Track whether context was originally provided from outside (e.g., via import context).
+	// This is important because we should only process templates during import when:
+	// 1. The file has a .tmpl extension, OR
+	// 2. Context was explicitly passed from outside (not just extracted from the file itself).
+	// Without this check, files with locals/settings/vars/env sections would have their templates
+	// processed prematurely, before component-specific context (like atmos_component) is available.
+	originalContextProvided := len(context) > 0
+
 	// Extract and resolve file-scoped locals before template processing.
 	// Locals can reference other locals using {{ .locals.X }} syntax.
 	// The resolved locals are added to the template context so they're available during template processing.
@@ -549,22 +734,33 @@ func processYAMLConfigFileWithContextInternal(
 	stackManifestTemplatesProcessed := stackYamlConfig
 	stackManifestTemplatesErrorMessage := ""
 
-	// Process `Go` templates in the imported stack manifest if it has a template extension
-	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates
-	// Other .tmpl files are processed only when context is provided (backward compatibility)
+	// Process `Go` templates in the imported stack manifest if it has a template extension.
+	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates.
+	// Other .tmpl files are processed only when context is provided (backward compatibility).
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
 		var tmplErr error
 		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if tmplErr != nil {
-			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+			// If template processing failed and the only context is from file extraction
+			// (locals/settings/vars/env, not from an explicit import context), this is likely
+			// due to templates referencing component context (like {{ .atmos_component }}) that
+			// isn't available during import. Fall back to the raw content — these templates will
+			// be processed later in ProcessStacks when the full component context is available.
+			if !originalContextProvided {
+				log.Debug("Template processing deferred for file with file-extracted context only",
+					"file", relativeFilePath, "error", tmplErr)
+				stackManifestTemplatesProcessed = stackYamlConfig
+			} else {
+				if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+					stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+				}
+				wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
+				if mergeContext != nil {
+					return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+				}
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 			}
-			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
-			if mergeContext != nil {
-				return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
-			}
-			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 		}
 	}
 
@@ -584,6 +780,24 @@ func processYAMLConfigFileWithContextInternal(
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, nil, nil, nil, nil, nil, nil, e
 		}
+	}
+
+	// Store resolved file-level sections in stackConfigMap so they're available during describe_stacks.
+	// The context contains resolved values from extractAndAddLocalsToContext, but the YAML content
+	// (and thus stackConfigMap) may still have unresolved template expressions.
+	// By updating stackConfigMap with resolved values, we ensure templates like {{ .locals.X }}
+	// and {{ .vars.X }} can be resolved correctly.
+	if resolvedLocals, ok := context[cfg.LocalsSectionName].(map[string]any); ok && len(resolvedLocals) > 0 {
+		stackConfigMap[cfg.LocalsSectionName] = resolvedLocals
+	}
+	if resolvedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok && len(resolvedVars) > 0 {
+		stackConfigMap[cfg.VarsSectionName] = resolvedVars
+	}
+	if resolvedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok && len(resolvedSettings) > 0 {
+		stackConfigMap[cfg.SettingsSectionName] = resolvedSettings
+	}
+	if resolvedEnv, ok := context[cfg.EnvSectionName].(map[string]any); ok && len(resolvedEnv) > 0 {
+		stackConfigMap[cfg.EnvSectionName] = resolvedEnv
 	}
 
 	// Enable provenance tracking in merge context if tracking is enabled

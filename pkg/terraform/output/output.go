@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Format represents output format types.
@@ -29,10 +30,15 @@ const (
 	FormatCSV Format = "csv"
 	// FormatTSV outputs as TSV: key<tab>value.
 	FormatTSV Format = "tsv"
+	// FormatTable outputs as a styled table with Key/Value columns.
+	FormatTable Format = "table"
+	// FormatGitHub outputs for GitHub Actions $GITHUB_OUTPUT file.
+	// Uses KEY=value for simple values, heredoc syntax for multiline values.
+	FormatGitHub Format = "github"
 )
 
 // SupportedFormats lists all supported output formats.
-var SupportedFormats = []string{"json", "yaml", "hcl", "env", "dotenv", "bash", "csv", "tsv"}
+var SupportedFormats = []string{"json", "yaml", "hcl", "env", "dotenv", "bash", "csv", "tsv", "table", "github"}
 
 // DefaultFileMode is the file mode for output files.
 const DefaultFileMode = 0o644
@@ -50,6 +56,8 @@ type FormatOptions struct {
 	Flatten bool
 	// FlattenSeparator is the separator used when flattening nested keys (default: "_").
 	FlattenSeparator string
+	// AtmosConfig provides configuration for syntax highlighting and color preferences.
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 // DefaultFlattenSeparator is the default separator for flattening nested keys.

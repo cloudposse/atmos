@@ -21,6 +21,7 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -50,7 +51,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(&atmosConfig, "cmd.executeAuthLoginCommand")()
 
 	// Create auth manager.
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -133,16 +134,21 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 
 // CreateAuthManager creates a new auth manager with all required dependencies.
 // Exported for use by command packages (e.g., terraform package).
-func CreateAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
-	return createAuthManager(authConfig)
+// cliConfigPath is used for realm computation (credential isolation).
+func CreateAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
+	return createAuthManager(authConfig, cliConfigPath)
 }
 
 // createAuthManager creates a new auth manager with all required dependencies.
-func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
+// cliConfigPath is used for realm computation (credential isolation).
+func createAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-
-	return auth.NewAuthManager(authConfig, credStore, validator, nil)
+	return auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 }
 
 const (
@@ -176,6 +182,16 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 
 	// Build table rows.
 	var rows [][]string
+
+	// Display realm if set (credential isolation boundary).
+	if whoami.Realm != "" {
+		realmDisplay := whoami.Realm
+		if whoami.RealmSource != "" {
+			realmDisplay = fmt.Sprintf("%s (%s)", whoami.Realm, whoami.RealmSource)
+		}
+		rows = append(rows, []string{"Realm", realmDisplay})
+	}
+
 	rows = append(rows, []string{"Provider", whoami.Provider})
 	rows = append(rows, []string{"Identity", whoami.Identity})
 
@@ -219,7 +235,7 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	fmt.Fprintf(os.Stderr, "%s\n\n", t)
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "%s\n\n", t)
 }
 
 func init() {

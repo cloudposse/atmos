@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 const (
@@ -236,6 +237,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.PackerDirAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.AnsibleDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
 	keyBuilder.WriteString(cacheKeyDelimiter)
 
@@ -312,6 +315,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		atmosConfig.TerraformDirAbsolutePath,
 		atmosConfig.HelmfileDirAbsolutePath,
 		atmosConfig.PackerDirAbsolutePath,
+		atmosConfig.AnsibleDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,
@@ -336,11 +340,24 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 }
 
 // processStackContextPrefix processes the context prefix for a stack based on name template or pattern.
+// If stackManifestName is provided (stack has explicit name), template/pattern processing is skipped.
 func processStackContextPrefix(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stackName string,
+	stackManifestName string,
 ) error {
+	// If stack has explicit name, skip template/pattern processing.
+	// The explicit name takes precedence over any generated name.
+	// Still populate Context from vars to avoid stale values from previous iterations.
+	if stackManifestName != "" {
+		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+		configAndStacksInfo.ContextPrefix = stackManifestName
+		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+		return nil
+	}
+
 	switch {
 	case atmosConfig.Stacks.NameTemplate != "":
 		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
@@ -412,7 +429,7 @@ func findComponentInStacks(
 			continue
 		}
 
-		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName); err != nil {
+		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName); err != nil {
 			continue
 		}
 
@@ -706,7 +723,13 @@ func ProcessStacks(
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
-		componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
+		// Use delimiter-safe YAML encoding when custom delimiters are configured.
+		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
+		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+			configAndStacksInfo.ComponentSection,
+			atmosConfig.Templates.Settings.Delimiters,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -716,6 +739,11 @@ func ProcessStacks(
 		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
 		if err != nil {
 			return configAndStacksInfo, err
+		}
+
+		// Restore env vars that mapstructure:"-" dropped during Decode.
+		if envMap := extractEnvFromRawMap(configAndStacksInfo.ComponentSettingsSection); len(envMap) > 0 {
+			settingsSectionStruct.Templates.Settings.Env = envMap
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(

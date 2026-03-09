@@ -1098,6 +1098,6 @@ func (f *formatter) RenderMarkdown(content string) (string, error) {
 
 - [NO_COLOR Standard](https://no-color.org/)
 - [CLICOLOR Conventions](https://bixense.com/clicolors/)
-- [Charmbracelet termenv](https://github.com/charmbracelet/termenv)
+- [Termenv](https://github.com/muesli/termenv)
 - [Charmbracelet glamour](https://github.com/charmbracelet/glamour)
 - PR #1433: Theme System

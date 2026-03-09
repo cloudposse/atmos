@@ -39,11 +39,14 @@ const TAGS_MAP = {
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'generate-files': ['Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
+  'stack-names': ['Stacks'],
+  'demo-ansible': ['Automation'],
 };
 
 // Documentation pages mapping for examples.
@@ -96,11 +99,16 @@ const DOCS_MAP = {
   'demo-custom-command': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
   ],
+  'generate-files': [
+    { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
+  ],
   'config-profiles': [
     { label: 'CLI Configuration', url: '/cli/configuration' },
   ],
   toolchain: [
-    { label: 'Getting Started', url: '/quick-start' },
+    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
+    { label: 'Toolchain Registries', url: '/cli/configuration/toolchain/registries' },
+    { label: 'Toolchain Commands', url: '/cli/commands/toolchain/usage' },
   ],
   devcontainer: [
     { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
@@ -110,6 +118,12 @@ const DOCS_MAP = {
   ],
   'demo-helmfile': [
     { label: 'Helmfile', url: '/stacks/components/helmfile' },
+  ],
+  'stack-names': [
+    { label: 'Stack Names', url: '/stacks/name' },
+  ],
+  'demo-ansible': [
+    { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
   ],
 };
 

@@ -157,6 +157,27 @@ func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
+// newTerraformPassthroughSubcommand creates a Cobra subcommand that delegates to the parent
+// terraform subcommand's execution flow. This enables proper Cobra command tree routing for
+// compound terraform subcommands like "state list", "providers lock", etc.
+//
+// When invoked, the sub-subcommand prepends its name to the argument list and delegates
+// to terraformRun with the parent command, which then follows the standard terraform
+// execution pipeline (ProcessCommandLineArgs → ExecuteTerraform).
+func newTerraformPassthroughSubcommand(parent *cobra.Command, name, short string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:                name + " [component] -s [stack]",
+		Short:              short,
+		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+		RunE: func(_ *cobra.Command, args []string) error {
+			argsForParent := append([]string{name}, args...)
+			return terraformRun(terraformCmd, parent, argsForParent)
+		},
+	}
+	RegisterTerraformCompletions(cmd)
+	return cmd
+}
+
 // terraformRun is for simple subcommands without their own parsers.
 // It binds terraformParser and delegates to terraformRunWithOptions.
 func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
@@ -224,6 +245,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		return err
 	}
 
+	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
+	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
+	applyOptionsToInfo(&info, opts)
+
 	// Resolve paths and prompt for missing component/stack interactively.
 	if err := resolveAndPromptForArgs(&info, actualCmd); err != nil {
 		return err
@@ -234,8 +259,6 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
-
-	applyOptionsToInfo(&info, opts)
 
 	// Handle --identity flag for interactive selection when used without a value.
 	if info.Identity == cfg.IdentityFlagSelectValue {
@@ -359,14 +382,22 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 		return nil
 	}
 
+	// Validate stack exists if provided via flag (fail fast before prompting or execution).
+	if info.Stack != "" && info.ComponentFromArg == "" {
+		if err := shared.ValidateStackExists(cmd, info.Stack); err != nil {
+			return err
+		}
+	}
+
 	// Both provided - nothing to do.
 	if info.ComponentFromArg != "" && info.Stack != "" {
 		return nil
 	}
 
 	// Prompt for component if missing.
+	// If stack is already provided (via --stack flag), filter components to that stack.
 	if info.ComponentFromArg == "" {
-		component, err := promptForComponent(cmd)
+		component, err := promptForComponent(cmd, info.Stack)
 		if err = handlePromptError(err, "component"); err != nil {
 			return err
 		}
@@ -391,8 +422,9 @@ func handlePromptError(err error, name string) error {
 }
 
 // promptForComponent delegates to shared.PromptForComponent.
-func promptForComponent(cmd *cobra.Command) (string, error) {
-	return shared.PromptForComponent(cmd)
+// If stack is provided, filters components to only those in that stack.
+func promptForComponent(cmd *cobra.Command, stack string) (string, error) {
+	return shared.PromptForComponent(cmd, stack)
 }
 
 // promptForStack delegates to shared.PromptForStack.

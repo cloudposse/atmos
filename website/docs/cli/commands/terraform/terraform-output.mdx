@@ -75,12 +75,53 @@ atmos terraform output vpc -s dev -json
 atmos terraform output vpc -s dev -raw vpc_id
 ```
 
+### GitHub Actions Integration
+
+The `--format=github` option is specifically designed for GitHub Actions workflows. It formats outputs using heredoc syntax for multiline values and writes to:
+1. `--output-file` if specified
+2. `$GITHUB_OUTPUT` environment variable if set
+3. stdout otherwise (useful for previewing output locally)
+
+```shell
+# Automatically writes to $GITHUB_OUTPUT in GitHub Actions
+atmos terraform output vpc -s dev --format=github
+
+# Preview output locally (writes to stdout when $GITHUB_OUTPUT is not set)
+atmos terraform output vpc -s dev --format=github
+
+# Export a single output to GitHub Actions
+atmos terraform output vpc -s dev vpc_id --format=github
+
+# Or specify a custom output file
+atmos terraform output vpc -s dev --format=github --output-file=outputs.txt
+```
+
+Example GitHub Actions workflow:
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Terraform Outputs
+        id: outputs
+        run: atmos terraform output vpc -s dev --format=github
+
+      - name: Use Outputs
+        run: |
+          echo "VPC ID: ${{ steps.outputs.outputs.vpc_id }}"
+          echo "Subnets: ${{ steps.outputs.outputs.private_subnet_ids }}"
+```
+
 ### Export All Outputs with --format
 
 The `--format` flag enables exporting all outputs in various formats, which is particularly useful for CI/CD workflows:
 
 ```shell
-# Export as environment variables for GitHub Actions
+# Export for GitHub Actions (writes to $GITHUB_OUTPUT automatically)
+atmos terraform output app -s preview --skip-init --format=github
+
+# Export as environment variables for older GitHub Actions syntax
 atmos terraform output app -s preview --skip-init --format=env --output-file=$GITHUB_OUTPUT
 
 # Export as bash exports for shell sourcing
@@ -163,11 +204,12 @@ Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error
         | `json` | `{"key": "value"}` | Machine parsing, piping to `jq` |
         | `yaml` | `key: value` | Human-readable, config files |
         | `hcl` | `key = "value"` | Terraform locals or tfvars files |
-        | `env` | `key=value` | GitHub Actions `$GITHUB_OUTPUT` |
+        | `env` | `key=value` | Environment variables |
         | `dotenv` | `key='value'` | `.env` files with quoting |
         | `bash` | `export key='value'` | Shell sourcing with `eval $(...)` |
         | `csv` | `key,value` | Spreadsheets, data processing |
         | `tsv` | `key<tab>value` | Tab-delimited for easy parsing |
+        | `github` | `key=value` or heredoc | GitHub Actions step outputs (writes to `$GITHUB_OUTPUT` if set, otherwise stdout) |
 
         ```shell
         atmos terraform output vpc -s dev --format=env

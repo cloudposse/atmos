@@ -2,6 +2,8 @@ package dependency
 
 import (
 	"fmt"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Constants for common error formats.
@@ -11,6 +13,8 @@ const (
 
 // NewGraph creates a new dependency graph.
 func NewGraph() *Graph {
+	defer perf.Track(nil, "dependency.NewGraph")()
+
 	return &Graph{
 		Nodes: make(map[string]*Node),
 		Roots: []string{},
@@ -19,6 +23,8 @@ func NewGraph() *Graph {
 
 // AddNode adds a node to the graph.
 func (g *Graph) AddNode(node *Node) error {
+	defer perf.Track(nil, "dependency.Graph.AddNode")()
+
 	if node == nil {
 		return ErrNilNode
 	}
@@ -46,6 +52,8 @@ func (g *Graph) AddNode(node *Node) error {
 // AddDependency creates a dependency relationship between two nodes.
 // The fromID depends on toID (fromID -> toID).
 func (g *Graph) AddDependency(fromID, toID string) error {
+	defer perf.Track(nil, "dependency.Graph.AddDependency")()
+
 	if fromID == "" || toID == "" {
 		return ErrEmptyDependencyID
 	}
@@ -80,6 +88,8 @@ func (g *Graph) AddDependency(fromID, toID string) error {
 
 // IdentifyRoots finds all nodes with no dependencies.
 func (g *Graph) IdentifyRoots() {
+	defer perf.Track(nil, "dependency.Graph.IdentifyRoots")()
+
 	g.Roots = []string{}
 
 	for id, node := range g.Nodes {
@@ -91,17 +101,23 @@ func (g *Graph) IdentifyRoots() {
 
 // GetNode retrieves a node by its ID.
 func (g *Graph) GetNode(id string) (*Node, bool) {
+	defer perf.Track(nil, "dependency.Graph.GetNode")()
+
 	node, exists := g.Nodes[id]
 	return node, exists
 }
 
 // Size returns the number of nodes in the graph.
 func (g *Graph) Size() int {
+	defer perf.Track(nil, "dependency.Graph.Size")()
+
 	return len(g.Nodes)
 }
 
 // HasCycles checks if the graph contains any cycles.
 func (g *Graph) HasCycles() (bool, []string) {
+	defer perf.Track(nil, "dependency.Graph.HasCycles")()
+
 	visited := make(map[string]bool)
 	recStack := make(map[string]bool)
 	var cyclePath []string
@@ -144,6 +160,8 @@ func (g *Graph) HasCycles() (bool, []string) {
 
 // Reset clears the processed flag for all nodes.
 func (g *Graph) Reset() {
+	defer perf.Track(nil, "dependency.Graph.Reset")()
+
 	for _, node := range g.Nodes {
 		node.Processed = false
 	}
@@ -151,6 +169,8 @@ func (g *Graph) Reset() {
 
 // Clone creates a deep copy of the graph.
 func (g *Graph) Clone() *Graph {
+	defer perf.Track(nil, "dependency.Graph.Clone")()
+
 	newGraph := NewGraph()
 
 	// Clone all nodes using the helper function.

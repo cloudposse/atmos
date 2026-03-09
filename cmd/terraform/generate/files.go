@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -50,15 +51,41 @@ The generate section in stack configuration supports:
 		dryRun := v.GetBool("dry-run")
 		clean := v.GetBool("clean")
 
-		// Validate: component requires stack, --all excludes component.
+		// Validate: --all excludes component argument.
 		if len(args) > 0 && all {
 			return fmt.Errorf("%w: cannot specify both component and --all", errUtils.ErrInvalidFlag)
 		}
-		if len(args) > 0 && stack == "" {
-			return fmt.Errorf("%w: --stack is required when specifying a component", errUtils.ErrInvalidFlag)
+
+		// Get component from args or prompt for it (when not using --all).
+		var component string
+		if len(args) > 0 {
+			component = args[0]
+		} else if !all {
+			// Prompt for component if missing.
+			prompted, err := shared.PromptForComponent(cmd, "")
+			if err = shared.HandlePromptError(err, "component"); err != nil {
+				return err
+			}
+			component = prompted
 		}
-		if len(args) == 0 && !all {
-			return fmt.Errorf("%w: either specify a component or use --all", errUtils.ErrInvalidFlag)
+
+		// Validate component after prompting (required when not using --all).
+		if !all && component == "" {
+			return errUtils.ErrMissingComponent
+		}
+
+		// Prompt for stack if missing (required when component is specified).
+		if component != "" && stack == "" {
+			prompted, err := shared.PromptForStack(cmd, component)
+			if err = shared.HandlePromptError(err, "stack"); err != nil {
+				return err
+			}
+			stack = prompted
+		}
+
+		// Validate stack after prompting (required when component is specified).
+		if component != "" && stack == "" {
+			return errUtils.ErrMissingStack
 		}
 
 		// Parse CSV values with whitespace trimming.
@@ -102,7 +129,6 @@ The generate section in stack configuration supports:
 			return service.ExecuteForAll(&atmosConfig, stacks, components, dryRun, clean)
 		}
 
-		component := args[0]
 		return service.ExecuteForComponent(&atmosConfig, component, stack, dryRun, clean)
 	},
 }
@@ -128,6 +154,9 @@ func init() {
 	if err := filesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+
+	// Register shell completion for component.
+	filesCmd.ValidArgsFunction = shared.ComponentsArgCompletion
 
 	// Register with parent GenerateCmd.
 	GenerateCmd.AddCommand(filesCmd)

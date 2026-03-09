@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -84,13 +85,41 @@ func (g *defaultBackendGenerator) GenerateProvidersIfNeeded(config *ComponentCon
 
 // generateBackendConfig generates the backend configuration for terraform.
 // This matches the logic in internal/exec/utils.go:generateComponentBackendConfig.
-// Note: workspace parameter is reserved for future Terraform Cloud backend support.
-func generateBackendConfig(backendType string, backendConfig map[string]any, _ string, _ *schema.AuthContext) (map[string]any, error) {
+// Supports Terraform Cloud backend with workspace token replacement.
+func generateBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, _ *schema.AuthContext) (map[string]any, error) {
 	defer perf.Track(nil, "output.generateBackendConfig")()
 
-	// Validate that backendType is not empty.
 	if backendType == "" {
 		return nil, errUtils.ErrBackendTypeRequired
+	}
+
+	if backendType == "cloud" {
+		backendConfigFinal := backendConfig
+
+		if terraformWorkspace != "" {
+			// Process template tokens in the backend config (e.g., {terraform_workspace}).
+			backendConfigStr, err := u.ConvertToYAML(backendConfig)
+			if err != nil {
+				return nil, err
+			}
+
+			ctx := schema.Context{
+				TerraformWorkspace: terraformWorkspace,
+			}
+
+			backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
+
+			backendConfigFinal, err = u.UnmarshalYAML[schema.AtmosSectionMapType](backendConfigStrReplaced)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return map[string]any{
+			"terraform": map[string]any{
+				"cloud": backendConfigFinal,
+			},
+		}, nil
 	}
 
 	return map[string]any{

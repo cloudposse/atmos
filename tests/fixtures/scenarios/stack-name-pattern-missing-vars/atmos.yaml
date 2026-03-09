@@ -1,0 +1,14 @@
+base_path: "./"
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/catalog/**"
+  # name_pattern requires tenant, but stacks with explicit name may not have it.
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+components:
+  terraform:
+    base_path: components/terraform

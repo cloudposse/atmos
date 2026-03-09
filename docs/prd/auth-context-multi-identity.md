@@ -1129,7 +1129,7 @@ func processTagStore(
 ## References
 
 - [Original Issue Report](#problem-statement)
-- [Atmos Auth PRD](../pkg/auth/docs/PRD/PRD-Atmos-Auth.md)
+- [Atmos Auth PRD](../../pkg/auth/docs/PRD/PRD-Atmos-Auth.md)
 - [AWS SDK Go v2 Configuration](https://aws.github.io/aws-sdk-go-v2/docs/configuring-sdk/)
 - [Error Handling Strategy](error-handling-strategy.md)
 

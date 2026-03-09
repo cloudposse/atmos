@@ -22,6 +22,10 @@ const (
 	EscCarriageReturn = "\r"       // Return cursor to start of line
 	EscClearLine      = "\x1b[K"   // Clear from cursor to end of line
 	EscResetLine      = "\r\x1b[K" // Return to start and clear entire line
+	EscCursorUp       = "\x1b[A"   // Move cursor up one line
+	EscCursorDown     = "\x1b[B"   // Move cursor down one line
+	EscSaveCursor     = "\x1b[s"   // Save cursor position
+	EscRestoreCursor  = "\x1b[u"   // Restore cursor position
 )
 
 // IOWriter is the interface for writing to I/O streams.
