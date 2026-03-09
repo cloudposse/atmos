@@ -1,0 +1,141 @@
+---
+title: Atmos AI
+sidebar_position: 1
+sidebar_label: Atmos AI
+description: AI-powered capabilities for Atmos infrastructure management
+id: ai
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Atmos integrates AI directly into infrastructure management, providing intelligent assistance
+for understanding configurations, analyzing stacks, troubleshooting issues, and automating workflows.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+```
+</File>
+
+<Terminal title="shell">
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
+atmos ai chat                                        # Interactive chat
+atmos ai ask "What stacks do we have?"               # Single question
+atmos ai exec "validate stacks" --format json        # CI/CD automation
+atmos ai sessions list                               # List sessions
+atmos ai skill list                                  # List installed skills
+```
+</Terminal>
+
+<ActionCard title="AI Configuration">
+    Configure AI providers, models, API keys, skills, tools, sessions, and instructions in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Example
+
+<ActionCard title="Try the Example">
+    Explore a complete multi-region infrastructure example with Atmos AI, skills, sessions, and tool execution.
+    <div>
+      <PrimaryCTA to="/examples/ai">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Commands
+
+<dl>
+  <dt>[`atmos ai chat`](/cli/commands/ai/chat)</dt>
+  <dd>Interactive chat with session management, provider switching, and skill selection.</dd>
+
+  <dt>[`atmos ai ask`](/cli/commands/ai/ask)</dt>
+  <dd>Ask a single question and get an immediate response. Ideal for scripting and CI/CD.</dd>
+
+  <dt>[`atmos ai exec`](/cli/commands/ai/exec)</dt>
+  <dd>Execute Atmos and shell commands via AI prompts with structured output.</dd>
+
+  <dt>[`atmos ai sessions`](/cli/commands/ai/sessions)</dt>
+  <dd>Manage chat sessions: list, clean, export, and import.</dd>
+
+  <dt>[`atmos ai skill`](/cli/commands/ai/skill)</dt>
+  <dd>Install, list, and uninstall community AI skills from GitHub.</dd>
+
+  <dt>[`atmos mcp start`](/cli/commands/mcp/start)</dt>
+  <dd>Start the MCP server with stdio (default) or HTTP transport.</dd>
+
+  <dt>[`atmos lsp start`](/cli/commands/lsp/start)</dt>
+  <dd>Start the LSP server with stdio, TCP, or WebSocket transport.</dd>
+</dl>
+
+## AI Assistants
+
+<ActionCard title="Configure AI Assistants">
+    Set up Claude Code, Cursor, Windsurf, GitHub Copilot, Gemini CLI, OpenAI Codex, and other AI coding assistants to use Atmos agent skills.
+    <div>
+      <PrimaryCTA to="/projects/setup-editor/ai-assistants">Setup Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Claude Code Integration
+
+<ActionCard title="Claude Code Integration">
+    Use Claude Code with the Atmos MCP server and create specialized `atmos-expert` subagents for deep infrastructure expertise.
+    <div>
+      <PrimaryCTA to="/ai/claude-code-integration">Claude Code Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Agent Skills
+
+Atmos ships 21+ agent skills that give AI coding assistants deep knowledge of Atmos conventions.
+Skills follow the [Agent Skills](https://agentskills.io) open standard and work across Claude Code,
+Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
+
+### [Agent Skills Overview](/ai/agent-skills)
+
+How skills work, available skills, and the SKILL.md format.
+
+### [Skill Marketplace](/ai/skill-marketplace)
+
+Install and share community skills from GitHub.
+
+### [Skills Configuration](/cli/configuration/ai/skills)
+
+Configure skills in `atmos.yaml`.
+
+## MCP Server
+
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server exposes Atmos AI tools
+to any compatible client -- Claude Desktop, Claude Code, VS Code, Cursor, Gemini CLI, and
+[many others](https://modelcontextprotocol.io/clients). This lets you use Atmos tools inside your
+preferred AI assistant without custom integrations.
+
+<ActionCard title="MCP Setup">
+    Configure MCP clients and manage tool permissions.
+    <div>
+        <PrimaryCTA to="/ai/mcp-server">MCP Server Setup</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Troubleshooting
+
+Having issues? See the [Troubleshooting Guide](/ai/troubleshooting) for solutions to common problems
+with providers, tools, sessions, and connectivity.
