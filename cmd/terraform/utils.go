@@ -138,6 +138,27 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	return nil
 }
 
+// runCIHooksForDeploy fires CI hooks using already-resolved info.
+// Unlike runHooksWithOutput, this avoids a second ProcessCommandLineArgs call
+// which would eagerly resolve !store YAML functions and fail if referenced
+// components haven't been deployed yet.
+func runCIHooksForDeploy(event h.HookEvent, cmd_ *cobra.Command, _ []string, info *schema.ConfigAndStacksInfo, output string) {
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		log.Warn("CI hook config init failed", "error", err)
+		return
+	}
+
+	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	if !forceCIMode {
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	if err := h.RunCIHooks(event, &atmosConfig, info, output, forceCIMode, nil); err != nil {
+		log.Warn("CI hook execution failed", "error", err)
+	}
+}
+
 // resolveComponentPath resolves a path-based component argument to a component name.
 // It validates the component exists in the specified stack and handles ambiguous paths.
 func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) error {
@@ -341,6 +362,15 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Check Terraform Single-Component and Multi-Component flags.
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
+
+	// Fire before.terraform.deploy CI hook after stack processing is complete.
+	// This runs inside RunE (not PreRunE) because ProcessCommandLineArgs eagerly
+	// resolves !store YAML functions for all stacks, which would fail if referenced
+	// components haven't been deployed yet. By running here, the hook has access
+	// to the resolved info without a second ProcessCommandLineArgs call.
+	if subCommand == "deploy" {
+		runCIHooksForDeploy(h.BeforeTerraformDeploy, actualCmd, args, &info, "")
+	}
 
 	// Route to appropriate execution path.
 	if info.Affected {
