@@ -61,10 +61,6 @@ aws:
     tag_mapping:
       stack_tag: "atmos:stack"
       component_tag: "atmos:component"
-      tenant_tag: "atmos:tenant"
-      environment_tag: "atmos:environment"
-      stage_tag: "atmos:stage"
-
     # Compliance frameworks to track
     frameworks:
       - cis-aws
@@ -91,7 +87,7 @@ aws:
   <dd>Tag keys used for mapping AWS resources back to Atmos components and stacks. See [Tag Mapping](#tag-mapping) below.</dd>
 
   <dt>`frameworks`</dt>
-  <dd>Compliance frameworks to track with `atmos aws compliance`. Supported: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist`.</dd>
+  <dd>Compliance frameworks to track with `atmos aws compliance report`. Supported: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist`.</dd>
 </dl>
 
 ## Sources
@@ -131,14 +127,6 @@ to your AWS resources via Terraform. The default tags follow Atmos conventions.
   <dt>`component_tag`</dt>
   <dd>Tag key identifying the Atmos component. Default: `"atmos:component"`.</dd>
 
-  <dt>`tenant_tag`</dt>
-  <dd>Tag key identifying the tenant. Default: `"atmos:tenant"`.</dd>
-
-  <dt>`environment_tag`</dt>
-  <dd>Tag key identifying the environment. Default: `"atmos:environment"`.</dd>
-
-  <dt>`stage_tag`</dt>
-  <dd>Tag key identifying the stage. Default: `"atmos:stage"`.</dd>
 </dl>
 
 ### How Tag Mapping Works
@@ -162,7 +150,7 @@ and resource type patterns.
 
 ## Compliance Frameworks
 
-The `frameworks` list determines which compliance standards are reported by `atmos aws compliance`.
+The `frameworks` list determines which compliance standards are reported by `atmos aws compliance report`.
 
 <dl>
   <dt>`cis-aws`</dt>
@@ -183,12 +171,12 @@ The `frameworks` list determines which compliance standards are reported by `atm
 
 ## AI-Powered Analysis
 
-By default, `atmos aws security` works without any AI provider. To enable AI-powered root cause
+By default, `atmos aws security analyze` works without any AI provider. To enable AI-powered root cause
 analysis and remediation guidance, use the `--ai` flag:
 
 <Terminal title="shell">
 ```bash
-atmos aws security --stack prod-us-east-1 --ai
+atmos aws security analyze --stack prod-us-east-1 --ai
 ```
 </Terminal>
 
@@ -222,7 +210,7 @@ The IAM role or user running the security commands needs read access to the enab
 ## Related
 
 <DocCardList items={[
-  {type: 'link', href: '/cli/commands/aws/security', label: 'atmos aws security', description: 'Analyze AWS security findings'},
-  {type: 'link', href: '/cli/commands/aws/compliance', label: 'atmos aws compliance', description: 'Generate compliance posture reports'},
+  {type: 'link', href: '/cli/commands/aws/security-analyze', label: 'atmos aws security analyze', description: 'Analyze AWS security findings'},
+  {type: 'link', href: '/cli/commands/aws/compliance-report', label: 'atmos aws compliance report', description: 'Generate compliance posture reports'},
   {type: 'link', href: '/cli/configuration/ai', label: 'AI Configuration', description: 'Configure AI providers for --ai flag'},
 ]} />

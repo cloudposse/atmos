@@ -1,8 +1,8 @@
 ---
-title: atmos aws compliance
-sidebar_label: compliance
+title: atmos aws compliance report
+sidebar_label: report
 sidebar_class_name: command
-id: compliance
+id: compliance-report
 description: Generate compliance posture reports against industry frameworks like CIS AWS, PCI DSS, SOC2, HIPAA, and NIST
 ---
 import Screengrab from '@site/src/components/Screengrab'
@@ -17,11 +17,11 @@ Generate compliance posture reports against industry frameworks. Retrieves compl
 
 <Experimental />
 
-<Screengrab title="atmos aws compliance --help" slug="atmos-aws-compliance--help" />
+<Screengrab title="atmos aws compliance report --help" slug="atmos-aws-compliance-report--help" />
 
 ## Description
 
-The `atmos aws compliance` command retrieves compliance status from AWS Security Hub enabled standards, maps failing controls to Atmos components that manage the affected resources, and generates reports. It supports multiple compliance frameworks and produces actionable reports that identify exactly which Terraform components need changes to achieve compliance.
+The `atmos aws compliance report` command retrieves compliance status from AWS Security Hub enabled standards, maps failing controls to Atmos components that manage the affected resources, and generates reports. It supports multiple compliance frameworks and produces actionable reports that identify exactly which Terraform components need changes to achieve compliance.
 
 Use it for:
 - **Compliance Audits**: Generate reports showing your posture against specific compliance frameworks
@@ -32,7 +32,7 @@ Use it for:
 ## Usage
 
 ```shell
-atmos aws compliance [flags]
+atmos aws compliance report [flags]
 ```
 
 ## Flags
@@ -58,13 +58,13 @@ atmos aws compliance [flags]
 <Terminal title="basic examples">
 ```bash
 # CIS AWS Foundations Benchmark report
-atmos aws compliance --framework cis-aws --stack prod-us-east-1
+atmos aws compliance report --framework cis-aws --stack prod-us-east-1
 
 # PCI DSS compliance status
-atmos aws compliance --framework pci-dss
+atmos aws compliance report --framework pci-dss
 
 # All frameworks for a stack
-atmos aws compliance --stack prod-us-east-1
+atmos aws compliance report --stack prod-us-east-1
 ```
 </Terminal>
 
@@ -73,13 +73,13 @@ atmos aws compliance --stack prod-us-east-1
 <Terminal title="output format examples">
 ```bash
 # Output as JSON for automation
-atmos aws compliance --framework cis-aws --format json
+atmos aws compliance report --framework cis-aws --format json
 
 # Markdown report for documentation
-atmos aws compliance --framework soc2 --stack prod-us-east-1 --format markdown
+atmos aws compliance report --framework soc2 --stack prod-us-east-1 --format markdown
 
 # Save report to file
-atmos aws compliance --framework hipaa --format markdown > hipaa-report.md
+atmos aws compliance report --framework hipaa --format markdown > hipaa-report.md
 ```
 </Terminal>
 
@@ -88,15 +88,15 @@ atmos aws compliance --framework hipaa --format markdown > hipaa-report.md
 <Terminal title="targeted examples">
 ```bash
 # Check specific controls
-atmos aws compliance --framework cis-aws --controls CIS.1.1,CIS.1.2,CIS.2.1
+atmos aws compliance report --framework cis-aws --controls CIS.1.1,CIS.1.2,CIS.2.1
 
 # NIST framework for production
-atmos aws compliance --framework nist --stack prod-us-east-1
+atmos aws compliance report --framework nist --stack prod-us-east-1
 
 # Multiple stacks comparison
 for stack in dev-us-east-1 staging-us-east-1 prod-us-east-1; do
   echo "=== $stack ==="
-  atmos aws compliance --framework cis-aws --stack "$stack" --format json > "compliance-${stack}.json"
+  atmos aws compliance report --framework cis-aws --stack "$stack" --format json > "compliance-${stack}.json"
 done
 ```
 </Terminal>
@@ -106,14 +106,14 @@ done
 <Terminal title="ci/cd examples">
 ```bash
 # Compliance gate in pipeline
-atmos aws compliance --framework pci-dss --stack prod-us-east-1 --format json > compliance.json
+atmos aws compliance report --framework pci-dss --stack prod-us-east-1 --format json > compliance.json
 if jq -e '.failing_controls | length > 0' compliance.json; then
   echo "PCI DSS compliance failures detected"
   exit 1
 fi
 
 # Generate compliance report as a deployment artifact
-atmos aws compliance --stack prod-us-east-1 \
+atmos aws compliance report --stack prod-us-east-1 \
   --format markdown > compliance-report.md
 ```
 </Terminal>
@@ -153,6 +153,6 @@ aws:
 ## Related Commands
 
 <DocCardList items={[
-  {type: 'link', href: '/cli/commands/aws/security', label: 'atmos aws security', description: 'Analyze AWS security findings'},
+  {type: 'link', href: '/cli/commands/aws/security-analyze', label: 'atmos aws security analyze', description: 'Analyze AWS security findings'},
   {type: 'link', href: '/cli/commands/aws/eks-update-kubeconfig', label: 'atmos aws eks update-kubeconfig', description: 'Update kubeconfig for EKS clusters'},
 ]} />

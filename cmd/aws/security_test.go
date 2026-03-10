@@ -223,12 +223,23 @@ func TestBuildSecurityReport(t *testing.T) {
 
 func TestSecuritySubcommandRegistered(t *testing.T) {
 	cmd := awsCmd
-	var found bool
+	var foundSecurity bool
 	for _, sub := range cmd.Commands() {
-		if sub.Use == "security" {
-			found = true
-			break
+		if sub.Use != "security" {
+			continue
 		}
+
+		foundSecurity = true
+		// Verify the analyze subcommand exists under security.
+		var foundAnalyze bool
+		for _, subSub := range sub.Commands() {
+			if subSub.Use == "analyze" {
+				foundAnalyze = true
+				break
+			}
+		}
+		assert.True(t, foundAnalyze, "security command should have analyze subcommand")
+		break
 	}
-	assert.True(t, found, "aws command should have security subcommand")
+	assert.True(t, foundSecurity, "aws command should have security subcommand")
 }

@@ -37,12 +37,23 @@ func TestValidateFramework(t *testing.T) {
 
 func TestComplianceSubcommandRegistered(t *testing.T) {
 	cmd := awsCmd
-	var found bool
+	var foundCompliance bool
 	for _, sub := range cmd.Commands() {
-		if sub.Use == "compliance" {
-			found = true
-			break
+		if sub.Use != "compliance" {
+			continue
 		}
+
+		foundCompliance = true
+		// Verify the report subcommand exists under compliance.
+		var foundReport bool
+		for _, subSub := range sub.Commands() {
+			if subSub.Use == "report" {
+				foundReport = true
+				break
+			}
+		}
+		assert.True(t, foundReport, "compliance command should have report subcommand")
+		break
 	}
-	assert.True(t, found, "aws command should have compliance subcommand")
+	assert.True(t, foundCompliance, "aws command should have compliance subcommand")
 }

@@ -12,7 +12,7 @@
 AWS Bedrock is the recommended AI provider for enterprise security workloads. It runs within your
 AWS account, so data never leaves your cloud environment — a key requirement for security-sensitive
 workloads. This document covers Bedrock-specific setup, configuration, pricing, and regional
-availability for use with Atmos AI (including `atmos aws security --ai`).
+availability for use with Atmos AI (including `atmos aws security analyze --ai`).
 
 For general AI provider configuration, see the [Atmos AWS Security & Compliance PRD](atmos-aws-security-compliance.md).
 

@@ -291,9 +291,9 @@ These flags are available for every Atmos command:
         - Default: `false` (opt-in)
         - When enabled, command output is sent to the configured AI provider for analysis and description
         - Requires AI to be configured in `atmos.yaml` (`ai.enabled: true` with a provider)
-        - Currently used with [`atmos aws security`](/cli/commands/aws/security) and [`atmos aws compliance`](/cli/commands/aws/compliance) commands
+        - Currently used with [`atmos aws security analyze`](/cli/commands/aws/security-analyze) and [`atmos aws compliance report`](/cli/commands/aws/compliance-report) commands
         - Can also use `ATMOS_AI` environment variable
-        - Example: `atmos aws security --ai -s prod`
+        - Example: `atmos aws security analyze --ai -s prod`
         - See [AI Configuration](/cli/configuration/ai) for provider setup
     </dd>
 
@@ -542,7 +542,7 @@ All global flags can be set using environment variables. The precedence order is
         - Equivalent to the `--ai` flag
         - Set to `true` to enable AI analysis
         - CLI flag takes precedence over this environment variable
-        - Example: `ATMOS_AI=true atmos aws security -s prod`
+        - Example: `ATMOS_AI=true atmos aws security analyze -s prod`
     </dd>
 </dl>
 
@@ -722,13 +722,13 @@ atmos describe config
 
 ```bash
 # Enable AI analysis for security findings
-atmos aws security --ai -s prod
+atmos aws security analyze --ai -s prod
 
 # Enable AI analysis via environment variable
-ATMOS_AI=true atmos aws security --severity=critical -s prod
+ATMOS_AI=true atmos aws security analyze --severity=critical -s prod
 
 # AI analysis with compliance reports
-atmos aws compliance --ai --framework=cis-aws -s prod
+atmos aws compliance report --ai --framework=cis-aws -s prod
 ```
 
 ### CI/CD Configuration

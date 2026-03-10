@@ -7,14 +7,14 @@ Atmos components, and generates reports with remediation guidance.
 
 ```shell
 # CIS AWS Foundations Benchmark report
-atmos aws compliance --framework cis-aws --stack prod-us-east-1
+atmos aws compliance report --framework cis-aws --stack prod-us-east-1
 
 # PCI DSS compliance status
-atmos aws compliance --framework pci-dss
+atmos aws compliance report --framework pci-dss
 
 # All frameworks for a stack
-atmos aws compliance --stack prod-us-east-1
+atmos aws compliance report --stack prod-us-east-1
 
 # Output as JSON
-atmos aws compliance --framework cis-aws --format json
+atmos aws compliance report --framework cis-aws --format json
 ```

@@ -29,9 +29,17 @@ var securityLongMarkdown string
 // securityParser handles flag parsing with Viper precedence for the security command.
 var securityParser *flags.StandardParser
 
-// securityCmd represents the aws security command.
+// securityCmd is the parent command for security subcommands.
 var securityCmd = &cobra.Command{
 	Use:   "security",
+	Short: "AWS security commands",
+	Long:  "Commands for analyzing AWS security findings and mapping them to Atmos components.",
+	Args:  cobra.NoArgs,
+}
+
+// securityAnalyzeCmd represents the aws security analyze command.
+var securityAnalyzeCmd = &cobra.Command{
+	Use:   "analyze",
 	Short: "Analyze AWS security findings for Atmos stacks",
 	Long:  securityLongMarkdown,
 	Args:  cobra.NoArgs,
@@ -199,14 +207,15 @@ func init() {
 		flags.WithEnvVars("region", "ATMOS_AWS_SECURITY_REGION"),
 	)
 
-	// Register flags on the command.
-	securityParser.RegisterFlags(securityCmd)
+	// Register flags on the analyze subcommand.
+	securityParser.RegisterFlags(securityAnalyzeCmd)
 
 	// Bind flags to Viper for environment variable support.
 	if err := securityParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 
+	securityCmd.AddCommand(securityAnalyzeCmd)
 	awsCmd.AddCommand(securityCmd)
 }
 

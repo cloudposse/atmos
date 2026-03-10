@@ -17,7 +17,7 @@ IAM Access Analyzer via Atmos Auth, maps findings back to Atmos components and s
 actionable remediation reports. AI analysis is **opt-in** via the `--ai` flag — the commands work
 without an AI provider configured.
 
-**AI is optional.** By default, `atmos aws security` and `atmos aws compliance` work purely with AWS
+**AI is optional.** By default, `atmos aws security analyze` and `atmos aws compliance report` work purely with AWS
 APIs — no AI provider needed. When the `--ai` flag is passed, AI-powered analysis adds root cause
 analysis, remediation guidance, and deploy commands using **any AI provider that Atmos AI supports**.
 
@@ -41,14 +41,14 @@ slow, error-prone, and requires deep AWS + Terraform expertise.
 With Atmos AWS Security & Compliance, a single command replaces that entire workflow:
 
 ```shell
-atmos aws security --stack prod-us-east-1
+atmos aws security analyze --stack prod-us-east-1
 ```
 
 This fetches findings, maps them to Atmos components, and shows which code manages each affected
 resource. Add `--ai` for AI-powered remediation guidance:
 
 ```shell
-atmos aws security --stack prod-us-east-1 --ai
+atmos aws security analyze --stack prod-us-east-1 --ai
 ```
 
 In seconds, the user gets a complete picture: what's wrong, which component caused it, exactly what
@@ -87,7 +87,7 @@ notifications, or compliance reporting tools.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    atmos aws security <stack>                       │
+│                 atmos aws security analyze <stack>                    │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐   │
@@ -471,7 +471,7 @@ For enterprise security workloads, **Bedrock is the recommended default** — fi
 your AWS account, no API keys to manage (uses IAM via Atmos Auth), and all invocations are logged in
 CloudTrail.
 
-By default, `atmos aws security` works without AI. The `--ai` flag enables AI-powered analysis
+By default, `atmos aws security analyze` works without AI. The `--ai` flag enables AI-powered analysis
 when a provider is configured. This opt-in design means CI/CD pipelines get structured finding
 data with zero AI cost by default.
 
@@ -479,46 +479,46 @@ data with zero AI cost by default.
 
 ## CLI Commands
 
-### `atmos aws security`
+### `atmos aws security analyze`
 
-Primary command for security analysis. Fetches findings, maps to components, and generates reports.
+Analyze security findings, map to components, and generate reports.
 
 ```shell
 # Analyze findings for a specific stack
-atmos aws security --stack prod-us-east-1
+atmos aws security analyze --stack prod-us-east-1
 
 # Analyze findings for a specific component in a stack
-atmos aws security --stack prod-us-east-1 --component vpc
+atmos aws security analyze --stack prod-us-east-1 --component vpc
 
 # Filter by severity
-atmos aws security --stack prod-us-east-1 --severity critical,high
+atmos aws security analyze --stack prod-us-east-1 --severity critical,high
 
 # Filter by finding source
-atmos aws security --stack prod-us-east-1 --source security-hub
+atmos aws security analyze --stack prod-us-east-1 --source security-hub
 
 # Filter by compliance framework
-atmos aws security --stack prod-us-east-1 --framework cis-aws,pci-dss
+atmos aws security analyze --stack prod-us-east-1 --framework cis-aws,pci-dss
 
 # Analyze all stacks
-atmos aws security
+atmos aws security analyze
 
 # Output as JSON (for piping to dashboards, ticketing systems, etc.)
-atmos aws security --stack prod-us-east-1 --format json
+atmos aws security analyze --stack prod-us-east-1 --format json
 
 # Output as YAML
-atmos aws security --stack prod-us-east-1 --format yaml
+atmos aws security analyze --stack prod-us-east-1 --format yaml
 
 # Output as CSV (for spreadsheets, compliance reporting)
-atmos aws security --stack prod-us-east-1 --format csv
+atmos aws security analyze --stack prod-us-east-1 --format csv
 
 # Pipe JSON to jq for filtering
-atmos aws security --stack prod-us-east-1 --format json | jq '.findings[] | select(.severity == "CRITICAL")'
+atmos aws security analyze --stack prod-us-east-1 --format json | jq '.findings[] | select(.severity == "CRITICAL")'
 
 # Feed into Slack notification
-atmos aws security --stack prod-us-east-1 --format json | notify-slack --channel security-alerts
+atmos aws security analyze --stack prod-us-east-1 --format json | notify-slack --channel security-alerts
 
 # Generate CSV for compliance audit trail
-atmos aws security --format csv > findings-$(date +%Y-%m-%d).csv
+atmos aws security analyze --format csv > findings-$(date +%Y-%m-%d).csv
 ```
 
 #### Flags
@@ -622,19 +622,19 @@ Terraform source:
 > be managed outside of Atmos or may be missing `atmos:*` tags.
 ```
 
-### `atmos aws compliance`
+### `atmos aws compliance report`
 
-Generates compliance posture reports against specific frameworks.
+Generate compliance posture reports against specific frameworks.
 
 ```shell
 # CIS AWS Foundations Benchmark report
-atmos aws compliance --framework cis-aws --stack prod-us-east-1
+atmos aws compliance report --framework cis-aws --stack prod-us-east-1
 
 # PCI DSS compliance status
-atmos aws compliance --framework pci-dss
+atmos aws compliance report --framework pci-dss
 
 # All frameworks
-atmos aws compliance --stack prod-us-east-1
+atmos aws compliance report --stack prod-us-east-1
 ```
 
 #### Flags
@@ -970,7 +970,7 @@ aws:
 3. **Tag-based mapping** — ✅ Implemented in `pkg/aws/security/component_mapper.go`. Supports
    `atmos:stack`, `atmos:component` tags via Resource Groups Tagging API (Path A) and heuristic
    naming convention matching (Path B).
-4. **CLI command scaffold** — ✅ Registered `atmos aws security` and `atmos aws compliance` commands
+4. **CLI command scaffold** — ✅ Registered `atmos aws security analyze` and `atmos aws compliance report` commands
    using the command registry pattern in `cmd/aws/security.go` and `cmd/aws/compliance.go`.
    Uses `flags.NewStandardParser()` for flag handling per mandatory patterns.
 
@@ -1024,7 +1024,7 @@ for error handling and reference `aws.security.enabled` config.
 17. **`--ai` as global persistent flag** — ✅ Added `AI bool` field to `pkg/flags/global/flags.go`
     `Flags` struct. Registered via `registerAIFlags()` in `pkg/flags/global_builder.go` with
     `ATMOS_AI` env var support. Removed command-local `--ai` from `cmd/aws/security.go`.
-    The flag is now inherited by all subcommands. Currently consumed by `atmos aws security`;
+    The flag is now inherited by all subcommands. Currently consumed by `atmos aws security analyze`;
     future PR will extend to all commands for AI-powered output analysis.
 
 ### Remaining Work (Future PRs)

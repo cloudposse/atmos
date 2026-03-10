@@ -25,9 +25,17 @@ var complianceLongMarkdown string
 // complianceParser handles flag parsing with Viper precedence for the compliance command.
 var complianceParser *flags.StandardParser
 
-// complianceCmd represents the aws compliance command.
+// complianceCmd is the parent command for compliance subcommands.
 var complianceCmd = &cobra.Command{
 	Use:   "compliance",
+	Short: "AWS compliance commands",
+	Long:  "Commands for generating compliance posture reports against industry frameworks.",
+	Args:  cobra.NoArgs,
+}
+
+// complianceReportCmd represents the aws compliance report command.
+var complianceReportCmd = &cobra.Command{
+	Use:   "report",
 	Short: "Generate compliance posture reports",
 	Long:  complianceLongMarkdown,
 	Args:  cobra.NoArgs,
@@ -137,14 +145,15 @@ func init() {
 		flags.WithEnvVars("format", "ATMOS_AWS_COMPLIANCE_FORMAT"),
 	)
 
-	// Register flags on the command.
-	complianceParser.RegisterFlags(complianceCmd)
+	// Register flags on the report subcommand.
+	complianceParser.RegisterFlags(complianceReportCmd)
 
 	// Bind flags to Viper for environment variable support.
 	if err := complianceParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 
+	complianceCmd.AddCommand(complianceReportCmd)
 	awsCmd.AddCommand(complianceCmd)
 }
 
