@@ -409,6 +409,26 @@ const config = {
                 docs: {
                     routeBasePath: '/',
                     sidebarPath: require.resolve('./sidebars.js'),
+                    async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
+                        const items = await defaultSidebarItemsGenerator(args);
+                        // Sort all sidebar items alphabetically by label,
+                        // treating categories and docs equally so they interleave correctly.
+                        const sortItems = (sidebarItems) => {
+                            return sidebarItems
+                                .map((item) => {
+                                    if (item.type === 'category' && item.items) {
+                                        return {...item, items: sortItems(item.items)};
+                                    }
+                                    return item;
+                                })
+                                .sort((a, b) => {
+                                    const labelA = (a.label || '').toLowerCase();
+                                    const labelB = (b.label || '').toLowerCase();
+                                    return labelA.localeCompare(labelB);
+                                });
+                        };
+                        return sortItems(items);
+                    },
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },

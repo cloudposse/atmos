@@ -1,0 +1,54 @@
+# Network stack for us-west-2
+# Spoke region connecting to the us-east-1 hub via cross-region peering
+
+import:
+  - mixins/region/us-west-2
+  - mixins/stage/network
+
+components:
+  terraform:
+
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        vpc_cidr: "10.2.0.0/16"
+        availability_zones:
+          - us-west-2a
+          - us-west-2b
+          - us-west-2c
+        nat_gateway_enabled: true
+        tags:
+          Environment: "network"
+          Region: "us-west-2"
+
+    tgw/attachment:
+      metadata:
+        component: tgw/attachment
+      vars:
+        tags:
+          Environment: "network"
+          Region: "us-west-2"
+      settings:
+        depends_on:
+          1:
+            component: vpc
+          2:
+            # Depends on tgw/hub in the us-east-1 hub region
+            component: tgw/hub
+            stack: "ue1-{{ .vars.stage }}"
+
+    tgw/cross-region-hub-connector:
+      metadata:
+        component: tgw/cross-region-hub-connector
+      vars:
+        peer_region: "us-east-1"
+        tags:
+          Environment: "network"
+          Region: "us-west-2"
+      settings:
+        depends_on:
+          1:
+            # Depends on tgw/hub in the us-east-1 hub region
+            component: tgw/hub
+            stack: "ue1-{{ .vars.stage }}"
