@@ -8,12 +8,14 @@ import (
 	"gopkg.in/yaml.v2"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform" // Register terraform CI plugin.
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic" // Register generic CI provider.
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"  // Register GitHub Actions CI provider.
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 type Hooks struct {
@@ -123,6 +125,14 @@ func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *s
 
 	log.Debug("Running CI hooks", "event", event, "force_ci", forceCIMode)
 
+	// CI integration is experimental. Check settings.experimental to decide
+	// whether to proceed, warn, or block — mirroring command-level behavior.
+	if atmosConfig != nil {
+		if err := checkExperimental(atmosConfig); err != nil {
+			return err
+		}
+	}
+
 	// ci.enabled in atmos.yaml is the authority — if not set or false, CI is off.
 	// The --ci flag / ATMOS_CI env var only controls provider fallback (generic vs auto-detect),
 	// it cannot override a disabled config.
@@ -140,4 +150,41 @@ func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *s
 		ForceCIMode:  forceCIMode,
 		CommandError: cmdErr,
 	})
+}
+
+// ciExperimentalFeature is the feature name used in experimental warnings for CI hooks.
+const ciExperimentalFeature = "ci"
+
+// checkExperimental checks settings.experimental and returns an error if CI
+// hooks should not run. Mirrors the command-level experimental gating in cmd/root.go.
+func checkExperimental(atmosConfig *schema.AtmosConfiguration) error {
+	mode := atmosConfig.Settings.Experimental
+	if mode == "" {
+		mode = "warn" // Default matches command-level behavior.
+	}
+
+	switch mode {
+	case "silence":
+		// Proceed without any warning.
+		return nil
+	case "disable":
+		log.Debug("CI hooks disabled by settings.experimental=disable")
+		return errUtils.Build(errUtils.ErrExperimentalDisabled).
+			WithContext("feature", ciExperimentalFeature).
+			WithHint("Enable with settings.experimental: warn").
+			Err()
+	case "warn":
+		ui.Experimental(ciExperimentalFeature)
+		return nil
+	case "error":
+		ui.Experimental(ciExperimentalFeature)
+		return errUtils.Build(errUtils.ErrExperimentalRequiresIn).
+			WithContext("feature", ciExperimentalFeature).
+			WithHint("Enable with settings.experimental: warn").
+			Err()
+	default:
+		// Unknown mode — treat as warn for forward compatibility.
+		ui.Experimental(ciExperimentalFeature)
+		return nil
+	}
 }

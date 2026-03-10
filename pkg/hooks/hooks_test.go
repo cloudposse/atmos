@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -354,6 +355,68 @@ func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
 			// assertion is that RunCIHooks itself short-circuits.
 			err := RunCIHooks("before.terraform.plan", config, info, "", tc.forceCIMode, nil)
 			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestCheckExperimental verifies that checkExperimental gates CI hooks
+// based on settings.experimental, mirroring the command-level behavior.
+func TestCheckExperimental(t *testing.T) {
+	tests := []struct {
+		name        string
+		mode        string
+		expectErr   bool
+		expectedErr error
+	}{
+		{
+			name:      "empty defaults to warn (no error)",
+			mode:      "",
+			expectErr: false,
+		},
+		{
+			name:      "silence allows CI hooks",
+			mode:      "silence",
+			expectErr: false,
+		},
+		{
+			name:      "warn allows CI hooks",
+			mode:      "warn",
+			expectErr: false,
+		},
+		{
+			name:        "disable blocks CI hooks",
+			mode:        "disable",
+			expectErr:   true,
+			expectedErr: errUtils.ErrExperimentalDisabled,
+		},
+		{
+			name:        "error blocks CI hooks",
+			mode:        "error",
+			expectErr:   true,
+			expectedErr: errUtils.ErrExperimentalRequiresIn,
+		},
+		{
+			name:      "unknown mode treated as warn",
+			mode:      "unknown-value",
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: tc.mode,
+				},
+			}
+
+			err := checkExperimental(config)
+			if tc.expectErr {
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, tc.expectedErr), "expected %v, got %v", tc.expectedErr, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
