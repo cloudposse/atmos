@@ -8,23 +8,62 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ProcessComponentInStackOptions provides optional processing controls for ProcessComponentInStack.
-type ProcessComponentInStackOptions struct {
-	ProcessTemplates     *bool // Controls Go template resolution. Defaults to true if nil.
-	ProcessYamlFunctions *bool // Controls YAML function resolution (!terraform.output, etc). Defaults to true if nil.
+// processOptions holds the resolved processing options for component resolution.
+type processOptions struct {
+	processTemplates     bool
+	processYamlFunctions bool
+}
+
+// ProcessOption is a functional option for ProcessComponentInStack and ProcessComponentFromContext.
+type ProcessOption func(*processOptions)
+
+// WithProcessTemplates controls whether Go templates are resolved during processing.
+// When false, template expressions like {{ .settings.config.a }} are preserved as raw strings.
+// Defaults to true when not specified.
+func WithProcessTemplates(enabled bool) ProcessOption {
+	defer perf.Track(nil, "describe.WithProcessTemplates")()
+	return func(o *processOptions) {
+		o.processTemplates = enabled
+	}
+}
+
+// WithProcessYamlFunctions controls whether YAML functions (!terraform.output, !terraform.state,
+// !template, !store, etc.) are resolved during processing.
+// When false, YAML function tags are preserved as raw strings.
+// Defaults to true when not specified.
+func WithProcessYamlFunctions(enabled bool) ProcessOption {
+	defer perf.Track(nil, "describe.WithProcessYamlFunctions")()
+	return func(o *processOptions) {
+		o.processYamlFunctions = enabled
+	}
+}
+
+// defaultProcessOptions returns the default processing options (both enabled).
+func defaultProcessOptions() processOptions {
+	return processOptions{
+		processTemplates:     true,
+		processYamlFunctions: true,
+	}
+}
+
+// applyProcessOptions applies functional options to the default options.
+func applyProcessOptions(opts []ProcessOption) processOptions {
+	o := defaultProcessOptions()
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
 }
 
 // ComponentFromContextParams contains the parameters for ProcessComponentFromContext.
 type ComponentFromContextParams struct {
-	Component            string
-	Namespace            string
-	Tenant               string
-	Environment          string
-	Stage                string
-	AtmosCliConfigPath   string
-	AtmosBasePath        string
-	ProcessTemplates     *bool // Optional: controls Go template resolution. Defaults to true if nil.
-	ProcessYamlFunctions *bool // Optional: controls YAML function resolution (!terraform.output, etc). Defaults to true if nil.
+	Component          string
+	Namespace          string
+	Tenant             string
+	Environment        string
+	Stage              string
+	AtmosCliConfigPath string
+	AtmosBasePath      string
 }
 
 // ProcessComponentInStack accepts a component and a stack name and returns the component configuration in the stack.
@@ -34,17 +73,17 @@ type ComponentFromContextParams struct {
 // internal/exec imports pkg/component (for the registry/provider types), creating an import
 // cycle if pkg/component imports internal/exec.
 //
-// An optional ProcessComponentInStackOptions struct can be passed to control whether Go templates
-// and YAML functions (e.g. !terraform.output, !terraform.state) are resolved during processing.
-// When called from the terraform-provider-utils, both should be false to avoid spawning child
-// terraform processes inside the provider plugin. When omitted, both default to true for
-// backward compatibility.
+// Functional options can be passed to control whether Go templates and YAML functions
+// (e.g. !terraform.output, !terraform.state) are resolved during processing.
+// When called from the terraform-provider-utils, both should be disabled to avoid spawning
+// child terraform processes inside the provider plugin. When omitted, both default to true
+// for backward compatibility.
 func ProcessComponentInStack(
 	component string,
 	stack string,
 	atmosCliConfigPath string,
 	atmosBasePath string,
-	opts ...ProcessComponentInStackOptions,
+	opts ...ProcessOption,
 ) (map[string]any, error) {
 	defer perf.Track(nil, "describe.ProcessComponentInStack")()
 
@@ -59,13 +98,9 @@ func ProcessComponentInStack(
 		return nil, err
 	}
 
-	var processTemplates, processYamlFunctions *bool
-	if len(opts) > 0 {
-		processTemplates = opts[0].ProcessTemplates
-		processYamlFunctions = opts[0].ProcessYamlFunctions
-	}
+	o := applyProcessOptions(opts)
 
-	return processComponentInStackWithConfig(&atmosConfig, component, stack, processTemplates, processYamlFunctions)
+	return processComponentInStackWithConfig(&atmosConfig, component, stack, &o)
 }
 
 // ProcessComponentFromContext accepts context (namespace, tenant, environment, stage)
@@ -73,7 +108,7 @@ func ProcessComponentInStack(
 //
 // This function is the public API used by terraform-provider-utils (data "utils_component_config").
 // See ProcessComponentInStack for details on why this lives in pkg/describe.
-func ProcessComponentFromContext(params *ComponentFromContextParams) (map[string]any, error) {
+func ProcessComponentFromContext(params *ComponentFromContextParams, opts ...ProcessOption) (map[string]any, error) {
 	defer perf.Track(nil, "describe.ProcessComponentFromContext")()
 
 	if params == nil {
@@ -119,32 +154,24 @@ func ProcessComponentFromContext(params *ComponentFromContextParams) (map[string
 		return nil, errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
-	return processComponentInStackWithConfig(&atmosConfig, params.Component, stack, params.ProcessTemplates, params.ProcessYamlFunctions)
-}
+	o := applyProcessOptions(opts)
 
-// boolDefault returns the value pointed to by p, or defaultVal if p is nil.
-func boolDefault(p *bool, defaultVal bool) bool {
-	if p != nil {
-		return *p
-	}
-	return defaultVal
+	return processComponentInStackWithConfig(&atmosConfig, params.Component, stack, &o)
 }
 
 // processComponentInStackWithConfig is the shared implementation used by both public functions.
 // It accepts an already-initialized AtmosConfiguration to avoid redundant config parsing.
-// ProcessTemplates and ProcessYamlFunctions control resolution; nil defaults to true.
 func processComponentInStackWithConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
-	processTemplates *bool,
-	processYamlFunctions *bool,
+	opts *processOptions,
 ) (map[string]any, error) {
 	return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
-		ProcessTemplates:     boolDefault(processTemplates, true),
-		ProcessYamlFunctions: boolDefault(processYamlFunctions, true),
+		ProcessTemplates:     opts.processTemplates,
+		ProcessYamlFunctions: opts.processYamlFunctions,
 	})
 }

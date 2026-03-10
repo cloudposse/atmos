@@ -11,16 +11,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-func TestBoolDefault(t *testing.T) {
-	trueVal := true
-	falseVal := false
-
-	assert.True(t, boolDefault(nil, true), "nil should return default true")
-	assert.False(t, boolDefault(nil, false), "nil should return default false")
-	assert.True(t, boolDefault(&trueVal, false), "pointer to true should return true regardless of default")
-	assert.False(t, boolDefault(&falseVal, true), "pointer to false should return false regardless of default")
-}
-
 func logOnFailure(t *testing.T, result map[string]any) {
 	t.Helper()
 	resultYaml, _ := u.ConvertToYAML(result)
@@ -304,51 +294,98 @@ func TestProcessComponentFromContextMatchesStackWithNameTemplate(t *testing.T) {
 		"ProcessComponentInStack and ProcessComponentFromContext should return the same result with name_template")
 }
 
-// Tests for ProcessTemplates and ProcessYamlFunctions options.
-// These verify that the provider can disable template and YAML function resolution
-// to avoid spawning child terraform processes inside the provider plugin.
+// Tests for WithProcessTemplates and WithProcessYamlFunctions functional options.
+// Each flag is tested independently against fixtures that contain templates and YAML functions,
+// verifying that disabling one flag does not affect the other.
 
-func TestProcessComponentInStackWithOptionsDisabled(t *testing.T) {
-	component := "infra/vpc"
-	stack := "tenant1-ue2-dev"
+func TestProcessComponentInStackTemplatesDisabledOnly(t *testing.T) {
+	// Uses stack-templates fixture where component-1 has Go templates in vars:
+	//   foo: "{{ .settings.config.a }}"  → resolves to "component-1-a" when templates enabled
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "stack-templates")
 
-	processTemplates := false
-	processYamlFunctions := false
-
-	result, err := ProcessComponentInStack(component, stack, "", "", ProcessComponentInStackOptions{
-		ProcessTemplates:     &processTemplates,
-		ProcessYamlFunctions: &processYamlFunctions,
-	})
+	result, err := ProcessComponentInStack("component-1", "nonprod", atmosCliConfigPath, "",
+		WithProcessTemplates(false),
+		WithProcessYamlFunctions(true),
+	)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Result should still contain vars, backend, and workspace — these don't depend
-	// on template or YAML function resolution
 	vars, ok := result["vars"].(map[string]any)
 	require.True(t, ok, "result should contain 'vars' section")
-	assert.Equal(t, "tenant1", vars["tenant"])
-	assert.Equal(t, "ue2", vars["environment"])
-	assert.Equal(t, "dev", vars["stage"])
 
-	_, hasBackendType := result["backend_type"]
-	assert.True(t, hasBackendType, "result should contain 'backend_type'")
-
-	_, hasBackend := result["backend"]
-	assert.True(t, hasBackend, "result should contain 'backend'")
+	// With templates disabled, vars should contain the raw Go template strings
+	assert.Equal(t, "{{ .settings.config.a }}", vars["foo"],
+		"with WithProcessTemplates(false), Go template should NOT be resolved")
+	assert.Equal(t, "{{ .settings.config.b }}", vars["bar"],
+		"with WithProcessTemplates(false), Go template should NOT be resolved")
 }
 
-func TestProcessComponentInStackWithOptionsNilDefaultsToTrue(t *testing.T) {
-	component := "infra/vpc"
-	stack := "tenant1-ue2-dev"
+func TestProcessComponentInStackTemplatesEnabledOnly(t *testing.T) {
+	// Same fixture, but with templates enabled — verifies the templates are actually resolved
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "stack-templates")
 
-	// Passing options with nil pointers should behave the same as not passing options
-	result, err := ProcessComponentInStack(component, stack, "", "", ProcessComponentInStackOptions{})
+	result, err := ProcessComponentInStack("component-1", "nonprod", atmosCliConfigPath, "",
+		WithProcessTemplates(true),
+		WithProcessYamlFunctions(false),
+	)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
 	vars, ok := result["vars"].(map[string]any)
 	require.True(t, ok, "result should contain 'vars' section")
-	assert.Equal(t, "tenant1", vars["tenant"])
+
+	// With templates enabled, vars should contain the resolved values
+	assert.Equal(t, "component-1-a", vars["foo"],
+		"with WithProcessTemplates(true), Go template should be resolved")
+	assert.Equal(t, "component-1-b", vars["bar"],
+		"with WithProcessTemplates(true), Go template should be resolved")
+}
+
+func TestProcessComponentInStackYamlFunctionsDisabledOnly(t *testing.T) {
+	// Uses atmos-template-yaml-function fixture where test-basic-template has !template YAML tags:
+	//   simple_string: !template "hello-world"
+	//   json_number: !template '42'
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-template-yaml-function")
+
+	result, err := ProcessComponentInStack("test-basic-template", "nonprod", atmosCliConfigPath, "",
+		WithProcessTemplates(true),
+		WithProcessYamlFunctions(false),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "result should contain 'vars' section")
+
+	// With YAML functions disabled, !template tags should NOT be resolved —
+	// the raw tag + value should be preserved as a string
+	assert.Equal(t, "!template hello-world", vars["simple_string"],
+		"with WithProcessYamlFunctions(false), !template should NOT decode the value")
+	// json_number: !template '42' — when not processed, should remain as raw "!template 42"
+	assert.Equal(t, "!template 42", vars["json_number"],
+		"with WithProcessYamlFunctions(false), !template '42' should remain as raw string")
+}
+
+func TestProcessComponentInStackYamlFunctionsEnabledOnly(t *testing.T) {
+	// Same fixture, but with YAML functions enabled — verifies they are actually resolved
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-template-yaml-function")
+
+	result, err := ProcessComponentInStack("test-basic-template", "nonprod", atmosCliConfigPath, "",
+		WithProcessTemplates(false),
+		WithProcessYamlFunctions(true),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "result should contain 'vars' section")
+
+	// With YAML functions enabled, !template tags should decode JSON values
+	// json_number: !template '42' → should be decoded to numeric 42
+	jsonNumber, numberOk := vars["json_number"]
+	require.True(t, numberOk, "result vars should contain 'json_number'")
+	assert.NotEqual(t, "42", jsonNumber,
+		"with WithProcessYamlFunctions(true), !template '42' should be decoded from JSON string to number")
 }
 
 func TestProcessComponentInStackBackwardCompatNoOptions(t *testing.T) {
@@ -365,57 +402,28 @@ func TestProcessComponentInStackBackwardCompatNoOptions(t *testing.T) {
 	assert.Equal(t, "tenant1", vars["tenant"])
 }
 
-func TestProcessComponentInStackDisabledMatchesEnabled(t *testing.T) {
-	// For simple configs without templates or YAML functions, the results should
-	// be the same regardless of processing flags
-	component := "infra/vpc"
-	stack := "tenant1-ue2-dev"
-
-	resultDefault, err := ProcessComponentInStack(component, stack, "", "")
-	require.NoError(t, err)
-
-	processTemplates := false
-	processYamlFunctions := false
-	resultDisabled, err := ProcessComponentInStack(component, stack, "", "", ProcessComponentInStackOptions{
-		ProcessTemplates:     &processTemplates,
-		ProcessYamlFunctions: &processYamlFunctions,
-	})
-	require.NoError(t, err)
-
-	// For configs without templates/YAML functions, vars should be identical
-	varsDefault, ok := resultDefault["vars"].(map[string]any)
-	require.True(t, ok)
-	varsDisabled, ok := resultDisabled["vars"].(map[string]any)
-	require.True(t, ok)
-
-	assert.Equal(t, varsDefault["tenant"], varsDisabled["tenant"])
-	assert.Equal(t, varsDefault["environment"], varsDisabled["environment"])
-	assert.Equal(t, varsDefault["stage"], varsDisabled["stage"])
-}
-
-func TestProcessComponentFromContextWithOptionsDisabled(t *testing.T) {
-	processTemplates := false
-	processYamlFunctions := false
+func TestProcessComponentFromContextWithProcessingDisabled(t *testing.T) {
+	// Uses stack-templates fixture (name_template: "{{ .vars.stage }}")
+	// Verifies that ProcessComponentFromContext also respects the functional options
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "stack-templates")
 
 	result, err := ProcessComponentFromContext(&ComponentFromContextParams{
-		Component:            "infra/vpc",
-		Tenant:               "tenant1",
-		Environment:          "ue2",
-		Stage:                "dev",
-		ProcessTemplates:     &processTemplates,
-		ProcessYamlFunctions: &processYamlFunctions,
-	})
+		Component:          "component-1",
+		Stage:              "nonprod",
+		AtmosCliConfigPath: atmosCliConfigPath,
+	},
+		WithProcessTemplates(false),
+		WithProcessYamlFunctions(false),
+	)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
 	vars, ok := result["vars"].(map[string]any)
 	require.True(t, ok, "result should contain 'vars' section")
-	assert.Equal(t, "tenant1", vars["tenant"])
-	assert.Equal(t, "ue2", vars["environment"])
-	assert.Equal(t, "dev", vars["stage"])
 
-	_, hasBackendType := result["backend_type"]
-	assert.True(t, hasBackendType, "result should contain 'backend_type'")
+	// With templates disabled, vars should contain raw Go template strings
+	assert.Equal(t, "{{ .settings.config.a }}", vars["foo"],
+		"ProcessComponentFromContext should respect WithProcessTemplates(false)")
 }
 
 func TestProcessComponentFromContextNoNameConfig(t *testing.T) {

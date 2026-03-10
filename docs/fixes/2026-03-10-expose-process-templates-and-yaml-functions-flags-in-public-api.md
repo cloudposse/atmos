@@ -58,10 +58,10 @@ The public API is the only entry point that lacks this control.
 
 After this fix, the API row becomes:
 
-| Entry Point                           | Templates      | YAML Functions | How to Disable                                            |
-|---------------------------------------|----------------|----------------|-----------------------------------------------------------|
-| **`ProcessComponentInStack` API**     | Default `true` | Default `true` | Pass `ProcessComponentInStackOptions` with `*bool` fields |
-| **`ProcessComponentFromContext` API** | Default `true` | Default `true` | Set `*bool` fields on `ComponentFromContextParams`        |
+| Entry Point                           | Templates      | YAML Functions | How to Disable                                                              |
+|---------------------------------------|----------------|----------------|-----------------------------------------------------------------------------|
+| **`ProcessComponentInStack` API**     | Default `true` | Default `true` | Pass `WithProcessTemplates(false)` and/or `WithProcessYamlFunctions(false)` |
+| **`ProcessComponentFromContext` API** | Default `true` | Default `true` | Pass `WithProcessTemplates(false)` and/or `WithProcessYamlFunctions(false)` |
 
 ## Impact on `terraform-provider-utils`
 
@@ -86,16 +86,43 @@ provider can pass `false` for both flags to avoid the crash entirely.
 
 ## Fix
 
-### New `ProcessComponentInStackOptions` struct
+### Functional options pattern
+
+The fix uses Go's functional options pattern to add optional processing controls to both
+public functions. This follows the repo's coding conventions and provides a clean, extensible
+API surface.
 
 ```go
-type ProcessComponentInStackOptions struct {
-    ProcessTemplates     *bool // Controls Go template resolution. Defaults to true if nil.
-    ProcessYamlFunctions *bool // Controls YAML function resolution. Defaults to true if nil.
+// processOptions holds the resolved processing options (unexported).
+type processOptions struct {
+    processTemplates     bool
+    processYamlFunctions bool
+}
+
+// ProcessOption is a functional option for ProcessComponentInStack and ProcessComponentFromContext.
+type ProcessOption func(*processOptions)
+
+// WithProcessTemplates controls whether Go templates are resolved during processing.
+// When false, template expressions like {{ .settings.config.a }} are preserved as raw strings.
+// Defaults to true when not specified.
+func WithProcessTemplates(enabled bool) ProcessOption {
+    return func(o *processOptions) {
+        o.processTemplates = enabled
+    }
+}
+
+// WithProcessYamlFunctions controls whether YAML functions (!terraform.output, !terraform.state,
+// !template, !store, etc.) are resolved during processing.
+// When false, YAML function tags are preserved as raw strings.
+// Defaults to true when not specified.
+func WithProcessYamlFunctions(enabled bool) ProcessOption {
+    return func(o *processOptions) {
+        o.processYamlFunctions = enabled
+    }
 }
 ```
 
-### `ProcessComponentInStack` — variadic options (backward compatible)
+### `ProcessComponentInStack` — variadic functional options (backward compatible)
 
 The function signature changes from 4 positional args to 4 positional args + variadic options.
 Existing callers that pass 4 args continue to compile without changes.
@@ -109,58 +136,61 @@ func ProcessComponentInStack(
     atmosBasePath string,
 ) (map[string]any, error)
 
-// After:
+// After (variadic functional options — backward compatible):
 func ProcessComponentInStack(
     component string,
     stack string,
     atmosCliConfigPath string,
     atmosBasePath string,
-    opts ...ProcessComponentInStackOptions,
+    opts ...ProcessOption,
 ) (map[string]any, error)
 ```
 
-### `ComponentFromContextParams` — new optional fields (backward compatible)
+### `ProcessComponentFromContext` — variadic functional options (backward compatible)
 
-Adding `*bool` fields to a struct is backward compatible — existing struct literals that don't
-set these fields get `nil`, which defaults to `true`.
+```go
+// Before:
+func ProcessComponentFromContext(params *ComponentFromContextParams) (map[string]any, error)
+
+// After (variadic functional options — backward compatible):
+func ProcessComponentFromContext(
+    params *ComponentFromContextParams,
+    opts ...ProcessOption,
+) (map[string]any, error)
+```
+
+### `ComponentFromContextParams` — unchanged
+
+The struct no longer needs `*bool` fields. Processing options are passed as variadic
+functional options to `ProcessComponentFromContext` instead.
 
 ```go
 type ComponentFromContextParams struct {
-    Component            string
-    Namespace            string
-    Tenant               string
-    Environment          string
-    Stage                string
-    AtmosCliConfigPath   string
-    AtmosBasePath        string
-    ProcessTemplates     *bool // Optional: defaults to true if nil
-    ProcessYamlFunctions *bool // Optional: defaults to true if nil
+    Component          string
+    Namespace          string
+    Tenant             string
+    Environment        string
+    Stage              string
+    AtmosCliConfigPath string
+    AtmosBasePath      string
 }
 ```
 
-### `processComponentInStackWithConfig` — uses `boolDefault` helper
+### `processComponentInStackWithConfig` — accepts resolved options
 
 ```go
-func boolDefault(p *bool, defaultVal bool) bool {
-    if p != nil {
-        return *p
-    }
-    return defaultVal
-}
-
 func processComponentInStackWithConfig(
     atmosConfig *schema.AtmosConfiguration,
     component string,
     stack string,
-    processTemplates *bool,
-    processYamlFunctions *bool,
+    opts *processOptions,
 ) (map[string]any, error) {
     return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
         AtmosConfig:          atmosConfig,
         Component:            component,
         Stack:                stack,
-        ProcessTemplates:     boolDefault(processTemplates, true),
-        ProcessYamlFunctions: boolDefault(processYamlFunctions, true),
+        ProcessTemplates:     opts.processTemplates,
+        ProcessYamlFunctions: opts.processYamlFunctions,
     })
 }
 ```
@@ -169,34 +199,69 @@ func processComponentInStackWithConfig(
 
 - **Existing callers of `ProcessComponentInStack`**: No changes needed. The variadic `opts`
   parameter is optional — calling with 4 args still compiles and defaults both flags to `true`.
-- **Existing callers of `ProcessComponentFromContext`**: No changes needed. Struct literals
-  that don't set `ProcessTemplates` or `ProcessYamlFunctions` get `nil` → defaults to `true`.
+- **Existing callers of `ProcessComponentFromContext`**: No changes needed. Calling with only
+  the params struct still compiles and defaults both flags to `true`.
 - **Atmos CLI**: Continues to work as before. The CLI's `--process-templates` and
   `--process-functions` flags are handled at a higher level and are unaffected.
 - **Tests**: All existing tests pass without modification.
 
 ## Tests Added
 
-| Test                                                      | What It Verifies                                                            |
-|-----------------------------------------------------------|-----------------------------------------------------------------------------|
-| `TestBoolDefault`                                         | `boolDefault` helper: `nil` returns default, non-nil returns pointed value  |
-| `TestProcessComponentInStackWithOptionsDisabled`          | Both flags `false` → result still contains vars, backend_type, backend      |
-| `TestProcessComponentInStackWithOptionsNilDefaultsToTrue` | Options struct with nil fields behaves like no options                      |
-| `TestProcessComponentInStackBackwardCompatNoOptions`      | Old 4-arg call (no options) still works                                     |
-| `TestProcessComponentInStackDisabledMatchesEnabled`       | For configs without templates/YAML functions, vars are identical either way |
-| `TestProcessComponentFromContextWithOptionsDisabled`      | Struct-based API with both flags disabled returns correct results           |
+| Test                                                    | What It Verifies                                                                                                                    |
+|---------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `TestProcessComponentInStackTemplatesDisabledOnly`      | `WithProcessTemplates(false)` preserves raw Go template strings (`{{ .settings.config.a }}`) while YAML functions are still enabled |
+| `TestProcessComponentInStackTemplatesEnabledOnly`       | `WithProcessTemplates(true)` resolves Go templates to values (`component-1-a`) while YAML functions are disabled                    |
+| `TestProcessComponentInStackYamlFunctionsDisabledOnly`  | `WithProcessYamlFunctions(false)` preserves raw YAML function tags (`!template hello-world`) while templates are still enabled      |
+| `TestProcessComponentInStackYamlFunctionsEnabledOnly`   | `WithProcessYamlFunctions(true)` resolves YAML function tags (JSON-decoded values) while templates are disabled                     |
+| `TestProcessComponentInStackBackwardCompatNoOptions`    | Old 4-arg call (no options) still works and returns correct vars                                                                    |
+| `TestProcessComponentFromContextWithProcessingDisabled` | `ProcessComponentFromContext` respects `WithProcessTemplates(false)` functional option                                              |
+
+### Test fixtures used
+
+- **`stack-templates`** — Contains Go template expressions in component vars (`{{ .settings.config.a }}`).
+  Used to verify that `WithProcessTemplates(false)` preserves raw templates and `WithProcessTemplates(true)` resolves them.
+- **`atmos-template-yaml-function`** — Contains `!template` YAML function tags in component vars.
+  Used to verify that `WithProcessYamlFunctions(false)` preserves raw tags and `WithProcessYamlFunctions(true)` resolves them.
+
+Each flag is tested independently against its own fixture, proving the two flags are wired
+independently and do not interfere with each other.
 
 ## Files Changed
 
-- `pkg/describe/component_processor.go` — added `ProcessComponentInStackOptions` struct,
-  variadic options on `ProcessComponentInStack`, `*bool` fields on `ComponentFromContextParams`,
-  `boolDefault` helper, updated `processComponentInStackWithConfig`
-- `pkg/describe/component_processor_test.go` — added 6 new tests
+- `pkg/describe/component_processor.go` — added `processOptions` struct, `ProcessOption` type,
+  `WithProcessTemplates` and `WithProcessYamlFunctions` functional option constructors,
+  `defaultProcessOptions` and `applyProcessOptions` helpers, variadic options on both
+  `ProcessComponentInStack` and `ProcessComponentFromContext`, updated `processComponentInStackWithConfig`
+- `pkg/describe/component_processor_test.go` — added 6 new tests verifying each flag independently
+  with real fixtures
 
 ## Consumer Changes (separate PR)
 
 The `terraform-provider-utils` provider will be updated in a separate PR to:
 
 1. Update `go.mod` to the Atmos version containing this fix
-2. Pass `ProcessTemplates: false` and `ProcessYamlFunctions: false` in both
+2. Pass `WithProcessTemplates(false)` and `WithProcessYamlFunctions(false)` in both
    `ProcessComponentInStack` and `ProcessComponentFromContext` call sites
+
+```go
+// Example provider usage:
+result, err = p.ProcessComponentInStack(
+    component, stack, atmosCliConfigPath, atmosBasePath,
+    p.WithProcessTemplates(false),
+    p.WithProcessYamlFunctions(false),
+)
+
+result, err = p.ProcessComponentFromContext(
+    &p.ComponentFromContextParams{
+        Component:          component,
+        Namespace:          namespace,
+        Tenant:             tenant,
+        Environment:        environment,
+        Stage:              stage,
+        AtmosCliConfigPath: atmosCliConfigPath,
+        AtmosBasePath:      atmosBasePath,
+    },
+    p.WithProcessTemplates(false),
+    p.WithProcessYamlFunctions(false),
+)
+```
