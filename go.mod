@@ -42,6 +42,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.6
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.1
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.55.3
+	github.com/aws/aws-sdk-go-v2/service/eks v1.80.2
 	github.com/aws/aws-sdk-go-v2/service/organizations v1.50.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.4
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.8

@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -199,15 +200,24 @@ func BuildClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName strin
 		info.Region,
 	}
 	if identityName != "" {
-		execArgs = append(execArgs, "--identity", identityName)
+		execArgs = append(execArgs, "--identity="+identityName)
 	}
 
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = contextName
 
+	// The EKS API returns CertificateAuthority.Data as base64-encoded PEM.
+	// clientcmdapi.Cluster.CertificateAuthorityData expects raw PEM bytes
+	// (client-go base64-encodes them when writing the YAML).
+	caData, err := base64.StdEncoding.DecodeString(info.CertificateAuthorityData)
+	if err != nil {
+		// If decoding fails, assume the data is already raw PEM.
+		caData = []byte(info.CertificateAuthorityData)
+	}
+
 	config.Clusters[info.ARN] = &clientcmdapi.Cluster{
 		Server:                   info.Endpoint,
-		CertificateAuthorityData: []byte(info.CertificateAuthorityData),
+		CertificateAuthorityData: caData,
 	}
 
 	config.Contexts[contextName] = &clientcmdapi.Context{

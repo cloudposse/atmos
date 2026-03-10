@@ -52,6 +52,20 @@ func TestComposeEnvironmentVariables_KubeconfigEmptyBase(t *testing.T) {
 	assert.Equal(t, "/path/a", result["KUBECONFIG"])
 }
 
+func TestComposeEnvironmentVariables_KubeConfigPathAppend(t *testing.T) {
+	base := map[string]string{"KUBE_CONFIG_PATH": "/path/a"}
+	additions := map[string]string{"KUBE_CONFIG_PATH": "/path/b"}
+	result := composeEnvironmentVariables(base, additions)
+	assert.Equal(t, "/path/a:/path/b", result["KUBE_CONFIG_PATH"])
+}
+
+func TestComposeEnvironmentVariables_KubeConfigPathDedup(t *testing.T) {
+	base := map[string]string{"KUBE_CONFIG_PATH": "/path/a"}
+	additions := map[string]string{"KUBE_CONFIG_PATH": "/path/a"}
+	result := composeEnvironmentVariables(base, additions)
+	assert.Equal(t, "/path/a", result["KUBE_CONFIG_PATH"])
+}
+
 func TestAppendPathList_EmptyExisting(t *testing.T) {
 	result := appendPathList("", "/new/path")
 	assert.Equal(t, "/new/path", result)

@@ -279,9 +279,12 @@ func TestEKSIntegration_Environment_DefaultPath(t *testing.T) {
 	env, err := integration.Environment()
 	require.NoError(t, err)
 	require.Contains(t, env, "KUBECONFIG")
+	require.Contains(t, env, "KUBE_CONFIG_PATH")
 	// Default path should contain "atmos/kube/config".
 	assert.Contains(t, env["KUBECONFIG"], "kube")
 	assert.Contains(t, env["KUBECONFIG"], "config")
+	// Both variables should point to the same path.
+	assert.Equal(t, env["KUBECONFIG"], env["KUBE_CONFIG_PATH"])
 }
 
 func TestEKSIntegration_Environment_CustomPath(t *testing.T) {
@@ -300,7 +303,9 @@ func TestEKSIntegration_Environment_CustomPath(t *testing.T) {
 	env, err := integration.Environment()
 	require.NoError(t, err)
 	require.Contains(t, env, "KUBECONFIG")
+	require.Contains(t, env, "KUBE_CONFIG_PATH")
 	assert.Equal(t, "/tmp/custom/kubeconfig", env["KUBECONFIG"])
+	assert.Equal(t, "/tmp/custom/kubeconfig", env["KUBE_CONFIG_PATH"])
 }
 
 func TestEKSIntegration_Cleanup_NoAlias(t *testing.T) {

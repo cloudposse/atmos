@@ -189,8 +189,11 @@ func (e *EKSIntegration) Environment() (map[string]string, error) {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
+	path := mgr.GetPath()
+
 	return map[string]string{
-		"KUBECONFIG": mgr.GetPath(),
+		"KUBECONFIG":       path,
+		"KUBE_CONFIG_PATH": path,
 	}, nil
 }
 

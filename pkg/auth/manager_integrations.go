@@ -18,7 +18,7 @@ import (
 func (m *manager) triggerIntegrations(ctx context.Context, identityName string, creds types.ICredentials) {
 	defer perf.Track(nil, "auth.Manager.triggerIntegrations")()
 
-	// Check if integrations should be skipped (when called from ExecuteIntegration).
+	// Check if integrations should be skipped (when called from ExecuteIntegration or eks-token).
 	if ctx.Value(skipIntegrationsKey) != nil {
 		log.Debug("Skipping auto-triggered integrations (explicit execution)", logKeyIdentity, identityName)
 		return
