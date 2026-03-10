@@ -11,6 +11,16 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+func TestBoolDefault(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	assert.True(t, boolDefault(nil, true), "nil should return default true")
+	assert.False(t, boolDefault(nil, false), "nil should return default false")
+	assert.True(t, boolDefault(&trueVal, false), "pointer to true should return true regardless of default")
+	assert.False(t, boolDefault(&falseVal, true), "pointer to false should return false regardless of default")
+}
+
 func logOnFailure(t *testing.T, result map[string]any) {
 	t.Helper()
 	resultYaml, _ := u.ConvertToYAML(result)
@@ -292,6 +302,120 @@ func TestProcessComponentFromContextMatchesStackWithNameTemplate(t *testing.T) {
 
 	assert.Equal(t, resultByStackYaml, resultByContextYaml,
 		"ProcessComponentInStack and ProcessComponentFromContext should return the same result with name_template")
+}
+
+// Tests for ProcessTemplates and ProcessYamlFunctions options.
+// These verify that the provider can disable template and YAML function resolution
+// to avoid spawning child terraform processes inside the provider plugin.
+
+func TestProcessComponentInStackWithOptionsDisabled(t *testing.T) {
+	component := "infra/vpc"
+	stack := "tenant1-ue2-dev"
+
+	processTemplates := false
+	processYamlFunctions := false
+
+	result, err := ProcessComponentInStack(component, stack, "", "", ProcessComponentInStackOptions{
+		ProcessTemplates:     &processTemplates,
+		ProcessYamlFunctions: &processYamlFunctions,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Result should still contain vars, backend, and workspace — these don't depend
+	// on template or YAML function resolution
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "result should contain 'vars' section")
+	assert.Equal(t, "tenant1", vars["tenant"])
+	assert.Equal(t, "ue2", vars["environment"])
+	assert.Equal(t, "dev", vars["stage"])
+
+	_, hasBackendType := result["backend_type"]
+	assert.True(t, hasBackendType, "result should contain 'backend_type'")
+
+	_, hasBackend := result["backend"]
+	assert.True(t, hasBackend, "result should contain 'backend'")
+}
+
+func TestProcessComponentInStackWithOptionsNilDefaultsToTrue(t *testing.T) {
+	component := "infra/vpc"
+	stack := "tenant1-ue2-dev"
+
+	// Passing options with nil pointers should behave the same as not passing options
+	result, err := ProcessComponentInStack(component, stack, "", "", ProcessComponentInStackOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "result should contain 'vars' section")
+	assert.Equal(t, "tenant1", vars["tenant"])
+}
+
+func TestProcessComponentInStackBackwardCompatNoOptions(t *testing.T) {
+	// Verify that calling without any options (the old 4-arg signature) still works
+	component := "infra/vpc"
+	stack := "tenant1-ue2-dev"
+
+	result, err := ProcessComponentInStack(component, stack, "", "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "result should contain 'vars' section")
+	assert.Equal(t, "tenant1", vars["tenant"])
+}
+
+func TestProcessComponentInStackDisabledMatchesEnabled(t *testing.T) {
+	// For simple configs without templates or YAML functions, the results should
+	// be the same regardless of processing flags
+	component := "infra/vpc"
+	stack := "tenant1-ue2-dev"
+
+	resultDefault, err := ProcessComponentInStack(component, stack, "", "")
+	require.NoError(t, err)
+
+	processTemplates := false
+	processYamlFunctions := false
+	resultDisabled, err := ProcessComponentInStack(component, stack, "", "", ProcessComponentInStackOptions{
+		ProcessTemplates:     &processTemplates,
+		ProcessYamlFunctions: &processYamlFunctions,
+	})
+	require.NoError(t, err)
+
+	// For configs without templates/YAML functions, vars should be identical
+	varsDefault, ok := resultDefault["vars"].(map[string]any)
+	require.True(t, ok)
+	varsDisabled, ok := resultDisabled["vars"].(map[string]any)
+	require.True(t, ok)
+
+	assert.Equal(t, varsDefault["tenant"], varsDisabled["tenant"])
+	assert.Equal(t, varsDefault["environment"], varsDisabled["environment"])
+	assert.Equal(t, varsDefault["stage"], varsDisabled["stage"])
+}
+
+func TestProcessComponentFromContextWithOptionsDisabled(t *testing.T) {
+	processTemplates := false
+	processYamlFunctions := false
+
+	result, err := ProcessComponentFromContext(&ComponentFromContextParams{
+		Component:            "infra/vpc",
+		Tenant:               "tenant1",
+		Environment:          "ue2",
+		Stage:                "dev",
+		ProcessTemplates:     &processTemplates,
+		ProcessYamlFunctions: &processYamlFunctions,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "result should contain 'vars' section")
+	assert.Equal(t, "tenant1", vars["tenant"])
+	assert.Equal(t, "ue2", vars["environment"])
+	assert.Equal(t, "dev", vars["stage"])
+
+	_, hasBackendType := result["backend_type"]
+	assert.True(t, hasBackendType, "result should contain 'backend_type'")
 }
 
 func TestProcessComponentFromContextNoNameConfig(t *testing.T) {
