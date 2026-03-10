@@ -401,7 +401,7 @@ opt-in via the `--ai` flag — commands work without any AI provider configured.
 |------------------|-----------------------------------------------------|-----------------------|
 | **Anthropic**    | Best overall quality (Claude direct API)             | Anthropic servers     |
 | **OpenAI**       | Organizations standardized on GPT models             | OpenAI servers        |
-| **Google Gemini**| Large context windows, cost-effective                | Google Cloud          |
+| **Google Gemini** | Large context windows, cost-effective               | Google Cloud          |
 | **Azure OpenAI** | Enterprise Azure customers                           | Your Azure tenant     |
 | **AWS Bedrock**  | Enterprise/compliance — data stays in-account        | Your AWS account      |
 | **Ollama**       | Air-gapped/offline, no external API calls            | Your infrastructure   |
@@ -963,7 +963,7 @@ aws:
 All AI tools use error builder pattern (`errUtils.Build(sentinel).WithHint().WithExitCode().Err()`)
 for error handling and reference `aws.security.enabled` config.
 
-### Phase 4: Polish — PARTIALLY DONE
+### Phase 4: Polish — DONE
 
 13. **JSON/YAML/CSV output** — ✅ All four formats implemented in `report_renderer.go`
 14. **Caching** — ✅ Cache infrastructure implemented in `pkg/aws/security/cache.go`
