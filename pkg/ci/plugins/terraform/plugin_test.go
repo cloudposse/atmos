@@ -134,6 +134,48 @@ func TestPlugin_BuildTemplateContext_ClearsOutputForNoChanges(t *testing.T) {
 	assert.Empty(t, ctx.Output, "Output should be empty for no-changes plan")
 }
 
+func TestPlugin_BuildTemplateContext_ApplyKeepsOutputWithNoChanges(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev-us-east-1",
+	}
+
+	// Apply with no changes should still show the apply result.
+	output := "No changes. Your infrastructure matches the configuration.\n\nApply complete! Resources: 0 added, 0 changed, 0 destroyed."
+
+	result, err := p.buildTemplateContext(info, nil, output, "apply")
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+
+	assert.Contains(t, ctx.Output, "Apply complete!")
+	assert.NotEmpty(t, ctx.Output, "Apply output should not be empty even with no changes")
+}
+
+func TestPlugin_BuildTemplateContext_ApplyStripsNoise(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev-us-east-1",
+	}
+
+	// Apply output with noise before the result.
+	output := "aws_instance.web: Creating...\naws_instance.web: Creation complete after 35s [id=i-12345678]\n\nApply complete! Resources: 1 added, 0 changed, 0 destroyed.\n\nOutputs:\n\ninstance_id = \"i-12345678\""
+
+	result, err := p.buildTemplateContext(info, nil, output, "apply")
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+
+	assert.True(t, len(ctx.Output) > 0)
+	assert.Contains(t, ctx.Output, "Apply complete!")
+	assert.NotContains(t, ctx.Output, "Creating...")
+	assert.Contains(t, ctx.Output, "instance_id")
+}
+
 func TestPlugin_BuildTemplateContext_PreservesOutputWithoutMarkers(t *testing.T) {
 	p := &Plugin{}
 	info := &schema.ConfigAndStacksInfo{

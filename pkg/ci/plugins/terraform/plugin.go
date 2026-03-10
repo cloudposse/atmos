@@ -92,7 +92,7 @@ func (p *Plugin) buildTemplateContext(
 		Command:       command,
 		CI:            ciCtx,
 		Result:        result,
-		Output:        cleanPlanOutput(output),
+		Output:        cleanOutput(output, command),
 		Custom:        make(map[string]any),
 	}
 
@@ -175,6 +175,16 @@ var planOutputMarkers = []string{
 // noChangesMarker identifies output where terraform found no differences.
 const noChangesMarker = "No changes."
 
+// cleanOutput strips noisy preamble from terraform output based on command type.
+// For plan: strips data source reads and state refreshes, returns empty for no-changes.
+// For apply: returns full output (the apply result is always meaningful).
+func cleanOutput(output, command string) string {
+	if command == "apply" {
+		return cleanApplyOutput(output)
+	}
+	return cleanPlanOutput(output)
+}
+
 // cleanPlanOutput strips noisy preamble (data source reads, state refreshes)
 // from terraform plan output, keeping only the plan itself.
 // Returns empty string for no-changes output (nothing useful to display).
@@ -189,5 +199,18 @@ func cleanPlanOutput(output string) string {
 			return output[idx+len(marker):]
 		}
 	}
+	return output
+}
+
+// applyOutputMarker identifies where the meaningful apply output starts.
+const applyOutputMarker = "Apply complete!"
+
+// cleanApplyOutput strips noisy preamble from terraform apply output,
+// keeping the apply result summary and outputs.
+func cleanApplyOutput(output string) string {
+	if idx := strings.Index(output, applyOutputMarker); idx >= 0 {
+		return output[idx:]
+	}
+	// If no marker found, return full output (might be error output).
 	return output
 }
