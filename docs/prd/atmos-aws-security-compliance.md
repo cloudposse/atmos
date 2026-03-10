@@ -15,17 +15,16 @@ security and compliance services — directly from the Atmos CLI.
 It connects to AWS Security Hub, AWS Config, Amazon Inspector, Amazon GuardDuty, Amazon Macie, and
 IAM Access Analyzer via Atmos Auth, maps findings back to Atmos components and stacks, and generates
 actionable remediation reports. AI analysis is **opt-in** via the `--ai` flag — the commands work
-without any AI provider configured.
+without an AI provider configured.
 
 **AI is optional.** By default, `atmos aws security` and `atmos aws compliance` work purely with AWS
 APIs — no AI provider needed. When the `--ai` flag is passed, AI-powered analysis adds root cause
 analysis, remediation guidance, and deploy commands using **any AI provider that Atmos AI supports**.
 
 **Supported AI providers (for `--ai`):** Anthropic (Claude), OpenAI (GPT), Google Gemini, Azure OpenAI,
-AWS Bedrock, Ollama (local/on-premise), and Grok (xAI). See the
-[AWS Bedrock AI Provider](aws-bedrock-ai-provider.md) reference for enterprise data residency setup.
+AWS Bedrock, Ollama (local/on-premise), and Grok (xAI).
 
-**Cloud-specific namespace.** These commands live under `atmos aws` (not `atmos ai`) because they are
+**Cloud-specific namespace.** These commands live under `atmos aws` because they are
 AWS-specific. This design enables future `atmos azure security` and `atmos gcp security` commands
 for other cloud providers.
 
@@ -74,7 +73,7 @@ notifications, or compliance reporting tools.
 6. **Authenticate** — Use Atmos Auth for AWS access (Security Hub, Config, Inspector, GuardDuty,
    Macie, Access Analyzer) and use the configured AI provider's credentials for AI analysis
 
-### Non-Goals (v1)
+### Non-Goals (future enhancements)
 
 - Auto-applying fixes (user reviews and applies manually)
 - PR creation (future enhancement)
@@ -88,17 +87,17 @@ notifications, or compliance reporting tools.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    atmos aws security <stack>                        │
+│                    atmos aws security <stack>                       │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐   │
-│  │  Atmos    │    │  AWS      │    │  AWS      │    │  Atmos    │   │
-│  │  Auth     │───▶│  Security │───▶│    AI     │───▶│  Atmos    │   │
-│  │           │    │  Services │    │ Provider  │    │  Report   │   │
+│  │  Atmos    │    │  AWS      │    │  AI       │    │  Atmos    │   │
+│  │  Auth     │───▶│  Security │───▶│  Provider │───▶│  Report   │   │
+│  │           │    │  Services │    │           │    │           │   │
 │  └───────────┘    └───────────┘    └───────────┘    └───────────┘   │
 │       │                │                │                │          │
 │       ▼                ▼                ▼                ▼          │
-│  AWS Creds        Findings         Analysis        Markdown         │
+│  AWS Creds        Findings         Analysis      Markdown/JSON/YAML │
 │  (SSO/Role)       (JSON)           (AI)            (CLI Output)     │
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
@@ -117,8 +116,9 @@ notifications, or compliance reporting tools.
 1. **Authenticate** — Atmos Auth obtains AWS credentials (SSO, assume-role, etc.)
 2. **Fetch Findings** — Query Security Hub / Config / Inspector / GuardDuty for the target stack's resources
 3. **Map to Components** — Use resource tags (`atmos:stack`, `atmos:component`) to trace findings back to IaC
-4. **AI Analysis** — Send finding details + component source + stack config to the configured AI provider for root cause analysis
-5. **Generate Report** — Render findings with remediation steps as Markdown in the terminal
+4. **AI Analysis** — Send finding details + component source + stack config to the configured AI provider for root cause
+   analysis
+5. **Generate Report** — Render findings with remediation steps as Markdown/JSON/YAML in the terminal
 
 ---
 
@@ -397,15 +397,15 @@ auth:
 Atmos AI Security & Compliance works with **all AI providers supported by Atmos AI**. AI is
 opt-in via the `--ai` flag — commands work without any AI provider configured.
 
-| Provider         | Best For                                            | Data Residency        |
-|------------------|-----------------------------------------------------|-----------------------|
-| **Anthropic**    | Best overall quality (Claude direct API)             | Anthropic servers     |
-| **OpenAI**       | Organizations standardized on GPT models             | OpenAI servers        |
-| **Google Gemini** | Large context windows, cost-effective               | Google Cloud          |
-| **Azure OpenAI** | Enterprise Azure customers                           | Your Azure tenant     |
-| **AWS Bedrock**  | Enterprise/compliance — data stays in-account        | Your AWS account      |
-| **Ollama**       | Air-gapped/offline, no external API calls            | Your infrastructure   |
-| **Grok (xAI)**   | Alternative provider                                 | xAI servers           |
+| Provider          | Best For                                      | Data Residency      |
+|-------------------|-----------------------------------------------|---------------------|
+| **Anthropic**     | Best overall quality (Claude direct API)      | Anthropic servers   |
+| **OpenAI**        | Organizations standardized on GPT models      | OpenAI servers      |
+| **Google Gemini** | Large context windows, cost-effective         | Google Cloud        |
+| **Azure OpenAI**  | Enterprise Azure customers                    | Your Azure tenant   |
+| **AWS Bedrock**   | Enterprise/compliance — data stays in-account | Your AWS account    |
+| **Ollama**        | Air-gapped/offline, no external API calls     | Your infrastructure |
+| **Grok (xAI)**    | Alternative provider                          | xAI servers         |
 
 For enterprise data residency requirements, see the
 [AWS Bedrock AI Provider](aws-bedrock-ai-provider.md) reference (setup, Terraform component,
@@ -968,22 +968,22 @@ for error handling and reference `aws.security.enabled` config.
 13. **JSON/YAML/CSV output** — ✅ All four formats implemented in `report_renderer.go`
 14. **Caching** — ✅ Cache infrastructure implemented in `pkg/aws/security/cache.go`
 15. **Documentation** — ✅ Docusaurus docs created:
-    - `website/docs/cli/commands/aws/security.mdx` — CLI command reference
-    - `website/docs/cli/commands/aws/compliance.mdx` — CLI command reference
-    - `website/docs/cli/configuration/aws/index.mdx` — AWS config overview
-    - `website/docs/cli/configuration/aws/security.mdx` — Security config reference
-    - `website/docs/cli/global-flags.mdx` — Updated with `--ai` global flag
-    - `cmd/aws/markdown/atmos_aws_security.md` — Embedded help text
-    - `cmd/aws/markdown/atmos_aws_compliance.md` — Embedded help text
+  - `website/docs/cli/commands/aws/security.mdx` — CLI command reference
+  - `website/docs/cli/commands/aws/compliance.mdx` — CLI command reference
+  - `website/docs/cli/configuration/aws/index.mdx` — AWS config overview
+  - `website/docs/cli/configuration/aws/security.mdx` — Security config reference
+  - `website/docs/cli/global-flags.mdx` — Updated with `--ai` global flag
+  - `cmd/aws/markdown/atmos_aws_security.md` — Embedded help text
+  - `cmd/aws/markdown/atmos_aws_compliance.md` — Embedded help text
 16. **Tests** — ✅ Unit tests with mocks:
-    - `cmd/aws/security_test.go` — 37 tests (parse functions, report building, subcommand registration)
-    - `cmd/aws/compliance_test.go` — 9 tests (framework validation, subcommand registration)
-    - `pkg/aws/security/finding_fetcher_test.go` — Finding fetcher tests with mocked AWS clients
-    - `pkg/aws/security/component_mapper_test.go` — Mapper tests
-    - `pkg/aws/security/report_renderer_test.go` — Renderer tests
-    - `pkg/aws/security/analyzer_test.go` — AI analyzer tests
-    - `pkg/aws/security/cache_test.go` — Cache tests
-    - Coverage: `pkg/aws/security/` at 91.8%, `cmd/aws/` at 33.5%
+  - `cmd/aws/security_test.go` — 37 tests (parse functions, report building, subcommand registration)
+  - `cmd/aws/compliance_test.go` — 9 tests (framework validation, subcommand registration)
+  - `pkg/aws/security/finding_fetcher_test.go` — Finding fetcher tests with mocked AWS clients
+  - `pkg/aws/security/component_mapper_test.go` — Mapper tests
+  - `pkg/aws/security/report_renderer_test.go` — Renderer tests
+  - `pkg/aws/security/analyzer_test.go` — AI analyzer tests
+  - `pkg/aws/security/cache_test.go` — Cache tests
+  - Coverage: `pkg/aws/security/` at 91.8%, `cmd/aws/` at 33.5%
 
 ### Phase 5: Global AI Flag — DONE
 
@@ -1019,17 +1019,17 @@ pattern per Atmos conventions.
 
 The following sentinel errors are defined in `errors/errors.go` (lines 946-955):
 
-| Sentinel Error                    | Message                               | When Used                                      |
-|-----------------------------------|---------------------------------------|-------------------------------------------------|
-| `ErrAISecurityNotEnabled`         | `security feature not enabled`        | `aws.security.enabled` is false in config       |
-| `ErrAISecurityNoFindings`         | `no matching findings returned`       | AWS APIs return zero findings for the query      |
-| `ErrAISecurityFetchFailed`        | `failed to fetch from AWS`            | AWS Security Hub/Config/Inspector API errors     |
-| `ErrAISecurityMappingFailed`      | `failed to map finding to component`  | Component mapping pipeline fails                 |
-| `ErrAISecurityInvalidSeverity`    | `invalid severity filter value`       | User passes unknown severity (not CRITICAL/HIGH/MEDIUM/LOW) |
-| `ErrAISecurityInvalidSource`      | `invalid finding source value`        | User passes unknown source (not security-hub/config/inspector/guardduty) |
-| `ErrAISecurityInvalidFramework`   | `invalid compliance framework value`  | User passes unknown framework                    |
-| `ErrAISecurityInvalidFormat`      | `invalid output format value`         | User passes unknown format (not markdown/json/yaml/csv) |
-| `ErrAISecurityAnalysisFailed`     | `AI analysis failed`                  | AI provider returns an error during analysis     |
+| Sentinel Error                  | Message                              | When Used                                                                |
+|---------------------------------|--------------------------------------|--------------------------------------------------------------------------|
+| `ErrAISecurityNotEnabled`       | `security feature not enabled`       | `aws.security.enabled` is false in config                                |
+| `ErrAISecurityNoFindings`       | `no matching findings returned`      | AWS APIs return zero findings for the query                              |
+| `ErrAISecurityFetchFailed`      | `failed to fetch from AWS`           | AWS Security Hub/Config/Inspector API errors                             |
+| `ErrAISecurityMappingFailed`    | `failed to map finding to component` | Component mapping pipeline fails                                         |
+| `ErrAISecurityInvalidSeverity`  | `invalid severity filter value`      | User passes unknown severity (not CRITICAL/HIGH/MEDIUM/LOW)              |
+| `ErrAISecurityInvalidSource`    | `invalid finding source value`       | User passes unknown source (not security-hub/config/inspector/guardduty) |
+| `ErrAISecurityInvalidFramework` | `invalid compliance framework value` | User passes unknown framework                                            |
+| `ErrAISecurityInvalidFormat`    | `invalid output format value`        | User passes unknown format (not markdown/json/yaml/csv)                  |
+| `ErrAISecurityAnalysisFailed`   | `AI analysis failed`                 | AI provider returns an error during analysis                             |
 
 ### Error Wrapping Pattern
 
@@ -1047,7 +1047,7 @@ This enables callers to check error types with `errors.Is()`:
 
 ```go
 if errors.Is(err, errUtils.ErrAISecurityNotEnabled) {
-    // Feature is disabled — show configuration hint.
+// Feature is disabled — show configuration hint.
 }
 ```
 
@@ -1057,9 +1057,9 @@ AI tools in `pkg/ai/tools/atmos/` use the error builder pattern for user-facing 
 
 ```go
 return errUtils.Build(errUtils.ErrAISecurityNotEnabled).
-    WithHint("Enable AWS security in atmos.yaml: aws.security.enabled: true").
-    WithExitCode(1).
-    Err()
+WithHint("Enable AWS security in atmos.yaml: aws.security.enabled: true").
+WithExitCode(1).
+Err()
 ```
 
 ---
@@ -1070,14 +1070,14 @@ return errUtils.Build(errUtils.ErrAISecurityNotEnabled).
 
 All AWS SDK interactions use interfaces defined in `pkg/aws/security/` for testability:
 
-| Interface          | File                    | Purpose                                    |
-|--------------------|-------------------------|--------------------------------------------|
-| `SecurityHubAPI`   | `aws_clients.go`        | Security Hub API operations (GetFindings, etc.) |
-| `TaggingAPI`       | `aws_clients.go`        | Resource Groups Tagging API (tag-based mapping) |
-| `FindingFetcher`   | `finding_fetcher.go`    | High-level findings retrieval              |
-| `ComponentMapper`  | `component_mapper.go`   | Resource-to-component mapping              |
-| `FindingAnalyzer`  | `analyzer.go`           | AI-powered analysis                        |
-| `ReportRenderer`   | `report_renderer.go`    | Report formatting (Markdown/JSON/YAML/CSV) |
+| Interface         | File                  | Purpose                                         |
+|-------------------|-----------------------|-------------------------------------------------|
+| `SecurityHubAPI`  | `aws_clients.go`      | Security Hub API operations (GetFindings, etc.) |
+| `TaggingAPI`      | `aws_clients.go`      | Resource Groups Tagging API (tag-based mapping) |
+| `FindingFetcher`  | `finding_fetcher.go`  | High-level findings retrieval                   |
+| `ComponentMapper` | `component_mapper.go` | Resource-to-component mapping                   |
+| `FindingAnalyzer` | `analyzer.go`         | AI-powered analysis                             |
+| `ReportRenderer`  | `report_renderer.go`  | Report formatting (Markdown/JSON/YAML/CSV)      |
 
 Mock generation uses `go.uber.org/mock/mockgen` with `//go:generate` directives:
 
@@ -1087,15 +1087,15 @@ Mock generation uses `go.uber.org/mock/mockgen` with `//go:generate` directives:
 
 ### Test Files and Coverage
 
-| Test File                            | Tests | Coverage | Notes                                    |
-|--------------------------------------|-------|----------|------------------------------------------|
-| `pkg/aws/security/finding_fetcher_test.go`  | Yes   | ~92%     | Mocked AWS SDK clients                  |
-| `pkg/aws/security/component_mapper_test.go` | Yes   | ~90%     | Tag-based and heuristic mapping paths   |
-| `pkg/aws/security/report_renderer_test.go`  | Yes   | ~95%     | All four output formats                 |
-| `pkg/aws/security/analyzer_test.go`         | Yes   | ~88%     | Manual mock `mockAIClient` for AI provider |
-| `pkg/aws/security/cache_test.go`            | Yes   | ~90%     | Cache TTL, invalidation, concurrency    |
+| Test File                                   | Tests | Coverage | Notes                                                     |
+|---------------------------------------------|-------|----------|-----------------------------------------------------------|
+| `pkg/aws/security/finding_fetcher_test.go`  | Yes   | ~92%     | Mocked AWS SDK clients                                    |
+| `pkg/aws/security/component_mapper_test.go` | Yes   | ~90%     | Tag-based and heuristic mapping paths                     |
+| `pkg/aws/security/report_renderer_test.go`  | Yes   | ~95%     | All four output formats                                   |
+| `pkg/aws/security/analyzer_test.go`         | Yes   | ~88%     | Manual mock `mockAIClient` for AI provider                |
+| `pkg/aws/security/cache_test.go`            | Yes   | ~90%     | Cache TTL, invalidation, concurrency                      |
 | `cmd/aws/security_test.go`                  | 37    | ~34%     | Parse functions, report building, subcommand registration |
-| `cmd/aws/compliance_test.go`                | 9     | ~34%     | Framework validation, subcommand registration |
+| `cmd/aws/compliance_test.go`                | 9     | ~34%     | Framework validation, subcommand registration             |
 
 **Overall coverage:** `pkg/aws/security/` at 91.8%, `cmd/aws/` at 33.5%.
 
@@ -1339,7 +1339,8 @@ multiple sources:
 
 ## Dependencies
 
-- **Atmos AI** — Provider system (Anthropic, OpenAI, Gemini, Azure OpenAI, Bedrock, Ollama, Grok), tool registry, Markdown rendering
+- **Atmos AI** — Provider system (Anthropic, OpenAI, Gemini, Azure OpenAI, Bedrock, Ollama, Grok), tool registry,
+  Markdown rendering
 - **Atmos Auth** — AWS credential management (SSO, assume-role)
 - **AWS Security Hub** — Central finding aggregation (primary source)
 - **AWS Config** — Resource compliance evaluations
