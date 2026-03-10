@@ -74,7 +74,7 @@ func TestIdentityFlag(t *testing.T) {
 		Description: "Identity to use",
 		Required:    false,
 		NoOptDefVal: cfg.IdentityFlagSelectValue,
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		EnvVars:     []string{"ATMOS_IDENTITY"},
 	}
 
 	assert.Equal(t, "identity", flag.GetName())
@@ -82,5 +82,5 @@ func TestIdentityFlag(t *testing.T) {
 	assert.Equal(t, "", flag.GetDefault())
 	assert.False(t, flag.IsRequired())
 	assert.Equal(t, "__SELECT__", flag.GetNoOptDefVal())
-	assert.Equal(t, []string{"ATMOS_IDENTITY", "IDENTITY"}, flag.GetEnvVars())
+	assert.Equal(t, []string{"ATMOS_IDENTITY"}, flag.GetEnvVars())
 }

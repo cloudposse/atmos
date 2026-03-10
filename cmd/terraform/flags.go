@@ -25,7 +25,7 @@ func registerIdentityFlags(registry *flags.FlagRegistry) {
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Specify the identity to authenticate to before running Terraform commands. Use without value to interactively select.",
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		EnvVars:     []string{"ATMOS_IDENTITY"},
 		NoOptDefVal: "__SELECT__",
 	})
 }

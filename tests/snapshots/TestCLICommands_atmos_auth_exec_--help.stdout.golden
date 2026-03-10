@@ -1,20 +1,25 @@
 
 👽 test linux/amd64
 
+[EXPERIMENTAL]
+
 Execute a command with the authenticated identity's environment variables set.
-Use -- to separate Atmos flags from the command's native arguments.
+Use -- to separate Atmos flags from the command and its arguments.
 
 USAGE
 
-                               
-    $ atmos auth exec [flags]  
-                               
+                                                      
+    $ atmos auth exec -- <command> [args...] [flags]  
+                                                      
 
 EXAMPLES
 
                                                               
     # Run terraform with the authenticated identity           
       atmos auth exec -- terraform plan -var-file=env.tfvars  
+                                                              
+      # Run aws CLI with a specific identity                  
+      atmos auth exec --identity prod -- aws s3 ls            
                                                               
 
 FLAGS
