@@ -48,6 +48,7 @@ type samlProvider struct {
 	region string
 	// RoleToAssumeFromAssertion is set by PreAuthenticate based on the next identity in the chain.
 	RoleToAssumeFromAssertion string
+	realm                     string // Credential isolation realm set by auth manager.
 }
 
 // NewSAMLProvider creates a new AWS SAML provider.
@@ -81,6 +82,11 @@ func (p *samlProvider) Kind() string {
 // Name returns the configured provider name.
 func (p *samlProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *samlProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate records a hint (next identity name) to help role selection.
@@ -406,8 +412,8 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 func (p *samlProvider) Paths() ([]types.Path, error) {
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
-	// Use AWSFileManager to get correct provider-namespaced paths.
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use AWSFileManager to get correct provider-namespaced paths with realm isolation.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
 		return nil, err
 	}
@@ -589,7 +595,8 @@ func (p *samlProvider) Logout(ctx context.Context) error {
 	// Get base_path from provider spec if configured.
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use realm for credential isolation between different repositories.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
 	}
@@ -609,7 +616,8 @@ func (p *samlProvider) GetFilesDisplayPath() string {
 
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use realm for credential isolation between different repositories.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
 		return "~/.aws/atmos"
 	}

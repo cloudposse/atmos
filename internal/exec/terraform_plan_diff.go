@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -35,8 +36,17 @@ type PlanFileOptions struct {
 func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
 
+	// Process stacks to resolve component metadata (metadata.component, component_folder_prefix).
+	// This is required to get the correct FinalComponent and ComponentFolderPrefix.
+	// Without this, plan-diff would look in the wrong directory when the component instance
+	// name differs from the actual component (e.g., "foobar-atmos-pro" with metadata.component: "foobar").
+	processedInfo, err := ProcessStacks(atmosConfig, *info, true, true, true, nil, nil)
+	if err != nil {
+		return fmt.Errorf("error processing stacks for plan-diff: %w", err)
+	}
+
 	// Extract flags and setup paths
-	origPlanFile, newPlanFile, err := parsePlanDiffFlags(info.AdditionalArgsAndFlags)
+	origPlanFile, newPlanFile, err := parsePlanDiffFlags(processedInfo.AdditionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
@@ -48,8 +58,14 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Get the component path
-	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, info.ComponentFolderPrefix, info.FinalComponent)
+	// Get the component path using the resolved FinalComponent from ProcessStacks.
+	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
+
+	// Check if workdir is enabled (source + workdir or workdir only).
+	// When workdir is enabled, the planfile will be in the workdir path, not the base component path.
+	if workdirPath, ok := processedInfo.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+		componentPath = workdirPath
+	}
 
 	// Ensure original plan file exists and is absolute
 	origPlanFile, err = validateOriginalPlanFile(origPlanFile, componentPath)
@@ -64,12 +80,12 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		NewPlanFile:   newPlanFile,
 		TmpDir:        tmpDir,
 	}
-	newPlanFile, err = prepareNewPlanFile(atmosConfig, info, opts)
+	newPlanFile, err = prepareNewPlanFile(atmosConfig, &processedInfo, opts)
 	if err != nil {
 		return err
 	}
 	// Compare the plans and generate diff
-	return comparePlansAndGenerateDiff(atmosConfig, info, componentPath, origPlanFile, newPlanFile)
+	return comparePlansAndGenerateDiff(atmosConfig, &processedInfo, componentPath, origPlanFile, newPlanFile)
 }
 
 // parsePlanDiffFlags extracts the orig and new plan file paths from command arguments.

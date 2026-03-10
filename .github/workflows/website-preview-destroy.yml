@@ -46,7 +46,7 @@ jobs:
         shell: bash
         env:
           PR_HEAD: ${{ github.head_ref }}
-        run: echo "##[set-output name=branch;]$(echo ${PR_HEAD#refs/heads/} | tr / -)"
+        run: echo "branch=$(echo ${PR_HEAD#refs/heads/} | tr / -)" >> $GITHUB_OUTPUT
 
       - name: Seek deployment
         uses: cloudposse/github-action-seek-deployment@0.1.1

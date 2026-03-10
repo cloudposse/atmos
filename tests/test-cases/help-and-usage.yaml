@@ -603,6 +603,11 @@ tests:
       stdout_contains:
         - "Terraform v"
       exit_code: 0
+      # Filter out lines that vary between terraform versions
+      diff:
+        - "out of date"  # "Your version of Terraform is out of date!" warning
+        - "You can update"  # Update instructions that follow the warning
+        - "^$"  # Empty lines that may appear with the warning
       # Normalize terraform version output which varies by environment
       sanitize:
         "Terraform v[0-9]+\\.[0-9]+\\.[0-9]+": "Terraform vX.X.X"
@@ -631,6 +636,7 @@ tests:
         - "^\\s+test\\s+"  # Test command description varies between versions
         - "^\\s+modules\\s+"  # modules subcommand only in newer terraform versions
         - "^\\s+stacks\\s+"  # stacks subcommand only in newer terraform versions (HCP Terraform)
+        - "^\\s+query\\s+"  # query subcommand only in certain terraform versions
       # Normalize minor punctuation differences between terraform versions
       sanitize:
         "output, or the help": "output or the help"

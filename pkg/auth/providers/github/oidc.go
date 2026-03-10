@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/spf13/viper"
@@ -21,8 +22,10 @@ const OidcTimeout = 10
 
 // oidcProvider implements GitHub OIDC authentication.
 type oidcProvider struct {
-	name   string
-	config *schema.Provider
+	name       string
+	config     *schema.Provider
+	realm      string       // Credential isolation realm set by auth manager.
+	httpClient *http.Client // Optional; if nil, a default client is created per request.
 }
 
 // NewOIDCProvider creates a new GitHub OIDC provider.
@@ -41,9 +44,22 @@ func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, erro
 	}, nil
 }
 
+// getHTTPClient returns the HTTP client to use for requests.
+func (p *oidcProvider) getHTTPClient() *http.Client {
+	if p.httpClient != nil {
+		return p.httpClient
+	}
+	return &http.Client{Timeout: OidcTimeout * time.Second}
+}
+
 // Name returns the provider name.
 func (p *oidcProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *oidcProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for GitHub OIDC provider.
@@ -120,7 +136,30 @@ func (p *oidcProvider) requestParams() (string, string, error) {
 	if requestURL == "" {
 		return "", "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL not found - ensure job has 'id-token: write' permission", errUtils.ErrAuthenticationFailed)
 	}
+
+	// Validate the URL to prevent SSRF: scheme must be https and host must be the
+	// GitHub Actions token endpoint.
+	if err := validateGitHubActionsURL(requestURL); err != nil {
+		return "", "", err
+	}
+
 	return requestURL, token, nil
+}
+
+// validateGitHubActionsURL validates that the URL is a safe GitHub Actions OIDC endpoint.
+// This prevents SSRF by ensuring the URL uses HTTPS and has a non-empty host.
+func validateGitHubActionsURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("%w: invalid ACTIONS_ID_TOKEN_REQUEST_URL: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must use https scheme, got %q", errUtils.ErrAuthenticationFailed, u.Scheme)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must have a non-empty host", errUtils.ErrAuthenticationFailed)
+	}
+	return nil
 }
 
 // audience extracts the required audience from provider config.
@@ -162,8 +201,7 @@ func (p *oidcProvider) getOIDCToken(ctx context.Context, requestURL, requestToke
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("Authorization", "bearer "+requestToken)
 	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: OidcTimeout * time.Second}
-	resp, err := client.Do(req)
+	resp, err := p.getHTTPClient().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: call OIDC endpoint: %w", errUtils.ErrAuthenticationFailed, err)
 	}

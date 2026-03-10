@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 func TestResolveWorkflowDependencies(t *testing.T) {

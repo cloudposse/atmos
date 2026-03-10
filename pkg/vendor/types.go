@@ -61,8 +61,18 @@ type processTargetsParams struct {
 	TemplateData         struct{ Component, Version string }
 	VendorConfigFilePath string
 	URI                  string
+	SourceTemplate       string // Raw un-templated source URL for per-target version re-resolution.
 	PkgType              pkgType
 	SourceIsLocalFile    bool
+}
+
+// resolvedTarget holds the resolved URI, version, template data, and source classification for a single target.
+type resolvedTarget struct {
+	uri               string
+	version           string
+	tmplData          struct{ Component, Version string }
+	pkgType           pkgType
+	sourceIsLocalFile bool
 }
 
 // executeVendorOptions holds options for executing vendor operations.

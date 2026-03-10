@@ -1,0 +1,281 @@
+---
+title: Ansible Components
+sidebar_position: 5
+sidebar_label: ansible
+sidebar_class_name: command
+description: Configure Ansible components in your Atmos stack manifests for configuration management and automation.
+id: ansible
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Ansible components run Ansible playbooks for configuration management and infrastructure automation. They allow you to manage playbook execution with the same stack-based configuration approach used for Terraform, Helmfile, and Packer.
+</Intro>
+
+## Available Configuration Sections
+
+Ansible components support the common configuration sections:
+
+<dl>
+  <dt>[`vars`](/stacks/vars)</dt>
+  <dd>Variables passed to ansible via `--extra-vars`.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables during execution.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>Integrations, metadata, and Ansible-specific settings like playbook and inventory.</dd>
+
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior and inheritance.</dd>
+
+  <dt>[`command`](/stacks/command)</dt>
+  <dd>Override ansible binary.</dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>Lifecycle event handlers.</dd>
+</dl>
+
+## Component Structure
+
+A typical Ansible component configuration:
+
+```yaml
+components:
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
+        app_port: 8080
+        app_version: "1.0.0"
+      env:
+        ANSIBLE_HOST_KEY_CHECKING: "false"
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory/production
+```
+
+## Ansible Directory Structure
+
+Ansible components are located in the path configured in `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+components:
+  ansible:
+    base_path: components/ansible
+```
+
+Example structure:
+
+```
+components/ansible/
+├── hello-world/
+│   ├── site.yml
+│   └── inventory.ini
+├── webserver/
+│   ├── site.yml
+│   ├── roles/
+│   │   └── nginx/
+│   └── inventory/
+│       ├── production
+│       └── staging
+└── database/
+    ├── deploy.yml
+    └── inventory.ini
+```
+
+## Playbook Configuration
+
+Each Ansible component contains playbooks that use variables passed from Atmos:
+
+<File title="components/ansible/hello-world/site.yml">
+```yaml
+---
+- name: Hello World
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Say hello
+      ansible.builtin.debug:
+        msg: "Hello from {{ app_name }} (version {{ app_version }}) on port {{ app_port }}"
+```
+</File>
+
+### Playbook and Inventory Resolution
+
+The playbook and inventory can be specified in two ways, with command line flags taking precedence:
+
+1. **Stack manifest settings** — Define `settings.ansible.playbook` and `settings.ansible.inventory`
+2. **Command line flags** — Use `--playbook` / `-p` and `--inventory` / `-i`
+
+```yaml
+components:
+  ansible:
+    webserver:
+      settings:
+        ansible:
+          playbook: site.yml            # Default playbook
+          inventory: inventory/production  # Default inventory
+```
+
+## Component-Type Defaults
+
+Define defaults for all Ansible components:
+
+```yaml
+# Apply to all Ansible components
+ansible:
+  vars:
+    managed_by: Atmos
+  env:
+    ANSIBLE_HOST_KEY_CHECKING: "false"
+    ANSIBLE_FORCE_COLOR: "true"
+
+# Individual components
+components:
+  ansible:
+    webserver:
+      vars:
+        app_port: 8080
+```
+
+## Complete Example
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/ansible/_defaults
+  - orgs/acme/plat/prod/_defaults
+
+vars:
+  region: us-east-1
+  stage: prod
+
+ansible:
+  vars:
+    managed_by: Atmos
+  env:
+    ANSIBLE_HOST_KEY_CHECKING: "false"
+
+components:
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
+        app_port: 8080
+        app_version: "2.0.0"
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory/production
+
+    database:
+      metadata:
+        component: database
+      vars:
+        db_name: acme-prod
+        db_port: 5432
+      settings:
+        ansible:
+          playbook: deploy.yml
+          inventory: inventory/production
+        depends_on:
+          - component: webserver
+```
+</File>
+
+## Variable Handling
+
+Atmos automatically generates a YAML variables file containing all variables from the component's
+`vars` section. This file is passed to Ansible using `--extra-vars @<filename>`.
+
+The generated file follows the naming convention: `<context>-<component>.ansible.vars.yaml`
+
+Here, `<context>` is the full Atmos context prefix (e.g., `tenant-account-stage-region`), not just the stack name.
+For example, for a component `webserver` with context prefix `acme-plat-prod-us-east-1`, the file would be:
+`acme-plat-prod-us-east-1-webserver.ansible.vars.yaml`
+
+The file is automatically cleaned up after playbook execution completes.
+
+## Running Ansible Commands
+
+Atmos provides commands that wrap Ansible operations:
+
+```bash
+# Run a playbook
+atmos ansible playbook webserver -s prod
+
+# Run with explicit playbook and inventory
+atmos ansible playbook webserver -s prod -p site.yml -i inventory/production
+
+# Dry run (shows command without executing)
+atmos ansible playbook webserver -s prod --dry-run
+
+# Pass options directly to ansible-playbook
+atmos ansible playbook webserver -s prod -- --check -vvv
+
+# Check Ansible version
+atmos ansible version
+```
+
+## Environment Variables
+
+Common environment variables for Ansible components:
+
+<dl>
+  <dt>`ANSIBLE_HOST_KEY_CHECKING`</dt>
+  <dd>Disable SSH host key checking (set to `false`).</dd>
+
+  <dt>`ANSIBLE_FORCE_COLOR`</dt>
+  <dd>Force colored output (set to `true`).</dd>
+
+  <dt>`ANSIBLE_CONFIG`</dt>
+  <dd>Path to Ansible configuration file.</dd>
+
+  <dt>`ANSIBLE_VAULT_PASSWORD_FILE`</dt>
+  <dd>Path to Ansible Vault password file.</dd>
+
+  <dt>`ANSIBLE_ROLES_PATH`</dt>
+  <dd>Additional paths to search for roles.</dd>
+
+  <dt>`ANSIBLE_COLLECTIONS_PATH`</dt>
+  <dd>Paths to search for collections.</dd>
+</dl>
+
+## Try It
+
+See the [demo-ansible](/examples/demo-ansible) example for a minimal hello-world setup demonstrating variable passing:
+
+```bash
+cd examples/demo-ansible
+atmos ansible playbook hello-world -s dev
+```
+
+## Best Practices
+
+1. **Use Settings for Playbook Config:** Define `settings.ansible.playbook` and `settings.ansible.inventory` in stack manifests rather than passing flags every time.
+
+2. **Centralize Defaults:** Define common settings in catalog defaults and override only when necessary.
+
+3. **Use Dependencies:** Define `depends_on` when playbooks need to run after infrastructure is provisioned.
+
+4. **Keep Playbooks Small:** Create focused playbooks for specific tasks rather than monolithic automation.
+
+5. **Use Environment Variables:** Configure Ansible behavior through `env` rather than `ansible.cfg` for consistency across environments.
+
+6. **Leverage Inheritance:** Use abstract components and inheritance for shared playbook configurations across environments.
+
+## Related
+
+- [Component Types Overview](/stacks/components)
+- [Terraform Components](/stacks/components/terraform)
+- [Helmfile Components](/stacks/components/helmfile)
+- [Packer Components](/stacks/components/packer)
+- [Configure Variables](/stacks/vars)
+- [Configure Environment](/stacks/env)
+- [depends_on](/stacks/settings/depends_on)
+- [atmos ansible playbook](/cli/commands/ansible/playbook)

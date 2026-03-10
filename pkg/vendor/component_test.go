@@ -309,7 +309,7 @@ func TestCheckComponentExcludes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			skip, err := checkComponentExcludes(tt.excludePaths, tt.src, tt.trimmedSrc)
+			skip, err := checkComponentExcludes(tt.excludePaths, tt.trimmedSrc)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.shouldSkip, skip)
 		})
@@ -356,7 +356,7 @@ func TestCheckComponentIncludes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			skip, err := checkComponentIncludes(tt.includePaths, tt.src, tt.trimmedSrc)
+			skip, err := checkComponentIncludes(tt.includePaths, tt.trimmedSrc)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.shouldSkip, skip)
 		})

@@ -207,6 +207,7 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			TemplateData:         tmplData,
 			VendorConfigFilePath: params.vendorConfigFilePath,
 			URI:                  uri,
+			SourceTemplate:       params.sources[indexSource].Source,
 			PkgType:              pType,
 			SourceIsLocalFile:    srcType.sourceIsLocalFile,
 		})
@@ -222,28 +223,91 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexTarget, tgt := range params.Source.Targets {
-		target, err := exec.ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
+		// Determine the effective template data and URI for this target.
+		tmplData := params.TemplateData
+		effectiveURI := params.URI
+		effectiveVersion := params.Source.Version
+		// Default to source-level classification.
+		pType := params.PkgType
+		sourceIsLocalFile := params.SourceIsLocalFile
+
+		// If the target has its own version, override template data and re-resolve the source URI.
+		if tgt.Version != "" {
+			resolved, err := resolveTargetOverride(params, indexTarget, tgt)
+			if err != nil {
+				return nil, err
+			}
+			effectiveURI = resolved.uri
+			effectiveVersion = resolved.version
+			tmplData = resolved.tmplData
+			pType = resolved.pkgType
+			sourceIsLocalFile = resolved.sourceIsLocalFile
+		}
+
+		// Template-expand the target path.
+		target, err := exec.ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt.Path, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
 		targetPath := filepath.Join(filepath.ToSlash(params.VendorConfigFilePath), filepath.ToSlash(target))
 		pkgName := params.Source.Component
 		if pkgName == "" {
-			pkgName = params.URI
+			pkgName = effectiveURI
 		}
-		// Create package struct
+		// Create package struct.
 		p := pkgAtmosVendor{
-			uri:               params.URI,
+			uri:               effectiveURI,
 			name:              pkgName,
 			targetPath:        targetPath,
-			sourceIsLocalFile: params.SourceIsLocalFile,
-			pkgType:           params.PkgType,
-			version:           params.Source.Version,
+			sourceIsLocalFile: sourceIsLocalFile,
+			pkgType:           pType,
+			version:           effectiveVersion,
 			atmosVendorSource: *params.Source,
 		}
 		packages = append(packages, p)
 	}
 	return packages, nil
+}
+
+// resolveTargetOverride re-resolves the source URI and classification when a target has a version override.
+func resolveTargetOverride(params *processTargetsParams, indexTarget int, tgt schema.AtmosVendorTarget) (*resolvedTarget, error) {
+	tmplData := struct{ Component, Version string }{
+		Component: params.TemplateData.Component,
+		Version:   tgt.Version,
+	}
+
+	// Re-template the source URL with the target-specific version.
+	effectiveURI, err := exec.ProcessTmpl(
+		params.AtmosConfig,
+		fmt.Sprintf("source-%d-target-%d", params.IndexSource, indexTarget),
+		params.SourceTemplate,
+		tmplData,
+		false,
+	)
+	if err != nil {
+		return nil, err
+	}
+	effectiveURI = normalizeVendorURI(effectiveURI)
+
+	// Recompute source classification from the re-resolved URI, since per-target version
+	// overrides may produce a URI with a different scheme or locality than the source-level URI.
+	srcType, err := determineSourceType(&effectiveURI, params.VendorConfigFilePath)
+	if err != nil {
+		return nil, err
+	}
+	if !srcType.useLocalFileSystem {
+		if err := validateRemoteURI(effectiveURI, params.Source.Component); err != nil {
+			return nil, err
+		}
+	}
+
+	return &resolvedTarget{
+		uri:               effectiveURI,
+		version:           tgt.Version,
+		tmplData:          tmplData,
+		pkgType:           determinePackageType(srcType.useOciScheme, srcType.useLocalFileSystem),
+		sourceIsLocalFile: srcType.sourceIsLocalFile,
+	}, nil
 }
 
 // sourceTypeResult holds the result of determineSourceType.

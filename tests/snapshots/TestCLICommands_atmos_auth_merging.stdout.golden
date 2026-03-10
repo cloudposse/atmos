@@ -54,4 +54,5 @@ providers:
     kind: aws/iam-identity-center
     region: us-east-1
     start_url: https://test.awsapps.com/start
+realm: <hash>
 

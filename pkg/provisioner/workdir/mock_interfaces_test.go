@@ -126,6 +126,21 @@ func (mr *MockFileSystemMockRecorder) Stat(path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockFileSystem)(nil).Stat), path)
 }
 
+// SyncDir mocks base method.
+func (m *MockFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncDir", src, dst, hasher)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncDir indicates an expected call of SyncDir.
+func (mr *MockFileSystemMockRecorder) SyncDir(src, dst, hasher any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDir", reflect.TypeOf((*MockFileSystem)(nil).SyncDir), src, dst, hasher)
+}
+
 // Walk mocks base method.
 func (m *MockFileSystem) Walk(root string, fn fs.WalkDirFunc) error {
 	m.ctrl.T.Helper()

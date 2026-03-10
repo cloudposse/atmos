@@ -64,3 +64,41 @@ tests:
         - "./components/terraform/myapp1/main.tf"
         - "./components/terraform/myapp1/README.md"
       exit_code: 0
+
+  # Tests for simple filename exclusions (without **/ prefix) - regression test for bug fix
+  - name: atmos_vendor_simple_exclude
+    short: false
+    enabled: true
+    description: "Test simple filename exclusion - 'README.md' excludes README.md without needing '**/README.md'"
+    workdir: "fixtures/scenarios/vendor-simple-excludes"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--tags=simple"
+    expect:
+      file_exists:
+        # main.tf should be included (matches **/* and not excluded)
+        - "./components/terraform/simple-exclude/main.tf"
+      file_not_exists:
+        # README.md should be excluded by simple pattern "README.md"
+        - "./components/terraform/simple-exclude/README.md"
+      exit_code: 0
+
+  - name: atmos_vendor_combined_exclude_include
+    short: false
+    enabled: true
+    description: "Test combined include/exclude - include **/*.tf but exclude main.tf"
+    workdir: "fixtures/scenarios/vendor-simple-excludes"
+    command: "atmos"
+    args:
+      - "vendor"
+      - "pull"
+      - "--tags=combined"
+    expect:
+      file_not_exists:
+        # main.tf should be excluded by simple pattern "main.tf"
+        - "./components/terraform/combined/main.tf"
+        # README.md should be excluded because it doesn't match **/*.tf include
+        - "./components/terraform/combined/README.md"
+      exit_code: 0

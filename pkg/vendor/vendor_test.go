@@ -368,7 +368,7 @@ func TestProcessTargets(t *testing.T) {
 				IndexSource: 0,
 				Source: &schema.AtmosVendorSource{
 					Component: "vpc",
-					Targets:   []string{"./components/terraform/vpc"},
+					Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}},
 				},
 				TemplateData:         struct{ Component, Version string }{Component: "vpc", Version: "1.0.0"},
 				VendorConfigFilePath: "/tmp",
@@ -385,7 +385,7 @@ func TestProcessTargets(t *testing.T) {
 				IndexSource: 0,
 				Source: &schema.AtmosVendorSource{
 					Component: "vpc",
-					Targets:   []string{"./target1", "./target2"},
+					Targets:   schema.AtmosVendorTargets{{Path: "./target1"}, {Path: "./target2"}},
 				},
 				TemplateData:         struct{ Component, Version string }{Component: "vpc", Version: "1.0.0"},
 				VendorConfigFilePath: "/tmp",
@@ -402,7 +402,7 @@ func TestProcessTargets(t *testing.T) {
 				IndexSource: 0,
 				Source: &schema.AtmosVendorSource{
 					Component: "vpc",
-					Targets:   []string{},
+					Targets:   schema.AtmosVendorTargets{},
 				},
 				TemplateData:         struct{ Component, Version string }{Component: "vpc", Version: "1.0.0"},
 				VendorConfigFilePath: "/tmp",
@@ -419,7 +419,7 @@ func TestProcessTargets(t *testing.T) {
 				IndexSource: 0,
 				Source: &schema.AtmosVendorSource{
 					Component: "vpc",
-					Targets:   []string{"./components/terraform/{{.Component}}"},
+					Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/{{.Component}}"}},
 				},
 				TemplateData:         struct{ Component, Version string }{Component: "vpc", Version: "1.0.0"},
 				VendorConfigFilePath: "/tmp",
@@ -588,7 +588,7 @@ func TestExecuteAtmosVendorInternal(t *testing.T) {
 						{
 							Component: "vpc",
 							Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
-							Targets:   []string{"./components/terraform/vpc"},
+							Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}},
 						},
 					},
 				},
@@ -606,7 +606,7 @@ func TestExecuteAtmosVendorInternal(t *testing.T) {
 						{
 							Component: "vpc",
 							Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
-							Targets:   []string{"./components/terraform/vpc"},
+							Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}},
 							Tags:      []string{"networking"},
 						},
 					},
@@ -649,7 +649,7 @@ func TestProcessAtmosVendorSource(t *testing.T) {
 					{
 						Component: "vpc",
 						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
-						Targets:   []string{"./components/terraform/vpc"},
+						Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}},
 					},
 				},
 				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
@@ -666,12 +666,12 @@ func TestProcessAtmosVendorSource(t *testing.T) {
 					{
 						Component: "vpc",
 						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
-						Targets:   []string{"./components/terraform/vpc"},
+						Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}},
 					},
 					{
 						Component: "rds",
 						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/rds?ref=1.0.0",
-						Targets:   []string{"./components/terraform/rds"},
+						Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/rds"}},
 					},
 				},
 				component:            "vpc",
@@ -689,13 +689,13 @@ func TestProcessAtmosVendorSource(t *testing.T) {
 					{
 						Component: "vpc",
 						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
-						Targets:   []string{"./components/terraform/vpc"},
+						Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}},
 						Tags:      []string{"networking"},
 					},
 					{
 						Component: "rds",
 						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/rds?ref=1.0.0",
-						Targets:   []string{"./components/terraform/rds"},
+						Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/rds"}},
 						Tags:      []string{"database"},
 					},
 				},
@@ -725,7 +725,7 @@ func TestProcessAtmosVendorSource(t *testing.T) {
 					{
 						Component: "vpc",
 						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
-						Targets:   []string{}, // No targets.
+						Targets:   schema.AtmosVendorTargets{}, // No targets.
 					},
 				},
 				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
@@ -741,7 +741,7 @@ func TestProcessAtmosVendorSource(t *testing.T) {
 					{
 						Component: "vpc",
 						Source:    "", // No source.
-						Targets:   []string{"./components/terraform/vpc"},
+						Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}},
 					},
 				},
 				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
@@ -873,7 +873,7 @@ func TestProcessTargets_TemplateError(t *testing.T) {
 		IndexSource: 0,
 		Source: &schema.AtmosVendorSource{
 			Component: "vpc",
-			Targets:   []string{"./components/terraform/{{.InvalidSyntax"},
+			Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/{{.InvalidSyntax"}},
 		},
 		TemplateData:         struct{ Component, Version string }{Component: "vpc", Version: "1.0.0"},
 		VendorConfigFilePath: "/tmp",
@@ -902,12 +902,12 @@ func TestExecuteAtmosVendorInternal_SkippedSource(t *testing.T) {
 				{
 					Component: "vpc",
 					Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
-					Targets:   []string{"./components/terraform/vpc"},
+					Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}},
 				},
 				{
 					Component: "rds",
 					Source:    "github.com/cloudposse/terraform-aws-components.git//modules/rds?ref=1.0.0",
-					Targets:   []string{"./components/terraform/rds"},
+					Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/rds"}},
 				},
 			},
 		},
@@ -934,7 +934,7 @@ func TestProcessTargets_MultipleTargets(t *testing.T) {
 		Source: &schema.AtmosVendorSource{
 			Component: "vpc",
 			Version:   "1.0.0",
-			Targets:   []string{"./components/terraform/vpc", "./modules/vpc"},
+			Targets:   schema.AtmosVendorTargets{{Path: "./components/terraform/vpc"}, {Path: "./modules/vpc"}},
 		},
 		TemplateData:         struct{ Component, Version string }{Component: "vpc", Version: "1.0.0"},
 		VendorConfigFilePath: tempDir,
@@ -959,7 +959,7 @@ func TestProcessTargets_NoComponent(t *testing.T) {
 		IndexSource: 0,
 		Source: &schema.AtmosVendorSource{
 			Component: "",
-			Targets:   []string{"./target"},
+			Targets:   schema.AtmosVendorTargets{{Path: "./target"}},
 		},
 		TemplateData:         struct{ Component, Version string }{Component: "", Version: ""},
 		VendorConfigFilePath: tempDir,
@@ -1019,12 +1019,12 @@ func TestProcessAtmosVendorSource_SkipsNonMatchingComponent(t *testing.T) {
 			{
 				Component: "vpc",
 				Source:    "github.com/example/repo.git//vpc",
-				Targets:   []string{"./vpc"},
+				Targets:   schema.AtmosVendorTargets{{Path: "./vpc"}},
 			},
 			{
 				Component: "rds",
 				Source:    "github.com/example/repo.git//rds",
-				Targets:   []string{"./rds"},
+				Targets:   schema.AtmosVendorTargets{{Path: "./rds"}},
 			},
 		},
 		component:            "vpc",
