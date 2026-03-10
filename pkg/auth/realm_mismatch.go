@@ -129,7 +129,7 @@ func (m *manager) deleteLegacyKeyringEntry(alias string) {
 		return
 	}
 	if err := m.credentialStore.Delete(alias, ""); err != nil {
-		log.Debug("Failed to delete legacy keyring entry", "alias", alias, "error", err)
+		log.Warn("Failed to delete legacy keyring entry", "alias", alias, "error", err)
 	} else {
 		log.Debug("Deleted legacy keyring entry (pre-realm)", "alias", alias)
 	}
