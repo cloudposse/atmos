@@ -159,7 +159,7 @@
         "null": {
           "source": "hashicorp/null",
           "version_constraints": [
-            "~/u003e 3.2"
+            "~\u003e 3.2"
           ]
         }
       },

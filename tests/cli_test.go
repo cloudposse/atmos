@@ -389,7 +389,12 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	normalizedOutput := filepath.ToSlash(output)
 	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.)
 	// This regex matches backslash followed by path-like characters, not escape sequences.
+	// First, protect JSON unicode escapes like \u003e from being corrupted.
+	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
+	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
+	normalizedOutput = jsonUnicodeEscape.ReplaceAllString(normalizedOutput, unicodePlaceholder+"$1")
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
+	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
