@@ -154,14 +154,14 @@ func TestPlugin_BuildTemplateContext_ApplyKeepsOutputWithNoChanges(t *testing.T)
 	assert.NotEmpty(t, ctx.Output, "Apply output should not be empty even with no changes")
 }
 
-func TestPlugin_BuildTemplateContext_ApplyStripsNoise(t *testing.T) {
+func TestPlugin_BuildTemplateContext_ApplyStripsProgressLines(t *testing.T) {
 	p := &Plugin{}
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "vpc",
 		Stack:            "dev-us-east-1",
 	}
 
-	// Apply output with noise before the result.
+	// Apply output with progress lines before the result.
 	output := "aws_instance.web: Creating...\naws_instance.web: Creation complete after 35s [id=i-12345678]\n\nApply complete! Resources: 1 added, 0 changed, 0 destroyed.\n\nOutputs:\n\ninstance_id = \"i-12345678\""
 
 	result, err := p.buildTemplateContext(info, nil, output, "apply")
@@ -173,7 +173,70 @@ func TestPlugin_BuildTemplateContext_ApplyStripsNoise(t *testing.T) {
 	assert.True(t, len(ctx.Output) > 0)
 	assert.Contains(t, ctx.Output, "Apply complete!")
 	assert.NotContains(t, ctx.Output, "Creating...")
+	assert.NotContains(t, ctx.Output, "Creation complete")
 	assert.Contains(t, ctx.Output, "instance_id")
+}
+
+func TestPlugin_BuildTemplateContext_ApplyKeepsPlanDiffs(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "app",
+		Stack:            "dev-us-east-1",
+	}
+
+	// Realistic apply output with plan diffs, progress lines, and result.
+	output := `data.validation_warning.warn[0]: Reading...
+data.validation_warning.warn[0]: Read complete after 0s [id=none]
+
+OpenTofu used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  ~ update in-place
+
+OpenTofu will perform the following actions:
+
+  # aws_ecs_service.default will be updated in-place
+  ~ resource "aws_ecs_service" "default" {
+      ~ task_definition = "arn:aws:ecs:us-east-2:123:task-definition/app:8" -> (known after apply)
+    }
+
+Plan: 1 to add, 1 to change, 0 to destroy.
+aws_ecs_task_definition.default: Creating...
+aws_ecs_task_definition.default: Creation complete after 0s [id=app]
+aws_ecs_service.default: Modifying... [id=arn:aws:ecs:us-east-2:123:service/app]
+aws_ecs_service.default: Still modifying... [id=arn:aws:ecs:..., 10s elapsed]
+aws_ecs_service.default: Modifications complete after 30s [id=arn:aws:ecs:us-east-2:123:service/app]
+
+Apply complete! Resources: 1 added, 1 changed, 0 destroyed.
+
+Outputs:
+
+url = "http://app.example.com"`
+
+	result, err := p.buildTemplateContext(info, nil, output, "apply")
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+
+	// Should contain plan diffs.
+	assert.Contains(t, ctx.Output, "aws_ecs_service.default will be updated in-place")
+	assert.Contains(t, ctx.Output, "task_definition")
+	assert.Contains(t, ctx.Output, "Plan: 1 to add, 1 to change, 0 to destroy.")
+
+	// Should contain apply result and outputs.
+	assert.Contains(t, ctx.Output, "Apply complete!")
+	assert.Contains(t, ctx.Output, "url")
+
+	// Should NOT contain pre-plan noise.
+	assert.NotContains(t, ctx.Output, "data.validation_warning.warn")
+	assert.NotContains(t, ctx.Output, "OpenTofu will perform the following actions:")
+
+	// Should NOT contain apply progress lines.
+	assert.NotContains(t, ctx.Output, "Creating...")
+	assert.NotContains(t, ctx.Output, "Creation complete")
+	assert.NotContains(t, ctx.Output, "Modifying...")
+	assert.NotContains(t, ctx.Output, "Still modifying...")
+	assert.NotContains(t, ctx.Output, "Modifications complete")
 }
 
 func TestPlugin_BuildTemplateContext_PreservesOutputWithoutMarkers(t *testing.T) {

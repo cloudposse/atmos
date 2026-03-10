@@ -4,6 +4,7 @@ package terraform
 import (
 	"embed"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -168,16 +169,32 @@ func (p *Plugin) getArtifactKey(info *schema.ConfigAndStacksInfo, ciCtx *provide
 
 // planOutputMarkers are searched in order to find where the meaningful plan output starts.
 // Everything before the first match is stripped (data source reads, state refreshes, etc.).
+// Supports both Terraform and OpenTofu output formats.
 var planOutputMarkers = []string{
 	"Terraform will perform the following actions:",
+	"OpenTofu will perform the following actions:",
 }
 
 // noChangesMarker identifies output where terraform found no differences.
 const noChangesMarker = "No changes."
 
+// applyProgressLineRe matches terraform/opentofu apply progress lines that should be stripped.
+// These are the noisy "Creating.../Still creating.../Creation complete..." lines emitted during apply.
+// Case-insensitive because terraform uses "Still modifying..." (lowercase after Still).
+var applyProgressLineRe = regexp.MustCompile(
+	`(?im)^\S+: (?:` +
+		`(?:Still )?(?:Creating|Modifying|Destroying|Reading)` +
+		`|(?:Creation|Modifications|Destruction|Read) complete` +
+		`|Refreshing state` +
+		`|Provisioning with` +
+		`).*\n?`)
+
+// multiBlankLinesRe matches 3 or more consecutive newlines for collapsing.
+var multiBlankLinesRe = regexp.MustCompile(`\n{3,}`)
+
 // cleanOutput strips noisy preamble from terraform output based on command type.
 // For plan: strips data source reads and state refreshes, returns empty for no-changes.
-// For apply: returns full output (the apply result is always meaningful).
+// For apply: strips preamble and progress lines, keeps plan diffs and apply result.
 func cleanOutput(output, command string) string {
 	if command == "apply" {
 		return cleanApplyOutput(output)
@@ -202,15 +219,25 @@ func cleanPlanOutput(output string) string {
 	return output
 }
 
-// applyOutputMarker identifies where the meaningful apply output starts.
-const applyOutputMarker = "Apply complete!"
-
-// cleanApplyOutput strips noisy preamble from terraform apply output,
-// keeping the apply result summary and outputs.
+// cleanApplyOutput strips noisy preamble and apply progress lines from apply output.
+// Keeps the plan diffs (resource change details), apply result summary, and outputs.
+// This gives users the same level of detail as the plan summary.
 func cleanApplyOutput(output string) string {
-	if idx := strings.Index(output, applyOutputMarker); idx >= 0 {
-		return output[idx:]
+	cleaned := output
+
+	// Strip pre-plan noise (data source reads, state refreshes, etc.).
+	for _, marker := range planOutputMarkers {
+		if idx := strings.Index(cleaned, marker); idx > 0 {
+			cleaned = cleaned[idx+len(marker):]
+			break
+		}
 	}
-	// If no marker found, return full output (might be error output).
-	return output
+
+	// Strip apply progress lines (Creating.../Modifying.../Still creating.../etc.).
+	cleaned = applyProgressLineRe.ReplaceAllString(cleaned, "")
+
+	// Collapse multiple blank lines into at most two newlines.
+	cleaned = multiBlankLinesRe.ReplaceAllString(cleaned, "\n\n")
+
+	return strings.TrimSpace(cleaned)
 }
