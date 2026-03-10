@@ -57,8 +57,11 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	}
 
 	// Upload -- FATAL (downstream apply depends on it).
-	if err := p.uploadPlanfile(ctx); err != nil {
-		return err
+	// Skip if planfile storage is not configured.
+	if isPlanfileStorageEnabled(ctx.Config) {
+		if err := p.uploadPlanfile(ctx); err != nil {
+			return err
+		}
 	}
 
 	// Check -- warn-only.
@@ -133,8 +136,11 @@ func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 	}
 
 	// Download -- warn-only (deploy works without a stored planfile).
-	if err := p.downloadPlanfileForVerification(ctx); err != nil {
-		log.Warn("CI hook handler failed", "event", "before.terraform.deploy", "error", err)
+	// Skip if planfile storage is not configured.
+	if isPlanfileStorageEnabled(ctx.Config) {
+		if err := p.downloadPlanfileForVerification(ctx); err != nil {
+			log.Warn("CI hook handler failed", "event", "before.terraform.deploy", "error", err)
+		}
 	}
 	return nil
 }
@@ -613,6 +619,19 @@ func isOutputEnabled(cfg *schema.AtmosConfiguration) bool {
 		return true
 	}
 	return *cfg.CI.Output.Enabled
+}
+
+// isPlanfileStorageEnabled checks if planfile storage is configured.
+// Returns true only when explicit planfile stores are defined
+// (via default store, priority list, or named stores).
+// When no planfiles configuration exists, upload/download is skipped
+// to avoid noisy errors from environment-based store fallback.
+func isPlanfileStorageEnabled(cfg *schema.AtmosConfiguration) bool {
+	if cfg == nil {
+		return false
+	}
+	pf := cfg.Components.Terraform.Planfiles
+	return pf.Default != "" || len(pf.Priority) > 0 || len(pf.Stores) > 0
 }
 
 // isCheckEnabled checks if check action is enabled in config.

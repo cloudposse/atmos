@@ -945,3 +945,40 @@ func TestResolveArtifactPath_EmptyStackOrComponent(t *testing.T) {
 		assert.Empty(t, path)
 	})
 }
+
+func TestIsPlanfileStorageEnabled(t *testing.T) {
+	t.Run("nil config", func(t *testing.T) {
+		assert.False(t, isPlanfileStorageEnabled(nil))
+	})
+
+	t.Run("empty planfiles config", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		assert.False(t, isPlanfileStorageEnabled(cfg))
+	})
+
+	t.Run("planfiles with default set", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Components.Terraform.Planfiles.Default = "s3"
+		assert.True(t, isPlanfileStorageEnabled(cfg))
+	})
+
+	t.Run("planfiles with priority list", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Components.Terraform.Planfiles.Priority = []string{"github", "s3"}
+		assert.True(t, isPlanfileStorageEnabled(cfg))
+	})
+
+	t.Run("planfiles with stores defined", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Components.Terraform.Planfiles.Stores = map[string]schema.PlanfileStoreSpec{
+			"s3": {Type: "s3"},
+		}
+		assert.True(t, isPlanfileStorageEnabled(cfg))
+	})
+
+	t.Run("planfiles with empty priority list", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Components.Terraform.Planfiles.Priority = []string{}
+		assert.False(t, isPlanfileStorageEnabled(cfg))
+	})
+}
