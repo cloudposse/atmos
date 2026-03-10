@@ -146,13 +146,48 @@ func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 }
 
 // onAfterDeploy handles the after.terraform.deploy event.
-// Deploy is semantically apply for CI purposes — delegates to onAfterApply
-// so that apply.md template is used and terraform outputs are fetched.
+// Deploy is semantically apply for CI purposes — uses apply template and parsing.
+// The original command ("deploy") is preserved for check run name correlation
+// so that the "in_progress" check run created in onBeforeDeploy gets updated
+// with the correct name instead of creating a new orphaned check run.
 func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterDeploy")()
 
+	// Override command for template/parsing (apply.md, ParseApplyOutput),
+	// but preserve the original for check run name correlation.
+	originalCommand := ctx.Command
 	ctx.Command = "apply"
-	return p.onAfterApply(ctx)
+	defer func() { ctx.Command = originalCommand }()
+
+	result := p.parseOutputWithError(ctx)
+
+	// Summary -- warn-only.
+	var renderedSummary string
+	if isSummaryEnabled(ctx.Config) {
+		var err error
+		renderedSummary, err = p.writeSummary(ctx, result)
+		if err != nil {
+			log.Warn("CI summary failed", "error", err)
+		}
+	}
+
+	// Output -- warn-only.
+	if isOutputEnabled(ctx.Config) {
+		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
+			log.Warn("CI output failed", "error", err)
+		}
+	}
+
+	// Check -- warn-only.
+	// Restore original command so check run name matches the one from onBeforeDeploy.
+	ctx.Command = originalCommand
+	if isCheckEnabled(ctx.Config) {
+		if err := p.updateCheckRun(ctx, result); err != nil {
+			logCheckRunError("CI check run update skipped", err)
+		}
+	}
+
+	return nil
 }
 
 // downloadPlanfileForVerification downloads a planfile from storage with a stored prefix
