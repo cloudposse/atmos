@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,6 +57,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		severityStr := v.GetString("severity")
 		sourceStr := v.GetString("source")
 		formatStr := v.GetString("format")
+		fileOutput := v.GetString("file")
 		maxFindings := v.GetInt("max-findings")
 		useAI := v.GetBool("ai")
 		region := v.GetString("region")
@@ -184,9 +186,32 @@ var securityAnalyzeCmd = &cobra.Command{
 		// Build report.
 		report := buildSecurityReport(findings, stack, component)
 
+		// Determine output destination.
+		output := os.Stdout
+		if fileOutput != "" {
+			dir := filepath.Dir(fileOutput)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return fmt.Errorf("failed to create output directory %q: %w", dir, err)
+			}
+			f, err := os.Create(fileOutput)
+			if err != nil {
+				return fmt.Errorf("failed to create output file %q: %w", fileOutput, err)
+			}
+			defer f.Close()
+			output = f
+		}
+
 		// Render output.
 		renderer := security.NewReportRenderer(outputFormat)
-		return renderer.RenderSecurityReport(os.Stdout, report)
+		if err := renderer.RenderSecurityReport(output, report); err != nil {
+			return err
+		}
+
+		if fileOutput != "" {
+			ui.Writef("Report saved to %s\n", fileOutput)
+		}
+
+		return nil
 	},
 }
 
@@ -199,6 +224,7 @@ func init() {
 		flags.WithStringFlag("source", "", "all", "Finding source: security-hub, config, inspector, guardduty, macie, access-analyzer, all"),
 		flags.WithStringFlag("framework", "", "", "Compliance framework filter"),
 		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv"),
+		flags.WithStringFlag("file", "", "", "Write output to file instead of stdout"),
 		flags.WithIntFlag("max-findings", "", defaultMaxFindings, "Maximum findings to analyze"),
 		flags.WithStringFlag("region", "", "", "AWS region override"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),

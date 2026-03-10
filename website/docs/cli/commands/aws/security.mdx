@@ -66,6 +66,9 @@ atmos aws security analyze [flags]
 
   <dt>`--framework`</dt>
   <dd>Filter findings by compliance framework (e.g., `cis-aws`, `pci-dss`).</dd>
+
+  <dt>`--file`</dt>
+  <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
 </dl>
 
 ## Examples
@@ -127,12 +130,27 @@ atmos aws security analyze --stack prod-us-east-1 --framework cis-aws
 ```
 </Terminal>
 
+### Saving to a File
+
+<Terminal title="file output examples">
+```bash
+# Save markdown report to a file
+atmos aws security analyze --stack prod-us-east-1 --file security-report.md
+
+# Save JSON findings to a file
+atmos aws security analyze --stack prod-us-east-1 --format json --file findings.json
+
+# Save to a nested directory (created automatically)
+atmos aws security analyze --stack prod-us-east-1 --format json --file reports/security/findings.json
+```
+</Terminal>
+
 ### CI/CD Integration
 
 <Terminal title="ci/cd examples">
 ```bash
 # Security gate in pipeline
-atmos aws security analyze --stack prod-us-east-1 --severity critical --format json > security.json
+atmos aws security analyze --stack prod-us-east-1 --severity critical --format json --file security.json
 if jq -e '.findings | length > 0' security.json; then
   echo "Critical security findings detected"
   exit 1
@@ -141,7 +159,7 @@ fi
 # Generate security report as a deployment artifact
 atmos aws security analyze --stack prod-us-east-1 \
   --severity critical,high \
-  --format markdown > security-report.md
+  --file security-report.md
 ```
 </Terminal>
 

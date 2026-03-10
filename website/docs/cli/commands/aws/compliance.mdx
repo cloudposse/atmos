@@ -49,6 +49,9 @@ atmos aws compliance report [flags]
 
   <dt>`--controls`</dt>
   <dd>Comma-separated list of specific control IDs to evaluate (e.g., `CIS.1.1,CIS.1.2`).</dd>
+
+  <dt>`--file`</dt>
+  <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
 </dl>
 
 ## Examples
@@ -77,9 +80,21 @@ atmos aws compliance report --framework cis-aws --format json
 
 # Markdown report for documentation
 atmos aws compliance report --framework soc2 --stack prod-us-east-1 --format markdown
+```
+</Terminal>
 
-# Save report to file
-atmos aws compliance report --framework hipaa --format markdown > hipaa-report.md
+### Saving to a File
+
+<Terminal title="file output examples">
+```bash
+# Save markdown report to a file
+atmos aws compliance report --framework hipaa --file hipaa-report.md
+
+# Save JSON report to a file
+atmos aws compliance report --framework pci-dss --format json --file pci-report.json
+
+# Save to a nested directory (created automatically)
+atmos aws compliance report --framework cis-aws --format json --file reports/compliance/cis.json
 ```
 </Terminal>
 
@@ -106,15 +121,14 @@ done
 <Terminal title="ci/cd examples">
 ```bash
 # Compliance gate in pipeline
-atmos aws compliance report --framework pci-dss --stack prod-us-east-1 --format json > compliance.json
+atmos aws compliance report --framework pci-dss --stack prod-us-east-1 --format json --file compliance.json
 if jq -e '.failing_controls | length > 0' compliance.json; then
   echo "PCI DSS compliance failures detected"
   exit 1
 fi
 
 # Generate compliance report as a deployment artifact
-atmos aws compliance report --stack prod-us-east-1 \
-  --format markdown > compliance-report.md
+atmos aws compliance report --stack prod-us-east-1 --file compliance-report.md
 ```
 </Terminal>
 

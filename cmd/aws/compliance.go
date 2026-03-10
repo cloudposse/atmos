@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -50,6 +51,7 @@ var complianceReportCmd = &cobra.Command{
 		stack := v.GetString("stack")
 		framework := v.GetString("framework")
 		formatStr := v.GetString("format")
+		fileOutput := v.GetString("file")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -108,6 +110,21 @@ var complianceReportCmd = &cobra.Command{
 			ui.Writef("📊 Generating compliance report...\n")
 		}
 
+		// Determine output destination.
+		output := os.Stdout
+		if fileOutput != "" {
+			dir := filepath.Dir(fileOutput)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return fmt.Errorf("failed to create output directory %q: %w", dir, err)
+			}
+			f, err := os.Create(fileOutput)
+			if err != nil {
+				return fmt.Errorf("failed to create output file %q: %w", fileOutput, err)
+			}
+			defer f.Close()
+			output = f
+		}
+
 		fetcher := security.NewFindingFetcher(&atmosConfig)
 		renderer := security.NewReportRenderer(outputFormat)
 
@@ -124,9 +141,13 @@ var complianceReportCmd = &cobra.Command{
 				continue
 			}
 
-			if err := renderer.RenderComplianceReport(os.Stdout, report); err != nil {
+			if err := renderer.RenderComplianceReport(output, report); err != nil {
 				return err
 			}
+		}
+
+		if fileOutput != "" {
+			ui.Writef("Report saved to %s\n", fileOutput)
 		}
 
 		return nil
@@ -139,6 +160,7 @@ func init() {
 		flags.WithStringFlag("stack", "s", "", "Target stack"),
 		flags.WithStringFlag("framework", "", "", "Compliance framework: cis-aws, pci-dss, soc2, hipaa, nist"),
 		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv"),
+		flags.WithStringFlag("file", "", "", "Write output to file instead of stdout"),
 		flags.WithStringFlag("controls", "", "", "Specific control IDs to check"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("framework", "ATMOS_AWS_COMPLIANCE_FRAMEWORK"),

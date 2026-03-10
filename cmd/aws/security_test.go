@@ -221,6 +221,14 @@ func TestBuildSecurityReport(t *testing.T) {
 	})
 }
 
+func TestSecurityAnalyzeFileFlag(t *testing.T) {
+	// Verify the --file flag is registered on the analyze subcommand.
+	flag := securityAnalyzeCmd.Flags().Lookup("file")
+	require.NotNil(t, flag, "securityAnalyzeCmd should have --file flag")
+	assert.Equal(t, "", flag.DefValue, "--file default should be empty")
+	assert.Equal(t, "string", flag.Value.Type(), "--file should be a string flag")
+}
+
 func TestSecuritySubcommandRegistered(t *testing.T) {
 	cmd := awsCmd
 	var foundSecurity bool

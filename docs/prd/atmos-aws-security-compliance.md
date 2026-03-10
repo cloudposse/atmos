@@ -519,6 +519,12 @@ atmos aws security analyze --stack prod-us-east-1 --format json | notify-slack -
 
 # Generate CSV for compliance audit trail
 atmos aws security analyze --format csv > findings-$(date +%Y-%m-%d).csv
+
+# Save report directly to a file
+atmos aws security analyze --stack prod-us-east-1 --file security-report.md
+
+# Save JSON findings to a file
+atmos aws security analyze --stack prod-us-east-1 --format json --file reports/findings.json
 ```
 
 #### Flags
@@ -531,6 +537,7 @@ atmos aws security analyze --format csv > findings-$(date +%Y-%m-%d).csv
 | `--source`       | string | `all`            | Finding source: `security-hub`, `config`, `inspector`, `guardduty`, `all`  |
 | `--framework`    | string | (all)            | Compliance framework filter: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist` |
 | `--format`       | string | `markdown`       | Output format: `markdown`, `json`, `yaml`, `csv`                           |
+| `--file`         | string | (stdout)         | Write output to file instead of stdout (creates parent dirs if needed)     |
 | `--max-findings` | int    | `50`             | Maximum findings to analyze (AI cost control)                              |
 | `--ai`           | bool   | `false`          | Enable AI-powered analysis (requires `ai.enabled: true`)                   |
 | `--region`       | string | (from stack)     | AWS region override                                                        |
@@ -644,6 +651,7 @@ atmos aws compliance report --stack prod-us-east-1
 | `--stack`     | string | (all stacks) | Target stack                                             |
 | `--framework` | string | (all)        | Framework: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist` |
 | `--format`    | string | `markdown`   | Output format: `markdown`, `json`, `yaml`, `csv`         |
+| `--file`      | string | (stdout)     | Write output to file instead of stdout                   |
 | `--controls`  | string | (all)        | Specific control IDs to check                            |
 
 #### Output

@@ -24,4 +24,10 @@ atmos aws security analyze --stack prod-us-east-1 --ai
 
 # Output as CSV for compliance reporting
 atmos aws security analyze --format csv > findings.csv
+
+# Save report to a file
+atmos aws security analyze --stack prod-us-east-1 --file security-report.md
+
+# Save JSON report to a file
+atmos aws security analyze --stack prod-us-east-1 --format json --file findings.json
 ```
