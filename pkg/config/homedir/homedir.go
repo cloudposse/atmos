@@ -5,9 +5,9 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -22,11 +22,6 @@ var (
 	ErrCannotExpandHomeDir = errors.New("cannot expand user-specific home dir")
 	ErrBlankOutput         = errors.New("blank output when reading home directory")
 	ErrHomeDrivePathBlank  = errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
-)
-
-const (
-	passwdFieldCount   = 7
-	passwdHomeDirIndex = 5
 )
 
 // Dir returns the home directory for the executing user.
@@ -162,30 +157,14 @@ func getDarwinHomeDir() (string, error) {
 }
 
 func getUnixHomeDir() (string, error) {
-	var stdout bytes.Buffer
-	cmd := exec.Command("getent", "passwd", strconv.Itoa(os.Getuid()))
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		if !errors.Is(err, exec.ErrNotFound) {
-			return "", err
-		}
-		return "", nil
+	// Use os/user.Current to get the home directory without parsing
+	// /etc/passwd format data directly. This avoids handling raw password
+	// database entries, which can contain sensitive fields.
+	u, err := user.Current()
+	if err != nil {
+		return "", err
 	}
-
-	passwd := strings.TrimSpace(stdout.String())
-	if passwd == "" {
-		return "", nil
-	}
-
-	// username:password:uid:gid:gecos:home:shell
-	// lgtm[go/clear-text-logging]
-	// The password field in modern /etc/passwd is 'x', not the actual password.
-	// We only extract the home directory field and do not log sensitive data.
-	passwdParts := strings.SplitN(passwd, ":", passwdFieldCount)
-	if len(passwdParts) > passwdHomeDirIndex {
-		return passwdParts[passwdHomeDirIndex], nil
-	}
-	return "", nil
+	return u.HomeDir, nil
 }
 
 func getHomeFromShell() (string, error) {
