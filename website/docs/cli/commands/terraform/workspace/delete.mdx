@@ -1,0 +1,126 @@
+---
+title: atmos terraform workspace delete
+sidebar_label: workspace delete
+sidebar_class_name: command
+id: delete
+description: Delete a Terraform workspace.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to delete a Terraform workspace for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform workspace delete --help" slug="atmos-terraform-workspace-delete--help" />
+
+## Usage
+
+Execute the `terraform workspace delete` command like this:
+
+```shell
+atmos terraform workspace delete <component> -s <stack> [workspace-name] [options]
+```
+
+This command deletes a Terraform workspace. The workspace must be empty (contain no resources) before it can be deleted. You cannot delete the currently selected workspace.
+
+:::caution
+A workspace must be empty before it can be deleted. Use `terraform destroy` to remove all resources first.
+:::
+
+:::tip
+Run `atmos terraform workspace delete --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Delete a workspace (auto-calculated from stack context)
+atmos terraform workspace delete vpc -s dev
+
+# Delete a specific workspace by name
+atmos terraform workspace delete vpc -s dev my-workspace
+
+# Force delete a non-empty workspace
+atmos terraform workspace delete vpc -s dev my-workspace -force
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+
+    <dt>`workspace-name` <em>(optional)</em></dt>
+    <dd>
+        The name of the workspace to delete. If not provided, Atmos calculates the workspace name from the stack context.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform workspace delete vpc -s dev --dry-run
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform workspace delete vpc -s dev --skip-init
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform workspace delete` command supports native `terraform workspace delete` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-force`</dt>
+    <dd>
+        Force deletion even if the workspace has resources. Use with caution.
+
+        ```shell
+        atmos terraform workspace delete vpc -s dev -force my-workspace
+        ```
+    </dd>
+
+    <dt>`-lock=true`</dt>
+    <dd>
+        Lock the state file when locking is supported. Defaults to `true`.
+
+        ```shell
+        atmos terraform workspace delete vpc -s dev -lock=false my-workspace
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Duration to retry a state lock. Defaults to `0s`.
+
+        ```shell
+        atmos terraform workspace delete vpc -s dev -lock-timeout=30s my-workspace
+        ```
+    </dd>
+</dl>
+
+## See Also
+
+- [`atmos terraform workspace`](/cli/commands/terraform/workspace) - Workspace management overview
+- [`atmos terraform workspace list`](/cli/commands/terraform/workspace/list) - List workspaces
+- [`atmos terraform workspace new`](/cli/commands/terraform/workspace/new) - Create a new workspace

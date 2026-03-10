@@ -262,7 +262,7 @@ func TestCreateAuthManager(t *testing.T) {
 		// Note: CreateAuthManager requires valid config to work.
 		// We're testing that it handles the call without panicking.
 		// A nil config will likely return an error.
-		manager, err := CreateAuthManager(nil)
+		manager, err := CreateAuthManager(nil, "")
 		// With nil config, we expect an error.
 		assert.Error(t, err)
 		assert.Nil(t, manager)

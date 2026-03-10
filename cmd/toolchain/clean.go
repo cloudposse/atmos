@@ -10,8 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/xdg"
-	"github.com/cloudposse/atmos/toolchain"
 )
 
 var cleanCmd = &cobra.Command{

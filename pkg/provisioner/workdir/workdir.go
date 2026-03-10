@@ -2,12 +2,12 @@ package workdir
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -93,15 +93,43 @@ func (s *Service) Provision(
 		return nil
 	}
 
-	// Get component name.
-	component, ok := componentConfig[ComponentKey].(string)
-	if !ok {
-		component = extractComponentName(componentConfig)
+	// If both source and workdir are enabled, skip local copy and let source provisioner handle it.
+	// This handles the case where workdir provisioner runs before source provisioner.
+	//
+	// NOTE: Provisioner execution order is determined by Go's init() function call order,
+	// which is not guaranteed between packages. When both source and workdir are enabled,
+	// they may run in either order. This check ensures correct behavior regardless of order:
+	// - If source runs first: WorkdirPathKey will be set (checked above), skip local copy
+	// - If workdir runs first: hasSource returns true (checked here), skip local copy and
+	//   let source provisioner download directly to workdir path
+	//
+	// The source provisioner will download directly to the workdir path and set WorkdirPathKey.
+	if hasSource(componentConfig) {
+		// Source provisioning will handle creating and populating the workdir.
+		return nil
 	}
-	if component == "" {
+
+	// Get component instance name for workdir path isolation.
+	// Use atmos_component (full component instance path) instead of metadata.component
+	// to ensure each component instance gets its own workdir.
+	workdirComponent, ok := componentConfig["atmos_component"].(string)
+	if !ok || workdirComponent == "" {
+		// Fallback to extractComponentName for backward compatibility.
+		workdirComponent = extractComponentName(componentConfig)
+	}
+	if workdirComponent == "" {
 		return errUtils.Build(errUtils.ErrWorkdirProvision).
 			WithExplanation("component name not found in configuration").
 			Err()
+	}
+
+	// Get base component name for source path resolution.
+	// The base component (e.g., "elasticache") points to the actual terraform module directory,
+	// while the workdir component (e.g., "elasticache-redis-cluster-1") is the instance name.
+	// When a component inherits via metadata.component, the "component" key holds the base name.
+	sourceComponent := extractComponentName(componentConfig)
+	if sourceComponent == "" {
+		sourceComponent = workdirComponent
 	}
 
 	// Get stack name for stack-specific workdir path.
@@ -113,29 +141,34 @@ func (s *Service) Provision(
 			Err()
 	}
 
-	ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", component))
+	ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", workdirComponent))
 
-	// 1. Create .workdir/terraform/<stack>-<component>/ directory.
-	workdirPath, err := s.createWorkdirDirectory(atmosConfig, stack, component)
+	// 1. Create .workdir/terraform/<stack>-<workdirComponent>/ directory.
+	workdirPath, err := s.createWorkdirDirectory(atmosConfig, stack, workdirComponent)
 	if err != nil {
 		return err
 	}
 
-	// 2. Copy local component files to workdir.
-	metadata, err := s.copyLocalToWorkdir(atmosConfig, componentConfig, workdirPath, component, stack)
+	// 2. Sync local component files to workdir (incremental, per-file checksum).
+	// Use sourceComponent for finding the source directory, workdirComponent for metadata.
+	metadata, changed, err := s.syncLocalToWorkdir(atmosConfig, componentConfig, workdirPath, workdirComponent, sourceComponent, stack)
 	if err != nil {
 		return err
 	}
 
-	// 3. Write workdir metadata.
-	if err := s.writeMetadata(workdirPath, metadata); err != nil {
+	// 3. Write workdir metadata (uses atomic write to .atmos/metadata.json).
+	if err := WriteMetadata(workdirPath, metadata); err != nil {
 		return err
 	}
 
 	// 4. Store workdir path for terraform execution.
 	componentConfig[WorkdirPathKey] = workdirPath
 
-	ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+	if changed {
+		ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+	} else {
+		ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))
+	}
 	return nil
 }
 
@@ -149,7 +182,6 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 		basePath = "."
 	}
 
-	// Use stack-component naming for proper isolation between stacks.
 	workdirName := fmt.Sprintf("%s-%s", stack, component)
 	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", workdirName)
 
@@ -164,84 +196,120 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 	return workdirPath, nil
 }
 
-// copyLocalToWorkdir copies local component files to workdir.
-func (s *Service) copyLocalToWorkdir(
+// syncLocalToWorkdir syncs local component files to workdir using incremental per-file checksums.
+// workdirComponent is the instance name (e.g., "elasticache-redis-cluster-1") used in metadata.
+// sourceComponent is the base component name (e.g., "elasticache") used to find the source directory.
+// Returns the metadata and a boolean indicating if any changes were made.
+func (s *Service) syncLocalToWorkdir(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
-	workdirPath, component, stack string,
-) (*WorkdirMetadata, error) {
-	defer perf.Track(atmosConfig, "workdir.Service.copyLocalToWorkdir")()
+	workdirPath, workdirComponent, sourceComponent, stack string,
+) (*WorkdirMetadata, bool, error) {
+	defer perf.Track(atmosConfig, "workdir.Service.syncLocalToWorkdir")()
 
-	// Get component path.
-	componentPath := extractComponentPath(atmosConfig, componentConfig, component)
-	if componentPath == "" {
-		return nil, errUtils.Build(errUtils.ErrWorkdirProvision).
-			WithExplanation("cannot determine local component path").
-			WithContext("component", component).
-			Err()
+	// Use sourceComponent (base component) for finding the source directory.
+	componentPath, err := s.validateComponentPath(atmosConfig, componentConfig, sourceComponent)
+	if err != nil {
+		return nil, false, err
 	}
 
-	// Verify source exists.
-	if !s.fs.Exists(componentPath) {
-		return nil, errUtils.Build(errUtils.ErrWorkdirProvision).
-			WithExplanation("local component path does not exist").
-			WithContext("path", componentPath).
-			WithHint("Check that the component exists in components/terraform/").
-			Err()
-	}
+	existingMetadata, _ := ReadMetadata(workdirPath)
 
-	ui.Info(fmt.Sprintf("Copying local component: %s", componentPath))
-
-	// Copy to workdir.
-	if err := s.fs.CopyDir(componentPath, workdirPath); err != nil {
-		return nil, errUtils.Build(errUtils.ErrWorkdirSync).
+	changed, err := s.fs.SyncDir(componentPath, workdirPath, s.hasher)
+	if err != nil {
+		return nil, false, errUtils.Build(errUtils.ErrWorkdirSync).
 			WithCause(err).
-			WithExplanation("failed to copy local component to workdir").
+			WithExplanation("failed to sync local component to workdir").
 			WithContext("source", componentPath).
 			WithContext("dest", workdirPath).
 			Err()
 	}
 
-	// Compute content hash.
+	if changed {
+		ui.Info(fmt.Sprintf("Local component files synced: %s", componentPath))
+	}
+
+	contentHash := s.computeContentHash(workdirPath)
+	// Use workdirComponent (instance name) in metadata for identification.
+	metadata := buildLocalMetadata(&localMetadataParams{
+		component:        workdirComponent,
+		stack:            stack,
+		componentPath:    componentPath,
+		contentHash:      contentHash,
+		existingMetadata: existingMetadata,
+		changed:          changed,
+	})
+
+	return metadata, changed, nil
+}
+
+// validateComponentPath extracts and validates the component path.
+func (s *Service) validateComponentPath(
+	atmosConfig *schema.AtmosConfiguration,
+	componentConfig map[string]any,
+	component string,
+) (string, error) {
+	componentPath := extractComponentPath(atmosConfig, componentConfig, component)
+	if componentPath == "" {
+		return "", errUtils.Build(errUtils.ErrWorkdirProvision).
+			WithExplanation("cannot determine local component path").
+			WithContext("component", component).
+			Err()
+	}
+
+	if !s.fs.Exists(componentPath) {
+		return "", errUtils.Build(errUtils.ErrWorkdirProvision).
+			WithExplanation("local component path does not exist").
+			WithContext("path", componentPath).
+			WithHint(fmt.Sprintf("Check that the component exists at %s", componentPath)).
+			Err()
+	}
+
+	return componentPath, nil
+}
+
+// computeContentHash computes the content hash, logging a warning on failure.
+func (s *Service) computeContentHash(workdirPath string) string {
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
 		ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+		return ""
 	}
-
-	now := time.Now()
-	return &WorkdirMetadata{
-		Component:   component,
-		Stack:       stack,
-		SourceType:  SourceTypeLocal,
-		Source:      componentPath,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		ContentHash: contentHash,
-	}, nil
+	return contentHash
 }
 
-// writeMetadata writes workdir metadata to the metadata file.
-func (s *Service) writeMetadata(workdirPath string, metadata *WorkdirMetadata) error {
-	defer perf.Track(nil, "workdir.Service.writeMetadata")()
+// localMetadataParams holds parameters for building local workdir metadata.
+type localMetadataParams struct {
+	component        string
+	stack            string
+	componentPath    string
+	contentHash      string
+	existingMetadata *WorkdirMetadata
+	changed          bool
+}
 
-	metadataPath := filepath.Join(workdirPath, WorkdirMetadataFile)
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return errUtils.Build(errUtils.ErrWorkdirMetadata).
-			WithCause(err).
-			WithExplanation("failed to marshal workdir metadata").
-			Err()
+// buildLocalMetadata creates metadata for a local workdir, preserving timestamps from existing metadata.
+func buildLocalMetadata(params *localMetadataParams) *WorkdirMetadata {
+	now := time.Now()
+	metadata := &WorkdirMetadata{
+		Component:    params.component,
+		Stack:        params.stack,
+		SourceType:   SourceTypeLocal,
+		Source:       params.componentPath,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		LastAccessed: now,
+		ContentHash:  params.contentHash,
 	}
 
-	if err := s.fs.WriteFile(metadataPath, data, FilePermissionsStandard); err != nil {
-		return errUtils.Build(errUtils.ErrWorkdirMetadata).
-			WithCause(err).
-			WithExplanation("failed to write workdir metadata").
-			WithContext("path", metadataPath).
-			Err()
+	if params.existingMetadata != nil {
+		metadata.CreatedAt = params.existingMetadata.CreatedAt
+		if !params.changed {
+			metadata.UpdatedAt = params.existingMetadata.UpdatedAt
+		}
 	}
 
-	return nil
+	return metadata
 }
 
 // isWorkdirEnabled checks if provision.workdir.enabled is set to true.
@@ -290,6 +358,8 @@ func extractComponentName(componentConfig map[string]any) string {
 }
 
 // extractComponentPath extracts the local component path.
+// Checks in order: top-level component_path, nested component_info.component_path,
+// then builds default path from base path + components base + component name.
 func extractComponentPath(atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, component string) string {
 	defer perf.Track(atmosConfig, "workdir.extractComponentPath")()
 
@@ -298,9 +368,18 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, componentConfi
 		basePath = "."
 	}
 
-	// Check for component_path in config.
+	// Check for component_path in config (top-level).
 	if componentPath, ok := componentConfig["component_path"].(string); ok && componentPath != "" {
 		return componentPath
+	}
+
+	// Check for component_info.component_path (nested).
+	// Production code (internal/exec/utils.go) sets ComponentSection["component_info"]["component_path"]
+	// with the resolved component path.
+	if componentInfo, ok := componentConfig["component_info"].(map[string]any); ok {
+		if componentPath, ok := componentInfo["component_path"].(string); ok && componentPath != "" {
+			return componentPath
+		}
 	}
 
 	// Build default path.
@@ -310,4 +389,36 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, componentConfi
 	}
 
 	return filepath.Join(basePath, componentsBasePath, component)
+}
+
+// hasSource checks if component config has a valid source defined.
+// Returns true only if the source has a valid URI.
+//
+// NOTE: This is a duplicate of source.HasSource() to avoid import cycles.
+// The workdir package cannot import the source package because source already imports workdir
+// (to use workdir.WorkdirPathKey and other constants). Creating a shared utility package
+// could solve this, but adds complexity for a simple check. The duplication is acceptable
+// given the function's simplicity and stability.
+func hasSource(componentConfig map[string]any) bool {
+	if componentConfig == nil {
+		return false
+	}
+	// Check top-level source.
+	source, ok := componentConfig[cfg.SourceSectionName]
+	if !ok || source == nil {
+		return false
+	}
+
+	// String form: must be non-empty.
+	if sourceStr, ok := source.(string); ok {
+		return sourceStr != ""
+	}
+
+	// Map form: must have uri field.
+	if sourceMap, ok := source.(map[string]any); ok {
+		uri, hasUri := sourceMap["uri"].(string)
+		return hasUri && uri != ""
+	}
+
+	return false
 }

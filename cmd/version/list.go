@@ -15,9 +15,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
-	"github.com/cloudposse/atmos/toolchain"
 )
 
 //go:embed markdown/atmos_version_list_usage.md

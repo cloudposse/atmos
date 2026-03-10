@@ -9,6 +9,8 @@ No versions installed
 Available Versions (latest 10):
     VERSION  DATE        TITLE                                          
 ────────────────────────────────────────────────────────────────────────
+    X.X.X   YYYY-MM-DD  Demo: change-with-nth                          
+    X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  When the result list is updated, move the      
@@ -17,8 +19,6 @@ Available Versions (latest 10):
     X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  X.X.X                                         
-    X.X.X   YYYY-MM-DD  X.X.X                                         
-    X.X.X   YYYY-MM-DD  Screenshot                                     
     X.X.X   YYYY-MM-DD  X.X.X                                         
 
 💡 Use atmos toolchain install junegunn/fzf@<version> to install

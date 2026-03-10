@@ -37,13 +37,17 @@ func BuildConfigAndStacksInfo(cmd *cobra.Command, v *viper.Viper) schema.ConfigA
 
 // CreateAuthManager creates a new auth manager with all required dependencies.
 // Exported for use by command packages (e.g., terraform package).
-func CreateAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
+func CreateAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
 	defer perf.Track(nil, "auth.CreateAuthManager")()
+
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
 
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
 
-	return auth.NewAuthManager(authConfig, credStore, validator, nil)
+	return auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 }
 
 // formatDuration formats a duration into a human-readable string.

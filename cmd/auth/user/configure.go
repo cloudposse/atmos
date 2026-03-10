@@ -100,7 +100,7 @@ func promptAndSaveCredentials(cmd *cobra.Command, yamlInfo awsUserIdentityInfo, 
 
 	// Save credentials to keyring.
 	store := credentials.NewCredentialStore()
-	if err := store.Store(alias, creds); err != nil {
+	if err := store.Store(alias, creds, ""); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAwsAuth, err)
 	}
 	fmt.Fprintf(cmd.ErrOrStderr(), "Saved credentials to keyring: %s\n", alias)

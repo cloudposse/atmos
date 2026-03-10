@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	toolchainpkg "github.com/cloudposse/atmos/toolchain"
+	toolchainpkg "github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // TestToolchainCommandProvider_Extended tests additional ToolchainCommandProvider functionality.

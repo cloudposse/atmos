@@ -1,4 +1,4 @@
-FROM golang:1.24.6 AS confetty
+FROM golang:1.26.0 AS confetty
 
 # Set the working directory
 WORKDIR /app
@@ -40,7 +40,7 @@ RUN curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/mas
 RUN curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash
 
 RUN apt-get -y install atmos terraform kubectl helmfile helm k9s stern && \
-    su - vscode -c "helm plugin install https://github.com/databus23/helm-diff"
+    su - vscode -c "helm plugin install --verify=false https://github.com/databus23/helm-diff"
 
 # Install the rootfs/ configurations
 COPY rootfs/ /

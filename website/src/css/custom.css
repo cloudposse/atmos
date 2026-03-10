@@ -1011,8 +1011,7 @@ a[class*="sidebarItemLink"]:hover {
 
 /* Table of contents - reasonable width with sticky positioning */
 .theme-doc-toc-desktop,
-div[class*="tableOfContents"],
-.thin-scrollbar {
+div[class*="tableOfContents"] {
     min-width: 250px;
     position: sticky;
     top: var(--ifm-navbar-height);
@@ -1060,4 +1059,53 @@ a[class*="table-of-contents__link"] {
 .prism-code .token.punctuation,
 .token.punctuation {
     color: rgb(199, 146, 234);
+}
+
+/* ========================= */
+/* RESIZABLE DOCS SIDEBAR    */
+/* ========================= */
+
+/* Drag handle: invisible strip on right edge of sidebar, visible on hover */
+@media (min-width: 997px) {
+    .theme-doc-sidebar-container {
+        width: var(--doc-sidebar-width, 300px) !important;
+        min-width: var(--doc-sidebar-width, 300px) !important;
+        flex: 0 0 var(--doc-sidebar-width, 300px) !important;
+    }
+
+    .theme-doc-sidebar-container::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: -2px;
+        width: 5px;
+        height: 100%;
+        cursor: col-resize;
+        background: transparent;
+        transition: background 0.15s ease;
+        z-index: 10;
+    }
+
+    .theme-doc-sidebar-container:hover::after {
+        background: var(--ifm-color-primary-lightest);
+        opacity: 0.4;
+    }
+
+    html.sidebar-resizing .theme-doc-sidebar-container::after {
+        background: var(--ifm-color-primary);
+        opacity: 0.6;
+        width: 3px;
+    }
+}
+
+/* During drag: force col-resize cursor and prevent text selection */
+html.sidebar-resizing,
+html.sidebar-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+/* Disable sidebar transition during drag for instant feedback */
+html.sidebar-resizing .theme-doc-sidebar-container {
+    transition: none !important;
 }

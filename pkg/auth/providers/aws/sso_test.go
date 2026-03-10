@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -310,7 +311,7 @@ func TestSSOProvider_GetFilesDisplayPath(t *testing.T) {
 				Region:   testRegion,
 				StartURL: testStartURL,
 			},
-			expected: "atmos/aws", // XDG path contains atmos/aws
+			expected: "atmos", // XDG path contains atmos (aws is added in subdirectories).
 		},
 		{
 			name: "custom base_path",
@@ -396,9 +397,9 @@ func TestSSOProvider_Logout_ErrorPaths(t *testing.T) {
 
 func TestIsTTY(t *testing.T) {
 	// isTTY checks if stderr is a terminal.
-	// In test environment, this will typically return false.
+	// In test environment, stderr is not a terminal.
 	result := isTTY()
-	assert.IsType(t, false, result)
+	assert.False(t, result, "isTTY should return false in test environment (stderr is not a terminal)")
 }
 
 func TestDisplayVerificationDialog(t *testing.T) {
@@ -806,10 +807,25 @@ func TestPromptDeviceAuth_VariousURLFormats(t *testing.T) {
 }
 
 func TestIsInteractive(t *testing.T) {
-	// Test isInteractive function.
+	// Test isInteractive function without force-tty.
+	// In test environment (no TTY), this returns false via isTTY() fallback.
+	prevForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", false)
+	t.Cleanup(func() { viper.Set("force-tty", prevForceTTY) })
+
 	result := isInteractive()
-	// In test environment, this typically returns false, but we just verify it doesn't panic.
-	assert.IsType(t, false, result)
+	// Test runner has no real TTY, so isTTY() returns false.
+	assert.False(t, result, "isInteractive should return false in non-TTY test environment when force-tty is not set")
+}
+
+func TestIsInteractive_ForceTTY(t *testing.T) {
+	// Test that force-tty viper setting overrides the TTY check.
+	prevForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", prevForceTTY) })
+
+	result := isInteractive()
+	assert.True(t, result, "isInteractive should return true when force-tty is set")
 }
 
 func TestSSOProvider_Paths(t *testing.T) {
@@ -861,6 +877,48 @@ func TestSSOProvider_Paths(t *testing.T) {
 // stringPtr is a helper to create string pointers.
 func stringPtr(s string) *string {
 	return &s
+}
+
+func TestSSOProvider_SetRealm(t *testing.T) {
+	providerConfig := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, providerConfig)
+	require.NoError(t, err)
+
+	// Initially realm should be empty.
+	assert.Empty(t, provider.realm, "realm should be empty initially")
+
+	// Set realm.
+	provider.SetRealm("test-realm")
+	assert.Equal(t, "test-realm", provider.realm, "realm should be set to test-realm")
+
+	// Update realm.
+	provider.SetRealm("another-realm")
+	assert.Equal(t, "another-realm", provider.realm, "realm should be updated to another-realm")
+}
+
+func TestSSOProvider_Authenticate_NonInteractive_ErrorMessage(t *testing.T) {
+	// Test that the non-interactive error is the correct sentinel error.
+	t.Setenv("CI", "1") // Force non-interactive mode.
+
+	providerConfig := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, providerConfig)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	_, err = provider.Authenticate(ctx)
+	assert.Error(t, err)
+	// The error should wrap ErrAuthenticationFailed.
+	assert.ErrorContains(t, err, "authentication failed")
 }
 
 func TestNewSSOProvider_InvalidProviderKind(t *testing.T) {

@@ -100,7 +100,7 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 	atmosConfigPtr := &atmosConfig
 
 	// Create auth manager.
-	authManager, err := CreateAuthManager(&atmosConfig.Auth)
+	authManager, err := CreateAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}

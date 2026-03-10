@@ -47,7 +47,7 @@ atmos auth exec -- terraform plan
 # Show current authentication status
 atmos auth whoami
 
-# Open AWS console in browser
+# Open cloud console in browser
 atmos auth console
 
 # Start a shell with authentication
@@ -93,17 +93,36 @@ Using the equals syntax (`--identity=admin`) is unambiguous and works in all con
 
 **Providers** are the upstream systems that Atmos Auth uses to obtain initial credentials:
 
+**AWS**
 - **AWS SSO**: `aws/iam-identity-center`
 - **AWS SAML**: `aws/saml`
 - **GitHub OIDC**: `github/oidc`
+
+**Azure**
+- **Device Code**: `azure/device-code`
+- **OIDC (Workload Identity)**: `azure/oidc`
+- **CLI**: `azure/cli`
+
+**GCP**
+- **Application Default Credentials**: `gcp/adc`
+- **Workload Identity Federation**: `gcp/workload-identity-federation`
 
 ### Identities
 
 **Identities** represent the user accounts or roles available from provider credentials:
 
-- **AWS Permission Set**: `aws/permission-set`
-- **AWS Assume Role**: `aws/assume-role`
-- **AWS User**: `aws/user`
+**AWS**
+- **Permission Set**: `aws/permission-set`
+- **Assume Role**: `aws/assume-role`
+- **Assume Root**: `aws/assume-root`
+- **User (Break-glass)**: `aws/user`
+
+**Azure**
+- **Subscription**: `azure/subscription`
+
+**GCP**
+- **Service Account**: `gcp/service-account`
+- **Project**: `gcp/project`
 
 ### Identity Chaining
 
@@ -154,7 +173,7 @@ atmos terraform plan mycomponent --stack=dev
 
 **Recognized disable values:** `false`, `0`, `no`, `off` (case-insensitive)
 
-When disabled, Atmos skips all identity authentication and falls back to standard cloud provider SDK credential resolution.
+When disabled, Atmos skips all identity authentication and falls back to standard cloud provider SDK credential resolution (AWS, Azure, or GCP).
 
 ## Environment Variable Formats
 

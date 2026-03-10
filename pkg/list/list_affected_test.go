@@ -678,3 +678,260 @@ func TestAffectedCommandOptions(t *testing.T) {
 		assert.True(t, opts.ExcludeLocked)
 	})
 }
+
+func TestAffectedResult_WithDeletedComponents(t *testing.T) {
+	t.Run("affectedResult with deleted component", func(t *testing.T) {
+		result := &affectedResult{
+			Affected: []schema.Affected{
+				{
+					Component:    "prometheus",
+					Stack:        "dev-us-east-1",
+					Affected:     "deleted",
+					Deleted:      true,
+					DeletionType: "component",
+				},
+			},
+			LocalRef:     "refs/heads/feature",
+			RemoteRef:    "refs/heads/main",
+			RemoteRepoID: "repo-123",
+		}
+
+		assert.Len(t, result.Affected, 1)
+		assert.Equal(t, "prometheus", result.Affected[0].Component)
+		assert.Equal(t, "deleted", result.Affected[0].Affected)
+		assert.True(t, result.Affected[0].Deleted)
+		assert.Equal(t, "component", result.Affected[0].DeletionType)
+	})
+
+	t.Run("affectedResult with deleted stack", func(t *testing.T) {
+		result := &affectedResult{
+			Affected: []schema.Affected{
+				{
+					Component:    "vpc",
+					Stack:        "staging-us-west-2",
+					Affected:     "deleted.stack",
+					Deleted:      true,
+					DeletionType: "stack",
+				},
+				{
+					Component:    "eks",
+					Stack:        "staging-us-west-2",
+					Affected:     "deleted.stack",
+					Deleted:      true,
+					DeletionType: "stack",
+				},
+			},
+			LocalRef:  "refs/heads/feature",
+			RemoteRef: "refs/heads/main",
+		}
+
+		assert.Len(t, result.Affected, 2)
+		for _, a := range result.Affected {
+			assert.Equal(t, "staging-us-west-2", a.Stack)
+			assert.Equal(t, "deleted.stack", a.Affected)
+			assert.True(t, a.Deleted)
+			assert.Equal(t, "stack", a.DeletionType)
+		}
+	})
+
+	t.Run("affectedResult with mixed modified and deleted", func(t *testing.T) {
+		result := &affectedResult{
+			Affected: []schema.Affected{
+				{
+					Component:    "vpc",
+					Stack:        "dev",
+					Affected:     "component",
+					Deleted:      false,
+					DeletionType: "",
+				},
+				{
+					Component:    "monitoring",
+					Stack:        "dev",
+					Affected:     "deleted",
+					Deleted:      true,
+					DeletionType: "component",
+				},
+			},
+		}
+
+		assert.Len(t, result.Affected, 2)
+		// First is modified.
+		assert.False(t, result.Affected[0].Deleted)
+		assert.Empty(t, result.Affected[0].DeletionType)
+		// Second is deleted.
+		assert.True(t, result.Affected[1].Deleted)
+		assert.Equal(t, "component", result.Affected[1].DeletionType)
+	})
+}
+
+func TestParseAffectedColumnsFlag_DeletedFields(t *testing.T) {
+	tests := []struct {
+		name        string
+		columnsFlag []string
+		expectedLen int
+		checkFirst  bool
+		firstName   string
+		firstValue  string
+	}{
+		{
+			name:        "column with deleted field",
+			columnsFlag: []string{"Deleted={{ .deleted }}"},
+			expectedLen: 1,
+			checkFirst:  true,
+			firstName:   "Deleted",
+			firstValue:  "{{ .deleted }}",
+		},
+		{
+			name:        "column with deletion_type field",
+			columnsFlag: []string{"DeletionType={{ .deletion_type }}"},
+			expectedLen: 1,
+			checkFirst:  true,
+			firstName:   "DeletionType",
+			firstValue:  "{{ .deletion_type }}",
+		},
+		{
+			name:        "multiple columns including deleted fields",
+			columnsFlag: []string{"Component={{ .component }}", "Deleted={{ .deleted }}", "Type={{ .deletion_type }}"},
+			expectedLen: 3,
+			checkFirst:  true,
+			firstName:   "Component",
+			firstValue:  "{{ .component }}",
+		},
+		{
+			name:        "conditional column based on deleted status",
+			columnsFlag: []string{"Status={{ if .deleted }}DELETED{{ else }}ACTIVE{{ end }}"},
+			expectedLen: 1,
+			checkFirst:  true,
+			firstName:   "Status",
+			firstValue:  "{{ if .deleted }}DELETED{{ else }}ACTIVE{{ end }}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseAffectedColumnsFlag(tt.columnsFlag)
+			require.NoError(t, err)
+			assert.Len(t, result, tt.expectedLen)
+
+			if tt.checkFirst && len(result) > 0 {
+				assert.Equal(t, tt.firstName, result[0].Name)
+				assert.Equal(t, tt.firstValue, result[0].Value)
+			}
+		})
+	}
+}
+
+func TestBuildAffectedFilters_DeletedFilter(t *testing.T) {
+	tests := []struct {
+		name       string
+		filterSpec string
+		expectNil  bool
+		expectLen  int
+	}{
+		{
+			name:       "filter by deleted true",
+			filterSpec: "deleted:true",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by deleted false",
+			filterSpec: "deleted:false",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by deletion_type component",
+			filterSpec: "deletion_type:component",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by deletion_type stack",
+			filterSpec: "deletion_type:stack",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by affected deleted",
+			filterSpec: "affected:deleted",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by affected deleted.stack",
+			filterSpec: "affected:deleted.stack",
+			expectNil:  false,
+			expectLen:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := buildAffectedFilters(tt.filterSpec)
+			require.NoError(t, err)
+
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				assert.Len(t, result, tt.expectLen)
+			}
+		})
+	}
+}
+
+func TestBuildAffectedSorters_DeletedSort(t *testing.T) {
+	columnsWithDeleted := []column.Config{
+		{Name: "Stack", Value: "{{ .stack }}"},
+		{Name: "Component", Value: "{{ .component }}"},
+		{Name: "Deleted", Value: "{{ .deleted }}"},
+	}
+
+	tests := []struct {
+		name      string
+		sortSpec  string
+		columns   []column.Config
+		expectNil bool
+		expectLen int
+		firstCol  string
+	}{
+		{
+			name:      "sort by deleted ascending",
+			sortSpec:  "Deleted:asc",
+			columns:   columnsWithDeleted,
+			expectNil: false,
+			expectLen: 1,
+			firstCol:  "Deleted",
+		},
+		{
+			name:      "sort by deleted descending",
+			sortSpec:  "Deleted:desc",
+			columns:   columnsWithDeleted,
+			expectNil: false,
+			expectLen: 1,
+			firstCol:  "Deleted",
+		},
+		{
+			name:      "sort by deleted then component",
+			sortSpec:  "Deleted:desc,Component:asc",
+			columns:   columnsWithDeleted,
+			expectNil: false,
+			expectLen: 2,
+			firstCol:  "Deleted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := buildAffectedSorters(tt.sortSpec, tt.columns)
+			require.NoError(t, err)
+
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				require.Len(t, result, tt.expectLen)
+				assert.Equal(t, tt.firstCol, result[0].Column)
+			}
+		})
+	}
+}

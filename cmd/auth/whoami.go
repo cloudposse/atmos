@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -99,7 +100,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(addGCPReauthExplanation(err), "", "")
 	}
 
 	// Validate credentials if available.
@@ -111,6 +112,19 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	}
 	printWhoamiHuman(whoami, isValid)
 	return nil
+}
+
+func addGCPReauthExplanation(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "invalid_grant") && strings.Contains(msg, "invalid_rapt") {
+		return errUtils.Build(err).
+			WithExplanation("Your Google application-default credentials have expired or require reauthentication. Run `gcloud auth application-default login` and try again.").
+			Err()
+	}
+	return err
 }
 
 // validateCredentials attempts to validate the credentials and returns true if valid.
@@ -138,6 +152,11 @@ func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool
 
 	validationInfo, err := v.Validate(ctx)
 	if err != nil {
+		if errors.Is(err, errUtils.ErrNotImplemented) {
+			expired := whoami.Credentials.IsExpired()
+			log.Debug("Credential validation not implemented; using expiration check", logKeyIdentity, whoami.Identity, "expired", expired)
+			return !expired
+		}
 		log.Debug("Credential validation failed", logKeyIdentity, whoami.Identity, "error", err)
 		return false
 	}
@@ -178,7 +197,7 @@ func loadAuthManager(cmd *cobra.Command, v *viper.Viper) (authTypes.AuthManager,
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
-	manager, err := CreateAuthManager(&atmosConfig.Auth)
+	manager, err := CreateAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -260,6 +279,16 @@ func buildWhoamiTableRows(whoami *authTypes.WhoamiInfo) [][]string {
 	const expiringThresholdMinutes = 15
 
 	var rows [][]string
+
+	// Display realm if set (credential isolation boundary).
+	if whoami.Realm != "" {
+		realmDisplay := whoami.Realm
+		if whoami.RealmSource != "" {
+			realmDisplay = fmt.Sprintf("%s (%s)", whoami.Realm, whoami.RealmSource)
+		}
+		rows = append(rows, []string{"Realm", realmDisplay})
+	}
+
 	rows = append(rows, []string{"Provider", whoami.Provider})
 	rows = append(rows, []string{"Identity", whoami.Identity})
 

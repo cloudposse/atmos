@@ -577,6 +577,90 @@ func TestRegisterCommandCompatFlags_Concurrent(t *testing.T) {
 	}
 }
 
+// resetFlagRegistries clears the commandFlagRegistries for test isolation.
+func resetFlagRegistries() {
+	commandFlagRegistries.mu.Lock()
+	defer commandFlagRegistries.mu.Unlock()
+	commandFlagRegistries.registries = make(map[string]*flags.FlagRegistry)
+}
+
+func TestRegisterCommandFlagRegistry(t *testing.T) {
+	resetFlagRegistries()
+
+	flagReg := flags.NewFlagRegistry()
+	flagReg.Register(&flags.StringFlag{
+		Name:        "identity",
+		NoOptDefVal: "__SELECT__",
+	})
+
+	RegisterCommandFlagRegistry("terraform", flagReg)
+
+	got := GetCommandFlagRegistry("terraform")
+	require.NotNil(t, got, "registered flag registry should be retrievable")
+	assert.Same(t, flagReg, got, "should return the exact same registry instance")
+}
+
+func TestGetCommandFlagRegistry_NotFound(t *testing.T) {
+	resetFlagRegistries()
+
+	got := GetCommandFlagRegistry("nonexistent")
+	assert.Nil(t, got, "should return nil for unregistered provider")
+}
+
+func TestRegisterCommandFlagRegistry_Overwrite(t *testing.T) {
+	resetFlagRegistries()
+
+	first := flags.NewFlagRegistry()
+	second := flags.NewFlagRegistry()
+
+	RegisterCommandFlagRegistry("terraform", first)
+	RegisterCommandFlagRegistry("terraform", second)
+
+	got := GetCommandFlagRegistry("terraform")
+	assert.Same(t, second, got, "second registration should overwrite the first")
+}
+
+func TestRegisterCommandFlagRegistry_MultipleProviders(t *testing.T) {
+	resetFlagRegistries()
+
+	tfRegistry := flags.NewFlagRegistry()
+	hfRegistry := flags.NewFlagRegistry()
+
+	RegisterCommandFlagRegistry("terraform", tfRegistry)
+	RegisterCommandFlagRegistry("helmfile", hfRegistry)
+
+	assert.Same(t, tfRegistry, GetCommandFlagRegistry("terraform"))
+	assert.Same(t, hfRegistry, GetCommandFlagRegistry("helmfile"))
+	assert.Nil(t, GetCommandFlagRegistry("packer"))
+}
+
+func TestRegisterCommandFlagRegistry_Concurrent(t *testing.T) {
+	resetFlagRegistries()
+
+	done := make(chan bool)
+
+	// Concurrently register flag registries for different providers.
+	for i := 0; i < 10; i++ {
+		go func(idx int) {
+			provider := fmt.Sprintf("provider%d", idx)
+			reg := flags.NewFlagRegistry()
+			RegisterCommandFlagRegistry(provider, reg)
+			done <- true
+		}(i)
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// Verify all registrations succeeded.
+	for i := 0; i < 10; i++ {
+		provider := fmt.Sprintf("provider%d", i)
+		got := GetCommandFlagRegistry(provider)
+		require.NotNil(t, got, "flag registry for %s should exist", provider)
+	}
+}
+
 // mockExperimentalCommandProvider is a test implementation that returns IsExperimental = true.
 type mockExperimentalCommandProvider struct {
 	mockCommandProvider

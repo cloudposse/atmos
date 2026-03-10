@@ -62,6 +62,7 @@ type oidcProvider struct {
 	httpClient httpClient.Client
 	// tokenEndpoint can be overridden for testing. If empty, uses Azure AD endpoint.
 	tokenEndpoint string
+	realm         string // Credential isolation realm set by auth manager.
 }
 
 // oidcConfig holds extracted Azure OIDC configuration from provider spec.
@@ -154,6 +155,11 @@ func (p *oidcProvider) Kind() string {
 // Name returns the configured provider name.
 func (p *oidcProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *oidcProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for Azure OIDC provider.
@@ -362,6 +368,13 @@ func (p *oidcProvider) fetchGitHubActionsToken() (string, error) {
 	reqURL, err := url.Parse(requestURL)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid ACTIONS_ID_TOKEN_REQUEST_URL: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+	// Validate the URL to prevent SSRF: scheme must be https and host must be non-empty.
+	if reqURL.Scheme != "https" {
+		return "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must use https scheme, got %q", errUtils.ErrAuthenticationFailed, reqURL.Scheme)
+	}
+	if reqURL.Hostname() == "" {
+		return "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must have a non-empty host", errUtils.ErrAuthenticationFailed)
 	}
 	q := reqURL.Query()
 	q.Set("audience", audience)

@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // sortMapKeys recursively sorts map keys for consistent comparison.
@@ -442,7 +444,7 @@ func processPriorityAttributes(diff *strings.Builder, origAttrs, newAttrs map[st
 func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, skipAttrs map[string]bool) {
 	for attrK, origAttrV := range origAttrs {
 		// Skip priority attributes (already processed) and attributes in the skip list
-		if contains(priorityAttrs, attrK) || skipAttrs[attrK] {
+		if u.SliceContainsString(priorityAttrs, attrK) || skipAttrs[attrK] {
 			continue
 		}
 
@@ -457,7 +459,7 @@ func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs m
 // processAddedAttributes handles new attributes that didn't exist before.
 func processAddedAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, skipAttrs map[string]bool) {
 	for attrK, newAttrV := range newAttrs {
-		if _, exists := origAttrs[attrK]; !exists && !contains(priorityAttrs, attrK) && !skipAttrs[attrK] {
+		if _, exists := origAttrs[attrK]; !exists && !u.SliceContainsString(priorityAttrs, attrK) && !skipAttrs[attrK] {
 			diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
 		}
 	}
@@ -508,14 +510,4 @@ func extractChangeAfterField(resMap map[string]interface{}, result map[string]in
 	for k, v := range after {
 		result[k] = v
 	}
-}
-
-// contains checks if a string is in a slice.
-func contains(slice []string, s string) bool {
-	for _, item := range slice {
-		if item == s {
-			return true
-		}
-	}
-	return false
 }

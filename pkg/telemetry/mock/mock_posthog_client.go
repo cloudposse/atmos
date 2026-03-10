@@ -128,6 +128,21 @@ func (mr *MockClientMockRecorder) GetFeatureFlagPayload(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeatureFlagPayload", reflect.TypeOf((*MockClient)(nil).GetFeatureFlagPayload), arg0)
 }
 
+// GetFeatureFlagResult mocks base method.
+func (m *MockClient) GetFeatureFlagResult(arg0 posthog.FeatureFlagPayload) (*posthog.FeatureFlagResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeatureFlagResult", arg0)
+	ret0, _ := ret[0].(*posthog.FeatureFlagResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeatureFlagResult indicates an expected call of GetFeatureFlagResult.
+func (mr *MockClientMockRecorder) GetFeatureFlagResult(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeatureFlagResult", reflect.TypeOf((*MockClient)(nil).GetFeatureFlagResult), arg0)
+}
+
 // GetFeatureFlags mocks base method.
 func (m *MockClient) GetFeatureFlags() ([]posthog.FeatureFlag, error) {
 	m.ctrl.T.Helper()

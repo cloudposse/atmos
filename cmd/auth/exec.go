@@ -107,7 +107,7 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (map[string]str
 	}
 
 	// Create auth manager.
-	authManager, err := CreateAuthManager(&atmosConfig.Auth)
+	authManager, err := CreateAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
