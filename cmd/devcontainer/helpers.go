@@ -153,7 +153,9 @@ func createUnauthenticatedAuthManager(authConfig *schema.AuthConfig) (auth.AuthM
 
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-	authManager, err := auth.NewAuthManager(authConfig, credStore, validator, authStackInfo)
+	// Note: Empty cliConfigPath results in auto-generated realm from empty path.
+	// This is acceptable for unauthenticated managers used for identity listing.
+	authManager, err := auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, "")
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrFailedToInitializeAuthManager).
 			WithExplanation("Failed to create authentication manager").

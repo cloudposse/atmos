@@ -43,7 +43,7 @@ settings:
 
 ### Component-Type Level
 
-Settings defined under `terraform`, `helmfile`, or `packer` apply to all components of that type:
+Settings defined under `terraform`, `helmfile`, `packer`, or `ansible` apply to all components of that type:
 
 ```yaml
 # stacks/orgs/acme/plat/prod/_defaults.yaml
@@ -78,7 +78,7 @@ components:
 Settings are deep-merged from the most general to the most specific level:
 
 1. **Global `settings:`** (applies to all components)
-2. **Component-type `terraform.settings:` / `helmfile.settings:` / `packer.settings:`** (applies to all components of that type)
+2. **Component-type `terraform.settings:` / `helmfile.settings:` / `packer.settings:` / `ansible.settings:`** (applies to all components of that type)
 3. **Component `components.terraform.<name>.settings`** (applies to a specific component)
 
 Maps are recursively merged, and lists are replaced (not appended).

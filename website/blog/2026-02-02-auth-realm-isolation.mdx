@@ -1,0 +1,79 @@
+---
+slug: auth-realm-isolation
+title: "Auth Realm Isolation for Multi-Repository Workflows"
+authors: [Benbentwo]
+tags: [feature, breaking-change]
+---
+
+Atmos now supports credential realm isolation, preventing collisions when engineers
+work with multiple customer repositories using identical identity names.
+
+<!--truncate-->
+
+## The Problem
+
+When working with multiple repositories that use the same identity names (like `core-root/terraform`),
+credentials from one repository could leak into another. This was especially problematic for
+consultants and engineers managing infrastructure across multiple customer environments.
+
+## What Changed
+
+Credentials are now stored in realm-scoped paths and keyring keys:
+
+```
+# Before
+~/.config/atmos/aws/{provider}/credentials
+Keyring: {identity}
+
+# After
+~/.config/atmos/{realm}/aws/{provider}/credentials
+Keyring: atmos:{realm}:{identity}
+```
+
+The realm is computed automatically based on your project location, ensuring each
+repository has isolated credentials.
+
+## Realm Computation
+
+Realms are determined by priority:
+
+1. **Environment variable**: `ATMOS_AUTH_REALM` - explicit override
+2. **Config file**: `auth.realm` in atmos.yaml - per-project setting
+3. **Auto-generated**: SHA256 hash of the atmos.yaml path (first 8 characters)
+
+## Viewing Your Realm
+
+The `atmos auth whoami` and `atmos auth login` commands now display the active realm:
+
+```
+atmos auth login --identity my-identity
+
+Realm     a1b2c3d4 (auto)
+Provider  aws-sso
+Identity  my-identity
+Region    us-east-1
+```
+
+## New Logout Options
+
+A new `--all-realms` flag allows logging out from all realms across all repositories:
+
+```bash
+# Logout from current realm only
+atmos auth logout --all
+
+# Logout from ALL realms (all repositories)
+atmos auth logout --all --all-realms
+```
+
+## Breaking Change
+
+This is a **breaking change**. Existing credentials will not be found after updating
+because they were stored in the old path format.
+
+**Action required**: Run `atmos auth login` after updating to re-authenticate.
+
+## Get Involved
+
+Found an issue or have a feature request?
+[Open an issue on GitHub](https://github.com/cloudposse/atmos/issues).

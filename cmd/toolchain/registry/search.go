@@ -16,10 +16,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/toolchain"
+	toolchainregistry "github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/toolchain"
-	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
 
 const (

@@ -248,7 +248,7 @@ func (ui *InitUI) GetTerminalWidth() int {
 
 // writeOutput writes to the output buffer instead of using fmt.Printf.
 func (ui *InitUI) writeOutput(format string, args ...interface{}) {
-	ui.output.WriteString(fmt.Sprintf(format, args...))
+	fmt.Fprintf(&ui.output, format, args...)
 }
 
 // colorSource returns a colored string for the given source value.

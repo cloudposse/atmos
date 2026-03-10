@@ -23,6 +23,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"
@@ -44,6 +45,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"
@@ -63,6 +65,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"
@@ -88,6 +91,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "whoami"
@@ -349,6 +353,6 @@ tests:
       - "validate"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0
