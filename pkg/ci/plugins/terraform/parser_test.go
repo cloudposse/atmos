@@ -629,9 +629,9 @@ Error: resource already exists
 
 func TestExtractApplyOutputs(t *testing.T) {
 	tests := []struct {
-		name    string
-		output  string
-		want    map[string]plugin.TerraformOutput
+		name   string
+		output string
+		want   map[string]plugin.TerraformOutput
 	}{
 		{
 			name:   "no outputs section",
