@@ -8,6 +8,8 @@ description: Use the `atmos.yaml` to configure any custom commands you want to a
 
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import StepTypes from '@site/docs/workflows/_partials/_step-types.mdx'
+import EmbedExample from '@site/src/components/EmbedExample'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
@@ -729,6 +731,125 @@ The `--identity` flag is automatically added to all custom commands and takes pr
 The `identity` field applies to all steps in the custom command. If you need different identities for different operations, consider using separate custom commands or [workflows](/workflows) with per-step identity configuration.
 :::
 
+## Extended Step Types
+
+Custom commands support the same extended step types as workflows, enabling interactive CLI wizards directly in your custom commands. Use these step types to collect user input, display formatted output, and control execution flow.
+
+### Example: Interactive Deployment Command
+
+```yaml
+commands:
+  - name: deploy-wizard
+    description: Interactive deployment wizard
+    steps:
+      # Collect environment selection
+      - name: env
+        type: choose
+        prompt: "Select target environment"
+        options:
+          - dev
+          - staging
+          - prod
+        default: dev
+
+      # Show warning for production
+      - name: prod_warning
+        type: warn
+        content: "You are about to deploy to PRODUCTION!"
+
+      # Confirm deployment
+      - name: confirm
+        type: confirm
+        prompt: "Deploy to {{ .steps.env.value }}?"
+        default: false
+
+      # Run the deployment
+      - name: deploy
+        type: atmos
+        command: terraform apply vpc -s {{ .steps.env.value }}
+
+      # Show success message
+      - name: done
+        type: success
+        content: "Deployment to {{ .steps.env.value }} completed!"
+```
+
+### Example: Multi-Component Deploy with Selection
+
+```yaml
+commands:
+  - name: deploy-components
+    description: Select and deploy multiple components
+    steps:
+      # Multi-select components
+      - name: components
+        type: filter
+        prompt: "Select components to deploy"
+        multiple: true
+        options:
+          - vpc
+          - eks
+          - rds
+          - s3
+          - lambda
+
+      # Show selected components
+      - name: summary
+        type: markdown
+        content: |
+          ## Deployment Summary
+
+          You selected **{{ len .steps.components.values }}** components:
+          {{ range .steps.components.values }}
+          - {{ . }}
+          {{ end }}
+
+      # Confirm and deploy
+      - name: confirm
+        type: confirm
+        prompt: "Proceed with deployment?"
+
+      # Deploy each component
+      - type: shell
+        command: |
+          {{ range .steps.components.values }}
+          echo "Deploying {{ . }}..."
+          {{ end }}
+```
+
+### Example: Input Collection
+
+```yaml
+commands:
+  - name: create-ticket
+    description: Create a deployment ticket
+    steps:
+      - name: title
+        type: input
+        prompt: "Ticket title"
+        placeholder: "Brief description of the change"
+
+      - name: description
+        type: write
+        prompt: "Detailed description"
+
+      - name: priority
+        type: choose
+        prompt: "Priority level"
+        options: [low, medium, high, critical]
+        default: medium
+
+      - type: success
+        content: |
+          Ticket created:
+          Title: {{ .steps.title.value }}
+          Priority: {{ .steps.priority.value }}
+```
+
+### Available Step Types Reference
+
+<StepTypes />
+
 ## Using Toolchain Tools
 
 Custom commands automatically have access to tools defined in your project's `.tool-versions` file. The toolchain ensures the correct versions are installed and available in PATH when your command executes.
@@ -799,3 +920,9 @@ The combination of `.tool-versions` for project-wide defaults and per-command `d
 
 - [Toolchain Configuration](/cli/configuration/toolchain) - Configure tool version management
 - [Workflows](/workflows) - Workflows also support toolchain integration
+
+## Try It
+
+Explore working examples that demonstrate custom commands in action.
+
+<EmbedExample example="custom-commands" />

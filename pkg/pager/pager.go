@@ -67,6 +67,8 @@ type PageCreator interface {
 
 type pageCreator struct {
 	enablePager           bool
+	maxHeight             int // Maximum viewport height (0 = use terminal height).
+	maxWidth              int // Maximum viewport width (0 = use terminal width).
 	writer                Writer
 	newTeaProgram         func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
 	contentFitsTerminal   func(content string) bool
@@ -77,6 +79,18 @@ type pageCreator struct {
 func NewWithAtmosConfig(enablePager bool) PageCreator {
 	pager := New()
 	pager.(*pageCreator).enablePager = enablePager
+	return pager
+}
+
+// NewWithViewport creates a pager with optional dimension constraints.
+// If maxHeight or maxWidth are non-zero, they constrain the viewport dimensions.
+// Zero values mean use the full terminal dimensions.
+func NewWithViewport(enablePager bool, maxHeight, maxWidth int) PageCreator {
+	pager := New()
+	pc := pager.(*pageCreator)
+	pc.enablePager = enablePager
+	pc.maxHeight = maxHeight
+	pc.maxWidth = maxWidth
 	return pager
 }
 
@@ -128,10 +142,12 @@ func (p *pageCreator) Run(title, content string) error {
 	// Content doesn't fit - use the pager with alternate screen.
 	_, pagerErr := p.newTeaProgram(
 		&model{
-			title:    title,
-			content:  content,
-			ready:    false,
-			viewport: viewport.New(0, 0),
+			title:     title,
+			content:   content,
+			ready:     false,
+			viewport:  viewport.New(0, 0),
+			maxHeight: p.maxHeight,
+			maxWidth:  p.maxWidth,
 		},
 		tea.WithAltScreen(), // use the full size of the terminal in its "alternate screen buffer".
 	).Run()

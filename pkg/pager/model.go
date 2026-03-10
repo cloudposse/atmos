@@ -129,6 +129,8 @@ type model struct {
 	viewport             viewport.Model
 	common               commonModel
 	showHelp             bool
+	maxHeight            int // Maximum viewport height constraint (0 = no constraint).
+	maxWidth             int // Maximum viewport width constraint (0 = no constraint).
 
 	state               pagerState
 	statusMessage       pagerStatusMessage
@@ -164,8 +166,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = pagerStateBrowse
 		// Window size is received when starting up and on every resize
 	case tea.WindowSizeMsg:
-		m.common.width = msg.Width
-		m.common.height = msg.Height
+		// Apply dimension constraints if configured.
+		width := msg.Width
+		height := msg.Height
+		if m.maxWidth > 0 && width > m.maxWidth {
+			width = m.maxWidth
+		}
+		if m.maxHeight > 0 && height > m.maxHeight {
+			height = m.maxHeight
+		}
+
+		m.common.width = width
+		m.common.height = height
 
 		footerHeight := lipgloss.Height(m.footerView())
 		verticalMarginHeight := footerHeight
@@ -176,13 +188,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// we can initialize the viewport. The initial dimensions come in
 			// quickly, though asynchronously, which is why we wait for them
 			// here.
-			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
+			m.viewport = viewport.New(width, height-verticalMarginHeight)
 			m.viewport.YPosition = 0
 			m.viewport.SetContent(m.content)
 			m.ready = true
 		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - verticalMarginHeight
+			m.viewport.Width = width
+			m.viewport.Height = height - verticalMarginHeight
 		}
 	}
 

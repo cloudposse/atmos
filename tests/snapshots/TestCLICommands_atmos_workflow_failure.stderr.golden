@@ -14,11 +14,13 @@ component and stack names correct? Did you forget an import?
 **Error:** workflow step execution failed: max attempts (1) exceeded, last
 error: subcommand exited with code 1
 
-## Hints
+## Explanation
 
-💡 The following command failed to execute:
+The following command failed to execute:
 
  atmos terraform plan mock -s idontexist
+
+## Hints
 
 💡 To resume the workflow from this step, run:
 
