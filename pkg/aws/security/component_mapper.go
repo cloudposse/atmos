@@ -39,7 +39,7 @@ func NewComponentMapper(atmosConfig *schema.AtmosConfiguration) ComponentMapper 
 // dualPathMapper implements the dual-path mapping algorithm from the PRD.
 type dualPathMapper struct {
 	atmosConfig *schema.AtmosConfiguration
-	tagMapping  schema.AISecurityTagMapping
+	tagMapping  schema.AWSSecurityTagMapping
 	clients     *awsClientCache
 	tagCache    map[string]*tagLookupResult // Cache by resource ARN.
 }
@@ -383,9 +383,9 @@ func extractRegionFromARN(arn string) string {
 }
 
 // resolveTagMapping returns the tag mapping config with defaults applied.
-func resolveTagMapping(atmosConfig *schema.AtmosConfiguration) schema.AISecurityTagMapping {
-	mapping := atmosConfig.AI.Security.TagMapping
-	defaults := schema.DefaultAISecurityTagMapping()
+func resolveTagMapping(atmosConfig *schema.AtmosConfiguration) schema.AWSSecurityTagMapping {
+	mapping := atmosConfig.AWS.Security.TagMapping
+	defaults := schema.DefaultAWSSecurityTagMapping()
 
 	if mapping.StackTag == "" {
 		mapping.StackTag = defaults.StackTag

@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ai/security"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/aws/security"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -60,31 +60,27 @@ func (t *DescribeFindingTool) Execute(ctx context.Context, params map[string]int
 		return &tools.Result{Success: false, Error: err}, err
 	}
 
-	if !atmosConfig.AI.Security.Enabled {
-		return &tools.Result{Success: false, Error: errUtils.ErrAISecurityNotEnabled}, nil
+	if !atmosConfig.AWS.Security.Enabled {
+		return &tools.Result{
+			Success: false,
+			Error: errUtils.Build(errUtils.ErrAISecurityNotEnabled).
+				WithHint("Add `aws.security.enabled: true` to your `atmos.yaml`").
+				WithExitCode(2).
+				Err(),
+		}, nil
 	}
 
-	// Fetch all findings and search for the specific one.
-	fetcher := security.NewFindingFetcher(&atmosConfig)
-	opts := security.QueryOptions{
-		Severity:    []security.Severity{security.SeverityCritical, security.SeverityHigh, security.SeverityMedium, security.SeverityLow, security.SeverityInformational},
-		MaxFindings: security.MaxFindingsForLookup,
-	}
-	findings, err := fetcher.FetchFindings(ctx, &opts)
+	return fetchAndDescribeFinding(ctx, &atmosConfig, findingID)
+}
+
+// fetchAndDescribeFinding fetches a finding by ID and returns a detailed description.
+func fetchAndDescribeFinding(ctx context.Context, atmosConfig *schema.AtmosConfiguration, findingID string) (*tools.Result, error) {
+	finding, err := fetchFindingByID(ctx, atmosConfig, findingID)
 	if err != nil {
 		return &tools.Result{Success: false, Error: err}, err
 	}
 
-	// Find the specific finding.
-	var found *security.Finding
-	for i := range findings {
-		if findings[i].ID == findingID {
-			found = &findings[i]
-			break
-		}
-	}
-
-	if found == nil {
+	if finding == nil {
 		return &tools.Result{
 			Success: true,
 			Output:  fmt.Sprintf("Finding with ID %q not found.", findingID),
@@ -92,14 +88,13 @@ func (t *DescribeFindingTool) Execute(ctx context.Context, params map[string]int
 	}
 
 	// Map the finding to component.
-	mapper := security.NewComponentMapper(&atmosConfig)
-	mapping, _ := mapper.MapFinding(ctx, found)
-	found.Mapping = mapping
+	mapper := security.NewComponentMapper(atmosConfig)
+	mapping, _ := mapper.MapFinding(ctx, finding)
+	finding.Mapping = mapping
 
 	// Format detailed output.
-	output := formatFindingDetail(found)
-
-	data, _ := json.Marshal(found)
+	output := formatFindingDetail(finding)
+	data, _ := json.Marshal(finding)
 
 	return &tools.Result{
 		Success: true,

@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -67,7 +66,7 @@ func (f *awsFindingFetcher) FetchFindings(ctx context.Context, opts *QueryOption
 
 	client, err := f.clients.getSecurityHubClient(ctx, region)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrAISecurityFetchFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
 	}
 
 	filters := f.buildFindingFilters(opts)
@@ -111,7 +110,7 @@ func (f *awsFindingFetcher) paginateFindings(
 			NextToken:  nextToken,
 		})
 		if err != nil {
-			return nil, errors.Join(errUtils.ErrAISecurityFetchFailed, err)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
 		}
 
 		for i := range output.Findings {
@@ -164,7 +163,7 @@ func (f *awsFindingFetcher) FetchComplianceStatus(ctx context.Context, framework
 
 	client, err := f.clients.getSecurityHubClient(ctx, region)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrAISecurityFetchFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
 	}
 
 	// Find the enabled standard ARN matching the framework.
@@ -270,7 +269,7 @@ func (f *awsFindingFetcher) resolveFrameworkStandard(ctx context.Context, client
 
 	output, err := client.GetEnabledStandards(ctx, &securityhub.GetEnabledStandardsInput{})
 	if err != nil {
-		return "", "", fmt.Errorf("GetEnabledStandards: %w", errors.Join(errUtils.ErrAISecurityFetchFailed, err))
+		return "", "", fmt.Errorf("%w: GetEnabledStandards: %w", errUtils.ErrAISecurityFetchFailed, err)
 	}
 
 	targetID := frameworkToStandardID(framework)

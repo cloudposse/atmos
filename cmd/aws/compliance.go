@@ -1,9 +1,8 @@
-package ai
+package aws
 
 import (
 	"context"
 	_ "embed"
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -12,7 +11,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ai/security"
+	"github.com/cloudposse/atmos/pkg/aws/security"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -20,13 +19,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-//go:embed markdown/atmos_ai_compliance.md
+//go:embed markdown/atmos_aws_compliance.md
 var complianceLongMarkdown string
 
 // complianceParser handles flag parsing with Viper precedence for the compliance command.
 var complianceParser *flags.StandardParser
 
-// complianceCmd represents the ai compliance command.
+// complianceCmd represents the aws compliance command.
 var complianceCmd = &cobra.Command{
 	Use:   "compliance",
 	Short: "Generate compliance posture reports",
@@ -51,15 +50,13 @@ var complianceCmd = &cobra.Command{
 			return err
 		}
 
-		// Check if AI is enabled.
-		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: set 'ai.enabled: true' in your atmos.yaml configuration",
-				errUtils.ErrAINotEnabled)
-		}
-
-		// Check if security features are enabled.
-		if !atmosConfig.AI.Security.Enabled {
-			return errUtils.ErrAISecurityNotEnabled
+		// Check if AWS security features are enabled.
+		if !atmosConfig.AWS.Security.Enabled {
+			return errUtils.Build(errUtils.ErrAISecurityNotEnabled).
+				WithHint("Add `aws.security.enabled: true` to your `atmos.yaml`").
+				WithHint("See https://atmos.tools/cli/configuration/aws for configuration reference").
+				WithExitCode(2).
+				Err()
 		}
 
 		// Validate output format.
@@ -90,7 +87,7 @@ var complianceCmd = &cobra.Command{
 		defer cancel()
 
 		// Determine which frameworks to report on.
-		frameworks := atmosConfig.AI.Security.Frameworks
+		frameworks := atmosConfig.AWS.Security.Frameworks
 		if framework != "" {
 			frameworks = []string{framework}
 		}
@@ -109,7 +106,7 @@ var complianceCmd = &cobra.Command{
 		for _, fw := range frameworks {
 			report, err := fetcher.FetchComplianceStatus(ctx, fw, stack)
 			if err != nil {
-				return errors.Join(errUtils.ErrAISecurityFetchFailed, err)
+				return fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
 			}
 
 			if report == nil {
@@ -136,8 +133,8 @@ func init() {
 		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv"),
 		flags.WithStringFlag("controls", "", "", "Specific control IDs to check"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
-		flags.WithEnvVars("framework", "ATMOS_AI_COMPLIANCE_FRAMEWORK"),
-		flags.WithEnvVars("format", "ATMOS_AI_COMPLIANCE_FORMAT"),
+		flags.WithEnvVars("framework", "ATMOS_AWS_COMPLIANCE_FRAMEWORK"),
+		flags.WithEnvVars("format", "ATMOS_AWS_COMPLIANCE_FORMAT"),
 	)
 
 	// Register flags on the command.
@@ -148,7 +145,7 @@ func init() {
 		panic(err)
 	}
 
-	aiCmd.AddCommand(complianceCmd)
+	awsCmd.AddCommand(complianceCmd)
 }
 
 // validateFramework checks that the framework name is valid.

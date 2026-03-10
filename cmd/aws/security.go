@@ -1,9 +1,8 @@
-package ai
+package aws
 
 import (
 	"context"
 	_ "embed"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -13,7 +12,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ai/security"
+	"github.com/cloudposse/atmos/pkg/aws/security"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -24,13 +23,13 @@ import (
 // defaultMaxFindings is the default maximum number of security findings to analyze.
 const defaultMaxFindings = 50
 
-//go:embed markdown/atmos_ai_security.md
+//go:embed markdown/atmos_aws_security.md
 var securityLongMarkdown string
 
 // securityParser handles flag parsing with Viper precedence for the security command.
 var securityParser *flags.StandardParser
 
-// securityCmd represents the ai security command.
+// securityCmd represents the aws security command.
 var securityCmd = &cobra.Command{
 	Use:   "security",
 	Short: "Analyze AWS security findings for Atmos stacks",
@@ -50,7 +49,7 @@ var securityCmd = &cobra.Command{
 		sourceStr := v.GetString("source")
 		formatStr := v.GetString("format")
 		maxFindings := v.GetInt("max-findings")
-		noAI := v.GetBool("no-ai")
+		useAI := v.GetBool("ai")
 		region := v.GetString("region")
 
 		// Initialize configuration.
@@ -60,15 +59,24 @@ var securityCmd = &cobra.Command{
 			return err
 		}
 
-		// Check if AI is enabled.
-		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: set 'ai.enabled: true' in your atmos.yaml configuration",
-				errUtils.ErrAINotEnabled)
+		// Check if AWS security features are enabled.
+		if !atmosConfig.AWS.Security.Enabled {
+			return errUtils.Build(errUtils.ErrAISecurityNotEnabled).
+				WithHint("Add `aws.security.enabled: true` to your `atmos.yaml`").
+				WithHint("See https://atmos.tools/cli/configuration/aws for configuration reference").
+				WithExitCode(2).
+				Err()
 		}
 
-		// Check if security features are enabled.
-		if !atmosConfig.AI.Security.Enabled {
-			return errUtils.ErrAISecurityNotEnabled
+		// If --ai flag is passed, check that AI is enabled in configuration.
+		if useAI && !atmosConfig.AI.Enabled {
+			return errUtils.Build(errUtils.ErrAINotEnabled).
+				WithExplanation("The `--ai` flag enables AI-powered analysis but requires an AI provider to be configured.").
+				WithHint("Add `ai.enabled: true` to your `atmos.yaml`").
+				WithHint("Configure a provider under `ai.providers` (e.g. `anthropic`, `bedrock`, `openai`)").
+				WithHint("See https://atmos.tools/cli/configuration/ai for provider setup").
+				WithExitCode(2).
+				Err()
 		}
 
 		// Validate and parse flags.
@@ -82,13 +90,13 @@ var securityCmd = &cobra.Command{
 			return err
 		}
 
-		severities, err := parseSeverities(severityStr, atmosConfig.AI.Security.DefaultSeverity)
+		severities, err := parseSeverities(severityStr, atmosConfig.AWS.Security.DefaultSeverity)
 		if err != nil {
 			return err
 		}
 
 		if maxFindings <= 0 {
-			maxFindings = atmosConfig.AI.Security.MaxFindings
+			maxFindings = atmosConfig.AWS.Security.MaxFindings
 			if maxFindings <= 0 {
 				maxFindings = defaultMaxFindings
 			}
@@ -101,7 +109,7 @@ var securityCmd = &cobra.Command{
 			Source:      source,
 			MaxFindings: maxFindings,
 			Region:      region,
-			NoAI:        noAI,
+			NoAI:        !useAI,
 		}
 
 		log.Debug("Running security analysis",
@@ -111,7 +119,7 @@ var securityCmd = &cobra.Command{
 			"source", sourceStr,
 			"format", formatStr,
 			"max_findings", maxFindings,
-			"no_ai", noAI,
+			"ai", useAI,
 		)
 
 		// Create context with timeout.
@@ -129,7 +137,7 @@ var securityCmd = &cobra.Command{
 		fetcher := security.NewFindingFetcher(&atmosConfig)
 		findings, err := fetcher.FetchFindings(ctx, &opts)
 		if err != nil {
-			return errors.Join(errUtils.ErrAISecurityFetchFailed, err)
+			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
 		}
 
 		if len(findings) == 0 {
@@ -146,11 +154,11 @@ var securityCmd = &cobra.Command{
 		mapper := security.NewComponentMapper(&atmosConfig)
 		findings, err = mapper.MapFindings(ctx, findings)
 		if err != nil {
-			return errors.Join(errUtils.ErrAISecurityMappingFailed, err)
+			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityMappingFailed, err)
 		}
 
-		// AI analysis (unless --no-ai is set).
-		if !noAI {
+		// AI analysis (only when --ai flag is set).
+		if useAI {
 			if outputFormat == security.FormatMarkdown {
 				ui.Writef("🤖 Analyzing findings with AI...\n")
 			}
@@ -160,7 +168,7 @@ var securityCmd = &cobra.Command{
 			} else {
 				findings, err = analyzer.AnalyzeFindings(ctx, findings)
 				if err != nil {
-					return errors.Join(errUtils.ErrAISecurityAnalysisFailed, err)
+					return fmt.Errorf("%w: %w", errUtils.ErrAISecurityAnalysisFailed, err)
 				}
 			}
 		}
@@ -184,12 +192,12 @@ func init() {
 		flags.WithStringFlag("framework", "", "", "Compliance framework filter"),
 		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv"),
 		flags.WithIntFlag("max-findings", "", defaultMaxFindings, "Maximum findings to analyze"),
-		flags.WithBoolFlag("no-ai", "", false, "Skip AI analysis, show raw findings only"),
+		flags.WithBoolFlag("ai", "", false, "Enable AI-powered analysis"),
 		flags.WithStringFlag("region", "", "", "AWS region override"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
-		flags.WithEnvVars("format", "ATMOS_AI_SECURITY_FORMAT"),
-		flags.WithEnvVars("max-findings", "ATMOS_AI_SECURITY_MAX_FINDINGS"),
-		flags.WithEnvVars("region", "ATMOS_AI_SECURITY_REGION"),
+		flags.WithEnvVars("format", "ATMOS_AWS_SECURITY_FORMAT"),
+		flags.WithEnvVars("max-findings", "ATMOS_AWS_SECURITY_MAX_FINDINGS"),
+		flags.WithEnvVars("region", "ATMOS_AWS_SECURITY_REGION"),
 	)
 
 	// Register flags on the command.
@@ -200,7 +208,7 @@ func init() {
 		panic(err)
 	}
 
-	aiCmd.AddCommand(securityCmd)
+	awsCmd.AddCommand(securityCmd)
 }
 
 // buildSecurityReport constructs a Report from mapped findings.

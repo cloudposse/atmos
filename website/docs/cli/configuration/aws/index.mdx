@@ -1,0 +1,55 @@
+---
+title: AWS Configuration
+sidebar_label: aws
+sidebar_class_name: command
+id: aws
+description: Configure AWS-specific features in your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `aws` section of the `atmos.yaml` configures AWS-specific features that integrate directly
+with AWS services. Each subsection controls a different AWS capability.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+aws:
+  security:
+    enabled: true
+```
+</File>
+
+## Configuration Reference
+
+### Top-Level Structure
+
+<File title="atmos.yaml">
+```yaml
+aws:
+  # Security scanning and compliance reporting
+  security:
+    enabled: true
+    # ... see Security documentation for full options
+```
+</File>
+
+## Sections
+
+<DocCardList />
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/aws/security', label: 'atmos aws security', description: 'Analyze AWS security findings'},
+  {type: 'link', href: '/cli/commands/aws/compliance', label: 'atmos aws compliance', description: 'Generate compliance posture reports'},
+  {type: 'link', href: '/cli/commands/aws/aws-eks-update-kubeconfig', label: 'atmos aws eks update-kubeconfig', description: 'Update kubeconfig for EKS clusters'},
+]} />

@@ -70,6 +70,7 @@ linters:
             - "!**/internal/aws_utils/**"
             - "!**/pkg/aws/identity/**"
             - "!**/pkg/aws/organization/**"
+            - "!**/pkg/aws/security/**"
             - "!**/pkg/provisioner/backend/**"
             - "!**/pkg/github/**"
             - "$test"

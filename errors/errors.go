@@ -925,8 +925,8 @@ var (
 	ErrAIComponentPathNotFound        = errors.New("component path not found")
 	ErrAIComponentPathNotDirectory    = errors.New("component path is not a directory")
 
-	// AI security and compliance errors.
-	ErrAISecurityNotEnabled       = errors.New("AI security features are not enabled: add 'ai.security.enabled: true' to atmos.yaml")
+	// AWS security and compliance errors.
+	ErrAISecurityNotEnabled       = errors.New("AWS security features are not enabled: add 'aws.security.enabled: true' to atmos.yaml")
 	ErrAISecurityNoFindings       = errors.New("no security findings found matching the specified filters")
 	ErrAISecurityFetchFailed      = errors.New("failed to fetch security findings from AWS")
 	ErrAISecurityMappingFailed    = errors.New("failed to map security finding to Atmos component")

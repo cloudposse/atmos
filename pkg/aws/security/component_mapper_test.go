@@ -31,7 +31,7 @@ func (m *mockTaggingClient) GetResources(_ context.Context, _ *resourcegroupstag
 func TestMapByTags_ExactMatch(t *testing.T) {
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
-		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 		clients:     newAWSClientCache(),
 		tagCache: map[string]*tagLookupResult{
 			"arn:aws:ec2:us-east-1:123456789012:instance/i-1234567890abcdef0": {
@@ -62,7 +62,7 @@ func TestMapByTags_ExactMatch(t *testing.T) {
 func TestMapByTags_IndividualTags(t *testing.T) {
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
-		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 		clients:     newAWSClientCache(),
 		tagCache: map[string]*tagLookupResult{
 			"arn:aws:s3:::my-bucket": {
@@ -94,7 +94,7 @@ func TestMapByTags_IndividualTags(t *testing.T) {
 func TestMapByTags_NoTags(t *testing.T) {
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
-		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 		clients:     newAWSClientCache(),
 		tagCache: map[string]*tagLookupResult{
 			"arn:aws:ec2:us-east-1:123456789012:instance/i-abc": {
@@ -117,7 +117,7 @@ func TestMapByTags_NoTags(t *testing.T) {
 func TestMapByNamingConvention(t *testing.T) {
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
-		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 	}
 
 	tests := []struct {
@@ -162,7 +162,7 @@ func TestMapByNamingConvention(t *testing.T) {
 func TestMapByResourceType(t *testing.T) {
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
-		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 	}
 
 	tests := []struct {
@@ -308,7 +308,7 @@ func TestMapFinding_TagsThenHeuristicsFallback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mapper := &dualPathMapper{
 				atmosConfig: &schema.AtmosConfiguration{},
-				tagMapping:  schema.DefaultAISecurityTagMapping(),
+				tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 				clients:     newAWSClientCache(),
 				tagCache:    tt.tagCache,
 			}
@@ -341,7 +341,7 @@ func TestMapFindings_Batch(t *testing.T) {
 
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
-		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 		clients:     newAWSClientCache(),
 		tagCache:    make(map[string]*tagLookupResult),
 	}
@@ -389,7 +389,7 @@ func TestMapFindings_Batch(t *testing.T) {
 func TestMapByHeuristics(t *testing.T) {
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
-		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 	}
 
 	tests := []struct {
@@ -532,7 +532,7 @@ func TestGetResourceTags(t *testing.T) {
 
 			mapper := &dualPathMapper{
 				atmosConfig: &schema.AtmosConfiguration{},
-				tagMapping:  schema.DefaultAISecurityTagMapping(),
+				tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 				clients:     newAWSClientCache(),
 				tagCache:    tt.tagCache,
 			}
@@ -572,9 +572,9 @@ func TestResolveTagMapping(t *testing.T) {
 		{
 			name: "custom overrides",
 			config: schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Security: schema.AISecuritySettings{
-						TagMapping: schema.AISecurityTagMapping{
+				AWS: schema.AWSSettings{
+					Security: schema.AWSSecuritySettings{
+						TagMapping: schema.AWSSecurityTagMapping{
 							ComponentTag: "custom:component",
 							StackTag:     "custom:stack",
 						},
@@ -586,9 +586,9 @@ func TestResolveTagMapping(t *testing.T) {
 		{
 			name: "partial override fills remaining defaults",
 			config: schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Security: schema.AISecuritySettings{
-						TagMapping: schema.AISecurityTagMapping{
+				AWS: schema.AWSSettings{
+					Security: schema.AWSSecuritySettings{
+						TagMapping: schema.AWSSecurityTagMapping{
 							StackTag: "my:stack",
 						},
 					},
@@ -626,7 +626,7 @@ func TestBatchFetchTags(t *testing.T) {
 
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
-		tagMapping:  schema.DefaultAISecurityTagMapping(),
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
 		clients:     newAWSClientCache(),
 		tagCache:    make(map[string]*tagLookupResult),
 	}

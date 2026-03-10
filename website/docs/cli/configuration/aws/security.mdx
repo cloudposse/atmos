@@ -1,0 +1,228 @@
+---
+title: Security Configuration
+sidebar_label: security
+sidebar_class_name: command
+id: security
+description: Configure AWS security scanning sources, severity filters, tag mapping, and compliance frameworks.
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `aws.security` section configures security scanning and compliance reporting for AWS resources.
+It controls which AWS security services to query, severity filters, resource-to-component tag mapping,
+and compliance frameworks.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+aws:
+  security:
+    enabled: true
+```
+</File>
+
+This enables security scanning with default settings: Security Hub, Config, Inspector, and GuardDuty
+as sources, filtering for `CRITICAL` and `HIGH` severity findings.
+
+## Full Configuration
+
+<File title="atmos.yaml">
+```yaml
+aws:
+  security:
+    enabled: true
+
+    # AWS security services to query
+    sources:
+      security_hub: true       # AWS Security Hub (aggregates all services)
+      config: true             # AWS Config compliance rules
+      inspector: true          # Amazon Inspector vulnerability scans
+      guardduty: true          # Amazon GuardDuty threat detection
+      macie: false             # Amazon Macie sensitive data findings
+      access_analyzer: false   # IAM Access Analyzer
+
+    # Default severity filter (when --severity flag is not specified)
+    default_severity:
+      - CRITICAL
+      - HIGH
+
+    # Maximum findings per analysis run
+    max_findings: 50
+
+    # Tag keys for mapping AWS resources to Atmos components
+    tag_mapping:
+      stack_tag: "atmos:stack"
+      component_tag: "atmos:component"
+      tenant_tag: "atmos:tenant"
+      environment_tag: "atmos:environment"
+      stage_tag: "atmos:stage"
+
+    # Compliance frameworks to track
+    frameworks:
+      - cis-aws
+      - pci-dss
+```
+</File>
+
+## Settings Reference
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Enable AWS security and compliance features. Default: `false`.</dd>
+
+  <dt>`sources`</dt>
+  <dd>Configure which AWS security services to query for findings. See [Sources](#sources) below.</dd>
+
+  <dt>`default_severity`</dt>
+  <dd>Default severity filter when `--severity` flag is not specified. Valid values: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFORMATIONAL`. Default: `["CRITICAL", "HIGH"]`.</dd>
+
+  <dt>`max_findings`</dt>
+  <dd>Maximum findings per analysis run. Controls the number of findings fetched from AWS. Default: `50`.</dd>
+
+  <dt>`tag_mapping`</dt>
+  <dd>Tag keys used for mapping AWS resources back to Atmos components and stacks. See [Tag Mapping](#tag-mapping) below.</dd>
+
+  <dt>`frameworks`</dt>
+  <dd>Compliance frameworks to track with `atmos aws compliance`. Supported: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist`.</dd>
+</dl>
+
+## Sources
+
+AWS Security Hub acts as a central aggregator for findings from multiple AWS security services.
+Each source can be enabled or disabled independently.
+
+<dl>
+  <dt>`security_hub`</dt>
+  <dd>Query AWS Security Hub for aggregated findings from all integrated services. This is the primary source and should usually be enabled. Default: `true`.</dd>
+
+  <dt>`config`</dt>
+  <dd>Query AWS Config for configuration compliance rule evaluations. Detects resources that don't comply with your Config rules. Default: `true`.</dd>
+
+  <dt>`inspector`</dt>
+  <dd>Query Amazon Inspector for automated vulnerability assessments of EC2 instances, Lambda functions, and container images. Default: `true`.</dd>
+
+  <dt>`guardduty`</dt>
+  <dd>Query Amazon GuardDuty for intelligent threat detection findings. Identifies malicious activity and unauthorized behavior. Default: `true`.</dd>
+
+  <dt>`macie`</dt>
+  <dd>Query Amazon Macie for sensitive data discovery findings in S3 buckets. Useful for data classification and privacy compliance. Default: `false`.</dd>
+
+  <dt>`access_analyzer`</dt>
+  <dd>Query IAM Access Analyzer for findings about resources shared with external entities. Helps identify unintended public or cross-account access. Default: `false`.</dd>
+</dl>
+
+## Tag Mapping
+
+Atmos maps AWS resources to components and stacks using resource tags. These tags should be applied
+to your AWS resources via Terraform. The default tags follow Atmos conventions.
+
+<dl>
+  <dt>`stack_tag`</dt>
+  <dd>Tag key identifying the Atmos stack. Default: `"atmos:stack"`.</dd>
+
+  <dt>`component_tag`</dt>
+  <dd>Tag key identifying the Atmos component. Default: `"atmos:component"`.</dd>
+
+  <dt>`tenant_tag`</dt>
+  <dd>Tag key identifying the tenant. Default: `"atmos:tenant"`.</dd>
+
+  <dt>`environment_tag`</dt>
+  <dd>Tag key identifying the environment. Default: `"atmos:environment"`.</dd>
+
+  <dt>`stage_tag`</dt>
+  <dd>Tag key identifying the stage. Default: `"atmos:stage"`.</dd>
+</dl>
+
+### How Tag Mapping Works
+
+When a security finding is detected on an AWS resource, Atmos looks up the resource's tags to
+determine which component and stack manage it. This enables targeted remediation guidance.
+
+If tags are not found, Atmos falls back to heuristic mapping using resource naming conventions
+and resource type patterns.
+
+<Terminal title="example">
+```bash
+# Ensure your Terraform components apply Atmos tags
+# In your component's main.tf:
+# tags = {
+#   "atmos:stack"     = var.atmos_stack
+#   "atmos:component" = var.atmos_component
+# }
+```
+</Terminal>
+
+## Compliance Frameworks
+
+The `frameworks` list determines which compliance standards are reported by `atmos aws compliance`.
+
+<dl>
+  <dt>`cis-aws`</dt>
+  <dd>CIS AWS Foundations Benchmark. Industry-standard security configuration guidelines.</dd>
+
+  <dt>`pci-dss`</dt>
+  <dd>Payment Card Industry Data Security Standard. Required for organizations handling credit card data.</dd>
+
+  <dt>`soc2`</dt>
+  <dd>SOC 2 Trust Service Criteria. Security, availability, processing integrity, confidentiality, and privacy.</dd>
+
+  <dt>`hipaa`</dt>
+  <dd>Health Insurance Portability and Accountability Act. Required for protected health information (PHI).</dd>
+
+  <dt>`nist`</dt>
+  <dd>NIST Cybersecurity Framework. Voluntary framework for managing cybersecurity risk.</dd>
+</dl>
+
+## AI-Powered Analysis
+
+By default, `atmos aws security` works without any AI provider. To enable AI-powered root cause
+analysis and remediation guidance, use the `--ai` flag:
+
+<Terminal title="shell">
+```bash
+atmos aws security --stack prod-us-east-1 --ai
+```
+</Terminal>
+
+This requires an AI provider to be configured in the `ai` section of `atmos.yaml`.
+See [AI Configuration](/cli/configuration/ai) for setup.
+
+## AWS Permissions
+
+The IAM role or user running the security commands needs read access to the enabled services:
+
+<File title="IAM Policy">
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "securityhub:GetFindings",
+        "securityhub:GetEnabledStandards",
+        "securityhub:DescribeStandardsControls",
+        "tag:GetResources"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+</File>
+
+## Related
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/aws/security', label: 'atmos aws security', description: 'Analyze AWS security findings'},
+  {type: 'link', href: '/cli/commands/aws/compliance', label: 'atmos aws compliance', description: 'Generate compliance posture reports'},
+  {type: 'link', href: '/cli/configuration/ai', label: 'AI Configuration', description: 'Configure AI providers for --ai flag'},
+]} />

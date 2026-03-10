@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ai/security"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/aws/security"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -70,8 +70,14 @@ func (t *ComplianceReportTool) Execute(ctx context.Context, params map[string]in
 		return &tools.Result{Success: false, Error: err}, err
 	}
 
-	if !atmosConfig.AI.Security.Enabled {
-		return &tools.Result{Success: false, Error: errUtils.ErrAISecurityNotEnabled}, nil
+	if !atmosConfig.AWS.Security.Enabled {
+		return &tools.Result{
+			Success: false,
+			Error: errUtils.Build(errUtils.ErrAISecurityNotEnabled).
+				WithHint("Add `aws.security.enabled: true` to your `atmos.yaml`").
+				WithExitCode(2).
+				Err(),
+		}, nil
 	}
 
 	// Fetch compliance status.

@@ -1,27 +1,34 @@
-# Atmos AI Security & Compliance - Product Requirements Document
+# Atmos AWS Security & Compliance - Product Requirements Document
 
 **Status:** Draft
-**Version:** 0.2
+**Version:** 0.3
 **Last Updated:** 2026-03-09
 
 ---
 
 ## Executive Summary
 
-The main purpose of Atmos AI Security & Compliance is to make it **very easy and fast** for users to
+The main purpose of Atmos AWS Security & Compliance is to make it **very easy and fast** for users to
 detect, review, analyze, and ask questions about any security and compliance findings from all AWS
 security and compliance services — directly from the Atmos CLI.
 
 It connects to AWS Security Hub, AWS Config, Amazon Inspector, Amazon GuardDuty, Amazon Macie, and
-IAM Access Analyzer via Atmos Auth, uses **any AI provider that Atmos AI supports** to analyze findings,
-maps them back to Atmos components and stacks, and generates actionable remediation reports with concrete
-Terraform/Atmos changes.
+IAM Access Analyzer via Atmos Auth, maps findings back to Atmos components and stacks, and generates
+actionable remediation reports. AI analysis is **opt-in** via the `--ai` flag — the commands work
+without any AI provider configured.
 
-**Supported AI providers:** Anthropic (Claude), OpenAI (GPT), Google Gemini, Azure OpenAI, AWS Bedrock,
-Ollama (local/on-premise), and Grok (xAI). Enterprise customers who require data residency within their
-AWS account should use **AWS Bedrock** — all data stays in-account with no external API calls. All other
-providers work equally well for AI analysis; the choice depends on your organization's security posture,
-compliance requirements, and preference.
+**AI is optional.** By default, `atmos aws security` and `atmos aws compliance` work purely with AWS
+APIs — no AI provider needed. When the `--ai` flag is passed, AI-powered analysis adds root cause
+analysis, remediation guidance, and deploy commands using **any AI provider that Atmos AI supports**.
+
+**Supported AI providers (for `--ai`):** Anthropic (Claude), OpenAI (GPT), Google Gemini, Azure OpenAI,
+AWS Bedrock, Ollama (local/on-premise), and Grok (xAI). Enterprise customers who require data residency
+within their AWS account should use **AWS Bedrock** — all data stays in-account with no external API
+calls.
+
+**Cloud-specific namespace.** These commands live under `atmos aws` (not `atmos ai`) because they are
+AWS-specific. This design enables future `atmos azure security` and `atmos gcp security` commands
+for other cloud providers.
 
 The key differentiator: Atmos owns the component-to-stack relationship, so it can trace a security
 finding on an AWS resource all the way back to the exact Terraform code and stack configuration that
@@ -33,14 +40,21 @@ Today, reviewing security findings requires navigating multiple AWS console page
 resources with Terraform code, and manually figuring out which configuration caused the issue. This is
 slow, error-prone, and requires deep AWS + Terraform expertise.
 
-With Atmos AI Security & Compliance, a single command replaces that entire workflow:
+With Atmos AWS Security & Compliance, a single command replaces that entire workflow:
 
 ```shell
-atmos ai security --stack prod-us-east-1
+atmos aws security --stack prod-us-east-1
+```
+
+This fetches findings, maps them to Atmos components, and shows which code manages each affected
+resource. Add `--ai` for AI-powered remediation guidance:
+
+```shell
+atmos aws security --stack prod-us-east-1 --ai
 ```
 
 In seconds, the user gets a complete picture: what's wrong, which component caused it, exactly what
-code to change, and how to deploy the fix. The AI handles the analysis; the user reviews and decides.
+code to change, and how to deploy the fix.
 
 For CI/CD pipelines and automation, all commands support structured output formats (`--format json`,
 `--format yaml`, `--format csv`) so findings can be piped to dashboards, ticketing systems, Slack
@@ -75,7 +89,7 @@ notifications, or compliance reporting tools.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    atmos ai security <stack>                        │
+│                    atmos aws security <stack>                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐   │
@@ -313,8 +327,8 @@ Finding arrives with resource ARN
 
 All AWS API calls use Atmos Auth for credential management. This provides a unified authentication
 experience — the same credentials used for `atmos terraform apply` are used for security scanning.
-AI analysis uses whatever provider is configured in `ai.default_provider` (Bedrock for enterprise
-customers who need data residency, or any other supported provider).
+When the `--ai` flag is used, AI analysis uses whatever provider is configured in `ai.default_provider`
+(Bedrock for enterprise customers who need data residency, or any other supported provider).
 
 ### Required AWS Permissions
 
@@ -444,9 +458,9 @@ ai:
       base_url: "http://localhost:11434/v1"
 ```
 
-The `--no-ai` flag skips AI analysis entirely (zero AI cost) and shows raw findings with
-tag-based component mapping only. This is useful for CI/CD pipelines that only need structured
-finding data.
+By default, `atmos aws security` works without AI. The `--ai` flag enables AI-powered analysis
+when a provider is configured. This opt-in design means CI/CD pipelines get structured finding
+data with zero AI cost by default.
 
 ### AWS Bedrock Setup (Enterprise)
 
@@ -616,10 +630,9 @@ A typical security analysis run processes ~50 findings. Each finding analysis in
 | 50 findings, single stack     | Haiku 4.5  | ~$0.15–$0.40   |
 | 200 findings, all stacks      | Sonnet 4.6 | ~$2.00–$6.00   |
 | 200 findings, all stacks      | Opus 4.6   | ~$10.00–$30.00 |
-| Raw findings only (`--no-ai`) | N/A        | $0.00          |
+| Default (no `--ai` flag)      | N/A        | $0.00          |
 
-The `--no-ai` flag skips AI analysis entirely (zero AI cost) and shows raw findings with tag-based
-component mapping only.
+By default, commands run without AI (zero cost). Use `--ai` to enable AI analysis.
 
 **Other Pricing Tiers:**
 
@@ -676,46 +689,46 @@ FedRAMP and government compliance workloads.
 
 ## CLI Commands
 
-### `atmos ai security`
+### `atmos aws security`
 
 Primary command for security analysis. Fetches findings, maps to components, and generates reports.
 
 ```shell
 # Analyze findings for a specific stack
-atmos ai security --stack prod-us-east-1
+atmos aws security --stack prod-us-east-1
 
 # Analyze findings for a specific component in a stack
-atmos ai security --stack prod-us-east-1 --component vpc
+atmos aws security --stack prod-us-east-1 --component vpc
 
 # Filter by severity
-atmos ai security --stack prod-us-east-1 --severity critical,high
+atmos aws security --stack prod-us-east-1 --severity critical,high
 
 # Filter by finding source
-atmos ai security --stack prod-us-east-1 --source security-hub
+atmos aws security --stack prod-us-east-1 --source security-hub
 
 # Filter by compliance framework
-atmos ai security --stack prod-us-east-1 --framework cis-aws,pci-dss
+atmos aws security --stack prod-us-east-1 --framework cis-aws,pci-dss
 
 # Analyze all stacks
-atmos ai security
+atmos aws security
 
 # Output as JSON (for piping to dashboards, ticketing systems, etc.)
-atmos ai security --stack prod-us-east-1 --format json
+atmos aws security --stack prod-us-east-1 --format json
 
 # Output as YAML
-atmos ai security --stack prod-us-east-1 --format yaml
+atmos aws security --stack prod-us-east-1 --format yaml
 
 # Output as CSV (for spreadsheets, compliance reporting)
-atmos ai security --stack prod-us-east-1 --format csv
+atmos aws security --stack prod-us-east-1 --format csv
 
 # Pipe JSON to jq for filtering
-atmos ai security --stack prod-us-east-1 --format json | jq '.findings[] | select(.severity == "CRITICAL")'
+atmos aws security --stack prod-us-east-1 --format json | jq '.findings[] | select(.severity == "CRITICAL")'
 
 # Feed into Slack notification
-atmos ai security --stack prod-us-east-1 --format json | notify-slack --channel security-alerts
+atmos aws security --stack prod-us-east-1 --format json | notify-slack --channel security-alerts
 
 # Generate CSV for compliance audit trail
-atmos ai security --format csv > findings-$(date +%Y-%m-%d).csv
+atmos aws security --format csv > findings-$(date +%Y-%m-%d).csv
 ```
 
 #### Flags
@@ -729,7 +742,7 @@ atmos ai security --format csv > findings-$(date +%Y-%m-%d).csv
 | `--framework`    | string | (all)            | Compliance framework filter: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist` |
 | `--format`       | string | `markdown`       | Output format: `markdown`, `json`, `yaml`, `csv`                           |
 | `--max-findings` | int    | `50`             | Maximum findings to analyze (AI cost control)                              |
-| `--no-ai`        | bool   | `false`          | Skip AI analysis, show raw findings only                                   |
+| `--ai`           | bool   | `false`          | Enable AI-powered analysis (requires `ai.enabled: true`)                   |
 | `--region`       | string | (from stack)     | AWS region override                                                        |
 
 #### Output: Markdown Report
@@ -819,19 +832,19 @@ Terraform source:
 > be managed outside of Atmos or may be missing `atmos:*` tags.
 ```
 
-### `atmos ai compliance`
+### `atmos aws compliance`
 
 Generates compliance posture reports against specific frameworks.
 
 ```shell
 # CIS AWS Foundations Benchmark report
-atmos ai compliance --framework cis-aws --stack prod-us-east-1
+atmos aws compliance --framework cis-aws --stack prod-us-east-1
 
 # PCI DSS compliance status
-atmos ai compliance --framework pci-dss
+atmos aws compliance --framework pci-dss
 
 # All frameworks
-atmos ai compliance --stack prod-us-east-1
+atmos aws compliance --stack prod-us-east-1
 ```
 
 #### Flags
@@ -1124,6 +1137,8 @@ ai:
   tools:
     enabled: true
 
+# AWS-specific settings
+aws:
   # Security & compliance settings
   security:
     enabled: true
@@ -1140,7 +1155,7 @@ ai:
       - CRITICAL
       - HIGH
 
-    # Maximum findings per analysis run (controls AI costs)
+    # Maximum findings per analysis run
     max_findings: 50
 
     # Tag keys used for finding-to-code mapping
@@ -1163,11 +1178,11 @@ ai:
 
 ### Phase 1: Foundation
 
-1. **Schema additions** — Add `ai.security` section to `pkg/schema/ai.go`
-2. **AWS security client** — Create `pkg/ai/security/` package with clients for Security Hub,
+1. **Schema additions** — Add `aws.security` section to `pkg/schema/aws.go`
+2. **AWS security client** — Create `pkg/aws/security/` package with clients for Security Hub,
    Config, Inspector, GuardDuty
 3. **Tag-based mapping** — Implement resource tag lookup and component resolution
-4. **CLI command scaffold** — Register `atmos ai security` and `atmos ai compliance` commands
+4. **CLI command scaffold** — Register `atmos aws security` and `atmos aws compliance` commands
    using the command registry pattern
 
 ### Phase 2: Core Analysis
@@ -1205,8 +1220,9 @@ ai:
   analysis, controlling costs across all providers
 - **Audit trail** — When using Bedrock, all invocations are logged via CloudTrail + optional
   CloudWatch. For other providers, consult the provider's audit logging capabilities.
-- **`--no-ai` flag** — Skips AI analysis entirely for environments where sending data to any AI
-  provider is not permitted. Shows raw findings with tag-based component mapping only.
+- **AI is opt-in** — By default, no data is sent to any AI provider. The `--ai` flag must be
+  explicitly passed to enable AI analysis. This ensures the commands work safely in environments
+  where sending data to AI providers is not permitted.
 
 ---
 

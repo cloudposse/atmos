@@ -102,6 +102,8 @@ type AtmosConfiguration struct {
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	// AI settings.
 	AI AISettings `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
+	// AWS settings.
+	AWS AWSSettings `yaml:"aws,omitempty" json:"aws,omitempty" mapstructure:"aws"`
 	// MCP (Model Context Protocol) server settings.
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
