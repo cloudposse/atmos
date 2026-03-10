@@ -231,6 +231,36 @@ func TestGraph_FindPath(t *testing.T) {
 	assert.Equal(t, "node1", path[0])
 }
 
+func TestGraph_ReverseTopologicalSort_WithCycle(t *testing.T) {
+	g := NewGraph()
+
+	_ = g.AddNode(&Node{ID: "a"})
+	_ = g.AddNode(&Node{ID: "b"})
+	_ = g.AddDependency("a", "b")
+	_ = g.AddDependency("b", "a")
+
+	_, err := g.ReverseTopologicalSort()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrCircularDependency)
+}
+
+func TestGraph_FindPath_NonexistentNode(t *testing.T) {
+	g := NewGraph()
+
+	_ = g.AddNode(&Node{ID: "a"})
+	_ = g.AddNode(&Node{ID: "b"})
+
+	// No path from a to b (no edges).
+	path, found := g.FindPath("a", "b")
+	assert.False(t, found)
+	assert.Nil(t, path)
+
+	// Nonexistent start node.
+	path, found = g.FindPath("nonexistent", "a")
+	assert.False(t, found)
+	assert.Nil(t, path)
+}
+
 func TestGraph_IsReachable(t *testing.T) {
 	graph := NewGraph()
 

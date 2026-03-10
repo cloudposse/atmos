@@ -511,3 +511,252 @@ func TestValidateExecuteTerraformAllArgsRemoved(t *testing.T) {
 		})
 	}
 }
+
+func buildTestGraph(t *testing.T) *dependency.Graph {
+	t.Helper()
+	g := dependency.NewGraph()
+	nodes := []*dependency.Node{
+		{ID: "vpc-dev", Component: "vpc", Stack: "dev", Type: config.TerraformComponentType},
+		{ID: "rds-dev", Component: "rds", Stack: "dev", Type: config.TerraformComponentType},
+		{ID: "app-dev", Component: "app", Stack: "dev", Type: config.TerraformComponentType},
+		{ID: "vpc-prod", Component: "vpc", Stack: "prod", Type: config.TerraformComponentType},
+		{ID: "rds-prod", Component: "rds", Stack: "prod", Type: config.TerraformComponentType},
+	}
+	for _, n := range nodes {
+		require.NoError(t, g.AddNode(n))
+	}
+	require.NoError(t, g.AddDependency("rds-dev", "vpc-dev"))
+	require.NoError(t, g.AddDependency("app-dev", "rds-dev"))
+	require.NoError(t, g.AddDependency("rds-prod", "vpc-prod"))
+	return g
+}
+
+func TestFilterNodesByComponents(t *testing.T) {
+	g := buildTestGraph(t)
+
+	t.Run("single component all stacks", func(t *testing.T) {
+		ids := filterNodesByComponents(g, []string{"vpc"}, "")
+		assert.Equal(t, 2, len(ids))
+		assert.Contains(t, ids, "vpc-dev")
+		assert.Contains(t, ids, "vpc-prod")
+	})
+
+	t.Run("single component single stack", func(t *testing.T) {
+		ids := filterNodesByComponents(g, []string{"vpc"}, "dev")
+		assert.Equal(t, 1, len(ids))
+		assert.Contains(t, ids, "vpc-dev")
+	})
+
+	t.Run("multiple components", func(t *testing.T) {
+		ids := filterNodesByComponents(g, []string{"vpc", "rds"}, "dev")
+		assert.Equal(t, 2, len(ids))
+		assert.Contains(t, ids, "vpc-dev")
+		assert.Contains(t, ids, "rds-dev")
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		ids := filterNodesByComponents(g, []string{"nonexistent"}, "")
+		assert.Empty(t, ids)
+	})
+}
+
+func TestFilterNodesByStack(t *testing.T) {
+	g := buildTestGraph(t)
+
+	t.Run("dev stack", func(t *testing.T) {
+		ids := filterNodesByStack(g, "dev")
+		assert.Equal(t, 3, len(ids))
+	})
+
+	t.Run("prod stack", func(t *testing.T) {
+		ids := filterNodesByStack(g, "prod")
+		assert.Equal(t, 2, len(ids))
+	})
+
+	t.Run("nonexistent stack", func(t *testing.T) {
+		ids := filterNodesByStack(g, "staging")
+		assert.Empty(t, ids)
+	})
+}
+
+func TestIsNodeInComponents(t *testing.T) {
+	node := &dependency.Node{ID: "vpc-dev", Component: "vpc", Stack: "dev"}
+
+	assert.True(t, isNodeInComponents(node, []string{"vpc", "rds"}))
+	assert.True(t, isNodeInComponents(node, []string{"vpc"}))
+	assert.False(t, isNodeInComponents(node, []string{"rds", "app"}))
+	assert.False(t, isNodeInComponents(node, []string{}))
+}
+
+func TestIsNodeInStack(t *testing.T) {
+	node := &dependency.Node{ID: "vpc-dev", Component: "vpc", Stack: "dev"}
+
+	assert.True(t, isNodeInStack(node, "dev"))
+	assert.True(t, isNodeInStack(node, "")) // Empty stack matches all.
+	assert.False(t, isNodeInStack(node, "prod"))
+}
+
+func TestGetAllNodeIDs(t *testing.T) {
+	g := buildTestGraph(t)
+
+	ids := getAllNodeIDs(g)
+	assert.Equal(t, 5, len(ids))
+}
+
+func TestCollectFilteredNodeIDs(t *testing.T) {
+	g := buildTestGraph(t)
+
+	t.Run("no filters returns empty", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{}
+		ids := collectFilteredNodeIDs(g, info)
+		assert.Empty(t, ids)
+	})
+
+	t.Run("component filter", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{Components: []string{"vpc"}}
+		ids := collectFilteredNodeIDs(g, info)
+		assert.Equal(t, 2, len(ids))
+	})
+
+	t.Run("stack filter only", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{Stack: "prod"}
+		ids := collectFilteredNodeIDs(g, info)
+		assert.Equal(t, 2, len(ids))
+	})
+
+	t.Run("component and stack filter", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{Components: []string{"rds"}, Stack: "dev"}
+		ids := collectFilteredNodeIDs(g, info)
+		assert.Equal(t, 1, len(ids))
+		assert.Contains(t, ids, "rds-dev")
+	})
+}
+
+func TestApplyFiltersToGraph_DependencyChain(t *testing.T) {
+	g := buildTestGraph(t)
+	g.IdentifyRoots()
+
+	t.Run("no filters returns original graph", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{}
+		filtered := applyFiltersToGraph(g, nil, info)
+		assert.Equal(t, g.Size(), filtered.Size())
+	})
+
+	t.Run("stack filter includes dependencies", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{Stack: "dev"}
+		filtered := applyFiltersToGraph(g, nil, info)
+		// dev has 3 nodes: vpc-dev, rds-dev, app-dev.
+		assert.Equal(t, 3, filtered.Size())
+	})
+
+	t.Run("component filter includes dependencies", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{Components: []string{"app"}, Stack: "dev"}
+		filtered := applyFiltersToGraph(g, nil, info)
+		// app-dev depends on rds-dev depends on vpc-dev — all 3 included.
+		assert.Equal(t, 3, filtered.Size())
+	})
+}
+
+func TestEvaluateNodeQuery(t *testing.T) {
+	t.Run("nil metadata", func(t *testing.T) {
+		node := &dependency.Node{ID: "test", Metadata: nil}
+		assert.False(t, evaluateNodeQuery(node, ".enabled"))
+	})
+
+	t.Run("invalid query", func(t *testing.T) {
+		node := &dependency.Node{
+			ID:       "test",
+			Metadata: map[string]any{"enabled": true},
+		}
+		assert.False(t, evaluateNodeQuery(node, "[[[invalid"))
+	})
+}
+
+func TestShouldSkipComponentForGraph(t *testing.T) {
+	t.Run("no metadata", func(t *testing.T) {
+		section := map[string]any{
+			"vars": map[string]any{"key": "val"},
+		}
+		assert.False(t, shouldSkipComponentForGraph(section, "vpc"))
+	})
+
+	t.Run("abstract component", func(t *testing.T) {
+		section := map[string]any{
+			"metadata": map[string]any{
+				"type": "abstract",
+			},
+		}
+		assert.True(t, shouldSkipComponentForGraph(section, "base"))
+	})
+
+	t.Run("disabled component", func(t *testing.T) {
+		section := map[string]any{
+			"metadata": map[string]any{
+				"enabled": false,
+			},
+		}
+		assert.True(t, shouldSkipComponentForGraph(section, "vpc"))
+	})
+
+	t.Run("enabled component", func(t *testing.T) {
+		section := map[string]any{
+			"metadata": map[string]any{
+				"enabled": true,
+			},
+		}
+		assert.False(t, shouldSkipComponentForGraph(section, "vpc"))
+	})
+}
+
+func TestFilterNodesByQuery(t *testing.T) {
+	graph := buildTestGraph(t)
+
+	t.Run("empty query returns all", func(t *testing.T) {
+		allIDs := getAllNodeIDs(graph)
+		result := filterNodesByQuery(graph, allIDs, "")
+		// Empty query string in evaluateNodeQuery returns false, so no nodes pass.
+		assert.Empty(t, result)
+	})
+
+	t.Run("nil metadata skipped", func(t *testing.T) {
+		g := dependency.NewGraph()
+		require.NoError(t, g.AddNode(&dependency.Node{ID: "n1", Component: "n1", Stack: "dev", Metadata: nil}))
+		result := filterNodesByQuery(g, []string{"n1"}, ".enabled")
+		assert.Empty(t, result)
+	})
+}
+
+func TestApplyFiltersToGraph_NoFilters(t *testing.T) {
+	graph := buildTestGraph(t)
+	info := &schema.ConfigAndStacksInfo{}
+
+	// No filters - should return the original graph.
+	result := applyFiltersToGraph(graph, nil, info)
+	assert.Equal(t, graph.Size(), result.Size())
+}
+
+func TestApplyFiltersToGraph_StackFilter(t *testing.T) {
+	graph := buildTestGraph(t)
+	info := &schema.ConfigAndStacksInfo{Stack: "dev"}
+
+	result := applyFiltersToGraph(graph, nil, info)
+	// Should include dev nodes and their dependencies.
+	assert.NotNil(t, result)
+	assert.Greater(t, result.Size(), 0)
+}
+
+func TestApplyFiltersToGraph_ComponentFilter(t *testing.T) {
+	graph := buildTestGraph(t)
+	info := &schema.ConfigAndStacksInfo{
+		Components: []string{"rds"},
+		Stack:      "dev",
+	}
+
+	result := applyFiltersToGraph(graph, nil, info)
+	assert.NotNil(t, result)
+	// rds-dev and its dependency vpc-dev should be included.
+	_, hasRDS := result.GetNode("rds-dev")
+	assert.True(t, hasRDS)
+	_, hasVPC := result.GetNode("vpc-dev")
+	assert.True(t, hasVPC)
+}

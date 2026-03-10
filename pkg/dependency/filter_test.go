@@ -412,6 +412,29 @@ func TestGraph_RemoveNode(t *testing.T) {
 	})
 }
 
+func TestRemoveNode_StaleReferences(t *testing.T) {
+	// Test that removeNodeFromDependencies and removeNodeFromDependents handle
+	// stale references gracefully (when a referenced node no longer exists).
+	g := NewGraph()
+
+	_ = g.AddNode(&Node{ID: "a", Component: "a", Stack: "dev"})
+	_ = g.AddNode(&Node{ID: "b", Component: "b", Stack: "dev"})
+	_ = g.AddNode(&Node{ID: "c", Component: "c", Stack: "dev"})
+	_ = g.AddDependency("b", "a")
+	_ = g.AddDependency("c", "b")
+
+	// Manually add a stale dependency reference that points to a non-existent node.
+	g.Nodes["b"].Dependencies = append(g.Nodes["b"].Dependencies, "ghost-dep")
+	g.Nodes["b"].Dependents = append(g.Nodes["b"].Dependents, "ghost-dependent")
+
+	// RemoveNode should handle the stale refs without panicking.
+	err := g.RemoveNode("b")
+	assert.NoError(t, err)
+
+	_, exists := g.GetNode("b")
+	assert.False(t, exists)
+}
+
 func TestFilterHelperFunctions(t *testing.T) {
 	t.Run("filterStringSlice", func(t *testing.T) {
 		ids := []string{"vpc-dev", "database-dev", "app-dev", "cache-dev"}

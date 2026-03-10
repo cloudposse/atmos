@@ -1467,6 +1467,85 @@ func BenchmarkExecuteTerraformAffectedComponentInDepOrder(b *testing.B) {
 	}
 }
 
+func TestLogFuncForDryRun(t *testing.T) {
+	t.Run("dry run returns non-nil function", func(t *testing.T) {
+		fn := logFuncForDryRun(true)
+		assert.NotNil(t, fn)
+	})
+
+	t.Run("non-dry-run returns non-nil function", func(t *testing.T) {
+		fn := logFuncForDryRun(false)
+		assert.NotNil(t, fn)
+	})
+}
+
+func TestShouldProcessDependent(t *testing.T) {
+	affectedList := []schema.Affected{
+		{Component: "vpc", Stack: "dev", StackSlug: "vpc-dev"},
+		{Component: "rds", Stack: "prod", StackSlug: "rds-prod"},
+	}
+
+	t.Run("already included in dependents", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "vpc",
+			Stack:                "dev",
+			StackSlug:            "vpc-dev",
+			IncludedInDependents: true,
+		}
+		assert.False(t, shouldProcessDependent(dep, affectedList, true))
+	})
+
+	t.Run("include dependents flag true", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "app",
+			Stack:                "dev",
+			StackSlug:            "app-dev",
+			IncludedInDependents: false,
+		}
+		assert.True(t, shouldProcessDependent(dep, affectedList, true))
+	})
+
+	t.Run("not included but affected in stack", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "vpc",
+			Stack:                "dev",
+			StackSlug:            "vpc-dev",
+			IncludedInDependents: false,
+		}
+		assert.True(t, shouldProcessDependent(dep, affectedList, false))
+	})
+
+	t.Run("not included and not affected", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "app",
+			Stack:                "staging",
+			StackSlug:            "app-staging",
+			IncludedInDependents: false,
+		}
+		assert.False(t, shouldProcessDependent(dep, affectedList, false))
+	})
+
+	t.Run("empty affected list with include dependents", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "app",
+			Stack:                "dev",
+			StackSlug:            "app-dev",
+			IncludedInDependents: false,
+		}
+		assert.True(t, shouldProcessDependent(dep, nil, true))
+	})
+
+	t.Run("empty affected list without include dependents", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "app",
+			Stack:                "dev",
+			StackSlug:            "app-dev",
+			IncludedInDependents: false,
+		}
+		assert.False(t, shouldProcessDependent(dep, nil, false))
+	})
+}
+
 func TestParseUploadStatusFlag(t *testing.T) {
 	tests := []struct {
 		name     string

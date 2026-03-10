@@ -516,3 +516,86 @@ func TestDependencyParser_AddDependencyIfExists(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDependencyMap(t *testing.T) {
+	nodeMap := map[string]string{
+		"vpc-dev":  "vpc-dev",
+		"rds-dev":  "rds-dev",
+		"app-dev":  "app-dev",
+		"vpc-prod": "vpc-prod",
+	}
+
+	t.Run("map string any format", func(t *testing.T) {
+		builder := dependency.NewBuilder()
+		for nodeID := range nodeMap {
+			_ = builder.AddNode(&dependency.Node{ID: nodeID})
+		}
+
+		parser := NewDependencyParser(builder, nodeMap)
+
+		deps := map[string]any{
+			"0": map[string]any{"component": "vpc"},
+		}
+		parser.parseDependencyMap("rds-dev", "dev", deps)
+
+		graph := builder.GetGraph()
+		node := graph.Nodes["rds-dev"]
+		assert.Contains(t, node.Dependencies, "vpc-dev")
+	})
+
+	t.Run("map any any format", func(t *testing.T) {
+		builder := dependency.NewBuilder()
+		for nodeID := range nodeMap {
+			_ = builder.AddNode(&dependency.Node{ID: nodeID})
+		}
+
+		parser := NewDependencyParser(builder, nodeMap)
+
+		deps := map[any]any{
+			0: map[any]any{"component": "vpc"},
+		}
+		parser.parseDependencyMapAnyAny("rds-dev", "dev", deps)
+
+		graph := builder.GetGraph()
+		node := graph.Nodes["rds-dev"]
+		assert.Contains(t, node.Dependencies, "vpc-dev")
+	})
+
+	t.Run("map any any with cross-stack dependency", func(t *testing.T) {
+		builder := dependency.NewBuilder()
+		for nodeID := range nodeMap {
+			_ = builder.AddNode(&dependency.Node{ID: nodeID})
+		}
+
+		parser := NewDependencyParser(builder, nodeMap)
+
+		deps := map[any]any{
+			0: map[any]any{"component": "vpc", "stack": "prod"},
+		}
+		parser.parseDependencyMapAnyAny("rds-dev", "dev", deps)
+
+		graph := builder.GetGraph()
+		node := graph.Nodes["rds-dev"]
+		assert.Contains(t, node.Dependencies, "vpc-prod")
+	})
+
+	t.Run("map with invalid dependency logs warning", func(t *testing.T) {
+		builder := dependency.NewBuilder()
+		for nodeID := range nodeMap {
+			_ = builder.AddNode(&dependency.Node{ID: nodeID})
+		}
+
+		parser := NewDependencyParser(builder, nodeMap)
+
+		// Invalid dependency type (int) — triggers warning log but doesn't panic.
+		deps := map[string]any{
+			"0": 42,
+		}
+		parser.parseDependencyMap("rds-dev", "dev", deps)
+
+		// Should not have added any dependency.
+		graph := builder.GetGraph()
+		node := graph.Nodes["rds-dev"]
+		assert.Empty(t, node.Dependencies)
+	})
+}
