@@ -20,8 +20,9 @@ type ProcessOption func(*processOptions)
 // WithProcessTemplates controls whether Go templates are resolved during processing.
 // When false, template expressions like {{ .settings.config.a }} are preserved as raw strings.
 // Defaults to true when not specified.
+//
+//nolint:lintroller // Trivial closure constructor - no perf tracking needed.
 func WithProcessTemplates(enabled bool) ProcessOption {
-	defer perf.Track(nil, "describe.WithProcessTemplates")()
 	return func(o *processOptions) {
 		o.processTemplates = enabled
 	}
@@ -31,8 +32,9 @@ func WithProcessTemplates(enabled bool) ProcessOption {
 // !template, !store, etc.) are resolved during processing.
 // When false, YAML function tags are preserved as raw strings.
 // Defaults to true when not specified.
+//
+//nolint:lintroller // Trivial closure constructor - no perf tracking needed.
 func WithProcessYamlFunctions(enabled bool) ProcessOption {
-	defer perf.Track(nil, "describe.WithProcessYamlFunctions")()
 	return func(o *processOptions) {
 		o.processYamlFunctions = enabled
 	}
