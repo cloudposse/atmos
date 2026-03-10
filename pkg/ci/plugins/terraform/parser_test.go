@@ -627,6 +627,144 @@ Error: resource already exists
 	}
 }
 
+func TestExtractApplyOutputs(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		want    map[string]plugin.TerraformOutput
+	}{
+		{
+			name:   "no outputs section",
+			output: "Apply complete! Resources: 0 added, 0 changed, 0 destroyed.",
+			want:   map[string]plugin.TerraformOutput{},
+		},
+		{
+			name: "simple string outputs",
+			output: `Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+instance_id = "i-12345678"
+public_ip = "54.123.45.67"
+`,
+			want: map[string]plugin.TerraformOutput{
+				"instance_id": {Value: "i-12345678"},
+				"public_ip":   {Value: "54.123.45.67"},
+			},
+		},
+		{
+			name: "mixed value types",
+			output: `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+name = "my-app"
+count = 42
+enabled = true
+`,
+			want: map[string]plugin.TerraformOutput{
+				"name":    {Value: "my-app"},
+				"count":   {Value: "42"},
+				"enabled": {Value: "true"},
+			},
+		},
+		{
+			name: "multi-line list value",
+			output: `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+simple = "hello"
+subnet_ids = [
+  "subnet-1",
+  "subnet-2",
+]
+vpc_id = "vpc-123"
+`,
+			want: map[string]plugin.TerraformOutput{
+				"simple":     {Value: "hello"},
+				"subnet_ids": {Value: "[\n\"subnet-1\",\n\"subnet-2\",\n]"},
+				"vpc_id":     {Value: "vpc-123"},
+			},
+		},
+		{
+			name: "multi-line map value",
+			output: `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+config = {
+  "host" = "localhost"
+  "port" = 3000
+}
+name = "test"
+`,
+			want: map[string]plugin.TerraformOutput{
+				"config": {Value: "{\n\"host\" = \"localhost\"\n\"port\" = 3000\n}"},
+				"name":   {Value: "test"},
+			},
+		},
+		{
+			name: "from testdata apply_success",
+			output: `aws_security_group.allow_http: Creating...
+aws_security_group.allow_http: Creation complete after 3s [id=sg-12345678]
+aws_instance.web: Creating...
+aws_instance.web: Still creating... [10s elapsed]
+aws_instance.web: Still creating... [20s elapsed]
+aws_instance.web: Still creating... [30s elapsed]
+aws_instance.web: Creation complete after 35s [id=i-12345678]
+aws_eip.web: Creating...
+aws_eip.web: Creation complete after 2s [id=eipalloc-12345678]
+
+Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+instance_id = "i-12345678"
+public_ip = "54.123.45.67"
+`,
+			want: map[string]plugin.TerraformOutput{
+				"instance_id": {Value: "i-12345678"},
+				"public_ip":   {Value: "54.123.45.67"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractApplyOutputs(tt.output)
+			assert.Equal(t, len(tt.want), len(got), "output count mismatch")
+			for key, wantOut := range tt.want {
+				gotOut, ok := got[key]
+				assert.True(t, ok, "missing output key: %s", key)
+				assert.Equal(t, wantOut.Value, gotOut.Value, "value mismatch for key: %s", key)
+			}
+		})
+	}
+}
+
+func TestParseApplyOutput_WithOutputs(t *testing.T) {
+	output := `aws_instance.web: Creating...
+aws_instance.web: Creation complete after 35s [id=i-12345678]
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+instance_id = "i-12345678"
+environment_url = "https://example.com"
+`
+	result := ParseApplyOutput(output)
+	require.NotNil(t, result)
+	assert.True(t, result.HasChanges)
+
+	data, ok := result.Data.(*plugin.TerraformOutputData)
+	require.True(t, ok)
+	assert.Equal(t, 2, len(data.Outputs))
+	assert.Equal(t, "i-12345678", data.Outputs["instance_id"].Value)
+	assert.Equal(t, "https://example.com", data.Outputs["environment_url"].Value)
+}
+
 func TestParseOutput(t *testing.T) {
 	t.Run("plan command", func(t *testing.T) {
 		result := ParseOutput("Plan: 1 to add, 0 to change, 0 to destroy.", "plan")

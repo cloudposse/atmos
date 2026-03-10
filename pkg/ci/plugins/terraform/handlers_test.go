@@ -795,113 +795,13 @@ func TestGetOutputVariables_ApplyIncludesSuccess(t *testing.T) {
 	})
 }
 
-func TestGetTerraformOutputs(t *testing.T) {
-	p := &Plugin{}
-
-	t.Run("skips for non-apply command", func(t *testing.T) {
-		ctx := &plugin.HookContext{
-			Command: "plan",
-			Config:  &schema.AtmosConfiguration{},
-			Info:    &schema.ConfigAndStacksInfo{},
-		}
-		outputs := p.getTerraformOutputs(ctx)
-		assert.Nil(t, outputs)
-	})
-
-	t.Run("skips when command error exists", func(t *testing.T) {
-		ctx := &plugin.HookContext{
-			Command:      "apply",
-			CommandError: fmt.Errorf("apply failed"),
-			Config:       &schema.AtmosConfiguration{},
-			Info:         &schema.ConfigAndStacksInfo{},
-		}
-		outputs := p.getTerraformOutputs(ctx)
-		assert.Nil(t, outputs)
-	})
-
-	t.Run("skips when config is nil", func(t *testing.T) {
-		ctx := &plugin.HookContext{
-			Command: "apply",
-			Config:  nil,
-			Info:    &schema.ConfigAndStacksInfo{},
-		}
-		outputs := p.getTerraformOutputs(ctx)
-		assert.Nil(t, outputs)
-	})
-
-	t.Run("skips when info is nil", func(t *testing.T) {
-		ctx := &plugin.HookContext{
-			Command: "apply",
-			Config:  &schema.AtmosConfiguration{},
-			Info:    nil,
-		}
-		outputs := p.getTerraformOutputs(ctx)
-		assert.Nil(t, outputs)
-	})
-
-	t.Run("returns outputs on successful apply", func(t *testing.T) {
-		// Override the package-level function for testing.
-		origFunc := getComponentOutputsFunc
-		defer func() { getComponentOutputsFunc = origFunc }()
-
-		expectedOutputs := map[string]any{
-			"vpc_id":     "vpc-123",
-			"subnet_ids": []any{"subnet-1", "subnet-2"},
-		}
-		getComponentOutputsFunc = func(_ *schema.AtmosConfiguration, _, _ string, _ bool, _ any) (map[string]any, error) {
-			return expectedOutputs, nil
-		}
-
-		ctx := &plugin.HookContext{
-			Command: "apply",
-			Config:  &schema.AtmosConfiguration{},
-			Info: &schema.ConfigAndStacksInfo{
-				Stack:            "dev",
-				ComponentFromArg: "vpc",
-			},
-		}
-		outputs := p.getTerraformOutputs(ctx)
-		assert.Equal(t, expectedOutputs, outputs)
-	})
-
-	t.Run("returns nil on fetch error", func(t *testing.T) {
-		origFunc := getComponentOutputsFunc
-		defer func() { getComponentOutputsFunc = origFunc }()
-
-		getComponentOutputsFunc = func(_ *schema.AtmosConfiguration, _, _ string, _ bool, _ any) (map[string]any, error) {
-			return nil, fmt.Errorf("terraform output failed")
-		}
-
-		ctx := &plugin.HookContext{
-			Command: "apply",
-			Config:  &schema.AtmosConfiguration{},
-			Info: &schema.ConfigAndStacksInfo{
-				Stack:            "dev",
-				ComponentFromArg: "vpc",
-			},
-		}
-		outputs := p.getTerraformOutputs(ctx)
-		assert.Nil(t, outputs)
-	})
-}
+// TestGetTerraformOutputs was removed — terraform outputs are now parsed from
+// apply stdout (via ParseApplyOutput) instead of running `terraform output`
+// separately, which required backend credentials not available in PostRunE.
 
 func TestWriteOutputs_ApplyWithTerraformOutputs(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
-
-	// Override the package-level function for testing.
-	origFunc := getComponentOutputsFunc
-	defer func() { getComponentOutputsFunc = origFunc }()
-
-	getComponentOutputsFunc = func(_ *schema.AtmosConfiguration, _, _ string, _ bool, _ any) (map[string]any, error) {
-		return map[string]any{
-			"vpc_id": "vpc-abc123",
-			"config": map[string]any{
-				"host": "localhost",
-				"port": float64(3000),
-			},
-		}, nil
-	}
 
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
@@ -917,14 +817,22 @@ func TestWriteOutputs_ApplyWithTerraformOutputs(t *testing.T) {
 		},
 	}
 
-	result := &plugin.OutputResult{HasChanges: true}
+	// Outputs are now parsed from apply stdout via ParseApplyOutput.
+	result := &plugin.OutputResult{
+		HasChanges: true,
+		Data: &plugin.TerraformOutputData{
+			Outputs: map[string]plugin.TerraformOutput{
+				"vpc_id":          {Value: "vpc-abc123"},
+				"environment_url": {Value: "https://example.com"},
+			},
+		},
+	}
 	err := p.writeOutputs(ctx, result, "")
 	require.NoError(t, err)
 
-	// Terraform outputs should be flattened with "output" prefix.
+	// Terraform outputs should be written with "output_" prefix.
 	assert.Equal(t, "vpc-abc123", mp.writer.outputs["output_vpc_id"])
-	assert.Equal(t, "localhost", mp.writer.outputs["output_config_host"])
-	assert.Equal(t, "3000", mp.writer.outputs["output_config_port"])
+	assert.Equal(t, "https://example.com", mp.writer.outputs["output_environment_url"])
 
 	// Standard variables should also be present.
 	assert.Equal(t, "dev", mp.writer.outputs["stack"])
@@ -936,17 +844,6 @@ func TestWriteOutputs_ApplyWithTerraformOutputs(t *testing.T) {
 func TestWriteOutputs_ApplyTerraformOutputsBypassFilter(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
-
-	// Override the package-level function for testing.
-	origFunc := getComponentOutputsFunc
-	defer func() { getComponentOutputsFunc = origFunc }()
-
-	getComponentOutputsFunc = func(_ *schema.AtmosConfiguration, _, _ string, _ bool, _ any) (map[string]any, error) {
-		return map[string]any{
-			"vpc_id":    "vpc-abc123",
-			"subnet_id": "subnet-456",
-		}, nil
-	}
 
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
@@ -965,7 +862,15 @@ func TestWriteOutputs_ApplyTerraformOutputsBypassFilter(t *testing.T) {
 		},
 	}
 
-	result := &plugin.OutputResult{}
+	// Outputs are parsed from apply stdout.
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformOutputData{
+			Outputs: map[string]plugin.TerraformOutput{
+				"vpc_id":    {Value: "vpc-abc123"},
+				"subnet_id": {Value: "subnet-456"},
+			},
+		},
+	}
 	err := p.writeOutputs(ctx, result, "")
 	require.NoError(t, err)
 
@@ -980,19 +885,9 @@ func TestWriteOutputs_ApplyTerraformOutputsBypassFilter(t *testing.T) {
 	assert.Equal(t, "subnet-456", mp.writer.outputs["output_subnet_id"])
 }
 
-func TestWriteOutputs_PlanDoesNotFetchTerraformOutputs(t *testing.T) {
+func TestWriteOutputs_PlanDoesNotIncludeTerraformOutputs(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
-
-	// Override the package-level function for testing - should NOT be called.
-	origFunc := getComponentOutputsFunc
-	defer func() { getComponentOutputsFunc = origFunc }()
-
-	called := false
-	getComponentOutputsFunc = func(_ *schema.AtmosConfiguration, _, _ string, _ bool, _ any) (map[string]any, error) {
-		called = true
-		return map[string]any{"vpc_id": "vpc-abc123"}, nil
-	}
 
 	ctx := &plugin.HookContext{
 		Config:   &schema.AtmosConfiguration{},
@@ -1004,14 +899,18 @@ func TestWriteOutputs_PlanDoesNotFetchTerraformOutputs(t *testing.T) {
 		},
 	}
 
-	result := &plugin.OutputResult{}
+	// Even if the result has outputs, plan command should not export them.
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformOutputData{
+			Outputs: map[string]plugin.TerraformOutput{
+				"vpc_id": {Value: "vpc-abc123"},
+			},
+		},
+	}
 	err := p.writeOutputs(ctx, result, "")
 	require.NoError(t, err)
 
-	// Should not have called the output function for plan commands.
-	assert.False(t, called)
-
-	// No output_ variables should be present.
+	// No output_ variables should be present for plan commands.
 	for key := range mp.writer.outputs {
 		assert.NotContains(t, key, "output_")
 	}

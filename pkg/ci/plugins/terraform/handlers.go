@@ -15,7 +15,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -286,10 +285,6 @@ func (p *Plugin) writeSummary(ctx *plugin.HookContext, _ *plugin.OutputResult) (
 	return rendered, nil
 }
 
-// getComponentOutputsFunc is the function used to fetch terraform outputs.
-// It defaults to tfoutput.GetComponentOutputs and can be overridden in tests.
-var getComponentOutputsFunc = tfoutput.GetComponentOutputs
-
 // writeOutputs writes CI output variables.
 func (p *Plugin) writeOutputs(ctx *plugin.HookContext, result *plugin.OutputResult, renderedSummary string) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.writeOutputs")()
@@ -320,11 +315,13 @@ func (p *Plugin) writeOutputs(ctx *plugin.HookContext, result *plugin.OutputResu
 
 	// Export terraform outputs after successful apply.
 	// Terraform outputs bypass the whitelist — they are always included.
+	// Outputs are extracted from the captured apply stdout (parsed by ParseApplyOutput)
+	// rather than running `terraform output` separately, which would require backend
+	// credentials that are not available in PostRunE context.
 	if ctx.Command == "apply" && ctx.CommandError == nil {
-		if tfOutputs := p.getTerraformOutputs(ctx); len(tfOutputs) > 0 {
-			flatOutputs := tfoutput.FlattenMap(tfOutputs, "output", "_")
-			for key, value := range flatOutputs {
-				vars[key] = fmt.Sprintf("%v", value)
+		if tfData, ok := result.Data.(*plugin.TerraformOutputData); ok && len(tfData.Outputs) > 0 {
+			for key, out := range tfData.Outputs {
+				vars["output_"+key] = fmt.Sprintf("%v", out.Value)
 			}
 		}
 	}
@@ -338,30 +335,6 @@ func (p *Plugin) writeOutputs(ctx *plugin.HookContext, result *plugin.OutputResu
 
 	log.Debug("Wrote CI outputs", "count", len(vars))
 	return nil
-}
-
-// getTerraformOutputs fetches terraform outputs after a successful apply.
-// Returns nil if the command is not apply, if apply failed, or if output fetching fails.
-func (p *Plugin) getTerraformOutputs(ctx *plugin.HookContext) map[string]any {
-	if ctx.Command != "apply" || ctx.CommandError != nil {
-		return nil
-	}
-	if ctx.Config == nil || ctx.Info == nil {
-		return nil
-	}
-
-	outputs, err := getComponentOutputsFunc(
-		ctx.Config,
-		ctx.Info.ComponentFromArg,
-		ctx.Info.Stack,
-		true, // skipInit — already initialized from apply.
-		nil,  // no authManager.
-	)
-	if err != nil {
-		log.Warn("Failed to fetch terraform outputs for CI export", "error", err)
-		return nil
-	}
-	return outputs
 }
 
 // uploadPlanfile uploads a planfile to the configured storage backend.

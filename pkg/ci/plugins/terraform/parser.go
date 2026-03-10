@@ -44,6 +44,13 @@ var (
 	//   # resource_type.name will be read during apply
 	resourceActionRe  = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+will be (created|destroyed|updated in-place|read during apply)`)
 	resourceReplaceRe = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+must be replaced`)
+
+	// Matches "Outputs:" section header in terraform apply stdout.
+	outputsSectionRe = regexp.MustCompile(`(?m)^Outputs:\s*$`)
+
+	// Matches simple output lines: 'key = "value"' or 'key = value'.
+	// Captures key and raw value (including quotes).
+	outputLineRe = regexp.MustCompile(`^(\w+)\s*=\s*(.+)$`)
 )
 
 // ParsePlanJSON parses terraform plan JSON from `terraform show -json <planfile>`.
@@ -392,7 +399,104 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 			data.ResourceCounts.Destroy > 0
 	}
 
+	// Extract outputs from apply stdout (e.g., 'key = "value"' lines after "Outputs:").
+	// This avoids needing to run `terraform output` separately, which would require
+	// backend credentials that may not be available in PostRunE context.
+	data.Outputs = extractApplyOutputs(output)
+
 	return result
+}
+
+// extractApplyOutputs extracts terraform outputs from apply stdout.
+// After a successful apply, terraform prints outputs in the format:
+//
+//	Outputs:
+//
+//	key1 = "string_value"
+//	key2 = 42
+//	key3 = true
+//
+// Complex values (lists, maps) span multiple lines and are captured as raw strings.
+// This is used instead of running `terraform output` separately, which would
+// require backend credentials that may not be available in PostRunE context.
+func extractApplyOutputs(output string) map[string]plugin.TerraformOutput {
+	defer perf.Track(nil, "terraform.extractApplyOutputs")()
+
+	outputs := make(map[string]plugin.TerraformOutput)
+
+	// Find the "Outputs:" section.
+	loc := outputsSectionRe.FindStringIndex(output)
+	if loc == nil {
+		return outputs
+	}
+
+	// Parse lines after "Outputs:".
+	section := output[loc[1]:]
+	lines := strings.Split(section, "\n")
+
+	var currentKey string
+	var currentValue strings.Builder
+	depth := 0 // Track nesting depth for complex values (lists, maps).
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Skip empty lines.
+		if trimmed == "" {
+			continue
+		}
+
+		// If we're inside a complex value (depth > 0), accumulate lines.
+		if depth > 0 {
+			currentValue.WriteString("\n")
+			currentValue.WriteString(trimmed)
+			depth += strings.Count(trimmed, "[") + strings.Count(trimmed, "{")
+			depth -= strings.Count(trimmed, "]") + strings.Count(trimmed, "}")
+			if depth <= 0 {
+				// Complex value complete.
+				outputs[currentKey] = plugin.TerraformOutput{
+					Value: currentValue.String(),
+				}
+				currentKey = ""
+				currentValue.Reset()
+				depth = 0
+			}
+			continue
+		}
+
+		// Try to match a new output line.
+		matches := outputLineRe.FindStringSubmatch(trimmed)
+		if matches == nil {
+			// Non-output line — end of outputs section.
+			break
+		}
+
+		key := matches[1]
+		rawValue := strings.TrimSpace(matches[2])
+
+		// Check if this is the start of a complex value.
+		openCount := strings.Count(rawValue, "[") + strings.Count(rawValue, "{")
+		closeCount := strings.Count(rawValue, "]") + strings.Count(rawValue, "}")
+		if openCount > closeCount {
+			// Multi-line complex value.
+			currentKey = key
+			currentValue.WriteString(rawValue)
+			depth = openCount - closeCount
+			continue
+		}
+
+		// Simple value — strip surrounding quotes if present.
+		value := rawValue
+		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+			value = value[1 : len(value)-1]
+		}
+
+		outputs[key] = plugin.TerraformOutput{
+			Value: value,
+		}
+	}
+
+	return outputs
 }
 
 // ParseOutput parses terraform output for a given command (fallback when JSON not available).
