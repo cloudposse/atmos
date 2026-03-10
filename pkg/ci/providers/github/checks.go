@@ -21,6 +21,10 @@ const (
 
 // createCheckRun creates a new check run on a commit.
 func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
+	if err := p.ensureClient(); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrCICheckRunCreateFailed, err)
+	}
+
 	ghOpts := github.CreateCheckRunOptions{
 		Name:    opts.Name,
 		HeadSHA: opts.SHA,
@@ -79,6 +83,10 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateChec
 // If no prior CreateCheckRun was called for this name, it falls back to
 // creating a new completed check run using opts.SHA.
 func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+	if err := p.ensureClient(); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrCICheckRunUpdateFailed, err)
+	}
+
 	// Look up the check run ID from the internal map (stored by CreateCheckRun).
 	val, ok := p.checkRunIDs.LoadAndDelete(opts.Name)
 	if !ok {

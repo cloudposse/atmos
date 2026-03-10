@@ -12,6 +12,10 @@ import (
 
 // getStatus fetches the CI status for the given options.
 func (p *Provider) getStatus(ctx context.Context, opts provider.StatusOptions) (*provider.Status, error) {
+	if err := p.ensureClient(); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrCIStatusFetchFailed, err)
+	}
+
 	status := &provider.Status{
 		Repository: fmt.Sprintf("%s/%s", opts.Owner, opts.Repo),
 	}

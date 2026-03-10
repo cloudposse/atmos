@@ -19,27 +19,48 @@ const (
 )
 
 // Provider implements provider.Provider for GitHub Actions.
+// The client is lazily initialized on first use, so the provider can be
+// registered at init time based on environment detection alone, without
+// requiring GITHUB_TOKEN to be available at startup.
 type Provider struct {
 	client      *Client
+	clientOnce  sync.Once
+	clientErr   error
 	checkRunIDs sync.Map // name → int64 ID, for correlating CreateCheckRun/UpdateCheckRun.
 }
 
 // NewProvider creates a new GitHub Actions provider.
-func NewProvider() (*Provider, error) {
+// The GitHub API client is lazily initialized on first use.
+func NewProvider() *Provider {
 	defer perf.Track(nil, "github.NewProvider")()
 
-	client, err := NewClient()
-	if err != nil {
-		return nil, err
-	}
-	return &Provider{client: client}, nil
+	return &Provider{}
 }
 
 // NewProviderWithClient creates a new GitHub Actions provider with a custom client.
 func NewProviderWithClient(client *Client) *Provider {
 	defer perf.Track(nil, "github.NewProviderWithClient")()
 
-	return &Provider{client: client}
+	p := &Provider{client: client}
+	// Mark client as already initialized so ensureClient() is a no-op.
+	p.clientOnce.Do(func() {})
+	return p
+}
+
+// ensureClient lazily initializes the GitHub API client.
+func (p *Provider) ensureClient() error {
+	p.clientOnce.Do(func() {
+		if p.client != nil {
+			return
+		}
+		client, err := NewClient()
+		if err != nil {
+			p.clientErr = err
+			return
+		}
+		p.client = client
+	})
+	return p.clientErr
 }
 
 // Name returns the provider name.
@@ -161,17 +182,9 @@ func (p *Provider) OutputWriter() provider.OutputWriter {
 
 func init() {
 	// Only register if we can detect GitHub Actions.
-	// We create a lightweight provider just for detection.
-	p := &Provider{}
+	// The client is lazily initialized — GITHUB_TOKEN is not required at init time.
+	p := NewProvider()
 	if p.Detect() {
-		// Create full provider with client for actual use.
-		fullProvider, err := NewProvider()
-		if err != nil {
-			// Log warning but don't fail - CI detection worked but client creation failed.
-			// This allows graceful degradation in environments where GitHub API is unavailable.
-			log.Debug("Failed to create GitHub provider", "error", err)
-			return
-		}
-		ci.Register(fullProvider)
+		ci.Register(p)
 	}
 }
