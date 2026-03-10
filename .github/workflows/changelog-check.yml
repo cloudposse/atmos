@@ -17,10 +17,10 @@ jobs:
         id: check-labels
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          BASE_REF="${{ github.event.pull_request.base.ref }}"
-          LABELS=$(gh pr view $PR_NUMBER --json labels --jq '.labels[].name')
+          LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
 
           # Only require changelog for PRs targeting main branch
           if [ "$BASE_REF" != "main" ]; then
@@ -40,15 +40,15 @@ jobs:
       - name: Check for new blog post
         if: steps.check-labels.outputs.requires_docs == 'true'
         id: check-blog
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          BASE_REF="${{ github.event.pull_request.base.sha }}"
-          HEAD_REF="${{ github.event.pull_request.head.sha }}"
-
           # Use git diff directly instead of gh pr diff to avoid API limitations
           # GitHub's diff API has a limit of ~300 files or ~3000 lines, which fails on large PRs
           # git diff works locally without these limitations
-          echo "Checking for blog post files between $BASE_REF and $HEAD_REF"
-          NEW_BLOG_FILES=$(git diff --name-only "$BASE_REF" "$HEAD_REF" | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
+          echo "Checking for blog post files between $BASE_SHA and $HEAD_SHA"
+          NEW_BLOG_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
 
           if [ -z "$NEW_BLOG_FILES" ]; then
             echo "has_changelog=false" >> $GITHUB_OUTPUT
@@ -65,13 +65,13 @@ jobs:
       - name: Check for roadmap update
         if: steps.check-labels.outputs.requires_docs == 'true'
         id: check-roadmap
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          BASE_REF="${{ github.event.pull_request.base.sha }}"
-          HEAD_REF="${{ github.event.pull_request.head.sha }}"
-
           # Check if website/src/data/roadmap.js was modified
-          echo "Checking for roadmap updates between $BASE_REF and $HEAD_REF"
-          ROADMAP_CHANGED=$(git diff --name-only "$BASE_REF" "$HEAD_REF" | grep -E '^website/src/data/roadmap\.js$' || true)
+          echo "Checking for roadmap updates between $BASE_SHA and $HEAD_SHA"
+          ROADMAP_CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^website/src/data/roadmap\.js$' || true)
 
           if [ -z "$ROADMAP_CHANGED" ]; then
             echo "has_roadmap=false" >> $GITHUB_OUTPUT
@@ -87,12 +87,14 @@ jobs:
           (steps.check-blog.outputs.has_changelog == 'false' || steps.check-roadmap.outputs.has_roadmap == 'false')
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HAS_CHANGELOG: ${{ steps.check-blog.outputs.has_changelog }}
+          HAS_ROADMAP: ${{ steps.check-roadmap.outputs.has_roadmap }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-
           # Build checklist based on what's missing
           MISSING_ITEMS=""
-          if [ "${{ steps.check-blog.outputs.has_changelog }}" = "false" ]; then
+          if [ "$HAS_CHANGELOG" = "false" ]; then
             MISSING_ITEMS="${MISSING_ITEMS}
           > - [ ] **Changelog entry** - Add a blog post in \`website/blog/YYYY-MM-DD-feature-name.mdx\`"
           else
@@ -100,7 +102,7 @@ jobs:
           > - [x] **Changelog entry** ✅"
           fi
 
-          if [ "${{ steps.check-roadmap.outputs.has_roadmap }}" = "false" ]; then
+          if [ "$HAS_ROADMAP" = "false" ]; then
             MISSING_ITEMS="${MISSING_ITEMS}
           > - [ ] **Roadmap update** - Update \`website/src/data/roadmap.js\` with the new milestone"
           else
@@ -109,7 +111,7 @@ jobs:
           fi
 
           # Check if comment already exists
-          EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
+          EXISTING_COMMENT=$(gh pr view "$PR_NUMBER" --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
 
           COMMENT_BODY="<!-- release-docs-check -->
           > [!WARNING]
@@ -122,14 +124,14 @@ jobs:
 
           if [ -n "$EXISTING_COMMENT" ]; then
             echo "Updating existing comment..."
-            gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+            gh api -X PATCH "/repos/${GH_REPO}/issues/comments/$EXISTING_COMMENT" \
               -f body="$COMMENT_BODY" || {
               echo "⚠️ Failed to update comment, creating new one..."
-              gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+              gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
             }
           else
             echo "Creating new comment..."
-            gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+            gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
           fi
 
       - name: Update comment with success message
@@ -139,13 +141,13 @@ jobs:
           steps.check-roadmap.outputs.has_roadmap == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BLOG_FILES: ${{ steps.check-blog.outputs.blog_files }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          BLOG_FILES="${{ steps.check-blog.outputs.blog_files }}"
-
           # Find existing comment (warning or success)
-          EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
-          EXISTING_COMMENT_BODY=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .body' | head -1)
+          EXISTING_COMMENT=$(gh pr view "$PR_NUMBER" --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
+          EXISTING_COMMENT_BODY=$(gh pr view "$PR_NUMBER" --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .body' | head -1)
 
           SUCCESS_COMMENT_BODY="<!-- release-docs-check -->
           > [!NOTE]
@@ -162,7 +164,7 @@ jobs:
               echo "ℹ️ Comment already shows success - no update needed"
             else
               echo "Updating existing comment with success message..."
-              gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+              gh api -X PATCH "/repos/${GH_REPO}/issues/comments/$EXISTING_COMMENT" \
                 -f body="$SUCCESS_COMMENT_BODY" || {
                 echo "⚠️ Failed to update comment (it may have been deleted)"
               }
@@ -176,15 +178,18 @@ jobs:
         if: |
           steps.check-labels.outputs.requires_docs == 'true' &&
           (steps.check-blog.outputs.has_changelog == 'false' || steps.check-roadmap.outputs.has_roadmap == 'false')
+        env:
+          HAS_CHANGELOG: ${{ steps.check-blog.outputs.has_changelog }}
+          HAS_ROADMAP: ${{ steps.check-roadmap.outputs.has_roadmap }}
         run: |
           echo "❌ ERROR: PR is labeled 'minor' or 'major' but release documentation is incomplete."
           echo ""
-          if [ "${{ steps.check-blog.outputs.has_changelog }}" = "false" ]; then
+          if [ "$HAS_CHANGELOG" = "false" ]; then
             echo "Missing: Changelog entry"
             echo "  → Add a blog post in website/blog/YYYY-MM-DD-feature-name.mdx"
             echo ""
           fi
-          if [ "${{ steps.check-roadmap.outputs.has_roadmap }}" = "false" ]; then
+          if [ "$HAS_ROADMAP" = "false" ]; then
             echo "Missing: Roadmap update"
             echo "  → Update website/src/data/roadmap.js with the new milestone"
             echo ""
@@ -196,8 +201,10 @@ jobs:
         if: |
           steps.check-labels.outputs.requires_docs == 'false' ||
           (steps.check-blog.outputs.has_changelog == 'true' && steps.check-roadmap.outputs.has_roadmap == 'true')
+        env:
+          REQUIRES_DOCS: ${{ steps.check-labels.outputs.requires_docs }}
         run: |
-          if [ "${{ steps.check-labels.outputs.requires_docs }}" = "false" ]; then
+          if [ "$REQUIRES_DOCS" = "false" ]; then
             echo "✅ No release documentation required for this PR"
           else
             echo "✅ Release documentation complete - check passed"
