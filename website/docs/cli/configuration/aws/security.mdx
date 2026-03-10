@@ -183,34 +183,10 @@ atmos aws security analyze --stack prod-us-east-1 --ai
 This requires an AI provider to be configured in the `ai` section of `atmos.yaml`.
 See [AI Configuration](/cli/configuration/ai) for setup.
 
-## AWS Permissions
-
-The IAM role or user running the security commands needs read access to the enabled services:
-
-<File title="IAM Policy">
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "securityhub:GetFindings",
-        "securityhub:GetEnabledStandards",
-        "securityhub:DescribeStandardsControls",
-        "tag:GetResources"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-</File>
-
 ## Related
 
 <DocCardList items={[
-  {type: 'link', href: '/cli/commands/aws/security-analyze', label: 'atmos aws security analyze', description: 'Analyze AWS security findings'},
-  {type: 'link', href: '/cli/commands/aws/compliance-report', label: 'atmos aws compliance report', description: 'Generate compliance posture reports'},
+  {type: 'link', href: '/cli/commands/aws/security/analyze', label: 'atmos aws security analyze', description: 'Analyze AWS security findings'},
+  {type: 'link', href: '/cli/commands/aws/compliance/report', label: 'atmos aws compliance report', description: 'Generate compliance posture reports'},
   {type: 'link', href: '/cli/configuration/ai', label: 'AI Configuration', description: 'Configure AI providers for --ai flag'},
 ]} />

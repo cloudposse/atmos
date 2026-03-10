@@ -2,7 +2,7 @@
 title: atmos aws security analyze
 sidebar_label: analyze
 sidebar_class_name: command
-id: security-analyze
+id: analyze
 description: Analyze AWS security findings and map them to Atmos components and stacks with optional AI-powered remediation guidance
 ---
 import Screengrab from '@site/src/components/Screengrab'
@@ -55,6 +55,9 @@ atmos aws security analyze [flags]
   <dt>`--format, -f`</dt>
   <dd>Output format: `markdown`, `json`, `yaml`, `csv` (default: `markdown`).</dd>
 
+  <dt>`--file`</dt>
+  <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
+
   <dt>`--max-findings`</dt>
   <dd>Maximum number of findings to retrieve and analyze.</dd>
 
@@ -66,9 +69,6 @@ atmos aws security analyze [flags]
 
   <dt>`--framework`</dt>
   <dd>Filter findings by compliance framework (e.g., `cis-aws`, `pci-dss`).</dd>
-
-  <dt>`--file`</dt>
-  <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
 </dl>
 
 ## Examples
@@ -196,6 +196,6 @@ ai:
 ## Related Commands
 
 <DocCardList items={[
-  {type: 'link', href: '/cli/commands/aws/compliance-report', label: 'atmos aws compliance report', description: 'Compliance posture reports against frameworks'},
-  {type: 'link', href: '/cli/commands/aws/eks-update-kubeconfig', label: 'atmos aws eks update-kubeconfig', description: 'Update kubeconfig for EKS clusters'},
+  {type: 'link', href: '/cli/commands/aws/compliance/report', label: 'atmos aws compliance report', description: 'Compliance posture reports against frameworks'},
+  {type: 'link', href: '/cli/commands/aws/eks/update-kubeconfig', label: 'atmos aws eks update-kubeconfig', description: 'Update kubeconfig for EKS clusters'},
 ]} />

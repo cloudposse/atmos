@@ -40,8 +40,12 @@ atmos auth user configure --help
 atmos auth validate --help
 atmos auth whoami --help
 atmos aws --help
+atmos aws compliance --help
+atmos aws compliance report --help
 atmos aws eks --help
 atmos aws eks update-kubeconfig --help
+atmos aws security --help
+atmos aws security analyze --help
 atmos completion --help
 atmos completion bash
 atmos completion fish
