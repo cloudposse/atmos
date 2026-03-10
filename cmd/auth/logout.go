@@ -60,7 +60,7 @@ func init() {
 	logoutParser = flags.NewStandardParser(
 		flags.WithStringFlag("provider", "", "", "Logout from specific provider"),
 		flags.WithBoolFlag("all", "", false, "Logout from all identities and providers"),
-		flags.WithBoolFlag("all-realms", "", false, "Logout from all realms across all repositories (clears all Atmos credentials)"),
+		flags.WithBoolFlag("all-realms", "", false, "Logout from all realms across all repositories (clears file-based credentials; keychain cleanup limited to current config)"),
 		flags.WithBoolFlag("dry-run", "", false, "Preview what would be removed without deleting"),
 		flags.WithBoolFlag("keychain", "", false, "Also remove credentials from system keychain (destructive, requires confirmation)"),
 		flags.WithBoolFlag("force", "", false, "Skip confirmation prompts (useful for CI/CD)"),

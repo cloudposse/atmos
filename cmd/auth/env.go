@@ -97,13 +97,13 @@ func executeAuthEnvCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
 	// Create auth manager.
 	authManager, err := CreateAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Get identity from flag or use default.

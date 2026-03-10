@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -18,11 +17,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
-	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -172,7 +172,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	if printOnly {
 		// Print to stdout for piping.
-		fmt.Fprintln(ioLayer.MaskWriter(os.Stdout), consoleURL)
+		_ = data.Writeln(consoleURL)
 		return nil
 	}
 
@@ -187,22 +187,19 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 func handleBrowserOpen(consoleURL string, skipOpen bool) {
 	defer perf.Track(nil, "auth.handleBrowserOpen")()
 
-	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 	if !skipOpen && !telemetry.IsCI() {
-		fmt.Fprintf(maskedStderr, "\n")
+		ui.Writeln("")
 		if err := u.OpenUrl(consoleURL); err != nil {
 			// Show URL on error so user can manually open it.
 			printConsoleURL(consoleURL)
-			warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange)).Bold(true)
-			fmt.Fprintf(maskedStderr, "\n%s Failed to open browser: %v\n", warningStyle.Render("Warning:"), err)
-			fmt.Fprintf(maskedStderr, "Please copy the URL above and open it manually.\n")
+			ui.Warningf("Failed to open browser: %v", err)
+			ui.Writeln("Please copy the URL above and open it manually.")
 		} else {
-			successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
-			fmt.Fprintf(maskedStderr, "%s\n", successStyle.Render("✓ Opened console in browser"))
+			ui.Success("Opened console in browser")
 		}
 	} else {
 		// User explicitly skipped opening or running in CI, so show the URL.
-		fmt.Fprintf(maskedStderr, "\n")
+		ui.Writeln("")
 		printConsoleURL(consoleURL)
 	}
 }
@@ -215,24 +212,23 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Width(ConsoleLabelWidth)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWhite))
-	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 
 	// Print header.
-	fmt.Fprintf(maskedStderr, "\n%s\n\n", headerStyle.Render("Console URL Generated"))
+	ui.Writef("\n%s\n\n", headerStyle.Render("Console URL Generated"))
 
 	// Print fields.
-	fmt.Fprintf(maskedStderr, ConsoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
-	fmt.Fprintf(maskedStderr, ConsoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
+	ui.Writef(ConsoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
+	ui.Writef(ConsoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
 
 	if whoami.Account != "" {
-		fmt.Fprintf(maskedStderr, ConsoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
+		ui.Writef(ConsoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
 	}
 
 	if duration > 0 {
 		// Calculate expiration time.
 		expiresAt := time.Now().Add(duration)
-		fmt.Fprintf(maskedStderr, ConsoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
-		fmt.Fprintf(maskedStderr, ConsoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
+		ui.Writef(ConsoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
+		ui.Writef(ConsoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
 	}
 
 	// Only print URL if requested (for error cases or --no-open).
@@ -247,7 +243,7 @@ func printConsoleURL(consoleURL string) {
 
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
 	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
+	ui.Writef("\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
 }
 
 // getConsoleProvider returns a ConsoleAccessProvider for the given identity.

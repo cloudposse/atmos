@@ -213,11 +213,10 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCommandNotFound, err)
 	}
 
-	// Prepare environment variables.
-	env := os.Environ()
-	for key, value := range envVars {
-		env = append(env, fmt.Sprintf("%s=%s", key, value))
-	}
+	// Convert the prepared environment map to a slice for the child process.
+	// The envVars map already includes the full environment (OS env + global env + auth vars)
+	// from prepareAuthenticatedEnv(), so we must not prepend os.Environ() again.
+	env := envpkg.ConvertMapToSlice(envVars)
 
 	// Execute the command.
 	// #nosec G204 -- This is intentional: auth exec is designed to run user-specified commands.

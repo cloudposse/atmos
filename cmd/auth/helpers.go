@@ -132,6 +132,9 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 //nolint:revive // deep-exit is intentional for help handling
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	for _, arg := range args {
+		if arg == "--" {
+			return // Stop scanning at separator — remaining args belong to downstream command.
+		}
 		if arg == "--help" || arg == "-h" {
 			_ = cmd.Help()
 			os.Exit(0)
