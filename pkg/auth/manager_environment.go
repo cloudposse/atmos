@@ -112,7 +112,7 @@ func (m *manager) composeIntegrationEnvironment(identityName string, base map[st
 }
 
 // composeEnvironmentVariables merges additions into base.
-// KUBECONFIG values are colon-separated with deduplication.
+// KUBECONFIG and KUBE_CONFIG_PATH values are colon-separated with deduplication.
 // All other keys use last-write-wins.
 func composeEnvironmentVariables(base, additions map[string]string) map[string]string {
 	if base == nil {
@@ -120,7 +120,7 @@ func composeEnvironmentVariables(base, additions map[string]string) map[string]s
 	}
 
 	for key, value := range additions {
-		if key == "KUBECONFIG" {
+		if key == "KUBECONFIG" || key == "KUBE_CONFIG_PATH" {
 			base[key] = appendPathList(base[key], value)
 		} else {
 			base[key] = value

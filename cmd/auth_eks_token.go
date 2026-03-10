@@ -95,9 +95,18 @@ func executeAuthEKSTokenCommand(cmd *cobra.Command, args []string) error {
 	log.Debug("Generating EKS token", "cluster", clusterName, "region", region, "identity", identityName)
 
 	// Authenticate to get credentials.
+	// Skip integrations to avoid rewriting the kubeconfig during token generation.
+	ctx = auth.ContextWithSkipIntegrations(ctx)
 	creds, err := authenticateForEKSToken(ctx, &atmosConfig.Auth, atmosConfig.CliConfigPath, identityName)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSTokenGeneration, err)
+	}
+
+	// Export AWS credentials to process environment so the AWS SDK can use them
+	// for the STS presign call. This ensures credentials are available regardless
+	// of how the exec plugin is invoked (e.g., by kubectl).
+	if err := exportAWSCredsToEnv(creds); err != nil {
+		log.Warn("eks-token: failed to export AWS credentials to environment", "error", err)
 	}
 
 	// Generate token.
@@ -174,6 +183,44 @@ func resolveDefaultIdentity(authConfig *schema.AuthConfig) string {
 	}
 
 	return ""
+}
+
+// exportAWSCredsToEnv sets AWS credential environment variables in the current process.
+// This ensures the AWS SDK can authenticate for the STS presign call used in token generation.
+func exportAWSCredsToEnv(creds types.ICredentials) error {
+	defer perf.Track(nil, "cmd.exportAWSCredsToEnv")()
+
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	if !ok {
+		return fmt.Errorf("%w: expected AWS credentials for environment export", errUtils.ErrEKSTokenGeneration)
+	}
+
+	if awsCreds.AccessKeyID != "" {
+		os.Setenv("AWS_ACCESS_KEY_ID", awsCreds.AccessKeyID)
+	}
+	if awsCreds.SecretAccessKey != "" {
+		os.Setenv("AWS_SECRET_ACCESS_KEY", awsCreds.SecretAccessKey)
+	}
+	if awsCreds.SessionToken != "" {
+		os.Setenv("AWS_SESSION_TOKEN", awsCreds.SessionToken)
+	}
+	if awsCreds.Region != "" {
+		os.Setenv("AWS_REGION", awsCreds.Region)
+		os.Setenv("AWS_DEFAULT_REGION", awsCreds.Region)
+	}
+
+	// Clear AWS_PROFILE to prevent the SDK from using a named profile
+	// that might conflict with the explicit credentials.
+	os.Unsetenv("AWS_PROFILE")
+
+	log.Debug("Exported AWS credentials to environment",
+		"hasAccessKey", awsCreds.AccessKeyID != "",
+		"hasSecretKey", awsCreds.SecretAccessKey != "",
+		"hasSessionToken", awsCreds.SessionToken != "",
+		"region", awsCreds.Region,
+	)
+
+	return nil
 }
 
 func init() {

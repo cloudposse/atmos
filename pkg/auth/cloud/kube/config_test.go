@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,11 +15,14 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 )
 
+// testCARawPEM is the raw PEM data used in test fixtures.
+const testCARawPEM = "-----BEGIN CERTIFICATE-----\ntest-ca-data\n-----END CERTIFICATE-----\n"
+
 func testClusterInfo() *awsCloud.EKSClusterInfo {
 	return &awsCloud.EKSClusterInfo{
 		Name:                     "dev-cluster",
 		Endpoint:                 "https://XXXX.gr7.us-east-2.eks.amazonaws.com",
-		CertificateAuthorityData: "LS0tLS1CRUdJTi...",
+		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
 		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster",
 		Region:                   "us-east-2",
 	}
@@ -64,7 +68,8 @@ func TestBuildClusterConfig_WithAlias(t *testing.T) {
 	cluster, ok := config.Clusters[info.ARN]
 	require.True(t, ok)
 	assert.Equal(t, info.Endpoint, cluster.Server)
-	assert.Equal(t, []byte(info.CertificateAuthorityData), cluster.CertificateAuthorityData)
+	// CA data should be base64-decoded from the EKS API response.
+	assert.Equal(t, []byte(testCARawPEM), cluster.CertificateAuthorityData)
 
 	// Check context entry.
 	ctx, ok := config.Contexts["dev-eks"]
@@ -80,8 +85,7 @@ func TestBuildClusterConfig_WithAlias(t *testing.T) {
 	assert.Equal(t, atmosCommand, user.Exec.Command)
 	assert.Contains(t, user.Exec.Args, "--cluster-name")
 	assert.Contains(t, user.Exec.Args, "dev-cluster")
-	assert.Contains(t, user.Exec.Args, "--identity")
-	assert.Contains(t, user.Exec.Args, "dev-admin")
+	assert.Contains(t, user.Exec.Args, "--identity=dev-admin")
 	assert.Equal(t, clientcmdapi.NeverExecInteractiveMode, user.Exec.InteractiveMode)
 
 	// Check env vars.
@@ -146,7 +150,7 @@ func TestWriteClusterConfig_MergeExisting(t *testing.T) {
 	info2 := &awsCloud.EKSClusterInfo{
 		Name:                     "staging-cluster",
 		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: "LS0tLS1PRUdJTi...",
+		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
@@ -180,7 +184,7 @@ func TestWriteClusterConfig_Replace(t *testing.T) {
 	info2 := &awsCloud.EKSClusterInfo{
 		Name:                     "staging-cluster",
 		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: "LS0tLS1PRUdJTi...",
+		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
@@ -264,7 +268,7 @@ func TestRemoveClusterConfig_PreservesOthers(t *testing.T) {
 	info2 := &awsCloud.EKSClusterInfo{
 		Name:                     "staging-cluster",
 		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: "LS0tLS1PRUdJTi...",
+		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
@@ -309,7 +313,7 @@ func TestRemoveClusterConfig_ClearsCurrentContext(t *testing.T) {
 	info2 := &awsCloud.EKSClusterInfo{
 		Name:                     "staging-cluster",
 		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
-		CertificateAuthorityData: "LS0tLS1PRUdJTi...",
+		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
 		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
 		Region:                   "us-east-1",
 	}
