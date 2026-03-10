@@ -73,6 +73,9 @@ type Flags struct {
 
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
+
+	// AI integration.
+	AI bool // Enable AI-powered analysis of command output (--ai).
 }
 
 // NewFlags creates a Flags with default values.

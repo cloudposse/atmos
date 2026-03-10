@@ -192,7 +192,6 @@ func init() {
 		flags.WithStringFlag("framework", "", "", "Compliance framework filter"),
 		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv"),
 		flags.WithIntFlag("max-findings", "", defaultMaxFindings, "Maximum findings to analyze"),
-		flags.WithBoolFlag("ai", "", false, "Enable AI-powered analysis"),
 		flags.WithStringFlag("region", "", "", "AWS region override"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("format", "ATMOS_AWS_SECURITY_FORMAT"),

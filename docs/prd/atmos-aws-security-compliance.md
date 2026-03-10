@@ -1,7 +1,7 @@
 # Atmos AWS Security & Compliance - Product Requirements Document
 
-**Status:** Draft
-**Version:** 0.3
+**Status:** In Progress
+**Version:** 0.4
 **Last Updated:** 2026-03-09
 
 ---
@@ -1176,35 +1176,88 @@ aws:
 
 ## Implementation Plan
 
-### Phase 1: Foundation
+### Phase 1: Foundation — DONE
 
-1. **Schema additions** — Add `aws.security` section to `pkg/schema/aws.go`
-2. **AWS security client** — Create `pkg/aws/security/` package with clients for Security Hub,
-   Config, Inspector, GuardDuty
-3. **Tag-based mapping** — Implement resource tag lookup and component resolution
-4. **CLI command scaffold** — Register `atmos aws security` and `atmos aws compliance` commands
-   using the command registry pattern
+1. **Schema additions** — ✅ Added `aws.security` section to `pkg/schema/aws.go` and
+   `pkg/schema/aws_security.go` (`AWSSettings`, `AWSSecuritySettings`, `AWSSecuritySources`,
+   `AWSSecurityTagMapping`). Added `AWS AWSSettings` field to `AtmosConfiguration` in `pkg/schema/schema.go`.
+2. **AWS security client** — ✅ Created `pkg/aws/security/` package (moved from `pkg/ai/security/`).
+   Contains: `aws_clients.go` (Security Hub, Config, Inspector, GuardDuty API clients),
+   `finding_fetcher.go`, `component_mapper.go`, `analyzer.go`, `report_renderer.go`, `cache.go`, `types.go`.
+3. **Tag-based mapping** — ✅ Implemented in `pkg/aws/security/component_mapper.go`. Supports
+   `atmos:stack`, `atmos:component` tags via Resource Groups Tagging API (Path A) and heuristic
+   naming convention matching (Path B).
+4. **CLI command scaffold** — ✅ Registered `atmos aws security` and `atmos aws compliance` commands
+   using the command registry pattern in `cmd/aws/security.go` and `cmd/aws/compliance.go`.
+   Uses `flags.NewStandardParser()` for flag handling per mandatory patterns.
 
-### Phase 2: Core Analysis
+### Phase 2: Core Analysis — DONE
 
-5. **Finding fetcher** — Implement finding retrieval from each AWS security service
-6. **Component mapper** — Implement the full mapping algorithm (tags → heuristic → AI fallback)
-7. **Report generator** — Implement Markdown report rendering using `pkg/ui/`
-8. **AI provider integration** — Build the prompt templates for finding analysis (works with all Atmos AI providers)
+5. **Finding fetcher** — ✅ Implemented in `pkg/aws/security/finding_fetcher.go`. Retrieves findings
+   from Security Hub (primary) with support for Config, Inspector, GuardDuty sources. Includes
+   severity filtering, source filtering, and max-findings limits.
+6. **Component mapper** — ✅ Implemented in `pkg/aws/security/component_mapper.go`. Dual-path
+   mapping: tag-based (Path A) and heuristic naming convention (Path B). Includes confidence levels
+   (Exact, High, Medium, Low, None).
+7. **Report generator** — ✅ Implemented in `pkg/aws/security/report_renderer.go`. Supports all
+   four output formats: Markdown (terminal), JSON, YAML, CSV.
+8. **AI provider integration** — ✅ Implemented in `pkg/aws/security/analyzer.go`. Uses configured
+   AI provider for finding analysis. AI is opt-in via `--ai` global flag.
 
-### Phase 3: AI Tools
+### Phase 3: AI Tools — DONE
 
-9. **`atmos_list_findings` tool** — Register in AI tool system
-10. **`atmos_describe_finding` tool** — Register in AI tool system
-11. **`atmos_analyze_finding` tool** — Register in AI tool system
-12. **`atmos_compliance_report` tool** — Register in AI tool system
+9. **`atmos_list_findings` tool** — ✅ Registered in `pkg/ai/tools/atmos/list_findings.go`
+10. **`atmos_describe_finding` tool** — ✅ Registered in `pkg/ai/tools/atmos/describe_finding.go`
+11. **`atmos_analyze_finding` tool** — ✅ Registered in `pkg/ai/tools/atmos/analyze_finding.go`
+12. **`atmos_compliance_report` tool** — ✅ Registered in `pkg/ai/tools/atmos/compliance_report.go`
 
-### Phase 4: Polish
+All AI tools use error builder pattern (`errUtils.Build(sentinel).WithHint().WithExitCode().Err()`)
+for error handling and reference `aws.security.enabled` config.
 
-13. **JSON/YAML output** — Structured output for CI/CD integration
-14. **Caching** — Cache findings and mappings to reduce API calls
-15. **Documentation** — CLI command docs, configuration docs, guide
-16. **Tests** — Unit tests with mocked AWS responses, integration tests
+### Phase 4: Polish — PARTIALLY DONE
+
+13. **JSON/YAML/CSV output** — ✅ All four formats implemented in `report_renderer.go`
+14. **Caching** — ✅ Cache infrastructure implemented in `pkg/aws/security/cache.go`
+15. **Documentation** — ✅ Docusaurus docs created:
+    - `website/docs/cli/commands/aws/security.mdx` — CLI command reference
+    - `website/docs/cli/commands/aws/compliance.mdx` — CLI command reference
+    - `website/docs/cli/configuration/aws/index.mdx` — AWS config overview
+    - `website/docs/cli/configuration/aws/security.mdx` — Security config reference
+    - `website/docs/cli/global-flags.mdx` — Updated with `--ai` global flag
+    - `cmd/aws/markdown/atmos_aws_security.md` — Embedded help text
+    - `cmd/aws/markdown/atmos_aws_compliance.md` — Embedded help text
+16. **Tests** — ✅ Unit tests with mocks:
+    - `cmd/aws/security_test.go` — 37 tests (parse functions, report building, subcommand registration)
+    - `cmd/aws/compliance_test.go` — 9 tests (framework validation, subcommand registration)
+    - `pkg/aws/security/finding_fetcher_test.go` — Finding fetcher tests with mocked AWS clients
+    - `pkg/aws/security/component_mapper_test.go` — Mapper tests
+    - `pkg/aws/security/report_renderer_test.go` — Renderer tests
+    - `pkg/aws/security/analyzer_test.go` — AI analyzer tests
+    - `pkg/aws/security/cache_test.go` — Cache tests
+    - Coverage: `pkg/aws/security/` at 91.8%, `cmd/aws/` at 33.5%
+
+### Phase 5: Global AI Flag — DONE
+
+17. **`--ai` as global persistent flag** — ✅ Added `AI bool` field to `pkg/flags/global/flags.go`
+    `Flags` struct. Registered via `registerAIFlags()` in `pkg/flags/global_builder.go` with
+    `ATMOS_AI` env var support. Removed command-local `--ai` from `cmd/aws/security.go`.
+    The flag is now inherited by all subcommands. Currently consumed by `atmos aws security`;
+    future PR will extend to all commands for AI-powered output analysis.
+
+### Remaining Work (Future PRs)
+
+- **Global `--ai` integration with all commands** — When `--ai` is passed to any command, send
+  command output to AI provider for analysis/description. Requires intercepting command output
+  in `cmd/root.go` PersistentPostRun.
+- **Terraform state search (Path B Strategy 1)** — Implement state file scanning for tagless
+  mapping. Reuse `!terraform.state` infrastructure.
+- **AI-assisted inference (Path B Strategy 4)** — Send unmapped findings to AI for component
+  inference when heuristic strategies fail.
+- **Integration tests** — End-to-end tests with real AWS API calls (requires test account).
+- **`cmd/aws/` coverage improvement** — RunE handlers need integration-level tests to improve
+  from 33.5% coverage.
+- **Interactive AI Q&A** — `atmos ai chat` with security context for follow-up questions about
+  findings.
 
 ---
 

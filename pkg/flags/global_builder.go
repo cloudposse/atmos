@@ -38,6 +38,7 @@ func NewGlobalOptionsBuilder() *GlobalOptionsBuilder {
 	builder.registerLoggingFlags(&defaults)
 	builder.registerTerminalFlags(&defaults)
 	builder.registerAuthenticationFlags(&defaults)
+	builder.registerAIFlags(&defaults)
 	builder.registerProfilingFlags(&defaults)
 	builder.registerPerformanceFlags(&defaults)
 	builder.registerSystemFlags(&defaults)
@@ -132,6 +133,14 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 			EnvVars:     []string{"ATMOS_PROFILE"},
 		})
 	})
+}
+
+// registerAIFlags registers AI integration flags.
+func (b *GlobalOptionsBuilder) registerAIFlags(defaults *global.Flags) {
+	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerAIFlags")()
+
+	b.options = append(b.options, WithBoolFlag("ai", "", defaults.AI, "Enable AI-powered analysis of command output"))
+	b.options = append(b.options, WithEnvVars("ai", "ATMOS_AI"))
 }
 
 // registerProfilingFlags registers profiling configuration flags.

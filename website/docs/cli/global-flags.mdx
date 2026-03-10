@@ -285,6 +285,18 @@ These flags are available for every Atmos command:
         - Example: `--redirect-stderr=/dev/null` to suppress error output
     </dd>
 
+    <dt>`--ai`</dt>
+    <dd>
+        Enable AI-powered analysis of command output.
+        - Default: `false` (opt-in)
+        - When enabled, command output is sent to the configured AI provider for analysis and description
+        - Requires AI to be configured in `atmos.yaml` (`ai.enabled: true` with a provider)
+        - Currently used with [`atmos aws security`](/cli/commands/aws/security) and [`atmos aws compliance`](/cli/commands/aws/compliance) commands
+        - Can also use `ATMOS_AI` environment variable
+        - Example: `atmos aws security --ai -s prod`
+        - See [AI Configuration](/cli/configuration/ai) for provider setup
+    </dd>
+
     <dt>`--version`</dt>
     <dd>
         Print a minimal single-line Atmos CLI version and exit.
@@ -521,6 +533,19 @@ All global flags can be set using environment variables. The precedence order is
     <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
 </dl>
 
+### AI Integration Environment Variables
+
+<dl>
+    <dt>`ATMOS_AI`</dt>
+    <dd>
+        Enable AI-powered analysis of command output.
+        - Equivalent to the `--ai` flag
+        - Set to `true` to enable AI analysis
+        - CLI flag takes precedence over this environment variable
+        - Example: `ATMOS_AI=true atmos aws security -s prod`
+    </dd>
+</dl>
+
 ### AI Assistant Environment Variables
 
 <dl>
@@ -691,6 +716,19 @@ export ATMOS_LOGS_LEVEL=Debug
 
 # Commands will use these settings
 atmos describe config
+```
+
+### AI-Powered Analysis Examples
+
+```bash
+# Enable AI analysis for security findings
+atmos aws security --ai -s prod
+
+# Enable AI analysis via environment variable
+ATMOS_AI=true atmos aws security --severity=critical -s prod
+
+# AI analysis with compliance reports
+atmos aws compliance --ai --framework=cis-aws -s prod
 ```
 
 ### CI/CD Configuration
