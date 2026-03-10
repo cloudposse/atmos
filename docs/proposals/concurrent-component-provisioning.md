@@ -24,7 +24,7 @@ Atmos already supports bulk Terraform execution patterns such as:
 
 It also already models component dependencies through `settings.depends_on`.
 
-PR #1516 answers a large part of the ordering problem by introducing reusable dependency graph logic, topological sorting, cross-stack dependency support, filtering, and dependency-ordered execution for bulk Terraform paths. However, PR #1516 is still open and unmerged as of this proposal revision, so it should be treated as a prerequisite rather than as behavior already present on `main`.
+PR #1516 answered a large part of the ordering problem by adding reusable dependency graph logic, topological sorting, cross-stack dependency support, filtering, and dependency-ordered execution for bulk Terraform paths. That work is now merged and should be treated as the existing foundation for this proposal.
 
 The remaining gap is that execution of the resolved graph is still sequential. That leaves two concrete problems:
 
@@ -55,9 +55,9 @@ The feature matters for both local and CI workflows.
 
 ## Current State in the Repository
 
-The repo already contains some of the building blocks needed for this feature, and PR #1516 introduces the rest:
+On current `main`, the repo already contains the main building blocks needed for this feature:
 
-- PR #1516 introduces a reusable dependency graph package, Kahn-based topological sorting, deterministic ordering, cycle detection, cross-stack support, filtering, and shared execution paths for `--all` and `--affected`
+- PR #1516 added a reusable dependency graph package, Kahn-based topological sorting, deterministic ordering, cycle detection, cross-stack support, filtering, and shared execution paths for `--all` and `--affected`
 - PR #1876 introduced isolated Terraform component workdirs and positioned them as an enabler for concurrent component execution
 - `settings.depends_on` is part of the stack schema
 - `describe dependents` can already discover reverse edges
@@ -75,18 +75,16 @@ That suggests the right boundary is:
 - Build the execution plan sequentially
 - Execute the plan concurrently using immutable per-node inputs
 
-## Prerequisites
+## Existing Foundation
 
-This proposal assumes the following prerequisite work:
+This proposal assumes and builds on the following existing foundation:
 
-- PR #1516 merges first, so Atmos has one graph-backed dependency-ordering foundation for Terraform bulk execution
-- PR #1876 remains the execution-isolation foundation via workdirs
-
-Without PR #1516, this proposal would have to solve both ordered graph execution and concurrent scheduling at the same time, which is not the intended scope.
+- the merged PR #1516 graph-backed dependency-ordering foundation for Terraform bulk execution
+- the PR #1876 execution-isolation foundation via workdirs
 
 ## What PR #1516 Already Settles
 
-This proposal should not reopen design questions that PR #1516 already addresses.
+Now that PR #1516 is merged, this proposal should not reopen design questions that it already addresses.
 
 Those decisions include:
 
@@ -282,7 +280,7 @@ Failure semantics must be explicit.
 Recommended default behavior:
 
 - for `plan`, `apply`, and similar forward-order commands, if a node fails, do not run nodes that depend on it
-- for `terraform destroy --all`, if destruction of a dependent node fails, block destruction of that node's prerequisites in the reversed graph
+- for `atmos terraform destroy --all`, if destruction of a dependent node fails, block destruction of that node's prerequisites in the reversed graph
 - continue running already-started or otherwise independent nodes where safe
 - return a non-zero exit code at the end
 
@@ -358,8 +356,9 @@ Recommended Phase 1 JSON summary contract:
 - transport may be stdout or an explicit output file, but the document shape should remain stable within v1
 - top-level fields should include at least `version`, `command`, `started_at`, `finished_at`, `overall_status`, `exit_code`, and `nodes`
 - `overall_status` should be constrained to stable values such as `completed`, `failed`, or `interrupted`
-- each node entry should include at least `id`, `component`, `stack`, `status`, `exit_code`, `started_at`, and `finished_at`
+- each node entry should include at least `id`, `component`, `stack`, `level`, `status`, `exit_code`, `started_at`, and `finished_at`
 - node `status` values should be limited to `pending`, `running`, `completed`, `failed`, `blocked`, and `skipped`
+- emitters should sort the top-level `nodes` array by topological `level` first, then by a stable key such as `component` plus `id`, so concurrent completion timing cannot affect output order or diffs
 - timestamps should use RFC 3339 format
 - v1 compatibility should be additive only: new fields may be added, but existing field names and meanings should not change
 
@@ -554,13 +553,13 @@ Add concurrent scheduling for the existing graph-backed Terraform bulk commands.
 
 Suggested initial surface:
 
-- `terraform apply --all`
-- `terraform plan --all`
-- `terraform destroy --all`
-- `terraform plan --affected`
-- `terraform apply --affected`
+- `atmos terraform apply --all`
+- `atmos terraform plan --all`
+- `atmos terraform destroy --all`
+- `atmos terraform plan --affected`
+- `atmos terraform apply --affected`
 
-`terraform plan --affected` and `terraform apply --affected` already map to the existing DescribeAffected behavior through the dynamic affected-flag bridge in `cmd/terraform/utils.go`. The concurrent scheduler should reuse that path rather than introduce a separate selector surface.
+`atmos terraform plan --affected` and `atmos terraform apply --affected` already map to the existing DescribeAffected behavior through the dynamic affected-flag bridge in `cmd/terraform/utils.go`. The concurrent scheduler should reuse that path rather than introduce a separate selector surface.
 
 Recommended Phase 1 constraints:
 
