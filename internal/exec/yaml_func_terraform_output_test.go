@@ -30,11 +30,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	stack := "nonprod"
 
 	defer func() {
-		// Delete the generated files and folders after the test
-		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
+		// Delete the generated files and folders after the test.
+		// Paths are relative to workDir (the scenario directory), which is the active directory
+		// during defer execution (t.Chdir cleanup runs after defers).
+		err := os.RemoveAll(filepath.Join("components", "terraform", "mock", ".terraform"))
 		assert.NoError(t, err)
 
-		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
+		err = os.RemoveAll(filepath.Join("components", "terraform", "mock", "terraform.tfstate.d"))
 		assert.NoError(t, err)
 	}()
 
