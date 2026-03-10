@@ -11,18 +11,14 @@
 
 {{- if .Result.HasErrors }}
 [![failed](https://shields.io/badge/APPLY-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
-{{- else }}
-{{- if gt .Resources.Create 0 }}
-[![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#user-content-create-{{$target}})
-{{- end }}
-{{- if gt .Resources.Change 0 }}
-[![change](https://shields.io/badge/APPLY-CHANGE-important?style=for-the-badge)](#user-content-change-{{$target}})
-{{- end }}
-{{- if gt .Resources.Destroy 0 }}
-[![destroy](https://shields.io/badge/APPLY-DESTROY-critical?style=for-the-badge)](#user-content-destroy-{{$target}})
-{{- end }}
-{{- if not .HasChanges }}
-[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}})
+{{- else -}}
+{{- if gt .Resources.Create 0 }} [![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#user-content-create-{{$target}})
+{{- end -}}
+{{- if gt .Resources.Change 0 }} [![change](https://shields.io/badge/APPLY-CHANGE-important?style=for-the-badge)](#user-content-change-{{$target}})
+{{- end -}}
+{{- if gt .Resources.Destroy 0 }} [![destroy](https://shields.io/badge/APPLY-DESTROY-critical?style=for-the-badge)](#user-content-destroy-{{$target}})
+{{- end -}}
+{{- if not .HasChanges }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}})
 {{- end }}
 {{- end }}
 
