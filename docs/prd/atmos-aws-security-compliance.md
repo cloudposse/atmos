@@ -1,8 +1,8 @@
 # Atmos AWS Security & Compliance - Product Requirements Document
 
 **Status:** In Progress
-**Version:** 0.4
-**Last Updated:** 2026-03-09
+**Version:** 0.5
+**Last Updated:** 2026-03-10
 
 ---
 
@@ -22,9 +22,8 @@ APIs — no AI provider needed. When the `--ai` flag is passed, AI-powered analy
 analysis, remediation guidance, and deploy commands using **any AI provider that Atmos AI supports**.
 
 **Supported AI providers (for `--ai`):** Anthropic (Claude), OpenAI (GPT), Google Gemini, Azure OpenAI,
-AWS Bedrock, Ollama (local/on-premise), and Grok (xAI). Enterprise customers who require data residency
-within their AWS account should use **AWS Bedrock** — all data stays in-account with no external API
-calls.
+AWS Bedrock, Ollama (local/on-premise), and Grok (xAI). See the
+[AWS Bedrock AI Provider](aws-bedrock-ai-provider.md) reference for enterprise data residency setup.
 
 **Cloud-specific namespace.** These commands live under `atmos aws` (not `atmos ai`) because they are
 AWS-specific. This design enables future `atmos azure security` and `atmos gcp security` commands
@@ -327,8 +326,7 @@ Finding arrives with resource ARN
 
 All AWS API calls use Atmos Auth for credential management. This provides a unified authentication
 experience — the same credentials used for `atmos terraform apply` are used for security scanning.
-When the `--ai` flag is used, AI analysis uses whatever provider is configured in `ai.default_provider`
-(Bedrock for enterprise customers who need data residency, or any other supported provider).
+When the `--ai` flag is used, AI analysis uses whatever provider is configured in `ai.default_provider`.
 
 ### Required AWS Permissions
 
@@ -364,20 +362,13 @@ The IAM role/user needs these permissions:
         "tag:GetTagValues"
       ],
       "Resource": "*"
-    },
-    {
-      "Sid": "BedrockInvoke",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream"
-      ],
-      "Resource": "arn:aws:bedrock:*::foundation-model/*",
-      "Comment": "Only required when using Bedrock as the AI provider"
     }
   ]
 }
 ```
+
+> **Note:** When using AWS Bedrock as the AI provider, additional `bedrock:InvokeModel` permissions
+> are required. See [AWS Bedrock AI Provider](aws-bedrock-ai-provider.md) for details.
 
 ### Atmos Auth Configuration
 
@@ -397,55 +388,40 @@ auth:
       config:
         permission_set: "SecurityAudit"
         account_id: "123456789012"
-    # Only needed when using Bedrock as the AI provider
-    bedrock-user:
-      provider: aws-security
-      type: permission-set
-      config:
-        permission_set: "BedrockUser"
-        account_id: "123456789012"
 ```
 
 ---
 
 ## AI Provider Configuration
 
-Atmos AI Security & Compliance works with **all AI providers supported by Atmos AI**:
+Atmos AI Security & Compliance works with **all AI providers supported by Atmos AI**. AI is
+opt-in via the `--ai` flag — commands work without any AI provider configured.
 
-| Provider         | Best For                                                    | Data Residency           |
-|------------------|-------------------------------------------------------------|--------------------------|
-| **Anthropic**    | Best overall quality (Claude models direct API)             | Anthropic servers        |
-| **OpenAI**       | GPT models for organizations standardized on OpenAI         | OpenAI servers           |
-| **Google Gemini**| Large context windows, cost-effective                       | Google Cloud             |
-| **Azure OpenAI** | Enterprise Azure customers with existing deployments        | Your Azure tenant        |
-| **AWS Bedrock**  | **Enterprise/compliance** — data stays in your AWS account  | **Your AWS account**     |
-| **Ollama**       | Air-gapped/offline environments, no external API calls      | **Your infrastructure**  |
-| **Grok (xAI)**   | Alternative provider                                        | xAI servers              |
+| Provider         | Best For                                            | Data Residency        |
+|------------------|-----------------------------------------------------|-----------------------|
+| **Anthropic**    | Best overall quality (Claude direct API)             | Anthropic servers     |
+| **OpenAI**       | Organizations standardized on GPT models             | OpenAI servers        |
+| **Google Gemini**| Large context windows, cost-effective                | Google Cloud          |
+| **Azure OpenAI** | Enterprise Azure customers                           | Your Azure tenant     |
+| **AWS Bedrock**  | Enterprise/compliance — data stays in-account        | Your AWS account      |
+| **Ollama**       | Air-gapped/offline, no external API calls            | Your infrastructure   |
+| **Grok (xAI)**   | Alternative provider                                 | xAI servers           |
 
-### Provider Selection Guide
+For enterprise data residency requirements, see the
+[AWS Bedrock AI Provider](aws-bedrock-ai-provider.md) reference (setup, Terraform component,
+pricing, regional availability).
 
-- **Enterprise customers** requiring data residency and compliance (SOC 2, HIPAA, PCI DSS, FedRAMP)
-  should use **AWS Bedrock** — all data stays within your AWS account with IAM-based access control
-  and CloudTrail audit logging.
-- **Air-gapped environments** should use **Ollama** for fully local inference with no external API calls.
-- **General use** can use any provider — the AI analysis quality depends on the model, not the provider.
-  Anthropic Claude models (via direct API or Bedrock) are recommended for best security analysis quality.
-
-### Multi-Provider Configuration Example
+### Configuration Example
 
 ```yaml
 # atmos.yaml
 ai:
   enabled: true
-  default_provider: "anthropic"  # or "bedrock" for enterprise
+  default_provider: "anthropic"
   providers:
     anthropic:
       model: "claude-sonnet-4-6"
       api_key: !env "ANTHROPIC_API_KEY"
-      max_tokens: 8192
-    bedrock:
-      model: "anthropic.claude-sonnet-4-6-20250514-v1:0"
-      base_url: "us-east-1"
       max_tokens: 8192
     openai:
       model: "gpt-4o"
@@ -461,229 +437,6 @@ ai:
 By default, `atmos aws security` works without AI. The `--ai` flag enables AI-powered analysis
 when a provider is configured. This opt-in design means CI/CD pipelines get structured finding
 data with zero AI cost by default.
-
-### AWS Bedrock Setup (Enterprise)
-
-AWS Bedrock is the recommended AI provider for enterprise security workloads. It runs within your
-AWS account, so data never leaves your cloud environment — a key requirement for security-sensitive
-workloads.
-
-#### Option A: Manual Setup (AWS Console)
-
-1. **Navigate to Amazon Bedrock** in the AWS Console
-2. **Request model access:**
-
-- Go to **Model access** in the left sidebar
-- Click **Manage model access**
-- Select **Anthropic → Claude 4 Sonnet** (or Claude 4 Opus for complex analysis)
-- Click **Request model access** and wait for approval (usually instant for Anthropic models)
-
-3. **Verify access:**
-
-- Go to **Playgrounds → Chat** in the Bedrock console
-- Select the Claude model and send a test message
-
-4. **Note the region** — Bedrock model availability varies by region. Use `us-east-1` or `us-west-2`
-   for the broadest model selection
-
-#### Option B: Atmos/Terraform Setup
-
-Create a Bedrock component that enables model access and sets up the required IAM permissions:
-
-```hcl
-# components/terraform/bedrock/main.tf
-
-# Enable Bedrock model access
-# Note: Model access requests must be done via console or AWS CLI as there is
-# no Terraform resource for model access approval. This component manages the
-# IAM permissions and monitoring.
-
-# IAM role for Bedrock invocation
-resource "aws_iam_role" "bedrock_user" {
-  name = "${var.namespace}-bedrock-user"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          AWS = var.trusted_role_arns
-        }
-      }
-    ]
-  })
-
-  tags = var.default_tags
-}
-
-resource "aws_iam_role_policy" "bedrock_invoke" {
-  name = "bedrock-invoke"
-  role = aws_iam_role.bedrock_user.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "bedrock:InvokeModel",
-          "bedrock:InvokeModelWithResponseStream"
-        ]
-        Resource = [
-          "arn:aws:bedrock:${var.region}::foundation-model/anthropic.*"
-        ]
-      }
-    ]
-  })
-}
-
-# CloudWatch logging for Bedrock invocations (audit trail)
-resource "aws_cloudwatch_log_group" "bedrock" {
-  name = "/aws/bedrock/${var.namespace}"
-  retention_in_days = var.log_retention_days
-
-  tags = var.default_tags
-}
-```
-
-```yaml
-# stacks/catalog/bedrock.yaml
-components:
-  terraform:
-    bedrock:
-      metadata:
-        component: bedrock
-      vars:
-        region: "us-east-1"
-        trusted_role_arns:
-          - "arn:aws:iam::123456789012:role/SecurityAudit"
-        log_retention_days: 90
-```
-
-Deploy with:
-
-```shell
-atmos terraform apply bedrock -s prod-us-east-1
-```
-
-#### Atmos AI Bedrock Provider Configuration
-
-```yaml
-# atmos.yaml
-ai:
-  enabled: true
-  default_provider: "bedrock"
-  providers:
-    bedrock:
-      model: "anthropic.claude-sonnet-4-6-20250514-v1:0"
-      base_url: "us-east-1"   # AWS region for Bedrock
-      max_tokens: 8192         # Higher limit for detailed analysis
-      cache:
-        enabled: true
-        cache_system_prompt: true
-```
-
-Bedrock uses AWS credentials from Atmos Auth — no API key is needed. The `base_url` field specifies
-the AWS region where Bedrock is available.
-
-#### Bedrock Pricing
-
-Bedrock uses **on-demand, pay-per-token** pricing with no upfront commitments. There is no charge for
-Bedrock itself — you only pay for model invocations. Pricing varies by model and region.
-
-**Claude Models on Bedrock (On-Demand, US East / US West):**
-
-| Model             | Input (per 1M tokens) | Output (per 1M tokens) | Context Window | Best For                            |
-|-------------------|-----------------------|------------------------|----------------|-------------------------------------|
-| Claude Opus 4.6   | $15.00                | $75.00                 | 200K tokens    | Deep analysis of complex findings   |
-| Claude Sonnet 4.6 | $3.00                 | $15.00                 | 200K tokens    | **Recommended** — best cost/quality |
-| Claude Haiku 4.5  | $0.80                 | $4.00                  | 200K tokens    | High-volume finding triage          |
-| Claude Sonnet 4.5 | $3.00                 | $15.00                 | 200K tokens    | Alternative to Sonnet 4.6           |
-| Claude Opus 4.5   | $15.00                | $75.00                 | 200K tokens    | Alternative to Opus 4.6             |
-
-> Prices are approximate and may vary by region. See [AWS Bedrock Pricing](https://aws.amazon.com/bedrock/pricing/)
-> for current rates.
-
-**Prompt Caching Discounts:**
-
-Bedrock supports prompt caching for Claude models, which significantly reduces costs for repeated
-analysis patterns (e.g., the system prompt and component source code stay cached across findings):
-
-| Operation   | Price vs On-Demand              |
-|-------------|---------------------------------|
-| Cache Write | 1.25× input price               |
-| Cache Read  | 0.10× input price (90% savings) |
-
-**Cost Estimation for Security Analysis:**
-
-A typical security analysis run processes ~50 findings. Each finding analysis involves:
-
-- System prompt + security context: ~2,000 tokens (cached after first call)
-- Finding details + component source: ~3,000–5,000 tokens input
-- AI analysis + remediation: ~1,000–2,000 tokens output
-
-| Scenario                      | Model      | Estimated Cost |
-|-------------------------------|------------|----------------|
-| 50 findings, single stack     | Sonnet 4.6 | ~$0.50–$1.50   |
-| 50 findings, single stack     | Haiku 4.5  | ~$0.15–$0.40   |
-| 200 findings, all stacks      | Sonnet 4.6 | ~$2.00–$6.00   |
-| 200 findings, all stacks      | Opus 4.6   | ~$10.00–$30.00 |
-| Default (no `--ai` flag)      | N/A        | $0.00          |
-
-By default, commands run without AI (zero cost). Use `--ai` to enable AI analysis.
-
-**Other Pricing Tiers:**
-
-| Tier             | Description                                              | Discount   |
-|------------------|----------------------------------------------------------|------------|
-| **On-Demand**    | Pay per token, no commitment. Default for Atmos.         | Baseline   |
-| **Batch**        | Async processing, up to 24h turnaround.                  | ~50% off   |
-| **Reserved**     | 1-month or 6-month commitment for guaranteed throughput. | Up to 50%  |
-| **Cross-Region** | Route requests globally for higher availability.         | Same price |
-
-For most Atmos security analysis workloads, on-demand pricing with prompt caching is the most
-cost-effective option. Reserved throughput is only needed for organizations running continuous
-compliance scans at high frequency.
-
-#### Bedrock Regional Availability
-
-Claude models on Bedrock are available in multiple regions. For security workloads, deploy Bedrock
-in the same region as your Security Hub aggregation region to minimize latency:
-
-**Primary regions (broadest model selection):**
-
-- `us-east-1` (N. Virginia)
-- `us-west-2` (Oregon)
-
-**Additional regions with Claude support:**
-
-- `eu-west-1` (Ireland), `eu-central-1` (Frankfurt), `eu-west-3` (Paris)
-- `ap-northeast-1` (Tokyo), `ap-southeast-1` (Singapore), `ap-southeast-2` (Sydney)
-- `ca-central-1` (Canada)
-
-**Cross-Region Inference:** Bedrock supports global cross-region inference, which routes requests
-across regions for higher throughput and built-in resilience. This is useful for organizations
-with multi-region Security Hub deployments.
-
-**GovCloud:** Claude Sonnet 4.5+ is available in AWS GovCloud (US-West) via Reserved Tier for
-FedRAMP and government compliance workloads.
-
-> For the most current regional availability, see
-> [Bedrock Model Support by Region](https://docs.aws.amazon.com/bedrock/latest/userguide/models-regions.html).
-
-#### Why Bedrock for Enterprise Security Workloads
-
-| Requirement           | Bedrock Advantage                                               |
-|-----------------------|-----------------------------------------------------------------|
-| **Data residency**    | Data never leaves your AWS account or chosen region             |
-| **Compliance**        | Bedrock is SOC 2, HIPAA, PCI DSS, FedRAMP compliant             |
-| **No API keys**       | Uses IAM roles via Atmos Auth — no secrets to manage            |
-| **Audit trail**       | All invocations logged in CloudTrail + optional CloudWatch Logs |
-| **Network isolation** | VPC endpoints available — no internet access required           |
-| **Access control**    | IAM policies restrict who can invoke models and which models    |
-| **Cost visibility**   | Standard AWS billing — no separate AI vendor invoice            |
 
 ---
 
@@ -1117,13 +870,9 @@ ai:
       api_key: !env "ANTHROPIC_API_KEY"
       max_tokens: 8192
 
-    # AWS Bedrock (recommended for enterprise/compliance)
-    bedrock:
-      model: "anthropic.claude-sonnet-4-6-20250514-v1:0"
-      base_url: "us-east-1"
-      max_tokens: 8192
-
     # Other providers (configure as needed)
+    # See provider-specific docs for setup:
+    # - AWS Bedrock: docs/prd/aws-bedrock-ai-provider.md
     # openai:
     #   model: "gpt-4o"
     #   api_key: !env "OPENAI_API_KEY"
@@ -1261,18 +1010,119 @@ for error handling and reference `aws.security.enabled` config.
 
 ---
 
+## Error Handling Strategy
+
+All errors use static sentinel errors defined in `errors/errors.go` and follow the error builder
+pattern per Atmos conventions.
+
+### Sentinel Errors
+
+The following sentinel errors are defined in `errors/errors.go` (lines 946-955):
+
+| Sentinel Error                    | Message                               | When Used                                      |
+|-----------------------------------|---------------------------------------|-------------------------------------------------|
+| `ErrAISecurityNotEnabled`         | `security feature not enabled`        | `aws.security.enabled` is false in config       |
+| `ErrAISecurityNoFindings`         | `no matching findings returned`       | AWS APIs return zero findings for the query      |
+| `ErrAISecurityFetchFailed`        | `failed to fetch from AWS`            | AWS Security Hub/Config/Inspector API errors     |
+| `ErrAISecurityMappingFailed`      | `failed to map finding to component`  | Component mapping pipeline fails                 |
+| `ErrAISecurityInvalidSeverity`    | `invalid severity filter value`       | User passes unknown severity (not CRITICAL/HIGH/MEDIUM/LOW) |
+| `ErrAISecurityInvalidSource`      | `invalid finding source value`        | User passes unknown source (not security-hub/config/inspector/guardduty) |
+| `ErrAISecurityInvalidFramework`   | `invalid compliance framework value`  | User passes unknown framework                    |
+| `ErrAISecurityInvalidFormat`      | `invalid output format value`         | User passes unknown format (not markdown/json/yaml/csv) |
+| `ErrAISecurityAnalysisFailed`     | `AI analysis failed`                  | AI provider returns an error during analysis     |
+
+### Error Wrapping Pattern
+
+All errors in `pkg/aws/security/` wrap sentinel errors with context using `fmt.Errorf`:
+
+```go
+// Wrapping with sentinel + underlying error.
+return fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
+
+// Wrapping with sentinel + additional context.
+return fmt.Errorf("%w: stack=%s source=%s: %w", errUtils.ErrAISecurityFetchFailed, stack, source, err)
+```
+
+This enables callers to check error types with `errors.Is()`:
+
+```go
+if errors.Is(err, errUtils.ErrAISecurityNotEnabled) {
+    // Feature is disabled — show configuration hint.
+}
+```
+
+### Error Builder Usage
+
+AI tools in `pkg/ai/tools/atmos/` use the error builder pattern for user-facing errors:
+
+```go
+return errUtils.Build(errUtils.ErrAISecurityNotEnabled).
+    WithHint("Enable AWS security in atmos.yaml: aws.security.enabled: true").
+    WithExitCode(1).
+    Err()
+```
+
+---
+
+## Testing Strategy
+
+### Mock-Based Unit Testing
+
+All AWS SDK interactions use interfaces defined in `pkg/aws/security/` for testability:
+
+| Interface          | File                    | Purpose                                    |
+|--------------------|-------------------------|--------------------------------------------|
+| `SecurityHubAPI`   | `aws_clients.go`        | Security Hub API operations (GetFindings, etc.) |
+| `TaggingAPI`       | `aws_clients.go`        | Resource Groups Tagging API (tag-based mapping) |
+| `FindingFetcher`   | `finding_fetcher.go`    | High-level findings retrieval              |
+| `ComponentMapper`  | `component_mapper.go`   | Resource-to-component mapping              |
+| `FindingAnalyzer`  | `analyzer.go`           | AI-powered analysis                        |
+| `ReportRenderer`   | `report_renderer.go`    | Report formatting (Markdown/JSON/YAML/CSV) |
+
+Mock generation uses `go.uber.org/mock/mockgen` with `//go:generate` directives:
+
+```go
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_aws_clients.go -package=security
+```
+
+### Test Files and Coverage
+
+| Test File                            | Tests | Coverage | Notes                                    |
+|--------------------------------------|-------|----------|------------------------------------------|
+| `pkg/aws/security/finding_fetcher_test.go`  | Yes   | ~92%     | Mocked AWS SDK clients                  |
+| `pkg/aws/security/component_mapper_test.go` | Yes   | ~90%     | Tag-based and heuristic mapping paths   |
+| `pkg/aws/security/report_renderer_test.go`  | Yes   | ~95%     | All four output formats                 |
+| `pkg/aws/security/analyzer_test.go`         | Yes   | ~88%     | Manual mock `mockAIClient` for AI provider |
+| `pkg/aws/security/cache_test.go`            | Yes   | ~90%     | Cache TTL, invalidation, concurrency    |
+| `cmd/aws/security_test.go`                  | 37    | ~34%     | Parse functions, report building, subcommand registration |
+| `cmd/aws/compliance_test.go`                | 9     | ~34%     | Framework validation, subcommand registration |
+
+**Overall coverage:** `pkg/aws/security/` at 91.8%, `cmd/aws/` at 33.5%.
+
+### Testing Approach
+
+- **Unit tests with mocks** for all AWS API interactions (no real AWS calls in CI).
+- **Table-driven tests** for input validation (severity, source, framework, format parsing).
+- **Manual mock implementations** where `mockgen` mocks don't exist yet (e.g., `mockAIClient`
+  in `analyzer_test.go` satisfies the `registry.Client` interface).
+- **Integration tests** (future) will require a dedicated test AWS account with Security Hub
+  enabled and sample findings seeded.
+
+---
+
 ## Security Considerations
 
-- **Data residency options** — When using **AWS Bedrock**, data stays in your AWS account with no
-  external API calls. When using other providers (Anthropic, OpenAI, etc.), finding data is sent to
-  the provider's API for analysis. Choose the provider that matches your security requirements.
+- **Data residency options** — Choose the AI provider that matches your security requirements.
+  Some providers (e.g., AWS Bedrock, Ollama) keep data within your own infrastructure, while others
+  (Anthropic, OpenAI, etc.) send finding data to the provider's API for analysis.
+  See [AWS Bedrock AI Provider](aws-bedrock-ai-provider.md) for enterprise data residency setup.
 - **Atmos Auth credentials** — All AWS access uses Atmos Auth; no hardcoded keys
 - **Read-only by default** — The security commands only read findings and source code; they never
   modify infrastructure. Users must manually apply remediation steps
 - **AI cost control** — The `max_findings` setting limits how many findings are sent to AI for
   analysis, controlling costs across all providers
-- **Audit trail** — When using Bedrock, all invocations are logged via CloudTrail + optional
-  CloudWatch. For other providers, consult the provider's audit logging capabilities.
+- **Audit trail** — Consult each provider's audit logging capabilities. For example, AWS Bedrock
+  logs all invocations via CloudTrail. See provider-specific documentation for details.
 - **AI is opt-in** — By default, no data is sent to any AI provider. The `--ai` flag must be
   explicitly passed to enable AI analysis. This ensures the commands work safely in environments
   where sending data to AI providers is not permitted.
