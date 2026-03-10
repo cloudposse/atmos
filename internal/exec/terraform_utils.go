@@ -17,6 +17,15 @@ import (
 
 const commandStr = "command"
 
+// affectedDepOrderParams holds parameters for executing an affected component in dependency order.
+type affectedDepOrderParams struct {
+	AffectedComponent string
+	AffectedStack     string
+	ParentComponent   string
+	ParentStack       string
+	Dependents        []schema.Dependent
+}
+
 // shouldProcessStacks determines whether to process stacks and check stack configuration.
 // Based on the command type and provided arguments.
 func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (shouldProcess bool, shouldCheckStack bool) {
@@ -180,72 +189,6 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	return true
 }
 
-// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
-func executeTerraformAffectedComponentInDepOrder(
-	info *schema.ConfigAndStacksInfo,
-	affectedList []schema.Affected,
-	affectedComponent string,
-	affectedStack string,
-	parentComponent string,
-	parentStack string,
-	dependents []schema.Dependent,
-	args *DescribeAffectedCmdArgs,
-) error {
-	// Always use debug level for internal logging.
-	logFunc := log.Debug
-
-	info.Component = affectedComponent
-	info.ComponentFromArg = affectedComponent
-	info.Stack = affectedStack
-
-	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
-
-	if args.IncludeDependents && parentComponent != "" && parentStack != "" {
-		logFunc("Executing", commandStr, command, "dependency of component", parentComponent, "in stack", parentStack)
-	} else {
-		logFunc("Executing", commandStr, command)
-	}
-
-	// Show user-facing progress for dry-run mode.
-	if info.DryRun {
-		msg := fmt.Sprintf("Would %s `%s` in `%s` (dry run)", info.SubCommand, affectedComponent, affectedStack)
-		if args.IncludeDependents && parentComponent != "" && parentStack != "" {
-			msg = fmt.Sprintf("Would %s `%s` in `%s` (dependency of `%s` in `%s`) (dry run)", info.SubCommand, affectedComponent, affectedStack, parentComponent, parentStack)
-		}
-		ui.Successf("%s", msg)
-		return nil
-	}
-
-	// Execute the terraform command for the affected component.
-	err := ExecuteTerraform(*info)
-	if err != nil {
-		return err
-	}
-
-	for i := 0; i < len(dependents); i++ {
-		dep := &dependents[i]
-		if args.IncludeDependents || isComponentInStackAffected(affectedList, dep.StackSlug) {
-			if !dep.IncludedInDependents {
-				err := executeTerraformAffectedComponentInDepOrder(
-					info,
-					affectedList,
-					dep.Component,
-					dep.Stack,
-					affectedComponent,
-					affectedStack,
-					dep.Dependents,
-					args,
-				)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // walkTerraformComponents iterates over all Terraform components in the provided stacks map.
 // For each component it calls the provided function, stopping if the function returns an error.
 func walkTerraformComponents(
@@ -341,6 +284,74 @@ func processTerraformComponent(
 	return true, nil
 }
 
+// logFuncForDryRun returns log.Info for dry-run mode, log.Debug otherwise.
+func logFuncForDryRun(dryRun bool) func(msg any, keyvals ...any) {
+	if dryRun {
+		return log.Info
+	}
+	return log.Debug
+}
+
+// shouldProcessDependent checks if a dependent should be processed.
+func shouldProcessDependent(dep *schema.Dependent, affectedList []schema.Affected, includeDependents bool) bool {
+	if dep.IncludedInDependents {
+		return false
+	}
+	return includeDependents || isComponentInStackAffected(affectedList, dep.StackSlug)
+}
+
+// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
+func executeTerraformAffectedComponentInDepOrder(
+	info *schema.ConfigAndStacksInfo,
+	affectedList []schema.Affected,
+	params *affectedDepOrderParams,
+	args *DescribeAffectedCmdArgs,
+) error {
+	logFunc := logFuncForDryRun(info.DryRun)
+
+	info.Component = params.AffectedComponent
+	info.ComponentFromArg = params.AffectedComponent
+	info.Stack = params.AffectedStack
+
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, params.AffectedComponent, params.AffectedStack)
+
+	if args.IncludeDependents && params.ParentComponent != "" && params.ParentStack != "" {
+		logFunc("Executing", commandStr, command, "dependency of component", params.ParentComponent, "in stack", params.ParentStack)
+	} else {
+		logFunc("Executing", commandStr, command)
+	}
+
+	if !info.DryRun {
+		if err := ExecuteTerraform(*info); err != nil {
+			return err
+		}
+	}
+
+	for i := 0; i < len(params.Dependents); i++ {
+		dep := &params.Dependents[i]
+		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {
+			continue
+		}
+		err := executeTerraformAffectedComponentInDepOrder(
+			info,
+			affectedList,
+			&affectedDepOrderParams{
+				AffectedComponent: dep.Component,
+				AffectedStack:     dep.Stack,
+				ParentComponent:   params.AffectedComponent,
+				ParentStack:       params.AffectedStack,
+				Dependents:        dep.Dependents,
+			},
+			args,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // parseUploadStatusFlag parses the upload status flag from the arguments.
 // It supports --flag, --flag=true, and --flag=false forms.
 // Returns true if the flag is present and not explicitly set to false.
@@ -352,7 +363,7 @@ func parseUploadStatusFlag(args []string, flagName string) bool {
 		return true
 	}
 
-	// Check for --flag=value forms
+	// Check for --flag=value forms.
 	for _, arg := range args {
 		if strings.HasPrefix(arg, flagPrefix) {
 			value := strings.TrimPrefix(arg, flagPrefix)
