@@ -59,7 +59,7 @@ func TestMapByTags_ExactMatch(t *testing.T) {
 	assert.Equal(t, "tag", mapping.Method)
 }
 
-func TestMapByTags_IndividualTags(t *testing.T) {
+func TestMapByTags_ComponentOnlyNoStack(t *testing.T) {
 	mapper := &dualPathMapper{
 		atmosConfig: &schema.AtmosConfiguration{},
 		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
@@ -67,10 +67,7 @@ func TestMapByTags_IndividualTags(t *testing.T) {
 		tagCache: map[string]*tagLookupResult{
 			"arn:aws:s3:::my-bucket": {
 				tags: map[string]string{
-					"atmos:tenant":      "acme",
-					"atmos:environment": "ue1",
-					"atmos:stage":       "prod",
-					"atmos:component":   "s3-bucket",
+					"atmos:component": "s3-bucket",
 				},
 				exists: true,
 			},
@@ -86,9 +83,45 @@ func TestMapByTags_IndividualTags(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, mapping)
 	assert.True(t, mapping.Mapped)
-	assert.Equal(t, "acme-ue1-prod", mapping.Stack)
+	assert.Equal(t, "", mapping.Stack)
 	assert.Equal(t, "s3-bucket", mapping.Component)
 	assert.Equal(t, ConfidenceExact, mapping.Confidence)
+}
+
+func TestMapByTags_CustomTagKeys(t *testing.T) {
+	customMapping := schema.AWSSecurityTagMapping{
+		StackTag:     "mycompany:stack",
+		ComponentTag: "mycompany:component",
+	}
+
+	mapper := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  customMapping,
+		clients:     newAWSClientCache(),
+		tagCache: map[string]*tagLookupResult{
+			"arn:aws:ec2:us-east-1:123456789012:instance/i-abc": {
+				tags: map[string]string{
+					"mycompany:stack":     "prod-us-east-1",
+					"mycompany:component": "web-server",
+				},
+				exists: true,
+			},
+		},
+	}
+
+	finding := &Finding{
+		ResourceARN: "arn:aws:ec2:us-east-1:123456789012:instance/i-abc",
+		Region:      "us-east-1",
+	}
+
+	mapping, err := mapper.mapByTags(context.Background(), finding)
+	require.NoError(t, err)
+	require.NotNil(t, mapping)
+	assert.True(t, mapping.Mapped)
+	assert.Equal(t, "prod-us-east-1", mapping.Stack)
+	assert.Equal(t, "web-server", mapping.Component)
+	assert.Equal(t, ConfidenceExact, mapping.Confidence)
+	assert.Equal(t, "tag", mapping.Method)
 }
 
 func TestMapByTags_NoTags(t *testing.T) {
@@ -602,11 +635,9 @@ func TestResolveTagMapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := resolveTagMapping(&tt.config)
 			assert.Equal(t, tt.wantTag, result.ComponentTag)
-			// Verify all fields are filled.
+			// Verify both fields are filled.
 			assert.NotEmpty(t, result.StackTag)
-			assert.NotEmpty(t, result.TenantTag)
-			assert.NotEmpty(t, result.EnvironmentTag)
-			assert.NotEmpty(t, result.StageTag)
+			assert.NotEmpty(t, result.ComponentTag)
 		})
 	}
 }

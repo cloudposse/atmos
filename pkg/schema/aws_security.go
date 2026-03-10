@@ -21,22 +21,18 @@ type AWSSecuritySources struct {
 }
 
 // AWSSecurityTagMapping configures the tag keys used for finding-to-code mapping.
+// Only two tags are needed: one for the stack name and one for the component name.
+// These are configurable so organizations can use their own tagging standards.
 type AWSSecurityTagMapping struct {
-	StackTag       string `yaml:"stack_tag,omitempty" json:"stack_tag,omitempty" mapstructure:"stack_tag"`                   // Default: "atmos:stack".
-	ComponentTag   string `yaml:"component_tag,omitempty" json:"component_tag,omitempty" mapstructure:"component_tag"`       // Default: "atmos:component".
-	TenantTag      string `yaml:"tenant_tag,omitempty" json:"tenant_tag,omitempty" mapstructure:"tenant_tag"`                // Default: "atmos:tenant".
-	EnvironmentTag string `yaml:"environment_tag,omitempty" json:"environment_tag,omitempty" mapstructure:"environment_tag"` // Default: "atmos:environment".
-	StageTag       string `yaml:"stage_tag,omitempty" json:"stage_tag,omitempty" mapstructure:"stage_tag"`                   // Default: "atmos:stage".
+	StackTag     string `yaml:"stack_tag,omitempty" json:"stack_tag,omitempty" mapstructure:"stack_tag"`             // Default: "atmos:stack".
+	ComponentTag string `yaml:"component_tag,omitempty" json:"component_tag,omitempty" mapstructure:"component_tag"` // Default: "atmos:component".
 }
 
 // DefaultAWSSecurityTagMapping returns the default tag mapping for finding-to-code resolution.
 func DefaultAWSSecurityTagMapping() AWSSecurityTagMapping {
 	return AWSSecurityTagMapping{
-		StackTag:       "atmos:stack",
-		ComponentTag:   "atmos:component",
-		TenantTag:      "atmos:tenant",
-		EnvironmentTag: "atmos:environment",
-		StageTag:       "atmos:stage",
+		StackTag:     "atmos:stack",
+		ComponentTag: "atmos:component",
 	}
 }
 

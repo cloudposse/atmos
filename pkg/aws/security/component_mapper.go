@@ -111,10 +111,6 @@ func (m *dualPathMapper) mapByTags(ctx context.Context, finding *Finding) (*Comp
 	stack := tags[m.tagMapping.StackTag]
 	component := tags[m.tagMapping.ComponentTag]
 
-	if stack == "" {
-		stack = m.reconstructStackFromTags(tags)
-	}
-
 	if stack == "" && component == "" {
 		return nil, nil
 	}
@@ -126,30 +122,6 @@ func (m *dualPathMapper) mapByTags(ctx context.Context, finding *Finding) (*Comp
 		Confidence: ConfidenceExact,
 		Method:     "tag",
 	}, nil
-}
-
-// reconstructStackFromTags attempts to reconstruct a stack name from individual tenant/environment/stage tags.
-func (m *dualPathMapper) reconstructStackFromTags(tags map[string]string) string {
-	tenant := tags[m.tagMapping.TenantTag]
-	environment := tags[m.tagMapping.EnvironmentTag]
-	stage := tags[m.tagMapping.StageTag]
-
-	if environment == "" && stage == "" {
-		return ""
-	}
-
-	parts := []string{}
-	if tenant != "" {
-		parts = append(parts, tenant)
-	}
-	if environment != "" {
-		parts = append(parts, environment)
-	}
-	if stage != "" {
-		parts = append(parts, stage)
-	}
-
-	return strings.Join(parts, "-")
 }
 
 // mapByHeuristics implements Path B: multi-strategy heuristic pipeline.
@@ -392,15 +364,6 @@ func resolveTagMapping(atmosConfig *schema.AtmosConfiguration) schema.AWSSecurit
 	}
 	if mapping.ComponentTag == "" {
 		mapping.ComponentTag = defaults.ComponentTag
-	}
-	if mapping.TenantTag == "" {
-		mapping.TenantTag = defaults.TenantTag
-	}
-	if mapping.EnvironmentTag == "" {
-		mapping.EnvironmentTag = defaults.EnvironmentTag
-	}
-	if mapping.StageTag == "" {
-		mapping.StageTag = defaults.StageTag
 	}
 
 	return mapping

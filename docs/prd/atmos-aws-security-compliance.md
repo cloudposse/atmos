@@ -134,18 +134,38 @@ If the user's infrastructure has `atmos:*` resource tags, mapping is instant and
 API call to the AWS Resource Groups Tagging API resolves any resource ARN to its Atmos component
 and stack.
 
-**Required tags:**
+**Required tags (configurable):**
 
-| Tag Key             | Value Example    | Purpose                          |
-|---------------------|------------------|----------------------------------|
-| `atmos:stack`       | `prod-us-east-1` | Full stack name                  |
-| `atmos:component`   | `vpc`            | Component name                   |
-| `atmos:tenant`      | `acme`           | Tenant (if using tenant pattern) |
-| `atmos:environment` | `prod`           | Environment                      |
-| `atmos:stage`       | `us-east-1`      | Stage                            |
-| `atmos:workspace`   | `prod-use1-vpc`  | Terraform workspace              |
+The system needs two tags on AWS resources to map findings back to Atmos: one for the stack name
+and one for the component name. The tag keys are configurable in `atmos.yaml` under
+`aws.security.tag_mapping` — every organization can use their own tagging standard.
 
-**Tag configuration:**
+| Default Tag Key   | Value Example    | Purpose         | Config Key      |
+|-------------------|------------------|-----------------|-----------------|
+| `atmos:stack`     | `prod-us-east-1` | Full stack name | `stack_tag`     |
+| `atmos:component` | `vpc`            | Component name  | `component_tag` |
+
+These two tags uniquely identify the Atmos component and stack that manage the resource.
+The `atmos:workspace` tag is optional but useful for direct Terraform state lookups.
+
+**Custom tag keys example:**
+
+```yaml
+# atmos.yaml — use your organization's tagging standard
+aws:
+  security:
+    tag_mapping:
+      stack_tag: "mycompany:stack"          # default: "atmos:stack"
+      component_tag: "mycompany:component"  # default: "atmos:component"
+```
+
+**How to apply the tags (two approaches):**
+
+The tag keys must match what you configure in `aws.security.tag_mapping` (defaults: `atmos:stack`,
+`atmos:component`). Both approaches below achieve the same result.
+
+**Option A: AWS Provider `default_tags`** — Define a `default_tags` variable and use the AWS provider's
+`default_tags` block to apply them to all resources automatically.
 
 ```yaml
 # stacks/catalog/defaults.yaml
@@ -153,9 +173,6 @@ vars:
   default_tags:
     atmos:stack: "{{ .atmos_stack }}"
     atmos:component: "{{ .atmos_component }}"
-    atmos:tenant: "{{ .vars.tenant }}"
-    atmos:environment: "{{ .vars.environment }}"
-    atmos:stage: "{{ .vars.stage }}"
 ```
 
 ```hcl
@@ -166,6 +183,22 @@ provider "aws" {
   }
 }
 ```
+
+**Option B: Atmos stack inheritance** — Define `tags` at the org-level `_defaults.yaml`. Atmos
+deep-merges all sections (including `vars`) through the inheritance chain, so these tags are
+automatically merged into every component's `tags` variable — no `default_tags` provider block needed.
+
+```yaml
+# stacks/orgs/acme/_defaults.yaml
+vars:
+  tags:
+    atmos:stack: "{{ .atmos_stack }}"
+    atmos:component: "{{ .atmos_component }}"
+```
+
+Both approaches achieve the same result. Option A uses the AWS provider's built-in tagging mechanism.
+Option B leverages Atmos's deep-merge inheritance, which works with any Terraform provider and any
+`tags` variable convention.
 
 **Flow:** Finding → Resource ARN → Tag lookup → `atmos:component` + `atmos:stack` → Done.
 
@@ -326,7 +359,7 @@ Finding arrives with resource ARN
 
 All AWS API calls use Atmos Auth for credential management. This provides a unified authentication
 experience — the same credentials used for `atmos terraform apply` are used for security scanning.
-When the `--ai` flag is used, AI analysis uses whatever provider is configured in `ai.default_provider`.
+When the `--ai` flag is used, AI analysis uses whatever provider is configured in `ai.default_provider` in `atmos.yaml`.
 
 ### Required AWS Permissions
 
@@ -407,18 +440,18 @@ opt-in via the `--ai` flag — commands work without any AI provider configured.
 | **Ollama**        | Air-gapped/offline, no external API calls     | Your infrastructure |
 | **Grok (xAI)**    | Alternative provider                          | xAI servers         |
 
-For enterprise data residency requirements, see the
-[AWS Bedrock AI Provider](aws-bedrock-ai-provider.md) reference (setup, Terraform component,
-pricing, regional availability).
-
 ### Configuration Example
 
 ```yaml
 # atmos.yaml
 ai:
   enabled: true
-  default_provider: "anthropic"
+  default_provider: "bedrock"  # Recommended for enterprise security — data stays in your AWS account
   providers:
+    bedrock:
+      model: "anthropic.claude-sonnet-4-6-20250514-v1:0"
+      base_url: "us-east-1"   # AWS region for Bedrock
+      max_tokens: 8192
     anthropic:
       model: "claude-sonnet-4-6"
       api_key: !env "ANTHROPIC_API_KEY"
@@ -433,6 +466,10 @@ ai:
       model: "llama3.3:70b"
       base_url: "http://localhost:11434/v1"
 ```
+
+For enterprise security workloads, **Bedrock is the recommended default** — finding data never leaves
+your AWS account, no API keys to manage (uses IAM via Atmos Auth), and all invocations are logged in
+CloudTrail.
 
 By default, `atmos aws security` works without AI. The `--ai` flag enables AI-powered analysis
 when a provider is configured. This opt-in design means CI/CD pipelines get structured finding
@@ -518,11 +555,11 @@ The default output is a rich Markdown report rendered in the terminal:
 | Field          | Value                                              |
 |----------------|----------------------------------------------------|
 | **Severity**   | CRITICAL                                           |
-| **Source**      | Security Hub (CIS AWS 2.1.2)                      |
-| **Resource**    | arn:aws:s3:::acme-prod-data-bucket                |
-| **Component**   | s3-bucket                                         |
-| **Stack**       | prod-us-east-1                                    |
-| **File**        | components/terraform/s3-bucket/main.tf:42         |
+| **Source**     | Security Hub (CIS AWS 2.1.2)                      |
+| **Resource**   | arn:aws:s3:::acme-prod-data-bucket                |
+| **Component**  | s3-bucket                                         |
+| **Stack**      | prod-us-east-1                                    |
+| **File**       | components/terraform/s3-bucket/main.tf:42         |
 
 #### Finding Details
 
@@ -624,9 +661,9 @@ atmos aws compliance --stack prod-us-east-1
 
 | Control   | Title                              | Severity | Component     | Remediation Available |
 |-----------|------------------------------------|----------|---------------|-----------------------|
-| CIS 2.1.2 | S3 bucket public access           | Critical | s3-bucket     | Yes                   |
-| CIS 2.2.1 | EBS encryption default            | High     | ebs-defaults  | Yes                   |
-| CIS 3.1   | CloudTrail enabled                | High     | cloudtrail    | Yes                   |
+| CIS 2.1.2 | S3 bucket public access            | Critical | s3-bucket     | Yes                   |
+| CIS 2.2.1 | EBS encryption default             | High     | ebs-defaults  | Yes                   |
+| CIS 3.1   | CloudTrail enabled                 | High     | cloudtrail    | Yes                   |
 
 ### Remediation Details
 (AI-generated remediation for each failing control, same format as security report)
@@ -861,24 +898,24 @@ Send to the configured AI provider for root cause analysis and remediation:
 # atmos.yaml
 ai:
   enabled: true
-  default_provider: "anthropic"  # or "bedrock", "openai", "gemini", "azureopenai", "ollama", "grok"
+  default_provider: "bedrock"  # Recommended for enterprise security (or "anthropic", "openai", "gemini", "azureopenai", "ollama", "grok")
 
   providers:
-    # Direct Anthropic API (recommended for general use)
-    anthropic:
-      model: "claude-sonnet-4-6"
-      api_key: !env "ANTHROPIC_API_KEY"
+    # AWS Bedrock (recommended for enterprise security — data stays in your AWS account)
+    bedrock:
+      model: "anthropic.claude-sonnet-4-6-20250514-v1:0"
+      base_url: "us-east-1"   # AWS region
       max_tokens: 8192
 
     # Other providers (configure as needed)
     # See provider-specific docs for setup:
     # - AWS Bedrock: docs/prd/aws-bedrock-ai-provider.md
+    # anthropic:
+    #   model: "claude-sonnet-4-6"
+    #   api_key: !env "ANTHROPIC_API_KEY"
     # openai:
     #   model: "gpt-4o"
     #   api_key: !env "OPENAI_API_KEY"
-    # gemini:
-    #   model: "gemini-2.5-flash"
-    #   api_key: !env "GEMINI_API_KEY"
     # ollama:
     #   model: "llama3.3:70b"
     #   base_url: "http://localhost:11434/v1"
@@ -907,13 +944,10 @@ aws:
     # Maximum findings per analysis run
     max_findings: 50
 
-    # Tag keys used for finding-to-code mapping
+    # Tag keys used for finding-to-code mapping (customize to match your tagging standard)
     tag_mapping:
-      stack_tag: "atmos:stack"
-      component_tag: "atmos:component"
-      tenant_tag: "atmos:tenant"
-      environment_tag: "atmos:environment"
-      stage_tag: "atmos:stage"
+      stack_tag: "atmos:stack"          # default: "atmos:stack"
+      component_tag: "atmos:component"  # default: "atmos:component"
 
     # Compliance frameworks to track
     frameworks:
