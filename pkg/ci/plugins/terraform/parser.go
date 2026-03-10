@@ -433,6 +433,9 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 	// backend credentials that may not be available in PostRunE context.
 	data.Outputs = extractApplyOutputs(output)
 
+	// Extract full warning blocks for CI summary display.
+	data.Warnings = ExtractWarningBlocks(output)
+
 	return result
 }
 

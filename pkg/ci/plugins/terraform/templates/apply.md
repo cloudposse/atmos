@@ -109,4 +109,14 @@ atmos terraform apply {{.Component}} -s {{.Stack}}
 
 </details>
 {{- end }}
+
+{{- if gt (len .Warnings) 0 }}
+{{ range .Warnings }}
+
+> [!WARNING]
+> ```
+{{ . }}
+> ```
+{{- end }}
+{{- end }}
 {{- end }}

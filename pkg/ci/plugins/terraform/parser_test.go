@@ -816,6 +816,48 @@ environment_url = "https://example.com"
 	assert.Equal(t, "https://example.com", data.Outputs["environment_url"].Value)
 }
 
+func TestParseApplyOutput_WithWarnings(t *testing.T) {
+	output := `aws_instance.web: Creating...
+aws_instance.web: Creation complete after 35s [id=i-12345678]
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+╷
+│ Warning: Value for undeclared variable
+│
+│ The root module does not declare a variable named "deps_stage" but a value
+│ was found in file "preview-app.terraform.tfvars.json". If you meant to use
+│ this value, add a "variable" block to the configuration.
+│
+│ To silence these warnings, use TF_VAR_... environment variables to provide
+│ certain "global" settings to all configurations in your organization. To
+│ reduce the verbosity of these warnings, use the -compact-warnings option.
+╵
+╷
+│ Warning: Value for undeclared variable
+│
+│ The root module does not declare a variable named "github_repo_name" but a
+│ value was found in file "preview-app.terraform.tfvars.json". If you meant
+│ to use this value, add a "variable" block to the configuration.
+│
+│ To silence these warnings, use TF_VAR_... environment variables to provide
+│ certain "global" settings to all configurations in your organization. To
+│ reduce the verbosity of these warnings, use the -compact-warnings option.
+╵
+`
+	result := ParseApplyOutput(output)
+	require.NotNil(t, result)
+	assert.True(t, result.HasChanges)
+
+	data, ok := result.Data.(*plugin.TerraformOutputData)
+	require.True(t, ok)
+	assert.Len(t, data.Warnings, 2)
+	assert.Contains(t, data.Warnings[0], "Value for undeclared variable")
+	assert.Contains(t, data.Warnings[0], "deps_stage")
+	assert.Contains(t, data.Warnings[1], "Value for undeclared variable")
+	assert.Contains(t, data.Warnings[1], "github_repo_name")
+}
+
 func TestParseOutput(t *testing.T) {
 	t.Run("plan command", func(t *testing.T) {
 		result := ParseOutput("Plan: 1 to add, 0 to change, 0 to destroy.", "plan")
