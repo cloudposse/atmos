@@ -562,13 +562,16 @@ Error: Reference to undeclared resource
 
 func TestParseApplyOutput(t *testing.T) {
 	tests := []struct {
-		name       string
-		output     string
-		hasChanges bool
-		hasErrors  bool
-		create     int
-		change     int
-		destroy    int
+		name           string
+		output         string
+		hasChanges     bool
+		hasErrors      bool
+		create         int
+		change         int
+		destroy        int
+		wantCreatedRes []string
+		wantUpdatedRes []string
+		wantDeletedRes []string
 	}{
 		{
 			name: "apply complete with changes",
@@ -578,10 +581,11 @@ aws_instance.example: Creation complete after 45s [id=i-12345678]
 
 Apply complete! Resources: 2 added, 1 changed, 0 destroyed.
 `,
-			hasChanges: true,
-			create:     2,
-			change:     1,
-			destroy:    0,
+			hasChanges:     true,
+			create:         2,
+			change:         1,
+			destroy:        0,
+			wantCreatedRes: []string{"aws_instance.example"},
 		},
 		{
 			name: "apply with destroy",
@@ -591,10 +595,11 @@ aws_instance.old: Destruction complete after 10s
 
 Apply complete! Resources: 0 added, 0 changed, 3 destroyed.
 `,
-			hasChanges: true,
-			create:     0,
-			change:     0,
-			destroy:    3,
+			hasChanges:     true,
+			create:         0,
+			change:         0,
+			destroy:        3,
+			wantDeletedRes: []string{"aws_instance.old"},
 		},
 		{
 			name: "apply with errors",
@@ -607,6 +612,42 @@ Error: resource already exists
 `,
 			hasChanges: false,
 			hasErrors:  true,
+		},
+		{
+			name: "apply with mixed operations",
+			output: `
+aws_s3_bucket.new: Creating...
+aws_s3_bucket.new: Creation complete after 3s [id=my-bucket]
+aws_instance.web: Modifying... [id=i-12345678]
+aws_instance.web: Modifications complete after 5s [id=i-12345678]
+aws_security_group.old: Destroying...
+aws_security_group.old: Destruction complete after 2s [id=sg-12345678]
+
+Apply complete! Resources: 1 added, 1 changed, 1 destroyed.
+`,
+			hasChanges:     true,
+			create:         1,
+			change:         1,
+			destroy:        1,
+			wantCreatedRes: []string{"aws_s3_bucket.new"},
+			wantUpdatedRes: []string{"aws_instance.web"},
+			wantDeletedRes: []string{"aws_security_group.old"},
+		},
+		{
+			name: "apply with duplicate resource lines (Still creating)",
+			output: `
+aws_instance.web: Creating...
+aws_instance.web: Still creating... [10s elapsed]
+aws_instance.web: Still creating... [20s elapsed]
+aws_instance.web: Creation complete after 35s [id=i-12345678]
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+`,
+			hasChanges:     true,
+			create:         1,
+			change:         0,
+			destroy:        0,
+			wantCreatedRes: []string{"aws_instance.web"},
 		},
 	}
 
@@ -622,6 +663,16 @@ Error: resource already exists
 				assert.Equal(t, tt.create, data.ResourceCounts.Create, "Create count mismatch")
 				assert.Equal(t, tt.change, data.ResourceCounts.Change, "Change count mismatch")
 				assert.Equal(t, tt.destroy, data.ResourceCounts.Destroy, "Destroy count mismatch")
+
+				if len(tt.wantCreatedRes) > 0 {
+					assert.ElementsMatch(t, tt.wantCreatedRes, data.CreatedResources, "CreatedResources mismatch")
+				}
+				if len(tt.wantUpdatedRes) > 0 {
+					assert.ElementsMatch(t, tt.wantUpdatedRes, data.UpdatedResources, "UpdatedResources mismatch")
+				}
+				if len(tt.wantDeletedRes) > 0 {
+					assert.ElementsMatch(t, tt.wantDeletedRes, data.DeletedResources, "DeletedResources mismatch")
+				}
 			}
 		})
 	}

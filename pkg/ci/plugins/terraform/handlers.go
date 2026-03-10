@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ func (p *Plugin) onBeforePlan(ctx *plugin.HookContext) error {
 
 	if isCheckEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
-			log.Warn("CI check run creation failed", "error", err)
+			logCheckRunError("CI check run creation skipped", err)
 		}
 	}
 	return nil
@@ -63,7 +64,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	// Check -- warn-only.
 	if isCheckEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
-			log.Warn("CI check run update failed", "error", err)
+			logCheckRunError("CI check run update skipped", err)
 		}
 	}
 
@@ -77,7 +78,7 @@ func (p *Plugin) onBeforeApply(ctx *plugin.HookContext) error {
 
 	if isCheckEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
-			log.Warn("CI check run creation failed", "error", err)
+			logCheckRunError("CI check run creation skipped", err)
 		}
 	}
 	return nil
@@ -110,7 +111,7 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	// Check -- warn-only.
 	if isCheckEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
-			log.Warn("CI check run update failed", "error", err)
+			logCheckRunError("CI check run update skipped", err)
 		}
 	}
 
@@ -127,7 +128,7 @@ func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 	// Create check run if enabled.
 	if isCheckEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
-			log.Warn("CI check run creation failed", "error", err)
+			logCheckRunError("CI check run creation skipped", err)
 		}
 	}
 
@@ -675,6 +676,18 @@ func buildCheckSummary(result *plugin.OutputResult) string {
 	}
 
 	return ""
+}
+
+// logCheckRunError logs check run errors at an appropriate level.
+// Token-related errors (missing GITHUB_TOKEN) are logged at Debug level since
+// they indicate a configuration gap rather than a runtime failure.
+// Other errors are logged at Warn level.
+func logCheckRunError(msg string, err error) {
+	if errors.Is(err, errUtils.ErrGitHubTokenNotFound) {
+		log.Debug(msg, "reason", "GITHUB_TOKEN not set")
+		return
+	}
+	log.Warn(msg, "error", err)
 }
 
 // logArtifactOperation logs details about a planfile upload/download operation.

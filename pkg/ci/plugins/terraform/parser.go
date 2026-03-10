@@ -45,6 +45,12 @@ var (
 	resourceActionRe  = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+will be (created|destroyed|updated in-place|read during apply)`)
 	resourceReplaceRe = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+must be replaced`)
 
+	// Matches resource operation progress lines in terraform apply stdout:
+	//   aws_instance.web: Creating...
+	//   aws_instance.web: Modifying... [id=i-12345]
+	//   aws_instance.web: Destroying... [id=i-12345]
+	applyResourceActionRe = regexp.MustCompile(`(?m)^(\S+): (Creating|Modifying|Destroying)\.\.\.`)
+
 	// Matches "Outputs:" section header in terraform apply stdout.
 	outputsSectionRe = regexp.MustCompile(`(?m)^Outputs:\s*$`)
 
@@ -397,6 +403,29 @@ func ParseApplyOutput(output string) *plugin.OutputResult {
 		result.HasChanges = data.ResourceCounts.Create > 0 ||
 			data.ResourceCounts.Change > 0 ||
 			data.ResourceCounts.Destroy > 0
+		data.ChangedResult = matches[0]
+	}
+
+	// Extract resource names from apply progress lines.
+	// Terraform apply prints "resource.name: Creating/Modifying/Destroying..." for each resource.
+	// Use a set to deduplicate (terraform may print multiple lines per resource).
+	seen := make(map[string]bool)
+	for _, match := range applyResourceActionRe.FindAllStringSubmatch(output, -1) {
+		resource := match[1]
+		action := match[2]
+		key := resource + ":" + action
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		switch action {
+		case "Creating":
+			data.CreatedResources = append(data.CreatedResources, resource)
+		case "Modifying":
+			data.UpdatedResources = append(data.UpdatedResources, resource)
+		case "Destroying":
+			data.DeletedResources = append(data.DeletedResources, resource)
+		}
 	}
 
 	// Extract outputs from apply stdout (e.g., 'key = "value"' lines after "Outputs:").

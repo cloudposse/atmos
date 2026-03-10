@@ -1,7 +1,9 @@
 
 ## Apply Succeeded for `bucket` in `prod`
-[![apply](https://shields.io/badge/APPLY-SUCCESS-success?style=for-the-badge)](#user-content-apply-prod-bucket)
-<details><summary><a id="user-content-result-prod-bucket" />Resources: 1 added, 0 changed, 0 destroyed</summary>
+
+<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
+[![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#user-content-create-prod-bucket)
+<details><summary><a id="result-prod-bucket" />Resources: 1 added, 0 changed, 0 destroyed</summary>
 
 <br/>
 To reproduce this locally, run:<br/><br/>
@@ -9,23 +11,19 @@ To reproduce this locally, run:<br/><br/>
 ```shell
 atmos terraform apply bucket -s prod
 ```
+
+---
+
+### <a id="create-prod-bucket" />Created
+```diff
++ aws_s3_bucket.main
+```
 </details>
 
-<details><summary><a id="user-content-apply-prod-bucket" />Terraform <strong>Apply</strong> Summary</summary>
+<details><summary>Terraform <strong>Apply</strong> Summary</summary>
 
 ```hcl
 Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
 ```
 
-</details>
-
-<details><summary>Metadata</summary>
-
-```json
-{
-  "component": "bucket",
-  "stack": "prod",
-  "commitSHA": ""
-}
-```
 </details>

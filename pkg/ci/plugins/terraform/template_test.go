@@ -221,11 +221,15 @@ func TestTemplateRendering(t *testing.T) {
 						HasErrors:  false,
 					},
 				},
-				Resources: plugin.ResourceCounts{Create: 1},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_s3_bucket.main"},
 			},
 			wantContains: []string{
-				"APPLY-SUCCESS-success",
+				"APPLY-CREATE-success",
 				"Apply Succeeded",
+				"cloudposse.com",
+				"+ aws_s3_bucket.main",
+				"Created",
 			},
 			wantNotContains: []string{
 				"FAILED",
@@ -247,7 +251,8 @@ func TestTemplateRendering(t *testing.T) {
 						HasErrors:  false,
 					},
 				},
-				Resources: plugin.ResourceCounts{Create: 1},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_s3_bucket.main"},
 				Outputs: map[string]plugin.TerraformOutput{
 					"bucket_arn":  {Value: "arn:aws:s3:::prod-bucket", Sensitive: false},
 					"secret_key":  {Value: "", Sensitive: true},
@@ -255,7 +260,7 @@ func TestTemplateRendering(t *testing.T) {
 				},
 			},
 			wantContains: []string{
-				"APPLY-SUCCESS-success",
+				"APPLY-CREATE-success",
 				"Terraform Outputs",
 				"bucket_arn",
 				"arn:aws:s3:::prod-bucket",
@@ -281,7 +286,7 @@ func TestTemplateRendering(t *testing.T) {
 				Resources: plugin.ResourceCounts{},
 			},
 			wantContains: []string{
-				"APPLY-FAILED-critical",
+				"APPLY-FAILED-ff0000",
 				"Apply Failed",
 				"Error creating resource",
 			},
@@ -304,8 +309,69 @@ func TestTemplateRendering(t *testing.T) {
 				Resources: plugin.ResourceCounts{},
 			},
 			wantContains: []string{
-				"APPLY-SUCCESS-success",
-				"No changes applied",
+				"NO_CHANGE-inactive",
+				"No Changes Applied",
+			},
+		},
+		{
+			name:         "apply with destroys shows warning",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "legacy",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Destroy: 2},
+				DeletedResources: []string{"aws_instance.old[0]", "aws_instance.old[1]"},
+				HasDestroy:       true,
+			},
+			wantContains: []string{
+				"APPLY-DESTROY-critical",
+				"CAUTION",
+				"Terraform destroyed resources",
+				"- aws_instance.old",
+			},
+		},
+		{
+			name:         "apply with mixed operations",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "app",
+					ComponentType: "terraform",
+					Stack:         "staging",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{
+					Create:  1,
+					Change:  1,
+					Destroy: 1,
+				},
+				CreatedResources: []string{"aws_instance.new"},
+				UpdatedResources: []string{"aws_instance.updated"},
+				DeletedResources: []string{"aws_instance.deleted"},
+				HasDestroy:       true,
+			},
+			wantContains: []string{
+				"APPLY-CREATE",
+				"APPLY-CHANGE",
+				"APPLY-DESTROY",
+				"CAUTION",
+				"+ aws_instance.new",
+				"~ aws_instance.updated",
+				"- aws_instance.deleted",
 			},
 		},
 	}
@@ -608,7 +674,8 @@ func TestTemplateGolden(t *testing.T) {
 						HasErrors:  false,
 					},
 				},
-				Resources: plugin.ResourceCounts{Create: 1},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_s3_bucket.main"},
 			},
 		},
 		{
@@ -628,7 +695,8 @@ func TestTemplateGolden(t *testing.T) {
 						HasErrors:  false,
 					},
 				},
-				Resources: plugin.ResourceCounts{Create: 1},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_s3_bucket.main"},
 				Outputs: map[string]plugin.TerraformOutput{
 					"bucket_arn":  {Value: "arn:aws:s3:::prod-bucket", Sensitive: false},
 					"bucket_name": {Value: "prod-bucket", Sensitive: false},
