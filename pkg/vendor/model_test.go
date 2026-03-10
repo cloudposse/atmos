@@ -1,11 +1,10 @@
 package vendor
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"errors"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
