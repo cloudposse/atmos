@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
@@ -633,34 +632,6 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	}
 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
-}
-
-func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
-	copyOptions := cp.Options{
-		Skip:          generateSkipFunction(tempDir, s),
-		PreserveTimes: false,
-		PreserveOwner: false,
-		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
-		// OnDirExists handles existing directories at the destination.
-		// We skip .git directories from source, but if the destination already has a .git directory
-		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
-		// on git packfiles which often have restrictive permissions.
-		OnDirExists: func(src, dest string) cp.DirExistsAction {
-			if filepath.Base(dest) == ".git" {
-				return cp.Untouchable
-			}
-			return cp.Merge
-		},
-	}
-
-	// Adjust the target path if it's a local file with no extension
-	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := SanitizeFileName(uri)
-		targetPath = filepath.Join(targetPath, sanitizedBase)
-	}
-
-	return cp.Copy(tempDir, targetPath, copyOptions)
 }
 
 // GenerateSkipFunction creates a function that determines whether to skip files during copying.
