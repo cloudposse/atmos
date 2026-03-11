@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -486,7 +487,38 @@ func TestDetermineTargetDirectory_WorkdirEnabled(t *testing.T) {
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", componentConfig)
 	require.NoError(t, err)
 	// Expecting: <tempDir>/.workdir/terraform/dev-vpc/
-	expected := filepath.Join(tempDir, WorkdirPath, "terraform", "dev-vpc")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc")
+	assert.Equal(t, expected, result)
+}
+
+// TestDetermineTargetDirectory_WorkdirUsesAtmosComponent tests that workdir path uses
+// atmos_component (instance name) instead of the passed component (base name) when available.
+// This ensures JIT vendoring and source pull use the same workdir path as terraform plan/init.
+func TestDetermineTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	componentConfig := map[string]any{
+		"atmos_stack":     "demo-dev",
+		"atmos_component": "demo-cluster-codepipeline-iac",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	// Pass the base component name, but expect the workdir to use atmos_component (instance name).
+	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "demo-cluster-codepipeline", componentConfig)
+	require.NoError(t, err)
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
 	assert.Equal(t, expected, result)
 }
 

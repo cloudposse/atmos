@@ -1,0 +1,135 @@
+---
+title: atmos ai skill
+sidebar_label: skill
+sidebar_class_name: command
+id: skill
+description: Manage AI skills including install, list, and uninstall operations
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to manage community and custom AI skills. Install skills from GitHub repositories, list installed skills, and remove skills you no longer need.
+</Intro>
+
+<Experimental />
+
+**See also:** [AI Skills Configuration](/cli/configuration/ai/skills) for configuring skills in `atmos.yaml` |
+[Skill Marketplace](/ai/skill-marketplace) for browsing available skills
+
+<Screengrab title="atmos ai skill --help" slug="atmos-ai-skill--help" />
+
+## Description
+
+Skills are specialized AI assistants that provide expert knowledge for specific domains. They follow the
+[Agent Skills](https://agentskills.io) open standard and can be installed from GitHub repositories.
+
+The `atmos ai skill` command lets you:
+- Install community-contributed skills from GitHub
+- List all installed skills and their status
+- Remove skills you no longer need
+
+## Usage
+
+```shell
+atmos ai skill <subcommand> [flags]
+```
+
+## Subcommands
+
+### `atmos ai skill install`
+
+Install a skill from a GitHub repository.
+
+**Usage:**
+```shell
+atmos ai skill install <source> [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`--force`</dt>
+  <dd>Reinstall if the skill is already installed.</dd>
+
+  <dt>`-y, --yes`</dt>
+  <dd>Skip the confirmation prompt.</dd>
+</dl>
+
+**Examples:**
+```shell
+# Install a skill from GitHub
+atmos ai skill install github.com/user/skill-name
+
+# Install a specific version
+atmos ai skill install github.com/user/skill-name@v1.2.3
+
+# Force reinstall
+atmos ai skill install github.com/user/skill-name --force
+
+# Install without confirmation
+atmos ai skill install github.com/user/skill-name --yes
+```
+
+### `atmos ai skill list`
+
+List all installed skills with their status.
+
+**Usage:**
+```shell
+atmos ai skill list [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`-d, --detailed`</dt>
+  <dd>Show detailed information for each skill, including source, version, install date, and location.</dd>
+</dl>
+
+**Examples:**
+```shell
+# List installed skills
+atmos ai skill list
+
+# Show detailed information
+atmos ai skill list --detailed
+```
+
+### `atmos ai skill uninstall`
+
+Remove an installed skill.
+
+**Usage:**
+```shell
+atmos ai skill uninstall <name> [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`-f, --force`</dt>
+  <dd>Skip the confirmation prompt.</dd>
+</dl>
+
+**Examples:**
+```shell
+# Uninstall a skill
+atmos ai skill uninstall skill-name
+
+# Uninstall without confirmation
+atmos ai skill uninstall skill-name --force
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Ask a one-time question'},
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start or resume an AI chat session'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+  {type: 'link', href: '/ai/skill-marketplace', label: 'Skill Marketplace', description: 'Browse and discover available skills'},
+]} />

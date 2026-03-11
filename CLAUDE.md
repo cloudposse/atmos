@@ -400,7 +400,7 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 
 ## Development Environment
 
-**Prerequisites**: Go 1.24+, golangci-lint, Make. See `.cursor/rules/atmos-rules.mdc`.
+**Prerequisites**: Go 1.26+, golangci-lint, Make. See `.cursor/rules/atmos-rules.mdc`.
 
 **Build**: CGO disabled, cross-platform, version via ldflags, output to `./build/`
 
