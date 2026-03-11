@@ -71,7 +71,8 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		HeatmapMode: v.GetString("heatmap-mode"),
 
 		// AI integration.
-		AI: v.GetBool("ai"),
+		AI:    v.GetBool("ai"),
+		Skill: v.GetString("skill"),
 
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
@@ -388,6 +389,13 @@ func registerAIFlags(registry *FlagRegistry) {
 		Default:     false,
 		Description: "Enable AI-powered analysis of command output",
 		EnvVars:     []string{"ATMOS_AI"},
+	})
+	registry.Register(&StringFlag{
+		Name:        "skill",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Specify skill for AI analysis context (requires --ai)",
+		EnvVars:     []string{"ATMOS_SKILL"},
 	})
 }
 

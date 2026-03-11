@@ -1051,3 +1051,65 @@ func TestHasAIFlagInternal(t *testing.T) {
 		})
 	}
 }
+
+// TestParseSkillFlagInternal tests the parseSkillFlagInternal function that extracts --skill value from os.Args.
+func TestParseSkillFlagInternal(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "no --skill flag",
+			args:     []string{"atmos", "terraform", "plan"},
+			expected: "",
+		},
+		{
+			name:     "--skill with separate value",
+			args:     []string{"atmos", "--ai", "--skill", "atmos-terraform", "terraform", "plan"},
+			expected: "atmos-terraform",
+		},
+		{
+			name:     "--skill=value format",
+			args:     []string{"atmos", "--ai", "--skill=atmos-stacks", "describe", "stacks"},
+			expected: "atmos-stacks",
+		},
+		{
+			name:     "--skill at end with value",
+			args:     []string{"atmos", "terraform", "plan", "--ai", "--skill", "atmos-terraform"},
+			expected: "atmos-terraform",
+		},
+		{
+			name:     "--skill after -- delimiter is ignored",
+			args:     []string{"atmos", "terraform", "plan", "--", "--skill", "atmos-terraform"},
+			expected: "",
+		},
+		{
+			name:     "--skill without value (next arg is a flag)",
+			args:     []string{"atmos", "--skill", "--ai", "terraform", "plan"},
+			expected: "",
+		},
+		{
+			name:     "--skill at end without value",
+			args:     []string{"atmos", "terraform", "plan", "--skill"},
+			expected: "",
+		},
+		{
+			name:     "empty args",
+			args:     []string{},
+			expected: "",
+		},
+		{
+			name:     "--skill=empty value",
+			args:     []string{"atmos", "--skill=", "terraform", "plan"},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseSkillFlagInternal(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

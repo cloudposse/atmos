@@ -174,6 +174,8 @@ func (b *GlobalOptionsBuilder) registerAIFlags(defaults *global.Flags) {
 
 	b.options = append(b.options, WithBoolFlag("ai", "", defaults.AI, "Enable AI-powered analysis of command output"))
 	b.options = append(b.options, WithEnvVars("ai", "ATMOS_AI"))
+	b.options = append(b.options, WithStringFlag("skill", "", defaults.Skill, "Specify skill for AI analysis context (requires --ai)"))
+	b.options = append(b.options, WithEnvVars("skill", "ATMOS_SKILL"))
 }
 
 // registerSystemFlags registers system configuration flags.

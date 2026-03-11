@@ -36,6 +36,17 @@ func withMockClient(t *testing.T, client messageSender, clientErr error) {
 	t.Cleanup(func() { clientFactory = original })
 }
 
+// newInput creates an AnalysisInput for testing.
+func newInput(cmd, stdout, stderr string, cmdErr error, skillPrompt string) *AnalysisInput {
+	return &AnalysisInput{
+		CommandName: cmd,
+		Stdout:      stdout,
+		Stderr:      stderr,
+		CmdErr:      cmdErr,
+		SkillPrompt: skillPrompt,
+	}
+}
+
 func TestValidateAIConfig_NotEnabled(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
@@ -125,7 +136,7 @@ func TestValidateAIConfig_DefaultsToAnthropic(t *testing.T) {
 }
 
 func TestBuildAnalysisPrompt_Success(t *testing.T) {
-	prompt := buildAnalysisPrompt("atmos terraform plan vpc -s prod", "Plan: 3 to add, 0 to change, 0 to destroy.", "", nil)
+	prompt := buildAnalysisPrompt(newInput("atmos terraform plan vpc -s prod", "Plan: 3 to add, 0 to change, 0 to destroy.", "", nil, ""))
 
 	assert.Contains(t, prompt, "atmos terraform plan vpc -s prod")
 	assert.Contains(t, prompt, "**Status:** Success")
@@ -135,12 +146,13 @@ func TestBuildAnalysisPrompt_Success(t *testing.T) {
 
 func TestBuildAnalysisPrompt_Error(t *testing.T) {
 	cmdErr := errors.New("exit status 1")
-	prompt := buildAnalysisPrompt(
+	prompt := buildAnalysisPrompt(newInput(
 		"atmos terraform apply vpc -s prod",
 		"",
 		"Error: No valid credential sources found",
 		cmdErr,
-	)
+		"",
+	))
 
 	assert.Contains(t, prompt, "atmos terraform apply vpc -s prod")
 	assert.Contains(t, prompt, "**Status:** Failed")
@@ -150,13 +162,13 @@ func TestBuildAnalysisPrompt_Error(t *testing.T) {
 }
 
 func TestBuildAnalysisPrompt_EmptyOutput(t *testing.T) {
-	prompt := buildAnalysisPrompt("atmos version", "", "", nil)
+	prompt := buildAnalysisPrompt(newInput("atmos version", "", "", nil, ""))
 
 	assert.Empty(t, prompt, "empty output with no error should produce empty prompt")
 }
 
 func TestBuildAnalysisPrompt_OnlyStderr(t *testing.T) {
-	prompt := buildAnalysisPrompt("atmos terraform plan", "", "Warning: something happened", nil)
+	prompt := buildAnalysisPrompt(newInput("atmos terraform plan", "", "Warning: something happened", nil, ""))
 
 	assert.Contains(t, prompt, "**Standard Error:**")
 	assert.Contains(t, prompt, "Warning: something happened")
@@ -166,7 +178,7 @@ func TestBuildAnalysisPrompt_OnlyStderr(t *testing.T) {
 func TestBuildAnalysisPrompt_ErrorWithNoOutput(t *testing.T) {
 	// Even with no stdout/stderr, an error should produce a prompt.
 	cmdErr := errors.New("command failed")
-	prompt := buildAnalysisPrompt("atmos terraform plan", "", "", cmdErr)
+	prompt := buildAnalysisPrompt(newInput("atmos terraform plan", "", "", cmdErr, ""))
 
 	assert.NotEmpty(t, prompt)
 	assert.Contains(t, prompt, "**Status:** Failed")
@@ -174,12 +186,13 @@ func TestBuildAnalysisPrompt_ErrorWithNoOutput(t *testing.T) {
 }
 
 func TestBuildAnalysisPrompt_BothStreams(t *testing.T) {
-	prompt := buildAnalysisPrompt(
+	prompt := buildAnalysisPrompt(newInput(
 		"atmos describe stacks",
 		"stack1:\n  components:\n    vpc: {}",
 		"Warning: deprecated feature",
 		nil,
-	)
+		"",
+	))
 
 	assert.Contains(t, prompt, "**Standard Output:**")
 	assert.Contains(t, prompt, "**Standard Error:**")
@@ -189,28 +202,28 @@ func TestBuildAnalysisPrompt_BothStreams(t *testing.T) {
 }
 
 func TestBuildAnalysisPrompt_ContainsSystemPrompt(t *testing.T) {
-	prompt := buildAnalysisPrompt("atmos version", "1.209.0", "", nil)
+	prompt := buildAnalysisPrompt(newInput("atmos version", "1.209.0", "", nil, ""))
 
 	assert.Contains(t, prompt, "Atmos AI")
 	assert.Contains(t, prompt, "infrastructure-as-code")
 }
 
 func TestBuildAnalysisPrompt_WhitespaceOnlyOutput(t *testing.T) {
-	prompt := buildAnalysisPrompt("atmos version", "   \n  \t  ", "  \n  ", nil)
+	prompt := buildAnalysisPrompt(newInput("atmos version", "   \n  \t  ", "  \n  ", nil, ""))
 
 	// Whitespace-only output with no error should produce empty prompt.
 	assert.Empty(t, prompt)
 }
 
 func TestBuildAnalysisPrompt_OutputWithoutTrailingNewline(t *testing.T) {
-	prompt := buildAnalysisPrompt("atmos version", "1.209.0", "", nil)
+	prompt := buildAnalysisPrompt(newInput("atmos version", "1.209.0", "", nil, ""))
 
 	// Output without trailing newline should get one added before the closing ```.
 	assert.Contains(t, prompt, "1.209.0\n```")
 }
 
 func TestBuildAnalysisPrompt_OutputWithTrailingNewline(t *testing.T) {
-	prompt := buildAnalysisPrompt("atmos version", "1.209.0\n", "", nil)
+	prompt := buildAnalysisPrompt(newInput("atmos version", "1.209.0\n", "", nil, ""))
 
 	// Output with trailing newline should not get a double newline.
 	assert.Contains(t, prompt, "1.209.0\n```")
@@ -249,7 +262,7 @@ func TestAnalyzeOutput_EmptyOutput(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
 
 	// Empty output with no error should skip analysis entirely.
-	AnalyzeOutput(cfg, "atmos version", "", "", nil)
+	AnalyzeOutput(cfg, newInput("atmos version", "", "", nil, ""))
 	assert.False(t, mock.called, "should not call AI client for empty output")
 }
 
@@ -259,7 +272,7 @@ func TestAnalyzeOutput_ClientCreationError(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
 
 	// Should not panic when client creation fails.
-	AnalyzeOutput(cfg, "atmos terraform plan", "some output", "", nil)
+	AnalyzeOutput(cfg, newInput("atmos terraform plan", "some output", "", nil, ""))
 }
 
 func TestAnalyzeOutput_SendMessageSuccess(t *testing.T) {
@@ -268,7 +281,7 @@ func TestAnalyzeOutput_SendMessageSuccess(t *testing.T) {
 
 	cfg := &schema.AtmosConfiguration{}
 
-	AnalyzeOutput(cfg, "atmos terraform plan vpc -s prod", "Plan: 1 to add", "", nil)
+	AnalyzeOutput(cfg, newInput("atmos terraform plan vpc -s prod", "Plan: 1 to add", "", nil, ""))
 
 	assert.True(t, mock.called, "should call AI client")
 	assert.Contains(t, mock.prompt, "atmos terraform plan vpc -s prod")
@@ -283,7 +296,7 @@ func TestAnalyzeOutput_SendMessageError(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
 
 	// Should not panic when AI call fails.
-	AnalyzeOutput(cfg, "atmos terraform plan", "output", "", nil)
+	AnalyzeOutput(cfg, newInput("atmos terraform plan", "output", "", nil, ""))
 
 	assert.True(t, mock.called)
 }
@@ -295,7 +308,7 @@ func TestAnalyzeOutput_WithCommandError(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
 	cmdErr := errors.New("exit status 1")
 
-	AnalyzeOutput(cfg, "atmos terraform apply", "", "Error: access denied", cmdErr)
+	AnalyzeOutput(cfg, newInput("atmos terraform apply", "", "Error: access denied", cmdErr, ""))
 
 	assert.True(t, mock.called)
 	assert.Contains(t, mock.prompt, "**Status:** Failed")
@@ -313,7 +326,7 @@ func TestAnalyzeOutput_CustomTimeout(t *testing.T) {
 		},
 	}
 
-	AnalyzeOutput(cfg, "atmos list stacks", "stack1\nstack2", "", nil)
+	AnalyzeOutput(cfg, newInput("atmos list stacks", "stack1\nstack2", "", nil, ""))
 
 	assert.True(t, mock.called)
 }
@@ -325,7 +338,7 @@ func TestAnalyzeOutput_WhitespaceOnlyOutput(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
 
 	// Whitespace-only output with no error should skip analysis.
-	AnalyzeOutput(cfg, "atmos version", "  \n  ", "  \t  ", nil)
+	AnalyzeOutput(cfg, newInput("atmos version", "  \n  ", "  \t  ", nil, ""))
 	assert.False(t, mock.called, "should not call AI client for whitespace-only output")
 }
 
@@ -337,8 +350,45 @@ func TestAnalyzeOutput_ErrorWithNoOutput(t *testing.T) {
 	cmdErr := errors.New("command not found")
 
 	// Error with no output should still trigger analysis.
-	AnalyzeOutput(cfg, "atmos foo", "", "", cmdErr)
+	AnalyzeOutput(cfg, newInput("atmos foo", "", "", cmdErr, ""))
 
 	assert.True(t, mock.called, "should call AI client when there's an error even with no output")
 	assert.Contains(t, mock.prompt, "command not found")
+}
+
+func TestBuildAnalysisPrompt_WithSkillPrompt(t *testing.T) {
+	skillPrompt := "You are an expert in Terraform orchestration. Analyze plan output for security issues."
+	prompt := buildAnalysisPrompt(newInput("atmos terraform plan vpc -s prod", "Plan: 1 to add", "", nil, skillPrompt))
+
+	// Skill prompt should appear before the system prompt.
+	skillIdx := strings.Index(prompt, skillPrompt)
+	systemIdx := strings.Index(prompt, "Atmos AI")
+	assert.Greater(t, systemIdx, skillIdx, "skill prompt should appear before system prompt")
+
+	// Both should be present.
+	assert.Contains(t, prompt, skillPrompt)
+	assert.Contains(t, prompt, "Atmos AI")
+	assert.Contains(t, prompt, "Plan: 1 to add")
+}
+
+func TestBuildAnalysisPrompt_WithoutSkillPrompt(t *testing.T) {
+	// Empty skill prompt should not add any prefix.
+	prompt := buildAnalysisPrompt(newInput("atmos version", "1.209.0", "", nil, ""))
+
+	// Should start with the system prompt (no skill prefix).
+	assert.True(t, strings.HasPrefix(prompt, systemPrompt), "prompt should start with system prompt when no skill is provided")
+}
+
+func TestAnalyzeOutput_WithSkillPrompt(t *testing.T) {
+	mock := &mockClient{response: "## Terraform Analysis\nLooks good!"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+	skillPrompt := "You are a Terraform expert."
+
+	AnalyzeOutput(cfg, newInput("atmos terraform plan vpc -s prod", "Plan: 1 to add", "", nil, skillPrompt))
+
+	assert.True(t, mock.called, "should call AI client")
+	assert.Contains(t, mock.prompt, "You are a Terraform expert.")
+	assert.Contains(t, mock.prompt, "Plan: 1 to add")
 }

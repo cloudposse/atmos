@@ -37,6 +37,8 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
 
 	"github.com/cloudposse/atmos/pkg/ai/analyze"
+	"github.com/cloudposse/atmos/pkg/ai/skills"
+	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -172,6 +174,102 @@ func hasAIFlagInternal(args []string) bool {
 	return false
 }
 
+// parseSkillFlag extracts the --skill flag value from os.Args.
+// This is needed before Cobra parses flags because we validate and load the skill
+// in Execute() before internal.Execute() runs the command.
+func parseSkillFlag() string {
+	return parseSkillFlagInternal(os.Args)
+}
+
+// parseSkillFlagInternal extracts the --skill flag value from the provided args.
+// This internal version accepts args as a parameter for testability.
+func parseSkillFlagInternal(args []string) string {
+	for i, arg := range args {
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
+		if arg == "--skill" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			return args[i+1]
+		}
+		if strings.HasPrefix(arg, "--skill=") {
+			return strings.TrimPrefix(arg, "--skill=")
+		}
+	}
+	return ""
+}
+
+// loadAndValidateSkill loads the skill registry and validates that the specified skill exists.
+// Returns the skill or a helpful error listing available skills.
+func loadAndValidateSkill(atmosConfig *schema.AtmosConfiguration, skillName string) (*skills.Skill, error) {
+	defer perf.Track(nil, "cmd.loadAndValidateSkill")()
+
+	var loader skills.SkillLoader
+	installer, installerErr := marketplace.NewInstaller(pkgversion.Version)
+	if installerErr == nil {
+		loader = installer
+	}
+
+	registry, err := skills.LoadSkills(atmosConfig, loader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load skills: %w", err)
+	}
+
+	skill, err := registry.Get(skillName)
+	if err != nil {
+		available := registry.List()
+		names := make([]string, 0, len(available))
+		for _, s := range available {
+			names = append(names, s.Name)
+		}
+
+		builder := errUtils.Build(errUtils.ErrAISkillNotFound).
+			WithExplanationf("The skill %q is not installed or configured.", skillName)
+
+		if len(names) > 0 {
+			builder = builder.WithHintf("Available skills: %s", strings.Join(names, ", "))
+		} else {
+			builder = builder.WithHint("No skills are installed. Install skills with: atmos ai skill install cloudposse/atmos")
+		}
+
+		builder = builder.WithHint("See https://atmos.tools/ai/agent-skills for more information.")
+
+		return nil, builder.Err()
+	}
+
+	return skill, nil
+}
+
+// setupAIAnalysis validates AI configuration, loads the skill if specified, and starts output capture.
+// Returns nil captureSession if capture setup fails (caller should disable AI).
+func setupAIAnalysis(atmosConfig *schema.AtmosConfiguration, skillName string) (*analyze.CaptureSession, string, error) {
+	defer perf.Track(nil, "cmd.setupAIAnalysis")()
+
+	// Validate AI configuration early to fail fast with helpful errors.
+	if err := analyze.ValidateAIConfig(atmosConfig); err != nil {
+		return nil, "", err
+	}
+
+	// If --skill specified, load and validate the skill.
+	var skillPrompt string
+	if skillName != "" {
+		skill, err := loadAndValidateSkill(atmosConfig, skillName)
+		if err != nil {
+			return nil, "", err
+		}
+		skillPrompt = skill.SystemPrompt
+	}
+
+	// Start capturing stdout/stderr while still teeing to the terminal.
+	captureSession, err := analyze.StartCapture()
+	if err != nil {
+		log.Warn("Failed to set up AI output capture, continuing without AI analysis", "error", err)
+		return nil, skillPrompt, nil
+	}
+
+	return captureSession, skillPrompt, nil
+}
+
 // buildCommandName reconstructs the command name from os.Args for AI analysis context.
 func buildCommandName() string {
 	return strings.Join(os.Args, " ")
@@ -180,7 +278,8 @@ func buildCommandName() string {
 // runAIAnalysis stops the capture session and sends captured output to the AI provider for analysis.
 // When there's an error, it prints the formatted error BEFORE the AI analysis so the user sees
 // the error first, followed by the AI explanation.
-func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error) {
+// If skillPrompt is non-empty, it is passed to AnalyzeOutput for domain-specific context.
+func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error, skillPrompt string) {
 	defer perf.Track(nil, "cmd.runAIAnalysis")()
 
 	stdout, stderrCaptured := captureSession.Stop()
@@ -197,8 +296,13 @@ func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analy
 		stderrCaptured += formatted
 	}
 
-	commandName := buildCommandName()
-	analyze.AnalyzeOutput(atmosConfig, commandName, stdout, stderrCaptured, cmdErr)
+	analyze.AnalyzeOutput(atmosConfig, &analyze.AnalysisInput{
+		CommandName: buildCommandName(),
+		Stdout:      stdout,
+		Stderr:      stderrCaptured,
+		CmdErr:      cmdErr,
+		SkillPrompt: skillPrompt,
+	})
 }
 
 // parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
@@ -1544,19 +1648,26 @@ func Execute() error {
 	// We parse --ai from os.Args because Cobra hasn't parsed flags yet at this point.
 	// Skip for "atmos ai" commands to avoid double AI processing.
 	aiEnabled := hasAIFlag() && !isAICommand()
+	skillName := parseSkillFlag()
 	var captureSession *analyze.CaptureSession
+	var skillPrompt string
+
+	// Validate --skill requires --ai.
+	if skillName != "" && !aiEnabled {
+		return errUtils.Build(errUtils.ErrAISkillRequiresAIFlag).
+			WithExplanation("The --skill flag provides domain-specific context for AI analysis, but AI analysis is not enabled. Use --skill together with --ai.").
+			WithHintf("Add --ai to enable AI analysis:\n  atmos --ai --skill %s <command>", skillName).
+			WithHintf("Or use environment variables:\n  ATMOS_AI=true ATMOS_SKILL=%s atmos <command>", skillName).
+			Err()
+	}
 
 	if aiEnabled {
-		// Validate AI configuration early to fail fast with helpful errors.
-		if validateErr := analyze.ValidateAIConfig(&atmosConfig); validateErr != nil {
-			return validateErr
+		var setupErr error
+		captureSession, skillPrompt, setupErr = setupAIAnalysis(&atmosConfig, skillName)
+		if setupErr != nil {
+			return setupErr
 		}
-
-		// Start capturing stdout/stderr while still teeing to the terminal.
-		var captureErr error
-		captureSession, captureErr = analyze.StartCapture()
-		if captureErr != nil {
-			log.Warn("Failed to set up AI output capture, continuing without AI analysis", "error", captureErr)
+		if captureSession == nil {
 			aiEnabled = false
 		}
 	}
@@ -1572,7 +1683,7 @@ func Execute() error {
 	// the error first, then the AI explanation. After analysis, we exit directly
 	// to prevent main.go from re-printing the error.
 	if aiEnabled && captureSession != nil {
-		runAIAnalysis(&atmosConfig, captureSession, err)
+		runAIAnalysis(&atmosConfig, captureSession, err, skillPrompt)
 		if err != nil {
 			// Error was already printed by runAIAnalysis. Exit with proper code.
 			errUtils.Exit(errUtils.GetExitCode(err))

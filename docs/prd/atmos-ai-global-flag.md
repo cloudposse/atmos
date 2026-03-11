@@ -1,7 +1,7 @@
 # Atmos Global `--ai` Flag - Product Requirements Document
 
-**Status:** Implemented
-**Version:** 2.0
+**Status:** In Progress (v3.0 — `--skill` flag)
+**Version:** 3.0
 **Last Updated:** 2026-03-11
 
 ---
@@ -9,6 +9,8 @@
 ## Executive Summary
 
 The global `--ai` flag enables AI-powered analysis of command output across all Atmos CLI commands. When enabled, command output (stdout and stderr) is automatically captured, sent to the configured AI provider for analysis, and the AI response is rendered after command execution. For errors, the AI explains what went wrong and how to fix it. For successful output, it provides a concise summary.
+
+The companion `--skill <name>` flag provides domain-specific context to the AI by loading a skill's system prompt. This gives the AI deep knowledge of a particular Atmos subsystem (e.g., Terraform, stacks, validation) for more accurate and actionable analysis.
 
 ## Motivation
 
@@ -18,7 +20,8 @@ Users frequently need to interpret complex command output (e.g., Terraform plan 
 - Zero-friction AI integration — just add `--ai` to any command
 - Works with ALL existing commands (terraform, helmfile, describe, validate, list, etc.)
 - Error explanation with actionable fix instructions
-- Environment variable support (`ATMOS_AI`) for CI/CD and scripting
+- Domain-specific analysis with `--skill` — the AI uses skill knowledge for deeper insights
+- Environment variable support (`ATMOS_AI`, `ATMOS_SKILL`) for CI/CD and scripting
 - Follows standard Atmos flag precedence: CLI > ENV > config > defaults
 
 ## Requirements
@@ -36,6 +39,12 @@ Users frequently need to interpret complex command output (e.g., Terraform plan 
 9. **Success Analysis**: When a command succeeds, the AI MUST provide a concise summary of the output.
 10. **AI Configuration Validation**: If `--ai` is used but AI is not configured in `atmos.yaml`, MUST show a helpful error with configuration hints.
 11. **AI Command Exclusion**: The `--ai` flag MUST NOT trigger analysis for `atmos ai` commands (to avoid double AI processing).
+12. **Skill Flag**: The `--skill <name>` flag MUST be a global persistent string flag that specifies a skill to use for AI analysis context.
+13. **Skill Requires AI**: If `--skill` is used without `--ai`, MUST show a helpful error explaining that `--skill` requires `--ai`.
+14. **Skill Validation**: The specified skill MUST exist in the skill registry (marketplace-installed or custom). If not found, MUST show an error listing available skills.
+15. **Skill Context Injection**: When a valid skill is specified, the skill's system prompt MUST be prepended to the analysis prompt, giving the AI domain-specific expertise.
+16. **Skill Environment Variable**: The flag MUST support the `ATMOS_SKILL` environment variable.
+17. **Skill Flag Precedence**: Standard Atmos precedence MUST apply: CLI flag > `ATMOS_SKILL` env var > config file > default (empty string).
 
 ### Non-Functional Requirements
 
@@ -51,22 +60,29 @@ Users frequently need to interpret complex command output (e.g., Terraform plan 
 ### Component Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  cmd/root.go Execute()                                      │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │ 1. Parse --ai from os.Args (before Cobra parses)   │    │
-│  │ 2. Validate AI config (fail fast with hints)        │    │
-│  │ 3. Start output capture (os.Pipe + tee goroutines)  │    │
-│  │ 4. Run command (internal.Execute)                   │    │
-│  │ 5. Stop capture, send output to AI provider         │    │
-│  │ 6. Render AI analysis as markdown                   │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                                                             │
-│  pkg/ai/analyze/                                            │
-│  ├── capture.go    - CaptureSession (os.Pipe + tee)        │
-│  ├── analyze.go    - ValidateAIConfig, AnalyzeOutput        │
-│  └── providers.go  - AI provider registration imports       │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  cmd/root.go Execute()                                           │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │ 1. Parse --ai and --skill from os.Args (before Cobra)   │    │
+│  │ 2. Validate --skill requires --ai                        │    │
+│  │ 3. Validate AI config (fail fast with hints)             │    │
+│  │ 4. If --skill: load skill registry, validate skill name  │    │
+│  │ 5. Start output capture (os.Pipe + tee goroutines)       │    │
+│  │ 6. Run command (internal.Execute)                        │    │
+│  │ 7. Stop capture, send output + skill context to AI       │    │
+│  │ 8. Render AI analysis as markdown                        │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  pkg/ai/analyze/                                                 │
+│  ├── capture.go    - CaptureSession (os.Pipe + tee)             │
+│  ├── analyze.go    - ValidateAIConfig, AnalyzeOutput             │
+│  └── providers.go  - AI provider registration imports            │
+│                                                                  │
+│  pkg/ai/skills/                                                  │
+│  ├── skill.go      - Skill struct (Name, SystemPrompt, etc.)    │
+│  ├── registry.go   - Registry (Get, Has, List)                  │
+│  └── loader.go     - LoadSkills (marketplace + custom)           │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ### Output Capture (capture.go)
@@ -95,6 +111,7 @@ stdout, stderr := session.Stop()  // Restores original streams
 
 // AnalyzeOutput sends captured output to AI:
 // - Builds prompt with command name, output, error status
+// - If skillPrompt is provided, prepends it to the system prompt for domain expertise
 // - Uses systemPrompt with infrastructure expertise
 // - Truncates large output (50KB max)
 // - Renders response as markdown
@@ -107,11 +124,29 @@ func Execute() error {
     // ... config loading, setup ...
 
     aiEnabled := hasAIFlag() && !isAICommand()
+    skillName := parseSkillFlag()  // Parse --skill from os.Args
+
+    // Validate --skill requires --ai.
+    if skillName != "" && !aiEnabled {
+        return errSkillRequiresAI  // Helpful error
+    }
+
+    var skillPrompt string
 
     if aiEnabled {
         if err := analyze.ValidateAIConfig(&atmosConfig); err != nil {
             return err  // Helpful error with config hints
         }
+
+        // If --skill specified, load and validate the skill.
+        if skillName != "" {
+            skill, err := loadAndValidateSkill(&atmosConfig, skillName)
+            if err != nil {
+                return err  // Skill not found error with available skills list
+            }
+            skillPrompt = skill.SystemPrompt
+        }
+
         captureSession, _ = analyze.StartCapture()
     }
 
@@ -121,7 +156,7 @@ func Execute() error {
 
     // Stop capture, print error (if any), then run AI analysis.
     if aiEnabled && captureSession != nil {
-        runAIAnalysis(&atmosConfig, captureSession, err)
+        runAIAnalysis(&atmosConfig, captureSession, err, skillPrompt)
         if err != nil {
             errUtils.Exit(errUtils.GetExitCode(err))  // Error already printed
         }
@@ -148,22 +183,35 @@ func Execute() error {
 
 ```go
 // In global/flags.go:
-AI bool // Enable AI-powered analysis of command output (--ai).
+AI    bool   // Enable AI-powered analysis of command output (--ai).
+Skill string // Specify skill for AI analysis context (--skill).
 
 // In global_builder.go:
 func (b *GlobalOptionsBuilder) registerAIFlags(defaults *global.Flags) {
     b.options = append(b.options, WithBoolFlag("ai", "", defaults.AI, "Enable AI-powered analysis of command output"))
     b.options = append(b.options, WithEnvVars("ai", "ATMOS_AI"))
+    b.options = append(b.options, WithStringFlag("skill", "", defaults.Skill, "Specify skill for AI analysis context (requires --ai)"))
+    b.options = append(b.options, WithEnvVars("skill", "ATMOS_SKILL"))
 }
 
-// In global_registry.go ParseGlobalFlags:
-AI: v.GetBool("ai"),
+// In global_registry.go:
+registry.Register(&StringFlag{
+    Name:        "skill",
+    Default:     "",
+    Description: "Specify skill for AI analysis context (requires --ai)",
+    EnvVars:     []string{"ATMOS_SKILL"},
+})
+
+// In ParseGlobalFlags:
+AI:    v.GetBool("ai"),
+Skill: v.GetString("skill"),
 ```
 
 ### Early Flag Parsing (cmd/root.go)
 
-The `--ai` flag is parsed from `os.Args` before Cobra runs (like `--chdir` and `--use-version`):
+Both `--ai` and `--skill` are parsed from `os.Args` before Cobra runs (like `--chdir` and `--use-version`):
 - `hasAIFlagInternal(args)` — checks for `--ai` or `--ai=true`
+- `parseSkillFlagInternal(args)` — extracts skill name from `--skill <name>` or `--skill=<name>`
 - `isAICommandInternal(args)` — detects `atmos ai` commands to skip
 - Respects `--` end-of-flags delimiter
 
@@ -191,9 +239,47 @@ Hints:
 ```
 
 Uses Atmos error builder pattern with:
-- Sentinel errors: `ErrAINotEnabled`, `ErrAIUnsupportedProvider`, `ErrAIAPIKeyNotFound`
+- Sentinel errors: `ErrAINotEnabled`, `ErrAIUnsupportedProvider`, `ErrAIAPIKeyNotFound`, `ErrAISkillRequiresAIFlag`, `ErrAISkillNotFound`
 - `WithExplanation()` for context
 - `WithHint()` for actionable steps with example YAML configuration
+
+### `--skill` without `--ai`
+
+```
+Error: --skill flag requires --ai
+
+Explanation:
+  The --skill flag provides domain-specific context for AI analysis, but AI analysis
+  is not enabled. Use --skill together with --ai.
+
+Hints:
+  - Add --ai to enable AI analysis:
+    atmos --ai --skill atmos-terraform terraform plan vpc -s prod
+
+  - Or use ATMOS_AI=true with ATMOS_SKILL:
+    ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s prod
+```
+
+### Invalid skill name
+
+```
+Error: AI skill not found: "my-skill"
+
+Explanation:
+  The skill "my-skill" is not installed or configured. Available skills are loaded
+  from marketplace installations (~/.atmos/skills/) and custom skills in atmos.yaml.
+
+Hints:
+  - Available skills: atmos-ansible, atmos-auth, atmos-components, atmos-config,
+    atmos-custom-commands, atmos-design-patterns, atmos-devcontainer, atmos-gitops,
+    atmos-helmfile, atmos-introspection, atmos-packer, atmos-schemas, atmos-stacks,
+    atmos-stores, atmos-templates, atmos-terraform, atmos-toolchain, atmos-validation,
+    atmos-vendoring, atmos-workflows, atmos-yaml-functions
+
+  - Install skills: atmos ai skill install cloudposse/atmos
+
+  - See https://atmos.tools/ai/agent-skills for more information.
+```
 
 ## Usage Examples
 
@@ -205,9 +291,17 @@ atmos --ai terraform plan vpc -s prod
 atmos --ai terraform apply vpc -s prod
 # If apply fails, AI explains the error and suggests fixes
 
+# Use a skill for domain-specific AI analysis
+atmos --ai --skill atmos-terraform terraform plan vpc -s prod
+atmos --ai --skill atmos-stacks describe stacks
+atmos --ai --skill atmos-validation validate stacks
+
 # Enable via environment variable for CI/CD
 export ATMOS_AI=true
 atmos terraform plan vpc -s prod
+
+# Enable with skill via environment variables
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s prod
 
 # Works with any command
 atmos --ai describe stacks
@@ -222,16 +316,24 @@ atmos --ai aws security analyze
 
 | Test File | Tests |
 |-----------|-------|
-| `pkg/flags/global_builder_test.go` | AI flag registration on commands |
-| `pkg/flags/global_registry_test.go` | AI flag parsing (default, CLI, env var) |
+| `pkg/flags/global_builder_test.go` | AI and Skill flag registration on commands |
+| `pkg/flags/global_registry_test.go` | AI and Skill flag parsing (default, CLI, env var) |
 | `pkg/ai/analyze/capture_test.go` | Output capture (stdout, stderr, both, restore, empty) |
-| `pkg/ai/analyze/analyze_test.go` | Config validation (not enabled, no provider, no key, valid, defaults), prompt building (success, error, empty, stderr only, whitespace), truncation |
-| `cmd/root_test.go` | `hasAIFlagInternal` (present, absent, =true, =false, after --, similar flags), `isAICommandInternal` (ai commands, non-ai, flags before ai) |
+| `pkg/ai/analyze/analyze_test.go` | Config validation (not enabled, no provider, no key, valid, defaults), prompt building (success, error, empty, stderr only, whitespace, with skill prompt, without skill prompt), truncation |
+| `cmd/root_test.go` | `hasAIFlagInternal`, `parseSkillFlagInternal` (present, absent, =value, separate value, after --, similar flags), `isAICommandInternal` |
+
+### New Tests for `--skill`
+
+| Test File | Tests |
+|-----------|-------|
+| `cmd/root_test.go` | `parseSkillFlagInternal` — `--skill atmos-terraform`, `--skill=atmos-terraform`, `--skill` after `--`, missing value, similar flags |
+| `pkg/ai/analyze/analyze_test.go` | `buildAnalysisPrompt` with skill prompt prepended, without skill prompt (backward compatible) |
+| `cmd/root_test.go` or integration | `--skill` without `--ai` returns error, `--skill` with invalid name returns error listing available skills |
 
 ### Coverage
 
 - `pkg/ai/analyze/`: ~95% (AnalyzeOutput tested via mock client; only OS pipe failure path uncovered)
-- `pkg/flags/`: Full coverage for AI flag registration and parsing
+- `pkg/flags/`: Full coverage for AI and Skill flag registration and parsing
 - `cmd/`: Full coverage for flag and command detection helpers
 
 ## Dependencies
@@ -240,11 +342,167 @@ atmos --ai aws security analyze
 - Uses `pkg/ai` factory and registry for client creation
 - Uses `pkg/utils` for markdown rendering (`PrintfMarkdownToTUI`) and status messages (`PrintfMessageToTUI`)
 - Uses `pkg/ai/analyze` for output capture (`CaptureSession`), config validation, and AI analysis
+- Uses `pkg/ai/skills` for skill loading (`LoadSkills`), registry (`Registry`), and marketplace loader
+- Uses `pkg/ai/skills/marketplace` for loading installed skills from `~/.atmos/skills/`
 - See `docs/prd/atmos-ai.md` for the full AI integration PRD
+
+## Implementation Steps for `--skill` Flag
+
+### Step 1: Add Sentinel Errors (`errors/errors.go`)
+
+```go
+ErrAISkillRequiresAIFlag = errors.New("--skill flag requires --ai")
+```
+
+Note: `ErrAISkillNotFound` already exists in `errors/errors.go`.
+
+### Step 2: Add `Skill` Field to Global Flags (`pkg/flags/global/flags.go`)
+
+```go
+// AI integration.
+AI    bool   // Enable AI-powered analysis of command output (--ai).
+Skill string // Specify skill for AI analysis context (--skill).
+```
+
+### Step 3: Register `--skill` Flag (`pkg/flags/global_builder.go` and `global_registry.go`)
+
+In `registerAIFlags`:
+
+```go
+// global_builder.go
+b.options = append(b.options, WithStringFlag("skill", "", defaults.Skill,
+    "Specify skill for AI analysis context (requires --ai)"))
+b.options = append(b.options, WithEnvVars("skill", "ATMOS_SKILL"))
+
+// global_registry.go
+registry.Register(&StringFlag{
+    Name:        "skill",
+    Default:     "",
+    Description: "Specify skill for AI analysis context (requires --ai)",
+    EnvVars:     []string{"ATMOS_SKILL"},
+})
+```
+
+In `ParseGlobalFlags`:
+
+```go
+Skill: v.GetString("skill"),
+```
+
+### Step 4: Add Early Flag Parsing (`cmd/root.go`)
+
+Add `parseSkillFlagInternal(args)` that extracts the skill name from `os.Args` before Cobra parses.
+Handles `--skill <name>`, `--skill=<name>`, respects `--` delimiter.
+
+```go
+func parseSkillFlag() string {
+    return parseSkillFlagInternal(os.Args)
+}
+
+func parseSkillFlagInternal(args []string) string {
+    for i, arg := range args {
+        if arg == "--" { break }
+        if arg == "--skill" && i+1 < len(args) {
+            return args[i+1]
+        }
+        if strings.HasPrefix(arg, "--skill=") {
+            return strings.TrimPrefix(arg, "--skill=")
+        }
+    }
+    return ""
+}
+```
+
+### Step 5: Add Skill Validation (`cmd/root.go`)
+
+Add `loadAndValidateSkill()` that:
+1. Loads the skill registry using `skills.LoadSkills()` with marketplace loader
+2. Checks if the skill exists using `registry.Get(skillName)`
+3. Returns the skill or a helpful error listing available skills
+
+```go
+func loadAndValidateSkill(atmosConfig *schema.AtmosConfiguration, skillName string) (*skills.Skill, error) {
+    loader := marketplace.NewInstaller(atmosConfig)
+    registry, _ := skills.LoadSkills(atmosConfig, loader)
+
+    skill, err := registry.Get(skillName)
+    if err != nil {
+        available := registry.List()
+        names := make([]string, len(available))
+        for i, s := range available { names[i] = s.Name }
+        return nil, errUtils.Build(errUtils.ErrAISkillNotFound).
+            WithExplanationf("The skill %q is not installed or configured.", skillName).
+            WithHintf("Available skills: %s", strings.Join(names, ", ")).
+            WithHint("Install skills: atmos ai skill install cloudposse/atmos").
+            Err()
+    }
+    return skill, nil
+}
+```
+
+### Step 6: Update `Execute()` Flow (`cmd/root.go`)
+
+After `aiEnabled` is determined:
+1. Parse `--skill` from `os.Args`
+2. If `--skill` without `--ai`, return error
+3. If `--skill` with `--ai`, load and validate skill, extract system prompt
+4. Pass skill prompt to `runAIAnalysis()`
+
+### Step 7: Update `runAIAnalysis()` (`cmd/root.go`)
+
+Add `skillPrompt string` parameter. Pass it through to `analyze.AnalyzeOutput()`.
+
+```go
+func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession,
+    cmdErr error, skillPrompt string) {
+    // ... existing error formatting ...
+    analyze.AnalyzeOutput(atmosConfig, commandName, stdout, stderrCaptured, cmdErr, skillPrompt)
+}
+```
+
+### Step 8: Update `AnalyzeOutput()` and `buildAnalysisPrompt()` (`pkg/ai/analyze/analyze.go`)
+
+Add `skillPrompt string` parameter to both functions. When a skill prompt is provided, prepend it
+to the system prompt to give the AI domain-specific expertise:
+
+```go
+func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, commandName string,
+    stdout, stderr string, cmdErr error, skillPrompt string) {
+    prompt := buildAnalysisPrompt(commandName, stdout, stderr, cmdErr, skillPrompt)
+    // ... rest unchanged ...
+}
+
+func buildAnalysisPrompt(commandName, stdout, stderr string, cmdErr error, skillPrompt string) string {
+    var b strings.Builder
+
+    // Skill-specific expertise comes first (if provided).
+    if skillPrompt != "" {
+        b.WriteString(skillPrompt)
+        b.WriteString("\n\n---\n\n")
+    }
+
+    // Then the general analysis system prompt.
+    b.WriteString(systemPrompt)
+    // ... rest unchanged ...
+}
+```
+
+### Step 9: Add Tests
+
+1. **`cmd/root_test.go`**: Table-driven tests for `parseSkillFlagInternal` (same pattern as `hasAIFlagInternal`)
+2. **`pkg/ai/analyze/analyze_test.go`**: Tests for `buildAnalysisPrompt` with and without skill prompt
+3. **`pkg/flags/global_builder_test.go`**: Skill flag registration test
+4. **`pkg/flags/global_registry_test.go`**: Skill flag parsing (default, CLI, env var)
+
+### Step 10: Update Documentation
+
+1. Update `website/docs/cli/global-flags.mdx` to document `--skill` and `ATMOS_SKILL`
+2. Update blog post with `--skill` examples
+3. Update `examples/ai/README.md` with `--skill` usage
 
 ## Future Considerations
 
-- Command-specific AI prompts for different output types (plan, apply, describe)
+- Auto-detect skill based on command (e.g., `terraform plan` → `atmos-terraform`)
 - Streaming AI response for faster perceived latency
 - AI provider auto-detection from environment
 - Cost estimation and token usage reporting

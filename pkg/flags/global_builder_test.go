@@ -55,6 +55,7 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 
 		// AI integration flags.
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("ai"), "ai flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("skill"), "skill flag should be registered")
 
 		// System flags.
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("redirect-stderr"), "redirect-stderr flag should be registered")

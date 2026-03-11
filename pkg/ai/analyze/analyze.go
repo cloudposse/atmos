@@ -88,13 +88,27 @@ func ValidateAIConfig(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
+// AnalysisInput holds the inputs for AI analysis of command output.
+type AnalysisInput struct {
+	// CommandName is the full command string (e.g., "atmos terraform plan vpc -s prod").
+	CommandName string
+	// Stdout is the captured standard output.
+	Stdout string
+	// Stderr is the captured standard error.
+	Stderr string
+	// CmdErr is the error returned by the command (nil if successful).
+	CmdErr error
+	// SkillPrompt is an optional skill system prompt for domain-specific expertise.
+	SkillPrompt string
+}
+
 // AnalyzeOutput sends captured command output to the configured AI provider for analysis.
 // It creates an AI client, builds a prompt with the command context, and renders the response.
-func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, commandName string, stdout, stderr string, cmdErr error) {
+func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput) {
 	defer perf.Track(nil, "analyze.AnalyzeOutput")()
 
 	// Build the analysis prompt.
-	prompt := buildAnalysisPrompt(commandName, stdout, stderr, cmdErr)
+	prompt := buildAnalysisPrompt(input)
 	if prompt == "" {
 		log.Debug("No output to analyze, skipping AI analysis")
 		return
@@ -134,61 +148,65 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, commandName string, s
 }
 
 // buildAnalysisPrompt constructs the prompt for AI analysis.
-func buildAnalysisPrompt(commandName, stdout, stderr string, cmdErr error) string {
+func buildAnalysisPrompt(input *AnalysisInput) string {
 	defer perf.Track(nil, "analyze.buildAnalysisPrompt")()
 
 	// Truncate output if too large.
-	stdout = truncateOutput(stdout)
-	stderr = truncateOutput(stderr)
+	stdout := truncateOutput(input.Stdout)
+	stderr := truncateOutput(input.Stderr)
 
 	// Skip if there's nothing meaningful to analyze.
-	if strings.TrimSpace(stdout) == "" && strings.TrimSpace(stderr) == "" && cmdErr == nil {
+	if strings.TrimSpace(stdout) == "" && strings.TrimSpace(stderr) == "" && input.CmdErr == nil {
 		return ""
 	}
 
 	var b strings.Builder
 
+	// Skill-specific expertise comes first (if provided).
+	if input.SkillPrompt != "" {
+		b.WriteString(input.SkillPrompt)
+		b.WriteString("\n\n---\n\n")
+	}
+
 	b.WriteString(systemPrompt)
 	b.WriteString("\n\n---\n\n")
 
 	// Command info.
-	fmt.Fprintf(&b, "**Command:** `%s`\n\n", commandName)
+	fmt.Fprintf(&b, "**Command:** `%s`\n\n", input.CommandName)
 
 	// Error status.
-	if cmdErr != nil {
-		fmt.Fprintf(&b, "**Status:** Failed with error: %s\n\n", cmdErr.Error())
+	if input.CmdErr != nil {
+		fmt.Fprintf(&b, "**Status:** Failed with error: %s\n\n", input.CmdErr.Error())
 	} else {
 		b.WriteString("**Status:** Success\n\n")
 	}
 
-	// Stdout.
-	if strings.TrimSpace(stdout) != "" {
-		b.WriteString("**Standard Output:**\n```\n")
-		b.WriteString(stdout)
-		if !strings.HasSuffix(stdout, newline) {
-			b.WriteString(newline)
-		}
-		b.WriteString("```\n\n")
-	}
-
-	// Stderr.
-	if strings.TrimSpace(stderr) != "" {
-		b.WriteString("**Standard Error:**\n```\n")
-		b.WriteString(stderr)
-		if !strings.HasSuffix(stderr, newline) {
-			b.WriteString(newline)
-		}
-		b.WriteString("```\n\n")
-	}
+	// Output streams.
+	writeStream(&b, "**Standard Output:**", stdout)
+	writeStream(&b, "**Standard Error:**", stderr)
 
 	// Instructions based on error status.
-	if cmdErr != nil {
+	if input.CmdErr != nil {
 		b.WriteString("Please analyze the error output above. Explain what went wrong and provide step-by-step instructions to fix it.\n")
 	} else {
 		b.WriteString("Please provide a concise summary and analysis of the command output above.\n")
 	}
 
 	return b.String()
+}
+
+// writeStream writes a labeled code block to the builder if the stream has non-whitespace content.
+func writeStream(b *strings.Builder, label, content string) {
+	if strings.TrimSpace(content) == "" {
+		return
+	}
+	b.WriteString(label)
+	b.WriteString("\n```\n")
+	b.WriteString(content)
+	if !strings.HasSuffix(content, newline) {
+		b.WriteString(newline)
+	}
+	b.WriteString("```\n\n")
 }
 
 // truncateOutput limits output length to prevent exceeding AI token limits.
