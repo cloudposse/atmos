@@ -129,7 +129,12 @@ func parsePullOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*PullO
 	var tags []string
 	tagsCSV := v.GetString("tags")
 	if tagsCSV != "" {
-		tags = strings.Split(tagsCSV, ",")
+		for _, tag := range strings.Split(tagsCSV, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				tags = append(tags, tag)
+			}
+		}
 	}
 
 	return &PullOptions{
