@@ -11,6 +11,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -129,16 +130,19 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	// Show thinking indicator with Atmos alien emoji.
-	utils.PrintfMessageToTUI("\n👽 Analyzing with AI...\n\n")
+	// Show animated spinner while AI analysis is in progress.
+	s := spinner.New("👽 Analyzing with AI...")
+	s.Start()
 
 	// Send to AI provider.
 	response, err := client.SendMessage(ctx, prompt)
 	if err != nil {
+		s.Error(fmt.Sprintf("AI analysis failed: %s", err.Error()))
 		log.Error("AI analysis failed", "error", err)
-		utils.PrintfMessageToTUI("⚠️ AI analysis failed: %s\n\n", err.Error())
 		return
 	}
+
+	s.Success("AI analysis complete")
 
 	// Render AI response as markdown with colors to stderr (UI layer).
 	utils.PrintfMarkdownToTUI("%s", response)
