@@ -56,7 +56,7 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 
 ---
 
-### Providers: GitHub Actions — Mostly Complete
+### Providers: GitHub Actions — Mostly Complete (PR Comments remaining)
 
 > PRDs: [GitHub Provider](../providers/github/provider.md) | [Job Summaries](../providers/github/job-summaries.md) | [CI Outputs](../providers/github/ci-outputs.md) | [Status Checks](../providers/github/status-checks.md) | [PR Comments](../providers/github/pr-comments.md)
 
@@ -118,7 +118,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 1. Plugin interface slimmed to 2 methods: `GetType()`, `GetHookBindings()` — Done
 2. `HookHandler` callback type + `HookContext` dependency bag — Done
 3. `CheckRunStore` interface (replaces `sync.Map` for cross-event check run ID correlation) — Done
-4. Hook bindings with `Handler` callbacks: `before.terraform.plan`, `after.terraform.plan`, `before.terraform.apply`, `after.terraform.apply` — Done
+4. Hook bindings with `Handler` callbacks: `before.terraform.plan`, `after.terraform.plan`, `before.terraform.apply`, `after.terraform.apply`, `before.terraform.deploy`, `after.terraform.deploy` — Done
 5. Output parser (`pkg/ci/plugins/terraform/parser.go`) — Done
 6. Template context (`pkg/ci/plugins/terraform/context.go`) — Done
 7. Handler logic in `pkg/ci/plugins/terraform/handlers.go`: summary, output, upload, download, check — Done
@@ -131,7 +131,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 
 > PRDs: [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Artifact Storage](./artifact-storage.md)
 
-**FR-5: Planfile Storage** — Done (Azure/GCS deferred)
+**FR-5: Planfile Storage** — Done (Azure/GCS deferred, all core features complete)
 1. `planfile.Store` interface (`pkg/ci/plugins/terraform/planfile/interface.go`) — Done
 2. Planfile adapter wrapping `artifact.Store` (`planfile/adapter/`) — Done
 3. ~~Planfile store registry (`planfile/registry.go`)~~ — Done → **Deleted** (unified into `artifact/registry.go`, see [Unify Artifact Stores](../phases/unify-artifact-stores.md))
@@ -141,8 +141,9 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 7. Azure Blob store — **Deferred**
 8. GCS store — **Deferred**
 9. `atmos terraform planfile` commands (upload, download, list, delete, show) — Done
-10. Automatic upload on `after.terraform.plan` via `uploadPlanfile()` handler — Done
-11. Automatic download on `before.terraform.deploy` via `downloadPlanfile()` handler — **Not Started** (moving from `before.terraform.apply` to `before.terraform.deploy`)
+10. Automatic upload on `after.terraform.plan` via `uploadPlanfile()` handler (guarded by `isPlanfileStorageEnabled()`) — Done
+11. Automatic download on `before.terraform.deploy` via `downloadPlanfileForVerification()` handler — Done
+12. Planfile storage skipped when `components.terraform.planfiles` not configured (`isPlanfileStorageEnabled()` guard) — Done
 12. CLI component/stack addressing (`<component> -s <stack>` pattern, SHA resolution, `--all` flag) — Done (see [CLI Addressing](../phases/planfile-cli-component-stack-addressing.md))
 13. Download resolves component path via `ProcessStacks()` + `ConstructTerraformComponentPlanfilePath()` — Done (see [Path Resolution](../phases/planfile-download-component-path-resolution.md))
 14. SHA256 integrity verification on download in `BundledStore.Download()` — Done (see [Path Resolution](../phases/planfile-download-component-path-resolution.md))
@@ -150,21 +151,21 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 
 ---
 
-### Terraform Plugin: Plan Verification — Not Started
+### Terraform Plugin: Plan Verification — COMPLETE
 
 > PRD: [Plan Verification](../terraform-plugin/plan-verification.md) | [CI Integration](../phases/plan-verification-ci-integration.md)
 
-**FR-6: Plan Verification** — Not Started
+**FR-6: Plan Verification** — Done
 
 Verification lives on `deploy`, not `apply`. The `apply` command does NOT interact with planfile storage — it only writes CI cosmetics (summaries, checks, outputs). The `deploy` command is the CI-native apply: it downloads stored planfiles, verifies them against fresh plans, and applies only if they match.
 
-1. `before.terraform.deploy` / `after.terraform.deploy` hook events — **Not Started**
-2. `deploy.go` fires deploy-specific hook events (not apply events) — **Not Started**
-3. `onBeforeDeploy()` handler: download planfile with `stored.*` prefix — **Not Started**
-4. `onAfterDeploy()` handler: writeSummary + writeOutputs + updateCheckRun — **Not Started**
-5. Deploy RunE: run `terraform plan` (no CI hooks), compare stored vs fresh via plan-diff — **Not Started**
-6. Fail deploy if drift detected, apply fresh planfile if match — **Not Started**
-7. Remove `--verify-plan` from `apply`, remove planfile download from `onBeforeApply()` — **Not Started**
+1. `before.terraform.deploy` / `after.terraform.deploy` hook events — Done
+2. `deploy.go` fires deploy-specific hook events (not apply events) — Done
+3. `onBeforeDeploy()` handler: download planfile with `stored.*` prefix for verification — Done
+4. `onAfterDeploy()` handler: writeSummary + writeOutputs + updateCheckRun — Done
+5. Deploy RunE: `VerifyPlanfile()` generates fresh plan, compares stored vs fresh via JSON plan-diff — Done
+6. Fail deploy if drift detected, apply fresh planfile if match — Done
+7. Planfile download moved from `onBeforeApply()` to `onBeforeDeploy()`; `onBeforeApply()` now only creates check run — Done
 
 ---
 
@@ -188,6 +189,16 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 3. `success` variable for apply commands (`true`/`false`) — Done
 4. Terraform outputs bypass `ci.output.variables` whitelist (always included) — Done
 5. Warn-only on fetch failure (does not fail apply) — Done
+
+---
+
+### Experimental Feature Gating — COMPLETE
+
+1. `atmos ci` command marked experimental via `IsExperimental() = true` on `CICommandProvider` — Done
+2. CI hooks gated via `checkExperimental()` in `RunCIHooks()` (`pkg/hooks/hooks.go`) — Done
+3. Experimental check runs after `ci.enabled` gate (no warning when CI is disabled) — Done
+4. Respects `settings.experimental` modes: `silence`, `warn` (default), `error`, `disable` — Done
+5. Uses existing `ErrExperimentalDisabled` and `ErrExperimentalRequiresIn` sentinel errors — Done
 
 ---
 
@@ -224,7 +235,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | | `ci.checks.enabled` config (disabled by default) | | Done | |
 | | Check run ID correlation via `CheckRunStore` interface | | Done | |
 | | `context_prefix` wired from config | | Not Started (hardcoded) | |
-| **FR-5** | Planfile Storage | [planfile-storage.md](../terraform-plugin/planfile-storage.md) | **Done** | ~97% |
+| **FR-5** | Planfile Storage | [planfile-storage.md](../terraform-plugin/planfile-storage.md) | **Done** | 100% |
 | | `planfile.Store` interface + adapter (multi-file, `[]FileEntry`) | | Done | |
 | | S3 store (`artifact/s3/`, implements `artifact.Store`) | | Done | |
 | | GitHub Artifacts store (`artifact/github/`, implements `artifact.Store`) | | Done | |
@@ -235,17 +246,21 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | | Planfile metadata embeds `artifact.Metadata` | | Done | |
 | | Plan + lock file bundled as tar archive | | Done | |
 | | Unified artifact store registry (`artifact.Register()`) | | Done | |
-| | Automatic upload on `after.terraform.plan` | | Done | |
-| | Automatic download on `before.terraform.deploy` (was `before.terraform.apply`, moved to deploy) | | Not Started | |
+| | Automatic upload on `after.terraform.plan` (guarded by `isPlanfileStorageEnabled()`) | | Done | |
+| | Automatic download on `before.terraform.deploy` with stored prefix for verification | | Done | |
 | | Download resolves component path via `ProcessStacks()` | | Done | |
 | | SHA256 integrity verification on download | | Done | |
 | | Shared `WritePlanfileResults()` helper | | Done | |
+| | Planfile storage skipped when `components.terraform.planfiles` not configured | | Done | |
 | | Azure Blob store | | Deferred | |
 | | GCS store | | Deferred | |
-| **FR-6** | Plan Verification (on `deploy`) | [plan-verification.md](../terraform-plugin/plan-verification.md) | **Not Started** | 0% |
-| | Deploy hook events (`before/after.terraform.deploy`) | | Not Started | |
-| | Download stored plan with `stored.*` prefix → fresh plan (no CI hooks) → plan-diff comparison | | Not Started | |
-| | Remove `--verify-plan` from `apply`, remove planfile download from `onBeforeApply()` | | Not Started | |
+| **FR-6** | Plan Verification (on `deploy`) | [plan-verification.md](../terraform-plugin/plan-verification.md) | **Done** | 100% |
+| | Deploy hook events (`before/after.terraform.deploy`) | | Done | |
+| | `onBeforeDeploy()` downloads stored plan with `stored.*` prefix | | Done | |
+| | `onAfterDeploy()` writes summary, outputs, updates check run | | Done | |
+| | `VerifyPlanfile()` generates fresh plan, compares via JSON plan-diff | | Done | |
+| | Fail deploy if drift detected, apply fresh planfile if match | | Done | |
+| | Planfile download moved from `onBeforeApply()` to `onBeforeDeploy()` | | Done | |
 | **FR-7** | Command Parity | [ci-detection.md](./ci-detection.md) | **Done** | 100% |
 | | `plan.go` full CI wiring (PreRunE, capture, PostRunE, error defer) | | Done | |
 | | `apply.go` `--ci` flag with full CI wiring (PreRunE, capture, PostRunE, error defer) | | Done | |
@@ -266,6 +281,11 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | | `pkg/terraform/output/FlattenMap()` formatting | | Done | |
 | | `success` variable for apply | | Done | |
 | | Terraform outputs bypass whitelist | | Done | |
+| **—** | Experimental Feature Gating | — | **Done** | 100% |
+| | `atmos ci` command marked experimental via `IsExperimental()` | | Done | |
+| | CI hooks gated via `checkExperimental()` in `RunCIHooks()` | | Done | |
+| | Experimental check after `ci.enabled` gate (no warning when CI disabled) | | Done | |
+| | Respects `settings.experimental` modes: silence/warn/error/disable | | Done | |
 | **—** | Documentation | — | **Not Started** | 0% |
 | | Archive old GitHub Actions docs | | Not Started | |
 | | Write new CI integration docs | | Not Started | |
@@ -283,11 +303,12 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Providers: GitHub — PR Comments | 0/3 | 3 | 0 |
 | Providers: Generic | 3/3 | 0 | 0 |
 | Terraform Plugin: Hook Bindings (callback-based) | 9/9 | 0 | 0 |
-| Terraform Plugin: Planfile Storage (FR-5) | 16/19 | 0 | 2 (Azure, GCS) |
-| Terraform Plugin: Plan Verification (FR-6) | 0/4 | 4 | 0 |
+| Terraform Plugin: Planfile Storage (FR-5) | 16/18 | 0 | 2 (Azure, GCS) |
+| Terraform Plugin: Plan Verification (FR-6) | 7/7 | 0 | 0 |
 | Terraform Plugin: Describe Affected Matrix (FR-8) | 3/3 | 0 | 0 |
 | Command Parity (FR-7) | 3/3 | 0 | 0 |
 | Terraform Output Export | 5/5 | 0 | 0 |
+| Experimental Feature Gating | 5/5 | 0 | 0 |
 | Documentation | 0/4 | 4 | 0 |
 | Phases: Planfile Storage Validation | 4/4 | 0 | 0 |
 | Phases: Metadata Embed Artifact | 6/6 | 0 | 0 |
@@ -296,7 +317,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Phases: CLI Component/Stack Addressing | 10/10 | 0 | 0 |
 | Phases: Apply Command Parity (FR-7) | 7/7 | 0 | 0 |
 | Phases: Planfile Download Path Resolution & Integrity | 6/6 | 0 | 0 |
-| **Total** | **127/135** | **6** | **2** |
+| **Total** | **139/148** | **7** | **2** |
 
 ## Implementation Phases (Incremental)
 
@@ -373,7 +394,7 @@ These are incremental improvements shipped as focused PRDs.
 2. `apply.go` stdout/stderr capture with ANSI stripping — Done
 3. `apply.go` error defer fires hooks on `RunE` failure — Done
 4. `deploy.go` `--ci` flag with `ATMOS_CI`/`CI` env var bindings — Done
-5. `deploy.go` `PreRunE` fires `before.terraform.apply` hooks — Done
+5. `deploy.go` `PreRunE` fires `before.terraform.deploy` hooks (deploy-specific, not apply) — Done
 6. `deploy.go` stdout/stderr capture with ANSI stripping — Done
 7. `deploy.go` error defer fires hooks on `RunE` failure — Done
 
@@ -426,7 +447,7 @@ These are incremental improvements shipped as focused PRDs.
 | **pkg/ci/plugins/terraform/** | Terraform CI plugin | |
 | `pkg/ci/plugins/terraform/plugin.go` | Terraform CI plugin (2 Plugin methods + private helpers: buildTemplateContext, getOutputVariables, getArtifactKey) | Done |
 | `pkg/ci/plugins/terraform/plugin_test.go` | Plugin tests | Done |
-| `pkg/ci/plugins/terraform/handlers.go` | All handler implementations: onBeforePlan, onAfterPlan, onBeforeApply, onAfterApply + helpers (writeSummary, writeOutputs, uploadPlanfile, downloadPlanfile, createCheckRun, updateCheckRun) | Done |
+| `pkg/ci/plugins/terraform/handlers.go` | All handler implementations: onBeforePlan, onAfterPlan, onBeforeApply, onAfterApply, onBeforeDeploy, onAfterDeploy + helpers (writeSummary, writeOutputs, uploadPlanfile, downloadPlanfileForVerification, createCheckRun, updateCheckRun, isPlanfileStorageEnabled) | Done |
 | `pkg/ci/plugins/terraform/handlers_test.go` | Handler tests (81% coverage) | Done |
 | `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply output (regex-based) | Done |
 | `pkg/ci/plugins/terraform/parser_test.go` | Parser tests | Done |
@@ -506,7 +527,13 @@ These are incremental improvements shipped as focused PRDs.
 | `pkg/ci/artifact/bundled_store_test.go` | Added 3 SHA256 verification tests (match, mismatch, empty) | Done |
 | `cmd/terraform/planfile/download.go` | Added `resolveDownloadPlanfilePath()` with `ProcessStacks()`, replaced `downloadToFile()` with `WritePlanfileResults()` | Done |
 | `pkg/ci/plugins/terraform/handlers.go` | Replaced inline file-writing in `downloadPlanfile()` with `planfile.WritePlanfileResults()` | Done |
-| `cmd/terraform/deploy.go` | Add `--verify-plan` flag | Not Started |
+| `cmd/terraform/deploy.go` | Full deploy CI wiring: fires `before/after.terraform.deploy` events (not apply events), `--verify-plan` flag, `VerifyPlanfile()` call | Done |
+| `internal/exec/terraform_verify_plan.go` | `VerifyPlanfile()` — generates fresh plan, compares stored vs fresh via JSON plan-diff, sets `info.PlanFile` to fresh plan on match | Done |
+| `pkg/hooks/event.go` | Added `BeforeTerraformDeploy` and `AfterTerraformDeploy` hook events | Done |
+| `pkg/hooks/hooks.go` | Added `checkExperimental()` for CI experimental feature gating after `ci.enabled` check | Done |
+| `pkg/ci/plugins/terraform/parser.go` | Added `ParseApplyOutput()` with warning extraction via `ExtractWarningBlocks()` | Done |
+| `pkg/ci/plugins/terraform/templates/apply.md` | Added warnings rendering section, resource lists with diff blocks, inline badges | Done |
+| `pkg/ci/plugins/terraform/templates/plan.md` | Plan diffs in summary instead of just result line, inline badges on single line | Done |
 | `pkg/datafetcher/schema/atmos-manifest/*.json` | JSON schema updates | Not Started |
 
 ## Sentinel Errors (IMPLEMENTED in `errors/errors.go`)
@@ -692,6 +719,10 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 12.0 | 2026-03-11 | CI Experimental Feature Gating SHIPPED. `atmos ci` command already marked experimental via `IsExperimental()`. CI hooks in `RunCIHooks()` now gated via `checkExperimental()` in `pkg/hooks/hooks.go`, respecting `settings.experimental` modes (silence/warn/error/disable). Experimental check placed after `ci.enabled` gate so warning only appears when CI is active. Uses existing sentinel errors `ErrExperimentalDisabled` and `ErrExperimentalRequiresIn`. |
+| 11.0 | 2026-03-11 | Bug fixes: (1) Deploy check run name mismatch — `onAfterDeploy` was setting `ctx.Command = "apply"` which changed check run name from `atmos/deploy:` to `atmos/apply:`, leaving original stuck in_progress; fixed by preserving original command for check run update. (2) Planfile storage skipped when not configured — `isPlanfileStorageEnabled()` guard added to `uploadPlanfile()` and `downloadPlanfileForVerification()` so planfile operations don't fail when `components.terraform.planfiles` is empty. (3) Apply warnings not shown — `ParseApplyOutput()` now calls `ExtractWarningBlocks()` and `apply.md` template includes warnings section. |
+| 10.0 | 2026-03-10 | Apply/Deploy summary enrichment: resource lists with diff blocks (created/changed/destroyed), inline badges on single line, plan diffs shown in apply summary instead of just result line. Output parser refactored into `ParseApplyOutput()` in `parser.go`. |
+| 9.0 | 2026-03-08 | FR-6 Plan Verification COMPLETE. Deploy hook events (`before/after.terraform.deploy`) added to `pkg/hooks/event.go`. `deploy.go` fires deploy-specific events (not apply). `onBeforeDeploy()` downloads planfile with `stored.*` prefix via `downloadPlanfileForVerification()`. `onAfterDeploy()` writes summary, outputs, and updates check run (delegates to apply template). `VerifyPlanfile()` in `internal/exec/terraform_verify_plan.go` generates fresh plan, compares stored vs fresh via JSON plan-diff, fails on drift. `onBeforeApply()` refactored to only create check run (no planfile download). Apply CI integration added: full CI wiring for apply and deploy with separate hook events. FR-5 updated to 100% (download on `before.terraform.deploy` done). Summary: 142/148 done. |
 | 8.0 | 2026-03-06 | Planfile Download Path Resolution & Integrity Check SHIPPED. `BundledStore.Download()` now verifies SHA256 checksums using existing `ErrArtifactIntegrityFailed` (no new sentinel error needed). CLI `planfile download` resolves component path via `ProcessStacks()` + `ConstructTerraformComponentPlanfilePath()` instead of writing to CWD. `--output` flag override detected via `cmd.Flags().Changed("output")`. Shared `WritePlanfileResults()` helper created in `planfile/write.go` — used by both CLI and CI hook handler. Old `downloadToFile()` removed. Handler's inline file-writing loop replaced. FR-5 updated from ~95% to ~97% (16/19 items). Summary: 127/135 done. |
 | 7.0 | 2026-03-06 | FR-3 CI Output Variables COMPLETE. Terraform output export after apply: `getTerraformOutputs()` fetches outputs via `tfoutput.GetComponentOutputs()`, `FlattenMap()` exported from `pkg/terraform/output/format.go`, flattened outputs written with `output_` prefix. Added `success` variable for apply commands. Key design decision: terraform `output_*` variables bypass the `ci.output.variables` whitelist — they are always included. The whitelist only filters native CI variables (`has_changes`, `stack`, etc.). FR-3 status updated from Partial (~80%) to Done (100%). Terraform Output Export status updated from Not Started (0%) to Done (100%). Summary table updated: 118/126 done. |
 | 6.0 | 2026-03-06 | FR-7 Command Parity COMPLETE. `apply.go` now has full CI wiring: PreRunE (`before.terraform.apply`), stdout/stderr capture, error defer, PostRunE with captured output. `deploy.go` gained `--ci` flag with identical full CI wiring. FR-7 status updated from Partial (~60%) to Done (100%). FR-5 planfile download note removed (apply PreRunE now wired). Summary table updated: 103/116 done (was 103/120 — consolidated FR-7 line items from 7 to 3). |
