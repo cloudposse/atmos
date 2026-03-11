@@ -130,6 +130,9 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
+	// Add visual separation before spinner so it's not obscured at the bottom of the terminal.
+	utils.PrintfMessageToTUI("\n")
+
 	// Show animated spinner while AI analysis is in progress.
 	s := spinner.New("👽 Analyzing with AI...")
 	s.Start()
