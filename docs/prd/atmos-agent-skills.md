@@ -266,7 +266,7 @@ The single plugin directory contains `agent-skills/.claude-plugin/plugin.json`:
     "name": "Cloud Posse",
     "url": "https://github.com/cloudposse"
   },
-  "homepage": "https://atmos.tools/integrations/ai/agent-skills",
+  "homepage": "https://atmos.tools/ai/agent-skills",
   "repository": "https://github.com/cloudposse/atmos",
   "license": "Apache-2.0",
   "keywords": ["atmos", "terraform", "infrastructure", "iac", "devops", "cloud"]
@@ -644,7 +644,7 @@ agent-skills/                                # Single plugin: atmos
 
 ### Phase 4: Documentation (Completed)
 
-1. Added Docusaurus documentation page (`website/docs/integrations/ai/agent-skills.mdx`).
+1. Added Docusaurus documentation page (`website/docs/ai/agent-skills.mdx`).
 2. Added blog post announcing the feature (`website/blog/2026-02-27-ai-agent-skills.mdx`).
 
 ### Phase 5: Claude Code Plugin Distribution (Completed)

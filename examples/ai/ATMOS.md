@@ -1,0 +1,68 @@
+# Project Instructions
+
+This file provides persistent context to the Atmos AI Assistant about this project.
+
+## Project Overview
+
+This is a multi-region AWS infrastructure project demonstrating Atmos AI features. It contains:
+- VPC networking components across two AWS regions
+- Transit Gateway hub-spoke topology for cross-region connectivity
+- Network and production stacks per region
+
+## Architecture
+
+- **Hub-spoke networking** — us-east-1 hosts the Transit Gateway hub; us-west-2 connects via cross-region peering
+- **Two regions** — us-east-1 (primary) and us-west-2 (secondary)
+- **Two stages** — `network` (shared networking) and `prod` (production workloads)
+
+## Stack Naming Convention
+
+Stacks follow the pattern: `{environment}-{stage}`
+- `ue1-network` — Network stack in us-east-1
+- `ue1-prod` — Production stack in us-east-1
+- `uw2-network` — Network stack in us-west-2
+- `uw2-prod` — Production stack in us-west-2
+
+## Components
+
+### vpc
+Virtual Private Cloud with CIDR allocation, availability zones, and NAT Gateways.
+- Network stacks use `10.1.0.0/16` (ue1) and `10.2.0.0/16` (uw2)
+- Production stacks use `10.10.0.0/16` (ue1) and `10.20.0.0/16` (uw2)
+
+### tgw/hub
+Transit Gateway hub in us-east-1 network stack. Central routing for cross-region and cross-account connectivity.
+
+### tgw/attachment
+Transit Gateway VPC attachment. Connects a VPC to the Transit Gateway. Present in all stacks.
+
+### tgw/cross-region-hub-connector
+Cross-region Transit Gateway peering. Only in uw2-network, connects us-west-2 to the us-east-1 hub.
+
+## Component Dependencies
+
+- `tgw/hub` depends on `vpc` in the same stack
+- `tgw/attachment` depends on `vpc` (same stack) and `tgw/hub` (network stack)
+- `tgw/cross-region-hub-connector` depends on `tgw/hub` in ue1-network
+
+## Common Operations
+
+### Describe a component
+```bash
+atmos describe component vpc -s ue1-network
+```
+
+### List all stacks
+```bash
+atmos list stacks
+```
+
+### Validate configuration
+```bash
+atmos validate stacks
+```
+
+### Check affected stacks
+```bash
+atmos describe affected
+```

@@ -273,4 +273,15 @@
     "comments": {},
     "templates": {}
   }
+  "ai": {
+    "sessions": {
+      "auto_compact": {}
+    },
+    "tools": {},
+    "instructions": {},
+    "web_search": {},
+    "context": {}
+  },
+  "mcp": {},
+  "lsp": {}
 }
