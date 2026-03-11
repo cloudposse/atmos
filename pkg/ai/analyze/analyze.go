@@ -11,8 +11,13 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// messageSender is the minimal interface needed for AI analysis.
+type messageSender interface {
+	SendMessage(ctx context.Context, message string) (string, error)
+}
 
 const (
 	// DefaultAnalysisTimeout is the default timeout for AI analysis requests.
@@ -25,6 +30,11 @@ const (
 	// Newline constant for string building.
 	newline = "\n"
 )
+
+// clientFactory creates AI clients. Overridden in tests for mocking.
+var clientFactory func(cfg *schema.AtmosConfiguration) (messageSender, error) = func(cfg *schema.AtmosConfiguration) (messageSender, error) {
+	return ai.NewClient(cfg)
+}
 
 // systemPrompt is the system prompt for AI analysis of command output.
 const systemPrompt = `You are Atmos AI, an expert in infrastructure-as-code, DevOps, and cloud infrastructure.
@@ -91,7 +101,7 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, commandName string, s
 	}
 
 	// Create AI client.
-	client, err := ai.NewClient(atmosConfig)
+	client, err := clientFactory(atmosConfig)
 	if err != nil {
 		log.Error("Failed to create AI client for output analysis", "error", err)
 		return
@@ -106,18 +116,18 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, commandName string, s
 	defer cancel()
 
 	// Show thinking indicator.
-	utils.PrintfMessageToTUI("\n🤖 Analyzing output with AI...\n\n")
+	ui.Info("Analyzing with AI...")
 
 	// Send to AI provider.
 	response, err := client.SendMessage(ctx, prompt)
 	if err != nil {
 		log.Error("AI analysis failed", "error", err)
-		utils.PrintfMessageToTUI("⚠️  AI analysis failed: %s\n", err.Error())
+		ui.Warningf("AI analysis failed: %s", err.Error())
 		return
 	}
 
 	// Render AI response as markdown.
-	utils.PrintfMarkdown("%s", response)
+	ui.Markdown(response)
 }
 
 // buildAnalysisPrompt constructs the prompt for AI analysis.

@@ -1,6 +1,7 @@
 package analyze
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -10,6 +11,30 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// mockClient implements messageSender for testing.
+type mockClient struct {
+	response string
+	err      error
+	called   bool
+	prompt   string
+}
+
+func (m *mockClient) SendMessage(_ context.Context, message string) (string, error) {
+	m.called = true
+	m.prompt = message
+	return m.response, m.err
+}
+
+// withMockClient sets a mock client factory for the duration of a test.
+func withMockClient(t *testing.T, client messageSender, clientErr error) {
+	t.Helper()
+	original := clientFactory
+	clientFactory = func(_ *schema.AtmosConfiguration) (messageSender, error) {
+		return client, clientErr
+	}
+	t.Cleanup(func() { clientFactory = original })
+}
 
 func TestValidateAIConfig_NotEnabled(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{
@@ -177,10 +202,30 @@ func TestBuildAnalysisPrompt_WhitespaceOnlyOutput(t *testing.T) {
 	assert.Empty(t, prompt)
 }
 
+func TestBuildAnalysisPrompt_OutputWithoutTrailingNewline(t *testing.T) {
+	prompt := buildAnalysisPrompt("atmos version", "1.209.0", "", nil)
+
+	// Output without trailing newline should get one added before the closing ```.
+	assert.Contains(t, prompt, "1.209.0\n```")
+}
+
+func TestBuildAnalysisPrompt_OutputWithTrailingNewline(t *testing.T) {
+	prompt := buildAnalysisPrompt("atmos version", "1.209.0\n", "", nil)
+
+	// Output with trailing newline should not get a double newline.
+	assert.Contains(t, prompt, "1.209.0\n```")
+	assert.NotContains(t, prompt, "1.209.0\n\n```")
+}
+
 func TestTruncateOutput(t *testing.T) {
 	t.Run("short output unchanged", func(t *testing.T) {
 		result := truncateOutput("short")
 		assert.Equal(t, "short", result)
+	})
+
+	t.Run("empty output unchanged", func(t *testing.T) {
+		result := truncateOutput("")
+		assert.Equal(t, "", result)
 	})
 
 	t.Run("output at limit unchanged", func(t *testing.T) {
@@ -195,4 +240,105 @@ func TestTruncateOutput(t *testing.T) {
 		assert.Len(t, result, maxOutputLength+len("\n... (output truncated)"))
 		assert.True(t, strings.HasSuffix(result, "\n... (output truncated)"))
 	})
+}
+
+func TestAnalyzeOutput_EmptyOutput(t *testing.T) {
+	mock := &mockClient{response: "analysis"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+
+	// Empty output with no error should skip analysis entirely.
+	AnalyzeOutput(cfg, "atmos version", "", "", nil)
+	assert.False(t, mock.called, "should not call AI client for empty output")
+}
+
+func TestAnalyzeOutput_ClientCreationError(t *testing.T) {
+	withMockClient(t, nil, errors.New("failed to create client"))
+
+	cfg := &schema.AtmosConfiguration{}
+
+	// Should not panic when client creation fails.
+	AnalyzeOutput(cfg, "atmos terraform plan", "some output", "", nil)
+}
+
+func TestAnalyzeOutput_SendMessageSuccess(t *testing.T) {
+	mock := &mockClient{response: "## Summary\nAll good!"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+
+	AnalyzeOutput(cfg, "atmos terraform plan vpc -s prod", "Plan: 1 to add", "", nil)
+
+	assert.True(t, mock.called, "should call AI client")
+	assert.Contains(t, mock.prompt, "atmos terraform plan vpc -s prod")
+	assert.Contains(t, mock.prompt, "Plan: 1 to add")
+	assert.Contains(t, mock.prompt, "**Status:** Success")
+}
+
+func TestAnalyzeOutput_SendMessageError(t *testing.T) {
+	mock := &mockClient{err: errors.New("API rate limit exceeded")}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+
+	// Should not panic when AI call fails.
+	AnalyzeOutput(cfg, "atmos terraform plan", "output", "", nil)
+
+	assert.True(t, mock.called)
+}
+
+func TestAnalyzeOutput_WithCommandError(t *testing.T) {
+	mock := &mockClient{response: "Error analysis"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+	cmdErr := errors.New("exit status 1")
+
+	AnalyzeOutput(cfg, "atmos terraform apply", "", "Error: access denied", cmdErr)
+
+	assert.True(t, mock.called)
+	assert.Contains(t, mock.prompt, "**Status:** Failed")
+	assert.Contains(t, mock.prompt, "exit status 1")
+	assert.Contains(t, mock.prompt, "Error: access denied")
+}
+
+func TestAnalyzeOutput_CustomTimeout(t *testing.T) {
+	mock := &mockClient{response: "done"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			TimeoutSeconds: 30,
+		},
+	}
+
+	AnalyzeOutput(cfg, "atmos list stacks", "stack1\nstack2", "", nil)
+
+	assert.True(t, mock.called)
+}
+
+func TestAnalyzeOutput_WhitespaceOnlyOutput(t *testing.T) {
+	mock := &mockClient{response: "analysis"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+
+	// Whitespace-only output with no error should skip analysis.
+	AnalyzeOutput(cfg, "atmos version", "  \n  ", "  \t  ", nil)
+	assert.False(t, mock.called, "should not call AI client for whitespace-only output")
+}
+
+func TestAnalyzeOutput_ErrorWithNoOutput(t *testing.T) {
+	mock := &mockClient{response: "error explanation"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+	cmdErr := errors.New("command not found")
+
+	// Error with no output should still trigger analysis.
+	AnalyzeOutput(cfg, "atmos foo", "", "", cmdErr)
+
+	assert.True(t, mock.called, "should call AI client when there's an error even with no output")
+	assert.Contains(t, mock.prompt, "command not found")
 }

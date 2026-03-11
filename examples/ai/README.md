@@ -94,6 +94,128 @@ $ atmos ai ask "what stacks and components do we have in the infra?"
   include VPC components for network isolation.
 ```
 
+### AI-Powered Plan Analysis with `--ai`
+
+Run `terraform plan` with the `--ai` flag to get an AI-powered summary of changes, warnings, and recommendations:
+
+```text
+$ atmos terraform plan vpc -s ue1-prod --ai
+
+Initializing the backend...
+Initializing provider plugins...
+- Reusing previous version of hashicorp/null from the dependency lock file
+- Using previously-installed hashicorp/null v3.2.4
+
+Terraform has been successfully initialized!
+Switched to workspace "ue1-prod".
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # null_resource.vpc will be created
+  + resource "null_resource" "vpc" {
+      + id       = (known after apply)
+      + triggers = {
+          + "availability_zones"  = "us-east-1a,us-east-1b,us-east-1c"
+          + "environment"         = "production"
+          + "nat_gateway_enabled" = "true"
+          + "vpc_cidr"            = "10.10.0.0/16"
+        }
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + availability_zones  = [
+      + "us-east-1a",
+      + "us-east-1b",
+      + "us-east-1c",
+    ]
+  + nat_gateway_enabled = true
+  + subnet_count        = 3
+  + tags                = {
+      + Environment = "production"
+      + Region      = "us-east-1"
+    }
+  + vpc_cidr            = "10.10.0.0/16"
+
+
+🤖 Analyzing with AI...
+
+
+  ## Terraform Plan Summary:  vpc  in  ue1-prod
+
+  ### ✅ Plan Succeeded — 1 Resource to Create
+
+   Metric     │ Value
+  ────────────┼───────
+   To Add     │ 1
+   To Change  │ 0
+   To Destroy │ 0
+
+  --------
+
+  ### 📦 Resource Being Created
+
+   A  null_resource.vpc  will be created with the following configuration:
+
+   Parameter             │ Value
+  ───────────────────────┼──────────────────────────────────────────
+    vpc_cidr             │  10.10.0.0/16
+    environment          │  production
+    availability_zones   │  us-east-1a ,  us-east-1b ,  us-east-1c
+    nat_gateway_enabled  │  true
+
+  │  Note: This appears to be a placeholder/stub module using  null_resource  rather than real
+  │  AWS VPC resources. This is likely a demo or skeleton component — not an actual VPC being
+  │  provisioned in AWS.
+
+  --------
+
+  ### ⚠️ Warnings (Non-Blocking)
+
+   Three variables passed via  ue1-prod-vpc.terraform.tfvars.json  are not declared in the
+   Terraform module:
+
+    •  region
+    •  stage
+    • 1 additional undeclared variable
+
+   These warnings do not block the plan, but they indicate the variables are silently ignored.
+
+  #### Recommended Fixes
+
+   Option 1 — Declare the variables in your module (preferred):
+
+   variable "region" {
+     type        = string
+     description = "AWS region"
+   }
+
+   variable "stage" {
+     type        = string
+     description = "Deployment stage (e.g. prod, staging)"
+   }
+
+   Option 2 — Use  TF_VAR_  env vars for org-wide globals to avoid passing them through
+   tfvars files.
+
+   Option 3 — Suppress warnings by running with  -compact-warnings  if the variables are
+   intentionally unused.
+
+  --------
+
+  ### 🔑 Key Takeaway
+
+   The plan is safe to apply, but the undeclared variable warnings suggest the VPC module is
+   incomplete — it's not consuming  region  or  stage , which are likely needed for proper
+   resource tagging, naming, or actual AWS resource provisioning. Review whether this module
+   needs to be fleshed out before production use.
+```
+
 ### Validate Stacks
 
 Ask the AI to validate all stacks and present the results in a table:
