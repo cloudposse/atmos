@@ -1104,6 +1104,31 @@ func TestParseSkillFlagInternal(t *testing.T) {
 			args:     []string{"atmos", "--skill=", "terraform", "plan"},
 			expected: "",
 		},
+		{
+			name:     "--skill with similar flag --skilled is not matched",
+			args:     []string{"atmos", "--skilled", "atmos-terraform", "terraform", "plan"},
+			expected: "",
+		},
+		{
+			name:     "--skilled=value should not match --skill= prefix",
+			args:     []string{"atmos", "--skilled=atmos-terraform", "terraform", "plan"},
+			expected: "",
+		},
+		{
+			name:     "--skill between other flags",
+			args:     []string{"atmos", "--logs-level=Debug", "--skill", "atmos-validation", "--ai", "validate", "stacks"},
+			expected: "atmos-validation",
+		},
+		{
+			name:     "--skill=value with hyphens in skill name",
+			args:     []string{"atmos", "--skill=my-custom-skill-v2", "terraform", "plan"},
+			expected: "my-custom-skill-v2",
+		},
+		{
+			name:     "multiple --skill flags uses first",
+			args:     []string{"atmos", "--skill", "first", "--skill", "second", "terraform", "plan"},
+			expected: "first",
+		},
 	}
 
 	for _, tt := range tests {

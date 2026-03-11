@@ -125,34 +125,30 @@ func Execute() error {
 
     aiEnabled := hasAIFlag() && !isAICommand()
     skillName := parseSkillFlag()  // Parse --skill from os.Args
+    var captureSession *analyze.CaptureSession
+    var skillPrompt string
 
     // Validate --skill requires --ai.
     if skillName != "" && !aiEnabled {
-        return errSkillRequiresAI  // Helpful error
+        return errUtils.Build(errUtils.ErrAISkillRequiresAIFlag).
+            WithExplanation("...").WithHintf("...").Err()
     }
 
-    var skillPrompt string
-
     if aiEnabled {
-        if err := analyze.ValidateAIConfig(&atmosConfig); err != nil {
-            return err  // Helpful error with config hints
+        // setupAIAnalysis validates config, loads skill, starts capture.
+        var setupErr error
+        captureSession, skillPrompt, setupErr = setupAIAnalysis(&atmosConfig, skillName)
+        if setupErr != nil {
+            return setupErr
         }
-
-        // If --skill specified, load and validate the skill.
-        if skillName != "" {
-            skill, err := loadAndValidateSkill(&atmosConfig, skillName)
-            if err != nil {
-                return err  // Skill not found error with available skills list
-            }
-            skillPrompt = skill.SystemPrompt
+        if captureSession == nil {
+            aiEnabled = false  // Capture failed, disable AI
         }
-
-        captureSession, _ = analyze.StartCapture()
     }
 
     cmd, err := internal.Execute(RootCmd)
 
-    // ... telemetry ...
+    telemetry.CaptureCmd(cmd, err)
 
     // Stop capture, print error (if any), then run AI analysis.
     if aiEnabled && captureSession != nil {

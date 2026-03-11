@@ -392,3 +392,85 @@ func TestAnalyzeOutput_WithSkillPrompt(t *testing.T) {
 	assert.Contains(t, mock.prompt, "You are a Terraform expert.")
 	assert.Contains(t, mock.prompt, "Plan: 1 to add")
 }
+
+func TestAnalyzeOutput_SkillPromptWithError(t *testing.T) {
+	mock := &mockClient{response: "Terraform error analysis"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+	cmdErr := errors.New("exit status 1")
+	skillPrompt := "You are a Terraform expert."
+
+	AnalyzeOutput(cfg, newInput("atmos terraform apply vpc -s prod", "", "Error: access denied", cmdErr, skillPrompt))
+
+	assert.True(t, mock.called)
+	assert.Contains(t, mock.prompt, "You are a Terraform expert.")
+	assert.Contains(t, mock.prompt, "**Status:** Failed")
+	assert.Contains(t, mock.prompt, "step-by-step instructions to fix")
+}
+
+func TestAnalyzeOutput_SkillPromptWithSendError(t *testing.T) {
+	mock := &mockClient{err: errors.New("timeout")}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+	skillPrompt := "You are a Terraform expert."
+
+	// Should not panic when AI call fails with skill prompt.
+	AnalyzeOutput(cfg, newInput("atmos terraform plan", "output", "", nil, skillPrompt))
+
+	assert.True(t, mock.called)
+	assert.Contains(t, mock.prompt, "You are a Terraform expert.")
+}
+
+func TestBuildAnalysisPrompt_SkillPromptSeparator(t *testing.T) {
+	skillPrompt := "Custom skill prompt."
+	prompt := buildAnalysisPrompt(newInput("atmos version", "1.0.0", "", nil, skillPrompt))
+
+	// Skill and system prompts should be separated by a divider.
+	assert.Contains(t, prompt, "Custom skill prompt.\n\n---\n\n")
+	assert.Contains(t, prompt, systemPrompt)
+}
+
+func TestBuildAnalysisPrompt_SkillPromptWithErrorAndBothStreams(t *testing.T) {
+	cmdErr := errors.New("exit code 2")
+	skillPrompt := "Expert in stacks."
+	prompt := buildAnalysisPrompt(newInput(
+		"atmos describe stacks",
+		"partial output",
+		"Warning: something",
+		cmdErr,
+		skillPrompt,
+	))
+
+	assert.Contains(t, prompt, "Expert in stacks.")
+	assert.Contains(t, prompt, "**Standard Output:**")
+	assert.Contains(t, prompt, "**Standard Error:**")
+	assert.Contains(t, prompt, "**Status:** Failed")
+	assert.Contains(t, prompt, "exit code 2")
+}
+
+func TestValidateAIConfig_MultipleProviders(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:         true,
+			DefaultProvider: "openai",
+			Providers: map[string]*schema.AIProviderConfig{
+				"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: "sk-test"},
+				"openai":    {Model: "gpt-4", ApiKey: "sk-openai-test"},
+			},
+		},
+	}
+
+	err := ValidateAIConfig(cfg)
+	assert.NoError(t, err)
+}
+
+func TestTruncateOutput_ExactlyOverLimit(t *testing.T) {
+	// One character over the limit.
+	input := strings.Repeat("x", maxOutputLength+1)
+	result := truncateOutput(input)
+	assert.Len(t, result, maxOutputLength+len("\n... (output truncated)"))
+	assert.True(t, strings.HasSuffix(result, "\n... (output truncated)"))
+	assert.True(t, strings.HasPrefix(result, strings.Repeat("x", 100)))
+}
