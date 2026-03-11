@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -261,7 +262,5 @@ func buildWorkdirPath(
 		basePath = "."
 	}
 
-	// Build workdir path: .workdir/<componentType>/<stack>-<component>/
-	workdirName := fmt.Sprintf("%s-%s", stack, component)
-	return filepath.Join(basePath, WorkdirPath, componentType, workdirName), nil
+	return workdir.BuildPath(basePath, componentType, component, stack, componentConfig), nil
 }

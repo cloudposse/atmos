@@ -1,0 +1,135 @@
+---
+slug: terraform-cloud-output-function
+title: "Terraform Cloud Backend Support for !terraform.output"
+authors: [gitbluf]
+tags: [enhancement]
+date: 2026-02-09T00:00:00.000Z
+---
+
+The `!terraform.output` YAML function now works seamlessly with Terraform Cloud and Terraform Enterprise backends, enabling cross-component dependencies without switching backend types.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos now correctly generates `backend.tf.json` configuration for Terraform Cloud and Terraform Enterprise backends when using the `!terraform.output` YAML function. This was previously broken because Terraform Cloud requires a different backend structure than other backend types.
+
+## Why This Matters
+
+The `!terraform.output` YAML function is powerful—it lets you reference outputs from one component in another component's configuration, creating declarative dependencies between infrastructure components. However, this feature was silently failing for teams using Terraform Cloud or Terraform Enterprise backends.
+
+When Atmos needed to fetch outputs from a dependency component, it would generate an incorrect backend configuration that Terraform would reject:
+
+```
+Error: Unsupported backend type on backend.tf.json line 4, in terraform.backend: 4:
+"cloud": { There is no explicit backend type named "cloud". To configure HCP
+Terraform, declare a 'cloud' block instead.
+```
+
+This forced teams to either:
+- Avoid using `!terraform.output` with Terraform Cloud
+- Switch to S3/Azure/GCS backends just to use this feature
+- Manually work around the limitation with `terraform_remote_state` data sources
+
+## The Problem
+
+Terraform Cloud has a unique backend configuration structure. Unlike other backends (S3, Azure, GCS) that nest under `terraform.backend.<type>`, Terraform Cloud's configuration must be placed directly under `terraform.cloud`:
+
+**Incorrect (what Atmos was generating):**
+```json
+{
+  "terraform": {
+    "backend": {
+      "cloud": {
+        "organization": "my-org",
+        "workspaces": {
+          "name": "my-workspace"
+        }
+      }
+    }
+  }
+}
+```
+
+**Correct (what Terraform Cloud expects):**
+```json
+{
+  "terraform": {
+    "cloud": {
+      "organization": "my-org",
+      "workspaces": {
+        "name": "my-workspace"
+      }
+    }
+  }
+}
+```
+
+This subtle difference caused Terraform to fail during initialization, preventing the `!terraform.output` function from fetching outputs.
+
+## How It Works
+
+Atmos now detects when a component uses a Terraform Cloud backend and generates the correct JSON structure automatically. The fix is applied in the `generateBackendConfig` function within the `pkg/terraform/output` package.
+
+When you use `!terraform.output` to reference another component's outputs, Atmos:
+1. Determines the backend type of the dependency component
+2. Generates the appropriate `backend.tf.json` structure
+3. For Terraform Cloud/Enterprise backends specifically, places the configuration under `terraform.cloud` instead of `terraform.backend.cloud`
+4. Runs `terraform init` and `terraform output` to fetch the values
+5. Returns the output values for use in your stack configuration
+
+## Example Usage
+
+Define your EKS cluster component with a Terraform Cloud backend:
+
+```yaml
+# stacks/eks-cluster.yaml
+components:
+  terraform:
+    cluster:
+      backend_type: cloud
+      backend:
+        cloud:
+          organization: "my-org"
+          workspaces:
+            name: "eks-cluster-prod"
+      vars:
+        cluster_version: "1.29"
+        # ... other cluster configuration
+```
+
+Now reference the cluster outputs in your application component:
+
+```yaml
+# stacks/my-app.yaml
+components:
+  terraform:
+    my-app:
+      backend_type: cloud
+      backend:
+        cloud:
+          organization: "my-org"
+          workspaces:
+            name: "my-app-prod"
+      vars:
+        # Reference cluster outputs using !terraform.output
+        cluster_endpoint: !terraform.output cluster.cluster_endpoint
+        cluster_ca_cert: !terraform.output cluster.cluster_certificate_authority_data
+        cluster_name: !terraform.output cluster.cluster_name
+```
+
+When Atmos processes `my-app`, it will:
+- Detect that `cluster` uses a Terraform Cloud backend
+- Generate the correct backend configuration
+- Fetch the outputs from the `eks-cluster-prod` workspace
+- Make them available to your `my-app` component
+
+## What's Next
+
+This fix ensures feature parity across all backend types. Whether you're using S3, Azure Blob Storage, GCS, or Terraform Cloud, the `!terraform.output` function now works consistently.
+
+For teams already using Terraform Cloud, this unlocks the full power of declarative component dependencies without manual workarounds.
+
+## Get Involved
+
+Try out the enhanced `!terraform.output` function with Terraform Cloud and let us know what you think! File issues or feature requests on [GitHub](https://github.com/cloudposse/atmos/issues).

@@ -10,8 +10,8 @@ tests:
       - "editorconfig"
     expect:
       diff: []
-      stdout:
-        - "No errors found"
+      stderr:
+        - "EditorConfig validation passed"
       exit_code: 0
   - name: atmos validate editorconfig error
     enabled: true

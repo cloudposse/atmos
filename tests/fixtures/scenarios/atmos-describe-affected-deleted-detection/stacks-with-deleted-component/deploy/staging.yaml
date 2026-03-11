@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# BASE (main branch) state - has ALL components including "monitoring"
+# This represents the state before the PR deleted the monitoring component
+
+vars:
+  environment: ue1
+  stage: staging
+
+components:
+  terraform:
+    # VPC component - exists in both HEAD and BASE
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        cidr_block: "10.0.0.0/16"
+        environment: "{{ .vars.environment }}"
+
+    # EKS component - exists in both HEAD and BASE
+    eks:
+      metadata:
+        component: mock
+      vars:
+        cluster_name: "eks-{{ .vars.stage }}"
+
+    # Monitoring component - EXISTS in BASE but will be DELETED in HEAD
+    # This should appear in describe affected output with:
+    #   affected: "deleted"
+    #   deleted: true
+    #   deletion_type: "component"
+    monitoring:
+      metadata:
+        component: mock
+      vars:
+        enabled: true
+        retention_days: 30
+
+    # Abstract component - should NOT be reported as deleted
+    # Abstract components are blueprints and are not provisioned
+    base-monitoring:
+      metadata:
+        component: mock
+        type: abstract
+      vars:
+        log_level: "info"

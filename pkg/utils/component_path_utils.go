@@ -222,6 +222,10 @@ func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, compone
 		envVarName = "ATMOS_COMPONENTS_PACKER_BASE_PATH"
 		resolvedPath = atmosConfig.PackerDirAbsolutePath
 		configBasePath = atmosConfig.Components.Packer.BasePath
+	case "ansible":
+		envVarName = "ATMOS_COMPONENTS_ANSIBLE_BASE_PATH"
+		resolvedPath = atmosConfig.AnsibleDirAbsolutePath
+		configBasePath = atmosConfig.Components.Ansible.BasePath
 	default:
 		return "", "", fmt.Errorf("%w: %s", ErrUnknownComponentType, componentType)
 	}

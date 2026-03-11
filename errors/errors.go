@@ -101,6 +101,7 @@ var (
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 	ErrStackRequired              = errors.New("--stack flag is required")
 	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
+	ErrNoStackManifestsFound      = errors.New("no stack manifests found")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -111,6 +112,7 @@ var (
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
+	ErrAwsDescribeOrganization          = errors.New("failed to describe AWS organization")
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
@@ -140,6 +142,7 @@ var (
 	ErrGetObjectFromS3           = errors.New("failed to get object from S3")
 	ErrReadS3ObjectBody          = errors.New("failed to read S3 object body")
 	ErrS3BucketAccessDenied      = errors.New("access denied to S3 bucket")
+	ErrInvalidSSECustomerKey     = errors.New("invalid SSE-C customer encryption key")
 	ErrCreateGCSClient           = errors.New("failed to create GCS client")
 	ErrGetObjectFromGCS          = errors.New("failed to get object from GCS")
 	ErrReadGCSObjectBody         = errors.New("failed to read GCS object body")
@@ -223,6 +226,7 @@ var (
 	ErrLatestFileNotFound           = errors.New("latest version file not found")
 	ErrRegistryNotReachable         = errors.New("registry not reachable")
 	ErrToolNotInRegistry            = errors.New("tool not in registry")
+	ErrToolPlatformNotSupported     = errors.New("tool does not support this platform")
 	ErrAliasNotFound                = errors.New("alias not found")
 	ErrBinaryNotExecutable          = errors.New("binary not executable")
 	ErrBinaryNotFound               = errors.New("binary not found")
@@ -230,6 +234,7 @@ var (
 	ErrNoAssetTemplate              = errors.New("no asset template defined")
 	ErrAssetTemplateInvalid         = errors.New("asset template invalid")
 	ErrToolVersionsFileOperation    = errors.New("tool-versions file operation failed")
+	ErrNoToolsConfigured            = errors.New("no tools configured")
 	ErrUnsupportedVersionConstraint = errors.New("unsupported version constraint format")
 
 	// Flag validation errors.
@@ -407,11 +412,17 @@ var (
 	// Validation errors.
 	ErrValidationFailed = errors.New("validation failed")
 
+	// EditorConfig validation errors.
+	ErrEditorConfigValidationFailed = errors.New("EditorConfig validation failed")
+	ErrEditorConfigVersionMismatch  = errors.New("EditorConfig version mismatch")
+	ErrEditorConfigGetFiles         = errors.New("failed to get files for EditorConfig validation")
+
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
 	ErrInvalidSettingsSection           = errors.New("invalid settings section")
 	ErrInvalidEnvSection                = errors.New("invalid env section")
 	ErrInvalidGenerateSection           = errors.New("invalid generate section")
+	ErrInvalidDependenciesSection       = errors.New("invalid dependencies section")
 	ErrInvalidTerraformSection          = errors.New("invalid terraform section")
 	ErrInvalidHelmfileSection           = errors.New("invalid helmfile section")
 	ErrInvalidPackerSection             = errors.New("invalid packer section")
@@ -438,41 +449,63 @@ var (
 	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+	ErrInvalidTerraformDependencies       = errors.New("invalid terraform dependencies section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
 
 	// Helmfile-specific subsection errors.
-	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
-	ErrInvalidHelmfileVars     = errors.New("invalid helmfile vars section")
-	ErrInvalidHelmfileSettings = errors.New("invalid helmfile settings section")
-	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
-	ErrInvalidHelmfileAuth     = errors.New("invalid helmfile auth section")
+	ErrInvalidHelmfileCommand      = errors.New("invalid helmfile command")
+	ErrInvalidHelmfileVars         = errors.New("invalid helmfile vars section")
+	ErrInvalidHelmfileSettings     = errors.New("invalid helmfile settings section")
+	ErrInvalidHelmfileEnv          = errors.New("invalid helmfile env section")
+	ErrInvalidHelmfileAuth         = errors.New("invalid helmfile auth section")
+	ErrInvalidHelmfileDependencies = errors.New("invalid helmfile dependencies section")
 
 	// Helmfile configuration errors.
 	ErrMissingHelmfileBasePath           = errors.New("helmfile base path is required")
 	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
 	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+	ErrMissingHelmfileClusterName        = errors.New("helmfile cluster name is required")
+	ErrMissingHelmfileAuth               = errors.New("helmfile AWS authentication is required")
 
 	// Packer configuration errors.
 	ErrMissingPackerBasePath = errors.New("packer base path is required")
 
 	// Packer-specific subsection errors.
-	ErrInvalidPackerCommand  = errors.New("invalid packer command")
-	ErrInvalidPackerVars     = errors.New("invalid packer vars section")
-	ErrInvalidPackerSettings = errors.New("invalid packer settings section")
-	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
-	ErrInvalidPackerAuth     = errors.New("invalid packer auth section")
+	ErrInvalidPackerCommand      = errors.New("invalid packer command")
+	ErrInvalidPackerVars         = errors.New("invalid packer vars section")
+	ErrInvalidPackerSettings     = errors.New("invalid packer settings section")
+	ErrInvalidPackerEnv          = errors.New("invalid packer env section")
+	ErrInvalidPackerAuth         = errors.New("invalid packer auth section")
+	ErrInvalidPackerDependencies = errors.New("invalid packer dependencies section")
+
+	// Ansible configuration errors.
+	ErrMissingAnsibleBasePath = errors.New("ansible base path is required")
+
+	// Ansible-specific subsection errors.
+	ErrInvalidAnsibleSection      = errors.New("invalid ansible section")
+	ErrInvalidAnsibleCommand      = errors.New("invalid ansible command")
+	ErrInvalidAnsibleVars         = errors.New("invalid ansible vars section")
+	ErrInvalidAnsibleSettings     = errors.New("invalid ansible settings section")
+	ErrInvalidAnsibleEnv          = errors.New("invalid ansible env section")
+	ErrInvalidAnsibleAuth         = errors.New("invalid ansible auth section")
+	ErrInvalidAnsibleDependencies = errors.New("invalid ansible dependencies section")
+
+	// Ansible execution errors.
+	ErrAnsiblePlaybookMissing = errors.New("ansible playbook is required")
 
 	// Component type-specific section errors.
 	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")
 	ErrInvalidComponentsHelmfile  = errors.New("invalid components.helmfile section")
 	ErrInvalidComponentsPacker    = errors.New("invalid components.packer section")
+	ErrInvalidComponentsAnsible   = errors.New("invalid components.ansible section")
 
 	// Specific component configuration errors.
 	ErrInvalidSpecificTerraformComponent = errors.New("invalid terraform component configuration")
 	ErrInvalidSpecificHelmfileComponent  = errors.New("invalid helmfile component configuration")
 	ErrInvalidSpecificPackerComponent    = errors.New("invalid packer component configuration")
+	ErrInvalidSpecificAnsibleComponent   = errors.New("invalid ansible component configuration")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
@@ -539,6 +572,24 @@ var (
 	ErrNoStacksFound             = errors.New("no stacks found")
 	ErrStackNotFound             = errors.New("stack not found")
 	ErrProcessStack              = errors.New("error processing stack")
+
+	// Dependency errors.
+	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
+	ErrMissingDependencyField    = errors.New("dependency missing required field")
+	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
+
+	// Terraform --all flag errors.
+	ErrStackRequiredWithAllFlag     = errors.New("stack is required when using --all flag")
+	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
+
+	// Terraform execution errors.
+	ErrTerraformExecFailed = errors.New("terraform execution failed")
+	ErrDescribeAffected    = errors.New("describe affected failed")
+	ErrDescribeStacks      = errors.New("describe stacks failed")
+	ErrBuildDepGraph       = errors.New("build dependency graph failed")
+	ErrTopologicalOrder    = errors.New("topological sort failed")
+	ErrFormatForLogging    = errors.New("format affected for logging failed")
+	ErrQueryEvaluation     = errors.New("query evaluation failed")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -617,6 +668,10 @@ var (
 	ErrInvalidProviderKind          = errors.New("invalid provider kind")
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrInvalidADCContent            = errors.New("invalid ADC content")
+	ErrWriteADCFile                 = errors.New("failed to write ADC file")
+	ErrWritePropertiesFile          = errors.New("failed to write properties file")
+	ErrWriteAccessTokenFile         = errors.New("failed to write access token file")
 	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
 	ErrAuthManager                  = errors.New("auth manager error")
 	ErrDefaultIdentity              = errors.New("default identity error")
@@ -681,6 +736,16 @@ var (
 
 	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
 	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
+
+	// Realm errors.
+	ErrFailedToComputeRealm = errors.New("failed to compute realm")
+	ErrInvalidRealm         = errors.New("invalid realm value")
+	ErrEmptyRealm           = errors.New("realm is required for credential isolation but was not set")
+
+	// Logout errors.
+	ErrFailedGetConfigDir   = errors.New("failed to get config directory")
+	ErrFailedDiscoverRealms = errors.New("failed to discover realms")
+	ErrFailedRemoveRealm    = errors.New("failed to remove realm")
 
 	// Store and hook errors.
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
@@ -794,6 +859,106 @@ var (
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
+
+	// AI-related errors.
+	ErrAINotEnabled                 = errors.New("AI features are not enabled")
+	ErrAIDisabledInConfiguration    = errors.New("AI features are disabled in configuration")
+	ErrAIAPIKeyNotFound             = errors.New("API key not found in environment variable")
+	ErrAINoStackFilesFound          = errors.New("no stack files found")
+	ErrAIUnsupportedProvider        = errors.New("unsupported AI provider")
+	ErrAIClientNil                  = errors.New("AI client cannot be nil")
+	ErrAINoResponseCandidates       = errors.New("no response candidates returned")
+	ErrAINoResponseContent          = errors.New("no content in response")
+	ErrAIResponseNotText            = errors.New("response part does not contain text")
+	ErrAINoResponseChoices          = errors.New("no response choices returned")
+	ErrAISessionNotFound            = errors.New("AI session not found")
+	ErrAISessionAlreadyExists       = errors.New("AI session already exists")
+	ErrAIToolNotFound               = errors.New("AI tool not found")
+	ErrAIToolExecutionDenied        = errors.New("AI tool execution denied by user")
+	ErrAIToolExecutionFailed        = errors.New("AI tool execution failed")
+	ErrAIToolParameterRequired      = errors.New("tool parameter is required")
+	ErrAIToolNameEmpty              = errors.New("tool name cannot be empty")
+	ErrAIToolAlreadyRegistered      = errors.New("tool already registered")
+	ErrAIToolBlocked                = errors.New("tool is blocked")
+	ErrAIToolsDisabled              = errors.New("tools are disabled")
+	ErrAINoPrompter                 = errors.New("no prompter available")
+	ErrAISessionsNotEnabled         = errors.New("sessions are not enabled in configuration")
+	ErrAIInvalidDurationFormat      = errors.New("invalid duration format")
+	ErrAIUnsupportedDurationUnit    = errors.New("unsupported duration unit")
+	ErrAIUnsupportedComponentType   = errors.New("unsupported component type")
+	ErrAIFileAccessDeniedComponents = errors.New("access denied: file path must be within components directory")
+	ErrAIFileAccessDeniedStacks     = errors.New("access denied: file path must be within stacks directory")
+	ErrAIInvalidConfiguration       = errors.New("invalid AI configuration")
+	ErrAINotInitialized             = errors.New("AI client not initialized")
+	ErrAIFileNotFound               = errors.New("file not found")
+	ErrAIPathIsDirectory            = errors.New("path is a directory, not a file")
+	ErrAISessionManagerNotAvailable = errors.New("session manager not available")
+	ErrAISessionNameEmpty           = errors.New("session name cannot be empty")
+	ErrAISQLitePragmaFailed         = errors.New("failed to set SQLite pragma")
+	ErrAIAgentNil                   = errors.New("AI agent cannot be nil")
+	ErrAIAgentNameEmpty             = errors.New("AI agent name cannot be empty")
+	ErrAIAgentNotFound              = errors.New("AI agent not found")
+	ErrAIAgentAlreadyRegistered     = errors.New("AI agent already registered")
+	ErrAISkillNil                   = errors.New("AI skill cannot be nil")
+	ErrAISkillNameEmpty             = errors.New("AI skill name cannot be empty")
+	ErrAISkillNotFound              = errors.New("AI skill not found")
+	ErrAISkillAlreadyRegistered     = errors.New("AI skill already registered")
+	ErrAIPromptRequired             = errors.New("prompt is required")
+	ErrAIExecutionFailed            = errors.New("AI execution failed")
+	ErrAISendMessage                = errors.New("failed to send message to AI provider")
+	ErrAIClientCreation             = errors.New("failed to create AI client")
+	ErrAIMarshalRequest             = errors.New("failed to marshal AI request")
+	ErrAIUnmarshalResponse          = errors.New("failed to unmarshal AI response")
+	ErrAIParseToolInput             = errors.New("failed to parse tool input")
+	ErrAILoadAWSConfig              = errors.New("failed to load AWS configuration for AI")
+	ErrAIBaseURLRequired            = errors.New("base URL is required for AI provider")
+	ErrAIAccessDeniedBasePath       = errors.New("access denied: file must be within Atmos base path")
+	ErrAIAccessDeniedSearchPath     = errors.New("access denied: search path must be within Atmos base path")
+	ErrAIUnknownOperation           = errors.New("unknown operation")
+	ErrAISearchTextNotFound         = errors.New("search text not found in file")
+	ErrAILineNumberOutOfRange       = errors.New("line number out of range")
+	ErrAIInvalidLineRange           = errors.New("invalid line range")
+	ErrAICommandEmpty               = errors.New("command cannot be empty")
+	ErrAICommandBlacklisted         = errors.New("command is blacklisted for security reasons")
+	ErrAICommandRmNotAllowed        = errors.New("rm with recursive or force flags is not allowed")
+	ErrAILSPNotEnabled              = errors.New("LSP is not enabled")
+	ErrAIFileDoesNotExist           = errors.New("file does not exist")
+	ErrAIConfigNil                  = errors.New("cannot switch provider: atmosConfig is nil")
+	ErrAIInvalidProviderSelection   = errors.New("invalid provider selection")
+
+	// AI session checkpoint/compaction errors.
+	ErrAICompactPlanNil               = errors.New("compact plan is nil")
+	ErrAIUnsupportedExportFormat      = errors.New("unsupported export format")
+	ErrAICheckpointNil                = errors.New("checkpoint is nil")
+	ErrAICheckpointVersionMissing     = errors.New("checkpoint version is missing")
+	ErrAIUnsupportedCheckpointVersion = errors.New("unsupported checkpoint version")
+	ErrAISessionNameRequired          = errors.New("session name is required")
+	ErrAISessionProviderRequired      = errors.New("session provider is required")
+	ErrAISessionModelRequired         = errors.New("session model is required")
+	ErrAICheckpointNoMessages         = errors.New("checkpoint must contain at least one message")
+	ErrAIMessageRoleRequired          = errors.New("message role is required")
+	ErrAIMessageInvalidRole           = errors.New("invalid message role")
+	ErrAIStatisticsMismatch           = errors.New("statistics message count does not match actual messages")
+	ErrAIUnsupportedCheckpointFormat  = errors.New("unsupported checkpoint format")
+	ErrAIComponentPathNotFound        = errors.New("component path not found")
+	ErrAIComponentPathNotDirectory    = errors.New("component path is not a directory")
+
+	// Web search errors.
+	ErrWebSearchFailed      = errors.New("web search request failed")
+	ErrWebSearchParseFailed = errors.New("failed to parse web search results")
+	ErrWebSearchNotEnabled  = errors.New("web search is not enabled in configuration")
+
+	// MCP errors.
+	ErrMCPNotEnabled            = errors.New("MCP server is not enabled: add 'mcp:\n  enabled: true' to atmos.yaml")
+	ErrMCPToolNotFound          = errors.New("MCP tool not found")
+	ErrMCPInvalidJSONRPCVersion = errors.New("invalid JSON-RPC version")
+	ErrMCPInvalidTransport      = errors.New("invalid transport type")
+	ErrMCPUnsupportedTransport  = errors.New("unsupported transport")
+	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
+	ErrLSPConfigNil             = errors.New("LSP config is nil")
+	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
+	ErrLSPRPCError              = errors.New("RPC error")
+	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

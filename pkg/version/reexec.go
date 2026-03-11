@@ -1,16 +1,18 @@
 package version
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"syscall"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/toolchain"
 )
 
 const (
@@ -25,6 +27,12 @@ const (
 	// This matches the config path `version.use` in atmos.yaml.
 	// The --use-version flag also sets this env var.
 	VersionUseEnvVar = "ATMOS_VERSION_USE"
+
+	// LogFieldPR is the log field name for PR numbers.
+	logFieldPR = "pr"
+
+	// LogFieldSHA is the log field name for commit SHAs.
+	logFieldSHA = "sha"
 )
 
 // VersionFinder is an interface for finding and installing atmos versions.
@@ -40,6 +48,21 @@ type VersionInstaller interface {
 // ExecFunc is the function signature for syscall.Exec.
 type ExecFunc func(argv0 string, argv []string, envv []string) error
 
+// PRCacheChecker checks PR cache status.
+type PRCacheChecker func(prNumber int) (toolchain.PRCacheStatus, string)
+
+// PRCacheUpdater checks if a PR needs reinstall and updates the cache timestamp.
+type PRCacheUpdater func(ctx context.Context, prNumber int, showProgress bool) (needsReinstall bool, err error)
+
+// PRInstaller installs from a PR artifact.
+type PRInstaller func(prNumber int, showProgress bool) (string, error)
+
+// SHACacheChecker checks SHA cache status.
+type SHACacheChecker func(sha string) (exists bool, binaryPath string)
+
+// SHAInstaller installs from a SHA artifact.
+type SHAInstaller func(sha string, showProgress bool) (string, error)
+
 // ReexecConfig holds dependencies for version re-execution.
 type ReexecConfig struct {
 	Finder    VersionFinder
@@ -49,6 +72,13 @@ type ReexecConfig struct {
 	SetEnv    func(string, string) error
 	Args      []string
 	Environ   func() []string
+
+	// PR/SHA version support (injectable for testing).
+	CheckPRCache   PRCacheChecker
+	CheckPRUpdate  PRCacheUpdater
+	InstallFromPR  PRInstaller
+	CheckSHACache  SHACacheChecker
+	InstallFromSHA SHAInstaller
 }
 
 // DefaultReexecConfig returns the default production configuration.
@@ -57,13 +87,18 @@ func DefaultReexecConfig() *ReexecConfig {
 
 	installer := toolchain.NewInstaller()
 	return &ReexecConfig{
-		Finder:    installer,
-		Installer: &defaultInstaller{},
-		ExecFn:    syscall.Exec,
-		GetEnv:    getEnvWrapper,
-		SetEnv:    os.Setenv,
-		Args:      os.Args,
-		Environ:   os.Environ,
+		Finder:         installer,
+		Installer:      &defaultInstaller{},
+		ExecFn:         syscall.Exec,
+		GetEnv:         getEnvWrapper,
+		SetEnv:         os.Setenv,
+		Args:           os.Args,
+		Environ:        os.Environ,
+		CheckPRCache:   toolchain.CheckPRCacheStatus,
+		CheckPRUpdate:  toolchain.CheckPRCacheAndUpdate,
+		InstallFromPR:  toolchain.InstallFromPR,
+		CheckSHACache:  toolchain.CheckSHACacheStatus,
+		InstallFromSHA: toolchain.InstallFromSHA,
 	}
 }
 
@@ -134,6 +169,18 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 		return true
 	}
 
+	// PR versions (pr:NNNN or just digits) always need re-exec - never skip.
+	if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
+		log.Debug("PR version requested, will re-exec", "requested", requestedVersion)
+		return false
+	}
+
+	// SHA versions (sha:ceb7526 or hex strings) always need re-exec - never skip.
+	if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
+		log.Debug("SHA version requested, will re-exec", "requested", requestedVersion)
+		return false
+	}
+
 	// Normalize versions for comparison (strip 'v' prefix).
 	currentVersion := strings.TrimPrefix(Version, "v")
 	targetVersion := strings.TrimPrefix(requestedVersion, "v")
@@ -152,13 +199,40 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 	return false
 }
 
+// fatalFormattedErr writes a pre-formatted error to stderr via the UI layer and exits.
+//
+//nolint:revive // os.Exit is intentional for hard failures.
+func fatalFormattedErr(formatted string) {
+	ui.Writeln(formatted)
+	os.Exit(1)
+}
+
 // executeVersionSwitch performs the actual version switch.
+//
+//nolint:revive // os.Exit is intentional for hard failures on PR/SHA version errors.
 func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	targetVersion := strings.TrimPrefix(requestedVersion, "v")
 
 	// Find or install the requested version.
 	binaryPath, err := findOrInstallVersionWithConfig(targetVersion, cfg)
 	if err != nil {
+		// For PR versions, fail hard - don't continue with wrong version.
+		if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+		}
+
+		// For SHA versions, fail hard - don't continue with wrong version.
+		if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+		}
+
+		// Check if this is an invalid version format error - fail hard for those too.
+		_, _, parseErr := toolchain.ParseVersionSpec(requestedVersion)
+		if parseErr != nil {
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+		}
+
+		// For regular semver versions, fall back to current (existing behavior).
 		ui.Warningf("Failed to switch to Atmos version %s: %v", requestedVersion, err)
 		ui.Warningf("Continuing with current version %s", Version)
 		return false
@@ -191,25 +265,138 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, error) {
 	defer perf.Track(nil, "version.findOrInstallVersionWithConfig")()
 
-	// Try to find existing installation.
-	binaryPath, err := cfg.Finder.FindBinaryPath("cloudposse", "atmos", version)
+	// Validate version format first.
+	vType, normalizedVersion, err := toolchain.ParseVersionSpec(version)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrVersionFormatInvalid).
+			WithExplanationf("Version '%s' is not a valid format", version).
+			WithHint("Version must be a PR number, pr:NNNN, sha:XXXXXXX, or semver (e.g., 1.2.3)").
+			WithCause(err).
+			WithExitCode(1).
+			Err()
+	}
+
+	// Handle PR versions (pr:NNNN or just digits) - install from PR artifact.
+	if vType == toolchain.VersionTypePR {
+		prNumber, _ := toolchain.IsPRVersion(version)
+		return findOrInstallPRVersionWithConfig(prNumber, cfg)
+	}
+
+	// Handle SHA versions (sha:XXXXXXX or auto-detected hex strings) - install from SHA artifact.
+	if vType == toolchain.VersionTypeSHA {
+		return findOrInstallSHAVersionWithConfig(normalizedVersion, cfg)
+	}
+
+	// For semver versions, try to find existing installation.
+	binaryPath, err := cfg.Finder.FindBinaryPath("cloudposse", "atmos", normalizedVersion)
 	if err == nil && binaryPath != "" {
-		log.Debug("Found existing installation", "version", version, "path", binaryPath)
+		log.Debug("Found existing installation", "version", normalizedVersion, "path", binaryPath)
 		return binaryPath, nil
 	}
 
 	// Install the requested version.
-	log.Debug("Version not installed, installing", "version", version)
-	toolSpec := fmt.Sprintf("atmos@%s", version)
+	log.Debug("Version not installed, installing", "version", normalizedVersion)
+	toolSpec := fmt.Sprintf("atmos@%s", normalizedVersion)
 
 	if installErr := cfg.Installer.Install(toolSpec, false, false); installErr != nil {
-		return "", fmt.Errorf("failed to install Atmos %s: %w", version, installErr)
+		return "", errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(installErr).
+			WithExplanationf("Failed to install Atmos %s", normalizedVersion).
+			WithHint("Check network connectivity and tool registry availability").
+			Err()
 	}
 
 	// Find the newly installed binary.
-	binaryPath, err = cfg.Finder.FindBinaryPath("cloudposse", "atmos", version)
+	binaryPath, err = cfg.Finder.FindBinaryPath("cloudposse", "atmos", normalizedVersion)
 	if err != nil {
-		return "", fmt.Errorf("installed Atmos %s but could not find binary: %w", version, err)
+		return "", errUtils.Build(errUtils.ErrToolNotFound).
+			WithCause(err).
+			WithExplanationf("Installed Atmos %s but could not find binary", normalizedVersion).
+			WithHint("Check installation directory permissions").
+			Err()
+	}
+
+	return binaryPath, nil
+}
+
+// findOrInstallPRVersionWithConfig finds the binary for a PR version, installing if needed.
+// Uses TTL caching to minimize GitHub API calls:
+//   - If binary exists and cache is within TTL (1 min) -> use cached binary, no API call.
+//   - If binary exists but TTL expired -> check API for new commits.
+//   - If no binary exists -> fresh install.
+func findOrInstallPRVersionWithConfig(prNumber int, cfg *ReexecConfig) (string, error) {
+	defer perf.Track(nil, "version.findOrInstallPRVersionWithConfig")()
+
+	ctx := context.Background()
+
+	// Check cache status to determine what action to take.
+	cacheStatus, binaryPath := cfg.CheckPRCache(prNumber)
+
+	switch cacheStatus {
+	case toolchain.PRCacheValid:
+		// Binary exists and cache is within TTL - use as-is without API call.
+		log.Debug("Using cached PR binary (within TTL)", logFieldPR, prNumber, "path", binaryPath)
+		return binaryPath, nil
+
+	case toolchain.PRCacheNeedsCheck:
+		// Binary exists but TTL expired - check if PR has new commits.
+		log.Debug("Cache TTL expired, checking for updates", logFieldPR, prNumber)
+		needsReinstall, err := cfg.CheckPRUpdate(ctx, prNumber, true)
+		if err != nil {
+			return "", errUtils.Build(errUtils.ErrVersionCheckFailed).
+				WithCause(err).
+				WithExplanationf("Failed to check PR #%d for updates", prNumber).
+				WithHint("Check GitHub API connectivity and rate limits").
+				Err()
+		}
+		if !needsReinstall {
+			// SHA unchanged, timestamp updated - use existing binary.
+			return binaryPath, nil
+		}
+		// SHA changed - fall through to reinstall.
+		log.Debug("PR has new commits, reinstalling", logFieldPR, prNumber)
+
+	case toolchain.PRCacheNeedsInstall:
+		// No binary exists - need fresh install.
+		log.Debug("PR version not installed, installing from artifact", logFieldPR, prNumber)
+	}
+
+	// Install from PR artifact.
+	binaryPath, err := cfg.InstallFromPR(prNumber, true)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanationf("Failed to install Atmos from PR #%d", prNumber).
+			WithHint("Check GitHub Actions artifacts availability and authentication").
+			Err()
+	}
+
+	return binaryPath, nil
+}
+
+// findOrInstallSHAVersionWithConfig finds the binary for a SHA version, installing if needed.
+// SHAs are immutable, so if a binary exists, it's always valid.
+func findOrInstallSHAVersionWithConfig(sha string, cfg *ReexecConfig) (string, error) {
+	defer perf.Track(nil, "version.findOrInstallSHAVersionWithConfig")()
+
+	// Check if binary already exists (SHAs are immutable, no TTL check needed).
+	exists, binaryPath := cfg.CheckSHACache(sha)
+	if exists {
+		log.Debug("Using cached SHA binary", logFieldSHA, sha, "path", binaryPath)
+		return binaryPath, nil
+	}
+
+	// Binary doesn't exist - need to install.
+	log.Debug("SHA version not installed, installing from artifact", logFieldSHA, sha)
+
+	// Install from SHA artifact.
+	binaryPath, err := cfg.InstallFromSHA(sha, true)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanationf("Failed to install Atmos from SHA %s", sha).
+			WithHint("Check GitHub Actions artifacts availability and authentication").
+			Err()
 	}
 
 	return binaryPath, nil
