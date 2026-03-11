@@ -109,7 +109,9 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 	// config.WithSharedCredentialsFiles([]string{}) prevents loading from ~/.aws/credentials (or AWS_SHARED_CREDENTIALS_FILE).
 	// Note: config.WithSharedConfigProfile("") is NOT sufficient - it means "use the default profile",
 	// which still loads from ~/.aws/config and can conflict with user's [default] profile settings.
-	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns)+2)
+	// The +2 capacity hint is omitted to eliminate the theoretical integer overflow risk flagged by
+	// CodeQL (would only occur if len(optFns) ≈ math.MaxInt); append grows the slice as needed.
+	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns))
 	isolatedOptFns = append(isolatedOptFns, config.WithSharedConfigFiles([]string{}))
 	isolatedOptFns = append(isolatedOptFns, config.WithSharedCredentialsFiles([]string{}))
 	isolatedOptFns = append(isolatedOptFns, optFns...)
@@ -234,7 +236,9 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 	)
 
 	// Create a copy to avoid mutating the input.
-	result := make(map[string]string, len(environ)+6)
+	// The +6 capacity hint is omitted to eliminate the theoretical integer overflow risk
+	// flagged by CodeQL (would only occur if len(environ) ≈ math.MaxInt); Go maps grow dynamically.
+	result := make(map[string]string, len(environ))
 	for k, v := range environ {
 		result[k] = v
 	}
