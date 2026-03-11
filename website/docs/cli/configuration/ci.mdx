@@ -433,6 +433,16 @@ CI mode is auto-enabled when any of these environment variables are set:
 
 Override with the `--ci` flag or `ci.enabled` configuration.
 
+## Related Commands
+
+- [`atmos ci`](/cli/commands/ci) - CI/CD integration command group (experimental)
+- [`atmos ci status`](/cli/commands/ci/status) - Show CI status for current branch
+- [`atmos terraform plan --ci`](/cli/commands/terraform/plan#ci-integration) - Run plan with CI summaries, output variables, and status checks
+- [`atmos terraform plan`](/cli/commands/terraform/plan#planfile-management) - Planfile management and naming conventions
+- [`atmos terraform apply --ci`](/cli/commands/terraform/apply#planfile-usage) - Apply from planfiles in CI workflows
+- [`atmos terraform deploy --ci`](/cli/commands/terraform/deploy#ci-integration) - Deploy with planfile verification and drift detection
+- [`atmos terraform planfile`](/cli/commands/terraform/planfile) - Manage stored planfiles (list, download, upload, delete, show)
+
 ## Environment Variables
 
 | Variable | Description |
