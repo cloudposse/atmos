@@ -11,7 +11,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // messageSender is the minimal interface needed for AI analysis.
@@ -115,19 +115,19 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, commandName string, s
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	// Show thinking indicator.
-	ui.Info("Analyzing with AI...")
+	// Show thinking indicator with Atmos alien emoji.
+	utils.PrintfMessageToTUI("\n👽 Analyzing with AI...\n\n")
 
 	// Send to AI provider.
 	response, err := client.SendMessage(ctx, prompt)
 	if err != nil {
 		log.Error("AI analysis failed", "error", err)
-		ui.Warningf("AI analysis failed: %s", err.Error())
+		utils.PrintfMessageToTUI("⚠️ AI analysis failed: %s\n\n", err.Error())
 		return
 	}
 
-	// Render AI response as markdown.
-	ui.Markdown(response)
+	// Render AI response as markdown with colors to stderr (UI layer).
+	utils.PrintfMarkdownToTUI("%s", response)
 }
 
 // buildAnalysisPrompt constructs the prompt for AI analysis.

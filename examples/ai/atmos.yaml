@@ -34,6 +34,13 @@ templates:
     gomplate:
       enabled: true
 
+settings:
+  terminal:
+    max_width: 120
+    pager: false
+    unicode: true
+    no_color: false
+
 # MCP Server Configuration (disabled by default)
 # Docs: https://atmos.tools/cli/configuration/mcp
 # Enable to allow external AI clients (Claude Desktop, VS Code, Cursor) to connect.
