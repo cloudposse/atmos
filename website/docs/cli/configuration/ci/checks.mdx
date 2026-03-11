@@ -1,0 +1,80 @@
+---
+title: CI Status Checks
+sidebar_label: checks
+sidebar_class_name: command
+description: Configure commit status checks for CI pipelines
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `ci.checks` section configures commit status checks that show real-time operation progress.
+On GitHub Actions, these use the Check Runs API. On GitLab CI, they use the Commit Status API.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  checks:
+    enabled: true
+    context_prefix: "atmos"
+```
+</File>
+
+<dl>
+  <dt>`ci.checks.enabled`</dt>
+  <dd>
+    Post commit status checks when operations start and complete.
+
+    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+
+    **Default:** `false`
+  </dd>
+
+  <dt>`ci.checks.context_prefix`</dt>
+  <dd>
+    Prefix for status check names. For example, with prefix `atmos`, checks appear as
+    `atmos/terraform/plan`.
+
+    **Default:** `atmos`
+  </dd>
+</dl>
+
+## How It Works
+
+When enabled, Atmos creates and updates check runs during Terraform operations:
+
+**While running:**
+```
+● Atmos  Plan in progress — vpc in plat-ue2-dev
+```
+
+**When complete (success):**
+```
+✓ Atmos  Plan complete — 3 to add, 1 to change, 2 to destroy
+```
+
+**When complete (failure):**
+```
+✗ Atmos  Plan failed — vpc in plat-ue2-dev
+```
+
+## GitHub Actions Permissions
+
+Status checks require the `checks: write` permission:
+
+```yaml
+permissions:
+  checks: write
+```
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Full configuration reference
+- [GitHub Actions](/ci/github-actions) - Permissions and workflows

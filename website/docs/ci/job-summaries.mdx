@@ -1,0 +1,85 @@
+---
+title: Job Summaries
+sidebar_label: Job Summaries
+description: Rich Markdown job summaries for Terraform plan and apply operations
+id: job-summaries
+slug: /ci/job-summaries
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+When CI mode is enabled, Atmos writes rich Markdown summaries to `$GITHUB_STEP_SUMMARY` with
+resource badges, collapsible diffs, and clear warnings about destructive changes.
+</Intro>
+
+<Experimental />
+
+## Plan Summary
+
+A plan summary includes resource counts as inline badges, destruction warnings, and a collapsible
+resource list:
+
+```markdown
+## Plan: `vpc` in `plat-ue2-dev`
+
+[![create](https://shields.io/badge/CREATE-3-success?style=for-the-badge)](#)
+[![change](https://shields.io/badge/CHANGE-1-warning?style=for-the-badge)](#)
+[![destroy](https://shields.io/badge/DESTROY-2-critical?style=for-the-badge)](#)
+
+> [!CAUTION]
+> **Terraform will delete resources!**
+
+<details>
+<summary>Plan: 3 to add, 1 to change, 2 to destroy</summary>
+
+### Create
+- `aws_vpc.main`
+- `aws_subnet.public[0]`
+- `aws_subnet.public[1]`
+
+### Change
+- `aws_security_group.web`
+
+### Destroy
+- `aws_security_group.deprecated`
+- `aws_route.legacy`
+
+</details>
+```
+
+## Apply Summary
+
+Apply summaries show the result of the apply operation, including resource counts and any
+terraform outputs that were produced.
+
+## Configuration
+
+<dl>
+  <dt>`ci.summary.enabled`</dt>
+  <dd>
+    Enable or disable job summaries.
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.summary.template`</dt>
+  <dd>
+    Override the default summary template with a custom template file path.
+  </dd>
+</dl>
+
+## Template Format
+
+Summaries use Go templates with access to plan/apply context. The default templates are embedded
+in the binary at `pkg/ci/plugins/terraform/templates/`.
+
+See [Template Customization](/ci/template-customization) for details on creating custom templates.
+
+## Related
+
+- [Native CI Overview](/ci) - Feature overview
+- [GitHub Actions](/ci/github-actions) - Workflow examples
+- [Template Customization](/ci/template-customization) - Custom templates
+- [CI Configuration](/cli/configuration/ci) - Full configuration reference

@@ -1,0 +1,115 @@
+---
+title: Planfile Storage
+sidebar_label: Planfile Storage
+description: Store and verify Terraform planfiles across CI pipeline stages
+id: planfile-storage
+slug: /ci/planfile-storage
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Planfile storage enables the plan-then-deploy workflow in CI. When configured, `atmos terraform plan`
+uploads planfiles to storage, and `atmos terraform deploy` downloads and verifies them before applying.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    planfiles:
+      # Stores are tried in priority order
+      priority:
+        - "github"
+        - "s3"
+        - "local"
+
+      # Named stores
+      stores:
+        github:
+          type: github-artifacts
+          options:
+            retention_days: 7
+
+        s3:
+          type: s3
+          options:
+            bucket: "my-terraform-planfiles"
+            prefix: "atmos/"
+            region: "us-east-1"
+
+        local:
+          type: local
+          options:
+            path: ".atmos/planfiles"
+```
+</File>
+
+## Storage Backends
+
+| Backend | Type | Best For |
+|---------|------|----------|
+| **GitHub Artifacts** | `github-artifacts` | GitHub Actions workflows (recommended) |
+| **S3** | `s3` | AWS-native environments, cross-provider workflows |
+| **Local** | `local` | Testing and development |
+
+:::tip
+If `components.terraform.planfiles` is not configured, planfile storage operations are silently
+skipped. CI summaries and status checks still work without planfile storage.
+:::
+
+## How It Works
+
+### Plan Phase
+
+When `atmos terraform plan` runs in CI mode with planfile storage configured:
+
+1. Terraform generates a binary planfile
+2. The planfile is bundled with the lock file into a tar archive
+3. SHA256 integrity checksums are computed
+4. The bundle is uploaded to the configured storage backend
+
+### Deploy Phase
+
+When `atmos terraform deploy` runs:
+
+1. Downloads the stored planfile bundle from storage
+2. Verifies SHA256 integrity checksums
+3. Generates a fresh plan against current infrastructure
+4. Performs semantic comparison between stored and fresh plans
+5. **If plans match:** Applies the verified plan
+6. **If plans differ:** Fails with a drift detection error
+
+This ensures that exactly what was reviewed during the plan phase gets applied, with no
+silent infrastructure drift.
+
+## Plan Verification
+
+The deploy command uses semantic plan comparison — not naive text diff. It compares the
+JSON plan structures to detect meaningful differences while ignoring cosmetic changes.
+
+If drift is detected, the deploy fails with a clear error showing what changed since the
+plan was created.
+
+## CLI Commands
+
+<ActionCard title="Planfile Commands">
+    Manage stored planfiles with upload, download, list, delete, and show commands.
+    <div>
+      <PrimaryCTA to="/cli/commands/terraform/planfile">Planfile Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Related
+
+- [Native CI Overview](/ci) - Feature overview
+- [GitHub Actions](/ci/github-actions) - Deploy workflow examples
+- [CI Configuration](/cli/configuration/ci) - Full configuration reference
+- [`atmos terraform planfile`](/cli/commands/terraform/planfile) - CLI commands

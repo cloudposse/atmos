@@ -3,34 +3,58 @@ title: atmos ci
 sidebar_label: ci
 sidebar_class_name: command
 sidebar_position: 1
-id: ci
+id: ci-commands
+slug: /cli/commands/ci
 description: CI/CD integration commands for GitHub Actions and other CI providers.
 ---
 import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
 import Experimental from '@site/src/components/Experimental'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The `atmos ci` command group provides tools for working with CI/CD systems. Use these commands to check CI status, manage check runs, and integrate with GitHub Actions.
+The `atmos ci` command group provides tools for working with CI/CD systems. CI features are
+activated with the `--ci` flag on existing Terraform commands — no separate CI commands needed.
 </Intro>
 
-<Experimental/>
+<Experimental />
 
-<ActionCard title="Configure CI Integration">
-    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
+<ActionCard title="Native CI Overview">
+    Learn about all CI features including job summaries, status checks, output variables, planfile storage, and plan verification.
     <div>
-      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
+      <PrimaryCTA to="/ci">Native CI Overview</PrimaryCTA>
     </div>
 </ActionCard>
 
-## Subcommands
+<ActionCard title="CI Configuration">
+    Configure CI providers, job summaries, output variables, status checks, planfile storage, and templates in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
-<DocCardList />
+## CI-Enabled Commands
+
+<dl>
+  <dt>[`atmos terraform plan --ci`](/cli/commands/terraform/plan)</dt>
+  <dd>Run plan with job summary, output variables, status checks, and planfile upload.</dd>
+
+  <dt>[`atmos terraform apply --ci`](/cli/commands/terraform/apply)</dt>
+  <dd>Run apply with job summary, output variables, and status checks.</dd>
+
+  <dt>[`atmos terraform deploy --ci`](/cli/commands/terraform/deploy)</dt>
+  <dd>Deploy with stored planfile verification, drift detection, and full CI reporting.</dd>
+
+  <dt>[`atmos terraform planfile`](/cli/commands/terraform/planfile)</dt>
+  <dd>Manage stored planfiles: upload, download, list, delete, and show.</dd>
+
+  <dt>[`atmos describe affected --format=matrix`](/cli/commands/describe/affected)</dt>
+  <dd>Generate GitHub Actions matrix strategy from affected components.</dd>
+</dl>
 
 ## Related
 
+- [Native CI Overview](/ci) - Full feature overview
 - [CI Configuration](/cli/configuration/ci) - Configure CI integration in `atmos.yaml`
 - [Profiles](/cli/configuration/profiles) - Configure CI-specific profiles
 - [Auth](/stacks/auth) - Configure OIDC authentication for CI
