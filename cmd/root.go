@@ -177,6 +177,27 @@ func buildCommandName() string {
 	return strings.Join(os.Args, " ")
 }
 
+// runAIAnalysis stops the capture session and sends captured output to the AI provider for analysis.
+// It handles both the normal error return path and the intercepted errUtils.Exit() path.
+func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error) {
+	defer perf.Track(nil, "cmd.runAIAnalysis")()
+
+	stdout, stderrCaptured := captureSession.Stop()
+
+	// If the command failed, append the formatted error to captured stderr
+	// so the AI sees the same error output the user will see.
+	if cmdErr != nil {
+		formatted := errUtils.Format(cmdErr, errUtils.DefaultFormatterConfig())
+		if stderrCaptured != "" {
+			stderrCaptured += "\n"
+		}
+		stderrCaptured += formatted
+	}
+
+	commandName := buildCommandName()
+	analyze.AnalyzeOutput(atmosConfig, commandName, stdout, stderrCaptured, cmdErr)
+}
+
 // parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
 // This internal version accepts args as a parameter for testability.
 func parseUseVersionFromArgsInternal(args []string) string {
@@ -1541,14 +1562,13 @@ func Execute() error {
 	RootCmd.SilenceErrors = true
 	cmd, err := internal.Execute(RootCmd)
 
-	// Stop capture and run AI analysis if enabled.
-	if aiEnabled && captureSession != nil {
-		stdout, stderr := captureSession.Stop()
-		commandName := buildCommandName()
-		analyze.AnalyzeOutput(&atmosConfig, commandName, stdout, stderr, err)
-	}
-
 	telemetry.CaptureCmd(cmd, err)
+
+	// Stop capture and run AI analysis before any exit calls.
+	// This must happen before showUsageAndExit which calls errUtils.Exit().
+	if aiEnabled && captureSession != nil {
+		runAIAnalysis(&atmosConfig, captureSession, err)
+	}
 
 	// Handle sentinel errors with errors.Is().
 	if err != nil {
@@ -1557,6 +1577,7 @@ func Execute() error {
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
+
 	return err
 }
 

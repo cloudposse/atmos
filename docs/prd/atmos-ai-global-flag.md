@@ -117,14 +117,18 @@ func Execute() error {
 
     cmd, err := internal.Execute(RootCmd)
 
+    // ... telemetry ...
+
+    // Stop capture and run AI analysis.
     if aiEnabled && captureSession != nil {
-        stdout, stderr := captureSession.Stop()
-        analyze.AnalyzeOutput(&atmosConfig, commandName, stdout, stderr, err)
+        runAIAnalysis(&atmosConfig, captureSession, err)
     }
 
-    // ... telemetry, error handling ...
+    return err
 }
 ```
+
+**Error Propagation**: Command functions (e.g., `executeSingleComponent`, `terraformRunWithOptions`) return errors through Cobra's `RunE` instead of calling `errUtils.CheckErrorPrintAndExit()` / `os.Exit()`. This ensures errors flow back to `Execute()` where AI analysis can process them. The error is then returned to `main.go` for formatting and display.
 
 ## Flag Infrastructure
 
