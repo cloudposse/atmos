@@ -450,34 +450,48 @@ After `aiEnabled` is determined:
 
 ### Step 7: Update `runAIAnalysis()` (`cmd/root.go`)
 
-Add `skillPrompt string` parameter. Pass it through to `analyze.AnalyzeOutput()`.
+Add `skillPrompt string` parameter. Pass it through to `analyze.AnalyzeOutput()` via `AnalysisInput`.
 
 ```go
 func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession,
     cmdErr error, skillPrompt string) {
     // ... existing error formatting ...
-    analyze.AnalyzeOutput(atmosConfig, commandName, stdout, stderrCaptured, cmdErr, skillPrompt)
+    analyze.AnalyzeOutput(atmosConfig, &analyze.AnalysisInput{
+        CommandName: commandName,
+        Stdout:      stdout,
+        Stderr:      stderrCaptured,
+        CmdErr:      cmdErr,
+        SkillPrompt: skillPrompt,
+    })
 }
 ```
 
 ### Step 8: Update `AnalyzeOutput()` and `buildAnalysisPrompt()` (`pkg/ai/analyze/analyze.go`)
 
-Add `skillPrompt string` parameter to both functions. When a skill prompt is provided, prepend it
-to the system prompt to give the AI domain-specific expertise:
+Use `AnalysisInput` struct to pass all parameters (introduced to satisfy the `argument-limit` linter rule).
+When a skill prompt is provided, prepend it to the system prompt for domain-specific expertise:
 
 ```go
-func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, commandName string,
-    stdout, stderr string, cmdErr error, skillPrompt string) {
-    prompt := buildAnalysisPrompt(commandName, stdout, stderr, cmdErr, skillPrompt)
+// AnalysisInput holds the inputs for AI analysis of command output.
+type AnalysisInput struct {
+    CommandName string // Full command string (e.g., "atmos terraform plan vpc -s prod").
+    Stdout      string // Captured standard output.
+    Stderr      string // Captured standard error.
+    CmdErr      error  // Error returned by the command (nil if successful).
+    SkillPrompt string // Optional skill system prompt for domain-specific expertise.
+}
+
+func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput) {
+    prompt := buildAnalysisPrompt(input)
     // ... rest unchanged ...
 }
 
-func buildAnalysisPrompt(commandName, stdout, stderr string, cmdErr error, skillPrompt string) string {
+func buildAnalysisPrompt(input *AnalysisInput) string {
     var b strings.Builder
 
     // Skill-specific expertise comes first (if provided).
-    if skillPrompt != "" {
-        b.WriteString(skillPrompt)
+    if input.SkillPrompt != "" {
+        b.WriteString(input.SkillPrompt)
         b.WriteString("\n\n---\n\n")
     }
 

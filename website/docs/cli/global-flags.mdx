@@ -308,6 +308,33 @@ These flags are available for every Atmos command:
         ```
     </dd>
 
+    <dt>`--skill`</dt>
+    <dd>
+        Specify an AI skill for domain-specific analysis context (requires `--ai`).
+        - Default: empty (no skill)
+        - Loads the skill's system prompt and prepends it to the AI analysis prompt
+        - The AI gains deep knowledge of the specified Atmos subsystem for more accurate analysis
+        - Skills are loaded from marketplace installations (`~/.atmos/skills/`) and custom skills in `atmos.yaml`
+        - Can also use `ATMOS_SKILL` environment variable
+        - Requires `--ai` flag — using `--skill` without `--ai` produces a helpful error
+        - See [AI Skills](/cli/configuration/ai/skills) for available skills
+
+        **Examples:**
+        ```bash
+        # Use Terraform expertise for plan analysis
+        atmos --ai --skill atmos-terraform terraform plan vpc -s prod
+
+        # Use stacks expertise for stack description
+        atmos --ai --skill atmos-stacks describe stacks
+
+        # Use validation expertise for stack validation
+        atmos --ai --skill atmos-validation validate stacks
+
+        # Use environment variables
+        ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s prod
+        ```
+    </dd>
+
     <dt>`--version`</dt>
     <dd>
         Print a minimal single-line Atmos CLI version and exit.
@@ -551,6 +578,15 @@ All global flags can be set using environment variables. The precedence order is
         - CLI flag takes precedence over this environment variable
         - Example: `ATMOS_AI=true atmos terraform plan vpc -s prod`
     </dd>
+
+    <dt>`ATMOS_SKILL`</dt>
+    <dd>
+        Specify an AI skill for domain-specific analysis context.
+        - Equivalent to the `--skill` flag
+        - Requires `ATMOS_AI=true` or `--ai` flag
+        - CLI flag takes precedence over this environment variable
+        - Example: `ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s prod`
+    </dd>
 </dl>
 
 ### AI Assistant Environment Variables
@@ -776,6 +812,14 @@ atmos terraform plan vpc -s prod
 
 # One-off AI analysis
 ATMOS_AI=true atmos terraform apply vpc -s prod
+
+# Use a skill for domain-specific analysis
+atmos --ai --skill atmos-terraform terraform plan vpc -s prod
+atmos --ai --skill atmos-stacks describe stacks
+atmos --ai --skill atmos-validation validate stacks
+
+# Skills via environment variables
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s prod
 ```
 
 ### CI/CD Portability Example

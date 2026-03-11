@@ -425,6 +425,15 @@ These environment variables configure Atmos behavior and can override settings i
     - Example: `ATMOS_AI=true atmos terraform plan vpc -s prod`
   </dd>
 
+  <dt>`ATMOS_SKILL`</dt>
+  <dd>
+    Specify an AI skill for domain-specific analysis context. Equivalent to the `--skill` flag.
+    Requires `ATMOS_AI=true` or `--ai` flag. The skill's system prompt is prepended to the AI analysis
+    for deeper, domain-aware insights.
+
+    - Example: `ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s prod`
+  </dd>
+
   <dt>`ANTHROPIC_API_KEY` / `ATMOS_ANTHROPIC_API_KEY`</dt>
   <dd>
     API key for the Anthropic Claude AI provider.

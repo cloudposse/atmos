@@ -4,6 +4,7 @@ This example demonstrates how to configure and use the Atmos AI Assistant with a
 infrastructure project.
 
 - **Global `--ai` flag** — Add AI-powered analysis to any Atmos command (`atmos --ai terraform plan`)
+- **`--skill` flag** — Domain-specific AI analysis with skills (`atmos --ai --skill atmos-terraform terraform plan`)
 - **Multi-provider configuration** — Configure multiple AI providers (Anthropic, OpenAI, Gemini, Ollama)
 - **Multi-region infrastructure** — Hub-spoke Transit Gateway topology across us-east-1 and us-west-2
 - **Session management** — Persistent conversation history with auto-compact
@@ -538,6 +539,32 @@ atmos describe stacks
 # Combine with other flags
 atmos --ai --logs-level=Debug terraform plan vpc -s ue1-prod
 ```
+
+### `--skill` Flag Examples
+
+Use `--skill` with `--ai` to give the AI domain-specific expertise for more accurate analysis:
+
+```bash
+# Terraform expertise for plan analysis
+atmos --ai --skill atmos-terraform terraform plan vpc -s ue1-prod
+
+# Stacks expertise for stack description
+atmos --ai --skill atmos-stacks describe stacks
+
+# Validation expertise for policy checks
+atmos --ai --skill atmos-validation validate stacks
+
+# Helmfile expertise for Kubernetes deployments
+atmos --ai --skill atmos-helmfile helmfile diff echo-server -s ue1-prod
+
+# Use environment variables for CI/CD
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s ue1-prod
+export ATMOS_SKILL=atmos-terraform
+atmos --ai terraform plan vpc -s ue1-network
+```
+
+Skills are loaded from marketplace installations (`~/.atmos/skills/`) and custom skills in `atmos.yaml`.
+If the specified skill is not found, Atmos shows an error listing all available skills.
 
 ### How It Works
 

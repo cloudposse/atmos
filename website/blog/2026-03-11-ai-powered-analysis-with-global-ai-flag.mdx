@@ -117,6 +117,29 @@ atmos validate stacks
 atmos describe stacks
 ```
 
+## Domain-Specific Analysis with `--skill`
+
+Pair `--ai` with `--skill` to give the AI deep knowledge of a specific Atmos subsystem. The skill's system
+prompt is prepended to the analysis, resulting in more accurate and actionable insights:
+
+```bash
+# Terraform expertise for plan analysis
+atmos --ai --skill atmos-terraform terraform plan vpc -s ue1-prod
+
+# Stacks expertise for stack descriptions
+atmos --ai --skill atmos-stacks describe stacks
+
+# Validation expertise for policy checks
+atmos --ai --skill atmos-validation validate stacks
+```
+
+Skills are loaded from marketplace installations (`~/.atmos/skills/`) and custom skills configured in
+`atmos.yaml`. Use `ATMOS_SKILL` environment variable for CI/CD:
+
+```bash
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s ue1-prod
+```
+
 ## Works with Everything
 
 The `--ai` flag works with **any** Atmos command:
@@ -174,6 +197,7 @@ $ atmos list stacks --ai
 ## Learn More
 
 - [AI Configuration](/cli/configuration/ai) — Full configuration reference
-- [Global Flags](/cli/global-flags) — All global flags including `--ai`
+- [Global Flags](/cli/global-flags) — All global flags including `--ai` and `--skill`
+- [AI Skills](/cli/configuration/ai/skills) — Available skills for domain-specific analysis
 - [AI Example](/examples/ai) — Complete example with multi-region infrastructure
 - [AI Providers](/cli/configuration/ai/providers) — Setup for all 7 supported providers
