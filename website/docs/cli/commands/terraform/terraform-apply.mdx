@@ -209,6 +209,19 @@ atmos terraform apply vpc -s dev
         atmos terraform apply vpc -s dev --process-templates=false
         ```
     </dd>
+
+    <dt>`--ci` <em>(optional)</em></dt>
+    <dd>
+        Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.
+
+        CI mode is auto-detected when `CI=true` or `GITHUB_ACTIONS=true` environment variables are set.
+
+        **Environment variables:** `ATMOS_CI`, `CI`
+
+        ```shell
+        atmos terraform apply vpc -s dev --ci
+        ```
+    </dd>
 </dl>
 
 ## Native Terraform Flags

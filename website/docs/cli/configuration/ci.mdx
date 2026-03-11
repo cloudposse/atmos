@@ -14,11 +14,15 @@ import File from '@site/src/components/File';
 Native CI integration brings first-class CI/CD support directly into the Atmos CLI. Run `atmos terraform plan` in GitHub Actions and get beautiful job summaries, status checks, and PR comments—no extra actions required.
 </Intro>
 
+:::warning Experimental Feature
+Native CI integration is an **experimental feature**. By default, a warning is shown when CI hooks are active. To suppress the warning, add `settings.experimental: silence` to your `atmos.yaml`. See [Experimental Features](/cli/configuration#experimental-features) for details.
+:::
+
 <KeyPoints>
 - Rich job summaries with resource badges and collapsible diffs
 - Live status checks showing "Plan in progress" / "Plan complete"
-- PR comments with plan summaries
 - Terraform outputs exported to `$GITHUB_OUTPUT`
+- Stored planfile verification on deploy (drift detection)
 - Same command works locally and in CI
 </KeyPoints>
 
@@ -346,6 +350,80 @@ cat /tmp/summary.md
 atmos terraform plan mycomponent -s dev --ci
 ```
 
+## Planfile Storage
+
+Configure planfile storage to enable the plan-then-deploy workflow. When configured, `atmos terraform plan` uploads planfiles to storage, and `atmos terraform deploy` downloads and verifies them before applying:
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      # Stores are tried in priority order
+      priority:
+        - "github"
+        - "s3"
+        - "local"
+
+      # Named stores
+      stores:
+        github:
+          type: github-artifacts
+          options:
+            retention_days: 7
+
+        s3:
+          type: s3
+          options:
+            bucket: "my-terraform-planfiles"
+            prefix: "atmos/"
+            region: "us-east-1"
+
+        local:
+          type: local
+          options:
+            path: ".atmos/planfiles"
+```
+
+Available storage backends:
+- **`github-artifacts`** — GitHub Actions artifacts (recommended for GitHub workflows)
+- **`s3`** — AWS S3 bucket
+- **`local`** — Local filesystem (useful for testing)
+
+:::tip
+If `components.terraform.planfiles` is not configured, planfile storage operations are silently skipped. This means CI summaries and status checks still work without planfile storage.
+:::
+
+See [`atmos terraform planfile`](/cli/commands/terraform/planfile) for CLI commands to manage stored planfiles.
+
+## Deploy Workflow
+
+The `deploy` command provides a complete CI-native apply workflow with plan verification:
+
+```yaml
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform plan ${{ matrix.component }} -s ${{ matrix.stack }}
+
+  deploy:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform deploy ${{ matrix.component }} -s ${{ matrix.stack }}
+```
+
+The deploy step automatically:
+1. Downloads the stored planfile from the plan step
+2. Generates a fresh plan and compares it against the stored plan
+3. Fails with a drift error if the plans don't match
+4. Applies the verified plan if they match
+
 ## CI Detection
 
 CI mode is auto-enabled when any of these environment variables are set:
@@ -354,3 +432,16 @@ CI mode is auto-enabled when any of these environment variables are set:
 - `GITHUB_ACTIONS=true` (set by GitHub Actions)
 
 Override with the `--ci` flag or `ci.enabled` configuration.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ATMOS_CI` | Explicitly enable CI mode (`true`/`false`) |
+| `CI` | Standard CI environment variable (set by most CI providers) |
+| `GITHUB_ACTIONS` | Set by GitHub Actions runner |
+| `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API token (required for status checks) |
+| `GITHUB_OUTPUT` | File path for CI output variables (set by GitHub Actions) |
+| `GITHUB_STEP_SUMMARY` | File path for job summaries (set by GitHub Actions) |
+| `GITHUB_REPOSITORY` | Repository name in `owner/repo` format |
+| `GITHUB_SHA` | Current commit SHA |
