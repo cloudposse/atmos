@@ -522,9 +522,12 @@ func TestTerraformState_YqDefaultWithEmptyListFallback(t *testing.T) {
 
 // TestTerraformState_IPv6StringPreserved verifies that IPv6 address strings returned
 // from Terraform state are preserved as strings and not misinterpreted as YAML maps.
-// This is a regression test for an issue where strings ending in :: (such as
-// "2041:0000:140F::875B::") were being converted to map objects like
-// {"2041:0000:140F::875B:": null} when written to terraform.tfvars.json.
+//
+// Regression guard for issue #2155 (reported against v1.204.0):
+// strings ending in "::" (e.g., "2041:0000:140F::875B::") were being converted to map objects
+// like {"2041:0000:140F::875B:": null} when written to terraform.tfvars.json, causing Terraform
+// to reject the value because the variable was declared as type "string".
+// The fix was introduced in v1.206.0 (PR #2059) as part of ARN colon-handling.
 func TestTerraformState_IPv6StringPreserved(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

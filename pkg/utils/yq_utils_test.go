@@ -496,7 +496,8 @@ func TestKeyMatchesOriginalWithColon(t *testing.T) {
 
 // TestEvaluateYqExpression_ARNWithTrailingColons tests that ARN strings ending
 // with colons are correctly preserved as strings and not misinterpreted as maps.
-// This is a regression test for issue #2031.
+// Regression test for issue #2031; fix shipped in v1.206.0 (PR #2059).
+// Also covers IPv6 addresses ending in "::" — see issue #2155.
 func TestEvaluateYqExpression_ARNWithTrailingColons(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -596,8 +597,11 @@ func TestEvaluateYqExpression_ARNWithTrailingColons(t *testing.T) {
 
 // TestEvaluateYqExpression_IPv6Scenario tests that IPv6 address strings are correctly
 // preserved as strings when retrieved via !terraform.state, not misinterpreted as YAML maps.
-// This is a regression test for issue #2155 where strings ending in :: were converted
-// to map objects like {"2041:0000:140F::875B:": null}.
+//
+// Regression guard for issue #2155 (reported against v1.204.0):
+// strings ending in "::" (e.g., "2041:0000:140F::875B::") were converted to map objects like
+// {"2041:0000:140F::875B:": null}. The fix was introduced in v1.206.0 (PR #2059) as part of
+// ARN colon-handling; this test ensures IPv6 strings remain covered going forward.
 func TestEvaluateYqExpression_IPv6Scenario(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 

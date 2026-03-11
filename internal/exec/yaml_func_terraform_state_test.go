@@ -180,8 +180,8 @@ func TestYamlFuncTerraformState(t *testing.T) {
 	})
 
 	// Test that IPv6 addresses ending in :: are correctly preserved as strings
-	// when read via !terraform.state. This is a regression test for an issue where
-	// "2041:0000:140F::875B::" was being misinterpreted as a YAML map.
+	// when read via !terraform.state.
+	// Regression guard for issue #2155 (reported against v1.204.0); fix in v1.206.0 (PR #2059).
 	t.Run("IPv6 address string preservation", func(t *testing.T) {
 		// First, apply the source component with an IPv6 address.
 		ipv6Info := schema.ConfigAndStacksInfo{
