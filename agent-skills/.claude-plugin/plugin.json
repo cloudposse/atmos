@@ -6,7 +6,7 @@
     "name": "Cloud Posse",
     "url": "https://github.com/cloudposse"
   },
-  "homepage": "https://atmos.tools/integrations/ai/agent-skills",
+  "homepage": "https://atmos.tools/ai/agent-skills",
   "repository": "https://github.com/cloudposse/atmos",
   "license": "Apache-2.0",
   "keywords": ["atmos", "terraform", "infrastructure", "iac", "devops", "cloud"]

@@ -302,11 +302,7 @@ func setupExecuteAffectedComponentsMock(
 			func(
 				info *schema.ConfigAndStacksInfo,
 				affectedList []schema.Affected,
-				affectedComponent string,
-				affectedStack string,
-				parentComponent string,
-				parentStack string,
-				dependents []schema.Dependent,
+				params *affectedDepOrderParams,
 				args *DescribeAffectedCmdArgs,
 			) error {
 				*executionCount++
@@ -378,11 +374,7 @@ func TestExecuteAffectedComponents(t *testing.T) {
 					func(
 						info *schema.ConfigAndStacksInfo,
 						affectedList []schema.Affected,
-						affectedComponent string,
-						affectedStack string,
-						parentComponent string,
-						parentStack string,
-						dependents []schema.Dependent,
+						params *affectedDepOrderParams,
 						args *DescribeAffectedCmdArgs,
 					) error {
 						return nil
@@ -425,11 +417,7 @@ func TestExecuteAffectedComponents(t *testing.T) {
 					func(
 						info *schema.ConfigAndStacksInfo,
 						affectedList []schema.Affected,
-						affectedComponent string,
-						affectedStack string,
-						parentComponent string,
-						parentStack string,
-						dependents []schema.Dependent,
+						params *affectedDepOrderParams,
 						args *DescribeAffectedCmdArgs,
 					) error {
 						return nil
@@ -472,11 +460,7 @@ func TestExecuteAffectedComponents(t *testing.T) {
 					func(
 						info *schema.ConfigAndStacksInfo,
 						affectedList []schema.Affected,
-						affectedComponent string,
-						affectedStack string,
-						parentComponent string,
-						parentStack string,
-						dependents []schema.Dependent,
+						params *affectedDepOrderParams,
 						args *DescribeAffectedCmdArgs,
 					) error {
 						return nil
@@ -508,11 +492,7 @@ func TestExecuteAffectedComponents(t *testing.T) {
 					func(
 						info *schema.ConfigAndStacksInfo,
 						affectedList []schema.Affected,
-						affectedComponent string,
-						affectedStack string,
-						parentComponent string,
-						parentStack string,
-						dependents []schema.Dependent,
+						params *affectedDepOrderParams,
 						args *DescribeAffectedCmdArgs,
 					) error {
 						return errors.New("terraform execution failed")
