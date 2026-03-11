@@ -186,10 +186,10 @@ Users currently using the GitHub Actions can migrate incrementally:
 
 ## References
 
-- [Existing CI Detection](../../pkg/telemetry/ci.go) - Detects 24+ CI providers
-- [Lifecycle Hooks](../../pkg/hooks/) - Hook system for terraform events
-- [Plan-Diff](../../internal/exec/terraform_plan_diff.go) - Semantic plan comparison (implemented)
-- [Store Registry](../../pkg/store/registry.go) - Pattern for planfile stores
+- [Existing CI Detection](../../../pkg/telemetry/ci.go) - Detects 24+ CI providers
+- [Lifecycle Hooks](../../../pkg/hooks/) - Hook system for terraform events
+- [Plan-Diff](../../../internal/exec/terraform_plan_diff.go) - Semantic plan comparison (implemented)
+- [Store Registry](../../../pkg/store/registry.go) - Pattern for planfile stores
 - Terraform Output Package (`pkg/terraform/output/`) - Output formatting and `FlattenMap()` for CI export
 - [tfcmt](https://github.com/suzuki-shunsuke/tfcmt) - Inspiration for PR comments
 - [GitHub Artifacts API v4](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts)

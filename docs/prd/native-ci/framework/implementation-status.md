@@ -101,7 +101,7 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 
 ### Providers: Generic CI — COMPLETE
 
-> PRD: [Generic Provider](../providers/generic/generic.md)
+> PRD: [Generic Provider](../providers/generic.md)
 
 1. Generic provider (`pkg/ci/providers/generic/provider.go`) — Done
 2. `CI=true` detection, env var context, OutputWriter — Done

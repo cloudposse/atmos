@@ -218,6 +218,6 @@ No existing data to migrate. No backwards-compatibility or deprecation concerns.
 ## References
 
 - [Planfile Storage PRD](../terraform-plugin/planfile-storage.md)
-- [Store Registry Pattern](../../pkg/store/registry.go)
-- [CI Provider Detection](../../pkg/telemetry/ci.go)
+- [Store Registry Pattern](../../../../pkg/store/registry.go)
+- [CI Provider Detection](../../../../pkg/telemetry/ci.go)
 - [GitHub Artifacts API v4](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts)
