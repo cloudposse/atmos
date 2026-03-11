@@ -17,8 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -76,10 +76,19 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	defer perf.Track(nil, "auth.displayAuthSuccess")()
 
 	// Display checkmark with success message.
-	u.PrintfMessageToTUI("\n%s Authentication successful!\n\n", theme.Styles.Checkmark)
+	ui.Writef("\n%s Authentication successful!\n\n", theme.Styles.Checkmark)
 
 	// Build table rows.
 	var rows [][]string
+
+	if whoami.Realm != "" {
+		realmDisplay := whoami.Realm
+		if whoami.RealmSource != "" {
+			realmDisplay = fmt.Sprintf("%s (%s)", whoami.Realm, whoami.RealmSource)
+		}
+		rows = append(rows, []string{"Realm", realmDisplay})
+	}
+
 	rows = append(rows, []string{"Provider", whoami.Provider})
 	rows = append(rows, []string{"Identity", whoami.Identity})
 
@@ -123,7 +132,7 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	fmt.Fprintf(os.Stderr, "%s\n\n", t)
+	ui.Writef("%s\n\n", t)
 }
 
 // handleHelpRequest handles help request for auth commands.

@@ -12,11 +12,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -154,7 +153,7 @@ func executeAuthEnvCommand(cmd *cobra.Command, args []string) error {
 
 	switch format {
 	case "json":
-		return outputEnvAsJSON(&atmosConfig, envVars)
+		return outputEnvAsJSON(envVars)
 	case "bash":
 		return outputEnvAsExport(envVars)
 	case "dotenv":
@@ -165,10 +164,10 @@ func executeAuthEnvCommand(cmd *cobra.Command, args []string) error {
 }
 
 // outputEnvAsJSON outputs environment variables as JSON.
-func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]string) error {
+func outputEnvAsJSON(envVars map[string]string) error {
 	defer perf.Track(nil, "auth.outputEnvAsJSON")()
 
-	return u.PrintAsJSON(atmosConfig, envVars)
+	return data.WriteJSON(envVars)
 }
 
 // outputEnvAsExport outputs environment variables as shell export statements.

@@ -181,6 +181,8 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 }
 
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
+//
+//nolint:revive // cyclomatic complexity is inherent to recursive dependency traversal
 func executeTerraformAffectedComponentInDepOrder(
 	info *schema.ConfigAndStacksInfo,
 	affectedList []schema.Affected,

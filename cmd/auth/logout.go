@@ -23,8 +23,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/xdg"
+)
+
+const (
+	msgDryRunMode = "**Dry run mode:** No credentials will be removed\n\n"
+	fmtBulletItem = "  • %s\n"
 )
 
 //go:embed markdown/atmos_auth_logout_usage.md
@@ -181,10 +185,10 @@ func confirmKeychainDeletion(identityOrProvider string, force bool, isTTY bool) 
 
 	// If not a TTY, show error and require --force.
 	if !isTTY {
-		u.PrintfMarkdownToTUI("⚠ **Warning:** `--keychain` specified but not in interactive terminal\n\n")
-		u.PrintfMarkdownToTUI("Keychain deletion requires confirmation. Options:\n")
-		u.PrintfMarkdownToTUI("  • Use `--force` to bypass confirmation in CI/CD\n")
-		u.PrintfMarkdownToTUI("  • Run interactively to confirm deletion\n\n")
+		ui.MarkdownMessagef("⚠ **Warning:** `--keychain` specified but not in interactive terminal\n\n")
+		ui.MarkdownMessagef("Keychain deletion requires confirmation. Options:\n")
+		ui.MarkdownMessagef("  • Use `--force` to bypass confirmation in CI/CD\n")
+		ui.MarkdownMessagef("  • Run interactively to confirm deletion\n\n")
 		ui.Error("Logout cancelled - use --force to delete keychain in non-interactive mode")
 		ui.Writeln("")
 		return false, errUtils.ErrKeychainDeletionRequiresConfirmation
@@ -208,7 +212,7 @@ func confirmKeychainDeletion(identityOrProvider string, force bool, isTTY bool) 
 	}
 
 	if !confirmed {
-		u.PrintfMessageToTUI("\nLogout cancelled - credentials preserved\n\n")
+		ui.Writef("\nLogout cancelled - credentials preserved\n\n")
 		return false, nil
 	}
 
@@ -255,13 +259,13 @@ func displayExternalCredentialWarnings() {
 		return
 	}
 
-	u.PrintfMarkdownToTUI("\n⚠ **Warning:** External credentials may still be active:\n\n")
+	ui.MarkdownMessagef("\n⚠ **Warning:** External credentials may still be active:\n\n")
 	for _, warning := range warnings {
-		u.PrintfMessageToTUI("  • %s\n", warning)
+		ui.Writef(fmtBulletItem, warning)
 	}
-	u.PrintfMarkdownToTUI("\nTo fully logout, consider:\n")
-	u.PrintfMarkdownToTUI("  • Unsetting the environment variable\n")
-	u.PrintfMarkdownToTUI("  • Removing the credentials file\n\n")
+	ui.MarkdownMessagef("\nTo fully logout, consider:\n")
+	ui.MarkdownMessagef("  • Unsetting the environment variable\n")
+	ui.MarkdownMessagef("  • Removing the credentials file\n\n")
 }
 
 // performIdentityLogout removes credentials for a specific identity.
@@ -271,12 +275,12 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	// Validate identity exists.
 	identities := authManager.GetIdentities()
 	if _, exists := identities[identityName]; !exists {
-		u.PrintfMarkdownToTUI("**Error:** identity %q not found in configuration\n\n", identityName)
-		u.PrintfMarkdownToTUI("**Available identities:**\n")
+		ui.MarkdownMessagef("**Error:** identity %q not found in configuration\n\n", identityName)
+		ui.MarkdownMessagef("**Available identities:**\n")
 		for name := range identities {
-			u.PrintfMessageToTUI("  • %s\n", name)
+			ui.Writef(fmtBulletItem, name)
 		}
-		u.PrintfMessageToTUI("\n")
+		ui.Writeln("")
 		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
 	}
 
@@ -284,20 +288,20 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	providerName := authManager.GetProviderForIdentity(identityName)
 
 	if dryRun {
-		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
-		u.PrintfMarkdownToTUI("**Would remove:**\n")
+		ui.MarkdownMessagef(msgDryRunMode)
+		ui.MarkdownMessagef("**Would remove:**\n")
 		if deleteKeychain {
-			u.PrintfMessageToTUI("  • Keyring entry: %s\n", identityName)
+			ui.Writef("  • Keyring entry: %s\n", identityName)
 			if providerName != "" {
-				u.PrintfMessageToTUI("  • Keyring entry: %s (provider)\n", providerName)
+				ui.Writef("  • Keyring entry: %s (provider)\n", providerName)
 			}
 		}
 		if providerName != "" {
 			// Get actual configured path for this provider.
 			basePath := authManager.GetFilesDisplayPath(providerName)
-			u.PrintfMessageToTUI("  • Files: %s/%s/\n", basePath, providerName)
+			ui.Writef("  • Files: %s/%s/\n", basePath, providerName)
 		}
-		u.PrintfMessageToTUI("\n")
+		ui.Writeln("")
 		return nil
 	}
 
@@ -321,13 +325,13 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 			ui.Writeln("")
 			ui.Success(fmt.Sprintf("Logged out %s with warnings (realm: %s)", identityName, realmInfo.Value))
 			ui.Writeln("")
-			u.PrintfMessageToTUI("Some credentials could not be removed:\n")
-			u.PrintfMessageToTUI("  %v\n\n", err)
+			ui.Writef("Some credentials could not be removed:\n")
+			ui.Writef("  %v\n\n", err)
 		} else {
 			ui.Writeln("")
 			ui.Error(fmt.Sprintf("Failed to log out %s", identityName))
 			ui.Writeln("")
-			u.PrintfMessageToTUI("Error: %v\n\n", err)
+			ui.Writef("Error: %v\n\n", err)
 			return err
 		}
 	} else {
@@ -352,12 +356,12 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 	// Validate provider exists.
 	providers := authManager.GetProviders()
 	if _, exists := providers[providerName]; !exists {
-		u.PrintfMarkdownToTUI("**Error:** provider %q not found in configuration\n\n", providerName)
-		u.PrintfMarkdownToTUI("**Available providers:**\n")
+		ui.MarkdownMessagef("**Error:** provider %q not found in configuration\n\n", providerName)
+		ui.MarkdownMessagef("**Available providers:**\n")
 		for name := range providers {
-			u.PrintfMessageToTUI("  • %s\n", name)
+			ui.Writef(fmtBulletItem, name)
 		}
-		u.PrintfMessageToTUI("\n")
+		ui.Writeln("")
 		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
 	}
 
@@ -371,16 +375,16 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 	}
 
 	if dryRun {
-		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
-		u.PrintfMarkdownToTUI("**Would remove:**\n")
-		u.PrintfMessageToTUI("  • All identities using provider %s\n", providerName)
+		ui.MarkdownMessagef(msgDryRunMode)
+		ui.MarkdownMessagef("**Would remove:**\n")
+		ui.Writef("  • All identities using provider %s\n", providerName)
 		if deleteKeychain {
-			u.PrintfMessageToTUI("  • Provider keyring entry\n")
+			ui.Writef("  • Provider keyring entry\n")
 		}
 		// Get actual configured path for this provider.
 		basePath := authManager.GetFilesDisplayPath(providerName)
-		u.PrintfMessageToTUI("  • Files: %s/%s/\n", basePath, providerName)
-		u.PrintfMessageToTUI("\n")
+		ui.Writef("  • Files: %s/%s/\n", basePath, providerName)
+		ui.Writeln("")
 		return nil
 	}
 
@@ -400,15 +404,15 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 	if err := authManager.LogoutProvider(ctx, providerName, deleteKeychain); err != nil {
 		// ErrPartialLogout is treated as success (exit 0) with warning.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMarkdownToTUI("⚠ **Provider logout partially succeeded**\n\n")
-			u.PrintfMessageToTUI("Warning: %v\n\n", err)
+			ui.MarkdownMessagef("⚠ **Provider logout partially succeeded**\n\n")
+			ui.Writef("Warning: %v\n\n", err)
 			displayBrowserWarning()
 			return nil
 		}
 
 		ui.Error("Failed to log out provider")
 		ui.Writeln("")
-		u.PrintfMessageToTUI("Error: %v\n\n", err)
+		ui.Writef("Error: %v\n\n", err)
 		return err
 	}
 
@@ -493,7 +497,7 @@ func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager,
 	providers := authManager.GetProviders()
 
 	if len(identities) == 0 {
-		u.PrintfMarkdownToTUI("**No identities configured** in atmos.yaml\n")
+		ui.MarkdownMessagef("**No identities configured** in atmos.yaml\n")
 		return nil
 	}
 
@@ -528,23 +532,23 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	defer perf.Track(nil, "auth.performLogoutAll")()
 
 	if dryRun {
-		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
-		u.PrintfMarkdownToTUI("**Would remove:**\n")
+		ui.MarkdownMessagef(msgDryRunMode)
+		ui.MarkdownMessagef("**Would remove:**\n")
 		if deleteKeychain {
-			u.PrintfMessageToTUI("  • All identity keyring entries\n")
-			u.PrintfMessageToTUI("  • All provider keyring entries\n")
+			ui.Writef("  • All identity keyring entries\n")
+			ui.Writef("  • All provider keyring entries\n")
 		}
 
 		// Show file paths for each provider.
 		providers := authManager.GetProviders()
 		if len(providers) > 0 {
-			u.PrintfMessageToTUI("  • Files:\n")
+			ui.Writef("  • Files:\n")
 			for providerName := range providers {
 				basePath := authManager.GetFilesDisplayPath(providerName)
-				u.PrintfMessageToTUI("    - %s/%s/\n", basePath, providerName)
+				ui.Writef("    - %s/%s/\n", basePath, providerName)
 			}
 		}
-		u.PrintfMessageToTUI("\n")
+		ui.Writeln("")
 		return nil
 	}
 
@@ -564,15 +568,15 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	if err := authManager.LogoutAll(ctx, deleteKeychain); err != nil {
 		// ErrPartialLogout is treated as success (exit 0) with warning.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMarkdownToTUI("⚠ **Logout all partially succeeded**\n\n")
-			u.PrintfMessageToTUI("Warning: %v\n\n", err)
+			ui.MarkdownMessagef("⚠ **Logout all partially succeeded**\n\n")
+			ui.Writef("Warning: %v\n\n", err)
 			displayBrowserWarning()
 			return nil
 		}
 
 		ui.Error("Failed to log out all identities")
 		ui.Writeln("")
-		u.PrintfMessageToTUI("Error: %v\n\n", err)
+		ui.Writef("Error: %v\n\n", err)
 		return err
 	}
 
@@ -616,15 +620,15 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 	}
 
 	if dryRun {
-		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
-		u.PrintfMarkdownToTUI("**Would remove credentials from %d realm(s):**\n", len(realms))
+		ui.MarkdownMessagef(msgDryRunMode)
+		ui.MarkdownMessagef("**Would remove credentials from %d realm(s):**\n", len(realms))
 		for _, realm := range realms {
-			u.PrintfMessageToTUI("  • %s\n", realm)
+			ui.Writef(fmtBulletItem, realm)
 		}
 		if deleteKeychain {
-			u.PrintfMarkdownToTUI("\n**Would also remove keychain entries for all realms**\n")
+			ui.MarkdownMessagef("\n**Would also remove keychain entries for all realms**\n")
 		}
-		u.PrintfMessageToTUI("\n")
+		ui.Writeln("")
 		return nil
 	}
 
@@ -678,14 +682,14 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 		ui.Success(fmt.Sprintf("Realm: %s", realmName))
 	}
 
-	u.PrintfMessageToTUI("\n")
+	ui.Writeln("")
 
 	if len(errs) > 0 {
-		u.PrintfMarkdownToTUI("⚠ **Logout completed with %d error(s):**\n\n", len(errs))
+		ui.MarkdownMessagef("⚠ **Logout completed with %d error(s):**\n\n", len(errs))
 		for _, err := range errs {
-			u.PrintfMessageToTUI("  • %v\n", err)
+			ui.Writef("  • %v\n", err)
 		}
-		u.PrintfMessageToTUI("\n")
+		ui.Writeln("")
 	}
 
 	ui.Success(fmt.Sprintf("Logged out from %d realm(s)", successCount))
@@ -749,7 +753,7 @@ func displayBrowserWarning() {
 	}
 
 	// Show the warning.
-	u.PrintfMarkdownToTUI("⚠️  **Note:** This only removes local credentials. Your browser session may still be active. Visit your identity provider to end your browser session.\n\n")
+	ui.MarkdownMessagef("⚠️  **Note:** This only removes local credentials. Your browser session may still be active. Visit your identity provider to end your browser session.\n\n")
 
 	// Mark warning as shown in cache.
 	cache.BrowserSessionWarningShown = true

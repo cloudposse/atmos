@@ -10,7 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // validateParser handles flags for the validate command.
@@ -61,7 +61,7 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	// Get verbose flag.
 	verbose := v.GetBool("verbose")
 	if verbose {
-		u.PrintfMarkdown("**Validating authentication configuration...**\n")
+		ui.MarkdownMessage("**Validating authentication configuration...**\n")
 	}
 
 	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
@@ -78,11 +78,11 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 
 	// Validate auth configuration.
 	if err := validator.ValidateAuthConfig(&atmosConfig.Auth); err != nil {
-		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
-		u.PrintfMarkdown("%s\n", err.Error())
+		ui.MarkdownMessage("**❌ Authentication configuration validation failed:**\n")
+		ui.MarkdownMessagef("%s\n", err.Error())
 		return err
 	}
 
-	u.PrintfMarkdown("**✅ Authentication configuration is valid**\n")
+	ui.MarkdownMessage("**✅ Authentication configuration is valid**\n")
 	return nil
 }
