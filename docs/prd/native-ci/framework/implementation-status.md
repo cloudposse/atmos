@@ -202,12 +202,12 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 
 ---
 
-### Documentation — Not Started
+### Documentation — COMPLETE
 
-1. Archive old GitHub Actions docs — **Not Started**
-2. Write new CI integration docs — **Not Started**
-3. Update command reference docs — **Not Started**
-4. Update JSON schemas in `pkg/datafetcher/schema/` — **Not Started**
+1. Archive old GitHub Actions docs — **Done** (added deprecation tip pointing to native CI in `github-actions.mdx`)
+2. Write new CI integration docs — **Done** (`website/docs/cli/configuration/ci.mdx`: experimental warning, planfile storage config, deploy workflow, env vars table)
+3. Update command reference docs — **Done** (added `--ci` flag + CI Integration sections to `terraform-plan.mdx`, `terraform-apply.mdx`, `terraform-deploy.mdx`)
+4. Update JSON schemas in `pkg/datafetcher/schema/` — **N/A** (schemas cover stack manifests only, not `atmos.yaml` global config; no CI schema needed)
 
 ## Implementation Status by Functional Requirement
 
@@ -286,11 +286,11 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | | CI hooks gated via `checkExperimental()` in `RunCIHooks()` | | Done | |
 | | Experimental check after `ci.enabled` gate (no warning when CI disabled) | | Done | |
 | | Respects `settings.experimental` modes: silence/warn/error/disable | | Done | |
-| **—** | Documentation | — | **Not Started** | 0% |
-| | Archive old GitHub Actions docs | | Not Started | |
-| | Write new CI integration docs | | Not Started | |
-| | Update command reference docs | | Not Started | |
-| | JSON schema updates (`pkg/datafetcher/schema/`) | | Not Started | |
+| **—** | Documentation | — | **Done** | 100% |
+| | Archive old GitHub Actions docs (deprecation tip added) | | Done | |
+| | Write new CI integration docs (ci.mdx expanded) | | Done | |
+| | Update command reference docs (plan/apply/deploy --ci) | | Done | |
+| | JSON schema updates — N/A (schemas cover stack manifests only) | | N/A | |
 
 ### Summary
 
@@ -309,7 +309,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Command Parity (FR-7) | 3/3 | 0 | 0 |
 | Terraform Output Export | 5/5 | 0 | 0 |
 | Experimental Feature Gating | 5/5 | 0 | 0 |
-| Documentation | 0/4 | 4 | 0 |
+| Documentation | 3/3 | 0 | 1 (N/A) |
 | Phases: Planfile Storage Validation | 4/4 | 0 | 0 |
 | Phases: Metadata Embed Artifact | 6/6 | 0 | 0 |
 | Phases: Bundle with Lock File | 8/8 | 0 | 0 |
@@ -317,7 +317,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Phases: CLI Component/Stack Addressing | 10/10 | 0 | 0 |
 | Phases: Apply Command Parity (FR-7) | 7/7 | 0 | 0 |
 | Phases: Planfile Download Path Resolution & Integrity | 6/6 | 0 | 0 |
-| **Total** | **139/148** | **7** | **2** |
+| **Total** | **142/148** | **4** | **2** |
 
 ## Implementation Phases (Incremental)
 
@@ -719,6 +719,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 13.0 | 2026-03-11 | Documentation COMPLETE. (1) Archived old GitHub Actions docs — added deprecation `:::tip` to `website/docs/integrations/github-actions/github-actions.mdx` pointing to native CI. (2) Expanded CI integration docs — `website/docs/cli/configuration/ci.mdx` now has experimental warning, planfile storage configuration (github-artifacts/s3/local), deploy workflow example, and environment variables table. (3) Updated command reference docs — added `--ci` flag with CI Integration sections to `terraform-plan.mdx`, `terraform-apply.mdx`, `terraform-deploy.mdx`. (4) JSON schemas confirmed N/A — `pkg/datafetcher/schema/` covers stack manifests only, not `atmos.yaml` global config. Summary: 142/148 done. |
 | 12.0 | 2026-03-11 | CI Experimental Feature Gating SHIPPED. `atmos ci` command already marked experimental via `IsExperimental()`. CI hooks in `RunCIHooks()` now gated via `checkExperimental()` in `pkg/hooks/hooks.go`, respecting `settings.experimental` modes (silence/warn/error/disable). Experimental check placed after `ci.enabled` gate so warning only appears when CI is active. Uses existing sentinel errors `ErrExperimentalDisabled` and `ErrExperimentalRequiresIn`. |
 | 11.0 | 2026-03-11 | Bug fixes: (1) Deploy check run name mismatch — `onAfterDeploy` was setting `ctx.Command = "apply"` which changed check run name from `atmos/deploy:` to `atmos/apply:`, leaving original stuck in_progress; fixed by preserving original command for check run update. (2) Planfile storage skipped when not configured — `isPlanfileStorageEnabled()` guard added to `uploadPlanfile()` and `downloadPlanfileForVerification()` so planfile operations don't fail when `components.terraform.planfiles` is empty. (3) Apply warnings not shown — `ParseApplyOutput()` now calls `ExtractWarningBlocks()` and `apply.md` template includes warnings section. |
 | 10.0 | 2026-03-10 | Apply/Deploy summary enrichment: resource lists with diff blocks (created/changed/destroyed), inline badges on single line, plan diffs shown in apply summary instead of just result line. Output parser refactored into `ParseApplyOutput()` in `parser.go`. |
