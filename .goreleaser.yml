@@ -47,7 +47,7 @@ builds:
       - goos: windows
         goarch: arm
       # modernc.org/libc (dependency of modernc.org/sqlite used by pkg/ai/session)
-      # has type mismatch bugs on freebsd/386 that are unresolved upstream.
+      # has type mismatch bugs on 32-bit FreeBSD that are unresolved upstream.
       # https://gitlab.com/cznic/libc/-/issues
       - goos: freebsd
         goarch: '386'
