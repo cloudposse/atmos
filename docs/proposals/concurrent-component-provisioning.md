@@ -661,6 +661,8 @@ Suggested scope:
 - consider ready-queue scheduling for better utilization
 - add richer progress UX and, later, scoped concurrency limits
 
+The `--affected` selector surface already exists through the dynamic DescribeAffected bridge in `cmd/terraform/utils.go`, so Phase 3 should reuse that path rather than introduce a separate selector model for concurrent execution.
+
 ## Alternatives Considered
 
 ### 1. Keep Using CI Matrices
