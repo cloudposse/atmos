@@ -111,6 +111,30 @@ html[data-theme="dark"] .terminal h1 {
     background: transparent !important;
 }
 
+.terminal .language-bash.theme-code-block {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal pre.prism-code.language-bash {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal .language-sh.theme-code-block {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+.terminal pre.prism-code.language-sh {
+    --prism-background-color: transparent !important;
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
 .terminal .viewport {
     max-height: 450px;
     overflow: auto;
