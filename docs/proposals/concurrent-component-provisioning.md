@@ -61,6 +61,8 @@ On current `main`, the repo already contains the main building blocks needed for
 - PR #1876 introduced isolated Terraform component workdirs and positioned them as an enabler for concurrent component execution
 - `settings.depends_on` is part of the stack schema
 - `describe dependents` can already discover reverse edges
+- non-affected multi-component CLI routing (`--all`, `--components`, `--query`) still flows through `ExecuteTerraformQuery`, which walks stacks sequentially
+- the graph-backed `ExecuteTerraformAll` executor exists, but is not yet the active CLI path and does not yet match `ExecuteTerraformQuery`'s auth/store bridge behavior for YAML-function-driven config resolution
 - current shell execution still binds subprocesses to shared `os.Stdin`, `os.Stdout`, and `os.Stderr`
 - Terraform workdirs are explicitly positioned as enabling isolated concurrent execution
 
@@ -81,6 +83,23 @@ This proposal assumes and builds on the following existing foundation:
 
 - the merged PR #1516 graph-backed dependency-ordering foundation for Terraform bulk execution
 - the PR #1876 execution-isolation foundation via workdirs
+
+## Potential Additional Foundation from PR #1891
+
+If PR #1891 merges before implementation starts, this proposal should reuse it where it fits:
+
+- `RunCIHooks` and `pkg/ci` provider bindings for Terraform `plan` and `apply`
+- `--ci` flags plus CI-related schema/config surface
+- planfile upload/download and human-facing CI summary/output integration
+
+If PR #1891 merges first, `plan` and `apply` are no longer hook-free from the concurrency planner's perspective, because concurrent execution would need to preserve those CI-oriented lifecycle actions per node rather than once per command.
+
+However, PR #1891 would not remove the need for:
+
+- stream-injectable subprocess output capture
+- CLI routing consolidation onto one graph-backed bulk executor
+- node-level hook execution under concurrency
+- a stable scheduler result model and JSON summary contract
 
 ## What PR #1516 Already Settles
 
@@ -122,6 +141,8 @@ The proposal in this document is therefore intentionally narrower:
 ## Proposed Direction
 
 Extend the graph-based Terraform executor from PR #1516 with concurrent scheduling of ready nodes.
+
+Because current `main` still routes non-affected bulk CLI execution through `ExecuteTerraformQuery`, the first implementation step should be to converge `--all`, `--components`, and `--query` onto one graph-backed bulk executor with auth/store parity before concurrency is introduced.
 
 Conceptually, the flow is:
 
@@ -252,7 +273,7 @@ This is simpler, deterministic, easier to debug, and directly matches the graph 
 
 The trade-off is utilization: if one node in a level is much slower than its peers, downstream work still waits for the entire level to finish, which can leave workers idle.
 
-A streaming ready-queue remains a valid Phase 2 optimization for unbalanced graphs, but it should not be the initial scheduler model.
+A streaming ready-queue remains a valid later-phase optimization for unbalanced graphs, but it should not be the initial scheduler model.
 
 ### 4. Concurrent Scheduling
 
@@ -272,6 +293,8 @@ Recommended flag:
 - `--max-concurrency N`
 
 This avoids confusion with Terraform's own `-parallelism` flag, which controls resource-level parallelism inside a single component.
+
+If `--max-concurrency > 1` is set and any prerequisite for safe concurrent execution is not met, the CLI should fail fast during validation before any node executes. That includes workdir requirements, non-interactive auth requirements, and command-specific prerequisites such as `-auto-approve` for concurrent `apply` and `destroy`.
 
 ### 5. Failure Handling
 
@@ -362,6 +385,8 @@ Recommended Phase 1 JSON summary contract:
 - timestamps should use RFC 3339 format
 - v1 compatibility should be additive only: new fields may be added, but existing field names and meanings should not change
 
+If PR #1891 is merged first, its CI summaries, outputs, and planfile actions should layer on top of node-level results and captured output, not replace this stable machine-readable contract.
+
 ## Output Isolation
 
 Concurrent execution cannot reuse the current shell execution model unchanged because Atmos subprocess execution still binds each command to shared process stdio.
@@ -443,6 +468,17 @@ A node should be considered complete only after:
 - any required post-apply store updates complete successfully
 
 This matters because downstream components may depend on side effects produced after `apply`, not only on Terraform state changes themselves.
+
+## CI Hook Implications If PR #1891 Lands First
+
+If PR #1891 merges before implementation begins, concurrent execution should treat its CI lifecycle bindings as part of node execution, not as one command-level afterthought.
+
+That means:
+
+- `after.terraform.plan` should run per node using that node's captured output
+- `after.terraform.apply` should run per node after that node completes successfully
+- `before.terraform.apply` planfile download should be evaluated per node before apply starts
+- if concurrent mode cannot preserve those semantics in the first cut, the CLI should fail fast for incompatible combinations such as `--ci` with `--max-concurrency > 1` rather than silently dropping CI behavior
 
 ## Rate Limits and Concurrency Defaults
 
@@ -543,46 +579,87 @@ This proposal should rely on workdir isolation rather than attempt to share a si
 
 ## Scope Recommendation
 
-The lowest-risk path is a staged rollout.
+The lowest-risk path is a staged rollout: two foundation PRs followed by three feature phases.
 
-This proposal should be treated as the concurrency layer that builds on top of the dependency graph foundation from PR #1516 and the workdir foundation from PR #1876, not as a replacement for either.
+This proposal should be treated as the concurrency layer that builds on top of the dependency graph foundation from PR #1516 and the workdir foundation from PR #1876, and, if it lands first, should reuse the CI/reporting infrastructure from PR #1891 where it fits.
+
+### Foundation PR 1
+
+Introduce stream-injectable subprocess execution and remove output-handling patterns that are unsafe under concurrency.
+
+Suggested scope:
+
+- refactor shell execution so callers can inject stdout/stderr destinations while preserving current defaults
+- eliminate global stdout swapping in plan/show paths
+- make no CLI surface or scheduling changes yet
+
+This is pure plumbing and should land separately because it affects hot subprocess paths but should not change user-visible behavior.
+
+### Foundation PR 2
+
+Consolidate non-affected bulk Terraform CLI routing onto one graph-backed executor before adding concurrency.
+
+Suggested scope:
+
+- route the non-affected bulk forms of `atmos terraform plan`, `atmos terraform apply`, and `atmos terraform destroy` through a shared graph-backed bulk executor
+- ensure that `--all`, `--components`, and `--query` all use that same bulk executor
+- preserve auth and store-resolution behavior that currently lives in `ExecuteTerraformQuery`
+- ship deterministic dependency ordering for those selectors before concurrency is introduced
+
+This is valuable on its own because it fixes ordering for bulk commands and flushes out graph/auth parity issues before a scheduler is layered on top.
 
 ### Phase 1
 
-Add concurrent scheduling for the existing graph-backed Terraform bulk commands.
+Add concurrent scheduling for `atmos terraform plan` on the graph-backed non-affected bulk path.
 
 Suggested initial surface:
 
-- `atmos terraform apply --all`
 - `atmos terraform plan --all`
-- `atmos terraform destroy --all`
-- `atmos terraform plan --affected`
-- `atmos terraform apply --affected`
-
-`atmos terraform plan --affected` and `atmos terraform apply --affected` already map to the existing DescribeAffected behavior through the dynamic affected-flag bridge in `cmd/terraform/utils.go`. The concurrent scheduler should reuse that path rather than introduce a separate selector surface.
+- `atmos terraform plan --components ...`
+- `atmos terraform plan --query ...`
 
 Recommended Phase 1 constraints:
 
 - opt-in only, with default concurrency of 1
 - level-based scheduling only
+- in Phase 1, `--max-concurrency` should be exposed on `atmos terraform plan` only; `apply` and `destroy` should not accept the flag until Phase 2
 - workdirs required when `--max-concurrency > 1`
-- non-interactive apply and destroy only
+- pre-authenticated, non-interactive auth only when `--max-concurrency > 1`; fail fast if the resolved identity flow would require a browser, device-code flow, or interactive prompt
 - global concurrency cap only
 - machine-readable summary output available from the start
+- if PR #1891 is merged by then, either invoke `after.terraform.plan` / `RunCIHooks` per node using captured output or fail fast on incompatible `--ci` combinations; silent downgrades are not acceptable
 
 If concurrent mode is requested without workdir support, the CLI should fail fast during validation before any node execution begins.
 
 ### Phase 2
 
-Add richer live reporting, resumability, and more advanced scheduling optimizations such as a streaming ready-queue.
+Extend the same scheduler to mutating commands on the non-affected bulk path.
+
+Suggested surface:
+
+- `atmos terraform apply --all`
+- `atmos terraform destroy --all`
+- the corresponding `--components` and `--query` forms, which already use the graph-backed path after Foundation PR 2
+
+Recommended Phase 2 additions:
+
+- enforce non-interactive concurrent apply/destroy with `-auto-approve`
+- add signal handling and graceful cancellation
+- treat hooks/store updates as part of node completion
+- add reverse blocked-node semantics for destroy
+- if PR #1891 is merged first, execute `before.terraform.apply` and `after.terraform.apply` CI actions per node
 
 ### Phase 3
 
-Evaluate whether the orchestration layer should be generalized for:
+Move `--affected` onto the shared graph-backed scheduler and then add operational refinements.
 
-- Helmfile
-- Packer
-- future multi-tool DAG workflows
+Suggested scope:
+
+- route `atmos terraform plan --affected` and `atmos terraform apply --affected` through the shared scheduler
+- preserve existing `--include-dependents` semantics on the graph-backed path
+- add resumability
+- consider ready-queue scheduling for better utilization
+- add richer progress UX and, later, scoped concurrency limits
 
 ## Alternatives Considered
 
@@ -636,8 +713,11 @@ Proceed with a phase-next Terraform concurrency enhancement that builds directly
 
 - reuses the dependency graph and ordering semantics from PR #1516
 - reuses workdir isolation from PR #1876
+- if PR #1891 lands first, reuses its CI hooks, summaries, outputs, and planfile infrastructure as a layer on top of node-level execution
+- first converges the non-affected bulk CLI path onto one graph-backed executor with auth/store parity
 - keeps graph construction and filtering sequential
 - uses level-based scheduling first, with bounded global concurrency
+- adds concurrent `plan` before concurrent `apply` and `destroy`
 - requires explicit non-interactive execution for concurrent apply and destroy
 - isolates per-node output and emits machine-readable summaries
 - produces CI-friendly aggregated results
