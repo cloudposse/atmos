@@ -153,7 +153,7 @@ html[data-theme="light"] .ai-badge {
   line-height: 1;
   letter-spacing: 0.05em;
   color: transparent;
-  background: -webkit-linear-gradient(-45deg, #eb1a1a, #583ce7, #2ec8ff, #23d5ab);
+  background: linear-gradient(-45deg, #eb1a1a, #583ce7, #2ec8ff, #23d5ab);
   background-size: 300% 300%;
   background-clip: text;
   -webkit-background-clip: text;
@@ -162,7 +162,7 @@ html[data-theme="light"] .ai-badge {
 }
 
 html[data-theme="light"] .ai-badge-text {
-  background: -webkit-linear-gradient(-45deg, #583ce7, #2554a0, #3578e5);
+  background: linear-gradient(-45deg, #583ce7, #2554a0, #3578e5);
   background-size: 300% 300%;
   background-clip: text;
   -webkit-background-clip: text;
@@ -223,7 +223,7 @@ html[data-theme="dark"] .ai-capability-card:hover {
   margin-bottom: 0.75rem;
   display: inline-flex;
   color: transparent;
-  background: -webkit-linear-gradient(-45deg, #583ce7, #2ec8ff);
+  background: linear-gradient(-45deg, #583ce7, #2ec8ff);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
