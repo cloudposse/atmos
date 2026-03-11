@@ -60,6 +60,9 @@ stacks:
     - "deploy/**/*"
   name_pattern: "{stage}"
 
+settings:
+  experimental: silence
+
 logs:
   file: "/dev/stderr"
   level: Info
