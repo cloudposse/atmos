@@ -435,6 +435,47 @@ func TestParsePagerFlag_FallbackToEnv(t *testing.T) {
 	assert.True(t, result.IsEnabled(), "Should be enabled")
 }
 
+// TestParseGlobalFlags_AIFlag tests that the --ai flag is correctly parsed.
+func TestParseGlobalFlags_AIFlag(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.False(t, flags.AI, "AI should default to false")
+	})
+
+	t.Run("CLI flag enables AI", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("ai", true)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.True(t, flags.AI, "AI should be true when set via CLI flag")
+	})
+
+	t.Run("environment variable enables AI", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_AI", "true")
+		_ = v.BindEnv("ai", "ATMOS_AI")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.True(t, flags.AI, "AI should be true when ATMOS_AI is set")
+	})
+}
+
 // TestParsePagerFlag_NoFlagRegistered tests behavior when pager flag is not registered.
 func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	// Create command WITHOUT pager flag.

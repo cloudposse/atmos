@@ -66,3 +66,22 @@ atmos validate stacks
 ```bash
 atmos describe affected
 ```
+
+## AI-Powered Analysis with `--ai`
+
+The global `--ai` flag adds AI analysis to any command. The AI summarizes output on success and
+explains errors with fix instructions on failure.
+
+### Analyze command output
+```bash
+atmos --ai terraform plan vpc -s ue1-network
+atmos --ai describe component vpc -s ue1-prod
+atmos --ai validate stacks
+atmos --ai list stacks
+```
+
+### Enable globally via environment variable
+```bash
+export ATMOS_AI=true
+atmos terraform plan vpc -s ue1-network
+```

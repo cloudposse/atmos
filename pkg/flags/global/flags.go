@@ -71,6 +71,9 @@ type Flags struct {
 	RedirectStderr string
 	Version        bool
 
+	// AI integration.
+	AI bool // Enable AI-powered analysis of command output (--ai).
+
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
 }

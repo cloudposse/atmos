@@ -53,6 +53,9 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("heatmap"), "heatmap flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("heatmap-mode"), "heatmap-mode flag should be registered")
 
+		// AI integration flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("ai"), "ai flag should be registered")
+
 		// System flags.
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("redirect-stderr"), "redirect-stderr flag should be registered")
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("use-version"), "use-version flag should be registered")

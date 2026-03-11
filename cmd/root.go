@@ -36,6 +36,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
 
+	"github.com/cloudposse/atmos/pkg/ai/analyze"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -120,6 +121,60 @@ func parseChdirFromArgs() string {
 // If no --use-version flag is found, it returns an empty string.
 func parseUseVersionFromArgs() string {
 	return parseUseVersionFromArgsInternal(os.Args)
+}
+
+// isAICommand checks if the current command is an "atmos ai" subcommand.
+// We skip AI output analysis for these commands to avoid double processing.
+func isAICommand() bool {
+	return isAICommandInternal(os.Args)
+}
+
+// isAICommandInternal checks if args represent an "atmos ai" command.
+func isAICommandInternal(args []string) bool {
+	for _, arg := range args {
+		// Skip flags.
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		// The first non-flag argument after the program name is the command.
+		if arg == "ai" {
+			return true
+		}
+		// If the first non-flag arg is not "ai", it's not an AI command.
+		// But the program name is args[0], so skip it.
+		if arg == args[0] {
+			continue
+		}
+		return false
+	}
+	return false
+}
+
+// hasAIFlag checks if --ai flag is present in os.Args.
+// This is needed before Cobra parses flags because we set up output capture
+// in Execute() before internal.Execute() runs the command.
+func hasAIFlag() bool {
+	return hasAIFlagInternal(os.Args)
+}
+
+// hasAIFlagInternal checks if --ai flag is present in the provided args.
+// This internal version accepts args as a parameter for testability.
+func hasAIFlagInternal(args []string) bool {
+	for _, arg := range args {
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
+		if arg == "--ai" || arg == "--ai=true" {
+			return true
+		}
+	}
+	return false
+}
+
+// buildCommandName reconstructs the command name from os.Args for AI analysis context.
+func buildCommandName() string {
+	return strings.Join(os.Args, " ")
 }
 
 // parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
@@ -1461,9 +1516,37 @@ func Execute() error {
 	// This separates Atmos flags from pass-through flags BEFORE Cobra parses.
 	preprocessCompatibilityFlags()
 
+	// Check if --ai flag is set and set up output capture.
+	// We parse --ai from os.Args because Cobra hasn't parsed flags yet at this point.
+	// Skip for "atmos ai" commands to avoid double AI processing.
+	aiEnabled := hasAIFlag() && !isAICommand()
+	var captureSession *analyze.CaptureSession
+
+	if aiEnabled {
+		// Validate AI configuration early to fail fast with helpful errors.
+		if validateErr := analyze.ValidateAIConfig(&atmosConfig); validateErr != nil {
+			return validateErr
+		}
+
+		// Start capturing stdout/stderr while still teeing to the terminal.
+		var captureErr error
+		captureSession, captureErr = analyze.StartCapture()
+		if captureErr != nil {
+			log.Warn("Failed to set up AI output capture, continuing without AI analysis", "error", captureErr)
+			aiEnabled = false
+		}
+	}
+
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := internal.Execute(RootCmd)
+
+	// Stop capture and run AI analysis if enabled.
+	if aiEnabled && captureSession != nil {
+		stdout, stderr := captureSession.Stop()
+		commandName := buildCommandName()
+		analyze.AnalyzeOutput(&atmosConfig, commandName, stdout, stderr, err)
+	}
 
 	telemetry.CaptureCmd(cmd, err)
 

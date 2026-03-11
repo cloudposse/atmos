@@ -285,6 +285,29 @@ These flags are available for every Atmos command:
         - Example: `--redirect-stderr=/dev/null` to suppress error output
     </dd>
 
+    <dt>`--ai`</dt>
+    <dd>
+        Enable AI-powered analysis of command output.
+        - Default: `false`
+        - When enabled, command output is automatically sent to the configured AI provider for analysis
+        - Requires AI configuration in `atmos.yaml` (provider, model, API key)
+        - Can also use `ATMOS_AI` environment variable
+        - Works with any command that produces output (e.g., `terraform plan`, `describe stacks`)
+        - See [AI Configuration](/cli/configuration/ai) for setup instructions
+
+        **Examples:**
+        ```bash
+        # Analyze terraform plan output with AI
+        atmos --ai terraform plan vpc -s prod
+
+        # Use environment variable
+        ATMOS_AI=true atmos terraform plan vpc -s prod
+
+        # Combine with other flags
+        atmos --ai --logs-level=Debug terraform apply vpc -s prod
+        ```
+    </dd>
+
     <dt>`--version`</dt>
     <dd>
         Print a minimal single-line Atmos CLI version and exit.
@@ -519,6 +542,15 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_PROFILE_TYPE`</dt>
     <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
+
+    <dt>`ATMOS_AI`</dt>
+    <dd>
+        Enable AI-powered analysis of command output.
+        - Equivalent to the `--ai` flag
+        - Set to `true` to enable AI analysis globally
+        - CLI flag takes precedence over this environment variable
+        - Example: `ATMOS_AI=true atmos terraform plan vpc -s prod`
+    </dd>
 </dl>
 
 ### AI Assistant Environment Variables
@@ -730,6 +762,20 @@ atmos describe stacks
 atmos terraform plan vpc -s prod --profile-file=cpu.prof --profile-type=cpu
 atmos terraform plan vpc -s prod --profile-file=heap.prof --profile-type=heap
 atmos terraform plan vpc -s prod --profile-file=trace.out --profile-type=trace
+```
+
+### AI-Powered Analysis Examples
+
+```bash
+# Analyze terraform plan output with AI
+atmos --ai terraform plan vpc -s prod
+
+# Enable AI via environment variable
+export ATMOS_AI=true
+atmos terraform plan vpc -s prod
+
+# One-off AI analysis
+ATMOS_AI=true atmos terraform apply vpc -s prod
 ```
 
 ### CI/CD Portability Example

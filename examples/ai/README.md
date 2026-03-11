@@ -3,6 +3,7 @@
 This example demonstrates how to configure and use the Atmos AI Assistant with a realistic multi-region AWS
 infrastructure project.
 
+- **Global `--ai` flag** — Add AI-powered analysis to any Atmos command (`atmos --ai terraform plan`)
 - **Multi-provider configuration** — Configure multiple AI providers (Anthropic, OpenAI, Gemini, Ollama)
 - **Multi-region infrastructure** — Hub-spoke Transit Gateway topology across us-east-1 and us-west-2
 - **Session management** — Persistent conversation history with auto-compact
@@ -273,6 +274,68 @@ examples/ai/
     └── ai-demo.yaml                             # Workflow demonstrating AI usage
 ```
 
+## The `--ai` Flag
+
+The global `--ai` flag adds AI-powered analysis to **any** Atmos command. When set, command output
+(stdout and stderr) is automatically captured and sent to the configured AI provider for analysis.
+
+- If the command **succeeds**, the AI provides a concise summary and key observations
+- If the command **fails**, the AI explains the error and provides step-by-step instructions to fix it
+
+The flag works with all commands — terraform, helmfile, describe, validate, list, and more.
+
+### `--ai` Flag Examples
+
+```bash
+# AI analyzes terraform plan output and summarizes changes
+atmos --ai terraform plan vpc -s ue1-network
+
+# AI explains any errors from terraform apply
+atmos --ai terraform apply vpc -s ue1-prod
+
+# AI summarizes the component configuration
+atmos --ai describe component vpc -s ue1-network
+
+# AI analyzes validation results
+atmos --ai validate stacks
+
+# AI summarizes the list of stacks and components
+atmos --ai list stacks
+atmos --ai list components
+
+# Enable via environment variable (applies to all commands)
+export ATMOS_AI=true
+atmos terraform plan vpc -s ue1-network
+atmos describe stacks
+
+# Combine with other flags
+atmos --ai --logs-level=Debug terraform plan vpc -s ue1-prod
+```
+
+### How It Works
+
+1. You run any Atmos command with `--ai` (e.g., `atmos --ai terraform plan vpc -s ue1-network`)
+2. The command runs normally — output is displayed to the terminal in real-time
+3. Output is also captured in the background
+4. After the command completes, the captured output is sent to the configured AI provider
+5. The AI analysis is rendered as markdown below the command output
+
+### Configuration Required
+
+The `--ai` flag requires AI to be configured in `atmos.yaml`. This example already has it configured.
+If AI is not configured, Atmos shows a helpful error with configuration instructions.
+
+```yaml
+# Minimum required in atmos.yaml:
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env ANTHROPIC_API_KEY
+```
+
 ## Example Commands
 
 ```bash
@@ -287,6 +350,11 @@ atmos ai ask "Describe the VPC in ue1-network"
 
 # Analyze dependencies
 atmos ai ask "What are the component dependencies in ue1-network?"
+
+# AI-powered analysis of any command output
+atmos --ai describe component vpc -s ue1-network
+atmos --ai validate stacks
+atmos --ai terraform plan vpc -s ue1-prod
 
 # Named session
 atmos ai chat --session infrastructure-review

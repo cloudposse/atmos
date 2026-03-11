@@ -24,6 +24,8 @@ GLOBAL FLAGS
       --                        Use double dashes to separate Atmos-specific options from native arguments and flags
                                 for the command.
 
+      --ai                      Enable AI-powered analysis of command output
+
       --base-path string        Base path for Atmos project
 
   -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this

@@ -947,3 +947,107 @@ func TestSetupColorProfileFromEnv(t *testing.T) {
 		})
 	}
 }
+
+// TestIsAICommandInternal tests that AI commands are detected correctly.
+func TestIsAICommandInternal(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected bool
+	}{
+		{
+			name:     "atmos ai chat",
+			args:     []string{"atmos", "ai", "chat"},
+			expected: true,
+		},
+		{
+			name:     "atmos ai ask question",
+			args:     []string{"atmos", "ai", "ask", "what is vpc"},
+			expected: true,
+		},
+		{
+			name:     "atmos --ai terraform plan is not an ai command",
+			args:     []string{"atmos", "--ai", "terraform", "plan"},
+			expected: false,
+		},
+		{
+			name:     "atmos terraform plan is not an ai command",
+			args:     []string{"atmos", "terraform", "plan"},
+			expected: false,
+		},
+		{
+			name:     "atmos with flags before ai",
+			args:     []string{"atmos", "--logs-level=Debug", "ai", "chat"},
+			expected: true,
+		},
+		{
+			name:     "empty args",
+			args:     []string{},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAICommandInternal(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestHasAIFlagInternal tests the hasAIFlagInternal function that parses --ai from os.Args.
+func TestHasAIFlagInternal(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected bool
+	}{
+		{
+			name:     "no --ai flag",
+			args:     []string{"atmos", "terraform", "plan"},
+			expected: false,
+		},
+		{
+			name:     "--ai flag present",
+			args:     []string{"atmos", "--ai", "terraform", "plan"},
+			expected: true,
+		},
+		{
+			name:     "--ai flag at end",
+			args:     []string{"atmos", "terraform", "plan", "--ai"},
+			expected: true,
+		},
+		{
+			name:     "--ai=true",
+			args:     []string{"atmos", "--ai=true", "terraform", "plan"},
+			expected: true,
+		},
+		{
+			name:     "--ai=false is not enabled",
+			args:     []string{"atmos", "--ai=false", "terraform", "plan"},
+			expected: false,
+		},
+		{
+			name:     "--ai after -- delimiter is ignored",
+			args:     []string{"atmos", "terraform", "plan", "--", "--ai"},
+			expected: false,
+		},
+		{
+			name:     "similar flag --aim is not matched",
+			args:     []string{"atmos", "--aim", "terraform", "plan"},
+			expected: false,
+		},
+		{
+			name:     "empty args",
+			args:     []string{},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasAIFlagInternal(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
