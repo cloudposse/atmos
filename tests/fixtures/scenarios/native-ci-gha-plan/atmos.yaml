@@ -16,6 +16,9 @@ stacks:
     - "**/_defaults.yaml"
   name_pattern: "{tenant}-{environment}-{stage}"
 
+settings:
+  experimental: silence
+
 logs:
   verbose: false
   colors: true
