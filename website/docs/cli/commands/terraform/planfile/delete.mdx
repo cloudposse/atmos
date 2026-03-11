@@ -7,10 +7,22 @@ id: delete
 description: Delete a Terraform planfile from remote storage.
 ---
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Delete a planfile from a storage backend. Requires the `--force` flag to confirm deletion and prevent accidental data loss.
 </Intro>
+
+<Experimental/>
+
+<ActionCard title="Configure CI Integration">
+    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Usage
 

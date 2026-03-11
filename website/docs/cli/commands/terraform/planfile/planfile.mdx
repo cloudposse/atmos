@@ -8,10 +8,22 @@ description: Commands for managing Terraform planfiles across multiple storage b
 ---
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 The `atmos terraform planfile` command group provides tools for managing Terraform planfiles. Store, retrieve, and share planfiles across CI/CD pipelines using local filesystem, S3, or GitHub Artifacts storage.
 </Intro>
+
+<Experimental/>
+
+<ActionCard title="Configure CI Integration">
+    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Subcommands
 

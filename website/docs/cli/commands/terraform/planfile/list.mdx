@@ -7,10 +7,22 @@ id: list
 description: List Terraform planfiles stored in a backend.
 ---
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 List planfiles stored in a storage backend, optionally filtering by prefix. Useful for finding planfiles for a specific stack or component.
 </Intro>
+
+<Experimental/>
+
+<ActionCard title="Configure CI Integration">
+    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Usage
 

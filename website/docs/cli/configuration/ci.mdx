@@ -9,14 +9,13 @@ import Intro from '@site/src/components/Intro';
 import KeyPoints from '@site/src/components/KeyPoints';
 import Note from '@site/src/components/Note';
 import File from '@site/src/components/File';
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Native CI integration brings first-class CI/CD support directly into the Atmos CLI. Run `atmos terraform plan` in GitHub Actions and get beautiful job summaries, status checks, and PR comments—no extra actions required.
 </Intro>
 
-:::warning Experimental Feature
-Native CI integration is an **experimental feature**. By default, a warning is shown when CI hooks are active. To suppress the warning, add `settings.experimental: silence` to your `atmos.yaml`. See [Experimental Features](/cli/configuration#experimental-features) for details.
-:::
+<Experimental/>
 
 <KeyPoints>
 - Rich job summaries with resource badges and collapsible diffs

@@ -8,14 +8,22 @@ description: CI/CD integration commands for GitHub Actions and other CI provider
 ---
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 The `atmos ci` command group provides tools for working with CI/CD systems. Use these commands to check CI status, manage check runs, and integrate with GitHub Actions.
 </Intro>
 
-:::warning Experimental Feature
-The `atmos ci` command group is an **experimental feature**. To suppress the experimental warning, add `settings.experimental: silence` to your `atmos.yaml`. See [Experimental Features](/cli/configuration#experimental-features) for details.
-:::
+<Experimental/>
+
+<ActionCard title="Configure CI Integration">
+    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Subcommands
 

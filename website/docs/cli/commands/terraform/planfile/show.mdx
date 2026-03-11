@@ -7,10 +7,22 @@ id: show
 description: Show details and metadata for a stored Terraform planfile.
 ---
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Display detailed metadata and information about a stored planfile without downloading it. Useful for verifying planfile contents before applying.
 </Intro>
+
+<Experimental/>
+
+<ActionCard title="Configure CI Integration">
+    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Usage
 
