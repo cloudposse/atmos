@@ -27,16 +27,14 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	stack := "nonprod"
+	stack := "terraform-output-test"
 
 	defer func() {
-		// Delete the generated files and folders after the test.
-		// Paths are relative to workDir (the scenario directory), which is the active directory
-		// during defer execution (t.Chdir cleanup runs after defers).
-		err := os.RemoveAll(filepath.Join("components", "terraform", "mock", ".terraform"))
+		// Delete the generated files and folders after the test
+		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
 		assert.NoError(t, err)
 
-		err = os.RemoveAll(filepath.Join("components", "terraform", "mock", "terraform.tfstate.d"))
+		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
 		assert.NoError(t, err)
 	}()
 
@@ -71,7 +69,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "component-1-b", d)
 
-	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 nonprod baz", "", nil)
+	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 terraform-output-test baz", "", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "component-1-c", d)
 
@@ -111,11 +109,11 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "component-1-a", d)
 
-	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod bar", stack, nil)
+	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 terraform-output-test bar", stack, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "component-1-b", d)
 
-	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod baz", "", nil)
+	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 terraform-output-test baz", "", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "component-1-c", d)
 
@@ -155,7 +153,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		assert.Equal(t, "arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123", d)
 
 		// Test with stack parameter and single quotes
-		d, err = processTagTerraformOutput(&atmosConfig, `!terraform.output component-1 nonprod '.secret_arns_map["auth0-event-stream/app/client-secret"]'`, stack, nil)
+		d, err = processTagTerraformOutput(&atmosConfig, `!terraform.output component-1 terraform-output-test '.secret_arns_map["auth0-event-stream/app/client-secret"]'`, stack, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "arn:aws:secretsmanager:us-east-1:123456789012:secret:client-secret-xyz789", d)
 	})
