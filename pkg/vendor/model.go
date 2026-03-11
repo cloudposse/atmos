@@ -584,7 +584,7 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 
 		// Then, check if the file should be excluded (excluded_paths takes precedence).
 		if len(s.ExcludedPaths) > 0 {
-			shouldSkip, err := shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
+			shouldSkip, err := shouldExcludeFile(s.ExcludedPaths, trimmedSrc)
 			if err != nil {
 				return true, err
 			}
@@ -600,14 +600,16 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 }
 
 // shouldExcludeFile checks if a file should be excluded based on patterns.
-func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
+func shouldExcludeFile(excludedPaths []string, trimmedSrc string) (bool, error) {
 	for _, excludePath := range excludedPaths {
-		excludeMatch, err := u.PathMatch(excludePath, src)
+		// Match against trimmedSrc (relative path) instead of src (absolute path).
+		// This allows simple patterns like "README.md" to match without needing "**/" prefix.
+		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
 		if err != nil {
 			return true, err
 		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
+			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file.
+			log.Debug("Excluding file since it matches pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
 			return true, nil
 		}
 	}
