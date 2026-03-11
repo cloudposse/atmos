@@ -178,16 +178,19 @@ func buildCommandName() string {
 }
 
 // runAIAnalysis stops the capture session and sends captured output to the AI provider for analysis.
-// It handles both the normal error return path and the intercepted errUtils.Exit() path.
+// When there's an error, it prints the formatted error BEFORE the AI analysis so the user sees
+// the error first, followed by the AI explanation.
 func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error) {
 	defer perf.Track(nil, "cmd.runAIAnalysis")()
 
 	stdout, stderrCaptured := captureSession.Stop()
 
-	// If the command failed, append the formatted error to captured stderr
-	// so the AI sees the same error output the user will see.
+	// If the command failed, print the error to stderr first so it appears before the AI analysis.
+	// Also append it to captured stderr so the AI sees the full error context.
 	if cmdErr != nil {
 		formatted := errUtils.Format(cmdErr, errUtils.DefaultFormatterConfig())
+		_, _ = iolib.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
+
 		if stderrCaptured != "" {
 			stderrCaptured += "\n"
 		}
@@ -1564,10 +1567,17 @@ func Execute() error {
 
 	telemetry.CaptureCmd(cmd, err)
 
-	// Stop capture and run AI analysis before any exit calls.
-	// This must happen before showUsageAndExit which calls errUtils.Exit().
+	// Stop capture and run AI analysis.
+	// runAIAnalysis prints the error BEFORE the AI response so the user sees
+	// the error first, then the AI explanation. After analysis, we exit directly
+	// to prevent main.go from re-printing the error.
 	if aiEnabled && captureSession != nil {
 		runAIAnalysis(&atmosConfig, captureSession, err)
+		if err != nil {
+			// Error was already printed by runAIAnalysis. Exit with proper code.
+			errUtils.Exit(errUtils.GetExitCode(err))
+		}
+		return nil
 	}
 
 	// Handle sentinel errors with errors.Is().

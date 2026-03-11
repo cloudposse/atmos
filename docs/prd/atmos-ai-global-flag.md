@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 **Version:** 2.0
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-03-11
 
 ---
 
@@ -119,16 +119,28 @@ func Execute() error {
 
     // ... telemetry ...
 
-    // Stop capture and run AI analysis.
+    // Stop capture, print error (if any), then run AI analysis.
     if aiEnabled && captureSession != nil {
         runAIAnalysis(&atmosConfig, captureSession, err)
+        if err != nil {
+            errUtils.Exit(errUtils.GetExitCode(err))  // Error already printed
+        }
+        return nil
     }
 
     return err
 }
 ```
 
-**Error Propagation**: Command functions (e.g., `executeSingleComponent`, `terraformRunWithOptions`) return errors through Cobra's `RunE` instead of calling `errUtils.CheckErrorPrintAndExit()` / `os.Exit()`. This ensures errors flow back to `Execute()` where AI analysis can process them. The error is then returned to `main.go` for formatting and display.
+**Error Handling with `--ai`**:
+
+1. **Error Propagation**: Command functions (e.g., `executeSingleComponent`, `terraformRunWithOptions`) return errors through Cobra's `RunE` instead of calling `errUtils.CheckErrorPrintAndExit()` / `os.Exit()`. This ensures errors flow back to `Execute()` where AI analysis can process them.
+
+2. **Output Ordering**: `runAIAnalysis()` prints the formatted error to stderr BEFORE sending output to the AI provider. This ensures the user sees: error message → AI explanation (not the reverse).
+
+3. **Exit Handling**: After AI analysis, `Execute()` calls `errUtils.Exit(code)` directly to prevent `main.go` from re-printing the error. For successful commands, it returns `nil`.
+
+4. **UI Output**: All AI output (thinking indicator, markdown response, warnings) goes to stderr via `utils.PrintfMessageToTUI()` and `utils.PrintfMarkdownToTUI()`, keeping stdout clean for piping.
 
 ## Flag Infrastructure
 
@@ -218,7 +230,7 @@ atmos --ai aws security analyze
 
 ### Coverage
 
-- `pkg/ai/analyze/`: ~74% (AnalyzeOutput requires real AI client — integration test territory)
+- `pkg/ai/analyze/`: ~95% (AnalyzeOutput tested via mock client; only OS pipe failure path uncovered)
 - `pkg/flags/`: Full coverage for AI flag registration and parsing
 - `cmd/`: Full coverage for flag and command detection helpers
 
@@ -226,7 +238,8 @@ atmos --ai aws security analyze
 
 - Requires AI provider configuration in `atmos.yaml` (provider, model, API key)
 - Uses `pkg/ai` factory and registry for client creation
-- Uses `pkg/utils` for markdown rendering
+- Uses `pkg/utils` for markdown rendering (`PrintfMarkdownToTUI`) and status messages (`PrintfMessageToTUI`)
+- Uses `pkg/ai/analyze` for output capture (`CaptureSession`), config validation, and AI analysis
 - See `docs/prd/atmos-ai.md` for the full AI integration PRD
 
 ## Future Considerations

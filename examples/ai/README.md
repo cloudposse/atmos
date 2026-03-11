@@ -225,107 +225,100 @@ $ atmos terraform plan vpc -s ue1-pro  --ai
 
 👽 Analyzing with AI...
 
+
   ## ❌ Component Not Found Error
 
-  Atmos could not locate the vpc component within the ue1-pro stack. This is a configuration/lookup error — no Terraform was executed.
+   Atmos cannot locate the  vpc  component within the  ue1-pro  stack. This is a configuration/resolution issue, not a Terraform error.
 
   --------
 
-  ## 🔍 Root Cause
+  ## 🔍 Root Causes
 
-  Atmos resolves components by matching the component name against stack manifests. This error means one of the following is true:
+   This error typically occurs for one of the following reasons:
 
-  1. **The **vpc** component is not defined** in any manifest that the ue1-pro stack imports
-  2. **The stack name **ue1-pro** is wrong** (typo, wrong delimiter, wrong environment/stage naming)
-  3. **A required import is missing** in the stack manifest, so Atmos can't see the component catalog entry
-  4. **Context variables** (e.g., tenant, environment, stage) are misconfigured, causing the stack slug to not resolve correctly
+    1. Wrong component name — The component may be named differently (e.g.,  vpc/defaults ,  networking/vpc )
+    2. Wrong stack name —  ue1-pro  may not exist or may use a different naming convention
+    3. Missing import — The stack manifest for  ue1-pro  doesn't import the catalog entry that defines  vpc
+    4. Missing component definition — The  vpc  component is never declared under  components.terraform  in the stack's resolved config
 
   --------
 
   ## 🛠️ Step-by-Step Fix
 
-  ### Step 1 — Verify the stack name exists
+  ### Step 1 — Verify the stack exists
 
-    atmos list stacks
+   atmos list stacks
 
-  Confirm ue1-pro appears in the output. Common issues:
-
-  • It may be ue1-prod instead of ue1-pro
-  • The delimiter may differ (e.g., ue1/prod or ue1-production)
+   Confirm  ue1-pro  appears in the output. Common alternatives might be  ue1-prod ,  use1-pro , or  us-east-1-pro .
 
   --------
 
-  ### Step 2 — Verify the component exists in that stack
+  ### Step 2 — List components available in that stack
 
-    atmos list components -s ue1-pro
+   atmos list components -s ue1-pro
 
-  Check if vpc appears. If it doesn't, the component is not reachable from that stack's import chain.
+   Check if  vpc  is listed. If not, the component is not configured for this stack.
 
   --------
 
   ### Step 3 — Inspect the stack manifest
 
-  Navigate to your stack file (typically stacks/ue1-pro.yaml or a file under stacks/ue1/pro/) and verify:
+   Navigate to your stacks directory (typically  stacks/ ) and look for the  ue1-pro  manifest:
 
-    # stacks/ue1-pro.yaml (or equivalent)
-    import:
-      - catalog/vpc          # ← Is this import present?
+   # Common locations
+   stacks/ue1-pro.yaml
+   stacks/orgs/<org>/ue1/pro.yaml
+   stacks/catalog/vpc.yaml
 
-    components:
-      terraform:
-        vpc:                 # ← Is this component block defined?
-          vars:
-            ...
+   Verify the stack file contains (or imports a file containing):
 
-  If the vpc component is defined in a **catalog file**, make sure that catalog file is imported.
-
-  --------
-
-  ### Step 4 — Check the component directory exists
-
-    atmos describe component vpc -s ue1-pro
-
-  This gives a detailed resolution trace. If it fails, the component truly isn't wired up.
-
-  Also verify the Terraform component folder exists:
-
-    ls components/terraform/vpc/
+   components:
+     terraform:
+       vpc:
+         vars:
+           ...
 
   --------
 
-  ### Step 5 — Validate your stack configuration
+  ### Step 4 — Check for missing imports
 
-    atmos validate stacks
+   If the  vpc  component is defined in a catalog file, ensure it's imported in the stack manifest:
 
-  This catches missing imports, broken references, and schema issues across all stacks.
+   # stacks/ue1-pro.yaml
+   import:
+     - catalog/vpc          # ← this line must exist
+     - catalog/networking
 
   --------
 
-  ### Step 6 — Check context variable alignment
+  ### Step 5 — Describe the stack to see its fully resolved config
 
-  If your stack naming uses context variables (tenant/environment/stage), ensure your stack manifest defines them consistently:
+   atmos describe stacks --stack ue1-pro
 
-    # In your stack manifest
-    vars:
-      tenant: ue1
-      environment: ue1
-      stage: pro          # ← Must match how the stack slug is constructed
+   Search the output for  vpc  to see if it resolves at all, and spot any misconfiguration.
 
-  The stack slug ue1-pro is derived from these variables, so a mismatch will cause lookup failures.
+  --------
+
+  ### Step 6 — Validate your configuration
+
+   atmos validate stacks
+
+   This will catch import errors, missing files, or schema issues across all stacks.
 
   --------
 
   ## ✅ Quick Checklist
 
-   Check                                                                                                                      | Command
-  ----------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------
-   Stack exists                                                                                                               | atmos list stacks
-   Component is in stack                                                                                                      | atmos list components -s ue1-pro
-   Component has Terraform files                                                                                              | ls components/terraform/vpc/
-   Stack manifest has import                                                                                                  | Review stacks/ue1-pro.yaml
-   Full stack validation                                                                                                      | atmos validate stacks
+   Check                           │ Command
+  ─────────────────────────────────┼────────────────────────────────────
+   Stack name is correct           │  atmos list stacks
+   Component is defined in stack   │  atmos list components -s ue1-pro
+   Import exists in stack manifest │ Review  stacks/ue1-pro.yaml
+   No YAML syntax errors           │  atmos validate stacks
 
-  Once the component is properly imported and defined in the stack manifest, re-run your atmos terraform plan vpc -s ue1-pro command.
+  --------
+
+  │  💡 Tip: If you're using a deep folder structure for stacks, double-check your  atmos.yaml   base_path  and  stacks.included_paths  settings to ensure the manifest is being picked up correctly.
 ```
 
 ### Validate Stacks
@@ -568,6 +561,34 @@ ai:
     anthropic:
       model: "claude-sonnet-4-6"
       api_key: !env ANTHROPIC_API_KEY
+```
+
+If AI is not configured, Atmos shows a helpful error with the exact YAML to add:
+
+```text
+$ atmos list stacks --ai
+
+   Error
+
+   Error: AI features are not enabled
+
+  ## Explanation
+
+   The --ai flag requires AI to be enabled in your atmos.yaml configuration.
+
+  ## Hints
+
+   💡 Add the following to your atmos.yaml:
+
+   ai:
+     enabled: true
+     default_provider: anthropic
+     providers:
+       anthropic:
+         model: claude-sonnet-4-5-20250514
+         api_key: !env ANTHROPIC_API_KEY
+
+   💡 See https://atmos.tools/cli/configuration/ai for full configuration options.
 ```
 
 ## Example Commands

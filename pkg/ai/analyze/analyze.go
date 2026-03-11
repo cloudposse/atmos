@@ -128,6 +128,9 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, commandName string, s
 
 	// Render AI response as markdown with colors to stderr (UI layer).
 	utils.PrintfMarkdownToTUI("%s", response)
+
+	// Add trailing newline for visual separation from subsequent output (e.g., exit status).
+	utils.PrintfMessageToTUI("\n")
 }
 
 // buildAnalysisPrompt constructs the prompt for AI analysis.

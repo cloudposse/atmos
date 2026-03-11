@@ -1,0 +1,179 @@
+---
+slug: ai-powered-analysis-with-global-ai-flag
+title: "AI-Powered Analysis for Atmos Commands with the Global --ai Flag"
+authors: [aknysh]
+tags: [feature, dx]
+---
+
+import Terminal from '@site/src/components/Terminal'
+
+Add `--ai` to any Atmos command and get instant AI-powered analysis of the output. Successful plans get
+summarized, errors get explained with step-by-step fixes — zero workflow changes required.
+
+<!--truncate-->
+
+## Why `--ai`?
+
+Atmos AI already provides interactive chat (`atmos ai chat`) and single questions (`atmos ai ask`). But sometimes
+you just want to run your usual command and have the AI explain what happened — especially when something goes wrong.
+
+The `--ai` flag does exactly that. Add it to any command, and Atmos automatically captures the output, sends it
+to your configured AI provider, and renders the analysis right in your terminal.
+
+## How It Works
+
+1. Run any Atmos command with `--ai`
+2. The command executes normally — output streams to your terminal in real-time
+3. After the command completes, the captured output is sent to the AI provider
+4. The AI analysis appears below the command output
+
+## Plan Analysis
+
+Get a clear summary of Terraform plan changes, warnings, and recommendations:
+
+<Terminal title="atmos --ai terraform plan">
+```console
+$ atmos --ai terraform plan vpc -s ue1-prod
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # null_resource.vpc will be created
+  + resource "null_resource" "vpc" {
+      + id       = (known after apply)
+      + triggers = {
+          + "availability_zones"  = "us-east-1a,us-east-1b,us-east-1c"
+          + "environment"         = "production"
+          + "nat_gateway_enabled" = "true"
+          + "vpc_cidr"            = "10.10.0.0/16"
+        }
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+
+👽 Analyzing with AI...
+
+  ## Terraform Plan Summary:  vpc  in  ue1-prod
+
+  ### Plan Succeeded — 1 Resource to Create
+
+   Metric     │ Value
+  ────────────┼───────
+   To Add     │ 1
+   To Change  │ 0
+   To Destroy │ 0
+
+  A  null_resource.vpc  will be created with CIDR  10.10.0.0/16 ,
+  3 availability zones, and NAT Gateways enabled.
+```
+</Terminal>
+
+## Error Explanation
+
+When commands fail, the AI explains the root cause and provides actionable steps to fix it:
+
+<Terminal title="atmos --ai terraform plan (error)">
+```console
+$ atmos terraform plan vpc -s ue1-pro --ai
+
+👽 Analyzing with AI...
+
+  ## Component Not Found Error
+
+   Atmos cannot locate the  vpc  component within the  ue1-pro  stack.
+
+  ## Root Causes
+
+    1. Wrong stack name —  ue1-pro  may not exist (try  ue1-prod )
+    2. Missing import — The stack manifest doesn't import the vpc catalog entry
+    3. Missing component definition — vpc  is not declared under  components.terraform
+
+  ## Quick Fix
+
+   Check                           │ Command
+  ─────────────────────────────────┼────────────────────────────────────
+   Stack name is correct           │  atmos list stacks
+   Component is defined in stack   │  atmos list components -s ue1-pro
+   Import exists in stack manifest │  Review  stacks/ue1-pro.yaml
+   No YAML syntax errors           │  atmos validate stacks
+```
+</Terminal>
+
+## Enable via Environment Variable
+
+Use `ATMOS_AI` for CI/CD pipelines or to enable it globally:
+
+```bash
+# Enable for a single command
+ATMOS_AI=true atmos terraform plan vpc -s ue1-prod
+
+# Enable for all commands in the session
+export ATMOS_AI=true
+atmos terraform plan vpc -s ue1-prod
+atmos validate stacks
+atmos describe stacks
+```
+
+## Works with Everything
+
+The `--ai` flag works with **any** Atmos command:
+
+```bash
+atmos --ai terraform plan vpc -s ue1-prod
+atmos --ai terraform apply vpc -s ue1-prod
+atmos --ai describe stacks
+atmos --ai validate stacks
+atmos --ai list components
+```
+
+## Configuration
+
+The `--ai` flag requires AI to be configured in `atmos.yaml`:
+
+```yaml
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env ANTHROPIC_API_KEY
+```
+
+If AI is not configured, Atmos shows a helpful error with the exact YAML to add:
+
+<Terminal title="atmos --ai (not configured)">
+```console
+$ atmos list stacks --ai
+
+   Error: AI features are not enabled
+
+  ## Explanation
+
+   The --ai flag requires AI to be enabled in your atmos.yaml configuration.
+
+  ## Hints
+
+   💡 Add the following to your atmos.yaml:
+
+   ai:
+     enabled: true
+     default_provider: anthropic
+     providers:
+       anthropic:
+         model: claude-sonnet-4-5-20250514
+         api_key: !env ANTHROPIC_API_KEY
+
+   💡 See https://atmos.tools/cli/configuration/ai for full configuration options.
+```
+</Terminal>
+
+## Learn More
+
+- [AI Configuration](/cli/configuration/ai) — Full configuration reference
+- [Global Flags](/cli/global-flags) — All global flags including `--ai`
+- [AI Example](/examples/ai) — Complete example with multi-region infrastructure
+- [AI Providers](/cli/configuration/ai/providers) — Setup for all 7 supported providers
