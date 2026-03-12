@@ -3,7 +3,11 @@ package homedir
 import (
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func BenchmarkDir(b *testing.B) {
@@ -96,6 +100,205 @@ func TestReset_WorksAcrossMultipleTests(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetUnixHomeDir verifies that getUnixHomeDir returns the current user's home
+// directory via os/user.Current (the code changed by the CodeQL #5157 fix).
+func TestGetUnixHomeDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("getUnixHomeDir is not used on Windows.")
+	}
+
+	u, err := user.Current()
+	require.NoError(t, err)
+
+	home, err := getUnixHomeDir()
+	require.NoError(t, err)
+	assert.Equal(t, u.HomeDir, home, "getUnixHomeDir should return the current user's home directory.")
+}
+
+// TestGetHomeFromShell verifies the shell-based home directory fallback.
+func TestGetHomeFromShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("getHomeFromShell relies on 'sh -c', which is not available on Windows.")
+	}
+
+	home, err := getHomeFromShell()
+	require.NoError(t, err)
+	assert.NotEmpty(t, home, "getHomeFromShell should return a non-empty path.")
+}
+
+// TestDirWindows exercises all branches of the dirWindows function directly.
+func TestDirWindows(t *testing.T) {
+	t.Run("HOME env var wins", func(t *testing.T) {
+		t.Setenv("HOME", "/my/home")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("HOMEPATH", "")
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		assert.Equal(t, "/my/home", dir)
+	})
+
+	t.Run("USERPROFILE wins when HOME is empty", func(t *testing.T) {
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "/user/profile")
+		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("HOMEPATH", "")
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		assert.Equal(t, "/user/profile", dir)
+	})
+
+	t.Run("HOMEDRIVE+HOMEPATH used when HOME and USERPROFILE are empty", func(t *testing.T) {
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("HOMEDRIVE", "C:")
+		t.Setenv("HOMEPATH", `\Users\testuser`)
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		assert.Equal(t, `C:\Users\testuser`, dir)
+	})
+
+	t.Run("error when all env vars are empty", func(t *testing.T) {
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("HOMEPATH", "")
+		_, err := dirWindows()
+		assert.ErrorIs(t, err, ErrHomeDrivePathBlank)
+	})
+}
+
+// TestGetHomeFromEnv tests the HOME env-var lookup (plan9 branch is not reachable
+// in unit tests, but the common path is fully exercised here).
+func TestGetHomeFromEnv(t *testing.T) {
+	t.Run("returns HOME when set", func(t *testing.T) {
+		t.Setenv("HOME", "/from/env")
+		assert.Equal(t, "/from/env", getHomeFromEnv())
+	})
+
+	t.Run("returns empty string when HOME is unset", func(t *testing.T) {
+		t.Setenv("HOME", "")
+		assert.Equal(t, "", getHomeFromEnv())
+	})
+}
+
+// TestDirUnix_FallbackToUnixHomeDir tests that dirUnix falls through to
+// getUnixHomeDir when the HOME env var is not set.
+func TestDirUnix_FallbackToUnixHomeDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("dirUnix is not used on Windows.")
+	}
+
+	t.Setenv("HOME", "")
+
+	u, err := user.Current()
+	require.NoError(t, err)
+
+	home, err := dirUnix()
+	require.NoError(t, err)
+	assert.Equal(t, u.HomeDir, home)
+}
+
+// TestDir_Cache verifies that Dir() caches its result and returns it on
+// subsequent calls without re-reading the home directory.
+func TestDir_Cache(t *testing.T) {
+	Reset()
+	defer Reset()
+
+	dir1, err := Dir()
+	require.NoError(t, err)
+	assert.NotEmpty(t, dir1)
+
+	// Change HOME — Dir() should still return the cached value.
+	t.Setenv("HOME", t.TempDir())
+
+	dir2, err := Dir()
+	require.NoError(t, err)
+	assert.Equal(t, dir1, dir2, "Dir() should return cached result when DisableCache is false.")
+}
+
+// TestExpand_WithDisabledCache verifies Expand falls back to Dir() properly
+// with DisableCache enabled and HOME set to an explicit value.
+func TestExpand_WithDisabledCache(t *testing.T) {
+	Reset()
+	defer Reset()
+
+	DisableCache = true
+	defer func() { DisableCache = false }()
+
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	expected := filepath.Join(tmpDir, "subdir", "file.txt")
+	actual, err := Expand("~/subdir/file.txt")
+	require.NoError(t, err)
+	assert.Equal(t, expected, actual)
+}
+
+// TestExpand_DirError verifies that Expand propagates errors from Dir().
+func TestExpand_DirError(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("This test only applies on Windows where HOME/USERPROFILE can be cleared.")
+	}
+
+	Reset()
+	defer Reset()
+
+	DisableCache = true
+	defer func() { DisableCache = false }()
+
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+
+	_, err := Expand("~/test")
+	assert.Error(t, err)
+}
+
+// TestDir_DisableCache verifies that setting DisableCache=true causes Dir()
+// to re-read the home directory on each invocation instead of returning a
+// stale cached value.
+func TestDir_DisableCache(t *testing.T) {
+	Reset()
+	defer Reset()
+
+	// Populate cache with the real home dir.
+	_, err := Dir()
+	require.NoError(t, err)
+
+	// Switch to a temp dir and disable caching.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	DisableCache = true
+	defer func() { DisableCache = false }()
+
+	dir, err := Dir()
+	require.NoError(t, err)
+	assert.Equal(t, tmpDir, dir, "With DisableCache=true, Dir() should re-read HOME each time.")
+}
+
+// TestExpandError_UserSpecificDir verifies the error path in Expand for ~username.
+func TestExpandError_UserSpecificDir(t *testing.T) {
+	_, err := Expand("~user/path")
+	assert.ErrorIs(t, err, ErrCannotExpandHomeDir)
+}
+
+// TestExpand_TildeOnly verifies that Expand("~") returns just the home directory.
+func TestExpand_TildeOnly(t *testing.T) {
+	Reset()
+	defer Reset()
+
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	DisableCache = true
+	defer func() { DisableCache = false }()
+
+	result, err := Expand("~")
+	require.NoError(t, err)
+	assert.Equal(t, tmpDir, result)
 }
 
 func TestExpand(t *testing.T) {
