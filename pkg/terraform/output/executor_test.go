@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -1245,7 +1246,11 @@ func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) 
 	toolchainDir := filepath.Join(tempDir, "toolchain")
 	binaryDir := filepath.Join(toolchainDir, "bin", "opentofu", "opentofu", "1.8.0")
 	require.NoError(t, os.MkdirAll(binaryDir, 0o755))
-	fakeBinary := filepath.Join(binaryDir, "tofu")
+	binaryName := "tofu"
+	if runtime.GOOS == "windows" {
+		binaryName = "tofu.exe"
+	}
+	fakeBinary := filepath.Join(binaryDir, binaryName)
 	require.NoError(t, os.WriteFile(fakeBinary, []byte("#!/bin/sh\n"), 0o755))
 
 	atmosConfig := &schema.AtmosConfiguration{

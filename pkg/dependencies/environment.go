@@ -96,7 +96,9 @@ func (e *ToolchainEnvironment) Resolve(command string) string {
 		return command
 	}
 
-	if p, ok := e.resolved[command]; ok {
+	// Strip extension for cross-platform matching (e.g. "tofu.exe" → "tofu").
+	key := strings.TrimSuffix(command, filepath.Ext(command))
+	if p, ok := e.resolved[key]; ok {
 		return p
 	}
 
@@ -280,7 +282,10 @@ func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[stri
 			continue
 		}
 
-		// Store by binary basename so Resolve("tofu") finds the right path.
-		env.resolved[filepath.Base(binaryPath)] = binaryPath
+		// Store by binary basename without extension so Resolve("tofu") works
+		// cross-platform (e.g. binary is "tofu.exe" on Windows, lookup is "tofu").
+		base := filepath.Base(binaryPath)
+		key := strings.TrimSuffix(base, filepath.Ext(base))
+		env.resolved[key] = binaryPath
 	}
 }
