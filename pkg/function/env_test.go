@@ -150,9 +150,9 @@ func TestEnvFunction_Metadata(t *testing.T) {
 
 func TestLookupEnvFromContext_WithEnvSection(t *testing.T) {
 	envSection := map[string]any{
-		"MY_VAR":   "my_value",
-		"PORT":     8080,
-		"ENABLED":  true,
+		"MY_VAR":  "my_value",
+		"PORT":    8080,
+		"ENABLED": true,
 	}
 
 	stackInfo := &schema.ConfigAndStacksInfo{
