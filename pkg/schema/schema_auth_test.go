@@ -125,6 +125,75 @@ func TestAuthConfig_Structure(t *testing.T) {
 	assert.Len(t, config.IdentityCaseMap, 1)
 }
 
+func TestAuthConfig_Needs(t *testing.T) {
+	tests := []struct {
+		name          string
+		needs         []string
+		expectedLen   int
+		expectedFirst string
+	}{
+		{
+			name:        "nil needs",
+			needs:       nil,
+			expectedLen: 0,
+		},
+		{
+			name:        "empty needs",
+			needs:       []string{},
+			expectedLen: 0,
+		},
+		{
+			name:          "single identity",
+			needs:         []string{"core-network/terraform"},
+			expectedLen:   1,
+			expectedFirst: "core-network/terraform",
+		},
+		{
+			name:          "multiple identities - first is primary",
+			needs:         []string{"core-network/terraform", "plat-prod/terraform"},
+			expectedLen:   2,
+			expectedFirst: "core-network/terraform",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &AuthConfig{
+				Needs:      tt.needs,
+				Providers:  map[string]Provider{},
+				Identities: map[string]Identity{},
+			}
+
+			assert.Len(t, config.Needs, tt.expectedLen)
+			if tt.expectedLen > 0 {
+				assert.Equal(t, tt.expectedFirst, config.Needs[0])
+			}
+		})
+	}
+}
+
+func TestAuthConfig_NeedsWithMapstructure(t *testing.T) {
+	// Test that Needs field works with a full AuthConfig, simulating how
+	// auth config is constructed from stack YAML via mapstructure decoding.
+	config := AuthConfig{
+		Needs: []string{"identity-a", "identity-b"},
+		Realm: "test-realm",
+		Providers: map[string]Provider{
+			"sso": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]Identity{
+			"identity-a": {Kind: "aws/permission-set"},
+			"identity-b": {Kind: "aws/assume-role"},
+		},
+	}
+
+	assert.Equal(t, []string{"identity-a", "identity-b"}, config.Needs)
+	assert.Equal(t, "test-realm", config.Realm)
+	assert.Equal(t, "aws/iam-identity-center", config.Providers["sso"].Kind)
+	assert.Equal(t, "aws/permission-set", config.Identities["identity-a"].Kind)
+	assert.Equal(t, "aws/assume-role", config.Identities["identity-b"].Kind)
+}
+
 func TestProvider_Structure(t *testing.T) {
 	// Test that Provider struct has expected fields.
 	autoProvision := true
