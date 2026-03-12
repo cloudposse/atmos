@@ -203,9 +203,11 @@ func ShouldIncludeFile(includedPaths []string, trimmedSrc string) (bool, error) 
 		// Match against trimmedSrc (relative path) instead of absolute path.
 		includeMatch, err := u.PathMatch(includePath, trimmedSrc)
 		if err != nil {
-			return true, err
+			// Return false (don't skip) on error so we don't accidentally exclude files
+			// due to an invalid pattern. The error propagates and aborts the copy.
+			return false, err
 		} else if includeMatch {
-			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
+			log.Debug("Including path since it matches a pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
 			return false, nil
 		}
 	}
