@@ -194,6 +194,12 @@ func ExecuteComponentVendorInternal(
 		uri, useLocalFileSystem, sourceIsLocalFile = handleLocalFileScheme(componentPath, uri)
 	}
 	pType := determinePackageType(useOciScheme, useLocalFileSystem)
+
+	// Warn if the source is an archived GitHub repository.
+	if pType == pkgTypeRemote {
+		warnIfArchivedGitHubRepo(uri, component)
+	}
+
 	componentPkg := pkgComponentVendor{
 		uri:                 uri,
 		name:                component,

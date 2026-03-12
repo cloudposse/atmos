@@ -325,6 +325,11 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 		// Determine package type from source-level URI.
 		pType := determinePackageType(useOciScheme, useLocalFileSystem)
 
+		// Warn if the source is an archived GitHub repository.
+		if pType == pkgTypeRemote {
+			warnIfArchivedGitHubRepo(uri, params.sources[indexSource].Component)
+		}
+
 		// Process each target within the source.
 		pkgs, err := processTargets(&processTargetsParams{
 			AtmosConfig:          params.atmosConfig,
