@@ -115,7 +115,11 @@ func TestRunAIAnalysis(t *testing.T) {
 			realStderr := os.Stderr
 			os.Stderr = tmpFile
 			// Register FIRST so it runs LAST in LIFO — after cs.Stop() restores os.Stderr.
-			t.Cleanup(func() { os.Stderr = realStderr })
+			// Close the temp file before TempDir cleanup to avoid Windows "file in use" errors.
+			t.Cleanup(func() {
+				os.Stderr = realStderr
+				tmpFile.Close()
+			})
 
 			// Save original stdout to verify restoration.
 			origStdout := os.Stdout
