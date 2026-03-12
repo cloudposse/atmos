@@ -234,7 +234,9 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 	if err != nil {
 		return nil, fmt.Errorf("failed to build toolchain PATH: %w", err)
 	}
-	env.path = toolchainPATH
+	if toolchainPATH != getPathFromEnv() {
+		env.path = toolchainPATH
+	}
 
 	// Extract unique toolchain bin dirs from resolved paths for PrependToPath().
 	seen := make(map[string]bool)

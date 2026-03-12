@@ -598,10 +598,9 @@ func listFiles(dir string) ([]string, error) {
 func buildTokenRequiredError() error {
 	return errUtils.Build(errUtils.ErrAuthenticationFailed).
 		WithExplanation("GitHub token required to download PR artifacts").
-		WithHint("Option 1: Use GitHub CLI (recommended)\n  brew install gh && gh auth login").
-		WithHint("Option 2: Set environment variable\n  export GITHUB_TOKEN=ghp_xxx").
-		WithHint("Generate a token at: https://github.com/settings/tokens").
-		WithHint("Required scope: public_repo (for public repositories)").
+		WithHint("Use GitHub CLI: brew install gh && gh auth login").
+		WithHint("Or set environment variable: export GITHUB_TOKEN=ghp_xxx").
+		WithHint("Generate a token at: https://github.com/settings/tokens (scope: public_repo)").
 		WithExitCode(1).
 		Err()
 }
@@ -621,11 +620,10 @@ func handlePRArtifactError(err error, prNumber int) error {
 
 	if errors.Is(err, github.ErrNoWorkflowRunFound) {
 		return errUtils.Build(errUtils.ErrToolNotFound).
-			WithExplanationf("No successful CI run found for PR #%d", prNumber).
-			WithHint("Possible reasons:").
-			WithHint("  - CI workflow hasn't completed yet").
-			WithHint("  - CI tests are failing").
-			WithHint("  - PR is from a fork (artifacts not accessible)").
+			WithExplanationf("No completed CI run found for PR #%d", prNumber).
+			WithHint("CI workflow may not have completed yet").
+			WithHint("CI build may be failing on this PR").
+			WithHint("Artifacts from fork PRs are not accessible").
 			WithHintf("Check PR status: %s", prURL).
 			WithExitCode(1).
 			Err()
@@ -634,9 +632,8 @@ func handlePRArtifactError(err error, prNumber int) error {
 	if errors.Is(err, github.ErrNoArtifactFound) {
 		return errUtils.Build(errUtils.ErrToolNotFound).
 			WithExplanationf("Build artifact not found for PR #%d", prNumber).
-			WithHint("Possible reasons:").
-			WithHint("  - Artifacts expired (90-day retention)").
-			WithHint("  - Build job was skipped").
+			WithHint("Artifacts may have expired (90-day retention)").
+			WithHint("Build job may have been skipped").
 			WithHintf("Check PR status: %s", prURL).
 			WithExitCode(1).
 			Err()
@@ -647,9 +644,8 @@ func handlePRArtifactError(err error, prNumber int) error {
 		return errUtils.Build(errUtils.ErrToolPlatformNotSupported).
 			WithExplanationf("No PR artifact available for %s/%s", runtime.GOOS, runtime.GOARCH).
 			WithHintf("PR builds currently only support: %s", strings.Join(platforms, ", ")).
-			WithHint("For unsupported platforms, try:").
-			WithHint("  - Download the release version: atmos --use-version <version>").
-			WithHint("  - Build from source: go install github.com/cloudposse/atmos@<branch>").
+			WithHint("Use a release version instead: atmos --use-version <version>").
+			WithHint("Or build from source: go install github.com/cloudposse/atmos@<branch>").
 			WithExitCode(1).
 			Err()
 	}
