@@ -47,14 +47,14 @@ func newInput(cmd, stdout, stderr string, cmdErr error, skillPrompt string) *Ana
 	}
 }
 
-// newInputWithSkill creates an AnalysisInput with both skill name and prompt for testing.
-func newInputWithSkill(cmd, stdout, stderr string, cmdErr error, skillName, skillPrompt string) *AnalysisInput {
+// newInputWithSkill creates an AnalysisInput with both skill names and prompt for testing.
+func newInputWithSkill(cmd, stdout, stderr string, cmdErr error, skillNames []string, skillPrompt string) *AnalysisInput {
 	return &AnalysisInput{
 		CommandName: cmd,
 		Stdout:      stdout,
 		Stderr:      stderr,
 		CmdErr:      cmdErr,
-		SkillName:   skillName,
+		SkillNames:  skillNames,
 		SkillPrompt: skillPrompt,
 	}
 }
@@ -484,8 +484,8 @@ func TestAnalyzeOutput_WithSkillName(t *testing.T) {
 
 	cfg := &schema.AtmosConfiguration{}
 
-	// SkillName should be accepted without affecting the prompt content (it only affects the spinner message).
-	AnalyzeOutput(cfg, newInputWithSkill("atmos terraform plan vpc -s prod", "Plan: 1 to add", "", nil, "atmos-terraform", "You are a Terraform expert."))
+	// SkillNames should be accepted without affecting the prompt content (it only affects the spinner message).
+	AnalyzeOutput(cfg, newInputWithSkill("atmos terraform plan vpc -s prod", "Plan: 1 to add", "", nil, []string{"atmos-terraform"}, "You are a Terraform expert."))
 
 	assert.True(t, mock.called, "should call AI client")
 	assert.Contains(t, mock.prompt, "You are a Terraform expert.")
@@ -498,8 +498,8 @@ func TestAnalyzeOutput_WithSkillNameNoPrompt(t *testing.T) {
 
 	cfg := &schema.AtmosConfiguration{}
 
-	// SkillName without SkillPrompt should still work (spinner shows skill name, prompt has no skill prefix).
-	AnalyzeOutput(cfg, newInputWithSkill("atmos terraform plan", "output", "", nil, "atmos-terraform", ""))
+	// SkillNames without SkillPrompt should still work (spinner shows skill names, prompt has no skill prefix).
+	AnalyzeOutput(cfg, newInputWithSkill("atmos terraform plan", "output", "", nil, []string{"atmos-terraform"}, ""))
 
 	assert.True(t, mock.called)
 	assert.True(t, strings.HasPrefix(mock.prompt, systemPrompt), "prompt should start with system prompt when no skill prompt")

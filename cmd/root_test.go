@@ -1052,82 +1052,97 @@ func TestHasAIFlagInternal(t *testing.T) {
 	}
 }
 
-// TestParseSkillFlagInternal tests the parseSkillFlagInternal function that extracts --skill value from os.Args.
+// TestParseSkillFlagInternal tests the parseSkillFlagInternal function that extracts --skill values from os.Args.
 func TestParseSkillFlagInternal(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
-		expected string
+		expected []string
 	}{
 		{
 			name:     "no --skill flag",
 			args:     []string{"atmos", "terraform", "plan"},
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "--skill with separate value",
 			args:     []string{"atmos", "--ai", "--skill", "atmos-terraform", "terraform", "plan"},
-			expected: "atmos-terraform",
+			expected: []string{"atmos-terraform"},
 		},
 		{
 			name:     "--skill=value format",
 			args:     []string{"atmos", "--ai", "--skill=atmos-stacks", "describe", "stacks"},
-			expected: "atmos-stacks",
+			expected: []string{"atmos-stacks"},
 		},
 		{
 			name:     "--skill at end with value",
 			args:     []string{"atmos", "terraform", "plan", "--ai", "--skill", "atmos-terraform"},
-			expected: "atmos-terraform",
+			expected: []string{"atmos-terraform"},
 		},
 		{
 			name:     "--skill after -- delimiter is ignored",
 			args:     []string{"atmos", "terraform", "plan", "--", "--skill", "atmos-terraform"},
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "--skill without value (next arg is a flag)",
 			args:     []string{"atmos", "--skill", "--ai", "terraform", "plan"},
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "--skill at end without value",
 			args:     []string{"atmos", "terraform", "plan", "--skill"},
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "empty args",
 			args:     []string{},
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "--skill=empty value",
 			args:     []string{"atmos", "--skill=", "terraform", "plan"},
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "--skill with similar flag --skilled is not matched",
 			args:     []string{"atmos", "--skilled", "atmos-terraform", "terraform", "plan"},
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "--skilled=value should not match --skill= prefix",
 			args:     []string{"atmos", "--skilled=atmos-terraform", "terraform", "plan"},
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "--skill between other flags",
 			args:     []string{"atmos", "--logs-level=Debug", "--skill", "atmos-validation", "--ai", "validate", "stacks"},
-			expected: "atmos-validation",
+			expected: []string{"atmos-validation"},
 		},
 		{
 			name:     "--skill=value with hyphens in skill name",
 			args:     []string{"atmos", "--skill=my-custom-skill-v2", "terraform", "plan"},
-			expected: "my-custom-skill-v2",
+			expected: []string{"my-custom-skill-v2"},
 		},
 		{
-			name:     "multiple --skill flags uses first",
+			name:     "multiple --skill flags collects all",
 			args:     []string{"atmos", "--skill", "first", "--skill", "second", "terraform", "plan"},
-			expected: "first",
+			expected: []string{"first", "second"},
+		},
+		{
+			name:     "comma-separated skills",
+			args:     []string{"atmos", "--ai", "--skill", "atmos-terraform,atmos-stacks", "terraform", "plan"},
+			expected: []string{"atmos-terraform", "atmos-stacks"},
+		},
+		{
+			name:     "comma-separated with --skill=value format",
+			args:     []string{"atmos", "--ai", "--skill=atmos-terraform,atmos-stacks", "terraform", "plan"},
+			expected: []string{"atmos-terraform", "atmos-stacks"},
+		},
+		{
+			name:     "mixed repeated and comma-separated",
+			args:     []string{"atmos", "--skill", "a,b", "--skill", "c", "terraform", "plan"},
+			expected: []string{"a", "b", "c"},
 		},
 	}
 

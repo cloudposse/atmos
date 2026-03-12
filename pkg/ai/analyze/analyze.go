@@ -99,8 +99,8 @@ type AnalysisInput struct {
 	Stderr string
 	// CmdErr is the error returned by the command (nil if successful).
 	CmdErr error
-	// SkillName is the name of the skill used for AI analysis (e.g., "atmos-terraform").
-	SkillName string
+	// SkillNames is the list of skill names used for AI analysis (e.g., ["atmos-terraform", "atmos-stacks"]).
+	SkillNames []string
 	// SkillPrompt is an optional skill system prompt for domain-specific expertise.
 	SkillPrompt string
 }
@@ -139,8 +139,8 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 	ui.Writeln("") // Visual separation before spinner.
 
 	spinnerMsg := "👽 Analyzing with AI..."
-	if input.SkillName != "" {
-		spinnerMsg = fmt.Sprintf("👽 Analyzing with AI using skill '%s'...", input.SkillName)
+	if len(input.SkillNames) > 0 {
+		spinnerMsg = fmt.Sprintf("👽 Analyzing with AI using skills '%s'...", strings.Join(input.SkillNames, "', '"))
 	}
 	s := spinner.New(spinnerMsg)
 	s.Start()
@@ -154,8 +154,8 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 	}
 
 	successMsg := "AI analysis complete"
-	if input.SkillName != "" {
-		successMsg = fmt.Sprintf("AI analysis complete (skill: %s)", input.SkillName)
+	if len(input.SkillNames) > 0 {
+		successMsg = fmt.Sprintf("AI analysis complete (skills: %s)", strings.Join(input.SkillNames, ", "))
 	}
 	s.Success(successMsg)
 

@@ -174,35 +174,48 @@ func hasAIFlagInternal(args []string) bool {
 	return false
 }
 
-// parseSkillFlag extracts the --skill flag value from os.Args.
-// This is needed before Cobra parses flags because we validate and load the skill
+// parseSkillFlag extracts all --skill flag values from os.Args.
+// This is needed before Cobra parses flags because we validate and load skills
 // in Execute() before internal.Execute() runs the command.
-func parseSkillFlag() string {
+func parseSkillFlag() []string {
 	return parseSkillFlagInternal(os.Args)
 }
 
-// parseSkillFlagInternal extracts the --skill flag value from the provided args.
+// parseSkillFlagInternal extracts all --skill flag values from the provided args.
+// Supports repeated flags (--skill a --skill b) and comma-separated values (--skill a,b).
 // This internal version accepts args as a parameter for testability.
-func parseSkillFlagInternal(args []string) string {
+func parseSkillFlagInternal(args []string) []string {
+	var result []string
 	for i, arg := range args {
 		// Stop scanning after bare "--" (end-of-flags delimiter).
 		if arg == "--" {
 			break
 		}
+
+		var value string
 		if arg == "--skill" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			return args[i+1]
+			value = args[i+1]
+		} else if strings.HasPrefix(arg, "--skill=") {
+			value = strings.TrimPrefix(arg, "--skill=")
 		}
-		if strings.HasPrefix(arg, "--skill=") {
-			return strings.TrimPrefix(arg, "--skill=")
+
+		if value != "" {
+			// Split comma-separated values.
+			for _, v := range strings.Split(value, ",") {
+				v = strings.TrimSpace(v)
+				if v != "" {
+					result = append(result, v)
+				}
+			}
 		}
 	}
-	return ""
+	return result
 }
 
-// loadAndValidateSkill loads the skill registry and validates that the specified skill exists.
-// Returns the skill or a helpful error listing available skills.
-func loadAndValidateSkill(atmosConfig *schema.AtmosConfiguration, skillName string) (*skills.Skill, error) {
-	defer perf.Track(nil, "cmd.loadAndValidateSkill")()
+// loadAndValidateSkills loads the skill registry and validates that all specified skills exist.
+// Returns the skills or a helpful error listing invalid and available skills.
+func loadAndValidateSkills(atmosConfig *schema.AtmosConfiguration, skillNames []string) ([]*skills.Skill, error) {
+	defer perf.Track(nil, "cmd.loadAndValidateSkills")()
 
 	var loader skills.SkillLoader
 	installer, installerErr := marketplace.NewInstaller(pkgversion.Version)
@@ -217,8 +230,19 @@ func loadAndValidateSkill(atmosConfig *schema.AtmosConfiguration, skillName stri
 		return nil, fmt.Errorf("failed to load skills: %w", err)
 	}
 
-	skill, err := registry.Get(skillName)
-	if err != nil {
+	var validSkills []*skills.Skill
+	var invalidNames []string
+
+	for _, name := range skillNames {
+		skill, err := registry.Get(name)
+		if err != nil {
+			invalidNames = append(invalidNames, name)
+		} else {
+			validSkills = append(validSkills, skill)
+		}
+	}
+
+	if len(invalidNames) > 0 {
 		available := registry.List()
 		names := make([]string, 0, len(available))
 		for _, s := range available {
@@ -226,7 +250,7 @@ func loadAndValidateSkill(atmosConfig *schema.AtmosConfiguration, skillName stri
 		}
 
 		builder := errUtils.Build(errUtils.ErrAISkillNotFound).
-			WithExplanationf("The skill %q is not installed or configured.", skillName)
+			WithExplanationf("The following skills are not installed or configured: %s", strings.Join(invalidNames, ", "))
 
 		if len(names) > 0 {
 			builder = builder.WithHintf("Available skills: %s", strings.Join(names, ", "))
@@ -239,12 +263,12 @@ func loadAndValidateSkill(atmosConfig *schema.AtmosConfiguration, skillName stri
 		return nil, builder.Err()
 	}
 
-	return skill, nil
+	return validSkills, nil
 }
 
-// setupAIAnalysis validates AI configuration, loads the skill if specified, and starts output capture.
+// setupAIAnalysis validates AI configuration, loads skills if specified, and starts output capture.
 // Returns nil captureSession if capture setup fails (caller should disable AI).
-func setupAIAnalysis(atmosConfig *schema.AtmosConfiguration, skillName string) (*analyze.CaptureSession, string, error) {
+func setupAIAnalysis(atmosConfig *schema.AtmosConfiguration, skillNames []string) (*analyze.CaptureSession, string, error) {
 	defer perf.Track(nil, "cmd.setupAIAnalysis")()
 
 	// Validate AI configuration early to fail fast with helpful errors.
@@ -252,14 +276,21 @@ func setupAIAnalysis(atmosConfig *schema.AtmosConfiguration, skillName string) (
 		return nil, "", err
 	}
 
-	// If --skill specified, load and validate the skill.
+	// If --skill specified, load and validate all skills.
 	var skillPrompt string
-	if skillName != "" {
-		skill, err := loadAndValidateSkill(atmosConfig, skillName)
+	if len(skillNames) > 0 {
+		validSkills, err := loadAndValidateSkills(atmosConfig, skillNames)
 		if err != nil {
 			return nil, "", err
 		}
-		skillPrompt = skill.SystemPrompt
+		// Concatenate all skill system prompts with separator.
+		var prompts []string
+		for _, s := range validSkills {
+			if s.SystemPrompt != "" {
+				prompts = append(prompts, s.SystemPrompt)
+			}
+		}
+		skillPrompt = strings.Join(prompts, "\n\n---\n\n")
 	}
 
 	// Start capturing stdout/stderr while still teeing to the terminal.
@@ -280,8 +311,8 @@ func buildCommandName() string {
 // runAIAnalysis stops the capture session and sends captured output to the AI provider for analysis.
 // When there's an error, it prints the formatted error BEFORE the AI analysis so the user sees
 // the error first, followed by the AI explanation.
-// If skillName/skillPrompt are non-empty, they are passed to AnalyzeOutput for domain-specific context.
-func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error, skillName, skillPrompt string) {
+// If skillNames/skillPrompt are non-empty, they are passed to AnalyzeOutput for domain-specific context.
+func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error, skillNames []string, skillPrompt string) {
 	defer perf.Track(nil, "cmd.runAIAnalysis")()
 
 	stdout, stderrCaptured := captureSession.Stop()
@@ -303,7 +334,7 @@ func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analy
 		Stdout:      stdout,
 		Stderr:      stderrCaptured,
 		CmdErr:      cmdErr,
-		SkillName:   skillName,
+		SkillNames:  skillNames,
 		SkillPrompt: skillPrompt,
 	})
 }
@@ -1651,22 +1682,23 @@ func Execute() error {
 	// We parse --ai from os.Args because Cobra hasn't parsed flags yet at this point.
 	// Skip for "atmos ai" commands to avoid double AI processing.
 	aiEnabled := hasAIFlag() && !isAICommand()
-	skillName := parseSkillFlag()
+	skillNames := parseSkillFlag()
 	var captureSession *analyze.CaptureSession
 	var skillPrompt string
 
 	// Validate --skill requires --ai.
-	if skillName != "" && !aiEnabled {
+	if len(skillNames) > 0 && !aiEnabled {
+		skillList := strings.Join(skillNames, ",")
 		return errUtils.Build(errUtils.ErrAISkillRequiresAIFlag).
 			WithExplanation("The --skill flag provides domain-specific context for AI analysis, but AI analysis is not enabled. Use --skill together with --ai.").
-			WithHintf("Add --ai to enable AI analysis:\n  atmos --ai --skill %s <command>", skillName).
-			WithHintf("Or use environment variables:\n  ATMOS_AI=true ATMOS_SKILL=%s atmos <command>", skillName).
+			WithHintf("Add --ai to enable AI analysis:\n  atmos <command> --ai --skill %s", skillList).
+			WithHintf("Or use environment variables:\n  ATMOS_AI=true ATMOS_SKILL=%s atmos <command>", skillList).
 			Err()
 	}
 
 	if aiEnabled {
 		var setupErr error
-		captureSession, skillPrompt, setupErr = setupAIAnalysis(&atmosConfig, skillName)
+		captureSession, skillPrompt, setupErr = setupAIAnalysis(&atmosConfig, skillNames)
 		if setupErr != nil {
 			return setupErr
 		}
@@ -1686,7 +1718,7 @@ func Execute() error {
 	// the error first, then the AI explanation. After analysis, we exit directly
 	// to prevent main.go from re-printing the error.
 	if aiEnabled && captureSession != nil {
-		runAIAnalysis(&atmosConfig, captureSession, err, skillName, skillPrompt)
+		runAIAnalysis(&atmosConfig, captureSession, err, skillNames, skillPrompt)
 		if err != nil {
 			// Error was already printed by runAIAnalysis. Exit with proper code.
 			errUtils.Exit(errUtils.GetExitCode(err))

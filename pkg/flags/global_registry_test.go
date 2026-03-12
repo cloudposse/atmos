@@ -476,7 +476,7 @@ func TestParseGlobalFlags_AIFlag(t *testing.T) {
 	})
 }
 
-// TestParseGlobalFlags_SkillFlag tests that the --skill flag is correctly parsed.
+// TestParseGlobalFlags_SkillFlag tests that the --skill flag is correctly parsed as a string slice.
 func TestParseGlobalFlags_SkillFlag(t *testing.T) {
 	t.Run("defaults to empty", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
@@ -486,20 +486,33 @@ func TestParseGlobalFlags_SkillFlag(t *testing.T) {
 		_ = parser.BindToViper(v)
 
 		flags := ParseGlobalFlags(cmd, v)
-		assert.Empty(t, flags.Skill, "Skill should default to empty string")
+		assert.Empty(t, flags.Skill, "Skill should default to empty slice")
 	})
 
-	t.Run("CLI flag sets skill", func(t *testing.T) {
+	t.Run("CLI flag sets single skill", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := NewGlobalOptionsBuilder().Build()
 		parser.RegisterFlags(cmd)
 		_ = parser.BindToViper(v)
 
-		v.Set("skill", "atmos-terraform")
+		v.Set("skill", []string{"atmos-terraform"})
 
 		flags := ParseGlobalFlags(cmd, v)
-		assert.Equal(t, "atmos-terraform", flags.Skill, "Skill should be set via CLI flag")
+		assert.Equal(t, []string{"atmos-terraform"}, flags.Skill, "Skill should be set via CLI flag")
+	})
+
+	t.Run("CLI flag sets multiple skills", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("skill", []string{"atmos-terraform", "atmos-stacks"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"atmos-terraform", "atmos-stacks"}, flags.Skill, "Skill should support multiple values")
 	})
 
 	t.Run("environment variable sets skill", func(t *testing.T) {
@@ -509,11 +522,11 @@ func TestParseGlobalFlags_SkillFlag(t *testing.T) {
 		parser.RegisterFlags(cmd)
 		_ = parser.BindToViper(v)
 
-		t.Setenv("ATMOS_SKILL", "atmos-stacks")
+		t.Setenv("ATMOS_SKILL", "atmos-terraform")
 		_ = v.BindEnv("skill", "ATMOS_SKILL")
 
 		flags := ParseGlobalFlags(cmd, v)
-		assert.Equal(t, "atmos-stacks", flags.Skill, "Skill should be set when ATMOS_SKILL is set")
+		assert.Contains(t, flags.Skill, "atmos-terraform", "Skill should be set when ATMOS_SKILL is set")
 	})
 }
 

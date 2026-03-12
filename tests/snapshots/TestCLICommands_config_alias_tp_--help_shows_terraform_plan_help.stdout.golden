@@ -135,7 +135,8 @@ GLOBAL FLAGS
 
       --sha string                Git commit SHA with which to compare the current branch
 
-      --skill string              Specify skill for AI analysis context (requires --ai)
+      --skill strings             Specify skills for AI analysis context (comma-separated or repeated flag, requires --
+                                  ai)
 
       --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
 

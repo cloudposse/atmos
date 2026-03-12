@@ -72,7 +72,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 
 		// AI integration.
 		AI:    v.GetBool("ai"),
-		Skill: v.GetString("skill"),
+		Skill: v.GetStringSlice("skill"),
 
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
@@ -390,11 +390,10 @@ func registerAIFlags(registry *FlagRegistry) {
 		Description: "Enable AI-powered analysis of command output",
 		EnvVars:     []string{"ATMOS_AI"},
 	})
-	registry.Register(&StringFlag{
+	registry.Register(&StringSliceFlag{
 		Name:        "skill",
-		Shorthand:   "",
-		Default:     "",
-		Description: "Specify skill for AI analysis context (requires --ai)",
+		Default:     []string{},
+		Description: "Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)",
 		EnvVars:     []string{"ATMOS_SKILL"},
 	})
 }

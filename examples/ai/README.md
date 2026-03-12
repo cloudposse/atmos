@@ -3,8 +3,8 @@
 This example demonstrates how to configure and use the Atmos AI Assistant with a realistic multi-region AWS
 infrastructure project.
 
-- **Global `--ai` flag** — Add AI-powered analysis to any Atmos command (`atmos --ai terraform plan`)
-- **`--skill` flag** — Domain-specific AI analysis with skills (`atmos --ai --skill atmos-terraform terraform plan`)
+- **Global `--ai` flag** — Add AI-powered analysis to any Atmos command (`atmos terraform plan --ai`)
+- **`--skill` flag** — Domain-specific AI analysis with skills (`atmos terraform plan --ai --skill atmos-terraform,atmos-stacks`)
 - **Multi-provider configuration** — Configure multiple AI providers (Anthropic, OpenAI, Gemini, Ollama)
 - **Multi-region infrastructure** — Hub-spoke Transit Gateway topology across us-east-1 and us-west-2
 - **Session management** — Persistent conversation history with auto-compact
@@ -97,7 +97,8 @@ $ atmos ai ask "what stacks and components do we have in the infra?"
 
 ### AI-Powered Analysis with `--skill` (Skill Not Found)
 
-When using `--skill` with a skill name that doesn't exist, Atmos shows a helpful error:
+When using `--skill` with a skill name that doesn't exist, Atmos shows a helpful error.
+Multiple skills can be specified with commas (`--skill a,b`) or repeated flags (`--skill a --skill b`):
 
 ```text
 $ atmos terraform plan vpc -s ue1-network --ai --skill terraform
@@ -106,7 +107,7 @@ $ atmos terraform plan vpc -s ue1-network --ai --skill terraform
 
   ## Explanation
 
-   The skill "terraform" is not installed or configured.
+   The following skills are not installed or configured: terraform
 
   ## Hints
 
@@ -123,7 +124,7 @@ Terraform-specific knowledge for richer plan analysis:
 ```text
 $ atmos terraform plan vpc -s ue1-network --ai --skill atmos-terraform
 
-✓ AI analysis complete (skill: atmos-terraform)
+✓ AI analysis complete (skills: atmos-terraform)
 
   ## ✅ Plan Succeeded — 1 Resource to Create
 
@@ -604,20 +605,20 @@ The flag works with all commands — terraform, helmfile, describe, validate, li
 
 ```bash
 # AI analyzes terraform plan output and summarizes changes
-atmos --ai terraform plan vpc -s ue1-network
+atmos terraform plan vpc -s ue1-network --ai
 
 # AI explains any errors from terraform apply
-atmos --ai terraform apply vpc -s ue1-prod
+atmos terraform apply vpc -s ue1-prod --ai
 
 # AI summarizes the component configuration
-atmos --ai describe component vpc -s ue1-network
+atmos describe component vpc -s ue1-network --ai
 
 # AI analyzes validation results
-atmos --ai validate stacks
+atmos validate stacks --ai
 
 # AI summarizes the list of stacks and components
-atmos --ai list stacks
-atmos --ai list components
+atmos list stacks --ai
+atmos list components --ai
 
 # Enable via environment variable (applies to all commands)
 export ATMOS_AI=true
@@ -625,38 +626,39 @@ atmos terraform plan vpc -s ue1-network
 atmos describe stacks
 
 # Combine with other flags
-atmos --ai --logs-level=Debug terraform plan vpc -s ue1-prod
+atmos terraform plan vpc -s ue1-prod --ai --logs-level=Debug
 ```
 
 ### `--skill` Flag Examples
 
-Use `--skill` with `--ai` to give the AI domain-specific expertise for more accurate analysis:
+Use `--skill` with `--ai` to give the AI domain-specific expertise for more accurate analysis.
+Multiple skills can be combined with commas or repeated flags:
 
 ```bash
 # Terraform expertise for plan analysis
-atmos --ai --skill atmos-terraform terraform plan vpc -s ue1-prod
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
 
-# Stacks expertise for stack description
-atmos --ai --skill atmos-stacks describe stacks
+# Combine multiple skills (comma-separated)
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform,atmos-stacks
 
-# Validation expertise for policy checks
-atmos --ai --skill atmos-validation validate stacks
+# Combine multiple skills (repeated flag)
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform --skill atmos-stacks
 
 # Helmfile expertise for Kubernetes deployments
-atmos --ai --skill atmos-helmfile helmfile diff echo-server -s ue1-prod
+atmos helmfile diff echo-server -s ue1-prod --ai --skill atmos-helmfile
 
-# Use environment variables for CI/CD
-ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s ue1-prod
+# Use environment variables for CI/CD (comma-separated)
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s ue1-prod
 export ATMOS_SKILL=atmos-terraform
-atmos --ai terraform plan vpc -s ue1-network
+atmos terraform plan vpc -s ue1-network --ai
 ```
 
 Skills are loaded from marketplace installations (`~/.atmos/skills/`) and custom skills in `atmos.yaml`.
-If the specified skill is not found, Atmos shows an error listing all available skills.
+If any specified skills are not found, Atmos shows an error listing the invalid and available skills.
 
 ### How It Works
 
-1. You run any Atmos command with `--ai` (e.g., `atmos --ai terraform plan vpc -s ue1-network`)
+1. You run any Atmos command with `--ai` (e.g., `atmos terraform plan vpc -s ue1-network --ai`)
 2. The command runs normally — output is displayed to the terminal in real-time
 3. Output is also captured in the background
 4. After the command completes, the captured output is sent to the configured AI provider
@@ -722,9 +724,9 @@ atmos ai ask "Describe the VPC in ue1-network"
 atmos ai ask "What are the component dependencies in ue1-network?"
 
 # AI-powered analysis of any command output
-atmos --ai describe component vpc -s ue1-network
-atmos --ai validate stacks
-atmos --ai terraform plan vpc -s ue1-prod
+atmos describe component vpc -s ue1-network --ai
+atmos validate stacks --ai
+atmos terraform plan vpc -s ue1-prod --ai
 
 # Named session
 atmos ai chat --session infrastructure-review

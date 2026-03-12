@@ -74,14 +74,29 @@ explains errors with fix instructions on failure.
 
 ### Analyze command output
 ```bash
-atmos --ai terraform plan vpc -s ue1-network
-atmos --ai describe component vpc -s ue1-prod
-atmos --ai validate stacks
-atmos --ai list stacks
+atmos terraform plan vpc -s ue1-network --ai
+atmos describe component vpc -s ue1-prod --ai
+atmos validate stacks --ai
+atmos list stacks --ai
+```
+
+### With domain-specific skills
+```bash
+# Single skill
+atmos terraform plan vpc -s ue1-network --ai --skill atmos-terraform
+
+# Multiple skills (comma-separated)
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform,atmos-stacks
+
+# Multiple skills (repeated flag)
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform --skill atmos-stacks
 ```
 
 ### Enable globally via environment variable
 ```bash
 export ATMOS_AI=true
 atmos terraform plan vpc -s ue1-network
+
+# With skills via env var
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s ue1-prod
 ```

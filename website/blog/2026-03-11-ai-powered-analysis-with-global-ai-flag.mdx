@@ -31,9 +31,9 @@ to your configured AI provider, and renders the analysis right in your terminal.
 
 Get a clear summary of Terraform plan changes, warnings, and recommendations:
 
-<Terminal title="atmos --ai terraform plan">
+<Terminal title="atmos terraform plan --ai">
 ```console
-$ atmos --ai terraform plan vpc -s ue1-prod
+$ atmos terraform plan vpc -s ue1-prod --ai
 
 Terraform used the selected providers to generate the following execution
 plan. Resource actions are indicated with the following symbols:
@@ -75,7 +75,7 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 
 When commands fail, the AI explains the root cause and provides actionable steps to fix it:
 
-<Terminal title="atmos --ai terraform plan (error)">
+<Terminal title="atmos terraform plan --ai (error)">
 ```console
 $ atmos terraform plan vpc -s ue1-pro --ai
 
@@ -119,32 +119,50 @@ atmos describe stacks
 
 ## Domain-Specific Analysis with `--skill`
 
-Pair `--ai` with `--skill` to give the AI deep knowledge of a specific Atmos subsystem. The skill's system
-prompt is prepended to the analysis, resulting in more accurate and actionable insights:
+Pair `--ai` with `--skill` to give the AI deep knowledge of specific Atmos subsystems. The skills' system
+prompts are prepended to the analysis, resulting in more accurate and actionable insights.
+
+### Single Skill
 
 ```bash
 # Terraform expertise for plan analysis
-atmos --ai --skill atmos-terraform terraform plan vpc -s ue1-prod
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
 
 # Stacks expertise for stack descriptions
-atmos --ai --skill atmos-stacks describe stacks
+atmos describe stacks --ai --skill atmos-stacks
 
 # Validation expertise for policy checks
-atmos --ai --skill atmos-validation validate stacks
+atmos validate stacks --ai --skill atmos-validation
+```
+
+### Multiple Skills
+
+Combine multiple skills for cross-domain expertise. Use comma-separated values or repeated flags:
+
+```bash
+# Comma-separated skills
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform,atmos-stacks
+
+# Repeated --skill flags
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform --skill atmos-stacks
 ```
 
 Skills are loaded from marketplace installations (`~/.atmos/skills/`) and custom skills configured in
 `atmos.yaml`. Use `ATMOS_SKILL` environment variable for CI/CD:
 
 ```bash
+# Single skill via env var
 ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s ue1-prod
+
+# Multiple skills via env var (comma-separated)
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s ue1-prod
 ```
 
 ### Skill Not Found
 
 If the skill name doesn't match an installed skill, Atmos shows a helpful error:
 
-<Terminal title="atmos --ai --skill terraform (not found)">
+<Terminal title="atmos terraform plan --ai --skill terraform (not found)">
 ```console
 $ atmos terraform plan vpc -s ue1-network --ai --skill terraform
 
@@ -152,7 +170,7 @@ $ atmos terraform plan vpc -s ue1-network --ai --skill terraform
 
   ## Explanation
 
-   The skill "terraform" is not installed or configured.
+   The following skills are not installed or configured: terraform
 
   ## Hints
 
@@ -167,11 +185,11 @@ $ atmos terraform plan vpc -s ue1-network --ai --skill terraform
 With the `atmos-terraform` skill, the AI gets deep Terraform knowledge for richer plan analysis —
 including actionable fix suggestions for warnings:
 
-<Terminal title="atmos --ai --skill atmos-terraform terraform plan">
+<Terminal title="atmos terraform plan --ai --skill atmos-terraform">
 ```console
 $ atmos terraform plan vpc -s ue1-network --ai --skill atmos-terraform
 
-✓ AI analysis complete (skill: atmos-terraform)
+✓ AI analysis complete (skills: atmos-terraform)
 
   ## ✅ Plan Succeeded — 1 Resource to Create
 
@@ -218,11 +236,11 @@ $ atmos terraform plan vpc -s ue1-network --ai --skill atmos-terraform
 The `--ai` flag works with **any** Atmos command:
 
 ```bash
-atmos --ai terraform plan vpc -s ue1-prod
-atmos --ai terraform apply vpc -s ue1-prod
-atmos --ai describe stacks
-atmos --ai validate stacks
-atmos --ai list components
+atmos terraform plan vpc -s ue1-prod --ai
+atmos terraform apply vpc -s ue1-prod --ai
+atmos describe stacks --ai
+atmos validate stacks --ai
+atmos list components --ai
 ```
 
 ## Configuration

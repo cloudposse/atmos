@@ -72,8 +72,8 @@ type Flags struct {
 	Version        bool
 
 	// AI integration.
-	AI    bool   // Enable AI-powered analysis of command output (--ai).
-	Skill string // Specify skill for AI analysis context (--skill).
+	AI    bool     // Enable AI-powered analysis of command output (--ai).
+	Skill []string // Specify skills for AI analysis context (--skill, comma-separated or repeated).
 
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
@@ -98,6 +98,7 @@ func NewFlags() Flags {
 		ProfileType:  "cpu",
 		Heatmap:      false,
 		HeatmapMode:  "bar",
+		Skill:        []string{}, // No skills active by default.
 	}
 }
 
