@@ -332,7 +332,7 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 95,
+      progress: 96,
       status: 'in-progress',
       milestones: [
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
@@ -346,12 +346,14 @@ export const roadmapConfig = {
         { label: 'Automatic component refresh on version changes', status: 'shipped', quarter: 'q1-2026', pr: 2010, changelog: 'version-aware-jit-provisioning', description: 'Workdirs automatically refresh when component version or source URI changes. Includes TTL-based cleanup for stale workdirs.', benefits: 'Change a component version and Atmos automatically re-provisions. Clean up old workdirs with --ttl=7d. No manual cleanup required.' },
         { label: 'Source cache TTL for JIT-vendored components', status: 'shipped', quarter: 'q1-2026', pr: 2138, changelog: 'source-cache-ttl', prd: 'source-cache-ttl', docs: '/cli/commands/terraform/source', description: 'TTL-based cache expiration for JIT-vendored sources. Set ttl on source config to control how long cached sources are reused before re-pulling from the remote.', benefits: 'Floating refs like branch names automatically refresh. Set ttl: 0s for active development or ttl: 1h for team collaboration. No manual cleanup required.' },
         { label: 'Per-target version overrides', status: 'shipped', quarter: 'q1-2026', pr: 2141, changelog: 'vendor-target-version-overrides', docs: '/design-patterns/version-management/vendoring-components', description: 'Vendor targets now accept both strings and maps with optional version overrides, enabling multiple versions of the same component from a single source entry.', benefits: 'Vendor multiple component versions without duplicating source entries. Cleaner, more maintainable vendor manifests.' },
+        { label: 'Warn when vendoring from archived repositories', status: 'shipped', quarter: 'q1-2026', pr: 2175, changelog: 'warn-vendor-archived-repo', description: 'Atmos now checks the GitHub API before vendoring and emits a warning when the source repository is archived. The check is best-effort and never blocks vendoring.', benefits: 'Catch stale or unmaintained dependencies early. Avoid unknowingly pulling in code that will never receive security patches.' },
       ],
       issues: [],
       prs: [
         { number: 1889, title: 'Migrate vendor to registry pattern + implement --stack flag' },
         { number: 1877, title: 'Implement source provisioner for JIT component vendoring' },
         { number: 1876, title: 'Implement component workdir provisioning and CRUD commands' },
+        { number: 2175, title: 'Warn when vendoring from an archived GitHub repository' },
       ],
     },
     {
