@@ -770,3 +770,156 @@ func TestEvaluateYqExpression_EdgeCases(t *testing.T) {
 		assert.Equal(t, "#this looks like a comment", result)
 	})
 }
+
+// TestEvaluateYqExpression_StringTypePreservation verifies that Go string values whose
+// content happens to match a YAML scalar keyword ("true", "false", "null") or a numeric
+// literal ("42", "3.14") are returned as strings and not silently coerced to their
+// native YAML types.  This is a regression test for the bug where UnwrapScalar=true
+// caused yq to emit bare `true`/`false`/`null`/`42` tokens, which the downstream YAML
+// parser decoded as bool/nil/int instead of preserving the original string type.
+func TestEvaluateYqExpression_StringTypePreservation(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name     string
+		data     map[string]any
+		yq       string
+		expected any
+	}{
+		// --- strings that look like YAML booleans ---
+		{
+			name:     "string 'true' preserved as string",
+			data:     map[string]any{"v": "true"},
+			yq:       ".v",
+			expected: "true", // must be string, not bool
+		},
+		{
+			name:     "string 'false' preserved as string",
+			data:     map[string]any{"v": "false"},
+			yq:       ".v",
+			expected: "false", // must be string, not bool
+		},
+		// --- string that looks like YAML null ---
+		{
+			name:     "string 'null' preserved as string",
+			data:     map[string]any{"v": "null"},
+			yq:       ".v",
+			expected: "null", // must be string, not nil
+		},
+		// --- strings that look like YAML numbers ---
+		{
+			name:     "string '42' preserved as string",
+			data:     map[string]any{"v": "42"},
+			yq:       ".v",
+			expected: "42", // must be string, not int
+		},
+		{
+			name:     "string '3.14' preserved as string",
+			data:     map[string]any{"v": "3.14"},
+			yq:       ".v",
+			expected: "3.14", // must be string, not float64
+		},
+		{
+			name:     "string '0' preserved as string",
+			data:     map[string]any{"v": "0"},
+			yq:       ".v",
+			expected: "0", // must be string, not int
+		},
+		// --- IPv6 address (regression for issue #2155) ---
+		{
+			name:     "IPv6 address with trailing double-colon",
+			data:     map[string]any{"addr": "2041:0000:140F::875B::"},
+			yq:       ".addr",
+			expected: "2041:0000:140F::875B::", // must be string, not a map
+		},
+		{
+			name:     "IPv6 loopback address",
+			data:     map[string]any{"addr": "::1"},
+			yq:       ".addr",
+			expected: "::1",
+		},
+		// --- native Go types must still round-trip correctly ---
+		{
+			name:     "native bool true unchanged",
+			data:     map[string]any{"v": true},
+			yq:       ".v",
+			expected: true,
+		},
+		{
+			name:     "native bool false unchanged",
+			data:     map[string]any{"v": false},
+			yq:       ".v",
+			expected: false,
+		},
+		{
+			name:     "native int unchanged",
+			data:     map[string]any{"v": 42},
+			yq:       ".v",
+			expected: 42,
+		},
+		{
+			name:     "native float64 unchanged",
+			data:     map[string]any{"v": 3.14},
+			yq:       ".v",
+			expected: 3.14,
+		},
+		{
+			name:     "nil value unchanged",
+			data:     map[string]any{"v": nil},
+			yq:       ".v",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := EvaluateYqExpression(atmosConfig, tt.data, tt.yq)
+			require.NoError(t, err)
+			assert.Equalf(t, tt.expected, result,
+				"type mismatch: got %T(%v), want %T(%v)", result, result, tt.expected, tt.expected)
+		})
+	}
+}
+
+// TestEvaluateYqExpression_StringTypePreservation_Nested verifies type preservation
+// for string values that look like YAML keywords when they appear inside nested structures.
+func TestEvaluateYqExpression_StringTypePreservation_Nested(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	data := map[string]any{
+		"config": map[string]any{
+			"enabled":     "true",  // string, not bool
+			"count":       "42",    // string, not int
+			"description": "null",  // string, not nil
+			"ipv6":        "2041:0000:140F::875B::",
+		},
+	}
+
+	t.Run("nested string 'true' preserved", func(t *testing.T) {
+		result, err := EvaluateYqExpression(atmosConfig, data, ".config.enabled")
+		require.NoError(t, err)
+		assert.IsType(t, "", result, "expected string, got %T", result)
+		assert.Equal(t, "true", result)
+	})
+
+	t.Run("nested string '42' preserved", func(t *testing.T) {
+		result, err := EvaluateYqExpression(atmosConfig, data, ".config.count")
+		require.NoError(t, err)
+		assert.IsType(t, "", result, "expected string, got %T", result)
+		assert.Equal(t, "42", result)
+	})
+
+	t.Run("nested string 'null' preserved", func(t *testing.T) {
+		result, err := EvaluateYqExpression(atmosConfig, data, ".config.description")
+		require.NoError(t, err)
+		assert.IsType(t, "", result, "expected string, got %T", result)
+		assert.Equal(t, "null", result)
+	})
+
+	t.Run("nested IPv6 preserved", func(t *testing.T) {
+		result, err := EvaluateYqExpression(atmosConfig, data, ".config.ipv6")
+		require.NoError(t, err)
+		assert.IsType(t, "", result, "expected string, got %T", result)
+		assert.Equal(t, "2041:0000:140F::875B::", result)
+	})
+}
