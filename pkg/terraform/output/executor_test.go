@@ -1203,3 +1203,96 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 		})
 	}
 }
+
+// TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable verifies that the executor
+// resolves toolchain-installed executables to absolute paths before passing them to the
+// runner factory. This ensures that template functions like atmos.Component() and YAML
+// functions like !terraform.output can find toolchain-installed binaries (e.g., tofu).
+//
+// This is a regression test for the issue where `atmos describe stacks` with `atmos.Component()`
+// template functions fails with: exec: "tofu": executable file not found in $PATH
+// even though tofu was installed via `atmos toolchain install`.
+func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	// Track what executable path is passed to the runner factory.
+	var capturedExecutable string
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		capturedExecutable = executable
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Create a temp dir structure simulating a toolchain install.
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Create a fake toolchain binary at the expected toolchain install path.
+	toolchainDir := filepath.Join(tempDir, "toolchain")
+	binaryDir := filepath.Join(toolchainDir, "bin", "opentofu", "opentofu", "1.8.0")
+	require.NoError(t, os.MkdirAll(binaryDir, 0o755))
+	fakeBinary := filepath.Join(binaryDir, "tofu")
+	require.NoError(t, os.WriteFile(fakeBinary, []byte("#!/bin/sh\n"), 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath:                "components/terraform",
+				AutoGenerateBackendFile: false,
+				InitRunReconfigure:      false,
+			},
+		},
+		Toolchain: schema.Toolchain{
+			InstallPath: toolchainDir,
+		},
+		Logs: schema.Logs{
+			Level: "info",
+		},
+	}
+
+	// Sections with bare "tofu" executable and toolchain dependencies.
+	sections := map[string]any{
+		cfg.CommandSectionName:   "tofu",
+		cfg.WorkspaceSectionName: "test-workspace",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+		cfg.BackendTypeSectionName: "s3",
+		cfg.BackendSectionName: map[string]any{
+			"bucket": "test-bucket",
+			"key":    "test-key",
+		},
+		"dependencies": map[string]any{
+			"tools": map[string]any{
+				"opentofu": "1.8.0",
+			},
+		},
+	}
+
+	// Setup mock expectations for the full execution path.
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-123"`)},
+	}, nil)
+
+	outputs, err := exec.ExecuteWithSections(atmosConfig, "vpc", "dev-ue1", sections, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-123", outputs["vpc_id"])
+
+	// Verify the executable was resolved to the absolute toolchain path,
+	// not passed as the bare "tofu" name.
+	assert.True(t, filepath.IsAbs(capturedExecutable),
+		"expected executable to be resolved to an absolute path, got %q", capturedExecutable)
+	assert.Equal(t, fakeBinary, capturedExecutable,
+		"expected executable to be resolved to the toolchain binary path")
+}

@@ -977,3 +977,84 @@ func TestBuildToolchainPATH_SkipsInvalidTools(t *testing.T) {
 	assert.NotEqual(t, testPath, result,
 		"PATH should include terraform path, not just original PATH")
 }
+
+func TestResolveExecutablePath(t *testing.T) {
+	t.Run("returns absolute path unchanged", func(t *testing.T) {
+		inst := NewInstaller(nil,
+			WithResolver(&mockResolver{}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{}),
+		)
+		result := inst.ResolveExecutablePath(map[string]string{"opentofu": "1.8.0"}, "/usr/bin/tofu")
+		assert.Equal(t, "/usr/bin/tofu", result)
+	})
+
+	t.Run("resolves bare executable from toolchain", func(t *testing.T) {
+		inst := NewInstaller(nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					if toolName == "opentofu" {
+						return "opentofu", "opentofu", nil
+					}
+					return "", "", errToolNotFound
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					if owner == "opentofu" && repo == "opentofu" && version == "1.8.0" {
+						return "/home/user/.local/share/atmos/toolchain/bin/opentofu/opentofu/1.8.0/tofu", nil
+					}
+					return "", errToolNotFound
+				},
+			}),
+		)
+
+		deps := map[string]string{"opentofu": "1.8.0"}
+		result := inst.ResolveExecutablePath(deps, "tofu")
+		assert.Equal(t, "/home/user/.local/share/atmos/toolchain/bin/opentofu/opentofu/1.8.0/tofu", result)
+	})
+
+	t.Run("returns original name when not found in toolchain or PATH", func(t *testing.T) {
+		inst := NewInstaller(nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "opentofu", "opentofu", nil
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					return "", errToolNotFound
+				},
+			}),
+		)
+
+		deps := map[string]string{"opentofu": "1.8.0"}
+		result := inst.ResolveExecutablePath(deps, "nonexistent-binary")
+		assert.Equal(t, "nonexistent-binary", result)
+	})
+
+	t.Run("skips deps with resolver errors", func(t *testing.T) {
+		inst := NewInstaller(nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					return "", "", errInvalidTool
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{}),
+		)
+
+		deps := map[string]string{"badtool": "1.0.0"}
+		result := inst.ResolveExecutablePath(deps, "somebinary")
+		assert.Equal(t, "somebinary", result)
+	})
+
+	t.Run("no-op with empty deps", func(t *testing.T) {
+		inst := NewInstaller(nil,
+			WithResolver(&mockResolver{}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{}),
+		)
+		result := inst.ResolveExecutablePath(map[string]string{}, "terraform")
+		// Falls through to exec.LookPath, which should find terraform if on PATH,
+		// otherwise returns original name.
+		assert.NotEmpty(t, result)
+	})
+}

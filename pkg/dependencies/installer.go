@@ -3,6 +3,7 @@ package dependencies
 import (
 	"fmt"
 	"os"
+	execPkg "os/exec"
 	"path/filepath"
 	"strings"
 
@@ -189,6 +190,49 @@ func (i *Installer) isToolInstalled(tool string, version string) bool {
 	// This handles tools where binary name differs from repo name.
 	_, err = i.binaryPathFinder.FindBinaryPath(owner, repo, version)
 	return err == nil
+}
+
+// ResolveExecutablePath resolves a bare executable name (e.g., "tofu") to its absolute path
+// using the toolchain dependency map. This is needed when the executable is installed via
+// `atmos toolchain install` and is not on the system PATH.
+//
+// Resolution order:
+//  1. For each dependency, check if the toolchain-installed binary matches the executable name.
+//  2. Fall back to exec.LookPath to check the system PATH.
+//  3. If nothing found, return the original name (let the caller fail with a clear error).
+func (i *Installer) ResolveExecutablePath(deps map[string]string, executable string) string {
+	defer perf.Track(i.atmosConfig, "dependencies.Installer.ResolveExecutablePath")()
+
+	// If the executable is already an absolute path, return it as-is.
+	if filepath.IsAbs(executable) {
+		return executable
+	}
+
+	// Try to find the executable in toolchain-installed dependencies.
+	for tool, version := range deps {
+		owner, repo, err := i.resolver.Resolve(tool)
+		if err != nil {
+			continue
+		}
+
+		binaryPath, err := i.binaryPathFinder.FindBinaryPath(owner, repo, version)
+		if err != nil {
+			continue
+		}
+
+		// Check if the binary basename matches the requested executable.
+		if filepath.Base(binaryPath) == executable {
+			return binaryPath
+		}
+	}
+
+	// Fall back to system PATH lookup.
+	if path, err := execPkg.LookPath(executable); err == nil {
+		return path
+	}
+
+	// Return the original name; the caller will get a clear error from tfexec.NewTerraform.
+	return executable
 }
 
 // fileExists checks if a file exists.
