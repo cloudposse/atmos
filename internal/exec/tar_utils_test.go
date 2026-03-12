@@ -49,7 +49,9 @@ func TestExtractTarball_NormalFiles(t *testing.T) {
 }
 
 func TestExtractTarball_DirectoryTraversal_DotDot(t *testing.T) {
-	dest := t.TempDir()
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "dest")
+	require.NoError(t, os.MkdirAll(dest, 0o755))
 	buf := buildTar(t, []tar.Header{
 		{Name: "../escape.txt", Typeflag: tar.TypeReg, Mode: 0o644},
 	}, map[string]string{
@@ -60,8 +62,8 @@ func TestExtractTarball_DirectoryTraversal_DotDot(t *testing.T) {
 	err := extractTarball(buf, dest)
 	require.NoError(t, err)
 
-	// File must NOT exist outside dest.
-	_, err = os.Stat(filepath.Join(dest, "..", "escape.txt"))
+	// File must NOT exist in the test-owned parent.
+	_, err = os.Stat(filepath.Join(parent, "escape.txt"))
 	assert.True(t, os.IsNotExist(err), "traversal file should not exist")
 }
 
