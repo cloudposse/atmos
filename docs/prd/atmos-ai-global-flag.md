@@ -59,11 +59,11 @@ Users frequently need to interpret complex command output (e.g., Terraform plan 
 
 ### Component Overview
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────┐
 │  cmd/root.go Execute()                                           │
 │  ┌──────────────────────────────────────────────────────────┐    │
-│  │ 1. Parse --ai and --skill from os.Args (before Cobra)   │    │
+│  │ 1. Parse --ai and --skill from os.Args (before Cobra)    │    │
 │  │ 2. Validate --skill requires --ai                        │    │
 │  │ 3. Validate AI config (fail fast with hints)             │    │
 │  │ 4. If --skill: load skill registry, validate skill name  │    │
@@ -74,13 +74,13 @@ Users frequently need to interpret complex command output (e.g., Terraform plan 
 │  └──────────────────────────────────────────────────────────┘    │
 │                                                                  │
 │  pkg/ai/analyze/                                                 │
-│  ├── capture.go    - CaptureSession (os.Pipe + tee)             │
+│  ├── capture.go    - CaptureSession (os.Pipe + tee)              │
 │  ├── analyze.go    - ValidateAIConfig, AnalyzeOutput             │
 │  └── providers.go  - AI provider registration imports            │
 │                                                                  │
 │  pkg/ai/skills/                                                  │
-│  ├── skill.go      - Skill struct (Name, SystemPrompt, etc.)    │
-│  ├── registry.go   - Registry (Get, Has, List)                  │
+│  ├── skill.go      - Skill struct (Name, SystemPrompt, etc.)     │
+│  ├── registry.go   - Registry (Get, Has, List)                   │
 │  └── loader.go     - LoadSkills (marketplace + custom)           │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -121,12 +121,12 @@ stdout, stderr := session.Stop()  // Restores original streams
 
 When `--skill <name>` is specified, the skill's full markdown content (its `SystemPrompt` field) is sent to the AI provider as part of the analysis prompt. The prompt is assembled in this order:
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │ 1. Skill system prompt (full markdown content)  │  ← domain expertise (e.g., Terraform knowledge)
-│    ───────── \n\n---\n\n separator ──────────    │
+│    ───────── \n\n---\n\n separator ──────────   │
 │ 2. General analysis system prompt               │  ← infrastructure/DevOps expertise
-│    ───────── \n\n---\n\n separator ──────────    │
+│    ───────── \n\n---\n\n separator ──────────   │
 │ 3. Command context                              │  ← command name, success/failure status
 │ 4. Captured stdout (code block)                 │  ← command's standard output
 │ 5. Captured stderr (code block)                 │  ← command's standard error
@@ -245,7 +245,7 @@ Both `--ai` and `--skill` are parsed from `os.Args` before Cobra runs (like `--c
 
 When `--ai` is used but AI is not configured:
 
-```
+```text
 Error: AI features are not enabled
 
 Explanation:
@@ -271,7 +271,7 @@ Uses Atmos error builder pattern with:
 
 ### `--skill` without `--ai`
 
-```
+```text
 Error: --skill flag requires --ai
 
 Explanation:
@@ -288,7 +288,7 @@ Hints:
 
 ### Invalid skill name
 
-```
+```text
 Error: AI skill not found: "my-skill"
 
 Explanation:
@@ -340,21 +340,21 @@ atmos --ai aws security analyze
 
 ### Unit Tests
 
-| Test File | Tests |
-|-----------|-------|
-| `pkg/flags/global_builder_test.go` | AI and Skill flag registration on commands |
-| `pkg/flags/global_registry_test.go` | AI and Skill flag parsing (default, CLI, env var) |
-| `pkg/ai/analyze/capture_test.go` | Output capture (stdout, stderr, both, restore, empty) |
-| `pkg/ai/analyze/analyze_test.go` | Config validation (not enabled, no provider, no key, valid, defaults), prompt building (success, error, empty, stderr only, whitespace, with skill prompt, without skill prompt), truncation |
-| `cmd/root_test.go` | `hasAIFlagInternal`, `parseSkillFlagInternal` (present, absent, =value, separate value, after --, similar flags), `isAICommandInternal` |
+| Test File                           | Tests                                                                                                                                                                                        |
+|-------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `pkg/flags/global_builder_test.go`  | AI and Skill flag registration on commands                                                                                                                                                   |
+| `pkg/flags/global_registry_test.go` | AI and Skill flag parsing (default, CLI, env var)                                                                                                                                            |
+| `pkg/ai/analyze/capture_test.go`    | Output capture (stdout, stderr, both, restore, empty)                                                                                                                                        |
+| `pkg/ai/analyze/analyze_test.go`    | Config validation (not enabled, no provider, no key, valid, defaults), prompt building (success, error, empty, stderr only, whitespace, with skill prompt, without skill prompt), truncation |
+| `cmd/root_test.go`                  | `hasAIFlagInternal`, `parseSkillFlagInternal` (present, absent, =value, separate value, after --, similar flags), `isAICommandInternal`                                                      |
 
 ### New Tests for `--skill`
 
-| Test File | Tests |
-|-----------|-------|
-| `cmd/root_test.go` | `parseSkillFlagInternal` — `--skill atmos-terraform`, `--skill=atmos-terraform`, `--skill` after `--`, missing value, similar flags |
-| `pkg/ai/analyze/analyze_test.go` | `buildAnalysisPrompt` with skill prompt prepended, without skill prompt (backward compatible) |
-| `cmd/root_test.go` or integration | `--skill` without `--ai` returns error, `--skill` with invalid name returns error listing available skills |
+| Test File                         | Tests                                                                                                                               |
+|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `cmd/root_test.go`                | `parseSkillFlagInternal` — `--skill atmos-terraform`, `--skill=atmos-terraform`, `--skill` after `--`, missing value, similar flags |
+| `pkg/ai/analyze/analyze_test.go`  | `buildAnalysisPrompt` with skill prompt prepended, without skill prompt (backward compatible)                                       |
+| `cmd/root_test.go` or integration | `--skill` without `--ai` returns error, `--skill` with invalid name returns error listing available skills                          |
 
 ### Coverage
 
