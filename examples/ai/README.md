@@ -6,7 +6,7 @@ Learn more in the [Atmos AI documentation](https://atmos.tools/ai).
 
 ## What You'll See
 
-- [Multi-provider AI configuration](https://atmos.tools/cli/configuration/ai/providers) (Anthropic, OpenAI, Gemini, Ollama)
+- [Multi-provider AI configuration](https://atmos.tools/cli/configuration/ai/providers) (OpenAI, Anthropic, Bedrock, Azure OpenAI, Gemini, Grok, Ollama)
 - [Interactive chat](https://atmos.tools/cli/commands/ai/chat) and single-question modes
 - [Session management](https://atmos.tools/cli/configuration/ai/sessions) with persistent conversation history
 - [Tool execution](https://atmos.tools/ai) — AI inspects stacks, components, and dependencies
