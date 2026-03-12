@@ -17,6 +17,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // Helper function to create minimal valid sections.
@@ -1213,6 +1214,13 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 // template functions fails with: exec: "tofu": executable file not found in $PATH
 // even though tofu was installed via `atmos toolchain install`.
 func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) {
+	// Restore package-global toolchain config after test to avoid leaking
+	// t.TempDir() paths into subsequent tests.
+	origToolchainConfig := toolchain.GetAtmosConfig()
+	t.Cleanup(func() {
+		toolchain.SetAtmosConfig(origToolchainConfig)
+	})
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

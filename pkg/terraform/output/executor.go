@@ -428,10 +428,11 @@ func (e *Executor) execute(
 	if err != nil {
 		return nil, err
 	}
-	// Include toolchain PATH in subprocess environment so terraform/tofu subprocesses
-	// can also find toolchain-installed binaries.
-	if p := tenv.PATH(); p != "" {
-		environMap["PATH"] = p
+	// Prepend toolchain bin dirs to subprocess PATH so terraform/tofu subprocesses
+	// can also find toolchain-installed binaries. Uses PrependToPath to preserve
+	// any PATH overrides from the component's env section.
+	if len(tenv.ToolchainDirs()) > 0 {
+		environMap["PATH"] = tenv.PrependToPath(environMap["PATH"])
 	}
 	if len(environMap) > 0 {
 		if err := runner.SetEnv(environMap); err != nil {

@@ -220,8 +220,10 @@ func (i *Installer) ResolveExecutablePath(deps map[string]string, executable str
 			continue
 		}
 
-		// Check if the binary basename matches the requested executable.
-		if filepath.Base(binaryPath) == executable {
+		// Normalize names so bare executables still match platform-specific suffixes (e.g. .exe on Windows).
+		binaryBase := strings.TrimSuffix(filepath.Base(binaryPath), filepath.Ext(binaryPath))
+		executableBase := strings.TrimSuffix(executable, filepath.Ext(executable))
+		if binaryBase == executableBase {
 			return binaryPath
 		}
 	}

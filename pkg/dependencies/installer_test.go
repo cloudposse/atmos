@@ -1057,4 +1057,31 @@ func TestResolveExecutablePath(t *testing.T) {
 		// otherwise returns original name.
 		assert.NotEmpty(t, result)
 	})
+
+	t.Run("matches binary with platform extension against bare executable name", func(t *testing.T) {
+		// On Windows, FindBinaryPath returns a path like /path/tofu.exe but the
+		// executable is specified as bare "tofu". The comparison should still match.
+		inst := NewInstaller(nil,
+			WithResolver(&mockResolver{
+				resolveFunc: func(toolName string) (string, string, error) {
+					if toolName == "opentofu" {
+						return "opentofu", "opentofu", nil
+					}
+					return "", "", errToolNotFound
+				},
+			}),
+			WithBinaryPathFinder(&mockBinaryPathFinder{
+				findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+					if owner == "opentofu" && repo == "opentofu" && version == "1.8.0" {
+						return "/home/user/.atmos/bin/opentofu/opentofu/1.8.0/tofu.exe", nil
+					}
+					return "", errToolNotFound
+				},
+			}),
+		)
+
+		deps := map[string]string{"opentofu": "1.8.0"}
+		result := inst.ResolveExecutablePath(deps, "tofu")
+		assert.Equal(t, "/home/user/.atmos/bin/opentofu/opentofu/1.8.0/tofu.exe", result)
+	})
 }

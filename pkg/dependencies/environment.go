@@ -2,8 +2,10 @@ package dependencies
 
 import (
 	"fmt"
+	"os"
 	execPkg "os/exec"
 	"path/filepath"
+	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -18,6 +20,9 @@ import (
 type ToolchainEnvironment struct {
 	// path is the full PATH string with toolchain bin dirs prepended.
 	path string
+
+	// dirs holds only the toolchain bin directories (without the system PATH).
+	dirs []string
 
 	// resolved maps bare command names (e.g. "tofu") to absolute paths.
 	resolved map[string]string
@@ -122,6 +127,29 @@ func (e *ToolchainEnvironment) PATH() string {
 	return e.path
 }
 
+// ToolchainDirs returns only the toolchain bin directories without the system PATH.
+// Use this to prepend toolchain paths to an existing PATH without losing other entries.
+func (e *ToolchainEnvironment) ToolchainDirs() []string {
+	defer perf.Track(nil, "dependencies.ToolchainEnvironment.ToolchainDirs")()
+
+	return e.dirs
+}
+
+// PrependToPath prepends toolchain bin dirs to the given PATH string.
+// If there are no toolchain dirs, returns basePATH unchanged.
+func (e *ToolchainEnvironment) PrependToPath(basePATH string) string {
+	defer perf.Track(nil, "dependencies.ToolchainEnvironment.PrependToPath")()
+
+	if len(e.dirs) == 0 {
+		return basePATH
+	}
+	prefix := strings.Join(e.dirs, string(os.PathListSeparator))
+	if basePATH == "" {
+		return prefix
+	}
+	return prefix + string(os.PathListSeparator) + basePATH
+}
+
 // envConfig holds injectable dependencies for newEnvironment.
 // Production code uses defaults; tests inject mocks via envOption.
 type envConfig struct {
@@ -207,6 +235,16 @@ func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]stri
 		return nil, fmt.Errorf("failed to build toolchain PATH: %w", err)
 	}
 	env.path = toolchainPATH
+
+	// Extract unique toolchain bin dirs from resolved paths for PrependToPath().
+	seen := make(map[string]bool)
+	for _, p := range env.resolved {
+		dir := filepath.Dir(p)
+		if !seen[dir] {
+			seen[dir] = true
+			env.dirs = append(env.dirs, dir)
+		}
+	}
 
 	return env, nil
 }
