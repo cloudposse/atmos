@@ -7,6 +7,7 @@ id: deploy
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to deploy Terraform changes for an Atmos component in a stack with auto-approval. This combines plan and apply operations in a single command.
@@ -300,6 +301,8 @@ atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
 </dl>
 
 ## CI Integration
+
+<Experimental/>
 
 When running in CI mode (`--ci` flag or auto-detected), the `deploy` command provides a complete CI-native apply workflow:
 

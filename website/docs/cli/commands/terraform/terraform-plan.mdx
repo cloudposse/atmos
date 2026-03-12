@@ -8,6 +8,7 @@ import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to generate a Terraform execution plan for an Atmos component in a stack, showing what changes would be made to your infrastructure.
@@ -380,6 +381,8 @@ atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
 </dl>
 
 ## CI Integration
+
+<Experimental/>
 
 When running in CI mode (`--ci` flag or auto-detected), Atmos produces rich CI artifacts:
 
