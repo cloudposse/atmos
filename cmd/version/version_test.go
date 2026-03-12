@@ -3,7 +3,9 @@ package version
 import (
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestVersionCommandProvider(t *testing.T) {
@@ -23,6 +25,11 @@ func TestVersionCommand_Flags(t *testing.T) {
 
 	formatFlagLookup := cmd.Flags().Lookup("format")
 	assert.NotNil(t, formatFlagLookup)
+
+	shortFlagLookup := cmd.Flags().Lookup("short")
+	assert.NotNil(t, shortFlagLookup)
+	assert.Equal(t, "s", shortFlagLookup.Shorthand)
+	assert.Equal(t, "false", shortFlagLookup.DefValue)
 }
 
 func TestVersionCommand_BasicProperties(t *testing.T) {
@@ -45,4 +52,52 @@ func TestSetAtmosConfig(t *testing.T) {
 	assert.NotPanics(t, func() {
 		SetAtmosConfig(nil)
 	})
+}
+
+func TestParseVersionOptions_ShortFlag(t *testing.T) {
+	tests := []struct {
+		name           string
+		short          bool
+		format         string
+		expectedFormat string
+	}{
+		{
+			name:           "short flag sets plain format when no format specified",
+			short:          true,
+			format:         "",
+			expectedFormat: "plain",
+		},
+		{
+			name:           "short flag does not override explicit format",
+			short:          true,
+			format:         "json",
+			expectedFormat: "json",
+		},
+		{
+			name:           "no short flag preserves empty format",
+			short:          false,
+			format:         "",
+			expectedFormat: "",
+		},
+		{
+			name:           "no short flag preserves explicit format",
+			short:          false,
+			format:         "yaml",
+			expectedFormat: "yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			v.Set("short", tt.short)
+			v.Set("format", tt.format)
+			v.Set("check", false)
+
+			opts, err := parseVersionOptions(versionCmd, v, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedFormat, opts.Format)
+			assert.Equal(t, tt.short, opts.Short)
+		})
+	}
 }

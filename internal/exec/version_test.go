@@ -278,6 +278,10 @@ func TestDisplayVersionInFormat(t *testing.T) {
 			format: "yaml",
 		},
 		{
+			name:   "Valid plain format",
+			format: "plain",
+		},
+		{
 			name:          "Invalid format",
 			format:        "xml",
 			expectedError: errUtils.ErrVersionFormatInvalid,

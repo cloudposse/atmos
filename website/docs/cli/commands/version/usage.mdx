@@ -32,13 +32,19 @@ Execute the `atmos version` command like this:
 atmos version
 ```
 
-For a quick version check, use the `--version` flag:
+To print just the version number without the banner (useful for scripting), use the `--short` flag:
+
+```shell
+atmos version --short
+```
+
+To check your Atmos version using the global flag, use `--version`:
 
 ```shell
 atmos --version
 ```
 
-**Note:** The `--version` flag prints a simple `atmos <version>` line and does not perform update checks or support the `--check` or `--format` flags. Use the full `atmos version` command for richer output and additional functionality.
+**Note:** The `--version` flag prints a simple `atmos <version>` line and does not perform update checks or support the `--check`, `--format`, or `--short` flags. Use the full `atmos version` command for richer output and additional functionality.
 
 From time to time, Atmos will check for updates. The frequency of these checks is configured in the `atmos.yaml` file.
 
@@ -75,7 +81,10 @@ To check the version of Terraform, Helmfile, or other tools, use their native co
     <dd>Force Atmos to check for a new version, irrespective of the configuration settings.</dd>
 
     <dt>`--format` <em>(optional)</em></dt>
-    <dd>Specify the output format: `yaml` or `json`.</dd>
+    <dd>Specify the output format: `plain`, `yaml`, or `json`.</dd>
+
+    <dt>`--short` / `-s` <em>(optional)</em></dt>
+    <dd>Print just the version number without the banner. Equivalent to `--format plain`.</dd>
 </dl>
 
 :::tip

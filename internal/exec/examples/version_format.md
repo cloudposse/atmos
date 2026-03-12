@@ -1,3 +1,9 @@
+- Display version in plain text (version number only)
+
+```bash
+$ atmos version --short
+```
+
 - Display version in JSON format
 
 ```bash
