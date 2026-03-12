@@ -11,8 +11,8 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // messageSender is the minimal interface needed for AI analysis.
@@ -132,15 +132,12 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 	defer cancel()
 
-	// Add visual separation before spinner so it's not obscured at the bottom of the terminal.
-	// Note: We use utils.PrintfMessageToTUI / utils.PrintfMarkdownToTUI here instead of ui.*
-	// because ui.InitFormatter() runs during PersistentPreRun while output capture pipes are
-	// active. The formatter's terminal detection and writers are stale after capture stops.
-	// The utils functions write directly to os.Stderr (restored after capture) and use a
-	// separate markdown renderer that works correctly in this context.
-	utils.PrintfMessageToTUI("\n")
+	// Reinitialize the UI formatter now that output capture pipes are restored.
+	// InitFormatter() ran during PersistentPreRun while pipes were active and cached
+	// ColorNone. ReinitFormatter() re-detects the real terminal for color support.
+	ui.ReinitFormatter()
+	ui.Writeln("") // Visual separation before spinner.
 
-	// Show animated spinner while AI analysis is in progress.
 	spinnerMsg := "👽 Analyzing with AI..."
 	if input.SkillName != "" {
 		spinnerMsg = fmt.Sprintf("👽 Analyzing with AI using skill '%s'...", input.SkillName)
@@ -162,11 +159,11 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 	}
 	s.Success(successMsg)
 
-	// Render AI response as markdown with colors to stderr.
-	utils.PrintfMarkdownToTUI("%s", response)
+	// Render AI response as markdown with colors to stderr (UI channel).
+	ui.MarkdownMessage(response)
 
 	// Add trailing newline for visual separation from subsequent output (e.g., exit status).
-	utils.PrintfMessageToTUI("\n")
+	ui.Writeln("")
 }
 
 // buildAnalysisPrompt constructs the prompt for AI analysis.

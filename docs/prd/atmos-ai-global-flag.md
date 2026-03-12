@@ -201,7 +201,7 @@ func Execute() error {
 
 3. **Exit Handling**: After AI analysis, `Execute()` calls `errUtils.Exit(code)` directly to prevent `main.go` from re-printing the error. For successful commands, it returns `nil`.
 
-4. **UI Output**: All AI output (thinking indicator, markdown response, warnings) goes to stderr via `utils.PrintfMessageToTUI()` and `utils.PrintfMarkdownToTUI()`, keeping stdout clean for piping.
+4. **UI Output**: All AI output (spinner, markdown response, status messages) goes to stderr via `ui.Writeln()` and `ui.MarkdownMessage()`, keeping stdout clean for piping. `ui.ReinitFormatter()` is called after capture stops to restore color detection.
 
 ## Flag Infrastructure
 
@@ -366,7 +366,7 @@ atmos --ai aws security analyze
 
 - Requires AI provider configuration in `atmos.yaml` (provider, model, API key)
 - Uses `pkg/ai` factory and registry for client creation
-- Uses `pkg/utils` for markdown rendering (`PrintfMarkdownToTUI`) and status messages (`PrintfMessageToTUI`)
+- Uses `pkg/ui` for markdown rendering (`ui.MarkdownMessage`) and status output (`ui.Writeln`), with `ui.ReinitFormatter()` to restore color after capture
 - Uses `pkg/ai/analyze` for output capture (`CaptureSession`), config validation, and AI analysis
 - Uses `pkg/ai/skills` for skill loading (`LoadSkills`), registry (`Registry`), and marketplace loader
 - Uses `pkg/ai/skills/marketplace` for loading installed skills from `~/.atmos/skills/`
@@ -540,34 +540,40 @@ func buildAnalysisPrompt(input *AnalysisInput) string {
 2. Update blog post with `--skill` examples
 3. Update `examples/ai/README.md` with `--skill` usage
 
-## Known Limitations
+## Resolved: Capture Timing Issue (ui.ReinitFormatter)
 
-### AI Analysis Cannot Use `ui.MarkdownMessage()` (Capture Timing Issue)
+### Problem
 
-The AI analysis output currently uses `utils.PrintfMarkdownToTUI` instead of the preferred `ui.MarkdownMessage()`.
-This is due to a timing conflict with the output capture mechanism:
+`ui.InitFormatter()` runs during Cobra's `PersistentPreRun` while output capture pipes are active.
+The formatter's `terminal.New()` detects the pipe instead of the real terminal → caches `ColorNone` → no colors.
+After `captureSession.Stop()` restores `os.Stdout`/`os.Stderr`, the formatter's terminal state is stale.
 
-1. `StartCapture()` replaces `os.Stdout`/`os.Stderr` with `os.Pipe()` **before** `internal.Execute()` runs.
-2. `ui.InitFormatter()` runs during Cobra's `PersistentPreRun` (inside `internal.Execute()`) — while pipes are active.
-3. The formatter's `terminal.New()` detects the **pipe** as the terminal → gets `ColorNone` → no colors.
-4. The formatter's `globalIO.UI()` writer is bound to the pipe writer, not the real stderr.
-5. After `captureSession.Stop()` restores the real streams, the formatter's state is stale.
+Note: The I/O writer issue was a non-problem — `io.Context` uses dynamic writers (`func() { return os.Stderr }`)
+that resolve `os.Stderr` at write time, not at creation time. Only the terminal color detection was stale.
 
-`utils.PrintfMarkdownToTUI` works because it writes directly to `os.Stderr` (restored after capture) and uses
-a separate `markdown.Renderer` initialized before capture starts.
+### Solution
 
-**To migrate to `ui.MarkdownMessage()`**, one of these approaches is needed:
-- **Reinitialize the formatter** after `captureSession.Stop()` to re-detect the real terminal.
-- **Move capture start** to after `PersistentPreRun` (requires Cobra hook restructuring).
-- **Make `ui.InitFormatter()` terminal-aware** — detect that stdout/stderr are pipes and defer color detection.
-- **Add `ui.ReinitFormatter()`** that re-runs terminal detection with the current (restored) streams.
+Added `ui.ReinitFormatter()` which creates a fresh `io.Context` and calls `InitFormatter()`, re-detecting
+the real terminal with correct color capabilities. Called in `AnalyzeOutput()` before rendering the AI response.
 
-This should be addressed when deprecating `utils.PrintfMarkdownToTUI` in favor of the `ui` package.
+```go
+// In pkg/ui/formatter.go:
+func ReinitFormatter() {
+    ioCtx, _ := io.NewContext()
+    InitFormatter(ioCtx)
+}
+
+// In pkg/ai/analyze/analyze.go:
+ui.ReinitFormatter()     // Re-detect terminal after capture stops
+ui.MarkdownMessage(resp) // Now renders with full color support
+```
+
+This replaced the previous workaround of using `utils.PrintfMarkdownToTUI` / `utils.PrintfMessageToTUI`.
+AI analysis output now uses the standard `ui` package: `ui.Writeln()` and `ui.MarkdownMessage()`.
 
 ## Future Considerations
 
 - Auto-detect skill based on command (e.g., `terraform plan` → `atmos-terraform`)
-- Migrate AI output rendering from `utils.PrintfMarkdownToTUI` to `ui.MarkdownMessage()` (see Known Limitations)
 - Streaming AI response for faster perceived latency
 - AI provider auto-detection from environment
 - Cost estimation and token usage reporting

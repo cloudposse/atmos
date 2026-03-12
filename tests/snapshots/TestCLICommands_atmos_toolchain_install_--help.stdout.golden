@@ -101,6 +101,8 @@ GLOBAL FLAGS
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
 
+      --skill string            Specify skill for AI analysis context (requires --ai)
+
       --tool-versions string    Path to tool-versions file (default .tool-versions)
 
       --toolchain-path string   Directory to store installed tools (default .tools)
