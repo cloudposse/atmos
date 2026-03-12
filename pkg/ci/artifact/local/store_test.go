@@ -72,7 +72,7 @@ func TestNewStore(t *testing.T) {
 
 func TestStore_Name(t *testing.T) {
 	store := &Store{basePath: "/tmp"}
-	assert.Equal(t, "local", store.Name())
+	assert.Equal(t, "local/dir", store.Name())
 }
 
 func TestStore_UploadDownload(t *testing.T) {

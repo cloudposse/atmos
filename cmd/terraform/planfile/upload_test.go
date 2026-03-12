@@ -102,18 +102,18 @@ func TestGetStoreOptions(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
 		t.Setenv("GITHUB_ACTIONS", "")
 
-		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "s3")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "aws/s3")
 		require.NoError(t, err)
-		assert.Equal(t, "s3", opts.Type)
+		assert.Equal(t, "aws/s3", opts.Type)
 	})
 
 	t.Run("explicit local store", func(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
 		t.Setenv("GITHUB_ACTIONS", "")
 
-		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local/dir")
 		require.NoError(t, err)
-		assert.Equal(t, "local", opts.Type)
+		assert.Equal(t, "local/dir", opts.Type)
 	})
 
 	t.Run("S3 from environment", func(t *testing.T) {
@@ -124,7 +124,7 @@ func TestGetStoreOptions(t *testing.T) {
 
 		opts, err := getStoreOptions(nil, "")
 		require.NoError(t, err)
-		assert.Equal(t, "s3", opts.Type)
+		assert.Equal(t, "aws/s3", opts.Type)
 		assert.Equal(t, "my-bucket", opts.Options["bucket"])
 		assert.Equal(t, "planfiles", opts.Options["prefix"])
 		assert.Equal(t, "us-east-1", opts.Options["region"])
@@ -136,7 +136,7 @@ func TestGetStoreOptions(t *testing.T) {
 
 		opts, err := getStoreOptions(nil, "")
 		require.NoError(t, err)
-		assert.Equal(t, "github-artifacts", opts.Type)
+		assert.Equal(t, "github/artifacts", opts.Type)
 	})
 
 	t.Run("default to local", func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestGetStoreOptions(t *testing.T) {
 
 		opts, err := getStoreOptions(nil, "")
 		require.NoError(t, err)
-		assert.Equal(t, "local", opts.Type)
+		assert.Equal(t, "local/dir", opts.Type)
 		assert.Equal(t, ".atmos/planfiles", opts.Options["path"])
 	})
 
@@ -155,16 +155,16 @@ func TestGetStoreOptions(t *testing.T) {
 
 		opts, err := getStoreOptions(nil, "")
 		require.NoError(t, err)
-		assert.Equal(t, "s3", opts.Type)
+		assert.Equal(t, "aws/s3", opts.Type)
 	})
 
 	t.Run("explicit store overrides environment", func(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "my-bucket")
 		t.Setenv("GITHUB_ACTIONS", "true")
 
-		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local/dir")
 		require.NoError(t, err)
-		assert.Equal(t, "local", opts.Type)
+		assert.Equal(t, "local/dir", opts.Type)
 	})
 }
 

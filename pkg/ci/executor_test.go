@@ -871,7 +871,7 @@ func TestDetectStoreFromEnv(t *testing.T) {
 
 		result := detectStoreFromEnv()
 		require.NotNil(t, result)
-		assert.Equal(t, "s3", result.Type)
+		assert.Equal(t, "aws/s3", result.Type)
 		assert.Equal(t, "my-bucket", result.Options["bucket"])
 		assert.Equal(t, "plans/", result.Options["prefix"])
 		assert.Equal(t, "us-east-1", result.Options["region"])
@@ -883,7 +883,7 @@ func TestDetectStoreFromEnv(t *testing.T) {
 
 		result := detectStoreFromEnv()
 		require.NotNil(t, result)
-		assert.Equal(t, "github-artifacts", result.Type)
+		assert.Equal(t, "github/artifacts", result.Type)
 	})
 
 	t.Run("S3 takes precedence over GitHub", func(t *testing.T) {
@@ -892,7 +892,7 @@ func TestDetectStoreFromEnv(t *testing.T) {
 
 		result := detectStoreFromEnv()
 		require.NotNil(t, result)
-		assert.Equal(t, "s3", result.Type)
+		assert.Equal(t, "aws/s3", result.Type)
 	})
 }
 
@@ -906,7 +906,7 @@ func TestCreatePlanfileStore(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.NotNil(t, store)
-		assert.Equal(t, "local", store.Name())
+		assert.Equal(t, "local/dir", store.Name())
 	})
 
 	t.Run("nil config defaults to local store", func(t *testing.T) {
@@ -918,7 +918,7 @@ func TestCreatePlanfileStore(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.NotNil(t, store)
-		assert.Equal(t, "local", store.Name())
+		assert.Equal(t, "local/dir", store.Name())
 	})
 }
 

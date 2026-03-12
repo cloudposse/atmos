@@ -35,7 +35,7 @@ const (
 // Store defines the interface for planfile storage backends.
 // Implementations include S3, Azure Blob, GCS, GitHub Artifacts, and local filesystem.
 type Store interface {
-	// Name returns the store type name (e.g., "s3", "azure", "gcs", "github", "local").
+	// Name returns the store type name (e.g., "aws/s3", "azure/blob", "google/gcs", "github/artifacts", "local/dir").
 	Name() string
 
 	// Upload uploads a planfile to the store.

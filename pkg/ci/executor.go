@@ -197,7 +197,7 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 	}
 
 	// Default to local storage.
-	artOpts.Type = "local"
+	artOpts.Type = "local/dir"
 	artOpts.Options = map[string]any{
 		"path": ".atmos/planfiles",
 	}
@@ -215,7 +215,7 @@ func detectStoreFromEnv() *artifact.StoreOptions {
 	// Check for S3 configuration.
 	if bucket := os.Getenv("ATMOS_PLANFILE_BUCKET"); bucket != "" {
 		return &artifact.StoreOptions{
-			Type: "s3",
+			Type: "aws/s3",
 			Options: map[string]any{
 				"bucket": bucket,
 				"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
@@ -227,7 +227,7 @@ func detectStoreFromEnv() *artifact.StoreOptions {
 	// Check for GitHub Actions.
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		return &artifact.StoreOptions{
-			Type: "github-artifacts",
+			Type: "github/artifacts",
 			Options: map[string]any{
 				"prefix": "planfile",
 			},

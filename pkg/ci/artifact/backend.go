@@ -12,7 +12,7 @@ import (
 // The BundledStore wraps a Backend to provide the higher-level Store interface
 // that handles bundling []FileEntry into a tar archive.
 type Backend interface {
-	// Name returns the backend type name (e.g., "s3", "local", "github-artifacts").
+	// Name returns the backend type name (e.g., "aws/s3", "local/dir", "github/artifacts").
 	Name() string
 
 	// Upload uploads a single data stream with the given name and metadata.

@@ -47,7 +47,7 @@ var uploadCmd = &cobra.Command{
 
 The component is specified as a positional argument and the stack via -s/--stack.
 The storage backend is configured in atmos.yaml under terraform.planfiles.
-Supported backends: local, s3, github-artifacts.
+Supported backends: local/dir, aws/s3, github/artifacts.
 
 When --planfile is omitted, the planfile path is derived from component and stack.`,
 	Args: cobra.ExactArgs(1),
@@ -324,7 +324,7 @@ func detectS3FromEnv() *planfile.StoreOptions {
 		return nil
 	}
 	return &planfile.StoreOptions{
-		Type: "s3",
+		Type: "aws/s3",
 		Options: map[string]any{
 			"bucket": bucket,
 			"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
@@ -339,7 +339,7 @@ func detectGitHubFromEnv() *planfile.StoreOptions {
 		return nil
 	}
 	return &planfile.StoreOptions{
-		Type: "github-artifacts",
+		Type: "github/artifacts",
 		Options: map[string]any{
 			"prefix": "planfile",
 		},
@@ -349,7 +349,7 @@ func detectGitHubFromEnv() *planfile.StoreOptions {
 // defaultLocalStore returns the default local storage configuration.
 func defaultLocalStore(atmosConfig *schema.AtmosConfiguration) planfile.StoreOptions {
 	return planfile.StoreOptions{
-		Type: "local",
+		Type: "local/dir",
 		Options: map[string]any{
 			"path": ".atmos/planfiles",
 		},

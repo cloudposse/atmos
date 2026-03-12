@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	storeName = "github-artifacts"
+	storeName = "github/artifacts"
 
 	// Metadata is stored as a JSON sidecar within the artifact zip.
 	metadataFilename = "metadata.json"

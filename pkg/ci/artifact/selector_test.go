@@ -60,26 +60,26 @@ func setupTestRegistry(t *testing.T, storeNames ...string) func() {
 }
 
 func TestSelectStoreExplicitOverride(t *testing.T) {
-	cleanup := setupTestRegistry(t, "s3", "gcs")
+	cleanup := setupTestRegistry(t, "aws/s3", "google/gcs")
 	defer cleanup()
 
 	stores := map[string]StoreOptions{
-		"my-s3":  {Type: "s3"},
-		"my-gcs": {Type: "gcs"},
+		"my-s3":  {Type: "aws/s3"},
+		"my-gcs": {Type: "google/gcs"},
 	}
 
 	store, err := SelectStore(context.Background(), []string{"my-gcs", "my-s3"}, stores, nil, "my-s3", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "s3", store.Name())
+	assert.Equal(t, "aws/s3", store.Name())
 }
 
 func TestSelectStorePrioritySelection(t *testing.T) {
-	cleanup := setupTestRegistry(t, "s3", "gcs")
+	cleanup := setupTestRegistry(t, "aws/s3", "google/gcs")
 	defer cleanup()
 
 	stores := map[string]StoreOptions{
-		"primary":  {Type: "s3"},
-		"fallback": {Type: "gcs"},
+		"primary":  {Type: "aws/s3"},
+		"fallback": {Type: "google/gcs"},
 	}
 	checkers := map[string]EnvironmentChecker{
 		"primary":  &testChecker{available: false},
@@ -88,16 +88,16 @@ func TestSelectStorePrioritySelection(t *testing.T) {
 
 	store, err := SelectStore(context.Background(), []string{"primary", "fallback"}, stores, checkers, "", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "gcs", store.Name())
+	assert.Equal(t, "google/gcs", store.Name())
 }
 
 func TestSelectStorePriorityFirstAvailable(t *testing.T) {
-	cleanup := setupTestRegistry(t, "s3", "gcs")
+	cleanup := setupTestRegistry(t, "aws/s3", "google/gcs")
 	defer cleanup()
 
 	stores := map[string]StoreOptions{
-		"primary":  {Type: "s3"},
-		"fallback": {Type: "gcs"},
+		"primary":  {Type: "aws/s3"},
+		"fallback": {Type: "google/gcs"},
 	}
 	checkers := map[string]EnvironmentChecker{
 		"primary":  &testChecker{available: true},
@@ -106,15 +106,15 @@ func TestSelectStorePriorityFirstAvailable(t *testing.T) {
 
 	store, err := SelectStore(context.Background(), []string{"primary", "fallback"}, stores, checkers, "", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "s3", store.Name())
+	assert.Equal(t, "aws/s3", store.Name())
 }
 
 func TestSelectStoreNoAvailableStore(t *testing.T) {
-	cleanup := setupTestRegistry(t, "s3")
+	cleanup := setupTestRegistry(t, "aws/s3")
 	defer cleanup()
 
 	stores := map[string]StoreOptions{
-		"primary": {Type: "s3"},
+		"primary": {Type: "aws/s3"},
 	}
 	checkers := map[string]EnvironmentChecker{
 		"primary": &testChecker{available: false},
@@ -134,15 +134,15 @@ func TestSelectStoreExplicitNotConfigured(t *testing.T) {
 }
 
 func TestSelectStoreNoCheckerMeansAvailable(t *testing.T) {
-	cleanup := setupTestRegistry(t, "s3")
+	cleanup := setupTestRegistry(t, "aws/s3")
 	defer cleanup()
 
 	stores := map[string]StoreOptions{
-		"primary": {Type: "s3"},
+		"primary": {Type: "aws/s3"},
 	}
 
 	// No checkers — store should be considered available.
 	store, err := SelectStore(context.Background(), []string{"primary"}, stores, nil, "", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "s3", store.Name())
+	assert.Equal(t, "aws/s3", store.Name())
 }

@@ -15,7 +15,7 @@ func TestStore_Name(t *testing.T) {
 	store := &Store{
 		bucket: "test-bucket",
 	}
-	assert.Equal(t, "s3", store.Name())
+	assert.Equal(t, "aws/s3", store.Name())
 }
 
 func TestStore_fullKey(t *testing.T) {
@@ -190,7 +190,7 @@ func TestStore_MetadataSuffix(t *testing.T) {
 
 func TestStore_StoreName(t *testing.T) {
 	// Verify the store name constant is correct.
-	assert.Equal(t, "s3", storeName)
+	assert.Equal(t, "aws/s3", storeName)
 }
 
 func TestStore_QueryToPrefix(t *testing.T) {

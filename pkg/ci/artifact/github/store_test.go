@@ -23,7 +23,7 @@ import (
 
 func TestStore_Name(t *testing.T) {
 	store := &Store{}
-	assert.Equal(t, "github-artifacts", store.Name())
+	assert.Equal(t, "github/artifacts", store.Name())
 }
 
 func TestSanitizeKey(t *testing.T) {

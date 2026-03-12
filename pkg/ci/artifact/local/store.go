@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	storeName        = "local"
+	storeName        = "local/dir"
 	metadataSuffix   = ".metadata.json"
 	defaultDirPerms  = 0o755
 	defaultFilePerms = 0o644

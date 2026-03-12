@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	storeName = "s3"
+	storeName = "aws/s3"
 
 	// Metadata is stored as a JSON file alongside the artifact.
 	metadataSuffix = ".metadata.json"
