@@ -23,10 +23,10 @@ func TestManifestSchema_AuthDefinitionExists(t *testing.T) {
 	definitions, ok := schemaMap["definitions"].(map[string]interface{})
 	require.True(t, ok, "Schema should have definitions")
 
-	// Verify auth definition exists.
-	auth, ok := definitions["auth"].(map[string]interface{})
-	require.True(t, ok, "Schema should have 'auth' definition")
-	assert.Equal(t, "auth", auth["title"])
+	// Verify component_auth definition exists.
+	auth, ok := definitions["component_auth"].(map[string]interface{})
+	require.True(t, ok, "Schema should have 'component_auth' definition")
+	assert.Equal(t, "component_auth", auth["title"])
 
 	// Verify auth is referenced from terraform_component_manifest.
 	tfManifest, ok := definitions["terraform_component_manifest"].(map[string]interface{})
@@ -61,7 +61,7 @@ func TestManifestSchema_AuthNeedsField(t *testing.T) {
 	require.NoError(t, err)
 
 	definitions := schemaMap["definitions"].(map[string]interface{})
-	auth := definitions["auth"].(map[string]interface{})
+	auth := definitions["component_auth"].(map[string]interface{})
 	oneOf := auth["oneOf"].([]interface{})
 
 	// Find the object variant.
