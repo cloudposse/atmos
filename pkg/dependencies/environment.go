@@ -282,8 +282,9 @@ func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[stri
 			continue
 		}
 
-		// Store by binary basename without extension so Resolve("tofu") works
-		// cross-platform (e.g. binary is "tofu.exe" on Windows, lookup is "tofu").
+		// Store by both the requested tool name and the binary basename so
+		// aliases/symlinks can still be resolved downstream.
+		env.resolved[tool] = binaryPath
 		base := filepath.Base(binaryPath)
 		key := strings.TrimSuffix(base, filepath.Ext(base))
 		env.resolved[key] = binaryPath

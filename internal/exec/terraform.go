@@ -61,7 +61,6 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 		return nil, err
 	}
 
-	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 	return tenv, nil
 }
 
@@ -293,8 +292,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Resolve and install component dependencies.
+	// tenv is declared outside the block so its EnvVars() can be appended
+	// after all other env assembly, ensuring toolchain PATH takes precedence.
+	var tenv *dependencies.ToolchainEnvironment
 	if shouldProcess {
-		tenv, err := resolveAndInstallToolchainDeps(&atmosConfig, &info)
+		tenv, err = resolveAndInstallToolchainDeps(&atmosConfig, &info)
 		if err != nil {
 			return err
 		}
@@ -457,6 +459,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Set TF_PLUGIN_CACHE_DIR for Terraform provider caching.
 	pluginCacheEnvList := configurePluginCache(&atmosConfig)
 	info.ComponentEnvList = append(info.ComponentEnvList, pluginCacheEnvList...)
+
+	// Append toolchain PATH last so it takes precedence over any PATH entries
+	// from ComponentEnvSection, auth hooks, or other env sources.
+	if tenv != nil {
+		info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
+	}
 
 	// Print ENV vars if they are found in the component's stack config.
 	if len(info.ComponentEnvList) > 0 {

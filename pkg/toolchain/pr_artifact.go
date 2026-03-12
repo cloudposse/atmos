@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -596,13 +597,26 @@ func listFiles(dir string) ([]string, error) {
 
 // buildTokenRequiredError creates a user-friendly error when GitHub token is missing.
 func buildTokenRequiredError() error {
-	return errUtils.Build(errUtils.ErrAuthenticationFailed).
+	b := errUtils.Build(errUtils.ErrAuthenticationFailed).
 		WithExplanation("GitHub token required to download PR artifacts").
-		WithHint("Use GitHub CLI: brew install gh && gh auth login").
-		WithHint("Or set environment variable: export GITHUB_TOKEN=ghp_xxx").
+		WithHint("Authenticate with GitHub CLI: gh auth login")
+
+	// Show brew install hint on macOS or when brew is available.
+	if runtime.GOOS == "darwin" || isBrewAvailable() {
+		b = b.WithHint("Install GitHub CLI: brew install gh")
+	}
+
+	return b.
+		WithHint("Or set the GITHUB_TOKEN environment variable in your shell/session").
 		WithHint("Generate a token at: https://github.com/settings/tokens (scope: public_repo)").
 		WithExitCode(1).
 		Err()
+}
+
+// isBrewAvailable reports whether the brew command is on the PATH.
+func isBrewAvailable() bool {
+	_, err := exec.LookPath("brew")
+	return err == nil
 }
 
 // handlePRArtifactError converts GitHub errors to user-friendly errors.
