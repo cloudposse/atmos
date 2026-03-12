@@ -44,7 +44,7 @@ atmos terraform planfile delete <key> [options]
   <dd>Required flag to confirm deletion. Without this flag, the command will fail with an error.</dd>
 
   <dt>`--store`</dt>
-  <dd>Storage backend to use: `local`, `s3`, or `github-artifacts`. Auto-detected from environment.</dd>
+  <dd>Name of the storage backend to use (as configured in `atmos.yaml` under `components.terraform.planfiles.stores`). Auto-detected from environment when not specified.</dd>
 </dl>
 
 ## Examples

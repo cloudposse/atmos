@@ -49,7 +49,7 @@ atmos terraform planfile upload [options]
   <dd>Override the auto-generated storage key. Format: `{stack}/{component}/{sha}.tfplan`</dd>
 
   <dt>`--store`</dt>
-  <dd>Storage backend to use: `local`, `s3`, or `github-artifacts`. Auto-detected from environment.</dd>
+  <dd>Name of the storage backend to use (as configured in `atmos.yaml` under `components.terraform.planfiles.stores`). Auto-detected from environment when not specified.</dd>
 </dl>
 
 ## Examples

@@ -34,21 +34,21 @@ The `atmos terraform planfile` command group provides tools for managing Terrafo
 Atmos supports multiple storage backends for planfiles:
 
 <dl>
-  <dt>`local`</dt>
+  <dt>`local/dir`</dt>
   <dd>
     Store planfiles on the local filesystem. Useful for development and single-machine workflows.
 
     Default path: `.atmos/planfiles/`
   </dd>
 
-  <dt>`s3`</dt>
+  <dt>`aws/s3`</dt>
   <dd>
     Store planfiles in Amazon S3. Ideal for team workflows and cross-region access.
 
     Configure via `ATMOS_PLANFILE_BUCKET` and `ATMOS_PLANFILE_PREFIX` environment variables.
   </dd>
 
-  <dt>`github-artifacts`</dt>
+  <dt>`github/artifacts`</dt>
   <dd>
     Store planfiles as GitHub Actions artifacts. Perfect for GitHub-native CI/CD workflows.
 
