@@ -117,6 +117,36 @@ stdout, stderr := session.Stop()  // Restores original streams
 // - Renders response as markdown
 ```
 
+### Skill Prompt Injection
+
+When `--skill <name>` is specified, the skill's full markdown content (its `SystemPrompt` field) is sent to the AI provider as part of the analysis prompt. The prompt is assembled in this order:
+
+```
+┌─────────────────────────────────────────────────┐
+│ 1. Skill system prompt (full markdown content)  │  ← domain expertise (e.g., Terraform knowledge)
+│    ───────── \n\n---\n\n separator ──────────    │
+│ 2. General analysis system prompt               │  ← infrastructure/DevOps expertise
+│    ───────── \n\n---\n\n separator ──────────    │
+│ 3. Command context                              │  ← command name, success/failure status
+│ 4. Captured stdout (code block)                 │  ← command's standard output
+│ 5. Captured stderr (code block)                 │  ← command's standard error
+│ 6. Analysis instructions                        │  ← error-specific or success-specific guidance
+└─────────────────────────────────────────────────┘
+```
+
+**Without `--skill`**, the skill layer (1) is omitted and the prompt starts with the general system prompt (2).
+
+**Data flow:**
+
+1. `parseSkillFlag()` extracts the skill name from `os.Args` (e.g., `"atmos-terraform"`)
+2. `setupAIAnalysis()` → `loadAndValidateSkill()` → loads skills from marketplace (`~/.atmos/skills/`) → `registry.Get(skillName)` → returns `*skills.Skill`
+3. `skill.SystemPrompt` (the full markdown content of the skill file) is stored as `skillPrompt string`
+4. `runAIAnalysis()` passes `skillPrompt` in `AnalysisInput{SkillPrompt: skillPrompt}`
+5. `buildAnalysisPrompt()` prepends the skill prompt before the general system prompt with a `\n\n---\n\n` separator
+6. The complete prompt is sent to the AI provider via `client.SendMessage(ctx, prompt)`
+
+This means the AI receives the skill's entire domain knowledge (e.g., Terraform best practices, Atmos stack conventions) alongside the command output, enabling significantly more accurate and actionable analysis.
+
 ### Execution Flow in cmd/root.go
 
 ```go
@@ -510,9 +540,34 @@ func buildAnalysisPrompt(input *AnalysisInput) string {
 2. Update blog post with `--skill` examples
 3. Update `examples/ai/README.md` with `--skill` usage
 
+## Known Limitations
+
+### AI Analysis Cannot Use `ui.MarkdownMessage()` (Capture Timing Issue)
+
+The AI analysis output currently uses `utils.PrintfMarkdownToTUI` instead of the preferred `ui.MarkdownMessage()`.
+This is due to a timing conflict with the output capture mechanism:
+
+1. `StartCapture()` replaces `os.Stdout`/`os.Stderr` with `os.Pipe()` **before** `internal.Execute()` runs.
+2. `ui.InitFormatter()` runs during Cobra's `PersistentPreRun` (inside `internal.Execute()`) — while pipes are active.
+3. The formatter's `terminal.New()` detects the **pipe** as the terminal → gets `ColorNone` → no colors.
+4. The formatter's `globalIO.UI()` writer is bound to the pipe writer, not the real stderr.
+5. After `captureSession.Stop()` restores the real streams, the formatter's state is stale.
+
+`utils.PrintfMarkdownToTUI` works because it writes directly to `os.Stderr` (restored after capture) and uses
+a separate `markdown.Renderer` initialized before capture starts.
+
+**To migrate to `ui.MarkdownMessage()`**, one of these approaches is needed:
+- **Reinitialize the formatter** after `captureSession.Stop()` to re-detect the real terminal.
+- **Move capture start** to after `PersistentPreRun` (requires Cobra hook restructuring).
+- **Make `ui.InitFormatter()` terminal-aware** — detect that stdout/stderr are pipes and defer color detection.
+- **Add `ui.ReinitFormatter()`** that re-runs terminal detection with the current (restored) streams.
+
+This should be addressed when deprecating `utils.PrintfMarkdownToTUI` in favor of the `ui` package.
+
 ## Future Considerations
 
 - Auto-detect skill based on command (e.g., `terraform plan` → `atmos-terraform`)
+- Migrate AI output rendering from `utils.PrintfMarkdownToTUI` to `ui.MarkdownMessage()` (see Known Limitations)
 - Streaming AI response for faster perceived latency
 - AI provider auto-detection from environment
 - Cost estimation and token usage reporting

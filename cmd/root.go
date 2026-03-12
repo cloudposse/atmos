@@ -278,8 +278,8 @@ func buildCommandName() string {
 // runAIAnalysis stops the capture session and sends captured output to the AI provider for analysis.
 // When there's an error, it prints the formatted error BEFORE the AI analysis so the user sees
 // the error first, followed by the AI explanation.
-// If skillPrompt is non-empty, it is passed to AnalyzeOutput for domain-specific context.
-func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error, skillPrompt string) {
+// If skillName/skillPrompt are non-empty, they are passed to AnalyzeOutput for domain-specific context.
+func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error, skillName, skillPrompt string) {
 	defer perf.Track(nil, "cmd.runAIAnalysis")()
 
 	stdout, stderrCaptured := captureSession.Stop()
@@ -301,6 +301,7 @@ func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analy
 		Stdout:      stdout,
 		Stderr:      stderrCaptured,
 		CmdErr:      cmdErr,
+		SkillName:   skillName,
 		SkillPrompt: skillPrompt,
 	})
 }
@@ -1683,7 +1684,7 @@ func Execute() error {
 	// the error first, then the AI explanation. After analysis, we exit directly
 	// to prevent main.go from re-printing the error.
 	if aiEnabled && captureSession != nil {
-		runAIAnalysis(&atmosConfig, captureSession, err, skillPrompt)
+		runAIAnalysis(&atmosConfig, captureSession, err, skillName, skillPrompt)
 		if err != nil {
 			// Error was already printed by runAIAnalysis. Exit with proper code.
 			errUtils.Exit(errUtils.GetExitCode(err))

@@ -99,6 +99,8 @@ type AnalysisInput struct {
 	Stderr string
 	// CmdErr is the error returned by the command (nil if successful).
 	CmdErr error
+	// SkillName is the name of the skill used for AI analysis (e.g., "atmos-terraform").
+	SkillName string
 	// SkillPrompt is an optional skill system prompt for domain-specific expertise.
 	SkillPrompt string
 }
@@ -131,10 +133,19 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 	defer cancel()
 
 	// Add visual separation before spinner so it's not obscured at the bottom of the terminal.
+	// Note: We use utils.PrintfMessageToTUI / utils.PrintfMarkdownToTUI here instead of ui.*
+	// because ui.InitFormatter() runs during PersistentPreRun while output capture pipes are
+	// active. The formatter's terminal detection and writers are stale after capture stops.
+	// The utils functions write directly to os.Stderr (restored after capture) and use a
+	// separate markdown renderer that works correctly in this context.
 	utils.PrintfMessageToTUI("\n")
 
 	// Show animated spinner while AI analysis is in progress.
-	s := spinner.New("👽 Analyzing with AI...")
+	spinnerMsg := "👽 Analyzing with AI..."
+	if input.SkillName != "" {
+		spinnerMsg = fmt.Sprintf("👽 Analyzing with AI using skill '%s'...", input.SkillName)
+	}
+	s := spinner.New(spinnerMsg)
 	s.Start()
 
 	// Send to AI provider.
@@ -145,9 +156,13 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 		return
 	}
 
-	s.Success("AI analysis complete")
+	successMsg := "AI analysis complete"
+	if input.SkillName != "" {
+		successMsg = fmt.Sprintf("AI analysis complete (skill: %s)", input.SkillName)
+	}
+	s.Success(successMsg)
 
-	// Render AI response as markdown with colors to stderr (UI layer).
+	// Render AI response as markdown with colors to stderr.
 	utils.PrintfMarkdownToTUI("%s", response)
 
 	// Add trailing newline for visual separation from subsequent output (e.g., exit status).

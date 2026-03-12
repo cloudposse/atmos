@@ -47,6 +47,18 @@ func newInput(cmd, stdout, stderr string, cmdErr error, skillPrompt string) *Ana
 	}
 }
 
+// newInputWithSkill creates an AnalysisInput with both skill name and prompt for testing.
+func newInputWithSkill(cmd, stdout, stderr string, cmdErr error, skillName, skillPrompt string) *AnalysisInput {
+	return &AnalysisInput{
+		CommandName: cmd,
+		Stdout:      stdout,
+		Stderr:      stderr,
+		CmdErr:      cmdErr,
+		SkillName:   skillName,
+		SkillPrompt: skillPrompt,
+	}
+}
+
 func TestValidateAIConfig_NotEnabled(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
@@ -464,6 +476,33 @@ func TestValidateAIConfig_MultipleProviders(t *testing.T) {
 
 	err := ValidateAIConfig(cfg)
 	assert.NoError(t, err)
+}
+
+func TestAnalyzeOutput_WithSkillName(t *testing.T) {
+	mock := &mockClient{response: "## Terraform Analysis\nLooks good!"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+
+	// SkillName should be accepted without affecting the prompt content (it only affects the spinner message).
+	AnalyzeOutput(cfg, newInputWithSkill("atmos terraform plan vpc -s prod", "Plan: 1 to add", "", nil, "atmos-terraform", "You are a Terraform expert."))
+
+	assert.True(t, mock.called, "should call AI client")
+	assert.Contains(t, mock.prompt, "You are a Terraform expert.")
+	assert.Contains(t, mock.prompt, "Plan: 1 to add")
+}
+
+func TestAnalyzeOutput_WithSkillNameNoPrompt(t *testing.T) {
+	mock := &mockClient{response: "analysis"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+
+	// SkillName without SkillPrompt should still work (spinner shows skill name, prompt has no skill prefix).
+	AnalyzeOutput(cfg, newInputWithSkill("atmos terraform plan", "output", "", nil, "atmos-terraform", ""))
+
+	assert.True(t, mock.called)
+	assert.True(t, strings.HasPrefix(mock.prompt, systemPrompt), "prompt should start with system prompt when no skill prompt")
 }
 
 func TestTruncateOutput_ExactlyOverLimit(t *testing.T) {

@@ -140,6 +140,79 @@ Skills are loaded from marketplace installations (`~/.atmos/skills/`) and custom
 ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s ue1-prod
 ```
 
+### Skill Not Found
+
+If the skill name doesn't match an installed skill, Atmos shows a helpful error:
+
+<Terminal title="atmos --ai --skill terraform (not found)">
+```console
+$ atmos terraform plan vpc -s ue1-network --ai --skill terraform
+
+   Error: AI skill not found
+
+  ## Explanation
+
+   The skill "terraform" is not installed or configured.
+
+  ## Hints
+
+   💡 No skills are installed. Install skills with: atmos ai skill install cloudposse/atmos
+
+   💡 See https://atmos.tools/ai/agent-skills for more information.
+```
+</Terminal>
+
+### Terraform Expertise with `--skill atmos-terraform`
+
+With the `atmos-terraform` skill, the AI gets deep Terraform knowledge for richer plan analysis —
+including actionable fix suggestions for warnings:
+
+<Terminal title="atmos --ai --skill atmos-terraform terraform plan">
+```console
+$ atmos terraform plan vpc -s ue1-network --ai --skill atmos-terraform
+
+✓ AI analysis complete (skill: atmos-terraform)
+
+  ## ✅ Plan Succeeded — 1 Resource to Create
+
+   The  vpc  component in stack  ue1-network  planned successfully. Atmos initialized
+   the backend, switched to the  ue1-network  workspace, and generated a clean plan.
+
+  --------
+
+  ### 📋 What Will Be Created
+
+   Resource            │ Type            │ Key Configuration
+  ─────────────────────┼─────────────────┼─────────────────────────────────────────
+    null_resource.vpc  │  null_resource  │ VPC CIDR  10.1.0.0/16 , 3 AZs, NAT enabled
+
+   Outputs:  vpc_cidr ,  availability_zones ,  nat_gateway_enabled ,
+    subnet_count ,  tags
+
+  --------
+
+  ### ⚠️ Warnings — Undeclared Variables
+
+   Terraform found 3 variables in the generated  tfvars.json  that have no corresponding
+    variable  block in the module. Fix options:
+
+    1. Declare the variables in your module:
+     variable "environment" {}
+     variable "region" {}
+
+    2. Remove unused vars from the stack config
+
+    3. Suppress warnings:
+     atmos terraform plan vpc -s ue1-network -- -compact-warnings
+
+  --------
+
+  ### 🚀 Next Steps
+
+   atmos terraform apply vpc -s ue1-network --from-plan
+```
+</Terminal>
+
 ## Works with Everything
 
 The `--ai` flag works with **any** Atmos command:

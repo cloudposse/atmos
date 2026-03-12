@@ -95,6 +95,94 @@ $ atmos ai ask "what stacks and components do we have in the infra?"
   include VPC components for network isolation.
 ```
 
+### AI-Powered Analysis with `--skill` (Skill Not Found)
+
+When using `--skill` with a skill name that doesn't exist, Atmos shows a helpful error:
+
+```text
+$ atmos terraform plan vpc -s ue1-network --ai --skill terraform
+
+   Error: AI skill not found
+
+  ## Explanation
+
+   The skill "terraform" is not installed or configured.
+
+  ## Hints
+
+   💡 No skills are installed. Install skills with: atmos ai skill install cloudposse/atmos
+
+   💡 See https://atmos.tools/ai/agent-skills for more information.
+```
+
+### AI-Powered Analysis with `--skill` (Terraform Expertise)
+
+When using a valid skill, the AI gets deep domain expertise. Here `atmos-terraform` gives the AI
+Terraform-specific knowledge for richer plan analysis:
+
+```text
+$ atmos terraform plan vpc -s ue1-network --ai --skill atmos-terraform
+
+✓ AI analysis complete (skill: atmos-terraform)
+
+  ## ✅ Plan Succeeded — 1 Resource to Create
+
+   The  vpc  component in stack  ue1-network  planned successfully. Atmos initialized the backend, switched to the  ue1-network  workspace, and generated a clean plan.
+
+  --------
+
+  ### 📋 What Will Be Created
+
+   Resource            │ Type            │ Key Configuration
+  ─────────────────────┼─────────────────┼────────────────────────────────────────────────────
+    null_resource.vpc  │  null_resource  │ VPC CIDR  10.1.0.0/16 , 3 AZs, NAT gateway enabled
+
+   Outputs that will be created:
+
+    •  vpc_cidr :  10.1.0.0/16
+    •  availability_zones :  us-east-1a ,  us-east-1b ,  us-east-1c
+    •  nat_gateway_enabled :  true
+    •  subnet_count :  3
+    •  tags :  Environment=network ,  Region=us-east-1
+
+  --------
+
+  ### ⚠️ Warnings — Undeclared Variables
+
+   Terraform found 3 variables in the generated  tfvars.json  that have no corresponding  variable  block in the module:  environment ,  region , and one additional undeclared variable. These values exist in your Atmos stack config but are not consumed by the Terraform module.
+
+   Root cause: Atmos passes all  vars  from the stack manifest to Terraform, but the  vpc  module hasn't declared matching  variable  blocks.
+
+   Fix options (choose one):
+
+    1. Declare the variables in your module (recommended if you intend to use them):
+     variable "environment" {}
+     variable "region" {}
+
+    2. Remove unused vars from the stack config if they're not needed by this component:
+     components:
+       terraform:
+         vpc:
+           vars:
+             # Remove environment, region if not used
+
+    3. Suppress warnings only by passing  -compact-warnings  (doesn't fix the underlying issue):
+     atmos terraform plan vpc -s ue1-network -- -compact-warnings
+
+
+  --------
+
+  ### 🚀 Next Steps
+
+   When ready to apply the reviewed plan:
+
+   atmos terraform apply vpc -s ue1-network --from-plan
+
+   Or for automated deployment:
+
+   atmos terraform deploy vpc -s ue1-network
+```
+
 ### AI-Powered Plan Analysis with `--ai`
 
 Run `terraform plan` with the `--ai` flag to get an AI-powered summary of changes, warnings, and recommendations:
