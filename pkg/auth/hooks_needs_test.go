@@ -60,7 +60,16 @@ func TestResolveTargetIdentityName_NeedsList(t *testing.T) {
 
 	name, err := resolveTargetIdentityName(stack, mgr)
 	assert.NoError(t, err)
-	assert.Equal(t, "core-network", name, "first entry in needs should be used as primary")
+	assert.Equal(t, "some-default", name, "default identity should be primary even when needs is set")
+}
+
+func TestResolveTargetIdentityName_NeedsFallbackWhenNoDefault(t *testing.T) {
+	stack := newStackWithNeeds([]string{"core-network", "plat-prod"})
+	mgr := &stubAuthManager{defaultIdentity: ""}
+
+	name, err := resolveTargetIdentityName(stack, mgr)
+	assert.NoError(t, err)
+	assert.Equal(t, "core-network", name, "first needs entry should be primary when no default identity exists")
 }
 
 func TestResolveTargetIdentityName_CliOverridesNeeds(t *testing.T) {

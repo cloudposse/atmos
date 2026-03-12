@@ -15,7 +15,7 @@ When Terraform components use multiple AWS provider aliases for multi-account pa
 
 ## The Solution
 
-Components can now declare all required identities using `auth.needs`. Before Terraform runs, Atmos authenticates every identity in the list and writes their profiles to the shared credentials file. The first identity in the list becomes the primary, setting `AWS_PROFILE` and other primary auth environment variables.
+Components can now declare additional identities using `auth.needs`. Before Terraform runs, Atmos authenticates every identity in the list and writes their profiles to the shared credentials file — in addition to the default identity, which remains the primary.
 
 ## Example
 
@@ -25,17 +25,18 @@ components:
     vpc-peering:
       auth:
         needs:
-          - core/network    # Primary identity (sets AWS_PROFILE)
           - plat/prod       # Additional account
           - plat/staging    # Additional account
 ```
 
+The default identity (e.g., `core/network`) is always authenticated as the primary — you don't need to list it again. Only list the *extra* identities your component needs.
+
 ## How It Works
 
-1. Atmos reads the `auth.needs` list from the component configuration.
-2. The first entry becomes the primary identity (used for `AWS_PROFILE` and default credentials).
-3. All remaining identities are authenticated and their profiles are written to the shared credentials file.
+1. Atmos authenticates the default identity as the primary (sets `AWS_PROFILE` and default credentials).
+2. Atmos reads the `auth.needs` list and authenticates each additional identity.
+3. All profiles are written to the shared credentials file, making them available for Terraform provider aliases.
 4. Failures for additional identities are non-fatal — Atmos logs a warning and continues.
 5. Terraform runs with all profiles available, so multi-account provider aliases resolve correctly.
 
-The `--identity` CLI flag still takes precedence over `auth.needs` when specified.
+If no default identity is configured, the first entry in `needs` becomes the primary. The `--identity` CLI flag takes precedence over both.

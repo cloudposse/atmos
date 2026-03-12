@@ -94,25 +94,23 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 		return stackInfo.Identity, nil
 	}
 
-	// If auth.needs is set, use the first entry as the primary identity.
-	authConfig, err := decodeAuthConfigFromStack(stackInfo)
-	if err == nil && len(authConfig.Needs) > 0 {
-		log.Debug("Using first identity from auth.needs as primary", identityKey, authConfig.Needs[0])
+	// Default identity from config is primary when available.
+	// auth.needs is purely additive — it lists extra identities beyond the default.
+	name, err := authManager.GetDefaultIdentity(false)
+	if err == nil && name != "" {
+		return name, nil
+	}
+
+	// Fallback: if no default identity, use first entry in needs as primary.
+	authConfig, decodeErr := decodeAuthConfigFromStack(stackInfo)
+	if decodeErr == nil && len(authConfig.Needs) > 0 {
+		log.Debug("No default identity configured, using first entry from auth.needs as primary", identityKey, authConfig.Needs[0])
 		return authConfig.Needs[0], nil
 	}
 
-	// Fallback: use default identity from config.
-	// Hooks don't have CLI flags, so never force selection here.
-	name, err := authManager.GetDefaultIdentity(false)
-	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, hookOpTerraformPreHook, "failed to get default identity")
-		return "", errUtils.ErrDefaultIdentity
-	}
-	if name == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
-		return "", errUtils.ErrNoDefaultIdentity
-	}
-	return name, nil
+	// Nothing found.
+	errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
+	return "", errUtils.ErrNoDefaultIdentity
 }
 
 // isAuthenticationDisabled checks if authentication has been explicitly disabled.
