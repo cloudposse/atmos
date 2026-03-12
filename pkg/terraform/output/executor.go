@@ -18,7 +18,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
-	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -392,22 +391,11 @@ func (e *Executor) execute(
 	// This ensures that toolchain-installed executables (e.g., tofu via `atmos toolchain install`)
 	// are found even when they are not on the system PATH. Without this, template functions like
 	// atmos.Component() and YAML functions like !terraform.output fail with "executable not found".
-	var toolchainPATH string
-	deps := dependencies.ExtractDependenciesFromConfig(sections)
-	if len(deps) > 0 {
-		toolchain.SetAtmosConfig(atmosConfig)
-		installer := dependencies.NewInstaller(atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			return nil, fmt.Errorf("failed to install component dependencies for %s in %s: %w", component, stack, err)
-		}
-
-		config.Executable = installer.ResolveExecutablePath(deps, config.Executable)
-
-		toolchainPATH, err = dependencies.BuildToolchainPATH(atmosConfig, deps)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build toolchain PATH for %s in %s: %w", component, stack, err)
-		}
+	tenv, err := dependencies.ForSections(atmosConfig, sections)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve toolchain for %s in %s: %w", component, stack, err)
 	}
+	config.Executable = tenv.Resolve(config.Executable)
 
 	// Step 4: Generate backend file if needed.
 	backendGen := &defaultBackendGenerator{}
@@ -442,8 +430,8 @@ func (e *Executor) execute(
 	}
 	// Include toolchain PATH in subprocess environment so terraform/tofu subprocesses
 	// can also find toolchain-installed binaries.
-	if toolchainPATH != "" {
-		environMap["PATH"] = toolchainPATH
+	if p := tenv.PATH(); p != "" {
+		environMap["PATH"] = p
 	}
 	if len(environMap) > 0 {
 		if err := runner.SetEnv(environMap); err != nil {

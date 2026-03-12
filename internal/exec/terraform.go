@@ -33,7 +33,6 @@ import (
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
-	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (
@@ -53,37 +52,17 @@ const (
 )
 
 // resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
-func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+// Returns the ToolchainEnvironment for resolving executable paths downstream.
+func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*dependencies.ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "exec.resolveAndInstallToolchainDeps")()
 
-	// Initialize toolchain with atmosConfig so it uses the configured install path.
-	toolchain.SetAtmosConfig(atmosConfig)
-	resolver := dependencies.NewResolver(atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("terraform", info.StackSection, info.ComponentSection)
+	tenv, err := dependencies.ForComponent(atmosConfig, "terraform", info.StackSection, info.ComponentSection)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		return nil, err
 	}
 
-	if len(deps) == 0 {
-		return nil
-	}
-
-	log.Debug("Installing component dependencies", logFieldComponent, info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-	installer := dependencies.NewInstaller(atmosConfig)
-	if err := installer.EnsureTools(deps); err != nil {
-		return fmt.Errorf("failed to install component dependencies: %w", err)
-	}
-
-	// Build PATH with toolchain binaries and add to component environment.
-	// This does NOT modify the global process environment - only the subprocess environment.
-	toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
-	if err != nil {
-		return fmt.Errorf("failed to build toolchain PATH: %w", err)
-	}
-
-	// Propagate toolchain PATH into environment for subprocess.
-	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
-	return nil
+	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
+	return tenv, nil
 }
 
 // ExecuteTerraform executes terraform commands.
@@ -112,12 +91,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "version" {
+		tenv, err := dependencies.ForComponent(&atmosConfig, "terraform", nil, nil)
+		if err != nil {
+			return err
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
-			info.Command,
+			tenv.Resolve(info.Command),
 			[]string{info.SubCommand},
 			"",
-			nil,
+			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr)
 	}
@@ -311,7 +294,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Resolve and install component dependencies.
 	if shouldProcess {
-		if err := resolveAndInstallToolchainDeps(&atmosConfig, &info); err != nil {
+		if _, err := resolveAndInstallToolchainDeps(&atmosConfig, &info); err != nil {
 			return err
 		}
 	}

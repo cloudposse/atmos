@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -247,7 +248,12 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err = ExecuteShellCommand(atmosConfig, "aws", args, shellCommandWorkingDir, nil, dryRun, "")
+	// Resolve aws through toolchain so it works when installed via `atmos toolchain install`.
+	tenv, tenvErr := dependencies.ForComponent(&atmosConfig, "", nil, nil)
+	if tenvErr != nil {
+		return tenvErr
+	}
+	err = ExecuteShellCommand(atmosConfig, tenv.Resolve("aws"), args, shellCommandWorkingDir, tenv.EnvVars(), dryRun, "")
 	if err != nil {
 		return err
 	}

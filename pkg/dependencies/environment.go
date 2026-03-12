@@ -1,0 +1,246 @@
+package dependencies
+
+import (
+	"fmt"
+	execPkg "os/exec"
+	"path/filepath"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
+)
+
+// ToolchainEnvironment holds resolved executable paths and a subprocess PATH
+// for a set of toolchain dependencies. Create one per command invocation using
+// ForComponent, ForSections, or ForWorkflow, then use Resolve() and EnvVars()
+// to configure subprocess execution.
+type ToolchainEnvironment struct {
+	// path is the full PATH string with toolchain bin dirs prepended.
+	path string
+
+	// resolved maps bare command names (e.g. "tofu") to absolute paths.
+	resolved map[string]string
+}
+
+// ForComponent creates a ToolchainEnvironment by resolving dependencies from
+// component stack configuration. The componentType is "terraform", "helmfile",
+// or "packer". Pass nil for stackSection/componentSection when no component
+// context is available (e.g. version commands).
+func ForComponent(
+	atmosConfig *schema.AtmosConfiguration,
+	componentType string,
+	stackSection map[string]any,
+	componentSection map[string]any,
+) (*ToolchainEnvironment, error) {
+	defer perf.Track(atmosConfig, "dependencies.ForComponent")()
+
+	resolver := NewResolver(atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies(componentType, stackSection, componentSection)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	return newEnvironment(atmosConfig, deps)
+}
+
+// ForSections creates a ToolchainEnvironment from pre-loaded configuration
+// sections (e.g. from DescribeComponent). Dependencies are extracted from
+// the sections using ExtractDependenciesFromConfig.
+func ForSections(atmosConfig *schema.AtmosConfiguration, sections map[string]any) (*ToolchainEnvironment, error) {
+	defer perf.Track(atmosConfig, "dependencies.ForSections")()
+
+	deps := ExtractDependenciesFromConfig(sections)
+	return newEnvironment(atmosConfig, deps)
+}
+
+// ForWorkflow creates a ToolchainEnvironment for workflow execution.
+// Merges .tool-versions with workflow-specific dependencies.
+func ForWorkflow(atmosConfig *schema.AtmosConfiguration, workflowDef *schema.WorkflowDefinition) (*ToolchainEnvironment, error) {
+	defer perf.Track(atmosConfig, "dependencies.ForWorkflow")()
+
+	// Load project-wide tools from .tool-versions.
+	toolVersionsDeps, err := LoadToolVersionsDependencies(atmosConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load .tool-versions: %w", err)
+	}
+
+	// Get workflow-specific dependencies.
+	resolver := NewResolver(atmosConfig)
+	workflowDeps, err := resolver.ResolveWorkflowDependencies(workflowDef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve workflow dependencies: %w", err)
+	}
+
+	// Merge: .tool-versions as base, workflow deps override.
+	deps, err := MergeDependencies(toolVersionsDeps, workflowDeps)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge dependencies: %w", err)
+	}
+
+	return newEnvironment(atmosConfig, deps)
+}
+
+// Resolve returns the absolute path for a command name. If the command was
+// installed via the toolchain, returns the toolchain path. Otherwise falls
+// back to exec.LookPath, then returns the original name unchanged.
+func (e *ToolchainEnvironment) Resolve(command string) string {
+	defer perf.Track(nil, "dependencies.ToolchainEnvironment.Resolve")()
+
+	if filepath.IsAbs(command) {
+		return command
+	}
+
+	if p, ok := e.resolved[command]; ok {
+		return p
+	}
+
+	if p, err := execPkg.LookPath(command); err == nil {
+		return p
+	}
+
+	return command
+}
+
+// EnvVars returns a slice containing "PATH=<toolchain-augmented-path>" ready
+// to append to a subprocess environment. Returns nil if no toolchain
+// dependencies were resolved (no-op — does not override the system PATH).
+func (e *ToolchainEnvironment) EnvVars() []string {
+	defer perf.Track(nil, "dependencies.ToolchainEnvironment.EnvVars")()
+
+	if e.path == "" {
+		return nil
+	}
+	return []string{fmt.Sprintf("PATH=%s", e.path)}
+}
+
+// PATH returns the augmented PATH string with toolchain bin dirs prepended,
+// or an empty string if no toolchain dependencies were resolved.
+func (e *ToolchainEnvironment) PATH() string {
+	defer perf.Track(nil, "dependencies.ToolchainEnvironment.PATH")()
+
+	return e.path
+}
+
+// envConfig holds injectable dependencies for newEnvironment.
+// Production code uses defaults; tests inject mocks via envOption.
+type envConfig struct {
+	ensureTools    func(deps map[string]string) error
+	resolveFunc    func(tool string) (owner, repo string, err error)
+	findBinaryPath func(owner, repo, version string, binaryName ...string) (string, error)
+	buildPATH      func(atmosConfig *schema.AtmosConfiguration, deps map[string]string) (string, error)
+}
+
+// envOption configures newEnvironment for testing.
+type envOption func(*envConfig)
+
+// withEnsureTools overrides the tool installation function.
+func withEnsureTools(fn func(deps map[string]string) error) envOption {
+	return func(c *envConfig) {
+		c.ensureTools = fn
+	}
+}
+
+// withResolveFunc overrides the tool name → owner/repo resolution.
+func withResolveFunc(fn func(tool string) (owner, repo string, err error)) envOption {
+	return func(c *envConfig) {
+		c.resolveFunc = fn
+	}
+}
+
+// withFindBinaryPath overrides the binary path lookup.
+func withFindBinaryPath(fn func(owner, repo, version string, binaryName ...string) (string, error)) envOption {
+	return func(c *envConfig) {
+		c.findBinaryPath = fn
+	}
+}
+
+// withBuildPATH overrides the PATH construction.
+func withBuildPATH(fn func(atmosConfig *schema.AtmosConfiguration, deps map[string]string) (string, error)) envOption {
+	return func(c *envConfig) {
+		c.buildPATH = fn
+	}
+}
+
+// newEnvironment is the shared constructor that installs missing tools,
+// resolves all executable paths, and builds the augmented PATH.
+func newEnvironment(atmosConfig *schema.AtmosConfiguration, deps map[string]string, opts ...envOption) (*ToolchainEnvironment, error) {
+	defer perf.Track(atmosConfig, "dependencies.newEnvironment")()
+
+	env := &ToolchainEnvironment{
+		resolved: make(map[string]string),
+	}
+
+	if len(deps) == 0 {
+		return env, nil
+	}
+
+	// Build config with defaults, then apply options.
+	cfg := &envConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	// Initialize toolchain with atmosConfig so it uses the configured install path.
+	toolchain.SetAtmosConfig(atmosConfig)
+
+	// Install missing tools.
+	ensureTools := cfg.ensureTools
+	if ensureTools == nil {
+		installer := NewInstaller(atmosConfig)
+		ensureTools = installer.EnsureTools
+	}
+	if err := ensureTools(deps); err != nil {
+		return nil, fmt.Errorf("failed to install dependencies: %w", err)
+	}
+
+	// Resolve every dependency to an absolute binary path.
+	resolveBinaryPaths(env, cfg, deps)
+
+	// Build augmented PATH.
+	buildPATH := cfg.buildPATH
+	if buildPATH == nil {
+		buildPATH = BuildToolchainPATH
+	}
+	toolchainPATH, err := buildPATH(atmosConfig, deps)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build toolchain PATH: %w", err)
+	}
+	env.path = toolchainPATH
+
+	return env, nil
+}
+
+// resolveBinaryPaths resolves each dependency to an absolute binary path
+// and populates env.resolved. Errors are logged and skipped.
+func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[string]string) {
+	resolveFunc := cfg.resolveFunc
+	findBinaryPath := cfg.findBinaryPath
+	if resolveFunc == nil || findBinaryPath == nil {
+		tcInstaller := toolchain.NewInstaller()
+		if resolveFunc == nil {
+			resolver := tcInstaller.GetResolver()
+			resolveFunc = resolver.Resolve
+		}
+		if findBinaryPath == nil {
+			findBinaryPath = tcInstaller.FindBinaryPath
+		}
+	}
+
+	for tool, version := range deps {
+		owner, repo, err := resolveFunc(tool)
+		if err != nil {
+			log.Debug("Could not resolve tool for toolchain environment", "tool", tool, "error", err)
+			continue
+		}
+
+		binaryPath, err := findBinaryPath(owner, repo, version)
+		if err != nil {
+			log.Debug("Could not find binary path for toolchain environment", "tool", tool, "version", version, "error", err)
+			continue
+		}
+
+		// Store by binary basename so Resolve("tofu") finds the right path.
+		env.resolved[filepath.Base(binaryPath)] = binaryPath
+	}
+}
