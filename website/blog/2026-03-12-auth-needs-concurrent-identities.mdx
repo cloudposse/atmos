@@ -1,0 +1,41 @@
+---
+slug: auth-needs-concurrent-identities
+title: "Concurrent Identity Authentication for Multi-Account Components"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports `auth.needs`, enabling components to declare multiple identities that are all authenticated before Terraform runs.
+
+<!--truncate-->
+
+## The Problem
+
+When Terraform components use multiple AWS provider aliases for multi-account patterns (e.g., hub-spoke networking), each provider assumes a different IAM role. In CI environments with OIDC authentication, only the primary identity's profile was written to the shared credentials file. The additional provider aliases failed because their AWS profiles didn't exist.
+
+## The Solution
+
+Components can now declare all required identities using `auth.needs`. Before Terraform runs, Atmos authenticates every identity in the list and writes their profiles to the shared credentials file. The first identity in the list becomes the primary, setting `AWS_PROFILE` and other primary auth environment variables.
+
+## Example
+
+```yaml
+components:
+  terraform:
+    vpc-peering:
+      auth:
+        needs:
+          - core/network    # Primary identity (sets AWS_PROFILE)
+          - plat/prod       # Additional account
+          - plat/staging    # Additional account
+```
+
+## How It Works
+
+1. Atmos reads the `auth.needs` list from the component configuration.
+2. The first entry becomes the primary identity (used for `AWS_PROFILE` and default credentials).
+3. All remaining identities are authenticated and their profiles are written to the shared credentials file.
+4. Failures for additional identities are non-fatal — Atmos logs a warning and continues.
+5. Terraform runs with all profiles available, so multi-account provider aliases resolve correctly.
+
+The `--identity` CLI flag still takes precedence over `auth.needs` when specified.
