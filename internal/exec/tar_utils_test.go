@@ -3,6 +3,7 @@ package exec
 import (
 	"archive/tar"
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -101,62 +102,57 @@ func TestExtractTarball_HardlinkSkipped(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "hardlinks should be skipped")
 }
 
-func TestProcessTarHeader_PrefixCollision(t *testing.T) {
-	// Verify that a path like "extractevil/file" is rejected when the dest
-	// is "extract" (prefix collision without trailing separator).
-	parent := t.TempDir()
-	destDir := filepath.Join(parent, "extract")
-	require.NoError(t, os.MkdirAll(destDir, 0o755))
-
-	// Create a sibling directory that shares a prefix with destDir.
-	evilDir := filepath.Join(parent, "extractevil")
-	require.NoError(t, os.MkdirAll(evilDir, 0o755))
-
-	header := &tar.Header{
-		// This name, when cleaned and joined, would produce parent/extractevil/file
-		// only if the base path check is wrong. With filepath.Join it actually
-		// produces destDir/name which is fine. But we test the boundary explicitly.
-		Name:     "safe.txt",
-		Typeflag: tar.TypeReg,
-		Mode:     0o644,
-	}
-	data := []byte("content")
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	header.Size = int64(len(data))
-	require.NoError(t, tw.WriteHeader(header))
-	_, err := tw.Write(data)
-	require.NoError(t, err)
-	require.NoError(t, tw.Close())
-
-	err = extractTarball(&buf, destDir)
-	require.NoError(t, err)
-
-	// File should be inside destDir.
-	content, err := os.ReadFile(filepath.Join(destDir, "safe.txt"))
-	require.NoError(t, err)
-	assert.Equal(t, "content", string(content))
-}
-
-func TestProcessTarHeader_PathBoundaryCheck(t *testing.T) {
-	// Directly test processTarHeader to verify the boundary check
-	// rejects paths that escape via prefix collision.
+func TestProcessTarHeader_RejectsPathTraversal(t *testing.T) {
+	// Directly call processTarHeader (bypassing untar's ".." filter)
+	// to verify the boundary check rejects paths that escape the dest.
 	parent := t.TempDir()
 	destDir := filepath.Join(parent, "dest")
 	require.NoError(t, os.MkdirAll(destDir, 0o755))
 
-	// A header with a clean name that stays within dest should work.
+	// Build a minimal tar with a traversal entry.
 	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	header := &tar.Header{
+		Name:     "../sibling/evil.txt",
+		Typeflag: tar.TypeReg,
+		Mode:     0o644,
+		Size:     int64(len("pwned")),
+	}
+	require.NoError(t, tw.WriteHeader(header))
+	_, err := tw.Write([]byte("pwned"))
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+
+	reader := tar.NewReader(&buf)
+	_, err = reader.Next()
+	require.NoError(t, err)
+
+	// processTarHeader must reject this path.
+	err = processTarHeader(header, reader, destDir)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidFilePath), "expected ErrInvalidFilePath, got: %v", err)
+
+	// File must not exist.
+	_, statErr := os.Stat(filepath.Join(parent, "sibling", "evil.txt"))
+	assert.True(t, os.IsNotExist(statErr), "traversal file should not be created")
+}
+
+func TestProcessTarHeader_AcceptsValidPath(t *testing.T) {
+	// Verify processTarHeader accepts a normal path within dest.
+	parent := t.TempDir()
+	destDir := filepath.Join(parent, "dest")
+	require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
 	header := &tar.Header{
 		Name:     "subdir/file.txt",
 		Typeflag: tar.TypeReg,
 		Mode:     0o644,
+		Size:     int64(len("ok")),
 	}
-	tw := tar.NewWriter(&buf)
-	data := []byte("ok")
-	header.Size = int64(len(data))
 	require.NoError(t, tw.WriteHeader(header))
-	_, err := tw.Write(data)
+	_, err := tw.Write([]byte("ok"))
 	require.NoError(t, err)
 	reader := tar.NewReader(&buf)
 	_, err = reader.Next()
