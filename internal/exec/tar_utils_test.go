@@ -169,7 +169,7 @@ func TestProcessTarHeader_AcceptsValidPath(t *testing.T) {
 func TestExtractTarball_StripSetuidSetgid(t *testing.T) {
 	dest := t.TempDir()
 	buf := buildTar(t, []tar.Header{
-		{Name: "setuid_file", Typeflag: tar.TypeReg, Mode: 0o4755},
+		{Name: "setuid_file", Typeflag: tar.TypeReg, Mode: 0o6755},
 	}, map[string]string{
 		"setuid_file": "dangerous",
 	})
