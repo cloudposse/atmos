@@ -41,6 +41,8 @@ atmos ai ask "What stacks do we have?"               # Single question
 atmos ai exec "validate stacks" --format json        # CI/CD automation
 atmos ai sessions list                               # List sessions
 atmos ai skill list                                  # List installed skills
+atmos terraform plan vpc -s prod --ai                # AI analysis of any command
+atmos terraform plan --ai --skill atmos-terraform    # With domain expertise
 ```
 </Terminal>
 
@@ -77,6 +79,9 @@ atmos ai skill list                                  # List installed skills
 
   <dt>[`atmos ai skill`](/cli/commands/ai/skill)</dt>
   <dd>Install, list, and uninstall community AI skills from GitHub.</dd>
+
+  <dt>[`atmos --ai`](/cli/global-flags)</dt>
+  <dd>Add `--ai` flag to any command for AI-powered output analysis. Use `--skill` flag for domain-specific expertise.</dd>
 
   <dt>[`atmos mcp start`](/cli/commands/mcp/start)</dt>
   <dd>Start the MCP server with stdio (default) or HTTP transport.</dd>
