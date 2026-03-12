@@ -84,3 +84,55 @@ func TestIdentityFlag(t *testing.T) {
 	assert.Equal(t, "__SELECT__", flag.GetNoOptDefVal())
 	assert.Equal(t, []string{"ATMOS_IDENTITY", "IDENTITY"}, flag.GetEnvVars())
 }
+
+// TestGetInt verifies that GetInt correctly retrieves integer values from flags map.
+func TestGetInt(t *testing.T) {
+	t.Run("returns integer value when key exists", func(t *testing.T) {
+		m := map[string]interface{}{"count": 42}
+		assert.Equal(t, 42, GetInt(m, "count"))
+	})
+
+	t.Run("returns zero when key does not exist", func(t *testing.T) {
+		m := map[string]interface{}{}
+		assert.Equal(t, 0, GetInt(m, "count"))
+	})
+
+	t.Run("returns zero when value is not int", func(t *testing.T) {
+		m := map[string]interface{}{"count": "not-an-int"}
+		assert.Equal(t, 0, GetInt(m, "count"))
+	})
+}
+
+// TestParsedConfig_GetIdentity verifies GetIdentity delegates to GetString for "identity".
+func TestParsedConfig_GetIdentity(t *testing.T) {
+	t.Run("returns identity when set", func(t *testing.T) {
+		pc := &ParsedConfig{
+			Flags: map[string]interface{}{"identity": "prod"},
+		}
+		assert.Equal(t, "prod", pc.GetIdentity())
+	})
+
+	t.Run("returns empty when not set", func(t *testing.T) {
+		pc := &ParsedConfig{
+			Flags: map[string]interface{}{},
+		}
+		assert.Equal(t, "", pc.GetIdentity())
+	})
+}
+
+// TestParsedConfig_GetStack verifies GetStack delegates to GetString for "stack".
+func TestParsedConfig_GetStack(t *testing.T) {
+	t.Run("returns stack when set", func(t *testing.T) {
+		pc := &ParsedConfig{
+			Flags: map[string]interface{}{"stack": "ue2-dev"},
+		}
+		assert.Equal(t, "ue2-dev", pc.GetStack())
+	})
+
+	t.Run("returns empty when not set", func(t *testing.T) {
+		pc := &ParsedConfig{
+			Flags: map[string]interface{}{},
+		}
+		assert.Equal(t, "", pc.GetStack())
+	})
+}

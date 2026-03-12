@@ -69,7 +69,8 @@ func TestGetGlobMatches_CacheIsolation(t *testing.T) {
 func TestGetGlobMatches_NonExistentBaseDir(t *testing.T) {
 	getGlobMatchesSyncMap = sync.Map{}
 
-	pattern := "/nonexistent/directory/that/does/not/exist/*.yaml"
+	// Use a path that is guaranteed not to exist (use a tmpdir + nonexistent subdir).
+	pattern := filepath.Join(os.TempDir(), "atmos-nonexistent-dir-xyzzy-12345", "*.yaml")
 	_, err := GetGlobMatches(pattern)
 	require.Error(t, err, "expected error for non-existent base directory")
 }

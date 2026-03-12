@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestEnvFunction_Execute_EdgeCases(t *testing.T) {
@@ -144,4 +146,43 @@ func TestEnvFunction_Metadata(t *testing.T) {
 	require.NotNil(t, fn)
 	assert.Equal(t, TagEnv, fn.Name())
 	assert.Equal(t, PreMerge, fn.Phase())
+}
+
+func TestLookupEnvFromContext_WithEnvSection(t *testing.T) {
+	envSection := map[string]any{
+		"MY_VAR":   "my_value",
+		"PORT":     8080,
+		"ENABLED":  true,
+	}
+
+	stackInfo := &schema.ConfigAndStacksInfo{
+		ComponentEnvSection: envSection,
+	}
+	execCtx := &ExecutionContext{StackInfo: stackInfo}
+
+	t.Run("key found returns string value", func(t *testing.T) {
+		val, found := lookupEnvFromContext(execCtx, "MY_VAR")
+		assert.True(t, found)
+		assert.Equal(t, "my_value", val)
+	})
+
+	t.Run("key found returns formatted non-string value", func(t *testing.T) {
+		val, found := lookupEnvFromContext(execCtx, "PORT")
+		assert.True(t, found)
+		assert.Equal(t, "8080", val)
+	})
+
+	t.Run("key not found returns empty", func(t *testing.T) {
+		val, found := lookupEnvFromContext(execCtx, "NONEXISTENT")
+		assert.False(t, found)
+		assert.Empty(t, val)
+	})
+
+	t.Run("nil env section returns false", func(t *testing.T) {
+		emptyInfo := &schema.ConfigAndStacksInfo{}
+		emptyCtx := &ExecutionContext{StackInfo: emptyInfo}
+		val, found := lookupEnvFromContext(emptyCtx, "MY_VAR")
+		assert.False(t, found)
+		assert.Empty(t, val)
+	})
 }

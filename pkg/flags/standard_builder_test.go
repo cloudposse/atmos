@@ -2,6 +2,8 @@ package flags
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -762,7 +764,8 @@ func TestStandardOptionsBuilder_WithSha(t *testing.T) {
 }
 
 func TestStandardOptionsBuilder_WithRepoPath(t *testing.T) {
-	builder := NewStandardOptionsBuilder().WithRepoPath("/tmp/repo")
+	repoPath := filepath.Join(os.TempDir(), "test-repo")
+	builder := NewStandardOptionsBuilder().WithRepoPath(repoPath)
 	parser := builder.Build()
 	require.NotNil(t, parser)
 
@@ -771,11 +774,11 @@ func TestStandardOptionsBuilder_WithRepoPath(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("repo-path")
 	require.NotNil(t, flag, "repo-path flag should be registered")
-	assert.Equal(t, "/tmp/repo", flag.DefValue)
+	assert.Equal(t, repoPath, flag.DefValue)
 }
 
 func TestStandardOptionsBuilder_WithSSHKey(t *testing.T) {
-	builder := NewStandardOptionsBuilder().WithSSHKey("/home/user/.ssh/id_rsa")
+	builder := NewStandardOptionsBuilder().WithSSHKey(filepath.Join(os.TempDir(), ".ssh", "id_rsa"))
 	parser := builder.Build()
 	require.NotNil(t, parser)
 
@@ -902,6 +905,7 @@ func TestStandardOptionsBuilder_WithPositionalArgs(t *testing.T) {
 			Name:        "component",
 			Description: "Component name",
 			Required:    true,
+			TargetField: "Component",
 		},
 	}
 	validator := cobra.ExactArgs(1)
@@ -909,4 +913,17 @@ func TestStandardOptionsBuilder_WithPositionalArgs(t *testing.T) {
 	builder := NewStandardOptionsBuilder().WithPositionalArgs(specs, validator, "component")
 	parser := builder.Build()
 	require.NotNil(t, parser)
+
+	// Test that positional args are extracted correctly via Parse.
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"vpc"})
+	require.NoError(t, err)
+
+	// Verify the component was extracted from positional args.
+	assert.Equal(t, "vpc", opts.Component)
 }
