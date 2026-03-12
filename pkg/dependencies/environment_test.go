@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -194,7 +195,8 @@ func TestForWorkflow_EmptyDef(t *testing.T) {
 	assert.Empty(t, tenv.PATH())
 }
 
-// TestForWorkflow_WithToolVersions tests ForWorkflow loading .tool-versions.
+// TestForWorkflow_WithToolVersions tests ForWorkflow loading .tool-versions
+// with a mock ToolProvisioner so the test is deterministic (no network).
 func TestForWorkflow_WithToolVersions(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -212,11 +214,24 @@ func TestForWorkflow_WithToolVersions(t *testing.T) {
 		},
 	}
 
-	tenv, err := ForWorkflow(atmosConfig, &schema.WorkflowDefinition{})
-	// May fail to install in CI without network — that's fine, we're testing the code path.
-	if err == nil {
-		assert.NotEmpty(t, tenv.PATH(), "expected non-empty PATH when tools are installed")
-	}
+	origConfig := toolchain.GetAtmosConfig()
+	t.Cleanup(func() { toolchain.SetAtmosConfig(origConfig) })
+
+	ctrl := gomock.NewController(t)
+	mockProv := NewMockToolProvisioner(ctrl)
+
+	expectedBinPath := filepath.Join(tempDir, "bin", "hashicorp", "terraform", "1.11.4", "terraform")
+	expectedPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
+
+	mockProv.EXPECT().EnsureTools(map[string]string{"terraform": "1.11.4"}).Return(nil)
+	mockProv.EXPECT().ResolveToolName("terraform").Return("hashicorp", "terraform", nil)
+	mockProv.EXPECT().FindBinaryPath("hashicorp", "terraform", "1.11.4").Return(expectedBinPath, nil)
+	mockProv.EXPECT().BuildPATH(atmosConfig, map[string]string{"terraform": "1.11.4"}).Return(expectedPATH, nil)
+
+	tenv, err := ForWorkflow(atmosConfig, &schema.WorkflowDefinition{}, withProvisioner(mockProv))
+	require.NoError(t, err)
+	assert.Equal(t, expectedPATH, tenv.PATH(), "PATH should equal the mocked value")
+	assert.Equal(t, expectedBinPath, tenv.Resolve("terraform"), "terraform should resolve to the mocked binary path")
 }
 
 // TestNewEnvironment_EnsureToolsFailure tests that EnsureTools errors propagate.
