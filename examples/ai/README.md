@@ -232,7 +232,7 @@ Changes to Outputs:
   + vpc_cidr            = "10.10.0.0/16"
 
 
-👽 Analyzing with AI...
+✓ AI analysis complete
 
 
   ## Terraform Plan Summary:  vpc  in  ue1-prod
@@ -312,7 +312,7 @@ When a command fails, the `--ai` flag explains the error and provides step-by-st
 ```text
 $ atmos terraform plan vpc -s ue1-pro  --ai
 
-👽 Analyzing with AI...
+✓ AI analysis complete
 
 
   ## ❌ Component Not Found Error
