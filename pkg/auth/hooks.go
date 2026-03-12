@@ -25,7 +25,10 @@ type (
 	Validator       = types.Validator
 )
 
-const hookOpTerraformPreHook = "TerraformPreHook"
+const (
+	hookOpTerraformPreHook = "TerraformPreHook"
+	identityKey            = "identity"
+)
 
 // TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
@@ -86,9 +89,19 @@ func decodeAuthConfigFromStack(stackInfo *schema.ConfigAndStacksInfo) (schema.Au
 }
 
 func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManager types.AuthManager) (string, error) {
+	// CLI --identity flag takes precedence.
 	if stackInfo.Identity != "" {
 		return stackInfo.Identity, nil
 	}
+
+	// If auth.needs is set, use the first entry as the primary identity.
+	authConfig, err := decodeAuthConfigFromStack(stackInfo)
+	if err == nil && len(authConfig.Needs) > 0 {
+		log.Debug("Using first identity from auth.needs as primary", identityKey, authConfig.Needs[0])
+		return authConfig.Needs[0], nil
+	}
+
+	// Fallback: use default identity from config.
 	// Hooks don't have CLI flags, so never force selection here.
 	name, err := authManager.GetDefaultIdentity(false)
 	if err != nil {
@@ -114,6 +127,10 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)
 	}
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
+
+	// Authenticate additional needed identities so their profiles exist in the shared credentials file.
+	// This is required for Terraform components that use multiple AWS provider aliases.
+	authenticateAdditionalIdentities(ctx, authManager, identityName, stackInfo)
 
 	// Convert ComponentEnvSection to env list for PrepareShellEnvironment.
 	// This includes any component-specific env vars already set in the stack config.
@@ -142,6 +159,29 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 		return fmt.Errorf("failed to print component env section: %w", err)
 	}
 	return nil
+}
+
+// authenticateAdditionalIdentities authenticates non-primary identities from auth.needs.
+// Failures are non-fatal: errors are logged as warnings but don't fail the hook.
+// This ensures all needed profiles exist in the shared credentials file for Terraform
+// components that use multiple AWS provider aliases (e.g., hub-spoke networking).
+func authenticateAdditionalIdentities(ctx context.Context, authManager types.AuthManager,
+	primaryIdentity string, stackInfo *schema.ConfigAndStacksInfo,
+) {
+	authConfig, err := decodeAuthConfigFromStack(stackInfo)
+	if err != nil || len(authConfig.Needs) == 0 {
+		return
+	}
+	for _, identity := range authConfig.Needs {
+		if strings.EqualFold(identity, primaryIdentity) {
+			continue
+		}
+		log.Debug("Authenticating additional needed identity", identityKey, identity)
+		if _, err := authManager.Authenticate(ctx, identity); err != nil {
+			log.Warn("Failed to authenticate additional identity (non-fatal)",
+				identityKey, identity, "error", err)
+		}
+	}
 }
 
 // componentEnvSectionToList converts ComponentEnvSection map to environment variable list.

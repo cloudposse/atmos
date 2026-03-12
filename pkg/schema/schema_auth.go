@@ -2,6 +2,14 @@ package schema
 
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
+	// Needs declares the identities this component requires for authentication.
+	// When set, all listed identities are authenticated before the command runs.
+	// The first identity in the list is the primary (sets AWS_PROFILE, etc.),
+	// and additional identities have their profiles written to the shared credentials file.
+	// This enables multi-account Terraform components (e.g., hub-spoke networking)
+	// where multiple AWS provider aliases reference different profiles.
+	// When not set, falls back to the default identity or --identity flag.
+	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	// Realm provides credential isolation between different repositories or customer environments.
 	// Different repositories with the same identity names will have isolated credentials.
 	// If not set, defaults to a SHA256 hash of the CLI config path (first 8 characters).
