@@ -888,9 +888,9 @@ func TestEvaluateYqExpression_StringTypePreservation_Nested(t *testing.T) {
 
 	data := map[string]any{
 		"config": map[string]any{
-			"enabled":     "true",  // string, not bool
-			"count":       "42",    // string, not int
-			"description": "null",  // string, not nil
+			"enabled":     "true", // string, not bool
+			"count":       "42",   // string, not int
+			"description": "null", // string, not nil
 			"ipv6":        "2041:0000:140F::875B::",
 		},
 	}
