@@ -12,7 +12,7 @@ import (
 // windowsFileDelay adds a delay on Windows to prevent file locking issues.
 func windowsFileDelay() {
 	if runtime.GOOS == "windows" {
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 }
 
@@ -24,7 +24,7 @@ func retryOnWindows(fn func() error) error {
 	}
 
 	var lastErr error
-	delays := []time.Duration{50 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond}
+	delays := []time.Duration{200 * time.Millisecond, 500 * time.Millisecond, 1000 * time.Millisecond}
 
 	for i := 0; i < len(delays); i++ {
 		if err := fn(); err == nil {
