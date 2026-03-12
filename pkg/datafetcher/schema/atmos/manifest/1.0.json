@@ -309,6 +309,9 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "auth": {
+              "$ref": "#/definitions/auth"
             }
           },
           "required": []
@@ -1292,6 +1295,50 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "auth": {
+      "title": "auth",
+      "description": "Authentication configuration for the component. Defines providers, identities, and which identities this component needs.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "needs": {
+              "type": "array",
+              "description": "List of identity names this component requires. The first identity is primary (sets AWS_PROFILE, etc.). Additional identities have their profiles written to the shared credentials file for multi-account components.",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."
+            },
+            "providers": {
+              "type": "object",
+              "description": "Authentication providers (e.g., AWS SSO, SAML, GitHub OIDC).",
+              "additionalProperties": true
+            },
+            "identities": {
+              "type": "object",
+              "description": "Authentication identities that use provider credentials.",
+              "additionalProperties": true
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
+            }
+          },
+          "required": []
         }
       ]
     }
