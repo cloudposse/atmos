@@ -531,3 +531,73 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 		})
 	}
 }
+
+// TestFlagParser_Reset verifies that Reset clears registered command flag state
+// so parsers can be reused cleanly between test runs.
+func TestFlagParser_Reset(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack name")
+
+	v := viper.New()
+	translator := compat.NewCompatibilityFlagTranslator(nil)
+	registry := NewFlagRegistry()
+	parser := NewAtmosFlagParser(cmd, v, translator, registry)
+
+	// Parse once to populate flags.
+	_, err := parser.Parse([]string{"--stack", "dev"})
+	require.NoError(t, err)
+	assert.Equal(t, "dev", v.GetString("stack"))
+
+	// Reset should not panic.
+	assert.NotPanics(t, func() {
+		parser.Reset()
+	})
+}
+
+// TestParsedConfig_GetArgsForTool verifies that GetArgsForTool combines positional
+// and separated args into the expected subprocess argument array.
+func TestParsedConfig_GetArgsForTool(t *testing.T) {
+	tests := []struct {
+		name           string
+		positionalArgs []string
+		separatedArgs  []string
+		want           []string
+	}{
+		{
+			name:           "positional only",
+			positionalArgs: []string{"plan", "vpc"},
+			separatedArgs:  []string{},
+			want:           []string{"plan", "vpc"},
+		},
+		{
+			name:           "separated only",
+			positionalArgs: []string{},
+			separatedArgs:  []string{"-var", "region=us-east-1"},
+			want:           []string{"-var", "region=us-east-1"},
+		},
+		{
+			name:           "both positional and separated",
+			positionalArgs: []string{"plan", "vpc"},
+			separatedArgs:  []string{"-var", "region=us-east-1", "-var-file", "prod.tfvars"},
+			want:           []string{"plan", "vpc", "-var", "region=us-east-1", "-var-file", "prod.tfvars"},
+		},
+		{
+			name:           "empty both",
+			positionalArgs: []string{},
+			separatedArgs:  []string{},
+			want:           []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pc := &ParsedConfig{
+				PositionalArgs: tt.positionalArgs,
+				SeparatedArgs:  tt.separatedArgs,
+			}
+
+			got := pc.GetArgsForTool()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

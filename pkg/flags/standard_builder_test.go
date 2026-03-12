@@ -638,3 +638,275 @@ func TestStandardOptionsBuilder_WithModulePaths(t *testing.T) {
 	parser := builder.Build()
 	require.NotNil(t, parser)
 }
+
+func TestStandardOptionsBuilder_WithTimeout(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithTimeout(30)
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("timeout")
+	require.NotNil(t, flag, "timeout flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithSchemasAtmosManifest(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithSchemasAtmosManifest("schema.json")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("schemas-atmos-manifest")
+	require.NotNil(t, flag, "schemas-atmos-manifest flag should be registered")
+	assert.Equal(t, "schema.json", flag.DefValue)
+}
+
+func TestStandardOptionsBuilder_WithLogin(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithLogin()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("login")
+	require.NotNil(t, flag, "login flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithProvider(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithProvider()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("provider")
+	require.NotNil(t, flag, "provider flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithProviders(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithProviders()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("providers")
+	require.NotNil(t, flag, "providers flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithIdentities(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithIdentities()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("identities")
+	require.NotNil(t, flag, "identities flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithAll(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithAll()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("all")
+	require.NotNil(t, flag, "all flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithEverything(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithEverything()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("everything")
+	require.NotNil(t, flag, "everything flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithRef(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithRef("main")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("ref")
+	require.NotNil(t, flag, "ref flag should be registered")
+	assert.Equal(t, "main", flag.DefValue)
+}
+
+func TestStandardOptionsBuilder_WithSha(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithSha("")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("sha")
+	require.NotNil(t, flag, "sha flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithRepoPath(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithRepoPath("/tmp/repo")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("repo-path")
+	require.NotNil(t, flag, "repo-path flag should be registered")
+	assert.Equal(t, "/tmp/repo", flag.DefValue)
+}
+
+func TestStandardOptionsBuilder_WithSSHKey(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithSSHKey("/home/user/.ssh/id_rsa")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("ssh-key")
+	require.NotNil(t, flag, "ssh-key flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithSSHKeyPassword(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithSSHKeyPassword("")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("ssh-key-password")
+	require.NotNil(t, flag, "ssh-key-password flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithIncludeSpaceliftAdminStacks(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithIncludeSpaceliftAdminStacks()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("include-spacelift-admin-stacks")
+	require.NotNil(t, flag, "include-spacelift-admin-stacks flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithIncludeDependents(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithIncludeDependents()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("include-dependents")
+	require.NotNil(t, flag, "include-dependents flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithIncludeSettings(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithIncludeSettings()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("include-settings")
+	require.NotNil(t, flag, "include-settings flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithUpload(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithUpload()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("upload")
+	require.NotNil(t, flag, "upload flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithCloneTargetRef(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithCloneTargetRef()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("clone-target-ref")
+	require.NotNil(t, flag, "clone-target-ref flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithExcludeLocked(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithExcludeLocked()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("exclude-locked")
+	require.NotNil(t, flag, "exclude-locked flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithComponents(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithComponents()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("components")
+	require.NotNil(t, flag, "components flag should be registered")
+}
+
+func TestStandardOptionsBuilder_WithOutput(t *testing.T) {
+	validOutputs := []string{"json", "yaml", "table"}
+	builder := NewStandardOptionsBuilder().WithOutput(validOutputs, "json")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("output")
+	require.NotNil(t, flag, "output flag should be registered")
+	assert.Equal(t, "json", flag.DefValue)
+}
+
+func TestStandardOptionsBuilder_WithPositionalArgs(t *testing.T) {
+	specs := []*PositionalArgSpec{
+		{
+			Name:        "component",
+			Description: "Component name",
+			Required:    true,
+		},
+	}
+	validator := cobra.ExactArgs(1)
+
+	builder := NewStandardOptionsBuilder().WithPositionalArgs(specs, validator, "component")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
