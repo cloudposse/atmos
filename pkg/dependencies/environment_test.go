@@ -3,6 +3,7 @@ package dependencies
 import (
 	"errors"
 	"os"
+	execPkg "os/exec"
 	"path/filepath"
 	"testing"
 
@@ -16,20 +17,23 @@ import (
 // TestToolchainEnvironment_Resolve tests the Resolve method.
 func TestToolchainEnvironment_Resolve(t *testing.T) {
 	t.Run("absolute path returned unchanged", func(t *testing.T) {
+		absPath := filepath.Join(os.TempDir(), "terraform")
 		env := &ToolchainEnvironment{resolved: map[string]string{}}
-		result := env.Resolve("/usr/bin/terraform")
-		assert.Equal(t, "/usr/bin/terraform", result)
+		result := env.Resolve(absPath)
+		assert.Equal(t, absPath, result)
 	})
 
 	t.Run("resolved tool returns toolchain path", func(t *testing.T) {
+		tofuPath := filepath.Join("home", "user", ".atmos", "bin", "opentofu", "opentofu", "1.8.0", "tofu")
+		terraformPath := filepath.Join("home", "user", ".atmos", "bin", "hashicorp", "terraform", "1.10.0", "terraform")
 		env := &ToolchainEnvironment{
 			resolved: map[string]string{
-				"tofu":      "/home/user/.atmos/bin/opentofu/opentofu/1.8.0/tofu",
-				"terraform": "/home/user/.atmos/bin/hashicorp/terraform/1.10.0/terraform",
+				"tofu":      tofuPath,
+				"terraform": terraformPath,
 			},
 		}
 		result := env.Resolve("tofu")
-		assert.Equal(t, "/home/user/.atmos/bin/opentofu/opentofu/1.8.0/tofu", result)
+		assert.Equal(t, tofuPath, result)
 	})
 
 	t.Run("unknown tool falls back to original name", func(t *testing.T) {
@@ -39,10 +43,15 @@ func TestToolchainEnvironment_Resolve(t *testing.T) {
 	})
 
 	t.Run("system PATH tool is found via LookPath", func(t *testing.T) {
+		// Use the current test binary as a known executable on PATH.
+		base := filepath.Base(os.Args[0])
+		// Only run this subtest if the binary is findable on PATH.
+		if _, err := execPkg.LookPath(base); err != nil {
+			t.Skip("test binary not on PATH")
+		}
 		env := &ToolchainEnvironment{resolved: map[string]string{}}
-		result := env.Resolve("sh")
-		// sh should be found on system PATH.
-		assert.NotEqual(t, "sh", result)
+		result := env.Resolve(base)
+		assert.NotEqual(t, base, result)
 		assert.True(t, filepath.IsAbs(result))
 	})
 }
@@ -55,13 +64,14 @@ func TestToolchainEnvironment_EnvVars(t *testing.T) {
 	})
 
 	t.Run("with path returns PATH entry", func(t *testing.T) {
+		testPATH := filepath.Join("toolchain", "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
 		env := &ToolchainEnvironment{
-			path:     "/toolchain/bin:/usr/bin",
+			path:     testPATH,
 			resolved: map[string]string{},
 		}
 		vars := env.EnvVars()
 		require.Len(t, vars, 1)
-		assert.Equal(t, "PATH=/toolchain/bin:/usr/bin", vars[0])
+		assert.Equal(t, "PATH="+testPATH, vars[0])
 	})
 }
 
@@ -73,11 +83,12 @@ func TestToolchainEnvironment_PATH(t *testing.T) {
 	})
 
 	t.Run("returns augmented path", func(t *testing.T) {
+		testPATH := filepath.Join("toolchain", "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
 		env := &ToolchainEnvironment{
-			path:     "/toolchain/bin:/usr/bin",
+			path:     testPATH,
 			resolved: map[string]string{},
 		}
-		assert.Equal(t, "/toolchain/bin:/usr/bin", env.PATH())
+		assert.Equal(t, testPATH, env.PATH())
 	})
 }
 
@@ -286,7 +297,7 @@ func TestNewEnvironment_SuccessfulResolution(t *testing.T) {
 		"tofu":      "1.8.0",
 	}
 
-	expectedPATH := filepath.Join(tempDir, "bin") + ":/usr/bin"
+	expectedPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
 
 	env, err := newEnvironment(atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
