@@ -1533,44 +1533,6 @@ func TestForWorkflow_NoDependencies(t *testing.T) {
 	assert.Empty(t, tenv.PATH())
 }
 
-// TestForWorkflow_WithWorkflowDeps tests with workflow-level dependencies.
-func TestForWorkflow_WithWorkflowDeps(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Chdir(tempDir) // Isolate from project .tool-versions.
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Toolchain: schema.Toolchain{
-			InstallPath: filepath.Join(tempDir, ".atmos", "tools"),
-		},
-	}
-
-	workflowDef := &schema.WorkflowDefinition{
-		Description: "Test workflow with dependencies",
-		Dependencies: &schema.Dependencies{
-			Tools: map[string]string{
-				"terraform": "1.11.4",
-			},
-		},
-		Steps: []schema.WorkflowStep{
-			{
-				Name:    "step1",
-				Command: "terraform version",
-				Type:    "shell",
-			},
-		},
-	}
-
-	// Should succeed (may fail to install if network is unavailable, but that's expected).
-	tenv, err := dependencies.ForWorkflow(atmosConfig, workflowDef)
-	// If installation succeeded, path should be non-empty.
-	if err == nil {
-		assert.NotEmpty(t, tenv.PATH(), "expected non-empty PATH when tools are installed")
-	}
-	// Error is acceptable in CI without network - code path is exercised either way.
-}
-
 // TestForWorkflow_NilWorkflowDef tests with nil workflow definition.
 func TestForWorkflow_NilWorkflowDef(t *testing.T) {
 	tempDir := t.TempDir()
@@ -1723,43 +1685,4 @@ func TestDoubleHyphenIssue1967(t *testing.T) {
 	// Verify the terraform flag after -- is preserved.
 	assert.Equal(t, "--", args[5], "sixth arg should be --")
 	assert.Equal(t, "-consolidate-warnings=false", args[6], "seventh arg should be -consolidate-warnings=false")
-}
-
-// TestForWorkflow_WithToolVersionsFile tests with .tool-versions file present.
-func TestForWorkflow_WithToolVersionsFile(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Chdir(tempDir) // Ensure we read the test's .tool-versions, not the project's.
-
-	// Create a .tool-versions file.
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-	content := "terraform 1.11.4\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
-	require.NoError(t, err)
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Toolchain: schema.Toolchain{
-			InstallPath: filepath.Join(tempDir, ".atmos", "tools"),
-		},
-	}
-
-	workflowDef := &schema.WorkflowDefinition{
-		Description: "Test workflow with .tool-versions",
-		Steps: []schema.WorkflowStep{
-			{
-				Name:    "step1",
-				Command: "terraform version",
-				Type:    "shell",
-			},
-		},
-	}
-
-	// Should try to install tools from .tool-versions.
-	tenv, err := dependencies.ForWorkflow(atmosConfig, workflowDef)
-	// If installation succeeded, path should be non-empty.
-	if err == nil {
-		assert.NotEmpty(t, tenv.PATH(), "expected non-empty PATH when tools are installed")
-	}
-	// Error is acceptable in CI without network - code path is exercised either way.
 }

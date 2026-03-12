@@ -294,9 +294,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Resolve and install component dependencies.
 	if shouldProcess {
-		if _, err := resolveAndInstallToolchainDeps(&atmosConfig, &info); err != nil {
+		tenv, err := resolveAndInstallToolchainDeps(&atmosConfig, &info)
+		if err != nil {
 			return err
 		}
+		info.Command = tenv.Resolve(info.Command)
 	}
 
 	varFile := constructTerraformComponentVarfileName(&info)

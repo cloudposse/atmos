@@ -249,7 +249,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	}
 
 	// Resolve aws through toolchain so it works when installed via `atmos toolchain install`.
-	tenv, tenvErr := dependencies.ForComponent(&atmosConfig, "", nil, nil)
+	tenv, tenvErr := dependencies.ForComponent(&atmosConfig, configAndStacksInfo.ComponentType, configAndStacksInfo.StackSection, configAndStacksInfo.ComponentSection)
 	if tenvErr != nil {
 		return tenvErr
 	}

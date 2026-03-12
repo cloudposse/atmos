@@ -61,7 +61,7 @@ func ForSections(atmosConfig *schema.AtmosConfiguration, sections map[string]any
 
 // ForWorkflow creates a ToolchainEnvironment for workflow execution.
 // Merges .tool-versions with workflow-specific dependencies.
-func ForWorkflow(atmosConfig *schema.AtmosConfiguration, workflowDef *schema.WorkflowDefinition) (*ToolchainEnvironment, error) {
+func ForWorkflow(atmosConfig *schema.AtmosConfiguration, workflowDef *schema.WorkflowDefinition, opts ...envOption) (*ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "dependencies.ForWorkflow")()
 
 	// Load project-wide tools from .tool-versions.
@@ -83,7 +83,7 @@ func ForWorkflow(atmosConfig *schema.AtmosConfiguration, workflowDef *schema.Wor
 		return nil, fmt.Errorf("failed to merge dependencies: %w", err)
 	}
 
-	return newEnvironment(atmosConfig, deps)
+	return newEnvironment(atmosConfig, deps, opts...)
 }
 
 // Resolve returns the absolute path for a command name. If the command was
