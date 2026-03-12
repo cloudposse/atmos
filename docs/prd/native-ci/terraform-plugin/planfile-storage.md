@@ -16,11 +16,11 @@
 **Storage Backends**:
 | Backend | Key | Description |
 |---------|-----|-------------|
-| `s3` | `s3://bucket/prefix/...` | AWS S3 with metadata sidecar |
-| `github-artifacts` | Artifact name | GitHub Actions artifacts API |
-| `azure-blob` | Container/blob path | Azure Blob Storage |
-| `gcs` | `gs://bucket/...` | Google Cloud Storage |
-| `local` | File path | Local filesystem (dev/testing) |
+| `aws/s3` | `s3://bucket/prefix/...` | AWS S3 with metadata sidecar |
+| `github/artifacts` | Artifact name | GitHub Actions artifacts API |
+| `azure/blob` | Container/blob path | Azure Blob Storage (not yet implemented) |
+| `google/gcs` | `gs://bucket/...` | Google Cloud Storage (not yet implemented) |
+| `local/dir` | File path | Local filesystem (dev/testing) |
 
 ## CLI Commands (IMPLEMENTED)
 
@@ -153,20 +153,20 @@ components:
         - "local"
       stores:
         s3:
-          type: s3
+          type: aws/s3
           options:
             bucket: "my-terraform-planfiles"
             prefix: "atmos/"
             region: "us-east-1"
             key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
         github:
-          type: github-artifacts
+          type: github/artifacts
           options:
             retention_days: 7
             owner: cloudposse
             repo: github-action-atmos-terraform-plan
         local:
-          type: local
+          type: local/dir
           options:
             path: ".atmos/planfiles"
             key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
@@ -185,4 +185,4 @@ The GitHub Artifacts store starts with **simple SHA-based lookup** — find arti
 
 ## Store Type Validation
 
-All store types (`s3`, `github-artifacts`, `azure-blob`, `gcs`, `local`) are accepted in configuration validation. Unimplemented backends fail at runtime only when actually selected via `--store` or priority. Users can pre-configure future backends without breaking current functionality.
+All store types (`aws/s3`, `github/artifacts`, `azure/blob`, `google/gcs`, `local/dir`) are accepted in configuration validation. Unimplemented backends fail at runtime only when actually selected via `--store` or priority. Users can pre-configure future backends without breaking current functionality.

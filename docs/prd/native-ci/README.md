@@ -52,6 +52,7 @@ This directory contains focused Product Requirement Documents for the Atmos Nati
 | [apply-command-parity.md](./phases/apply-command-parity.md) | **SHIPPED** | Apply/deploy full CI wiring (PreRunE, output capture, error defer, `--ci` flag) |
 | [plan-verification-ci-integration.md](./phases/plan-verification-ci-integration.md) | Proposed | Deploy-based stored vs fresh plan comparison (download → plan → compare → apply) |
 | [move-checkrun-store-to-provider.md](./phases/move-checkrun-store-to-provider.md) | Proposed | Move check run ID correlation from plugin to provider layer |
+| [rename-artifact-store-types.md](./phases/rename-artifact-store-types.md) | Proposed | Rename store types to namespaced `{provider}/{backend}` convention |
 
 ## Original Documents
 

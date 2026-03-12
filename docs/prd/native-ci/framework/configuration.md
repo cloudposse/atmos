@@ -25,7 +25,7 @@ components:
       # Named stores — each backend has its own key/naming pattern
       stores:
         s3:
-          type: s3
+          type: aws/s3
           options:
             bucket: "my-terraform-planfiles"
             prefix: "atmos/"
@@ -33,7 +33,7 @@ components:
             key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         github:
-          type: github-artifacts
+          type: github/artifacts
           options:
             retention_days: 7
             owner: cloudposse
@@ -41,21 +41,21 @@ components:
             # GitHub uses the artifact name from the implementation layer directly
 
         azure:
-          type: azure-blob
+          type: azure/blob
           options:
             account: "mystorageaccount"
             container: "planfiles"
             key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         gcs:
-          type: gcs
+          type: google/gcs
           options:
             bucket: "my-gcs-bucket"
             prefix: "planfiles/"
             key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         local:
-          type: local
+          type: local/dir
           options:
             path: ".atmos/planfiles"
             key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"

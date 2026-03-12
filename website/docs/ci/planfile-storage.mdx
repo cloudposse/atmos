@@ -34,19 +34,19 @@ components:
       # Named stores
       stores:
         github:
-          type: github-artifacts
+          type: github/artifacts
           options:
             retention_days: 7
 
         s3:
-          type: s3
+          type: aws/s3
           options:
             bucket: "my-terraform-planfiles"
             prefix: "atmos/"
             region: "us-east-1"
 
         local:
-          type: local
+          type: local/dir
           options:
             path: ".atmos/planfiles"
 ```
@@ -56,9 +56,9 @@ components:
 
 | Backend | Type | Best For |
 |---------|------|----------|
-| **GitHub Artifacts** | `github-artifacts` | GitHub Actions workflows (recommended) |
-| **S3** | `s3` | AWS-native environments, cross-provider workflows |
-| **Local** | `local` | Testing and development |
+| **GitHub Artifacts** | `github/artifacts` | GitHub Actions workflows (recommended) |
+| **S3** | `aws/s3` | AWS-native environments, cross-provider workflows |
+| **Local** | `local/dir` | Testing and development |
 
 :::tip
 If `components.terraform.planfiles` is not configured, planfile storage operations are silently

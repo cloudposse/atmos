@@ -63,7 +63,7 @@ Additionally, `planfile.Store` uses a single-blob interface (`io.Reader`) while 
 
 2. **Planfile local store is removed.** `planfile/local/` is deleted. The local backend is served by `artifact/local/store.go` via the adapter.
 
-3. **Single registry.** `artifact.Register()` is the only store registry. The planfile registry is deleted entirely. Store type names (`local`, `s3`, `github-artifacts`) are shared.
+3. **Single registry.** `artifact.Register()` is the only store registry. The planfile registry is deleted entirely. Store type names (`local/dir`, `aws/s3`, `github/artifacts`) are shared.
 
 4. **Bundling moves into artifact stores.** Each artifact store implementation handles persistence format internally — callers pass `[]FileEntry` and receive `[]FileResult`. The planfile layer no longer pre-bundles files into tar archives. `planfile/bundle.go` is deleted. Shared tar helpers move to `pkg/ci/artifact/tar.go`.
 
@@ -97,9 +97,9 @@ artifact.Store (multi-file interface: []FileEntry)
 └── planfile/github/store.go    → implements artifact.Store (updated, stays in planfile dir)
 
 artifact.Register() — single registry for all backends
-├── "local"             → artifact/local
-├── "s3"                → planfile/s3 (temporarily)
-└── "github-artifacts"  → planfile/github (temporarily)
+├── "local/dir"           → artifact/local
+├── "aws/s3"              → planfile/s3 (temporarily)
+└── "github/artifacts"    → planfile/github (temporarily)
 
 planfile.Store (multi-file interface: []FileEntry, aligned with artifact.Store)
 └── planfile/adapter/store.go   → thin wrapper: artifact.Store → planfile.Store (metadata conversion only)
@@ -416,7 +416,7 @@ The planfile store implementations are internal packages. No external consumers 
 
 ### Store type names remain the same
 
-The registered store type names (`local`, `s3`, `github-artifacts`) do not change. Configuration in `atmos.yaml` under `terraform.planfiles.stores` continues to work.
+The registered store type names are `local/dir`, `aws/s3`, and `github/artifacts`. Configuration in `atmos.yaml` under `terraform.planfiles.stores` continues to work.
 
 ### Local store format change
 
