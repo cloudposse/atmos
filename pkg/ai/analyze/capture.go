@@ -24,7 +24,8 @@ type CaptureSession struct {
 	stdoutBuf bytes.Buffer
 	stderrBuf bytes.Buffer
 
-	wg sync.WaitGroup
+	wg      sync.WaitGroup
+	stopped bool
 }
 
 // StartCapture begins capturing stdout and stderr.
@@ -80,6 +81,12 @@ func StartCapture() (*CaptureSession, error) {
 // It blocks until all captured data has been flushed.
 func (cs *CaptureSession) Stop() (stdout, stderr string) {
 	defer perf.Track(nil, "analyze.CaptureSession.Stop")()
+
+	// Guard against double-Stop() calls — closing an already-closed pipe panics.
+	if cs.stopped {
+		return cs.stdoutBuf.String(), cs.stderrBuf.String()
+	}
+	cs.stopped = true
 
 	// Restore original streams first so any subsequent writes go directly to terminal.
 	os.Stdout = cs.oldStdout

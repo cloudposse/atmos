@@ -208,6 +208,8 @@ func loadAndValidateSkill(atmosConfig *schema.AtmosConfiguration, skillName stri
 	installer, installerErr := marketplace.NewInstaller(pkgversion.Version)
 	if installerErr == nil {
 		loader = installer
+	} else {
+		log.Debug("Marketplace skill loader unavailable, using config-only skills", "error", installerErr)
 	}
 
 	registry, err := skills.LoadSkills(atmosConfig, loader)
