@@ -601,8 +601,67 @@ AI analysis output now uses the standard `ui` package: `ui.Writeln()` and `ui.Ma
 
 ## Future Considerations
 
-- Auto-detect skill based on command (e.g., `terraform plan` → `atmos-terraform`)
 - Streaming AI response for faster perceived latency
 - AI provider auto-detection from environment
 - Cost estimation and token usage reporting
 - Integration with AI sessions for follow-up questions
+
+### Auto-Skill Selection (when `--skill` is not specified)
+
+When `--ai` is used without `--skill`, Atmos could automatically select the most relevant skill(s)
+based on the command being run. Three approaches, in order of implementation priority:
+
+#### Approach 1: Command-based mapping (recommended first)
+
+Map Atmos command prefixes to skills deterministically in code. Zero latency, no AI call.
+
+```go
+var defaultSkillMap = map[string][]string{
+    "terraform":  {"atmos-terraform"},
+    "helmfile":   {"atmos-helmfile"},
+    "validate":   {"atmos-validation"},
+    "describe":   {"atmos-introspection"},
+    "list":       {"atmos-introspection"},
+    "workflow":   {"atmos-workflows"},
+    "vendor":     {"atmos-vendoring"},
+}
+```
+
+**Pros:** Instant, deterministic, no extra API cost, easy to test.
+**Cons:** Cannot handle nuanced cases (e.g., a terraform error that is really a stack config issue
+needing `atmos-stacks`).
+
+#### Approach 2: Skill metadata matching (layer on top of Approach 1)
+
+Add a `triggers` field to SKILL.md metadata so skill authors can define when their skill applies:
+
+```yaml
+---
+name: atmos-terraform
+triggers:
+  commands: ["terraform"]
+  keywords: ["plan", "apply", "init", "state", "backend"]
+---
+```
+
+The code scans installed skills, matches against the current command and output keywords.
+No AI call required.
+
+**Pros:** Extensible — skill authors define their own triggers. No API cost.
+**Cons:** More complex implementation. Keyword matching can be imprecise.
+
+#### Approach 3: AI-powered selection (not recommended)
+
+Send the skill list and command context to the AI to pick the best skill(s). Requires an extra
+API call before the actual analysis.
+
+**Pros:** Handles edge cases intelligently.
+**Cons:** Extra API round-trip adds latency and cost. Overkill when the command name already
+indicates which skill to use. Defeats the speed advantage of `--ai`.
+
+#### Recommendation
+
+Start with Approach 1 (covers ~90% of cases, trivial to implement). Layer Approach 2 for
+custom/community skills. Skip Approach 3 — the latency and cost are not justified.
+
+When no skill matches, fall back to general analysis (no skill), which is the current behavior.

@@ -6,19 +6,13 @@ tags: [feature, dx]
 ---
 
 import Terminal from '@site/src/components/Terminal'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 Add `--ai` to any Atmos command and get instant AI-powered analysis of the output. Successful plans get
 summarized, errors get explained with step-by-step fixes — zero workflow changes required.
 
 <!--truncate-->
-
-## Why `--ai`?
-
-Atmos AI already provides interactive chat (`atmos ai chat`) and single questions (`atmos ai ask`). But sometimes
-you just want to run your usual command and have the AI explain what happened — especially when something goes wrong.
-
-The `--ai` flag does exactly that. Add it to any command, and Atmos automatically captures the output, sends it
-to your configured AI provider, and renders the analysis right in your terminal.
 
 ## How It Works
 
@@ -29,15 +23,9 @@ to your configured AI provider, and renders the analysis right in your terminal.
 
 ## Plan Analysis
 
-Get a clear summary of Terraform plan changes, warnings, and recommendations:
-
 <Terminal title="atmos terraform plan --ai">
 ```console
 $ atmos terraform plan vpc -s ue1-prod --ai
-
-Terraform used the selected providers to generate the following execution
-plan. Resource actions are indicated with the following symbols:
-  + create
 
 Terraform will perform the following actions:
 
@@ -73,7 +61,7 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 
 ## Error Explanation
 
-When commands fail, the AI explains the root cause and provides actionable steps to fix it:
+When commands fail, the AI explains the root cause and provides actionable fixes:
 
 <Terminal title="atmos terraform plan --ai (error)">
 ```console
@@ -85,151 +73,41 @@ $ atmos terraform plan vpc -s ue1-pro --ai
 
    Atmos cannot locate the  vpc  component within the  ue1-pro  stack.
 
-  ## Root Causes
-
-    1. Wrong stack name —  ue1-pro  may not exist (try  ue1-prod )
-    2. Missing import — The stack manifest doesn't import the vpc catalog entry
-    3. Missing component definition — vpc  is not declared under  components.terraform
-
   ## Quick Fix
 
    Check                           │ Command
   ─────────────────────────────────┼────────────────────────────────────
    Stack name is correct           │  atmos list stacks
    Component is defined in stack   │  atmos list components -s ue1-pro
-   Import exists in stack manifest │  Review  stacks/ue1-pro.yaml
    No YAML syntax errors           │  atmos validate stacks
 ```
 </Terminal>
 
-## Enable via Environment Variable
-
-Use `ATMOS_AI` for CI/CD pipelines or to enable it globally:
-
-```bash
-# Enable for a single command
-ATMOS_AI=true atmos terraform plan vpc -s ue1-prod
-
-# Enable for all commands in the session
-export ATMOS_AI=true
-atmos terraform plan vpc -s ue1-prod
-atmos validate stacks
-atmos describe stacks
-```
-
 ## Domain-Specific Analysis with `--skill`
 
-Pair `--ai` with `--skill` to give the AI deep knowledge of specific Atmos subsystems. The skills' system
-prompts are prepended to the analysis, resulting in more accurate and actionable insights.
-
-### Single Skill
+Pair `--ai` with `--skill` for domain-specific expertise. Combine multiple skills with commas or repeated flags:
 
 ```bash
 # Terraform expertise for plan analysis
 atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
 
-# Stacks expertise for stack descriptions
-atmos describe stacks --ai --skill atmos-stacks
-
-# Validation expertise for policy checks
-atmos validate stacks --ai --skill atmos-validation
-```
-
-### Multiple Skills
-
-Combine multiple skills for cross-domain expertise. Use comma-separated values or repeated flags:
-
-```bash
-# Comma-separated skills
+# Multiple skills (comma-separated)
 atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform,atmos-stacks
 
-# Repeated --skill flags
+# Multiple skills (repeated flag)
 atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform --skill atmos-stacks
 ```
 
-Skills are loaded from marketplace installations (`~/.atmos/skills/`) and custom skills configured in
-`atmos.yaml`. Use `ATMOS_SKILL` environment variable for CI/CD:
+## Enable via Environment Variable
 
 ```bash
-# Single skill via env var
-ATMOS_AI=true ATMOS_SKILL=atmos-terraform atmos terraform plan vpc -s ue1-prod
+# Enable for all commands in the session
+export ATMOS_AI=true
+atmos terraform plan vpc -s ue1-prod
 
-# Multiple skills via env var (comma-separated)
+# With skills
 ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s ue1-prod
 ```
-
-### Skill Not Found
-
-If the skill name doesn't match an installed skill, Atmos shows a helpful error:
-
-<Terminal title="atmos terraform plan --ai --skill terraform (not found)">
-```console
-$ atmos terraform plan vpc -s ue1-network --ai --skill terraform
-
-   Error: AI skill not found
-
-  ## Explanation
-
-   The following skills are not installed or configured: terraform
-
-  ## Hints
-
-   💡 No skills are installed. Install skills with: atmos ai skill install cloudposse/atmos
-
-   💡 See https://atmos.tools/ai/agent-skills for more information.
-```
-</Terminal>
-
-### Terraform Expertise with `--skill atmos-terraform`
-
-With the `atmos-terraform` skill, the AI gets deep Terraform knowledge for richer plan analysis —
-including actionable fix suggestions for warnings:
-
-<Terminal title="atmos terraform plan --ai --skill atmos-terraform">
-```console
-$ atmos terraform plan vpc -s ue1-network --ai --skill atmos-terraform
-
-✓ AI analysis complete (skills: atmos-terraform)
-
-  ## ✅ Plan Succeeded — 1 Resource to Create
-
-   The  vpc  component in stack  ue1-network  planned successfully. Atmos initialized
-   the backend, switched to the  ue1-network  workspace, and generated a clean plan.
-
-  --------
-
-  ### 📋 What Will Be Created
-
-   Resource            │ Type            │ Key Configuration
-  ─────────────────────┼─────────────────┼─────────────────────────────────────────
-    null_resource.vpc  │  null_resource  │ VPC CIDR  10.1.0.0/16 , 3 AZs, NAT enabled
-
-   Outputs:  vpc_cidr ,  availability_zones ,  nat_gateway_enabled ,
-    subnet_count ,  tags
-
-  --------
-
-  ### ⚠️ Warnings — Undeclared Variables
-
-   Terraform found 3 variables in the generated  tfvars.json  that have no corresponding
-    variable  block in the module. Fix options:
-
-    1. Declare the variables in your module:
-     variable "environment" {}
-     variable "region" {}
-
-    2. Remove unused vars from the stack config
-
-    3. Suppress warnings:
-     atmos terraform plan vpc -s ue1-network -- -compact-warnings
-
-  --------
-
-  ### 🚀 Next Steps
-
-   atmos terraform apply vpc -s ue1-network --from-plan
-```
-</Terminal>
 
 ## Works with Everything
 
@@ -243,52 +121,17 @@ atmos validate stacks --ai
 atmos list components --ai
 ```
 
-## Configuration
+## Try It
 
-The `--ai` flag requires AI to be configured in `atmos.yaml`:
-
-```yaml
-ai:
-  enabled: true
-  default_provider: "anthropic"
-  providers:
-    anthropic:
-      model: "claude-sonnet-4-6"
-      api_key: !env ANTHROPIC_API_KEY
-```
-
-If AI is not configured, Atmos shows a helpful error with the exact YAML to add:
-
-<Terminal title="atmos --ai (not configured)">
-```console
-$ atmos list stacks --ai
-
-   Error: AI features are not enabled
-
-  ## Explanation
-
-   The --ai flag requires AI to be enabled in your atmos.yaml configuration.
-
-  ## Hints
-
-   💡 Add the following to your atmos.yaml:
-
-   ai:
-     enabled: true
-     default_provider: anthropic
-     providers:
-       anthropic:
-         model: claude-sonnet-4-5-20250514
-         api_key: !env ANTHROPIC_API_KEY
-
-   💡 See https://atmos.tools/cli/configuration/ai for full configuration options.
-```
-</Terminal>
+<ActionCard title="Explore the AI Example">
+    Try `--ai` and `--skill` with a complete multi-region infrastructure project using mock components — no cloud credentials required.
+    <div>
+      <PrimaryCTA to="/examples/ai">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Learn More
 
 - [AI Configuration](/cli/configuration/ai) — Full configuration reference
 - [Global Flags](/cli/global-flags) — All global flags including `--ai` and `--skill`
 - [AI Skills](/cli/configuration/ai/skills) — Available skills for domain-specific analysis
-- [AI Example](/examples/ai) — Complete example with multi-region infrastructure
-- [AI Providers](/cli/configuration/ai/providers) — Setup for all 7 supported providers
