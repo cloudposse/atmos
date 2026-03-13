@@ -1,0 +1,137 @@
+---
+slug: ai-powered-analysis-with-global-ai-flag
+title: "AI-Powered Analysis for Atmos Commands with the Global --ai Flag"
+authors: [aknysh]
+tags: [feature, dx]
+---
+
+import Terminal from '@site/src/components/Terminal'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+Add `--ai` to any Atmos command and get instant AI-powered analysis of the output. Successful plans get
+summarized, errors get explained with step-by-step fixes — zero workflow changes required.
+
+<!--truncate-->
+
+## How It Works
+
+1. Run any Atmos command with `--ai`
+2. The command executes normally — output streams to your terminal in real-time
+3. After the command completes, the captured output is sent to the AI provider
+4. The AI analysis appears below the command output
+
+## Plan Analysis
+
+<Terminal title="atmos terraform plan --ai">
+```console
+$ atmos terraform plan vpc -s ue1-prod --ai
+
+Terraform will perform the following actions:
+
+  # null_resource.vpc will be created
+  + resource "null_resource" "vpc" {
+      + id       = (known after apply)
+      + triggers = {
+          + "availability_zones"  = "us-east-1a,us-east-1b,us-east-1c"
+          + "environment"         = "production"
+          + "nat_gateway_enabled" = "true"
+          + "vpc_cidr"            = "10.10.0.0/16"
+        }
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+
+✓ AI analysis complete
+
+  ## Terraform Plan Summary:  vpc  in  ue1-prod
+
+  ### Plan Succeeded — 1 Resource to Create
+
+   Metric     │ Value
+  ────────────┼───────
+   To Add     │ 1
+   To Change  │ 0
+   To Destroy │ 0
+
+  A  null_resource.vpc  will be created with CIDR  10.10.0.0/16 ,
+  3 availability zones, and NAT Gateways enabled.
+```
+</Terminal>
+
+## Error Explanation
+
+When commands fail, the AI explains the root cause and provides actionable fixes:
+
+<Terminal title="atmos terraform plan --ai (error)">
+```console
+$ atmos terraform plan vpc -s ue1-pro --ai
+
+✓ AI analysis complete
+
+  ## Component Not Found Error
+
+   Atmos cannot locate the  vpc  component within the  ue1-pro  stack.
+
+  ## Quick Fix
+
+   Check                           │ Command
+  ─────────────────────────────────┼────────────────────────────────────
+   Stack name is correct           │  atmos list stacks
+   Component is defined in stack   │  atmos list components -s ue1-pro
+   No YAML syntax errors           │  atmos validate stacks
+```
+</Terminal>
+
+## Domain-Specific Analysis with `--skill`
+
+Pair `--ai` with `--skill` for domain-specific expertise. Combine multiple skills with commas or repeated flags:
+
+```bash
+# Terraform expertise for plan analysis
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
+
+# Multiple skills (comma-separated)
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform,atmos-stacks
+
+# Multiple skills (repeated flag)
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform --skill atmos-stacks
+```
+
+## Enable via Environment Variable
+
+```bash
+# Enable for all commands in the session
+export ATMOS_AI=true
+atmos terraform plan vpc -s ue1-prod
+
+# With skills
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s ue1-prod
+```
+
+## Works with Everything
+
+The `--ai` flag works with **any** Atmos command:
+
+```bash
+atmos terraform plan vpc -s ue1-prod --ai
+atmos terraform apply vpc -s ue1-prod --ai
+atmos describe stacks --ai
+atmos validate stacks --ai
+atmos list components --ai
+```
+
+## Try It
+
+<ActionCard title="Explore the AI Example">
+    Try `--ai` and `--skill` with a complete multi-region infrastructure project using mock components — no cloud credentials required.
+    <div>
+      <PrimaryCTA to="/examples/ai">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Learn More
+
+- [AI Configuration](/cli/configuration/ai) — Full configuration reference
+- [Global Flags](/cli/global-flags) — All global flags including `--ai` and `--skill`
+- [AI Skills](/cli/configuration/ai/skills) — Available skills for domain-specific analysis
