@@ -5,12 +5,16 @@ import (
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"github.com/Masterminds/semver/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry/aqua"
 )
 
 // InstallFunc is the function signature for installing a tool.
@@ -28,6 +32,12 @@ type BinaryPathFinder interface {
 	FindBinaryPath(owner, repo, version string, binaryName ...string) (string, error)
 }
 
+// VersionLister fetches available versions for a tool from its release source.
+// This interface decouples constraint resolution from the concrete registry implementation.
+type VersionLister interface {
+	GetAvailableVersions(owner, repo string) ([]string, error)
+}
+
 // Installer handles automatic tool installation.
 type Installer struct {
 	atmosConfig      *schema.AtmosConfiguration
@@ -36,6 +46,7 @@ type Installer struct {
 	batchInstallFunc BatchInstallFunc
 	fileExistsFunc   func(path string) bool
 	binaryPathFinder BinaryPathFinder
+	versionLister    VersionLister
 }
 
 // InstallerOption is a functional option for configuring Installer.
@@ -86,6 +97,15 @@ func WithBinaryPathFinder(finder BinaryPathFinder) InstallerOption {
 	}
 }
 
+// WithVersionLister sets a custom version lister (for testing).
+func WithVersionLister(lister VersionLister) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithVersionLister")()
+
+	return func(i *Installer) {
+		i.versionLister = lister
+	}
+}
+
 // NewInstaller creates a new tool installer.
 func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOption) *Installer {
 	defer perf.Track(nil, "dependencies.NewInstaller")()
@@ -109,6 +129,7 @@ func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOptio
 		batchInstallFunc: toolchain.RunInstallBatch,
 		fileExistsFunc:   fileExists,
 		binaryPathFinder: tcInstaller, // Uses FindBinaryPath() for proper binary detection.
+		versionLister:    aqua.NewAquaRegistry(),
 	}
 
 	// Apply options.
@@ -121,11 +142,20 @@ func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOptio
 
 // EnsureTools ensures all required tools are installed.
 // Installs missing tools automatically using batch install with progress bar.
+// Version constraints (e.g., "^1.10.0", "~> 1.5") are resolved to concrete
+// versions before installation. The dependency map is updated in-place with
+// resolved versions so downstream callers (PATH building, binary lookup) use
+// concrete version strings.
 func (i *Installer) EnsureTools(dependencies map[string]string) error {
 	defer perf.Track(i.atmosConfig, "dependencies.EnsureTools")()
 
 	if len(dependencies) == 0 {
 		return nil
+	}
+
+	// Resolve any semver constraints to concrete versions before install.
+	if err := i.resolveConstraints(dependencies); err != nil {
+		return err
 	}
 
 	// Collect missing tools.
@@ -149,6 +179,96 @@ func (i *Installer) EnsureTools(dependencies map[string]string) error {
 	}
 
 	return nil
+}
+
+// resolveConstraints replaces semver constraint strings in the dependency map
+// with the highest concrete version that satisfies each constraint.
+// For example, "^1.10.0" might resolve to "1.10.3".
+func (i *Installer) resolveConstraints(deps map[string]string) error {
+	defer perf.Track(i.atmosConfig, "dependencies.resolveConstraints")()
+
+	for tool, version := range deps {
+		if !isConstraint(version) {
+			continue
+		}
+
+		// Parse the constraint.
+		constraint, err := semver.NewConstraint(version)
+		if err != nil {
+			return errUtils.Build(errUtils.ErrDependencyConstraint).
+				WithCause(err).
+				WithExplanationf("Invalid version constraint %q for tool %q", version, tool).
+				Err()
+		}
+
+		// Resolve tool name to owner/repo for the version listing API.
+		owner, repo, err := i.resolver.Resolve(tool)
+		if err != nil {
+			return errUtils.Build(errUtils.ErrDependencyResolution).
+				WithCause(err).
+				WithExplanationf("Cannot resolve tool %q to owner/repo for constraint resolution", tool).
+				Err()
+		}
+
+		// Fetch available versions from the registry.
+		available, err := i.versionLister.GetAvailableVersions(owner, repo)
+		if err != nil {
+			return errUtils.Build(errUtils.ErrDependencyResolution).
+				WithCause(err).
+				WithExplanationf("Failed to fetch available versions for %s/%s", owner, repo).
+				WithHintf("Check your network connection or try specifying a concrete version instead of %q", version).
+				Err()
+		}
+
+		// Find the highest version satisfying the constraint.
+		resolved, err := highestMatch(available, constraint)
+		if err != nil {
+			return errUtils.Build(errUtils.ErrDependencyConstraint).
+				WithCause(err).
+				WithExplanationf("No available version of %s/%s satisfies constraint %q", owner, repo, version).
+				WithHint("Run `atmos toolchain search` to see available versions").
+				Err()
+		}
+
+		// Update the map in-place so downstream code uses the concrete version.
+		deps[tool] = resolved
+	}
+
+	return nil
+}
+
+// isConstraint returns true if the version string is a semver constraint
+// rather than a concrete version. Constraints contain operators like ^, ~, >, <, =, ||, or spaces.
+func isConstraint(version string) bool {
+	if version == "" || version == "latest" {
+		return false
+	}
+	// A concrete version parses successfully as a semver version.
+	// If it fails, but succeeds as a constraint, it's a constraint.
+	_, err := semver.NewVersion(strings.TrimPrefix(version, "v"))
+	return err != nil
+}
+
+// highestMatch finds the highest version from candidates that satisfies the constraint.
+func highestMatch(candidates []string, constraint *semver.Constraints) (string, error) {
+	var matched []*semver.Version
+	for _, c := range candidates {
+		v, err := semver.NewVersion(strings.TrimPrefix(c, "v"))
+		if err != nil {
+			continue // Skip unparseable versions.
+		}
+		if constraint.Check(v) {
+			matched = append(matched, v)
+		}
+	}
+
+	if len(matched) == 0 {
+		return "", errUtils.ErrDependencyConstraint
+	}
+
+	// Sort descending and pick the highest.
+	sort.Sort(sort.Reverse(semver.Collection(matched)))
+	return matched[0].Original(), nil
 }
 
 // ensureTool ensures a specific tool version is installed.
