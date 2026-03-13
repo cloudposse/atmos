@@ -39,7 +39,7 @@ func BuildAWSConfigFromCreds(ctx context.Context, creds types.ICredentials, regi
 		)),
 	)
 	if err != nil {
-		return aws.Config{}, err
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	return cfg, nil

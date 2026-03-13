@@ -11,35 +11,28 @@ import (
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 )
 
-// mockEKSClient implements EKSClient for testing.
-type mockEKSClient struct {
-	describeClusterFn func(ctx context.Context, input *eks.DescribeClusterInput, opts ...func(*eks.Options)) (*eks.DescribeClusterOutput, error)
-}
-
-func (m *mockEKSClient) DescribeCluster(ctx context.Context, input *eks.DescribeClusterInput, opts ...func(*eks.Options)) (*eks.DescribeClusterOutput, error) {
-	return m.describeClusterFn(ctx, input, opts...)
-}
-
 func TestDescribeCluster_Success(t *testing.T) {
-	client := &mockEKSClient{
-		describeClusterFn: func(_ context.Context, input *eks.DescribeClusterInput, _ ...func(*eks.Options)) (*eks.DescribeClusterOutput, error) {
-			return &eks.DescribeClusterOutput{
-				Cluster: &ekstypes.Cluster{
-					Name:     input.Name,
-					Endpoint: aws.String("https://XXXX.gr7.us-east-2.eks.amazonaws.com"),
-					CertificateAuthority: &ekstypes.Certificate{
-						Data: aws.String("LS0tLS1CRUdJTi..."),
-					},
-					Arn: aws.String("arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"),
+	ctrl := gomock.NewController(t)
+
+	client := NewMockEKSClient(ctrl)
+	client.EXPECT().
+		DescribeCluster(gomock.Any(), gomock.Any()).
+		Return(&eks.DescribeClusterOutput{
+			Cluster: &ekstypes.Cluster{
+				Name:     aws.String("dev-cluster"),
+				Endpoint: aws.String("https://XXXX.gr7.us-east-2.eks.amazonaws.com"),
+				CertificateAuthority: &ekstypes.Certificate{
+					Data: aws.String("LS0tLS1CRUdJTi..."),
 				},
-			}, nil
-		},
-	}
+				Arn: aws.String("arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"),
+			},
+		}, nil)
 
 	info, err := DescribeCluster(context.Background(), client, "dev-cluster", "us-east-2")
 	require.NoError(t, err)
@@ -51,13 +44,12 @@ func TestDescribeCluster_Success(t *testing.T) {
 }
 
 func TestDescribeCluster_NilCluster(t *testing.T) {
-	client := &mockEKSClient{
-		describeClusterFn: func(_ context.Context, _ *eks.DescribeClusterInput, _ ...func(*eks.Options)) (*eks.DescribeClusterOutput, error) {
-			return &eks.DescribeClusterOutput{
-				Cluster: nil,
-			}, nil
-		},
-	}
+	ctrl := gomock.NewController(t)
+
+	client := NewMockEKSClient(ctrl)
+	client.EXPECT().
+		DescribeCluster(gomock.Any(), gomock.Any()).
+		Return(&eks.DescribeClusterOutput{Cluster: nil}, nil)
 
 	_, err := DescribeCluster(context.Background(), client, "missing-cluster", "us-east-2")
 	require.Error(t, err)
@@ -65,11 +57,12 @@ func TestDescribeCluster_NilCluster(t *testing.T) {
 }
 
 func TestDescribeCluster_APIError(t *testing.T) {
-	client := &mockEKSClient{
-		describeClusterFn: func(_ context.Context, _ *eks.DescribeClusterInput, _ ...func(*eks.Options)) (*eks.DescribeClusterOutput, error) {
-			return nil, assert.AnError
-		},
-	}
+	ctrl := gomock.NewController(t)
+
+	client := NewMockEKSClient(ctrl)
+	client.EXPECT().
+		DescribeCluster(gomock.Any(), gomock.Any()).
+		Return(nil, assert.AnError)
 
 	_, err := DescribeCluster(context.Background(), client, "dev-cluster", "us-east-2")
 	require.Error(t, err)
@@ -77,18 +70,19 @@ func TestDescribeCluster_APIError(t *testing.T) {
 }
 
 func TestDescribeCluster_NilCertificateAuthority(t *testing.T) {
-	client := &mockEKSClient{
-		describeClusterFn: func(_ context.Context, input *eks.DescribeClusterInput, _ ...func(*eks.Options)) (*eks.DescribeClusterOutput, error) {
-			return &eks.DescribeClusterOutput{
-				Cluster: &ekstypes.Cluster{
-					Name:                 input.Name,
-					Endpoint:             aws.String("https://example.eks.amazonaws.com"),
-					CertificateAuthority: nil,
-					Arn:                  aws.String("arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"),
-				},
-			}, nil
-		},
-	}
+	ctrl := gomock.NewController(t)
+
+	client := NewMockEKSClient(ctrl)
+	client.EXPECT().
+		DescribeCluster(gomock.Any(), gomock.Any()).
+		Return(&eks.DescribeClusterOutput{
+			Cluster: &ekstypes.Cluster{
+				Name:                 aws.String("dev-cluster"),
+				Endpoint:             aws.String("https://example.eks.amazonaws.com"),
+				CertificateAuthority: nil,
+				Arn:                  aws.String("arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"),
+			},
+		}, nil)
 
 	info, err := DescribeCluster(context.Background(), client, "dev-cluster", "us-east-2")
 	require.NoError(t, err)

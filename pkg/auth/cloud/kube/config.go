@@ -99,11 +99,19 @@ func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, al
 
 	case "error":
 		if _, err := os.Stat(m.path); err == nil {
-			// File exists, check if cluster is already configured.
+			// File exists, check for cluster, context, and auth info collisions.
 			existing, loadErr := clientcmd.LoadFromFile(m.path)
 			if loadErr == nil {
 				if _, exists := existing.Clusters[info.ARN]; exists {
 					return fmt.Errorf("%w: cluster %s already exists in %s", errUtils.ErrKubeconfigMerge, info.ARN, m.path)
+				}
+				// Check context name collision.
+				contextName := info.ARN
+				if alias != "" {
+					contextName = alias
+				}
+				if _, exists := existing.Contexts[contextName]; exists {
+					return fmt.Errorf("%w: context %s already exists in %s", errUtils.ErrKubeconfigMerge, contextName, m.path)
 				}
 			}
 		}
@@ -179,15 +187,17 @@ func BuildClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName strin
 		contextName = alias
 	}
 
-	// User name derived from cluster name.
-	userName := "user-" + info.Name
+	// User name includes cluster name and region for uniqueness when multiple
+	// clusters share the same identity.
+	userName := "atmos-eks-" + info.Name + "-" + info.Region
 
-	// Build exec plugin env vars.
-	execEnv := []clientcmdapi.ExecEnvVar{
-		{
+	// Build exec plugin env vars. Only set ATMOS_IDENTITY when identity is specified.
+	var execEnv []clientcmdapi.ExecEnvVar
+	if identityName != "" {
+		execEnv = append(execEnv, clientcmdapi.ExecEnvVar{
 			Name:  "ATMOS_IDENTITY",
 			Value: identityName,
-		},
+		})
 	}
 
 	// Build exec plugin args.
@@ -257,7 +267,11 @@ func (m *KubeconfigManager) writeConfig(config *clientcmdapi.Config) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigWrite, err)
 	}
 
-	return os.Chmod(m.path, m.mode)
+	if err := os.Chmod(m.path, m.mode); err != nil {
+		return fmt.Errorf("%w: failed to set permissions on %s: %w", errUtils.ErrKubeconfigWrite, m.path, err)
+	}
+
+	return nil
 }
 
 // mergeConfig merges a kubeconfig into the existing file.

@@ -43,6 +43,8 @@ type EKSClusterInfo struct {
 }
 
 // EKSClient defines the interface for EKS API calls (for testability).
+//
+//go:generate mockgen -destination=mock_eks_client_test.go -package=aws -source=eks.go EKSClient
 type EKSClient interface {
 	DescribeCluster(ctx context.Context, input *eks.DescribeClusterInput, opts ...func(*eks.Options)) (*eks.DescribeClusterOutput, error)
 }
