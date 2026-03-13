@@ -18,11 +18,7 @@ func warnIfArchivedGitHubRepo(uri, component string) {
 
 	archived, err := gh.IsRepoArchived(owner, repo)
 	if err != nil {
-		log.Debug("Failed to check if GitHub repository is archived",
-			"owner", owner,
-			"repo", repo,
-			"error", err,
-		)
+		// Best-effort check: silently skip when the GitHub API is unavailable.
 		return
 	}
 

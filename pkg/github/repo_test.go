@@ -76,6 +76,34 @@ func TestParseGitHubOwnerRepo(t *testing.T) {
 			wantOK:    true,
 		},
 
+		// SSH scheme (ssh://) — distinct from SCP-style.
+		{
+			name:      "ssh:// URL with .git and subdirectory",
+			uri:       "ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "git:: force prefix with ssh:// URL and subdirectory",
+			uri:       "git::ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "ssh:// URL without subdirectory",
+			uri:       "ssh://git@github.com/cloudposse/terraform-null-label.git",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "ssh:// URL to non-GitHub host",
+			uri:       "ssh://git@gitlab.com/owner/repo.git",
+			wantOK:    false,
+		},
+
 		// SCP-style Git URLs.
 		{
 			name:      "SCP-style git@github.com",

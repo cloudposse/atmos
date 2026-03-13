@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -76,8 +75,15 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 		return "", "", false
 	}
 
-	// Path format: /owner/repo or /owner/repo.git
+	// Path format: /owner/repo or /owner/repo.git//subdir
 	path := strings.TrimPrefix(parsed.Path, "/")
+	// Strip the go-getter path-level subdirectory delimiter ("//" within the path).
+	// This is required for any URL where the scheme's "//" (e.g., "ssh://") caused
+	// the top-level stripping above to stop at the scheme separator, leaving the
+	// path-level "//" subdirectory still in the URL path after parsing.
+	if idx := strings.Index(path, "//"); idx >= 0 {
+		path = path[:idx]
+	}
 	path = strings.TrimSuffix(path, ".git")
 
 	parts := strings.SplitN(path, "/", 3)
@@ -90,12 +96,10 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 
 // IsRepoArchived reports whether a GitHub repository is archived.
 // It returns an error when the API call fails; callers that treat the check as
-// best-effort should log the error at debug level and continue rather than
+// best-effort should silently ignore the error and continue rather than
 // blocking the operation.
 func IsRepoArchived(owner, repo string) (bool, error) {
 	defer perf.Track(nil, "github.IsRepoArchived")()
-
-	log.Debug("Checking if GitHub repository is archived", logFieldOwner, owner, logFieldRepo, repo)
 
 	ctx := context.Background()
 	client := newGitHubClient(ctx)
