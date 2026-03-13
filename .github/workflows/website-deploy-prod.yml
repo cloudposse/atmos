@@ -34,24 +34,24 @@ jobs:
     steps:
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: "website/.nvmrc"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
         with:
           version: 9
 
@@ -72,7 +72,7 @@ jobs:
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }} --recursive --human-readable --summarize
 
       - name: Trigger Algolia Crawler
-        uses: algolia/algoliasearch-crawler-github-actions@v1
+        uses: algolia/algoliasearch-crawler-github-actions@79db67cd7284bf4623324cd69e3cba49c7a85c4c # v1.1.0
         with:
           crawler-user-id: ${{ secrets.ALGOLIA_CRAWLER_USER_ID }}
           crawler-api-key: ${{ secrets.ALGOLIA_CRAWLER_API_KEY }}
