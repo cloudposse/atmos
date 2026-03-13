@@ -72,3 +72,92 @@ func TestIdentityNamesWithDots(t *testing.T) {
 	assert.Equal(t, "dev.env/AdminAccess", config.Auth.IdentityCaseMap["dev.env/adminaccess"])
 	assert.Equal(t, "simple-name", config.Auth.IdentityCaseMap["simple-name"])
 }
+
+// TestIdentityNamesWithDotsErrorHandling tests that fixAuthIdentities gracefully handles edge cases.
+func TestIdentityNamesWithDotsErrorHandling(t *testing.T) {
+	tests := []struct {
+		name              string
+		configContent     string
+		expectedIdentities int
+	}{
+		{
+			name: "identity with scalar value is skipped",
+			configContent: `auth:
+  providers:
+    test-provider:
+      kind: mock
+  identities:
+    product.usa/ReadOnlyAccess: "invalid-string-value"
+    valid.identity/Access:
+      kind: mock
+      provider: test-provider
+`,
+			// Viper will still parse the scalar incorrectly, but fixAuthIdentities will skip it.
+			// The valid identity should be processed.
+			expectedIdentities: 1,
+		},
+		{
+			name: "identity with list value is skipped",
+			configContent: `auth:
+  providers:
+    test-provider:
+      kind: mock
+  identities:
+    product.usa/ReadOnlyAccess:
+      - invalid
+      - list
+    valid.identity/Access:
+      kind: mock
+      provider: test-provider
+`,
+			// The list-valued identity will be skipped, valid one processed.
+			expectedIdentities: 1,
+		},
+		{
+			name: "config with no auth section",
+			configContent: `some_other:
+  config: value
+`,
+			expectedIdentities: 0,
+		},
+		{
+			name: "auth without identities section",
+			configContent: `auth:
+  providers:
+    test-provider:
+      kind: mock
+`,
+			expectedIdentities: 0,
+		},
+		{
+			name: "empty identities section",
+			configContent: `auth:
+  providers:
+    test-provider:
+      kind: mock
+  identities: {}
+`,
+			expectedIdentities: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "atmos.yaml")
+			err := os.WriteFile(configPath, []byte(tt.configContent), 0o644)
+			require.NoError(t, err)
+
+			// Load config.
+			configAndStacksInfo := &schema.ConfigAndStacksInfo{
+				AtmosConfigFilesFromArg: []string{configPath},
+			}
+			config, err := LoadConfig(configAndStacksInfo)
+			require.NoError(t, err, "Config loading should not fail")
+
+			// Check that the expected number of identities are loaded.
+			assert.Len(t, config.Auth.Identities, tt.expectedIdentities, 
+				"Should have %d identities", tt.expectedIdentities)
+		})
+	}
+}
