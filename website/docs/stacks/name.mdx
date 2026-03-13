@@ -77,7 +77,7 @@ When determining a stack's name, Atmos uses this precedence order:
 
 1. **`name`** (highest) - Explicit name from stack manifest
 2. **`name_template`** - Go template from `atmos.yaml`
-3. **`name_pattern`** - Token-based pattern from `atmos.yaml`
+3. **`name_pattern`** - Token-based pattern from `atmos.yaml` (**⚠️ deprecated**, use `name_template`)
 4. **Default** - Basename of the stack file (e.g., `prod.yaml` → `prod`)
 
 This means the `name` field always wins, allowing you to override programmatic naming for specific stacks.
