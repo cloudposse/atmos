@@ -62,12 +62,19 @@ func runUninstallWithInstaller(_ *cobra.Command, args []string, installer *Insta
 	return uninstallToolVersion(installer, owner, repo, version)
 }
 
-// RunUninstall removes tools by spec (owner/repo, tool, or ).
-func RunUninstall(toolSpec string) error {
+// RunUninstall removes tools by spec (owner/repo, tool, or all installed).
+// When uninstallAll is true, it scans the install directory and removes everything.
+func RunUninstall(toolSpec string, uninstallAll bool) error {
 	defer perf.Track(nil, "toolchain.RunUninstall")()
 
 	installer := NewInstaller()
-	// If no arguments, uninstall from tool-versions file
+
+	// --all flag: scan install directory and uninstall everything found.
+	if uninstallAll {
+		return uninstallAllInstalledTools(installer)
+	}
+
+	// If no arguments, uninstall from tool-versions file.
 	if len(toolSpec) == 0 {
 		return uninstallFromToolVersions(GetToolVersionsFilePath(), installer)
 	}
@@ -282,6 +289,32 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 
 	result := processToolUninstalls(installedTools, installer)
 	printUninstallSummary(len(toolVersions.Tools), result)
+
+	return nil
+}
+
+// uninstallAllInstalledTools scans the install directory and uninstalls every tool found.
+func uninstallAllInstalledTools(installer *Installer) error {
+	defer perf.Track(nil, "toolchain.uninstallAllInstalledTools")()
+
+	tools, err := installer.ListAllInstalledTools()
+	if err != nil {
+		return fmt.Errorf("failed to scan install directory: %w", err)
+	}
+
+	if len(tools) == 0 {
+		ui.Writeln("No tools installed")
+		return nil
+	}
+
+	for _, tool := range tools {
+		if err := uninstallAllVersionsOfTool(installer, tool.Owner, tool.Repo); err != nil {
+			ui.Errorf("Failed to uninstall `%s/%s`: %v", tool.Owner, tool.Repo, err)
+		}
+	}
+
+	// Try to clean up the bin directory if empty.
+	_ = os.Remove(installer.GetBinDir())
 
 	return nil
 }
