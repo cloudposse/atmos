@@ -255,7 +255,7 @@ The `import` section supports the following fields:
   <dd>Skip template processing for the imported file. Can be used if the imported file uses `Go` templates that should not be interpreted by atmos. For example, sometimes configurations for components may pass Go template strings not intended for atmos.</dd>
 
   <dt>`ignore_missing_template_values` - (boolean)</dt>
-  <dd>Process templates but skip any values missing from the `context` instead of throwing an error. Useful when the imported file contains Go templates for external systems (e.g. Datadog) that Atmos should not evaluate. Unlike `skip_templates_processing` which skips all template processing, this option still evaluates templates that have matching context values.</dd>
+  <dd>Process templates but skip any values missing from the `context` instead of throwing an error. Useful when the imported file contains Go templates for external systems (e.g. Datadog) that Atmos should not evaluate. Unlike `skip_templates_processing` which skips all template processing, this option still evaluates templates that have matching context values. To apply this globally to all imports without setting it on each one, use the [`templates.settings.ignore_missing_template_values`](/cli/configuration/templates) setting in `atmos.yaml`.</dd>
 
   <dt>`skip_if_missing` - (boolean)</dt>
   <dd>Skip the import without error if the file does not exist.</dd>

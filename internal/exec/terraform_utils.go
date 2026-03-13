@@ -228,12 +228,14 @@ func walkTerraformComponents(
 
 // processTerraformComponent performs filtering and execution logic for a single Terraform component.
 // Returns true if the component was processed (passed all filters), false otherwise.
+// The executeFn parameter allows callers to inject a custom executor (used for testing without gomonkey).
 func processTerraformComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	stackName, componentName string,
 	componentSection map[string]any,
 	logFunc func(msg any, keyvals ...any),
+	executeFn func(schema.ConfigAndStacksInfo) error,
 ) (bool, error) {
 	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
@@ -277,7 +279,7 @@ func processTerraformComponent(
 	info.Stack = stackName
 	info.StackFromArg = stackName
 
-	if err := ExecuteTerraform(*info); err != nil {
+	if err := executeFn(*info); err != nil {
 		return true, err
 	}
 
