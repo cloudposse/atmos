@@ -42,7 +42,7 @@ func TestIsScalarString(t *testing.T) {
 		{
 			name:     "empty string",
 			input:    "",
-			expected: false, // Empty strings should go through YAML parsing which converts them to nil.
+			expected: false, // A bare empty trimmedResult means yq returned no content; YAML parses that as nil.
 		},
 		{
 			name:     "string ending with single colon",

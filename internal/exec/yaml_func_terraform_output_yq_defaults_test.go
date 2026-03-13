@@ -404,7 +404,7 @@ func TestTerraformOutput_YqDefaultWithMapFallback(t *testing.T) {
 
 // TestTerraformOutput_YqDefaultWithEmptyStringFallback verifies behavior
 // when using an empty string as a YQ default value.
-// Note: YQ evaluates empty strings to nil in the current implementation.
+// The empty string default should be preserved as an empty string, not converted to nil.
 func TestTerraformOutput_YqDefaultWithEmptyStringFallback(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -442,9 +442,8 @@ func TestTerraformOutput_YqDefaultWithEmptyStringFallback(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	// Note: YQ evaluates empty string default to nil in current implementation.
-	// This documents the actual behavior.
-	assert.Nil(t, result["optional"])
+	// The empty string default is correctly preserved as "" (not coerced to nil).
+	assert.Equal(t, "", result["optional"])
 }
 
 // TestTerraformOutput_YqDefaultWithNumericFallback verifies that
