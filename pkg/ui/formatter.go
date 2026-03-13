@@ -70,6 +70,22 @@ func InitFormatter(ioCtx io.Context) {
 	Format = globalFormatter // Also expose for advanced use
 }
 
+// ReinitFormatter re-creates the global formatter with a fresh I/O context.
+// This is needed after output capture (os.Pipe) is stopped, because the original
+// InitFormatter() ran while pipes were active — terminal detection saw pipes instead
+// of the real terminal and cached ColorNone. After capture restores os.Stdout/os.Stderr,
+// calling ReinitFormatter() re-detects the real terminal and restores color support.
+func ReinitFormatter() {
+	defer perf.Track(nil, "ui.ReinitFormatter")()
+
+	ioCtx, err := io.NewContext()
+	if err != nil {
+		log.Debug("ui.ReinitFormatter: failed to create I/O context", "error", err)
+		return
+	}
+	InitFormatter(ioCtx)
+}
+
 // Reset clears all UI globals (formatter, I/O, terminal).
 // This is primarily used in tests to ensure clean state between test executions.
 func Reset() {

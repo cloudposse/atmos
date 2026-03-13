@@ -344,8 +344,11 @@ func processInstancesWithDeps(
 	stacksProcessor e.StacksProcessor,
 	authManager auth.AuthManager,
 ) ([]schema.Instance, error) {
-	// Get all stacks with template processing enabled to render template variables.
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, authManager)
+	// Get all stacks with template processing but without YAML functions.
+	// Templates are needed because they can create additional stacks and components.
+	// YAML functions (e.g., !terraform.output, atmos.Component()) are disabled to avoid
+	// requiring external binaries like tofu/terraform in $PATH.
+	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, authManager)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
