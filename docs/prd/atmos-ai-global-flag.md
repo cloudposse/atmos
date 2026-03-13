@@ -138,14 +138,14 @@ When `--skill <name>` is specified, the skill's full markdown content (its `Syst
 
 **Data flow:**
 
-1. `parseSkillFlag()` extracts the skill name from `os.Args` (e.g., `"atmos-terraform"`)
-2. `setupAIAnalysis()` → `loadAndValidateSkill()` → loads skills from marketplace (`~/.atmos/skills/`) → `registry.Get(skillName)` → returns `*skills.Skill`
-3. `skill.SystemPrompt` (the full markdown content of the skill file) is stored as `skillPrompt string`
-4. `runAIAnalysis()` passes `skillPrompt` in `AnalysisInput{SkillPrompt: skillPrompt}`
-5. `buildAnalysisPrompt()` prepends the skill prompt before the general system prompt with a `\n\n---\n\n` separator
+1. `parseSkillFlag()` extracts skill names from `os.Args` — supports comma-separated (`--skill a,b`) and repeated flags (`--skill a --skill b`), returns `[]string`
+2. `setupAIAnalysis()` → `loadAndValidateSkills()` → loads each skill from marketplace (`~/.atmos/skills/`) → `registry.Get(name)` → returns `[]*skills.Skill`
+3. Each `skill.SystemPrompt` is concatenated with `\n\n---\n\n` separators into a single `skillPrompt string`
+4. `runAIAnalysis()` passes `skillPrompt` in `AnalysisInput{SkillPrompt: skillPrompt, SkillNames: skillNames}`
+5. `buildAnalysisPrompt()` prepends the merged skill prompt before the general system prompt
 6. The complete prompt is sent to the AI provider via `client.SendMessage(ctx, prompt)`
 
-This means the AI receives the skill's entire domain knowledge (e.g., Terraform best practices, Atmos stack conventions) alongside the command output, enabling significantly more accurate and actionable analysis.
+This means the AI receives the combined domain knowledge from all specified skills (e.g., Terraform best practices + stack conventions) alongside the command output, enabling significantly more accurate and actionable analysis.
 
 ### Execution Flow in cmd/root.go
 
@@ -154,25 +154,28 @@ func Execute() error {
     // ... config loading, setup ...
 
     aiEnabled := hasAIFlag() && !isAICommand()
-    skillName := parseSkillFlag()  // Parse --skill from os.Args
+    skillNames := parseSkillFlag()  // Parse --skill from os.Args ([]string)
     var captureSession *analyze.CaptureSession
     var skillPrompt string
 
     // Validate --skill requires --ai.
-    if skillName != "" && !aiEnabled {
+    if len(skillNames) > 0 && !aiEnabled {
         return errUtils.Build(errUtils.ErrAISkillRequiresAIFlag).
             WithExplanation("...").WithHintf("...").Err()
     }
 
     if aiEnabled {
-        // setupAIAnalysis validates config, loads skill, starts capture.
+        // setupAIAnalysis validates config, loads skills, starts capture.
         var setupErr error
-        captureSession, skillPrompt, setupErr = setupAIAnalysis(&atmosConfig, skillName)
+        captureSession, skillPrompt, setupErr = setupAIAnalysis(&atmosConfig, skillNames)
         if setupErr != nil {
             return setupErr
         }
         if captureSession == nil {
             aiEnabled = false  // Capture failed, disable AI
+        } else {
+            // Ensure stdout/stderr are restored even on panic.
+            defer captureSession.Stop()
         }
     }
 
@@ -182,7 +185,7 @@ func Execute() error {
 
     // Stop capture, print error (if any), then run AI analysis.
     if aiEnabled && captureSession != nil {
-        runAIAnalysis(&atmosConfig, captureSession, err, skillPrompt)
+        runAIAnalysis(&atmosConfig, captureSession, err, skillNames, skillPrompt)
         if err != nil {
             errUtils.Exit(errUtils.GetExitCode(err))  // Error already printed
         }

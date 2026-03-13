@@ -53,8 +53,6 @@ Guidelines:
 // ValidateAIConfig checks that AI is properly configured for the --ai flag.
 // Returns a user-friendly error with hints if configuration is missing.
 func ValidateAIConfig(atmosConfig *schema.AtmosConfiguration) error {
-	defer perf.Track(nil, "analyze.ValidateAIConfig")()
-
 	if !atmosConfig.AI.Enabled {
 		return errUtils.Build(errUtils.ErrAINotEnabled).
 			WithExplanation("The --ai flag requires AI to be enabled in your atmos.yaml configuration.").
@@ -108,7 +106,7 @@ type AnalysisInput struct {
 // AnalyzeOutput sends captured command output to the configured AI provider for analysis.
 // It creates an AI client, builds a prompt with the command context, and renders the response.
 func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput) {
-	defer perf.Track(nil, "analyze.AnalyzeOutput")()
+	defer perf.Track(atmosConfig, "analyze.AnalyzeOutput")()
 
 	// Build the analysis prompt.
 	prompt := buildAnalysisPrompt(input)
@@ -170,9 +168,14 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 func buildAnalysisPrompt(input *AnalysisInput) string {
 	defer perf.Track(nil, "analyze.buildAnalysisPrompt")()
 
-	// Truncate output if too large.
-	stdout := truncateOutput(input.Stdout)
-	stderr := truncateOutput(input.Stderr)
+	// Truncate output if too large. When both streams have content, split the
+	// budget evenly so the combined output stays within a reasonable limit.
+	outputBudget := maxOutputLength
+	if strings.TrimSpace(input.Stdout) != "" && strings.TrimSpace(input.Stderr) != "" {
+		outputBudget = maxOutputLength / 2 //nolint:mnd // Half budget per stream when both present.
+	}
+	stdout := truncateOutput(input.Stdout, outputBudget)
+	stderr := truncateOutput(input.Stderr, outputBudget)
 
 	// Skip if there's nothing meaningful to analyze.
 	if strings.TrimSpace(stdout) == "" && strings.TrimSpace(stderr) == "" && input.CmdErr == nil {
@@ -229,9 +232,9 @@ func writeStream(b *strings.Builder, label, content string) {
 }
 
 // truncateOutput limits output length to prevent exceeding AI token limits.
-func truncateOutput(output string) string {
-	if len(output) <= maxOutputLength {
+func truncateOutput(output string, limit int) string {
+	if len(output) <= limit {
 		return output
 	}
-	return output[:maxOutputLength] + "\n... (output truncated)"
+	return output[:limit] + "\n... (output truncated)"
 }

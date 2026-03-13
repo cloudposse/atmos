@@ -244,24 +244,24 @@ func TestBuildAnalysisPrompt_OutputWithTrailingNewline(t *testing.T) {
 
 func TestTruncateOutput(t *testing.T) {
 	t.Run("short output unchanged", func(t *testing.T) {
-		result := truncateOutput("short")
+		result := truncateOutput("short", maxOutputLength)
 		assert.Equal(t, "short", result)
 	})
 
 	t.Run("empty output unchanged", func(t *testing.T) {
-		result := truncateOutput("")
+		result := truncateOutput("", maxOutputLength)
 		assert.Equal(t, "", result)
 	})
 
 	t.Run("output at limit unchanged", func(t *testing.T) {
 		input := strings.Repeat("a", maxOutputLength)
-		result := truncateOutput(input)
+		result := truncateOutput(input, maxOutputLength)
 		assert.Equal(t, input, result)
 	})
 
 	t.Run("long output truncated", func(t *testing.T) {
 		input := strings.Repeat("a", maxOutputLength+100)
-		result := truncateOutput(input)
+		result := truncateOutput(input, maxOutputLength)
 		assert.Len(t, result, maxOutputLength+len("\n... (output truncated)"))
 		assert.True(t, strings.HasSuffix(result, "\n... (output truncated)"))
 	})
@@ -508,7 +508,7 @@ func TestAnalyzeOutput_WithSkillNameNoPrompt(t *testing.T) {
 func TestTruncateOutput_ExactlyOverLimit(t *testing.T) {
 	// One character over the limit.
 	input := strings.Repeat("x", maxOutputLength+1)
-	result := truncateOutput(input)
+	result := truncateOutput(input, maxOutputLength)
 	assert.Len(t, result, maxOutputLength+len("\n... (output truncated)"))
 	assert.True(t, strings.HasSuffix(result, "\n... (output truncated)"))
 	assert.True(t, strings.HasPrefix(result, strings.Repeat("x", 100)))

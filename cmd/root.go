@@ -132,22 +132,20 @@ func isAICommand() bool {
 }
 
 // isAICommandInternal checks if args represent an "atmos ai" command.
+// It skips the program name (args[0]) and flags, then checks if the first
+// positional argument is "ai".
 func isAICommandInternal(args []string) bool {
-	for _, arg := range args {
+	for i, arg := range args {
+		// Skip program name.
+		if i == 0 {
+			continue
+		}
 		// Skip flags.
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		// The first non-flag argument after the program name is the command.
-		if arg == "ai" {
-			return true
-		}
-		// If the first non-flag arg is not "ai", it's not an AI command.
-		// But the program name is args[0], so skip it.
-		if arg == args[0] {
-			continue
-		}
-		return false
+		// First positional argument determines the command.
+		return arg == "ai"
 	}
 	return false
 }
@@ -296,7 +294,7 @@ func setupAIAnalysis(atmosConfig *schema.AtmosConfiguration, skillNames []string
 	// Start capturing stdout/stderr while still teeing to the terminal.
 	captureSession, err := analyze.StartCapture()
 	if err != nil {
-		log.Warn("Failed to set up AI output capture, continuing without AI analysis", "error", err)
+		ui.Warning(fmt.Sprintf("Failed to set up AI output capture, continuing without AI analysis: %v", err))
 		return nil, skillPrompt, nil
 	}
 
@@ -1704,6 +1702,10 @@ func Execute() error {
 		}
 		if captureSession == nil {
 			aiEnabled = false
+		} else {
+			// Ensure stdout/stderr are restored even if a panic occurs during command execution.
+			// Stop() is idempotent, so this is safe even when Stop() is also called in runAIAnalysis.
+			defer captureSession.Stop()
 		}
 	}
 
