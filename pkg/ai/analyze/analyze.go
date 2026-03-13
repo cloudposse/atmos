@@ -53,6 +53,8 @@ Guidelines:
 // ValidateAIConfig checks that AI is properly configured for the --ai flag.
 // Returns a user-friendly error with hints if configuration is missing.
 func ValidateAIConfig(atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "analyze.ValidateAIConfig")()
+
 	if !atmosConfig.AI.Enabled {
 		return errUtils.Build(errUtils.ErrAINotEnabled).
 			WithExplanation("The --ai flag requires AI to be enabled in your atmos.yaml configuration.").
@@ -232,9 +234,16 @@ func writeStream(b *strings.Builder, label, content string) {
 }
 
 // truncateOutput limits output length to prevent exceeding AI token limits.
+// The suffix is included within the limit so the result never exceeds it.
 func truncateOutput(output string, limit int) string {
+	const suffix = "\n... (output truncated)"
+
 	if len(output) <= limit {
 		return output
 	}
-	return output[:limit] + "\n... (output truncated)"
+	cutAt := limit - len(suffix)
+	if cutAt <= 0 {
+		return output[:limit]
+	}
+	return output[:cutAt] + suffix
 }

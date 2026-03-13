@@ -95,7 +95,10 @@ Uses `os.Pipe()` to intercept both Go-level writes and subprocess writes:
 // 1. Original terminal (user sees output in real-time)
 // 2. Buffer (captured for AI analysis)
 
-session, _ := analyze.StartCapture()
+session, err := analyze.StartCapture()
+if err != nil {
+    return err
+}
 // ... command runs, output flows to terminal AND buffer ...
 stdout, stderr := session.Stop()  // Restores original streams
 ```
@@ -517,6 +520,7 @@ func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analy
         Stdout:      stdout,
         Stderr:      stderrCaptured,
         CmdErr:      cmdErr,
+        SkillNames:  skillNames,
         SkillPrompt: skillPrompt,
     })
 }

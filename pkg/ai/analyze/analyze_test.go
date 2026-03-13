@@ -259,10 +259,10 @@ func TestTruncateOutput(t *testing.T) {
 		assert.Equal(t, input, result)
 	})
 
-	t.Run("long output truncated", func(t *testing.T) {
+	t.Run("long output truncated within limit", func(t *testing.T) {
 		input := strings.Repeat("a", maxOutputLength+100)
 		result := truncateOutput(input, maxOutputLength)
-		assert.Len(t, result, maxOutputLength+len("\n... (output truncated)"))
+		assert.LessOrEqual(t, len(result), maxOutputLength, "truncated result must not exceed limit")
 		assert.True(t, strings.HasSuffix(result, "\n... (output truncated)"))
 	})
 }
@@ -509,7 +509,7 @@ func TestTruncateOutput_ExactlyOverLimit(t *testing.T) {
 	// One character over the limit.
 	input := strings.Repeat("x", maxOutputLength+1)
 	result := truncateOutput(input, maxOutputLength)
-	assert.Len(t, result, maxOutputLength+len("\n... (output truncated)"))
+	assert.LessOrEqual(t, len(result), maxOutputLength, "truncated result must not exceed limit")
 	assert.True(t, strings.HasSuffix(result, "\n... (output truncated)"))
 	assert.True(t, strings.HasPrefix(result, strings.Repeat("x", 100)))
 }

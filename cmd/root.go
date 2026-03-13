@@ -157,8 +157,9 @@ func hasAIFlag() bool {
 	return hasAIFlagInternal(os.Args)
 }
 
-// hasAIFlagInternal checks if --ai flag is present in the provided args.
-// This internal version accepts args as a parameter for testability.
+// hasAIFlagInternal checks if --ai flag is present in the provided args
+// or if the ATMOS_AI environment variable is set to "true".
+// This internal version accepts args and an env lookup function for testability.
 func hasAIFlagInternal(args []string) bool {
 	for _, arg := range args {
 		// Stop scanning after bare "--" (end-of-flags delimiter).
@@ -169,7 +170,9 @@ func hasAIFlagInternal(args []string) bool {
 			return true
 		}
 	}
-	return false
+	// Fall back to ATMOS_AI environment variable for CI/CD env-only usage.
+	//nolint:forbidigo // Must use os.Getenv: AI flag is processed before Viper configuration loads.
+	return strings.EqualFold(os.Getenv("ATMOS_AI"), "true")
 }
 
 // parseSkillFlag extracts all --skill flag values from os.Args.
@@ -181,6 +184,7 @@ func parseSkillFlag() []string {
 
 // parseSkillFlagInternal extracts all --skill flag values from the provided args.
 // Supports repeated flags (--skill a --skill b) and comma-separated values (--skill a,b).
+// Falls back to the ATMOS_SKILL environment variable if no CLI flags are found.
 // This internal version accepts args as a parameter for testability.
 func parseSkillFlagInternal(args []string) []string {
 	var result []string
@@ -198,13 +202,26 @@ func parseSkillFlagInternal(args []string) []string {
 		}
 
 		if value != "" {
-			// Split comma-separated values.
-			for _, v := range strings.Split(value, ",") {
-				v = strings.TrimSpace(v)
-				if v != "" {
-					result = append(result, v)
-				}
-			}
+			result = append(result, splitCSV(value)...)
+		}
+	}
+
+	// Fall back to ATMOS_SKILL environment variable for CI/CD env-only usage.
+	if len(result) == 0 {
+		//nolint:forbidigo // Must use os.Getenv: skill flag is processed before Viper configuration loads.
+		result = splitCSV(os.Getenv("ATMOS_SKILL"))
+	}
+
+	return result
+}
+
+// splitCSV splits a comma-separated string into trimmed, non-empty values.
+func splitCSV(value string) []string {
+	var result []string
+	for _, v := range strings.Split(value, ",") {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			result = append(result, v)
 		}
 	}
 	return result
