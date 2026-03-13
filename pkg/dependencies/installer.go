@@ -1,19 +1,25 @@
 package dependencies
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
+	log "github.com/charmbracelet/log"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry/aqua"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -297,14 +303,10 @@ func (i *Installer) resolveOneConstraint(tool, version string) (string, error) {
 	var resolved string
 	progressMsg := fmt.Sprintf("Resolving `%s/%s` version for constraint `%s`", owner, repo, version)
 	spinnerErr := spinner.ExecWithSpinnerDynamic(progressMsg, func() (string, error) {
-		// Fetch available versions from the registry.
-		available, err := i.versionLister.GetAvailableVersions(owner, repo)
+		// Fetch available versions with retry for transient network errors.
+		available, err := i.fetchAvailableVersionsWithRetry(owner, repo, version)
 		if err != nil {
-			return "", errUtils.Build(errUtils.ErrDependencyResolution).
-				WithCause(err).
-				WithExplanationf("Failed to fetch available versions for %s/%s", owner, repo).
-				WithHintf("Check your network connection or try specifying a concrete version instead of %q", version).
-				Err()
+			return "", err
 		}
 
 		// Find the highest version satisfying the constraint.
@@ -324,6 +326,51 @@ func (i *Installer) resolveOneConstraint(tool, version string) (string, error) {
 	}
 
 	return resolved, nil
+}
+
+// Retry configuration for version resolution network calls.
+const (
+	versionRetryMaxAttempts = 3
+	versionRetryMaxDelay    = 5 * time.Second
+	versionRetryJitter      = 0.3
+)
+
+// fetchAvailableVersionsWithRetry fetches available versions from the registry,
+// retrying transient HTTP errors with exponential backoff.
+func (i *Installer) fetchAvailableVersionsWithRetry(owner, repo, version string) ([]string, error) {
+	defer perf.Track(i.atmosConfig, "dependencies.fetchAvailableVersionsWithRetry")()
+
+	var available []string
+	maxAttempts := versionRetryMaxAttempts
+	initialDelay := 1 * time.Second
+	maxDelay := versionRetryMaxDelay
+	jitter := versionRetryJitter
+	retryConfig := &schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		RandomJitter:    &jitter,
+	}
+	retryErr := retry.WithPredicate(
+		context.Background(),
+		retryConfig,
+		func() error {
+			var err error
+			available, err = i.versionLister.GetAvailableVersions(owner, repo)
+			return err
+		},
+		isRetryableHTTPError,
+	)
+	if retryErr != nil {
+		return nil, errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(retryErr).
+			WithExplanationf("Failed to fetch available versions for %s/%s", owner, repo).
+			WithHintf("Check your network connection or try specifying a concrete version instead of %q", version).
+			Err()
+	}
+
+	return available, nil
 }
 
 // isConstraint returns true if the version string is a semver constraint
@@ -450,6 +497,51 @@ func (i *Installer) ResolveExecutablePath(deps map[string]string, executable str
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// isRetryableHTTPError determines whether an error from GetAvailableVersions
+// is a transient network/HTTP error worth retrying.
+// Uses a hybrid approach: first gates on registry.ErrHTTPRequest sentinel to
+// avoid retrying constraint parsing or "no versions found" errors, then
+// string-matches within HTTP errors to distinguish transient from permanent.
+func isRetryableHTTPError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Only retry HTTP-related errors, not constraint or resolution errors.
+	if !errors.Is(err, registry.ErrHTTPRequest) {
+		return false
+	}
+
+	// Within HTTP errors, distinguish transient from permanent (e.g., 404).
+	errStr := strings.ToLower(err.Error())
+	transientPatterns := []string{
+		"connection reset",
+		"connection refused",
+		"timeout",
+		"timed out",
+		"eof",
+		"stream error",
+		"stream cancel",
+		"temporary failure",
+		"ssl",
+		"tls",
+		"rate limit",
+		"too many requests",
+		"service unavailable",
+		"internal server error",
+		"bad gateway",
+		"gateway timeout",
+		"failed to read response body",
+	}
+	for _, pattern := range transientPatterns {
+		if strings.Contains(errStr, pattern) {
+			log.Warn("Retryable HTTP error detected, will retry", "error", err)
+			return true
+		}
+	}
+	return false
 }
 
 // getPathFromEnv retrieves PATH from environment.
