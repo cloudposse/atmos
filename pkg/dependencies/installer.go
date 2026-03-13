@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry/aqua"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
@@ -218,6 +219,7 @@ func (i *Installer) resolveConstraints(deps map[string]string) error {
 		// Fast path: check if an installed version satisfies the constraint.
 		if resolved, found := i.findInstalledMatch(tool, version); found {
 			deps[tool] = resolved
+			ui.Info(fmt.Sprintf("Using `%s` %s (satisfies %s)", tool, resolved, version))
 			continue
 		}
 
