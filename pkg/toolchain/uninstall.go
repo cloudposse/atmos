@@ -300,7 +300,7 @@ func collectInstalledTools(toolVersions *ToolVersions, installer *Installer) []u
 			if err == nil {
 				installedTools = append(installedTools, uninstallToolInfo{tool, version, owner, repo})
 			} else {
-				ui.Successf("Skipped %s/%s@%s (not installed)", owner, repo, version)
+				ui.Info(fmt.Sprintf("Skipped `%s/%s@%s` (not installed)", owner, repo, version))
 			}
 		}
 	}
@@ -395,7 +395,7 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 
 	// Check if the tool directory exists.
 	if _, err := os.Stat(toolDir); os.IsNotExist(err) {
-		ui.Successf("Tool %s/%s is not installed", owner, repo)
+		ui.Info(fmt.Sprintf("Tool `%s/%s` is not installed", owner, repo))
 		return nil
 	}
 
@@ -405,7 +405,7 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 	}
 
 	if len(versionsToUninstall) == 0 {
-		ui.Successf("No versions of %s/%s are installed", owner, repo)
+		ui.Info(fmt.Sprintf("No versions of `%s/%s` are installed", owner, repo))
 		return nil
 	}
 
@@ -417,9 +417,9 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 	// Uninstall each version.
 	for _, version := range versionsToUninstall {
 		if err := uninstallSingleTool(installer, owner, repo, version, false); err != nil {
-			ui.Errorf("Failed to uninstall %s/%s@%s: %v", owner, repo, version, err)
+			ui.Errorf("Failed to uninstall `%s/%s@%s`: %v", owner, repo, version, err)
 		} else {
-			ui.Successf("Uninstalled %s/%s@%s", owner, repo, version)
+			ui.Successf("Uninstalled `%s/%s@%s`", owner, repo, version)
 		}
 	}
 
@@ -434,7 +434,7 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 
 	// Only show summary if there are multiple versions.
 	if len(versionsToUninstall) > 1 {
-		ui.Successf("Uninstalled all versions of %s/%s", owner, repo)
+		ui.Successf("Uninstalled all versions of `%s/%s`", owner, repo)
 	}
 	return nil
 }
