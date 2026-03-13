@@ -73,6 +73,36 @@ func TestProvider_Context(t *testing.T) {
 		assert.Equal(t, "owner", ctx.RepoOwner)
 		assert.Equal(t, "repo", ctx.RepoName)
 		assert.Equal(t, "main", ctx.Branch)
+		// SHA should be resolved from git HEAD (since we're in a git repo),
+		// not from GITHUB_SHA env var.
+		assert.NotEqual(t, "abc123", ctx.SHA, "SHA should come from git HEAD, not GITHUB_SHA")
+		assert.Len(t, ctx.SHA, 40, "SHA should be a full 40-character git hash")
+	})
+}
+
+func TestResolveGitSHA(t *testing.T) {
+	t.Run("prefers git HEAD over GITHUB_SHA", func(t *testing.T) {
+		t.Setenv("GITHUB_SHA", "env-sha-value")
+
+		sha := resolveGitSHA()
+		// We're running in a git repo, so git HEAD should be used.
+		assert.NotEqual(t, "env-sha-value", sha)
+		assert.Len(t, sha, 40, "SHA should be a full 40-character git hash")
+	})
+
+	t.Run("falls back to GITHUB_SHA when git is unavailable", func(t *testing.T) {
+		// Change to a non-git directory to force git HEAD to fail.
+		originalDir, err := os.Getwd()
+		require.NoError(t, err)
+		t.Cleanup(func() { os.Chdir(originalDir) }) //nolint:errcheck
+
+		err = os.Chdir(os.TempDir())
+		require.NoError(t, err)
+
+		t.Setenv("GITHUB_SHA", "fallback-sha")
+
+		sha := resolveGitSHA()
+		assert.Equal(t, "fallback-sha", sha)
 	})
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -92,7 +93,7 @@ func (p *Provider) Context() (*provider.Context, error) {
 		Actor:      os.Getenv("GITHUB_ACTOR"),
 		EventName:  os.Getenv("GITHUB_EVENT_NAME"),
 		Ref:        os.Getenv("GITHUB_REF"),
-		SHA:        os.Getenv("GITHUB_SHA"),
+		SHA:        resolveGitSHA(),
 		Repository: os.Getenv("GITHUB_REPOSITORY"),
 	}
 
@@ -118,6 +119,18 @@ func (p *Provider) Context() (*provider.Context, error) {
 	}
 
 	return ctx, nil
+}
+
+// resolveGitSHA returns the current commit SHA by first trying git HEAD,
+// then falling back to the GITHUB_SHA environment variable.
+func resolveGitSHA() string {
+	gitRepo := git.NewDefaultGitRepo()
+	sha, err := gitRepo.GetCurrentCommitSHA()
+	if err == nil && sha != "" {
+		return sha
+	}
+	log.Debug("Failed to resolve SHA from git HEAD, falling back to GITHUB_SHA", "error", err)
+	return os.Getenv("GITHUB_SHA")
 }
 
 // parsePRInfo extracts PR information from environment variables.
