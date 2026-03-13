@@ -110,6 +110,11 @@ type AnalysisInput struct {
 func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput) {
 	defer perf.Track(atmosConfig, "analyze.AnalyzeOutput")()
 
+	if input == nil {
+		log.Error("AnalyzeOutput called with nil AnalysisInput")
+		return
+	}
+
 	// Build the analysis prompt.
 	prompt := buildAnalysisPrompt(input)
 	if prompt == "" {
@@ -138,11 +143,7 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 	ui.ReinitFormatter()
 	ui.Writeln("") // Visual separation before spinner.
 
-	spinnerMsg := "👽 Analyzing with AI..."
-	if len(input.SkillNames) > 0 {
-		spinnerMsg = fmt.Sprintf("👽 Analyzing with AI using skills '%s'...", strings.Join(input.SkillNames, "', '"))
-	}
-	s := spinner.New(spinnerMsg)
+	s := spinner.New(spinnerMessage(input.SkillNames))
 	s.Start()
 
 	// Send to AI provider.
@@ -153,17 +154,29 @@ func AnalyzeOutput(atmosConfig *schema.AtmosConfiguration, input *AnalysisInput)
 		return
 	}
 
-	successMsg := "AI analysis complete"
-	if len(input.SkillNames) > 0 {
-		successMsg = fmt.Sprintf("AI analysis complete (skills: %s)", strings.Join(input.SkillNames, ", "))
-	}
-	s.Success(successMsg)
+	s.Success(successMessage(input.SkillNames))
 
 	// Render AI response as markdown with colors to stderr (UI channel).
 	ui.MarkdownMessage(response)
 
 	// Add trailing newline for visual separation from subsequent output (e.g., exit status).
 	ui.Writeln("")
+}
+
+// spinnerMessage returns the spinner text, including skill names if provided.
+func spinnerMessage(skillNames []string) string {
+	if len(skillNames) > 0 {
+		return fmt.Sprintf("👽 Analyzing with AI using skills '%s'...", strings.Join(skillNames, "', '"))
+	}
+	return "👽 Analyzing with AI..."
+}
+
+// successMessage returns the success text, including skill names if provided.
+func successMessage(skillNames []string) string {
+	if len(skillNames) > 0 {
+		return fmt.Sprintf("AI analysis complete (skills: %s)", strings.Join(skillNames, ", "))
+	}
+	return "AI analysis complete"
 }
 
 // buildAnalysisPrompt constructs the prompt for AI analysis.

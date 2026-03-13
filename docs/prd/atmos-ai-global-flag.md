@@ -449,20 +449,24 @@ func parseSkillFlag() []string {
 
 func parseSkillFlagInternal(args []string) []string {
     var result []string
+    flagSeen := false
     for i, arg := range args {
         if arg == "--" { break }
         var value string
         if arg == "--skill" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
             value = args[i+1]
+            flagSeen = true
         } else if strings.HasPrefix(arg, "--skill=") {
             value = strings.TrimPrefix(arg, "--skill=")
+            flagSeen = true
         }
         if value != "" {
-            for _, v := range strings.Split(value, ",") {
-                v = strings.TrimSpace(v)
-                if v != "" { result = append(result, v) }
-            }
+            result = append(result, splitCSV(value)...)
         }
+    }
+    // Fall back to ATMOS_SKILL env var only when no --skill CLI flag was provided.
+    if !flagSeen {
+        result = splitCSV(os.Getenv("ATMOS_SKILL"))
     }
     return result
 }

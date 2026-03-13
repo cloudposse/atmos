@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosErrors "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -59,92 +60,97 @@ func newInputWithSkill(cmd, stdout, stderr string, cmdErr error, skillNames []st
 	}
 }
 
-func TestValidateAIConfig_NotEnabled(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Enabled: false,
-		},
-	}
-
-	err := ValidateAIConfig(cfg)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "AI features are not enabled")
-}
-
-func TestValidateAIConfig_NoProvider(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Enabled:   true,
-			Providers: nil,
-		},
-	}
-
-	err := ValidateAIConfig(cfg)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported AI provider")
-}
-
-func TestValidateAIConfig_ProviderNotConfigured(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Enabled:         true,
-			DefaultProvider: "openai",
-			Providers: map[string]*schema.AIProviderConfig{
-				"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: "sk-test"},
+func TestValidateAIConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		cfg         *schema.AtmosConfiguration
+		wantErr     bool
+		sentinelErr error
+	}{
+		{
+			name: "AI not enabled returns ErrAINotEnabled",
+			cfg: &schema.AtmosConfiguration{
+				AI: schema.AISettings{Enabled: false},
 			},
+			wantErr:     true,
+			sentinelErr: atmosErrors.ErrAINotEnabled,
 		},
-	}
-
-	err := ValidateAIConfig(cfg)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "openai")
-}
-
-func TestValidateAIConfig_NoAPIKey(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Enabled:         true,
-			DefaultProvider: "anthropic",
-			Providers: map[string]*schema.AIProviderConfig{
-				"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: ""},
+		{
+			name: "no providers returns ErrAIUnsupportedProvider",
+			cfg: &schema.AtmosConfiguration{
+				AI: schema.AISettings{Enabled: true, Providers: nil},
 			},
+			wantErr:     true,
+			sentinelErr: atmosErrors.ErrAIUnsupportedProvider,
 		},
-	}
-
-	err := ValidateAIConfig(cfg)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "API key not found")
-}
-
-func TestValidateAIConfig_Valid(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Enabled:         true,
-			DefaultProvider: "anthropic",
-			Providers: map[string]*schema.AIProviderConfig{
-				"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: "sk-test-key"},
+		{
+			name: "requested provider not configured returns ErrAIUnsupportedProvider",
+			cfg: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "openai",
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: "sk-test"},
+					},
+				},
 			},
+			wantErr:     true,
+			sentinelErr: atmosErrors.ErrAIUnsupportedProvider,
 		},
-	}
-
-	err := ValidateAIConfig(cfg)
-	assert.NoError(t, err)
-}
-
-func TestValidateAIConfig_DefaultsToAnthropic(t *testing.T) {
-	// When DefaultProvider is empty, it defaults to "anthropic".
-	cfg := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Enabled:         true,
-			DefaultProvider: "", // Should default to "anthropic".
-			Providers: map[string]*schema.AIProviderConfig{
-				"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: "sk-test-key"},
+		{
+			name: "missing API key returns ErrAIAPIKeyNotFound",
+			cfg: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "anthropic",
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: ""},
+					},
+				},
 			},
+			wantErr:     true,
+			sentinelErr: atmosErrors.ErrAIAPIKeyNotFound,
+		},
+		{
+			name: "valid config succeeds",
+			cfg: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "anthropic",
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: "sk-test-key"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty provider defaults to anthropic",
+			cfg: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "",
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {Model: "claude-sonnet-4-5-20250514", ApiKey: "sk-test-key"},
+					},
+				},
+			},
+			wantErr: false,
 		},
 	}
 
-	err := ValidateAIConfig(cfg)
-	assert.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateAIConfig(tt.cfg)
+			if !tt.wantErr {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.sentinelErr),
+				"expected error chain to contain %v, got: %v", tt.sentinelErr, err)
+		})
+	}
 }
 
 func TestBuildAnalysisPrompt_Success(t *testing.T) {
