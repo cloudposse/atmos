@@ -504,6 +504,71 @@ func TestForWorkflow_MergeConflict(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to merge dependencies")
 }
 
+// TestToolchainEnvironment_PrependToPath tests the PrependToPath method.
+func TestToolchainEnvironment_PrependToPath(t *testing.T) {
+	t.Run("no dirs returns basePATH unchanged", func(t *testing.T) {
+		env := &ToolchainEnvironment{dirs: nil, resolved: map[string]string{}}
+		result := env.PrependToPath("/usr/bin")
+		assert.Equal(t, "/usr/bin", result)
+	})
+
+	t.Run("with dirs prepends to basePATH", func(t *testing.T) {
+		env := &ToolchainEnvironment{
+			dirs:     []string{"/tools/bin/a", "/tools/bin/b"},
+			resolved: map[string]string{},
+		}
+		result := env.PrependToPath("/usr/bin")
+		expected := "/tools/bin/a" + string(os.PathListSeparator) + "/tools/bin/b" + string(os.PathListSeparator) + "/usr/bin"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("with dirs and empty basePATH", func(t *testing.T) {
+		env := &ToolchainEnvironment{
+			dirs:     []string{"/tools/bin/a"},
+			resolved: map[string]string{},
+		}
+		result := env.PrependToPath("")
+		assert.Equal(t, "/tools/bin/a", result)
+	})
+}
+
+// TestToolchainEnvironment_ToolchainDirs tests the ToolchainDirs method.
+func TestToolchainEnvironment_ToolchainDirs(t *testing.T) {
+	t.Run("nil dirs returns nil", func(t *testing.T) {
+		env := &ToolchainEnvironment{resolved: map[string]string{}}
+		assert.Nil(t, env.ToolchainDirs())
+	})
+
+	t.Run("returns dirs", func(t *testing.T) {
+		dirs := []string{"/a", "/b"}
+		env := &ToolchainEnvironment{dirs: dirs, resolved: map[string]string{}}
+		assert.Equal(t, dirs, env.ToolchainDirs())
+	})
+}
+
+// TestResolveBinaryPaths_RelativeToAbsolute tests that relative paths from
+// findBinaryPath are converted to absolute paths.
+func TestResolveBinaryPaths_RelativeToAbsolute(t *testing.T) {
+	env := &ToolchainEnvironment{resolved: make(map[string]string)}
+	cfg := &envConfig{
+		resolveFunc: func(tool string) (string, string, error) {
+			return "hashicorp", "terraform", nil
+		},
+		findBinaryPath: func(owner, repo, version string, binaryName ...string) (string, error) {
+			// Return a relative path.
+			return filepath.Join("relative", "bin", "terraform"), nil
+		},
+	}
+
+	deps := map[string]string{"terraform": "1.10.0"}
+	resolveBinaryPaths(env, cfg, deps)
+
+	// The resolved path should be absolute.
+	resolvedPath := env.resolved["terraform"]
+	assert.True(t, filepath.IsAbs(resolvedPath), "resolved path should be absolute, got: %s", resolvedPath)
+	assert.Contains(t, resolvedPath, filepath.Join("relative", "bin", "terraform"))
+}
+
 // TestForComponent_WithDepsError tests ForComponent when dependency resolution fails.
 func TestForComponent_WithDepsError(t *testing.T) {
 	tempDir := t.TempDir()
