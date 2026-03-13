@@ -55,6 +55,33 @@ Guidelines:
 - Use markdown formatting for readability.
 - Do not repeat the full command output back to the user.`
 
+// providerHintDefaults maps known providers to example model names and API key env vars.
+var providerHintDefaults = map[string]struct{ model, envVar string }{
+	"anthropic":   {model: "claude-sonnet-4-5-20250514", envVar: "ANTHROPIC_API_KEY"},
+	"openai":      {model: "gpt-4o", envVar: "OPENAI_API_KEY"},
+	"gemini":      {model: "gemini-2.0-flash", envVar: "GEMINI_API_KEY"},
+	"bedrock":     {model: "anthropic.claude-sonnet-4-5-20250514-v2:0", envVar: "AWS_ACCESS_KEY_ID"},
+	"azureopenai": {model: "gpt-4o", envVar: "AZURE_OPENAI_API_KEY"},
+	"ollama":      {model: "llama3", envVar: "OLLAMA_API_KEY"},
+	"grok":        {model: "grok-3", envVar: "GROK_API_KEY"},
+}
+
+// hintModel returns an example model name for the given provider.
+func hintModel(provider string) string {
+	if d, ok := providerHintDefaults[provider]; ok {
+		return d.model
+	}
+	return "<model-name>"
+}
+
+// hintEnvVar returns an example API key env var name for the given provider.
+func hintEnvVar(provider string) string {
+	if d, ok := providerHintDefaults[provider]; ok {
+		return d.envVar
+	}
+	return strings.ToUpper(provider) + "_API_KEY"
+}
+
 // ValidateAIConfig checks that AI is properly configured for the --ai flag.
 // Returns a user-friendly error with hints if configuration is missing.
 func ValidateAIConfig(atmosConfig *schema.AtmosConfiguration) error {
@@ -79,15 +106,16 @@ func ValidateAIConfig(atmosConfig *schema.AtmosConfiguration) error {
 		return errUtils.Build(errUtils.ErrAIUnsupportedProvider).
 			WithCause(err).
 			WithExplanationf("The --ai flag requires a configured AI provider, but provider %q is not configured.", provider).
-			WithHintf("Add a provider configuration to your atmos.yaml:\n\n```yaml\nai:\n  enabled: true\n  default_provider: %s\n  providers:\n    %s:\n      model: claude-sonnet-4-5-20250514\n      api_key: !env ANTHROPIC_API_KEY\n```", provider, provider).
+			WithHintf("Add a provider configuration to your atmos.yaml:\n\n```yaml\nai:\n  enabled: true\n  default_provider: %s\n  providers:\n    %s:\n      model: %s\n      api_key: !env %s\n```", provider, provider, hintModel(provider), hintEnvVar(provider)).
 			Err()
 	}
 
 	if providerConfig.ApiKey == "" {
+		envVar := hintEnvVar(provider)
 		return errUtils.Build(errUtils.ErrAIAPIKeyNotFound).
 			WithExplanationf("The --ai flag requires an API key for provider %q, but none was found.", provider).
-			WithHintf("Set the API key in your atmos.yaml using the !env function:\n\n```yaml\nai:\n  providers:\n    %s:\n      api_key: !env ANTHROPIC_API_KEY\n```", provider).
-			WithHint("Or set the environment variable directly: export ANTHROPIC_API_KEY=your-key").
+			WithHintf("Set the API key in your atmos.yaml using the !env function:\n\n```yaml\nai:\n  providers:\n    %s:\n      api_key: !env %s\n```", provider, envVar).
+			WithHintf("Or set the environment variable directly: export %s=your-key", envVar).
 			Err()
 	}
 

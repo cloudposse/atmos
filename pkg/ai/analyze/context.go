@@ -142,7 +142,21 @@ func (c *Context) RunAnalysis(cmdErr error) bool {
 	return true
 }
 
-// BuildCommandName reconstructs the command name from os.Args for AI analysis context.
+// BuildCommandName reconstructs a sanitized command label from os.Args for AI analysis context.
+// Stops at the "--" delimiter to avoid leaking native tool arguments (which may contain secrets
+// such as -var, tokens, or credentials passed to terraform/helmfile).
 func BuildCommandName() string {
-	return strings.Join(os.Args, " ")
+	return BuildCommandNameInternal(os.Args)
+}
+
+// BuildCommandNameInternal is the testable implementation of BuildCommandName.
+func BuildCommandNameInternal(args []string) string {
+	var parts []string
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		parts = append(parts, arg)
+	}
+	return strings.Join(parts, " ")
 }

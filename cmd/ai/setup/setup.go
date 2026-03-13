@@ -18,6 +18,11 @@ import (
 func InitAI(atmosConfig *schema.AtmosConfiguration) (*analyze.Context, error) {
 	defer perf.Track(nil, "setup.InitAI")()
 
+	// Short-circuit for help requests: --help/-h/help should never fail due to AI env vars.
+	if aiflags.HasHelpFlag() {
+		return analyze.NewDisabledContext(), nil
+	}
+
 	aiEnabled := aiflags.HasAIFlag()
 	skillNames := aiflags.ParseSkillFlag()
 

@@ -273,7 +273,20 @@ func TestTruncateOutput(t *testing.T) {
 	})
 }
 
+func TestAnalyzeOutput_NilInput(t *testing.T) {
+	redirectToDevNull(t)
+	mock := &mockClient{response: "analysis"}
+	withMockClient(t, mock, nil)
+
+	cfg := &schema.AtmosConfiguration{}
+
+	// Nil input should not panic.
+	AnalyzeOutput(cfg, nil)
+	assert.False(t, mock.called, "should not call AI client for nil input")
+}
+
 func TestAnalyzeOutput_EmptyOutput(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "analysis"}
 	withMockClient(t, mock, nil)
 
@@ -285,6 +298,7 @@ func TestAnalyzeOutput_EmptyOutput(t *testing.T) {
 }
 
 func TestAnalyzeOutput_ClientCreationError(t *testing.T) {
+	redirectToDevNull(t)
 	withMockClient(t, nil, errors.New("failed to create client"))
 
 	cfg := &schema.AtmosConfiguration{}
@@ -294,6 +308,7 @@ func TestAnalyzeOutput_ClientCreationError(t *testing.T) {
 }
 
 func TestAnalyzeOutput_SendMessageSuccess(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "## Summary\nAll good!"}
 	withMockClient(t, mock, nil)
 
@@ -308,6 +323,7 @@ func TestAnalyzeOutput_SendMessageSuccess(t *testing.T) {
 }
 
 func TestAnalyzeOutput_SendMessageError(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{err: errors.New("API rate limit exceeded")}
 	withMockClient(t, mock, nil)
 
@@ -320,6 +336,7 @@ func TestAnalyzeOutput_SendMessageError(t *testing.T) {
 }
 
 func TestAnalyzeOutput_WithCommandError(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "Error analysis"}
 	withMockClient(t, mock, nil)
 
@@ -335,6 +352,7 @@ func TestAnalyzeOutput_WithCommandError(t *testing.T) {
 }
 
 func TestAnalyzeOutput_CustomTimeout(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "done"}
 	withMockClient(t, mock, nil)
 
@@ -350,6 +368,7 @@ func TestAnalyzeOutput_CustomTimeout(t *testing.T) {
 }
 
 func TestAnalyzeOutput_WhitespaceOnlyOutput(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "analysis"}
 	withMockClient(t, mock, nil)
 
@@ -361,6 +380,7 @@ func TestAnalyzeOutput_WhitespaceOnlyOutput(t *testing.T) {
 }
 
 func TestAnalyzeOutput_ErrorWithNoOutput(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "error explanation"}
 	withMockClient(t, mock, nil)
 
@@ -398,6 +418,7 @@ func TestBuildAnalysisPrompt_WithoutSkillPrompt(t *testing.T) {
 }
 
 func TestAnalyzeOutput_WithSkillPrompt(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "## Terraform Analysis\nLooks good!"}
 	withMockClient(t, mock, nil)
 
@@ -412,6 +433,7 @@ func TestAnalyzeOutput_WithSkillPrompt(t *testing.T) {
 }
 
 func TestAnalyzeOutput_SkillPromptWithError(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "Terraform error analysis"}
 	withMockClient(t, mock, nil)
 
@@ -428,6 +450,7 @@ func TestAnalyzeOutput_SkillPromptWithError(t *testing.T) {
 }
 
 func TestAnalyzeOutput_SkillPromptWithSendError(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{err: errors.New("timeout")}
 	withMockClient(t, mock, nil)
 
@@ -485,6 +508,7 @@ func TestValidateAIConfig_MultipleProviders(t *testing.T) {
 }
 
 func TestAnalyzeOutput_WithSkillName(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "## Terraform Analysis\nLooks good!"}
 	withMockClient(t, mock, nil)
 
@@ -499,6 +523,7 @@ func TestAnalyzeOutput_WithSkillName(t *testing.T) {
 }
 
 func TestAnalyzeOutput_WithSkillNameNoPrompt(t *testing.T) {
+	redirectToDevNull(t)
 	mock := &mockClient{response: "analysis"}
 	withMockClient(t, mock, nil)
 

@@ -130,6 +130,29 @@ func TestBuildCommandName_ReturnsNonEmpty(t *testing.T) {
 	assert.NotEmpty(t, result)
 }
 
+func TestBuildCommandNameInternal(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{name: "simple command", args: []string{"atmos", "terraform", "plan"}, expected: "atmos terraform plan"},
+		{name: "stops at -- delimiter", args: []string{"atmos", "terraform", "plan", "--", "-var", "secret=hunter2"}, expected: "atmos terraform plan"},
+		{name: "includes flags before --", args: []string{"atmos", "--ai", "terraform", "plan", "--", "-target=module.vpc"}, expected: "atmos --ai terraform plan"},
+		{name: "no args after --", args: []string{"atmos", "terraform", "--"}, expected: "atmos terraform"},
+		{name: "empty args", args: []string{}, expected: ""},
+		{name: "only --", args: []string{"--"}, expected: ""},
+		{name: "single arg", args: []string{"atmos"}, expected: "atmos"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := BuildCommandNameInternal(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestSetup_InvalidConfig(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{
 		AI: schema.AISettings{Enabled: false},

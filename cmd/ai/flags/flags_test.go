@@ -21,6 +21,10 @@ func TestHasAIFlagInternal(t *testing.T) {
 		{name: "--ai after -- delimiter is ignored", args: []string{"atmos", "terraform", "plan", "--", "--ai"}, expected: false},
 		{name: "similar flag --aim is not matched", args: []string{"atmos", "--aim", "terraform", "plan"}, expected: false},
 		{name: "empty args", args: []string{}, expected: false},
+		{name: "repeated --ai last wins (true then false)", args: []string{"atmos", "--ai", "--ai=false", "terraform", "plan"}, expected: false},
+		{name: "repeated --ai last wins (false then true)", args: []string{"atmos", "--ai=false", "--ai", "terraform", "plan"}, expected: true},
+		{name: "repeated --ai=value last wins", args: []string{"atmos", "--ai=true", "--ai=false", "terraform"}, expected: false},
+		{name: "--ai=invalid skipped, bare --ai wins", args: []string{"atmos", "--ai=maybe", "--ai", "terraform"}, expected: true},
 	}
 
 	for _, tt := range tests {
@@ -128,6 +132,39 @@ func TestParseSkillFlagInternal_CLIOverridesEnv(t *testing.T) {
 	t.Setenv("ATMOS_SKILL", "from-env")
 	result := ParseSkillFlagInternal([]string{"atmos", "--skill", "from-cli", "terraform", "plan"})
 	assert.Equal(t, []string{"from-cli"}, result, "CLI --skill should override ATMOS_SKILL env var")
+}
+
+// TestParseSkillFlagInternal_BareSkillSuppressesEnv verifies bare --skill without value suppresses env fallback.
+func TestParseSkillFlagInternal_BareSkillSuppressesEnv(t *testing.T) {
+	t.Setenv("ATMOS_SKILL", "from-env")
+	result := ParseSkillFlagInternal([]string{"atmos", "--skill", "--ai", "terraform", "plan"})
+	assert.Nil(t, result, "bare --skill without value should suppress ATMOS_SKILL env var fallback")
+}
+
+// TestHasHelpFlagInternal tests the HasHelpFlagInternal function.
+func TestHasHelpFlagInternal(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected bool
+	}{
+		{name: "no help flag", args: []string{"atmos", "terraform", "plan"}, expected: false},
+		{name: "--help flag", args: []string{"atmos", "terraform", "plan", "--help"}, expected: true},
+		{name: "-h flag", args: []string{"atmos", "terraform", "-h"}, expected: true},
+		{name: "help subcommand", args: []string{"atmos", "help", "terraform"}, expected: true},
+		{name: "--help after -- is ignored", args: []string{"atmos", "terraform", "--", "--help"}, expected: false},
+		{name: "-h after -- is ignored", args: []string{"atmos", "terraform", "--", "-h"}, expected: false},
+		{name: "empty args", args: []string{}, expected: false},
+		{name: "--help with --ai", args: []string{"atmos", "--ai", "terraform", "plan", "--help"}, expected: true},
+		{name: "--help with --skill", args: []string{"atmos", "--skill", "atmos-terraform", "--help"}, expected: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := HasHelpFlagInternal(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 // TestSplitCSV tests the SplitCSV helper function.

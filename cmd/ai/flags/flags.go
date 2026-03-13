@@ -18,9 +18,10 @@ func HasAIFlag() bool {
 }
 
 // HasAIFlagInternal checks if --ai flag is present in the provided args.
-// Respects CLI precedence: if --ai or --ai=<value> is explicitly provided, that value wins.
+// Uses last-value-wins semantics to match Cobra's behavior for repeated flags.
 // Only falls back to ATMOS_AI environment variable when no CLI flag is present.
 func HasAIFlagInternal(args []string) bool {
+	var explicit *bool
 	for _, arg := range args {
 		// Stop scanning after bare "--" (end-of-flags delimiter).
 		if arg == "--" {
@@ -28,16 +29,21 @@ func HasAIFlagInternal(args []string) bool {
 		}
 		// Bare --ai is equivalent to --ai=true.
 		if arg == "--ai" {
-			return true
+			v := true
+			explicit = &v
+			continue
 		}
 		// Explicit --ai=<value>: parse the boolean to respect --ai=false.
 		if strings.HasPrefix(arg, "--ai=") {
 			val, err := strconv.ParseBool(strings.TrimPrefix(arg, "--ai="))
 			if err != nil {
-				return false
+				continue
 			}
-			return val
+			explicit = &val
 		}
+	}
+	if explicit != nil {
+		return *explicit
 	}
 	// Fall back to ATMOS_AI environment variable for CI/CD env-only usage.
 	//nolint:forbidigo // Must use os.Getenv: AI flag is processed before Viper configuration loads.
@@ -68,9 +74,11 @@ func ParseSkillFlagInternal(args []string) []string {
 		}
 
 		var value string
-		if arg == "--skill" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			value = args[i+1]
+		if arg == "--skill" {
 			flagSeen = true
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				value = args[i+1]
+			}
 		} else if strings.HasPrefix(arg, "--skill=") {
 			value = strings.TrimPrefix(arg, "--skill=")
 			flagSeen = true
@@ -88,6 +96,25 @@ func ParseSkillFlagInternal(args []string) []string {
 	}
 
 	return result
+}
+
+// HasHelpFlag checks if --help or -h is present in os.Args (before the "--" delimiter).
+// Used to short-circuit AI setup when the user is requesting help.
+func HasHelpFlag() bool {
+	return HasHelpFlagInternal(os.Args)
+}
+
+// HasHelpFlagInternal checks if --help, -h, or the "help" subcommand is present in the provided args.
+func HasHelpFlagInternal(args []string) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--help" || arg == "-h" || arg == "help" {
+			return true
+		}
+	}
+	return false
 }
 
 // SplitCSV splits a comma-separated string into trimmed, non-empty values.

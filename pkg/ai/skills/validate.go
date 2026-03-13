@@ -1,7 +1,6 @@
 package skills
 
 import (
-	"fmt"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -15,10 +14,9 @@ import (
 func LoadAndValidate(atmosConfig *schema.AtmosConfiguration, skillNames []string, loader SkillLoader) ([]*Skill, error) {
 	defer perf.Track(nil, "skills.LoadAndValidate")()
 
-	registry, err := LoadSkills(atmosConfig, loader)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAISkillLoadFailed, err)
-	}
+	// LoadSkills uses best-effort loading: marketplace and config errors are logged
+	// but do not fail the call. Missing skills are caught by the Get() check below.
+	registry, _ := LoadSkills(atmosConfig, loader)
 
 	var validSkills []*Skill
 	var invalidNames []string

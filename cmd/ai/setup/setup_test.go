@@ -106,3 +106,50 @@ func TestInitAI_SkillWithoutAI_EnvVar(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, atmosErrors.ErrAISkillRequiresAIFlag))
 }
+
+// TestInitAI_HelpWithSkillEnvVar verifies --help short-circuits before skill validation.
+func TestInitAI_HelpWithSkillEnvVar(t *testing.T) {
+	saveAndRestoreArgs(t)
+	//nolint:tenv // Must set os.Args directly to test pre-Cobra flag parsing.
+	os.Args = []string{"atmos", "terraform", "plan", "--help"}
+	t.Setenv("ATMOS_SKILL", "atmos-terraform")
+	t.Setenv("ATMOS_AI", "")
+
+	cfg := validAIConfig()
+	ctx, err := InitAI(cfg)
+	require.NoError(t, err, "ATMOS_SKILL with --help should not return ErrAISkillRequiresAIFlag")
+	require.NotNil(t, ctx)
+	assert.False(t, ctx.Enabled(), "--help should return disabled context")
+}
+
+// TestInitAI_HelpWithAIEnvVar verifies --help short-circuits before provider validation.
+func TestInitAI_HelpWithAIEnvVar(t *testing.T) {
+	saveAndRestoreArgs(t)
+	//nolint:tenv // Must set os.Args directly to test pre-Cobra flag parsing.
+	os.Args = []string{"atmos", "--help"}
+	t.Setenv("ATMOS_AI", "true")
+
+	// Use a config with no providers to ensure validation would fail.
+	cfg := &schema.AtmosConfiguration{
+		AI: schema.AISettings{Enabled: true},
+	}
+	ctx, err := InitAI(cfg)
+	require.NoError(t, err, "ATMOS_AI=true with --help should not fail provider validation")
+	require.NotNil(t, ctx)
+	assert.False(t, ctx.Enabled(), "--help should return disabled context")
+}
+
+// TestInitAI_ShortHelpFlag verifies -h short-circuits like --help.
+func TestInitAI_ShortHelpFlag(t *testing.T) {
+	saveAndRestoreArgs(t)
+	//nolint:tenv // Must set os.Args directly to test pre-Cobra flag parsing.
+	os.Args = []string{"atmos", "terraform", "-h"}
+	t.Setenv("ATMOS_AI", "true")
+	t.Setenv("ATMOS_SKILL", "atmos-terraform")
+
+	cfg := validAIConfig()
+	ctx, err := InitAI(cfg)
+	require.NoError(t, err, "-h should short-circuit AI setup")
+	require.NotNil(t, ctx)
+	assert.False(t, ctx.Enabled(), "-h should return disabled context")
+}
