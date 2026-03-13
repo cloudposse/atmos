@@ -6,8 +6,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -269,6 +273,8 @@ func TestEKSIntegration_GetCluster(t *testing.T) {
 }
 
 func TestEKSIntegration_Environment_DefaultPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
@@ -344,6 +350,115 @@ func TestEKSIntegration_Cleanup_NonexistentFile(t *testing.T) {
 
 	// Should not error - file doesn't exist, nothing to clean up.
 	err := integration.Cleanup(t.Context())
+	require.NoError(t, err)
+}
+
+func TestEKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
+	tests := []struct {
+		name           string
+		alias          string
+		currentContext string
+		expectCleared  bool
+	}{
+		{
+			name:           "with alias as current context",
+			alias:          "dev-eks",
+			currentContext: "dev-eks",
+			expectCleared:  true,
+		},
+		{
+			name:           "with alias not current context",
+			alias:          "dev-eks",
+			currentContext: "other-context",
+			expectCleared:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+			clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
+			contextName := tt.alias
+			userName := "atmos-eks-dev-cluster-us-east-2"
+
+			// Provision a kubeconfig with known entries using BuildClusterConfig.
+			info := &awsCloud.EKSClusterInfo{
+				Name:                     "dev-cluster",
+				Endpoint:                 "https://example.eks.amazonaws.com",
+				CertificateAuthorityData: "dGVzdA==",
+				ARN:                      clusterARN,
+				Region:                   "us-east-2",
+			}
+			clusterConfig := kube.BuildClusterConfig(info, tt.alias, "dev-admin")
+
+			mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+			require.NoError(t, err)
+			err = mgr.WriteClusterConfig(info, tt.alias, "dev-admin", "merge")
+			require.NoError(t, err)
+
+			// Verify entries exist.
+			_ = clusterConfig // Used BuildClusterConfig above to verify consistency.
+			arns, err := mgr.ListClusterARNs()
+			require.NoError(t, err)
+			assert.Contains(t, arns, clusterARN)
+
+			// Set current-context if specified.
+			if tt.currentContext != "" {
+				existing, loadErr := loadKubeconfig(kubeconfigPath)
+				require.NoError(t, loadErr)
+				existing.CurrentContext = tt.currentContext
+				writeKubeconfig(t, kubeconfigPath, existing)
+			}
+
+			// Run cleanup.
+			integration := &EKSIntegration{
+				name:     "test",
+				identity: "dev-admin",
+				cluster: &schema.EKSCluster{
+					Name:   "dev-cluster",
+					Region: "us-east-2",
+					Alias:  tt.alias,
+					Kubeconfig: &schema.KubeconfigSettings{
+						Path: kubeconfigPath,
+					},
+				},
+			}
+
+			err = integration.Cleanup(t.Context())
+			require.NoError(t, err)
+
+			// Verify entries were removed.
+			arns, err = mgr.ListClusterARNs()
+			require.NoError(t, err)
+			assert.NotContains(t, arns, clusterARN)
+
+			// Verify context and user were removed.
+			remaining, loadErr := loadKubeconfig(kubeconfigPath)
+			if loadErr == nil {
+				assert.NotContains(t, remaining.Contexts, contextName)
+				assert.NotContains(t, remaining.AuthInfos, userName)
+
+				if tt.expectCleared {
+					assert.Empty(t, remaining.CurrentContext)
+				}
+			}
+
+			// Verify idempotency - cleanup again should succeed.
+			err = integration.Cleanup(t.Context())
+			require.NoError(t, err)
+		})
+	}
+}
+
+// loadKubeconfig loads a kubeconfig file.
+func loadKubeconfig(path string) (*clientcmdapi.Config, error) {
+	return clientcmd.LoadFromFile(path)
+}
+
+// writeKubeconfig writes a kubeconfig file.
+func writeKubeconfig(t *testing.T, path string, config *clientcmdapi.Config) {
+	t.Helper()
+	err := clientcmd.WriteToFile(*config, path)
 	require.NoError(t, err)
 }
 
