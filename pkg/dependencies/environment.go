@@ -307,6 +307,14 @@ func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[stri
 			continue
 		}
 
+		// Convert to absolute path to ensure exec can find the binary
+		// regardless of working directory changes during execution.
+		if !filepath.IsAbs(binaryPath) {
+			if abs, err := filepath.Abs(binaryPath); err == nil {
+				binaryPath = abs
+			}
+		}
+
 		// Store by both the requested tool name and the binary basename so
 		// aliases/symlinks can still be resolved downstream.
 		env.resolved[tool] = binaryPath
