@@ -99,9 +99,9 @@ func TestParseGitHubOwnerRepo(t *testing.T) {
 			wantOK:    true,
 		},
 		{
-			name:      "ssh:// URL to non-GitHub host",
-			uri:       "ssh://git@gitlab.com/owner/repo.git",
-			wantOK:    false,
+			name:   "ssh:// URL to non-GitHub host",
+			uri:    "ssh://git@gitlab.com/owner/repo.git",
+			wantOK: false,
 		},
 
 		// SCP-style Git URLs.
