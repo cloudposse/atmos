@@ -112,7 +112,7 @@ func executeAuthEKSTokenCommand(cmd *cobra.Command, args []string) error {
 	// Generate token.
 	token, expiresAt, err := awsCloud.GetToken(ctx, creds, clusterName, region)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUtils.ErrEKSTokenGeneration, err)
 	}
 
 	// Output ExecCredential JSON to stdout.

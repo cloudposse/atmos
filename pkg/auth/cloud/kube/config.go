@@ -117,8 +117,11 @@ func (m *KubeconfigManager) WriteClusterConfig(info *awsCloud.EKSClusterInfo, al
 		}
 		return m.mergeConfig(newConfig)
 
-	default: // "merge"
+	case "merge":
 		return m.mergeConfig(newConfig)
+
+	default:
+		return fmt.Errorf("%w: invalid update mode %q", errUtils.ErrKubeconfigMerge, updateMode)
 	}
 }
 
