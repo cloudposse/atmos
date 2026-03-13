@@ -196,9 +196,10 @@ export const roadmapConfig = {
       tagline: 'Sane defaults, full configurability',
       description:
         'Too many parameters, too much configuration. Everything should just work out of the box while remaining fully customizable.',
-      progress: 90,
+      progress: 91,
       status: 'in-progress',
       milestones: [
+        { label: 'Global `ignore_missing_template_values` for stack imports', status: 'shipped', quarter: 'q1-2026', changelog: 'global-ignore-missing-template-values', docs: '/cli/configuration/templates', description: 'Set `templates.settings.ignore_missing_template_values: true` in `atmos.yaml` once to apply globally, instead of annotating every catalog import individually.', benefits: 'Teams with hundreds of catalog imports no longer need to annotate each one. One-line change in atmos.yaml applies the setting project-wide.' },
         { label: 'Zero-config terminal output (auto TTY/color)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/terminal', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Terminal output adapts automatically to your environment—colors when interactive, clean text when piping. Works identically in CI and locally without configuration.', benefits: 'No terminal configuration needed. Output is readable regardless of where commands run—locally, in CI, or piped to files.' },
         { label: 'Force flags (`--force-tty`, `--force-color`)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/global-flags', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Override auto-detection for CI environments or screenshot generation with explicit TTY and color control.', benefits: 'Generate consistent screenshots for documentation or force colors in CI environments that support them.' },
         { label: 'Auto-degradation (TrueColor→256→16→None)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/terminal', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Graceful color fallback from 16 million colors to 256 to 16 to plain text based on terminal support.', benefits: 'Output looks good on any terminal—from modern iTerm2 to legacy xterm to CI logs.' },
