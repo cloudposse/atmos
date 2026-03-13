@@ -160,7 +160,9 @@ func TestSetup_InvalidConfig(t *testing.T) {
 
 func TestSetup_ValidConfigNoSkills(t *testing.T) {
 	cfg := validAIConfig()
-	mockSession := &CaptureSession{stopped: false}
+	// Use stopped:true so Stop() short-circuits without touching os.Stdout/os.Stderr.
+	// A stopped:false mock with nil pipe fields would nil-out the standard streams on Cleanup().
+	mockSession := &CaptureSession{stopped: true}
 	withMockCapture(t, mockSession, nil)
 
 	ctx, err := Setup(cfg, nil, "atmos terraform plan")
@@ -175,7 +177,8 @@ func TestSetup_ValidConfigNoSkills(t *testing.T) {
 
 func TestSetup_ValidConfigWithSkills(t *testing.T) {
 	cfg := validAIConfigWithSkill()
-	mockSession := &CaptureSession{stopped: false}
+	// Use stopped:true so Stop() short-circuits without touching os.Stdout/os.Stderr.
+	mockSession := &CaptureSession{stopped: true}
 	withMockCapture(t, mockSession, nil)
 
 	ctx, err := Setup(cfg, []string{"test-skill"}, "atmos terraform plan")
@@ -189,7 +192,7 @@ func TestSetup_ValidConfigWithSkills(t *testing.T) {
 
 func TestSetup_InvalidSkillName(t *testing.T) {
 	cfg := validAIConfig()
-	mockSession := &CaptureSession{stopped: false}
+	mockSession := &CaptureSession{stopped: true}
 	withMockCapture(t, mockSession, nil)
 
 	_, err := Setup(cfg, []string{"nonexistent-skill"}, "atmos terraform plan")
@@ -198,6 +201,7 @@ func TestSetup_InvalidSkillName(t *testing.T) {
 }
 
 func TestSetup_CaptureFailure(t *testing.T) {
+	redirectToDevNull(t)
 	cfg := validAIConfig()
 	withMockCapture(t, nil, errors.New("pipe creation failed"))
 
@@ -233,6 +237,7 @@ func TestRunAnalysis_SuccessNoError(t *testing.T) {
 }
 
 func TestRunAnalysis_WithError(t *testing.T) {
+	redirectToDevNull(t)
 	capturedInput := withMockAnalyzePtr(t)
 	exitCode := withMockExit(t)
 
@@ -279,6 +284,7 @@ func TestRunAnalysis_WithSkills(t *testing.T) {
 }
 
 func TestRunAnalysis_ErrorAppendsToExistingStderr(t *testing.T) {
+	redirectToDevNull(t)
 	capturedInput := withMockAnalyzePtr(t)
 	_ = withMockExit(t)
 
@@ -302,6 +308,7 @@ func TestRunAnalysis_ErrorAppendsToExistingStderr(t *testing.T) {
 }
 
 func TestRunAnalysis_ErrorWithEmptyStderr(t *testing.T) {
+	redirectToDevNull(t)
 	capturedInput := withMockAnalyzePtr(t)
 	_ = withMockExit(t)
 
