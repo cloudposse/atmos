@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -193,6 +194,7 @@ func TestNewEKSIntegration_InvalidUpdateMode(t *testing.T) {
 }
 
 func TestNewEKSIntegration_ValidKubeconfigSettings(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 	config := &integrations.IntegrationConfig{
 		Name: "test-eks",
 		Config: &schema.Integration{
@@ -202,7 +204,7 @@ func TestNewEKSIntegration_ValidKubeconfigSettings(t *testing.T) {
 					Name:   "dev-cluster",
 					Region: "us-east-2",
 					Kubeconfig: &schema.KubeconfigSettings{
-						Path:   "/tmp/kubeconfig",
+						Path:   kubeconfigPath,
 						Mode:   "0644",
 						Update: "replace",
 					},
@@ -217,7 +219,7 @@ func TestNewEKSIntegration_ValidKubeconfigSettings(t *testing.T) {
 
 	eksIntegration, ok := integration.(*EKSIntegration)
 	require.True(t, ok)
-	assert.Equal(t, "/tmp/kubeconfig", eksIntegration.cluster.Kubeconfig.Path)
+	assert.Equal(t, kubeconfigPath, eksIntegration.cluster.Kubeconfig.Path)
 	assert.Equal(t, "0644", eksIntegration.cluster.Kubeconfig.Mode)
 	assert.Equal(t, "replace", eksIntegration.cluster.Kubeconfig.Update)
 }
@@ -288,6 +290,7 @@ func TestEKSIntegration_Environment_DefaultPath(t *testing.T) {
 }
 
 func TestEKSIntegration_Environment_CustomPath(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "custom", "kubeconfig")
 	integration := &EKSIntegration{
 		name:     "test",
 		identity: "dev-admin",
@@ -295,7 +298,7 @@ func TestEKSIntegration_Environment_CustomPath(t *testing.T) {
 			Name:   "dev-cluster",
 			Region: "us-east-2",
 			Kubeconfig: &schema.KubeconfigSettings{
-				Path: "/tmp/custom/kubeconfig",
+				Path: kubeconfigPath,
 			},
 		},
 	}
@@ -304,8 +307,8 @@ func TestEKSIntegration_Environment_CustomPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, env, "KUBECONFIG")
 	require.Contains(t, env, "KUBE_CONFIG_PATH")
-	assert.Equal(t, "/tmp/custom/kubeconfig", env["KUBECONFIG"])
-	assert.Equal(t, "/tmp/custom/kubeconfig", env["KUBE_CONFIG_PATH"])
+	assert.Equal(t, kubeconfigPath, env["KUBECONFIG"])
+	assert.Equal(t, kubeconfigPath, env["KUBE_CONFIG_PATH"])
 }
 
 func TestEKSIntegration_Cleanup_NoAlias(t *testing.T) {
@@ -334,7 +337,7 @@ func TestEKSIntegration_Cleanup_NonexistentFile(t *testing.T) {
 			Region: "us-east-2",
 			Alias:  "dev-eks",
 			Kubeconfig: &schema.KubeconfigSettings{
-				Path: t.TempDir() + "/nonexistent/kubeconfig",
+				Path: filepath.Join(t.TempDir(), "nonexistent", "kubeconfig"),
 			},
 		},
 	}

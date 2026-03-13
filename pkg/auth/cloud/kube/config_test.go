@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -75,10 +76,10 @@ func TestBuildClusterConfig_WithAlias(t *testing.T) {
 	ctx, ok := config.Contexts["dev-eks"]
 	require.True(t, ok)
 	assert.Equal(t, info.ARN, ctx.Cluster)
-	assert.Equal(t, "user-dev-cluster", ctx.AuthInfo)
+	assert.Equal(t, "atmos-eks-dev-cluster-us-east-2", ctx.AuthInfo)
 
 	// Check user entry.
-	user, ok := config.AuthInfos["user-dev-cluster"]
+	user, ok := config.AuthInfos["atmos-eks-dev-cluster-us-east-2"]
 	require.True(t, ok)
 	require.NotNil(t, user.Exec)
 	assert.Equal(t, execAPIVersion, user.Exec.APIVersion)
@@ -108,7 +109,7 @@ func TestBuildClusterConfig_WithoutIdentity(t *testing.T) {
 	info := testClusterInfo()
 	config := BuildClusterConfig(info, "dev", "")
 
-	user := config.AuthInfos["user-dev-cluster"]
+	user := config.AuthInfos["atmos-eks-dev-cluster-us-east-2"]
 	require.NotNil(t, user.Exec)
 	// Should not contain --identity flag.
 	assert.NotContains(t, user.Exec.Args, "--identity")
@@ -131,7 +132,7 @@ func TestWriteClusterConfig_MergeNewFile(t *testing.T) {
 	assert.Equal(t, "dev-eks", loaded.CurrentContext)
 	assert.Contains(t, loaded.Clusters, info.ARN)
 	assert.Contains(t, loaded.Contexts, "dev-eks")
-	assert.Contains(t, loaded.AuthInfos, "user-dev-cluster")
+	assert.Contains(t, loaded.AuthInfos, "atmos-eks-dev-cluster-us-east-2")
 }
 
 func TestWriteClusterConfig_MergeExisting(t *testing.T) {
@@ -218,6 +219,9 @@ func TestWriteClusterConfig_ErrorMode(t *testing.T) {
 }
 
 func TestWriteClusterConfig_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission tests are not reliable on Windows")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
 
@@ -245,7 +249,7 @@ func TestRemoveClusterConfig_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Remove the cluster.
-	err = mgr.RemoveClusterConfig(info.ARN, "dev-eks", "user-dev-cluster")
+	err = mgr.RemoveClusterConfig(info.ARN, "dev-eks", "atmos-eks-dev-cluster-us-east-2")
 	require.NoError(t, err)
 
 	// File should be removed (was the only cluster).
@@ -276,7 +280,7 @@ func TestRemoveClusterConfig_PreservesOthers(t *testing.T) {
 	require.NoError(t, err)
 
 	// Remove first cluster.
-	err = mgr.RemoveClusterConfig(info1.ARN, "dev-eks", "user-dev-cluster")
+	err = mgr.RemoveClusterConfig(info1.ARN, "dev-eks", "atmos-eks-dev-cluster-us-east-2")
 	require.NoError(t, err)
 
 	// Second cluster should still exist.
@@ -325,7 +329,7 @@ func TestRemoveClusterConfig_ClearsCurrentContext(t *testing.T) {
 	assert.Equal(t, "staging-eks", loaded.CurrentContext)
 
 	// Remove staging (current context).
-	err = mgr.RemoveClusterConfig(info2.ARN, "staging-eks", "user-staging-cluster")
+	err = mgr.RemoveClusterConfig(info2.ARN, "staging-eks", "atmos-eks-staging-cluster-us-east-1")
 	require.NoError(t, err)
 
 	// Current context should be cleared.

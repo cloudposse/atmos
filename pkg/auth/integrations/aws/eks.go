@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -144,30 +145,23 @@ func (e *EKSIntegration) Cleanup(_ context.Context) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	// Compute context name and user name as BuildClusterConfig would.
-	contextName := e.cluster.Alias
-	if contextName == "" {
-		// Without the actual ARN, we construct it from the cluster name and region.
-		// This matches the format: arn:aws:eks:<region>:<account>:cluster/<name>.
-		// Since we don't have the account ID during cleanup, we use a wildcard approach:
-		// search for any cluster entry that contains the cluster name.
-		// However, the simpler approach is to require the alias for cleanup reliability.
-		// For now, we'll skip removal if we can't determine the context name.
-		log.Debug("EKS cleanup: no alias configured, skipping kubeconfig removal (ARN unknown without API call)")
-		return nil
-	}
-
-	userName := "user-" + e.cluster.Name
-
-	// We need the ARN to remove the cluster entry. Without an API call, we construct
-	// a best-effort match. The cluster ARN key in kubeconfig is set by Execute().
-	// During cleanup we don't have credentials, so we search the kubeconfig for
-	// the cluster name pattern.
+	// We need the ARN to remove the cluster entry. Without an API call, we search
+	// the kubeconfig for an entry matching the cluster name suffix pattern.
+	// This is best-effort since we don't have credentials during cleanup.
 	clusterARN, err := e.findClusterARN(mgr)
 	if err != nil {
 		log.Debug("EKS cleanup: could not determine cluster ARN", "error", err)
 		return nil
 	}
+
+	// Compute context name and user name to match BuildClusterConfig output.
+	contextName := e.cluster.Alias
+	if contextName == "" {
+		// Use the ARN as context name (same default as BuildClusterConfig).
+		contextName = clusterARN
+	}
+
+	userName := "atmos-eks-" + e.cluster.Name + "-" + e.cluster.Region
 
 	if err := mgr.RemoveClusterConfig(clusterARN, contextName, userName); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
@@ -224,10 +218,10 @@ func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, er
 		return "", err
 	}
 
-	// Look for an ARN containing the cluster name.
+	// Look for an ARN ending with "cluster/<name>".
 	suffix := "cluster/" + e.cluster.Name
 	for _, arn := range clusters {
-		if len(arn) >= len(suffix) && arn[len(arn)-len(suffix):] == suffix {
+		if strings.HasSuffix(arn, suffix) {
 			return arn, nil
 		}
 	}
