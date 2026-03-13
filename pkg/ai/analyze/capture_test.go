@@ -9,7 +9,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// redirectToDevNull replaces os.Stdout and os.Stderr with os.DevNull
+// before calling StartCapture, so that tee output does not leak into
+// go test's captured output (which causes intermittent test failures).
+func redirectToDevNull(t *testing.T) {
+	t.Helper()
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	require.NoError(t, err)
+
+	realStdout := os.Stdout
+	realStderr := os.Stderr
+	os.Stdout = devNull
+	os.Stderr = devNull
+	t.Cleanup(func() {
+		os.Stdout = realStdout
+		os.Stderr = realStderr
+		devNull.Close()
+	})
+}
+
 func TestStartCapture_CapturesStdout(t *testing.T) {
+	redirectToDevNull(t)
+
 	cs, err := StartCapture()
 	require.NoError(t, err)
 	t.Cleanup(func() { cs.Stop() })
@@ -24,6 +45,8 @@ func TestStartCapture_CapturesStdout(t *testing.T) {
 }
 
 func TestStartCapture_CapturesStderr(t *testing.T) {
+	redirectToDevNull(t)
+
 	cs, err := StartCapture()
 	require.NoError(t, err)
 	t.Cleanup(func() { cs.Stop() })
@@ -38,6 +61,8 @@ func TestStartCapture_CapturesStderr(t *testing.T) {
 }
 
 func TestStartCapture_CapturesBoth(t *testing.T) {
+	redirectToDevNull(t)
+
 	cs, err := StartCapture()
 	require.NoError(t, err)
 	t.Cleanup(func() { cs.Stop() })
@@ -100,6 +125,8 @@ func TestStartCapture_TeesToOriginalStreams(t *testing.T) {
 }
 
 func TestStartCapture_RestoresStreams(t *testing.T) {
+	redirectToDevNull(t)
+
 	origStdout := os.Stdout
 	origStderr := os.Stderr
 
@@ -113,12 +140,14 @@ func TestStartCapture_RestoresStreams(t *testing.T) {
 
 	cs.Stop()
 
-	// After stop, os.Stdout/os.Stderr should be restored.
+	// After stop, os.Stdout/os.Stderr should be restored to the devNull streams.
 	assert.Equal(t, origStdout, os.Stdout)
 	assert.Equal(t, origStderr, os.Stderr)
 }
 
 func TestStartCapture_DoubleStopIsSafe(t *testing.T) {
+	redirectToDevNull(t)
+
 	cs, err := StartCapture()
 	require.NoError(t, err)
 	t.Cleanup(func() { cs.Stop() })
@@ -136,6 +165,8 @@ func TestStartCapture_DoubleStopIsSafe(t *testing.T) {
 }
 
 func TestStartCapture_EmptyOutput(t *testing.T) {
+	redirectToDevNull(t)
+
 	cs, err := StartCapture()
 	require.NoError(t, err)
 	t.Cleanup(func() { cs.Stop() })

@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -37,9 +36,6 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
 
-	"github.com/cloudposse/atmos/pkg/ai/analyze"
-	"github.com/cloudposse/atmos/pkg/ai/skills"
-	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -63,6 +59,7 @@ import (
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
 	_ "github.com/cloudposse/atmos/cmd/ai"
+	aisetup "github.com/cloudposse/atmos/cmd/ai/setup"
 	_ "github.com/cloudposse/atmos/cmd/ai/skill"
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/aws"
@@ -124,248 +121,6 @@ func parseChdirFromArgs() string {
 // If no --use-version flag is found, it returns an empty string.
 func parseUseVersionFromArgs() string {
 	return parseUseVersionFromArgsInternal(os.Args)
-}
-
-// isAICommand checks if the current command is an "atmos ai" subcommand.
-// We skip AI output analysis for these commands to avoid double processing.
-func isAICommand() bool {
-	return isAICommandInternal(os.Args)
-}
-
-// isAICommandInternal checks if args represent an "atmos ai" command.
-// It skips the program name (args[0]) and flags, then checks if the first
-// positional argument is "ai".
-func isAICommandInternal(args []string) bool {
-	for i, arg := range args {
-		// Skip program name.
-		if i == 0 {
-			continue
-		}
-		// Skip flags.
-		if strings.HasPrefix(arg, "-") {
-			continue
-		}
-		// First positional argument determines the command.
-		return arg == "ai"
-	}
-	return false
-}
-
-// hasAIFlag checks if --ai flag is present in os.Args.
-// This is needed before Cobra parses flags because we set up output capture
-// in Execute() before internal.Execute() runs the command.
-func hasAIFlag() bool {
-	return hasAIFlagInternal(os.Args)
-}
-
-// hasAIFlagInternal checks if --ai flag is present in the provided args.
-// Respects CLI precedence: if --ai or --ai=<value> is explicitly provided, that value wins.
-// Only falls back to ATMOS_AI environment variable when no CLI flag is present.
-func hasAIFlagInternal(args []string) bool {
-	for _, arg := range args {
-		// Stop scanning after bare "--" (end-of-flags delimiter).
-		if arg == "--" {
-			break
-		}
-		// Bare --ai is equivalent to --ai=true.
-		if arg == "--ai" {
-			return true
-		}
-		// Explicit --ai=<value>: parse the boolean to respect --ai=false.
-		if strings.HasPrefix(arg, "--ai=") {
-			val, err := strconv.ParseBool(strings.TrimPrefix(arg, "--ai="))
-			if err != nil {
-				return false
-			}
-			return val
-		}
-	}
-	// Fall back to ATMOS_AI environment variable for CI/CD env-only usage.
-	//nolint:forbidigo // Must use os.Getenv: AI flag is processed before Viper configuration loads.
-	val, err := strconv.ParseBool(os.Getenv("ATMOS_AI"))
-	return err == nil && val
-}
-
-// parseSkillFlag extracts all --skill flag values from os.Args.
-// This is needed before Cobra parses flags because we validate and load skills
-// in Execute() before internal.Execute() runs the command.
-func parseSkillFlag() []string {
-	return parseSkillFlagInternal(os.Args)
-}
-
-// parseSkillFlagInternal extracts all --skill flag values from the provided args.
-// Supports repeated flags (--skill a --skill b) and comma-separated values (--skill a,b).
-// Respects CLI precedence: if --skill is explicitly provided (even as empty), the env var is not consulted.
-// Only falls back to ATMOS_SKILL environment variable when no --skill flag is present.
-func parseSkillFlagInternal(args []string) []string {
-	var result []string
-	flagSeen := false
-	for i, arg := range args {
-		// Stop scanning after bare "--" (end-of-flags delimiter).
-		if arg == "--" {
-			break
-		}
-
-		var value string
-		if arg == "--skill" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			value = args[i+1]
-			flagSeen = true
-		} else if strings.HasPrefix(arg, "--skill=") {
-			value = strings.TrimPrefix(arg, "--skill=")
-			flagSeen = true
-		}
-
-		if value != "" {
-			result = append(result, splitCSV(value)...)
-		}
-	}
-
-	// Fall back to ATMOS_SKILL environment variable only when no --skill CLI flag was provided.
-	if !flagSeen {
-		//nolint:forbidigo // Must use os.Getenv: skill flag is processed before Viper configuration loads.
-		result = splitCSV(os.Getenv("ATMOS_SKILL"))
-	}
-
-	return result
-}
-
-// splitCSV splits a comma-separated string into trimmed, non-empty values.
-func splitCSV(value string) []string {
-	var result []string
-	for _, v := range strings.Split(value, ",") {
-		v = strings.TrimSpace(v)
-		if v != "" {
-			result = append(result, v)
-		}
-	}
-	return result
-}
-
-// loadAndValidateSkills loads the skill registry and validates that all specified skills exist.
-// Returns the skills or a helpful error listing invalid and available skills.
-func loadAndValidateSkills(atmosConfig *schema.AtmosConfiguration, skillNames []string) ([]*skills.Skill, error) {
-	defer perf.Track(nil, "cmd.loadAndValidateSkills")()
-
-	var loader skills.SkillLoader
-	installer, installerErr := marketplace.NewInstaller(pkgversion.Version)
-	if installerErr == nil {
-		loader = installer
-	} else {
-		log.Debug("Marketplace skill loader unavailable, using config-only skills", "error", installerErr)
-	}
-
-	registry, err := skills.LoadSkills(atmosConfig, loader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load skills: %w", err)
-	}
-
-	var validSkills []*skills.Skill
-	var invalidNames []string
-
-	for _, name := range skillNames {
-		skill, err := registry.Get(name)
-		if err != nil {
-			invalidNames = append(invalidNames, name)
-		} else {
-			validSkills = append(validSkills, skill)
-		}
-	}
-
-	if len(invalidNames) > 0 {
-		available := registry.List()
-		names := make([]string, 0, len(available))
-		for _, s := range available {
-			names = append(names, s.Name)
-		}
-
-		builder := errUtils.Build(errUtils.ErrAISkillNotFound).
-			WithExplanationf("The following skills are not installed or configured: %s", strings.Join(invalidNames, ", "))
-
-		if len(names) > 0 {
-			builder = builder.WithHintf("Available skills: %s", strings.Join(names, ", "))
-		} else {
-			builder = builder.WithHint("No skills are installed. Install skills with: atmos ai skill install cloudposse/atmos")
-		}
-
-		builder = builder.WithHint("See https://atmos.tools/ai/agent-skills for more information.")
-
-		return nil, builder.Err()
-	}
-
-	return validSkills, nil
-}
-
-// setupAIAnalysis validates AI configuration, loads skills if specified, and starts output capture.
-// Returns nil captureSession if capture setup fails (caller should disable AI).
-func setupAIAnalysis(atmosConfig *schema.AtmosConfiguration, skillNames []string) (*analyze.CaptureSession, string, error) {
-	defer perf.Track(nil, "cmd.setupAIAnalysis")()
-
-	// Validate AI configuration early to fail fast with helpful errors.
-	if err := analyze.ValidateAIConfig(atmosConfig); err != nil {
-		return nil, "", err
-	}
-
-	// If --skill specified, load and validate all skills.
-	var skillPrompt string
-	if len(skillNames) > 0 {
-		validSkills, err := loadAndValidateSkills(atmosConfig, skillNames)
-		if err != nil {
-			return nil, "", err
-		}
-		// Concatenate all skill system prompts with separator.
-		var prompts []string
-		for _, s := range validSkills {
-			if s.SystemPrompt != "" {
-				prompts = append(prompts, s.SystemPrompt)
-			}
-		}
-		skillPrompt = strings.Join(prompts, "\n\n---\n\n")
-	}
-
-	// Start capturing stdout/stderr while still teeing to the terminal.
-	captureSession, err := analyze.StartCapture()
-	if err != nil {
-		ui.Warning(fmt.Sprintf("Failed to set up AI output capture, continuing without AI analysis: %v", err))
-		return nil, skillPrompt, nil
-	}
-
-	return captureSession, skillPrompt, nil
-}
-
-// buildCommandName reconstructs the command name from os.Args for AI analysis context.
-func buildCommandName() string {
-	return strings.Join(os.Args, " ")
-}
-
-// runAIAnalysis stops the capture session and sends captured output to the AI provider for analysis.
-// When there's an error, it prints the formatted error BEFORE the AI analysis so the user sees
-// the error first, followed by the AI explanation.
-// If skillNames/skillPrompt are non-empty, they are passed to AnalyzeOutput for domain-specific context.
-func runAIAnalysis(atmosConfig *schema.AtmosConfiguration, captureSession *analyze.CaptureSession, cmdErr error, skillNames []string, skillPrompt string) {
-	defer perf.Track(nil, "cmd.runAIAnalysis")()
-
-	stdout, stderrCaptured := captureSession.Stop()
-
-	// If the command failed, print the error to stderr first so it appears before the AI analysis.
-	// Also append it to captured stderr so the AI sees the full error context.
-	if cmdErr != nil {
-		formatted := errUtils.Format(cmdErr, errUtils.DefaultFormatterConfig())
-		_, _ = iolib.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
-
-		if stderrCaptured != "" {
-			stderrCaptured += "\n"
-		}
-		stderrCaptured += formatted
-	}
-
-	analyze.AnalyzeOutput(atmosConfig, &analyze.AnalysisInput{
-		CommandName: buildCommandName(),
-		Stdout:      stdout,
-		Stderr:      stderrCaptured,
-		CmdErr:      cmdErr,
-		SkillNames:  skillNames,
-		SkillPrompt: skillPrompt,
-	})
 }
 
 // parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
@@ -1707,38 +1462,13 @@ func Execute() error {
 	// This separates Atmos flags from pass-through flags BEFORE Cobra parses.
 	preprocessCompatibilityFlags()
 
-	// Check if --ai flag is set and set up output capture.
-	// We parse --ai from os.Args because Cobra hasn't parsed flags yet at this point.
-	// Skip for "atmos ai" commands to avoid double AI processing.
-	aiEnabled := hasAIFlag() && !isAICommand()
-	skillNames := parseSkillFlag()
-	var captureSession *analyze.CaptureSession
-	var skillPrompt string
-
-	// Validate --skill requires --ai.
-	if len(skillNames) > 0 && !aiEnabled {
-		skillList := strings.Join(skillNames, ",")
-		return errUtils.Build(errUtils.ErrAISkillRequiresAIFlag).
-			WithExplanation("The --skill flag provides domain-specific context for AI analysis, but AI analysis is not enabled. Use --skill together with --ai.").
-			WithHintf("Add --ai to enable AI analysis:\n  atmos <command> --ai --skill %s", skillList).
-			WithHintf("Or use environment variables:\n  ATMOS_AI=true ATMOS_SKILL=%s atmos <command>", skillList).
-			Err()
+	// Set up AI output capture if --ai flag is present (flag parsing in cmd/ai,
+	// orchestration in pkg/ai/analyze, skill loading in pkg/ai/skills).
+	aiCtx, aiErr := aisetup.InitAI(&atmosConfig)
+	if aiErr != nil {
+		return aiErr
 	}
-
-	if aiEnabled {
-		var setupErr error
-		captureSession, skillPrompt, setupErr = setupAIAnalysis(&atmosConfig, skillNames)
-		if setupErr != nil {
-			return setupErr
-		}
-		if captureSession == nil {
-			aiEnabled = false
-		} else {
-			// Ensure stdout/stderr are restored even if a panic occurs during command execution.
-			// Stop() is idempotent, so this is safe even when Stop() is also called in runAIAnalysis.
-			defer captureSession.Stop()
-		}
-	}
+	defer aiCtx.Cleanup()
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
@@ -1746,16 +1476,8 @@ func Execute() error {
 
 	telemetry.CaptureCmd(cmd, err)
 
-	// Stop capture and run AI analysis.
-	// runAIAnalysis prints the error BEFORE the AI response so the user sees
-	// the error first, then the AI explanation. After analysis, we exit directly
-	// to prevent main.go from re-printing the error.
-	if aiEnabled && captureSession != nil {
-		runAIAnalysis(&atmosConfig, captureSession, err, skillNames, skillPrompt)
-		if err != nil {
-			// Error was already printed by runAIAnalysis. Exit with proper code.
-			errUtils.Exit(errUtils.GetExitCode(err))
-		}
+	// Run AI analysis on captured output unless this is an "atmos ai" subcommand.
+	if !aisetup.IsAISubcommand(cmd) && aiCtx.RunAnalysis(err) {
 		return nil
 	}
 

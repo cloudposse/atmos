@@ -24,9 +24,14 @@ const (
 	// DefaultAnalysisTimeout is the default timeout for AI analysis requests.
 	defaultAnalysisTimeout = 120
 
-	// MaxOutputLength is the maximum number of characters to send to the AI provider.
-	// This prevents sending excessively large outputs that exceed token limits.
+	// MaxOutputLength is the maximum number of characters of command output (stdout+stderr)
+	// to include in the analysis prompt. Skill prompts and system prompt are added separately.
 	maxOutputLength = 50000
+
+	// PromptOverheadReserve is the character budget reserved for skill prompts, system prompt,
+	// and prompt framing (headers, separators, command name, error text). Output truncation
+	// subtracts this from maxOutputLength to keep the total prompt within reasonable bounds.
+	promptOverheadReserve = 20000
 
 	// Newline constant for string building.
 	newline = "\n"
@@ -183,14 +188,18 @@ func successMessage(skillNames []string) string {
 func buildAnalysisPrompt(input *AnalysisInput) string {
 	defer perf.Track(nil, "analyze.buildAnalysisPrompt")()
 
-	// Truncate output if too large. When both streams have content, split the
-	// budget evenly so the combined output stays within a reasonable limit.
-	outputBudget := maxOutputLength
-	if strings.TrimSpace(input.Stdout) != "" && strings.TrimSpace(input.Stderr) != "" {
-		outputBudget = maxOutputLength / 2 //nolint:mnd // Half budget per stream when both present.
+	// Reserve space for skill prompts, system prompt, and framing, then split
+	// the remaining budget across stdout and stderr.
+	outputBudget := maxOutputLength - len(input.SkillPrompt)
+	if outputBudget < promptOverheadReserve {
+		outputBudget = promptOverheadReserve
 	}
-	stdout := truncateOutput(input.Stdout, outputBudget)
-	stderr := truncateOutput(input.Stderr, outputBudget)
+	perStreamBudget := outputBudget
+	if strings.TrimSpace(input.Stdout) != "" && strings.TrimSpace(input.Stderr) != "" {
+		perStreamBudget = outputBudget / 2 //nolint:mnd // Half budget per stream when both present.
+	}
+	stdout := truncateOutput(input.Stdout, perStreamBudget)
+	stderr := truncateOutput(input.Stderr, perStreamBudget)
 
 	// Skip if there's nothing meaningful to analyze.
 	if strings.TrimSpace(stdout) == "" && strings.TrimSpace(stderr) == "" && input.CmdErr == nil {

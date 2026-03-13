@@ -904,6 +904,7 @@ var (
 	ErrAISkillNotFound              = errors.New("AI skill not found")
 	ErrAISkillAlreadyRegistered     = errors.New("AI skill already registered")
 	ErrAISkillRequiresAIFlag        = errors.New("--skill flag requires --ai")
+	ErrAISkillLoadFailed            = errors.New("failed to load AI skills")
 	ErrAIPromptRequired             = errors.New("prompt is required")
 	ErrAIExecutionFailed            = errors.New("AI execution failed")
 	ErrAISendMessage                = errors.New("failed to send message to AI provider")
