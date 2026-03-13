@@ -67,6 +67,10 @@ const config = {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },
+                    {
+                        from: '/reference/alternatives',
+                        to: '/alternatives'
+                    },
                     // Core concepts main pages moved to top level
                     {from: '/core-concepts/stacks', to: '/stacks'},
                     {from: '/core-concepts/components', to: '/components'},
