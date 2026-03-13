@@ -130,7 +130,7 @@ Successfully authenticated as dev-admin
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 11h59m)
 ```
 
-Integration failures are non-blocking - your identity authentication succeeds even if an integration fails. You can retry integrations separately using [`atmos auth ecr-login`](/cli/commands/auth/ecr-login).
+Integration failures are non-blocking - your identity authentication succeeds even if an integration fails. You can retry integrations separately using [`atmos aws ecr login`](/cli/commands/aws/ecr-login).
 
 See [ECR Authentication Tutorial](/tutorials/ecr-authentication) for detailed configuration examples.
 
@@ -167,6 +167,6 @@ See [Azure Authentication](/tutorials/azure-authentication) for detailed Azure c
 
 ## See Also
 
-- [Auth ECR Login Command](/cli/commands/auth/ecr-login) — Login to AWS ECR registries
+- [AWS ECR Login Command](/cli/commands/aws/ecr-login) — Login to AWS ECR registries
 - [ECR Authentication Tutorial](/tutorials/ecr-authentication) — Step-by-step ECR setup guide
 - [Auth Providers Configuration](/cli/configuration/auth/providers) — Configure AWS SSO, SAML, and OIDC providers (including IAM permissions for identity provisioning)
