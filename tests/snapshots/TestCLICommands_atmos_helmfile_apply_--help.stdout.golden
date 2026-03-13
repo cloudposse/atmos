@@ -25,6 +25,8 @@ GLOBAL FLAGS
       --                        Use double dashes to separate Atmos-specific options from native arguments and flags
                                 for the command.
 
+      --ai                      Enable AI-powered analysis of command output
+
       --base-path string        Base path for Atmos project
 
   -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
@@ -81,6 +83,8 @@ GLOBAL FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
 
   -s, --stack string            The stack flag specifies the environment or configuration set for deployment in Atmos
                                 CLI.
