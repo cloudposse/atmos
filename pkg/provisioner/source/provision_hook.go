@@ -215,22 +215,14 @@ func determineSourceTargetDirectory(
 ) (string, bool, error) {
 	// Check if workdir is enabled.
 	if workdir.IsWorkdirEnabled(componentConfig) {
-		// Get stack name for workdir path.
-		stack, _ := componentConfig["atmos_stack"].(string)
-		if stack == "" {
-			return "", false, errUtils.Build(errUtils.ErrSourceProvision).
-				WithExplanation("Stack name required when workdir is enabled").
-				WithHint("The 'atmos_stack' field is required for workdir provisioning").
-				Err()
+		if workdirPath, ok := workdir.ResolvePath(atmosConfig.BasePath, componentType, component, componentConfig); ok {
+			return workdirPath, true, nil
 		}
-
-		basePath := atmosConfig.BasePath
-		if basePath == "" {
-			basePath = "."
-		}
-
-		workdirPath := workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
-		return workdirPath, true, nil
+		// Workdir is enabled but stack is missing.
+		return "", false, errUtils.Build(errUtils.ErrSourceProvision).
+			WithExplanation("Stack name required when workdir is enabled").
+			WithHint("The 'atmos_stack' field is required for workdir provisioning").
+			Err()
 	}
 
 	// No workdir - use standard component path.

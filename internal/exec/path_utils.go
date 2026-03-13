@@ -10,24 +10,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// computeWorkdirPathIfEnabled computes the workdir path when provision.workdir.enabled
-// is true but provisioners haven't run yet (e.g., during describe component).
-// Returns the path and true if workdir is enabled, or empty string and false.
-func computeWorkdirPathIfEnabled(atmosConfig *schema.AtmosConfiguration, componentType string, info *schema.ConfigAndStacksInfo) (string, bool) {
-	if !provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
-		return "", false
-	}
-	stack, _ := info.ComponentSection["atmos_stack"].(string)
-	if stack == "" {
-		return "", false
-	}
-	basePath := atmosConfig.BasePath
-	if basePath == "" {
-		basePath = "."
-	}
-	return provWorkdir.BuildPath(basePath, componentType, info.FinalComponent, stack, info.ComponentSection), true
-}
-
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
 func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
 	// Check if a provisioner (source or workdir) set a workdir path.
@@ -39,7 +21,7 @@ func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguratio
 
 	// If workdir provisioning is enabled but provisioners haven't run yet
 	// (e.g., during describe component), compute the path deterministically.
-	if path, ok := computeWorkdirPathIfEnabled(atmosConfig, "terraform", info); ok {
+	if path, ok := provWorkdir.ResolvePath(atmosConfig.BasePath, "terraform", info.FinalComponent, info.ComponentSection); ok {
 		return path
 	}
 
@@ -115,7 +97,7 @@ func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration
 
 	// If workdir provisioning is enabled but provisioners haven't run yet
 	// (e.g., during describe component), compute the path deterministically.
-	if path, ok := computeWorkdirPathIfEnabled(atmosConfig, "helmfile", info); ok {
+	if path, ok := provWorkdir.ResolvePath(atmosConfig.BasePath, "helmfile", info.FinalComponent, info.ComponentSection); ok {
 		return path
 	}
 
@@ -189,7 +171,7 @@ func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, 
 
 	// If workdir provisioning is enabled but provisioners haven't run yet
 	// (e.g., during describe component), compute the path deterministically.
-	if path, ok := computeWorkdirPathIfEnabled(atmosConfig, "packer", info); ok {
+	if path, ok := provWorkdir.ResolvePath(atmosConfig.BasePath, "packer", info.FinalComponent, info.ComponentSection); ok {
 		return path
 	}
 

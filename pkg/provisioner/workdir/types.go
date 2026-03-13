@@ -103,6 +103,26 @@ const (
 	WorkdirPathKey = "_workdir_path"
 )
 
+// ResolvePath checks if workdir provisioning is enabled and returns the computed
+// workdir path. Returns the path and true if workdir is enabled, or empty string
+// and false otherwise. This is the canonical way to determine the workdir path
+// without running provisioners (e.g., during describe component).
+func ResolvePath(basePath, componentType, component string, componentConfig map[string]any) (string, bool) {
+	defer perf.Track(nil, "workdir.ResolvePath")()
+
+	if !IsWorkdirEnabled(componentConfig) {
+		return "", false
+	}
+	stack, _ := componentConfig["atmos_stack"].(string)
+	if stack == "" {
+		return "", false
+	}
+	if basePath == "" {
+		basePath = "."
+	}
+	return BuildPath(basePath, componentType, component, stack, componentConfig), true
+}
+
 // BuildPath constructs the canonical workdir path for a component instance.
 // It uses atmos_component (the instance name) from componentConfig when available,
 // falling back to the provided component name. This ensures all provisioners
