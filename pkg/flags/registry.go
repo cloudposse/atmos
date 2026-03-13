@@ -90,9 +90,11 @@ func (r *FlagRegistry) SetCompletionFunc(name string, fn func(*cobra.Command, []
 		return
 	}
 
-	// Only StringFlag supports completion functions currently.
-	if stringFlag, ok := flag.(*StringFlag); ok {
-		stringFlag.CompletionFunc = fn
+	switch f := flag.(type) {
+	case *StringFlag:
+		f.CompletionFunc = fn
+	case *StringSliceFlag:
+		f.CompletionFunc = fn
 	}
 }
 

@@ -74,10 +74,11 @@ const (
 	cwdKey = "cwd"
 )
 
-// parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
-// This is a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer).
+// ParseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
+// This is used both as a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// and for early profile extraction before Cobra parses flags (same pattern as --chdir).
 // Uses pflag's StringSlice parser to handle all syntax variations correctly.
-func parseProfilesFromOsArgs(args []string) []string {
+func ParseProfilesFromOsArgs(args []string) []string {
 	// Create temporary FlagSet just for parsing --profile.
 	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
 	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
@@ -138,9 +139,9 @@ func parseViperProfilesFromEnv(profiles []string) []string {
 	return parsed
 }
 
-// parseProfilesFromEnvString parses comma-separated profiles from an environment variable value.
+// ParseProfilesFromEnvString parses comma-separated profiles from an environment variable value.
 // Trims whitespace and filters empty entries.
-func parseProfilesFromEnvString(envValue string) []string {
+func ParseProfilesFromEnvString(envValue string) []string {
 	var result []string
 	for _, v := range strings.Split(envValue, profileDelimiter) {
 		if trimmed := strings.TrimSpace(v); trimmed != "" {
@@ -155,14 +156,14 @@ func parseProfilesFromEnvString(envValue string) []string {
 func getProfilesFromFallbacks() ([]string, string) {
 	// Fallback: For commands with DisableFlagParsing=true, Cobra never parses flags,
 	// so Viper won't have flag values. Manually parse os.Args as fallback.
-	profiles := parseProfilesFromOsArgs(os.Args)
+	profiles := ParseProfilesFromOsArgs(os.Args)
 	if len(profiles) > 0 {
 		return profiles, "flag"
 	}
 
 	// Check environment variable directly as final fallback.
 	if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" { //nolint:forbidigo
-		result := parseProfilesFromEnvString(envProfiles)
+		result := ParseProfilesFromEnvString(envProfiles)
 		if len(result) > 0 {
 			return result, "env"
 		}
