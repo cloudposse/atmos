@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	stdio "io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -519,9 +520,35 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
+		usingWorkdir := false
 		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 			componentPath = workdirPath
+			usingWorkdir = true
 			log.Debug("Using workdir path", "workdirPath", workdirPath)
+		}
+
+		var initEnvList []string
+		var initOpts []ShellCommandOpt
+
+		if usingWorkdir {
+			// In workdir mode the lock file is intentionally ephemeral -- the workdir is a
+			// fresh, isolated directory that is recreated on every run.  Keep the plugin
+			// cache fully enabled so providers are served from cache, but suppress the
+			// "Incomplete lock file information for providers" warning that Terraform emits
+			// when it installs providers from cache without network-verifiable h1: checksums.
+			// The warning is expected and non-actionable here because the lock file is disposable.
+			initEnvList = info.ComponentEnvList
+			initOpts = []ShellCommandOpt{
+				WithStderrFilter(func(w stdio.Writer) stdio.Writer {
+					return newIncompleteLockWarningFilter(w)
+				}),
+			}
+		} else {
+			// Not in workdir mode: on first init (no lock file yet) disable the
+			// Atmos-managed plugin cache so providers are fetched from the registry and
+			// their h1: checksums are recorded in the new lock file, avoiding the warning.
+			// On subsequent runs the lock file exists and the cache is re-enabled.
+			initEnvList = buildInitEnvList(componentPath, info.ComponentEnvList, pluginCacheEnvList)
 		}
 
 		err = ExecuteShellCommand(
@@ -529,9 +556,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.Command,
 			initCommandWithArguments,
 			componentPath,
-			info.ComponentEnvList,
+			initEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
+			initOpts...,
 		)
 		if err != nil {
 			return err
@@ -837,6 +865,47 @@ func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
 		fmt.Sprintf("TF_PLUGIN_CACHE_DIR=%s", pluginCacheDir),
 		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true",
 	}
+}
+
+// buildInitEnvList returns the environment variable list to use for terraform init.
+// When the dependency lock file does not yet exist in componentPath and Atmos is managing
+// the plugin cache (pluginCacheEnvList is non-empty), the plugin cache env vars are removed
+// from the list. This causes providers to be downloaded directly from the registry on first
+// init, recording h1: checksums in the lock file and avoiding the Terraform warning:
+// "Incomplete lock file information for providers".
+//
+// On subsequent runs the lock file already exists with h1: checksums, so the plugin cache
+// is re-enabled and providers are served from the cache without producing the warning.
+//
+// When pluginCacheEnvList is empty (user manages the plugin cache, or caching is disabled),
+// the original envList is returned unchanged.
+func buildInitEnvList(componentPath string, envList, pluginCacheEnvList []string) []string {
+	if len(pluginCacheEnvList) == 0 {
+		return envList
+	}
+
+	lockFilePath := filepath.Join(componentPath, ".terraform.lock.hcl")
+	if _, err := os.Stat(lockFilePath); err == nil {
+		// Lock file exists – use the normal env list with the plugin cache.
+		return envList
+	}
+
+	// No lock file yet: bypass the Atmos-managed plugin cache so providers are fetched
+	// from the registry and their h1: checksums are written to the new lock file.
+	log.Debug("No dependency lock file found, bypassing plugin cache for terraform init to record h1: checksums")
+
+	pluginCacheVars := make(map[string]struct{}, len(pluginCacheEnvList))
+	for _, v := range pluginCacheEnvList {
+		pluginCacheVars[v] = struct{}{}
+	}
+
+	filtered := make([]string, 0, len(envList))
+	for _, env := range envList {
+		if _, skip := pluginCacheVars[env]; !skip {
+			filtered = append(filtered, env)
+		}
+	}
+	return filtered
 }
 
 // getValidUserPluginCacheDir checks if the user has set a valid TF_PLUGIN_CACHE_DIR.
