@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -2149,4 +2150,87 @@ func TestManager_ResolveProviderConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInitializeIdentities_EmptyKindWithProfile(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"core-root/terraform": {Kind: ""}, // Empty kind - not configured in profile.
+			},
+		},
+		identities: make(map[string]types.Identity),
+		stackInfo: &schema.ConfigAndStacksInfo{
+			ProfilesFromArg: []string{"marketplace"},
+		},
+	}
+
+	err := m.initializeIdentities()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+
+	// Explanation is stored as a detail on the structured error.
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "core-root/terraform")
+	assert.Contains(t, details[0], "is not configured in the")
+	assert.Contains(t, details[0], "marketplace")
+}
+
+func TestInitializeIdentities_EmptyKindWithoutProfile(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"core-root/terraform": {Kind: ""}, // Empty kind - not configured.
+			},
+		},
+		identities: make(map[string]types.Identity),
+		stackInfo:  &schema.ConfigAndStacksInfo{},
+	}
+
+	err := m.initializeIdentities()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "core-root/terraform")
+	assert.Contains(t, details[0], "is not configured")
+	assert.Contains(t, details[0], "Did you forget to specify a profile?")
+}
+
+func TestInitializeIdentities_EmptyKindNilStackInfo(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"core-root/terraform": {Kind: ""},
+			},
+		},
+		identities: make(map[string]types.Identity),
+		stackInfo:  nil,
+	}
+
+	err := m.initializeIdentities()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "Did you forget to specify a profile?")
+}
+
+func TestInitializeIdentities_ValidKindSucceeds(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"mock-identity": {Kind: "mock"},
+			},
+		},
+		identities: make(map[string]types.Identity),
+		stackInfo:  &schema.ConfigAndStacksInfo{},
+	}
+
+	err := m.initializeIdentities()
+	assert.NoError(t, err)
+	assert.Len(t, m.identities, 1)
 }
