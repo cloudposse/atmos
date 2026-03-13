@@ -1,6 +1,7 @@
 package output
 
 import (
+	"os"
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -49,6 +50,17 @@ func (g *defaultBackendGenerator) GenerateBackendIfNeeded(config *ComponentConfi
 			Err()
 	}
 
+	// Create the component directory if it does not exist.
+	// This handles the case where components are vendored and not committed to git,
+	// e.g. when running `atmos describe/list affected` which creates a temp repo
+	// that only contains the git-tracked files but not the vendored components.
+	if err := os.MkdirAll(config.ComponentPath, 0o755); err != nil {
+		return errUtils.Build(errUtils.ErrBackendFileGeneration).
+			WithCause(err).
+			WithExplanationf("Failed to create component directory for %s.", GetComponentInfo(component, stack)).
+			Err()
+	}
+
 	if err := u.WriteToFileAsJSON(backendFileName, backendConfig, filePermission); err != nil {
 		return errUtils.Build(errUtils.ErrBackendFileGeneration).
 			WithCause(err).
@@ -72,6 +84,18 @@ func (g *defaultBackendGenerator) GenerateProvidersIfNeeded(config *ComponentCon
 	log.Debug("Writing provider overrides", "file", providerFileName)
 
 	providerOverrides := generateProviderOverrides(config.Providers, authContext)
+
+	// Create the component directory if it does not exist.
+	// This handles the case where components are vendored and not committed to git,
+	// e.g. when running `atmos describe/list affected` which creates a temp repo
+	// that only contains the git-tracked files but not the vendored components.
+	if err := os.MkdirAll(config.ComponentPath, 0o755); err != nil {
+		return errUtils.Build(errUtils.ErrProviderFileGeneration).
+			WithCause(err).
+			WithExplanationf("Failed to create component directory to write provider override file to %s.", providerFileName).
+			Err()
+	}
+
 	if err := u.WriteToFileAsJSON(providerFileName, providerOverrides, filePermission); err != nil {
 		return errUtils.Build(errUtils.ErrProviderFileGeneration).
 			WithCause(err).
