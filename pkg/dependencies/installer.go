@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry/aqua"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // InstallFunc is the function signature for installing a tool.
@@ -192,42 +193,9 @@ func (i *Installer) resolveConstraints(deps map[string]string) error {
 			continue
 		}
 
-		// Parse the constraint.
-		constraint, err := semver.NewConstraint(version)
+		resolved, err := i.resolveOneConstraint(tool, version)
 		if err != nil {
-			return errUtils.Build(errUtils.ErrDependencyConstraint).
-				WithCause(err).
-				WithExplanationf("Invalid version constraint %q for tool %q", version, tool).
-				Err()
-		}
-
-		// Resolve tool name to owner/repo for the version listing API.
-		owner, repo, err := i.resolver.Resolve(tool)
-		if err != nil {
-			return errUtils.Build(errUtils.ErrDependencyResolution).
-				WithCause(err).
-				WithExplanationf("Cannot resolve tool %q to owner/repo for constraint resolution", tool).
-				Err()
-		}
-
-		// Fetch available versions from the registry.
-		available, err := i.versionLister.GetAvailableVersions(owner, repo)
-		if err != nil {
-			return errUtils.Build(errUtils.ErrDependencyResolution).
-				WithCause(err).
-				WithExplanationf("Failed to fetch available versions for %s/%s", owner, repo).
-				WithHintf("Check your network connection or try specifying a concrete version instead of %q", version).
-				Err()
-		}
-
-		// Find the highest version satisfying the constraint.
-		resolved, err := highestMatch(available, constraint)
-		if err != nil {
-			return errUtils.Build(errUtils.ErrDependencyConstraint).
-				WithCause(err).
-				WithExplanationf("No available version of %s/%s satisfies constraint %q", owner, repo, version).
-				WithHint("Run `atmos toolchain search` to see available versions").
-				Err()
+			return err
 		}
 
 		// Update the map in-place so downstream code uses the concrete version.
@@ -235,6 +203,61 @@ func (i *Installer) resolveConstraints(deps map[string]string) error {
 	}
 
 	return nil
+}
+
+// resolveOneConstraint resolves a single tool's version constraint to the
+// highest concrete version, showing a spinner during the network call.
+func (i *Installer) resolveOneConstraint(tool, version string) (string, error) {
+	defer perf.Track(i.atmosConfig, "dependencies.resolveOneConstraint")()
+
+	// Parse the constraint.
+	constraint, err := semver.NewConstraint(version)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrDependencyConstraint).
+			WithCause(err).
+			WithExplanationf("Invalid version constraint %q for tool %q", version, tool).
+			Err()
+	}
+
+	// Resolve tool name to owner/repo for the version listing API.
+	owner, repo, err := i.resolver.Resolve(tool)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Cannot resolve tool %q to owner/repo for constraint resolution", tool).
+			Err()
+	}
+
+	var resolved string
+	progressMsg := fmt.Sprintf("Resolving `%s/%s` version for constraint `%s`", owner, repo, version)
+	spinnerErr := spinner.ExecWithSpinnerDynamic(progressMsg, func() (string, error) {
+		// Fetch available versions from the registry.
+		available, err := i.versionLister.GetAvailableVersions(owner, repo)
+		if err != nil {
+			return "", errUtils.Build(errUtils.ErrDependencyResolution).
+				WithCause(err).
+				WithExplanationf("Failed to fetch available versions for %s/%s", owner, repo).
+				WithHintf("Check your network connection or try specifying a concrete version instead of %q", version).
+				Err()
+		}
+
+		// Find the highest version satisfying the constraint.
+		resolved, err = highestMatch(available, constraint)
+		if err != nil {
+			return "", errUtils.Build(errUtils.ErrDependencyConstraint).
+				WithCause(err).
+				WithExplanationf("No available version of %s/%s satisfies constraint %q", owner, repo, version).
+				WithHint("Run `atmos toolchain search` to see available versions").
+				Err()
+		}
+
+		return fmt.Sprintf("Resolved `%s` %s → `%s`", tool, version, resolved), nil
+	})
+	if spinnerErr != nil {
+		return "", spinnerErr
+	}
+
+	return resolved, nil
 }
 
 // isConstraint returns true if the version string is a semver constraint
