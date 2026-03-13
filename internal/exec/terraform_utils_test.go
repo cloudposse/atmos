@@ -92,10 +92,9 @@ func TestIsWorkspacesEnabled(t *testing.T) {
 	}
 }
 
-func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
-	// Skip long tests in short mode (this test takes ~26 seconds due to Git operations and Terraform execution)
+func TestExecuteTerraformAffectedWithGraphAndDependents(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~26 seconds due to Git operations and Terraform execution).
 	tests.SkipIfShort(t)
-
 	// Check for valid Git remote URL before running test
 	tests.RequireGitRemoteWithValidURL(t)
 
@@ -139,7 +138,7 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 		CloneTargetRef:    true,
 	}
 
-	err = ExecuteTerraformAffected(&a, &info)
+	err = ExecuteTerraformAffectedWithGraph(&a, &info)
 
 	// Restore stderr before checking error.
 	w.Close()
@@ -1354,11 +1353,13 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 			err := executeTerraformAffectedComponentInDepOrder(
 				tt.info,
 				tt.affectedList,
-				tt.affectedComponent,
-				tt.affectedStack,
-				tt.parentComponent,
-				tt.parentStack,
-				tt.dependents,
+				&affectedDepOrderParams{
+					AffectedComponent: tt.affectedComponent,
+					AffectedStack:     tt.affectedStack,
+					ParentComponent:   tt.parentComponent,
+					ParentStack:       tt.parentStack,
+					Dependents:        tt.dependents,
+				},
 				tt.args,
 			)
 
@@ -1433,17 +1434,96 @@ func BenchmarkExecuteTerraformAffectedComponentInDepOrder(b *testing.B) {
 		err := executeTerraformAffectedComponentInDepOrder(
 			info,
 			affectedList,
-			"test-component",
-			"test-stack",
-			"",
-			"",
-			dependents,
+			&affectedDepOrderParams{
+				AffectedComponent: "test-component",
+				AffectedStack:     "test-stack",
+				Dependents:        dependents,
+			},
 			args,
 		)
 		if err != nil {
 			b.Fatalf("Unexpected error in benchmark: %v", err)
 		}
 	}
+}
+
+func TestLogFuncForDryRun(t *testing.T) {
+	t.Run("dry run returns non-nil function", func(t *testing.T) {
+		fn := logFuncForDryRun(true)
+		assert.NotNil(t, fn)
+	})
+
+	t.Run("non-dry-run returns non-nil function", func(t *testing.T) {
+		fn := logFuncForDryRun(false)
+		assert.NotNil(t, fn)
+	})
+}
+
+func TestShouldProcessDependent(t *testing.T) {
+	affectedList := []schema.Affected{
+		{Component: "vpc", Stack: "dev", StackSlug: "vpc-dev"},
+		{Component: "rds", Stack: "prod", StackSlug: "rds-prod"},
+	}
+
+	t.Run("already included in dependents", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "vpc",
+			Stack:                "dev",
+			StackSlug:            "vpc-dev",
+			IncludedInDependents: true,
+		}
+		assert.False(t, shouldProcessDependent(dep, affectedList, true))
+	})
+
+	t.Run("include dependents flag true", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "app",
+			Stack:                "dev",
+			StackSlug:            "app-dev",
+			IncludedInDependents: false,
+		}
+		assert.True(t, shouldProcessDependent(dep, affectedList, true))
+	})
+
+	t.Run("not included but affected in stack", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "vpc",
+			Stack:                "dev",
+			StackSlug:            "vpc-dev",
+			IncludedInDependents: false,
+		}
+		assert.True(t, shouldProcessDependent(dep, affectedList, false))
+	})
+
+	t.Run("not included and not affected", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "app",
+			Stack:                "staging",
+			StackSlug:            "app-staging",
+			IncludedInDependents: false,
+		}
+		assert.False(t, shouldProcessDependent(dep, affectedList, false))
+	})
+
+	t.Run("empty affected list with include dependents", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "app",
+			Stack:                "dev",
+			StackSlug:            "app-dev",
+			IncludedInDependents: false,
+		}
+		assert.True(t, shouldProcessDependent(dep, nil, true))
+	})
+
+	t.Run("empty affected list without include dependents", func(t *testing.T) {
+		dep := &schema.Dependent{
+			Component:            "app",
+			Stack:                "dev",
+			StackSlug:            "app-dev",
+			IncludedInDependents: false,
+		}
+		assert.False(t, shouldProcessDependent(dep, nil, false))
+	})
 }
 
 func TestParseUploadStatusFlag(t *testing.T) {
