@@ -7,11 +7,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // redirectToDevNull replaces os.Stdout and os.Stderr with os.DevNull
-// before calling StartCapture, so that tee output does not leak into
-// go test's captured output (which causes intermittent test failures).
+// and suppresses the global logger, so that tee output, spinner messages,
+// and log.Error calls do not leak into go test's output (which causes CI failures).
 func redirectToDevNull(t *testing.T) {
 	t.Helper()
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -21,9 +23,15 @@ func redirectToDevNull(t *testing.T) {
 	realStderr := os.Stderr
 	os.Stdout = devNull
 	os.Stderr = devNull
+
+	// Also redirect the logger (it caches its writer at init time,
+	// so changing os.Stderr alone does not suppress log.Error output).
+	log.SetOutput(devNull)
+
 	t.Cleanup(func() {
 		os.Stdout = realStdout
 		os.Stderr = realStderr
+		log.SetOutput(realStderr)
 		devNull.Close()
 	})
 }

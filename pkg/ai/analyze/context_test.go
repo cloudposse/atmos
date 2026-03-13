@@ -122,12 +122,7 @@ func TestContext_RunAnalysis_DisabledReturnsFalse(t *testing.T) {
 
 func TestContext_RunAnalysis_NilContextReturnsFalse(t *testing.T) {
 	var ctx *Context
-	assert.False(t, ctx.Enabled())
-}
-
-func TestBuildCommandName_ReturnsNonEmpty(t *testing.T) {
-	result := BuildCommandName()
-	assert.NotEmpty(t, result)
+	assert.False(t, ctx.RunAnalysis(nil))
 }
 
 func TestBuildCommandNameInternal(t *testing.T) {
@@ -147,7 +142,7 @@ func TestBuildCommandNameInternal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildCommandNameInternal(tt.args)
+			result := buildCommandNameInternal(tt.args)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

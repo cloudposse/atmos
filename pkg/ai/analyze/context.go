@@ -146,11 +146,13 @@ func (c *Context) RunAnalysis(cmdErr error) bool {
 // Stops at the "--" delimiter to avoid leaking native tool arguments (which may contain secrets
 // such as -var, tokens, or credentials passed to terraform/helmfile).
 func BuildCommandName() string {
-	return BuildCommandNameInternal(os.Args)
+	defer perf.Track(nil, "analyze.BuildCommandName")()
+
+	return buildCommandNameInternal(os.Args)
 }
 
-// BuildCommandNameInternal is the testable implementation of BuildCommandName.
-func BuildCommandNameInternal(args []string) string {
+// buildCommandNameInternal is the testable implementation of BuildCommandName.
+func buildCommandNameInternal(args []string) string {
 	var parts []string
 	for _, arg := range args {
 		if arg == "--" {
