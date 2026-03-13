@@ -96,6 +96,10 @@ type OutputOptions struct {
 	// Use this when formatting output for scripts to avoid polluting stdout/stderr.
 	// If an error occurs, captured stderr is included in the error message.
 	QuietMode bool
+	// SkipInit skips terraform init, workspace select, and workspace cleanup.
+	// Use this when the component was just applied and .terraform/ state is already correct.
+	// Only terraform output is executed.
+	SkipInit bool
 }
 
 // quietModeWriter captures output during quiet mode operations.
@@ -196,11 +200,8 @@ func (e *Executor) GetAllOutputs(
 	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
 	defer stopSpinner()
 
-	// Note: skipInit is currently ignored - terraform init is always run to ensure correct state.
-	_ = skipInit
-
 	// Use quiet mode to suppress terraform init/workspace output.
-	opts := &OutputOptions{QuietMode: true}
+	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
 	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts, authManager)
 	if err != nil {
 		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
@@ -325,12 +326,21 @@ func (e *Executor) fetchAndCacheOutputs(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.fetchAndCacheOutputs")()
 
+	// When skipInit is set and no authManager is provided, skip YAML function
+	// processing. YAML functions like !terraform.state need credentials that
+	// may not be available in PostRunE context. We only need the component path
+	// and workspace info to run terraform output.
+	processYamlFunctions := true
+	if opts != nil && opts.SkipInit && authManager == nil {
+		processYamlFunctions = false
+	}
+
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
-		ProcessYamlFunctions: true,
+		ProcessYamlFunctions: processYamlFunctions,
 		AuthManager:          authManager,
 	})
 	if err != nil {
@@ -423,17 +433,23 @@ func (e *Executor) execute(
 		}
 	}
 
-	// Step 8: Clean workspace and run terraform init.
-	workspaceMgr := &defaultWorkspaceManager{}
-	workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
+	// Step 8: Clean workspace and run terraform init (skipped when SkipInit is set).
+	// SkipInit is used when the component was just applied and .terraform/ state
+	// is already correct — re-initializing would require auth credentials that
+	// may not be available in PostRunE context.
+	skipInit := opts != nil && opts.SkipInit
+	if !skipInit {
+		workspaceMgr := &defaultWorkspaceManager{}
+		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
 
-	if err := e.runInit(ctx, runner, config, component, stack, stderrCapture); err != nil {
-		return nil, err
-	}
+		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture); err != nil {
+			return nil, err
+		}
 
-	// Step 9: Ensure workspace exists and is selected.
-	if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
-		return nil, err
+		// Step 9: Ensure workspace exists and is selected.
+		if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
+			return nil, err
+		}
 	}
 
 	// Step 10: Execute terraform output.

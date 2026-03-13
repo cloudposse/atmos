@@ -1,0 +1,261 @@
+---
+title: GitHub Actions
+sidebar_label: GitHub Actions
+description: Native CI integration with GitHub Actions workflows, permissions, and matrix strategy
+id: github-actions
+slug: /ci/github-actions
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Atmos auto-detects GitHub Actions and activates native CI features. Add the `--ci` flag to your
+Terraform commands and get job summaries, status checks, and output variables with zero configuration.
+</Intro>
+
+<Experimental />
+
+## Permissions
+
+Different CI features require different GitHub Actions permissions. Add only what you need:
+
+```yaml
+permissions:
+  id-token: write       # Required: OIDC authentication
+  contents: read        # Required: Checkout repository
+  checks: write         # Optional: Status checks
+  pull-requests: write  # Optional: PR comments
+```
+
+| Permission | Required | Enables |
+|------------|----------|---------|
+| `id-token: write` | Yes | OIDC authentication via [atmos auth](/stacks/auth) for AWS, Azure, GCP |
+| `contents: read` | Yes | Checkout repository code |
+| `checks: write` | No | Status checks showing "Plan in progress" / "Plan complete" |
+| `pull-requests: write` | No | PR comments with plan summaries |
+
+## Minimal Workflow
+
+Job summaries and output variables (no status checks or PR comments):
+
+```yaml
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ATMOS_PROFILE: ci
+      ATMOS_IDENTITY: plat-dev/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Plan
+        run: atmos terraform plan mycomponent -s dev-us-east-1
+```
+
+## Full-Featured Workflow
+
+Status checks + PR comments + job summaries:
+
+```yaml
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      checks: write
+      pull-requests: write
+    env:
+      ATMOS_PROFILE: ci
+      ATMOS_IDENTITY: plat-dev/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Plan
+        run: atmos terraform plan mycomponent -s dev-us-east-1
+```
+
+## Matrix Strategy
+
+Use `atmos describe affected` to dynamically plan all affected components:
+
+```yaml
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.affected.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Get Affected Components
+        id: affected
+        run: echo "matrix=$(atmos describe affected --format=matrix)" >> $GITHUB_OUTPUT
+
+  plan:
+    needs: affected
+    if: ${{ needs.affected.outputs.matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ATMOS_PROFILE: ci
+      ATMOS_IDENTITY: plat-dev/admin
+    strategy:
+      matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Plan
+        run: atmos terraform plan ${{ matrix.component }} -s ${{ matrix.stack }}
+```
+
+## Deploy Workflow
+
+The `deploy` command provides a complete CI-native apply workflow with plan verification:
+
+```yaml
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform plan ${{ matrix.component }} -s ${{ matrix.stack }}
+
+  deploy:
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform deploy ${{ matrix.component }} -s ${{ matrix.stack }}
+```
+
+The deploy step automatically:
+1. Downloads the stored planfile from the plan step
+2. Generates a fresh plan and compares it against the stored plan
+3. Fails with a drift error if the plans don't match
+4. Applies the verified plan if they match
+
+## Authentication
+
+Use [profiles](/cli/configuration/profiles) and [auth](/stacks/auth) with OIDC for secure, keyless authentication:
+
+<File title="profiles/ci/auth.yaml">
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-2
+      spec:
+        audience: sts.amazonaws.com
+
+  identities:
+    plat-dev/admin:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/acme-plat-gbl-dev-terraform
+```
+</File>
+
+Then set the profile and identity in your workflow:
+
+```yaml
+env:
+  ATMOS_PROFILE: ci
+  ATMOS_IDENTITY: plat-dev/admin
+```
+
+## Output Variables
+
+When CI mode is enabled, Atmos writes plan/apply results to `$GITHUB_OUTPUT` for use in downstream jobs:
+
+| Variable | Description |
+|----------|-------------|
+| `has_changes` | Whether the plan has any changes (`true`/`false`) |
+| `has_additions` | Whether the plan creates resources (`true`/`false`) |
+| `has_destructions` | Whether the plan destroys resources (`true`/`false`) |
+| `plan_summary` | Human-readable plan summary |
+| `artifact_key` | Planfile storage key (when storage is configured) |
+| `output_*` | All terraform outputs prefixed with `output_` |
+| `success` | Whether the operation succeeded (`true`/`false`) |
+
+## Status Checks
+
+When `ci.checks.enabled: true`, Atmos posts commit status checks:
+
+**While running:**
+```
+● Atmos  Plan in progress — vpc in plat-ue2-dev
+```
+
+**When complete:**
+```
+✓ Atmos  Plan complete — 3 to add, 1 to change, 2 to destroy
+```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ATMOS_CI` | Explicitly enable CI mode (`true`/`false`) |
+| `CI` | Standard CI environment variable (set by most CI providers) |
+| `GITHUB_ACTIONS` | Set by GitHub Actions runner |
+| `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API token (required for status checks and PR comments) |
+| `GITHUB_OUTPUT` | File path for CI output variables (set by GitHub Actions) |
+| `GITHUB_STEP_SUMMARY` | File path for job summaries (set by GitHub Actions) |
+
+## Local Testing
+
+Test CI output locally:
+
+```bash
+# Write summary to a file
+export ATMOS_CI_SUMMARY=/tmp/summary.md
+atmos terraform plan mycomponent -s dev --ci
+cat /tmp/summary.md
+
+# Force CI mode to see output
+atmos terraform plan mycomponent -s dev --ci
+```
+
+## Related
+
+- [Native CI Overview](/ci) - Feature overview
+- [CI Configuration](/cli/configuration/ci) - Full configuration reference
+- [Job Summaries](/ci/job-summaries) - Summary format and customization
+- [Planfile Storage](/ci/planfile-storage) - Store and verify planfiles
+- [GitHub Actions (Legacy)](/integrations/github-actions) - Community GitHub Actions
