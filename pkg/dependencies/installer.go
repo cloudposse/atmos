@@ -39,15 +39,23 @@ type VersionLister interface {
 	GetAvailableVersions(owner, repo string) ([]string, error)
 }
 
+// InstalledVersionLister lists locally installed versions for a tool.
+// Used to check if an installed version already satisfies a constraint
+// before making a network call to resolve it.
+type InstalledVersionLister interface {
+	ListInstalledVersions(owner, repo string) ([]string, error)
+}
+
 // Installer handles automatic tool installation.
 type Installer struct {
-	atmosConfig      *schema.AtmosConfiguration
-	resolver         toolchain.ToolResolver
-	installFunc      InstallFunc
-	batchInstallFunc BatchInstallFunc
-	fileExistsFunc   func(path string) bool
-	binaryPathFinder BinaryPathFinder
-	versionLister    VersionLister
+	atmosConfig            *schema.AtmosConfiguration
+	resolver               toolchain.ToolResolver
+	installFunc            InstallFunc
+	batchInstallFunc       BatchInstallFunc
+	fileExistsFunc         func(path string) bool
+	binaryPathFinder       BinaryPathFinder
+	versionLister          VersionLister
+	installedVersionLister InstalledVersionLister
 }
 
 // InstallerOption is a functional option for configuring Installer.
@@ -107,6 +115,15 @@ func WithVersionLister(lister VersionLister) InstallerOption {
 	}
 }
 
+// WithInstalledVersionLister sets a custom installed version lister (for testing).
+func WithInstalledVersionLister(lister InstalledVersionLister) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithInstalledVersionLister")()
+
+	return func(i *Installer) {
+		i.installedVersionLister = lister
+	}
+}
+
 // NewInstaller creates a new tool installer.
 func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOption) *Installer {
 	defer perf.Track(nil, "dependencies.NewInstaller")()
@@ -124,13 +141,14 @@ func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOptio
 	tcInstaller := toolchain.NewInstallerWithBinDir(binDir)
 
 	inst := &Installer{
-		atmosConfig:      atmosConfig,
-		resolver:         tcInstaller.GetResolver(),
-		installFunc:      toolchain.RunInstall,
-		batchInstallFunc: toolchain.RunInstallBatch,
-		fileExistsFunc:   fileExists,
-		binaryPathFinder: tcInstaller, // Uses FindBinaryPath() for proper binary detection.
-		versionLister:    aqua.NewAquaRegistry(),
+		atmosConfig:            atmosConfig,
+		resolver:               tcInstaller.GetResolver(),
+		installFunc:            toolchain.RunInstall,
+		batchInstallFunc:       toolchain.RunInstallBatch,
+		fileExistsFunc:         fileExists,
+		binaryPathFinder:       tcInstaller, // Uses FindBinaryPath() for proper binary detection.
+		versionLister:          aqua.NewAquaRegistry(),
+		installedVersionLister: tcInstaller, // Uses ListInstalledVersions() for local cache check.
 	}
 
 	// Apply options.
@@ -185,6 +203,10 @@ func (i *Installer) EnsureTools(dependencies map[string]string) error {
 // resolveConstraints replaces semver constraint strings in the dependency map
 // with the highest concrete version that satisfies each constraint.
 // For example, "^1.10.0" might resolve to "1.10.3".
+//
+// Fast path: if a locally installed version already satisfies the constraint,
+// it is used without any network call. Only when no local match exists does
+// the method fall back to querying available versions from the registry.
 func (i *Installer) resolveConstraints(deps map[string]string) error {
 	defer perf.Track(i.atmosConfig, "dependencies.resolveConstraints")()
 
@@ -193,6 +215,13 @@ func (i *Installer) resolveConstraints(deps map[string]string) error {
 			continue
 		}
 
+		// Fast path: check if an installed version satisfies the constraint.
+		if resolved, found := i.findInstalledMatch(tool, version); found {
+			deps[tool] = resolved
+			continue
+		}
+
+		// Slow path: resolve via network.
 		resolved, err := i.resolveOneConstraint(tool, version)
 		if err != nil {
 			return err
@@ -203,6 +232,41 @@ func (i *Installer) resolveConstraints(deps map[string]string) error {
 	}
 
 	return nil
+}
+
+// findInstalledMatch checks if any locally installed version of the tool
+// satisfies the given constraint. Returns the highest matching version and
+// true, or ("", false) if no installed version matches.
+func (i *Installer) findInstalledMatch(tool, constraintStr string) (string, bool) {
+	defer perf.Track(i.atmosConfig, "dependencies.findInstalledMatch")()
+
+	constraint, err := semver.NewConstraint(constraintStr)
+	if err != nil {
+		return "", false
+	}
+
+	owner, repo, err := i.resolver.Resolve(tool)
+	if err != nil {
+		return "", false
+	}
+
+	installed, err := i.installedVersionLister.ListInstalledVersions(owner, repo)
+	if err != nil || len(installed) == 0 {
+		return "", false
+	}
+
+	// Find the highest installed version satisfying the constraint.
+	resolved, err := highestMatch(installed, constraint)
+	if err != nil {
+		return "", false
+	}
+
+	// Verify the binary actually exists (directory might be empty/corrupt).
+	if _, err := i.binaryPathFinder.FindBinaryPath(owner, repo, resolved); err != nil {
+		return "", false
+	}
+
+	return resolved, true
 }
 
 // resolveOneConstraint resolves a single tool's version constraint to the
