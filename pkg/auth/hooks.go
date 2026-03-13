@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -100,10 +101,16 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	if err == nil && name != "" {
 		return name, nil
 	}
+	if err != nil && !errors.Is(err, errUtils.ErrNoDefaultIdentity) {
+		return "", err
+	}
 
 	// Fallback: if no default identity, use first entry in needs as primary.
 	authConfig, decodeErr := decodeAuthConfigFromStack(stackInfo)
-	if decodeErr == nil && len(authConfig.Needs) > 0 {
+	if decodeErr != nil {
+		return "", decodeErr
+	}
+	if len(authConfig.Needs) > 0 {
 		log.Debug("No default identity configured, using first entry from auth.needs as primary", identityKey, authConfig.Needs[0])
 		return authConfig.Needs[0], nil
 	}
@@ -163,6 +170,12 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 // Failures are non-fatal: errors are logged as warnings but don't fail the hook.
 // This ensures all needed profiles exist in the shared credentials file for Terraform
 // components that use multiple AWS provider aliases (e.g., hub-spoke networking).
+//
+// TODO: Azure credentials are keyed by provider name, not identity. If two identities
+// share the same Azure provider name, the second will overwrite the first. AWS merges
+// profiles into INI sections and GCP isolates by directory, so they handle this correctly.
+// Consider adopting a per-identity storage strategy for Azure if multi-identity Azure
+// support becomes a requirement.
 func authenticateAdditionalIdentities(ctx context.Context, authManager types.AuthManager,
 	primaryIdentity string, stackInfo *schema.ConfigAndStacksInfo,
 ) {
