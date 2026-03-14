@@ -579,7 +579,8 @@ func getFileFolderDependenciesFromLegacyFormat(settingsSection map[string]any) [
 				Kind: "file",
 				Path: dep.File,
 			})
-		} else if dep.Folder != "" {
+		}
+		if dep.Folder != "" {
 			result = append(result, schema.ComponentDependency{
 				Kind: "folder",
 				Path: dep.Folder,

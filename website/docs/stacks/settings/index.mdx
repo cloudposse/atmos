@@ -146,19 +146,25 @@ settings:
       policy_path: "policies/vpc.rego"
 ```
 
-### Component Dependencies
+### Component Dependencies (Legacy)
 
-Define dependencies between components using `depends_on`:
+Define dependencies between components using the legacy `depends_on` format:
 
 ```yaml
 settings:
   depends_on:
-    - component: vpc
-    - component: security-groups
+    1:
+      component: vpc
+    2:
+      component: security-groups
       namespace: "{{ .namespace }}"
 ```
 
-For detailed dependency configuration, see [Component Dependencies](/stacks/dependencies/components).
+:::tip Recommended
+Use the new [`dependencies.components`](/stacks/dependencies/components) format instead.
+:::
+
+For legacy dependency configuration, see [depends_on](/stacks/settings/depends_on).
 
 ## Example: Multi-Level Settings
 

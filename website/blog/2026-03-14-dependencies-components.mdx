@@ -37,7 +37,7 @@ components:
 - **Cross-type dependencies**: Terraform components can depend on Helmfile components using the `kind` field
 - **File/folder watching**: Trigger rebuilds when config files change with `kind: file` or `kind: folder`
 - **Template support**: Dynamic stack references with Go templates
-- **Inheritance**: Dependencies are appended during stack inheritance (not replaced)
+- **Inheritance**: Dependencies are replaced during stack inheritance by default, or appended when `list_merge_strategy: append` is configured
 
 ### Cross-Type Dependencies
 

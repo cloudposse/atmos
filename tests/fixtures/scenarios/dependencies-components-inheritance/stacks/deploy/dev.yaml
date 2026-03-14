@@ -1,5 +1,5 @@
 # Dev stack that imports base and adds its own dependencies.
-# Tests that child dependencies are APPENDED to parent dependencies.
+# Tests that child dependencies REPLACE parent dependencies (default behavior).
 import:
   - catalog/base
 
@@ -19,7 +19,7 @@ components:
 
     # VPC inherits base dependencies AND adds its own.
     vpc:
-      # Child dependencies are appended to parent.
+      # Child dependencies replace parent (base.yaml deps are NOT inherited).
       dependencies:
         components:
           - component: network-baseline

@@ -236,7 +236,7 @@ dependencies:
 
 ## Related Documentation
 
-- [Component Dependencies User Guide](/stacks/dependencies/components)
-- [describe dependents](/cli/commands/describe/dependents)
-- [describe affected](/cli/commands/describe/affected)
+- Component Dependencies User Guide — `website/docs/stacks/dependencies/components.mdx`
+- describe dependents — `website/docs/cli/commands/describe/dependents.mdx`
+- describe affected — `website/docs/cli/commands/describe/affected.mdx`
 - [Tool Dependencies Integration](./tool-dependencies-integration.md)

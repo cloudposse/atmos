@@ -66,7 +66,7 @@ type Dependencies struct {
     // Components lists component dependencies that must be applied before this component.
     // This is the recommended location for component dependencies (replaces settings.depends_on).
     // Uses list format with append merge behavior (child lists extend parent lists).
-    Components []Context `yaml:"components,omitempty" json:"components,omitempty" mapstructure:"components"`
+    Components []ComponentDependency `yaml:"components,omitempty" json:"components,omitempty" mapstructure:"components"`
 }
 ```
 
@@ -82,7 +82,7 @@ dependencies:
   components:
     - component: vpc
     - component: rds
-      stage: prod
+      stack: tenant1-ue1-prod
 ```
 
 Component dependencies define execution order and are used by:
@@ -95,7 +95,7 @@ Component dependencies define execution order and are used by:
 - Uses append merge behavior (child lists extend parent lists)
 - Located under `dependencies` alongside tool dependencies
 
-See the [Component Dependencies documentation](/stacks/dependencies/components) for detailed usage.
+See the Component Dependencies documentation (`website/docs/stacks/dependencies/components.mdx`) for detailed usage.
 
 **Usage in Stack Configuration:**
 
@@ -197,9 +197,10 @@ Before execution:
 ```go
 package schema
 
-// Dependencies declares required tools and their versions.
+// Dependencies declares required tools and component dependencies.
 type Dependencies struct {
-	Tools map[string]string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
+	Tools      map[string]string     `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
+	Components []ComponentDependency `yaml:"components,omitempty" json:"components,omitempty" mapstructure:"components"`
 }
 ```
 
