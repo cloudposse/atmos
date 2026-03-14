@@ -25,7 +25,7 @@ impossible to use Atmos auth, `!terraform.state`, or Azure console features with
 
 A user reports that `!terraform.state` returns:
 
-```
+```text
 failed to get blob from Azure Blob Storage: Get "https://redacted.blob.core.windows.net/redacted/tfstate"
 dial tcp: lookup redacted.blob.core.windows.net: no such host.
 ```

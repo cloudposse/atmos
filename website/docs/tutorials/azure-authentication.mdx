@@ -89,7 +89,8 @@ auth:
 1. Atmos displays a device code (e.g., "WDDD-HRQV")
 2. Browser opens to Microsoft's device login page
 3. You enter the code and sign in (with MFA if configured)
-4. Atmos receives 3 token scopes:
+4. Atmos receives 3 token scopes (shown here for Azure Commercial; sovereign clouds use their
+   [cloud-specific scopes](#missing-token-scopes) automatically):
    - `https://management.azure.com/.default` (Azure Resource Manager)
    - `https://graph.microsoft.com/.default` (Azure AD operations)
    - `https://vault.azure.net/.default` (Azure KeyVault operations)
