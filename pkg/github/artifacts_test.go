@@ -327,9 +327,9 @@ func TestArtifactFetcherGetPRHeadSHA_APIError(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-// --- Mock-based unit tests for findSuccessfulWorkflowRun ---.
+// --- Mock-based unit tests for findCompletedWorkflowRun ---.
 
-func TestFindSuccessfulWorkflowRun_MatchesCorrectWorkflow(t *testing.T) {
+func TestFindCompletedWorkflowRun_MatchesCorrectWorkflow(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -362,7 +362,7 @@ func TestFindSuccessfulWorkflowRun_MatchesCorrectWorkflow(t *testing.T) {
 		Return(runs, nil, nil)
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	result, err := findCompletedWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -370,21 +370,24 @@ func TestFindSuccessfulWorkflowRun_MatchesCorrectWorkflow(t *testing.T) {
 	assert.Equal(t, runStartedAt, result.RunStartedAt)
 }
 
-func TestFindSuccessfulWorkflowRun_IgnoresNonSuccessConclusion(t *testing.T) {
+func TestFindCompletedWorkflowRun_AcceptsFailedConclusion(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockActions := NewMockActionsService(ctrl)
 
+	runStartedAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
 	workflowRunName := "Tests"
 	failure := "failure"
+	runID := int64(12345)
 
 	runs := &github.WorkflowRuns{
 		WorkflowRuns: []*github.WorkflowRun{
 			{
-				Name:       &workflowRunName,
-				Conclusion: &failure,
-				ID:         github.Int64(12345),
+				Name:         &workflowRunName,
+				Conclusion:   &failure,
+				ID:           &runID,
+				RunStartedAt: &github.Timestamp{Time: runStartedAt},
 			},
 		},
 	}
@@ -394,14 +397,16 @@ func TestFindSuccessfulWorkflowRun_IgnoresNonSuccessConclusion(t *testing.T) {
 		Return(runs, nil, nil)
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	result, err := findCompletedWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
 
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.ErrorIs(t, err, ErrNoWorkflowRunFound)
+	// A failed workflow run should still be accepted — the build artifact
+	// may exist even if other jobs (e.g., Windows tests) failed.
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, int64(12345), result.ID)
 }
 
-func TestFindSuccessfulWorkflowRun_NoMatchingRuns(t *testing.T) {
+func TestFindCompletedWorkflowRun_NoMatchingRuns(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -416,14 +421,14 @@ func TestFindSuccessfulWorkflowRun_NoMatchingRuns(t *testing.T) {
 		Return(runs, nil, nil)
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	result, err := findCompletedWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, ErrNoWorkflowRunFound)
 }
 
-func TestFindSuccessfulWorkflowRun_APIError(t *testing.T) {
+func TestFindCompletedWorkflowRun_APIError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -434,7 +439,7 @@ func TestFindSuccessfulWorkflowRun_APIError(t *testing.T) {
 		Return(nil, nil, errors.New("API error"))
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	result, err := findCompletedWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -937,7 +942,7 @@ func TestArtifactFetcherGetSHAArtifactInfo_NoArtifactError(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoArtifactFound)
 }
 
-func TestFindSuccessfulWorkflowRun_NilWorkflowRuns(t *testing.T) {
+func TestFindCompletedWorkflowRun_NilWorkflowRuns(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -949,7 +954,7 @@ func TestFindSuccessfulWorkflowRun_NilWorkflowRuns(t *testing.T) {
 		Return(nil, nil, nil)
 
 	ctx := context.Background()
-	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+	result, err := findCompletedWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
