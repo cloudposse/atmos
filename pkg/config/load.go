@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -81,6 +82,7 @@ const (
 func ParseProfilesFromOsArgs(args []string) []string {
 	// Create temporary FlagSet just for parsing --profile.
 	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)                    // Suppress usage/error output from leaking to stderr.
 	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
 
 	// Register profile flag using pflag's StringSlice (handles comma-separated values).
