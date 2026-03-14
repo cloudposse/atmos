@@ -66,7 +66,8 @@ var cloudEnvironments = map[string]*CloudEnvironment{
 var PublicCloud = cloudEnvironments["public"]
 
 // GetCloudEnvironment returns the endpoint set for the given cloud name.
-// Returns the "public" environment if name is empty or unknown.
+// Returns the "public" environment if name is empty. Unknown non-empty values
+// are rejected by ValidateCloudEnvironment before calling this function.
 func GetCloudEnvironment(name string) *CloudEnvironment {
 	if env, ok := cloudEnvironments[name]; ok {
 		return env

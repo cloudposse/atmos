@@ -554,12 +554,29 @@ func TestParseAzureCLITime(t *testing.T) {
 	}
 }
 
+func TestCLIProvider_SetRealm(t *testing.T) {
+	p := &cliProvider{
+		cloudEnv: azureCloud.GetCloudEnvironment(""),
+	}
+	p.SetRealm("test-realm")
+	assert.Equal(t, "test-realm", p.realm)
+}
+
+func TestCLIProvider_Paths(t *testing.T) {
+	p := &cliProvider{
+		cloudEnv: azureCloud.GetCloudEnvironment(""),
+	}
+	paths, err := p.Paths()
+	require.NoError(t, err)
+	assert.Empty(t, paths, "CLI provider should return empty paths")
+}
+
 func TestCLIProvider_Environment_SovereignCloud(t *testing.T) {
 	tests := []struct {
-		name             string
-		cloudEnvName     string
-		expectedEnvVars  map[string]string
-		unexpectedEnvVar string
+		name              string
+		cloudEnvName      string
+		expectedEnvVars   map[string]string
+		unexpectedEnvVars []string
 	}{
 		{
 			name:         "usgovernment sets ARM_ENVIRONMENT",
@@ -578,14 +595,19 @@ func TestCLIProvider_Environment_SovereignCloud(t *testing.T) {
 			},
 		},
 		{
-			name:             "public does not set ARM_ENVIRONMENT",
-			cloudEnvName:     "public",
-			unexpectedEnvVar: "ARM_ENVIRONMENT",
+			name:              "public does not set sovereign env vars",
+			cloudEnvName:      "public",
+			unexpectedEnvVars: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
 		},
 		{
-			name:             "empty defaults to public, no ARM_ENVIRONMENT",
-			cloudEnvName:     "",
-			unexpectedEnvVar: "ARM_ENVIRONMENT",
+			name:              "empty defaults to public, no sovereign env vars",
+			cloudEnvName:      "",
+			unexpectedEnvVars: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
+		},
+		{
+			name:              "unknown defaults to public, no sovereign env vars",
+			cloudEnvName:      "unknown-cloud",
+			unexpectedEnvVars: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
 		},
 	}
 
@@ -605,9 +627,9 @@ func TestCLIProvider_Environment_SovereignCloud(t *testing.T) {
 				assert.Equal(t, v, env[k], "Expected %s=%s", k, v)
 			}
 
-			if tt.unexpectedEnvVar != "" {
-				_, exists := env[tt.unexpectedEnvVar]
-				assert.False(t, exists, "Expected %s to not be set", tt.unexpectedEnvVar)
+			for _, k := range tt.unexpectedEnvVars {
+				_, exists := env[k]
+				assert.False(t, exists, "Expected %s to not be set", k)
 			}
 		})
 	}

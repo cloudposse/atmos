@@ -1493,3 +1493,85 @@ func TestResolveUsername(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateAzureCLIFiles(t *testing.T) {
+	t.Run("non-Azure credentials returns nil", func(t *testing.T) {
+		// Pass a non-Azure credential type.
+		err := UpdateAzureCLIFiles(nil, "tenant", "sub", "")
+		assert.NoError(t, err)
+	})
+
+	t.Run("invalid token returns nil gracefully", func(t *testing.T) {
+		creds := &types.AzureCredentials{
+			AccessToken: "not-a-jwt",
+		}
+		err := UpdateAzureCLIFiles(creds, "tenant", "sub", "")
+		assert.NoError(t, err, "Invalid token should return nil (non-fatal)")
+	})
+
+	t.Run("valid token updates CLI files", func(t *testing.T) {
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid": "user-oid-123",
+			"upn": "admin@contoso.com",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:    accessToken,
+			Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:       "tenant-abc",
+			SubscriptionID: "sub-def",
+		}
+
+		err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "")
+		assert.NoError(t, err)
+
+		// Verify files were created in home directory.
+		home, _ := os.UserHomeDir()
+		msalPath := filepath.Join(home, ".azure", "msal_token_cache.json")
+		profilePath := filepath.Join(home, ".azure", "azureProfile.json")
+		_, msalErr := os.Stat(msalPath)
+		_, profileErr := os.Stat(profilePath)
+		assert.NoError(t, msalErr, "MSAL cache should exist")
+		assert.NoError(t, profileErr, "Azure profile should exist")
+	})
+
+	t.Run("sovereign cloud passes correct env name", func(t *testing.T) {
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid": "gov-oid-456",
+			"upn": "admin@gov.onmicrosoft.us",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:    accessToken,
+			Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:       "gov-tenant",
+			SubscriptionID: "gov-sub",
+		}
+
+		err := UpdateAzureCLIFiles(creds, "gov-tenant", "gov-sub", "usgovernment")
+		assert.NoError(t, err)
+	})
+
+	t.Run("service principal with OIDC updates entries", func(t *testing.T) {
+		now := time.Now().UTC()
+		accessToken := createTestJWT(map[string]interface{}{
+			"oid":   "sp-oid-789",
+			"appid": "sp-client-id",
+		})
+
+		creds := &types.AzureCredentials{
+			AccessToken:        accessToken,
+			Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
+			TenantID:           "sp-tenant",
+			SubscriptionID:     "sp-sub",
+			ClientID:           "sp-client-id",
+			IsServicePrincipal: true,
+			FederatedToken:     "federated-token-value",
+		}
+
+		err := UpdateAzureCLIFiles(creds, "sp-tenant", "sp-sub", "")
+		assert.NoError(t, err)
+	})
+}

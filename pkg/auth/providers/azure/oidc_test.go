@@ -1347,44 +1347,51 @@ func TestOIDCProvider_FetchGitHubActionsToken_URLValidation(t *testing.T) {
 }
 
 func TestOIDCProvider_SovereignCloudEndpoints(t *testing.T) {
-	t.Run("US government token endpoint", func(t *testing.T) {
-		provider := &oidcProvider{
-			name:          "test-oidc",
-			tenantID:      "gov-tenant-123",
-			clientID:      "client-456",
-			cloudEnv:      azureCloud.GetCloudEnvironment("usgovernment"),
-			tokenEndpoint: "",
-		}
-
-		endpoint := provider.getTokenEndpoint()
-		assert.Equal(t, "https://login.microsoftonline.us/gov-tenant-123/oauth2/v2.0/token", endpoint)
-	})
-
-	t.Run("China cloud token endpoint", func(t *testing.T) {
-		provider := &oidcProvider{
-			name:          "test-oidc",
-			tenantID:      "cn-tenant-456",
-			clientID:      "client-789",
-			cloudEnv:      azureCloud.GetCloudEnvironment("china"),
-			tokenEndpoint: "",
-		}
-
-		endpoint := provider.getTokenEndpoint()
-		assert.Equal(t, "https://login.chinacloudapi.cn/cn-tenant-456/oauth2/v2.0/token", endpoint)
-	})
-
-	t.Run("custom endpoint overrides cloud environment", func(t *testing.T) {
-		provider := &oidcProvider{
-			name:          "test-oidc",
+	tests := []struct {
+		name          string
+		tenantID      string
+		clientID      string
+		cloudEnvName  string
+		tokenEndpoint string
+		expected      string
+	}{
+		{
+			name:         "US government token endpoint",
+			tenantID:     "gov-tenant-123",
+			clientID:     "client-456",
+			cloudEnvName: "usgovernment",
+			expected:     "https://login.microsoftonline.us/gov-tenant-123/oauth2/v2.0/token",
+		},
+		{
+			name:         "China cloud token endpoint",
+			tenantID:     "cn-tenant-456",
+			clientID:     "client-789",
+			cloudEnvName: "china",
+			expected:     "https://login.chinacloudapi.cn/cn-tenant-456/oauth2/v2.0/token",
+		},
+		{
+			name:          "custom endpoint overrides cloud environment",
 			tenantID:      "tenant-123",
 			clientID:      "client-456",
-			cloudEnv:      azureCloud.GetCloudEnvironment("usgovernment"),
+			cloudEnvName:  "usgovernment",
 			tokenEndpoint: "https://custom.endpoint.example.com/token",
-		}
+			expected:      "https://custom.endpoint.example.com/token",
+		},
+	}
 
-		endpoint := provider.getTokenEndpoint()
-		assert.Equal(t, "https://custom.endpoint.example.com/token", endpoint)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &oidcProvider{
+				name:          "test-oidc",
+				tenantID:      tt.tenantID,
+				clientID:      tt.clientID,
+				cloudEnv:      azureCloud.GetCloudEnvironment(tt.cloudEnvName),
+				tokenEndpoint: tt.tokenEndpoint,
+			}
+
+			assert.Equal(t, tt.expected, provider.getTokenEndpoint())
+		})
+	}
 }
 
 func TestExtractOIDCConfig_CloudEnvironment(t *testing.T) {

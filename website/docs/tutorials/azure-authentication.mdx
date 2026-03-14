@@ -571,9 +571,11 @@ components:
           environment: usgovernment  # Required for sovereign clouds
 ```
 
-Atmos uses this `environment` field to resolve the correct blob storage endpoint when reading Terraform state files. Additionally, when `cloud_environment` is set to a sovereign cloud, Atmos exports `ARM_ENVIRONMENT` and `AZURE_ENVIRONMENT` to the subprocess environment, which the Terraform `azurerm` provider uses to select the correct Azure Resource Manager endpoints.
+Atmos uses this `environment` field to resolve the correct blob storage endpoint when reading Terraform state files. If the same stack also uses Atmos auth, keep `spec.cloud_environment` and `backend.azurerm.environment` set to the same cloud value so authentication endpoints and Terraform state URLs stay aligned. Additionally, when `cloud_environment` is set to a sovereign cloud, Atmos exports `ARM_ENVIRONMENT` and `AZURE_ENVIRONMENT` to the subprocess environment, which the Terraform `azurerm` provider uses to select the correct Azure Resource Manager endpoints.
 
 ### Supported Cloud Environments
+
+The `cloud_environment` setting applies to all Azure provider kinds: `azure/device-code`, `azure/oidc`, and `azure/cli`.
 
 | `cloud_environment` | Cloud | Login Endpoint | Blob Storage | Portal |
 |---------------------|-------|----------------|--------------|--------|

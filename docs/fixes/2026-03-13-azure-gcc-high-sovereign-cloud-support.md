@@ -117,8 +117,9 @@ type CloudEnvironment struct {
     ManagementScope   string // ARM management API scope
     GraphAPIScope     string // Microsoft Graph scope
     KeyVaultScope     string // KeyVault scope
-    BlobStorageSuffix string // Blob storage URL suffix (e.g., "blob.core.windows.net")
-    PortalURL         string // Azure Portal base URL
+    BlobStorageSuffix   string // Blob storage URL suffix (e.g., "blob.core.windows.net")
+    PortalURL           string // Azure Portal base URL
+    AzureProfileEnvName string // Environment name used in azureProfile.json (e.g., "AzureCloud")
 }
 
 var cloudEnvironments = map[string]*CloudEnvironment{
@@ -152,7 +153,8 @@ var cloudEnvironments = map[string]*CloudEnvironment{
 }
 
 // GetCloudEnvironment returns the endpoint set for the given cloud name.
-// Returns the "public" environment if name is empty or unknown.
+// Returns the "public" environment if name is empty. Unknown non-empty values
+// are rejected by ValidateCloudEnvironment before calling this function.
 func GetCloudEnvironment(name string) *CloudEnvironment {
     if env, ok := cloudEnvironments[name]; ok {
         return env
