@@ -464,6 +464,16 @@ func validateFlagShorthand(cmdName string, flag *schema.CommandFlag, seen map[st
 		return nil
 	}
 
+	if len([]rune(flag.Shorthand)) != 1 {
+		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
+			WithExplanation(fmt.Sprintf("Custom command '%s' defines invalid shorthand '-%s' for flag '--%s'", cmdName, flag.Shorthand, flag.Name)).
+			WithHint("Use exactly one character for shorthand flags").
+			WithContext("command", cmdName).
+			WithContext("flag", flag.Name).
+			WithContext("shorthand", flag.Shorthand).
+			Err()
+	}
+
 	if seen[flag.Shorthand] {
 		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
 			WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag shorthand '-%s'", cmdName, flag.Shorthand)).
