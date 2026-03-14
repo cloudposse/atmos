@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -668,6 +669,135 @@ func TestExtractDeviceCodeConfig(t *testing.T) {
 			assert.Equal(t, tt.expectedSubID, cfg.SubscriptionID, "subscription_id mismatch")
 			assert.Equal(t, tt.expectedLocation, cfg.Location, "location mismatch")
 			assert.Equal(t, tt.expectedClientID, cfg.ClientID, "client_id mismatch")
+		})
+	}
+}
+
+func TestExtractDeviceCodeConfig_CloudEnvironment(t *testing.T) {
+	tests := []struct {
+		name             string
+		spec             map[string]interface{}
+		expectedCloudEnv string
+	}{
+		{
+			name: "reads cloud_environment from spec",
+			spec: map[string]interface{}{
+				"tenant_id":         "tenant-123",
+				"cloud_environment": "usgovernment",
+			},
+			expectedCloudEnv: "usgovernment",
+		},
+		{
+			name: "empty when not specified",
+			spec: map[string]interface{}{
+				"tenant_id": "tenant-123",
+			},
+			expectedCloudEnv: "",
+		},
+		{
+			name: "china cloud",
+			spec: map[string]interface{}{
+				"tenant_id":         "tenant-123",
+				"cloud_environment": "china",
+			},
+			expectedCloudEnv: "china",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := extractDeviceCodeConfig(tt.spec)
+			assert.Equal(t, tt.expectedCloudEnv, cfg.CloudEnvironment)
+		})
+	}
+}
+
+func TestNewDeviceCodeProvider_SovereignCloud(t *testing.T) {
+	tests := []struct {
+		name             string
+		cloudEnvironment string
+		expectedLogin    string
+	}{
+		{
+			name:             "US government cloud",
+			cloudEnvironment: "usgovernment",
+			expectedLogin:    "login.microsoftonline.us",
+		},
+		{
+			name:             "China cloud",
+			cloudEnvironment: "china",
+			expectedLogin:    "login.chinacloudapi.cn",
+		},
+		{
+			name:             "empty defaults to public",
+			cloudEnvironment: "",
+			expectedLogin:    "login.microsoftonline.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := map[string]interface{}{
+				"tenant_id": "tenant-123",
+			}
+			if tt.cloudEnvironment != "" {
+				spec["cloud_environment"] = tt.cloudEnvironment
+			}
+
+			provider, err := NewDeviceCodeProvider("test-device-code", &schema.Provider{
+				Kind: "azure/device-code",
+				Spec: spec,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedLogin, provider.cloudEnv.LoginEndpoint)
+		})
+	}
+}
+
+func TestNewOIDCProvider_SovereignCloud(t *testing.T) {
+	tests := []struct {
+		name             string
+		cloudEnvironment string
+		expectedLogin    string
+		expectedMgmt     string
+	}{
+		{
+			name:             "US government cloud",
+			cloudEnvironment: "usgovernment",
+			expectedLogin:    "login.microsoftonline.us",
+			expectedMgmt:     azureCloud.GetCloudEnvironment("usgovernment").ManagementScope,
+		},
+		{
+			name:             "China cloud",
+			cloudEnvironment: "china",
+			expectedLogin:    "login.chinacloudapi.cn",
+			expectedMgmt:     azureCloud.GetCloudEnvironment("china").ManagementScope,
+		},
+		{
+			name:             "empty defaults to public",
+			cloudEnvironment: "",
+			expectedLogin:    "login.microsoftonline.com",
+			expectedMgmt:     azureCloud.GetCloudEnvironment("public").ManagementScope,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := map[string]interface{}{
+				"tenant_id": "tenant-123",
+				"client_id": "client-456",
+			}
+			if tt.cloudEnvironment != "" {
+				spec["cloud_environment"] = tt.cloudEnvironment
+			}
+
+			provider, err := NewOIDCProvider("test-oidc", &schema.Provider{
+				Kind: "azure/oidc",
+				Spec: spec,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedLogin, provider.cloudEnv.LoginEndpoint)
+			assert.Equal(t, tt.expectedMgmt, provider.cloudEnv.ManagementScope)
 		})
 	}
 }

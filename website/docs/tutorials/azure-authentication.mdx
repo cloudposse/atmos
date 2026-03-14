@@ -15,6 +15,7 @@ Atmos Auth provides native Azure authentication that works identically to `az lo
 - **Device Code Flow** (browser-based authentication for users)
 - **OIDC** (workload identity for CI/CD pipelines)
 - **Service Principals** (client credentials for automation)
+- **Sovereign Clouds** (Azure Government / GCC High, Azure China / Mooncake)
 
 All authentication methods write credentials to the Azure CLI MSAL cache (`~/.azure/msal_token_cache.json`), ensuring full compatibility with Terraform's Azure providers (azurerm, azuread, azapi).
 
@@ -331,13 +332,31 @@ resource "azapi_resource" "example" {
 
 Atmos Azure authentication provides all three token scopes required for full Azure functionality:
 
+**Azure Commercial (public):**
+
 | Token Scope | Used By | Purpose |
 |-------------|---------|---------|
 | `https://management.azure.com/.default` | azurerm, azapi | Azure Resource Manager operations |
 | `https://graph.microsoft.com/.default` | azuread | Azure Active Directory operations |
 | `https://vault.azure.net/.default` | azurerm | Azure KeyVault operations |
 
-This matches exactly what `az login` provides, ensuring 100% compatibility.
+**Azure Government (GCC High):**
+
+| Token Scope | Used By | Purpose |
+|-------------|---------|---------|
+| `https://management.usgovcloudapi.net/.default` | azurerm, azapi | Azure Resource Manager operations |
+| `https://graph.microsoft.us/.default` | azuread | Azure Active Directory operations |
+| `https://vault.usgovcloudapi.net/.default` | azurerm | Azure KeyVault operations |
+
+**Azure China (Mooncake):**
+
+| Token Scope | Used By | Purpose |
+|-------------|---------|---------|
+| `https://management.chinacloudapi.cn/.default` | azurerm, azapi | Azure Resource Manager operations |
+| `https://microsoftgraph.chinacloudapi.cn/.default` | azuread | Azure Active Directory operations |
+| `https://vault.azure.cn/.default` | azurerm | Azure KeyVault operations |
+
+Atmos automatically selects the correct scopes based on the `cloud_environment` setting in your provider configuration. This matches exactly what `az login` provides, ensuring 100% compatibility.
 
 ## Authentication Flow
 
@@ -427,6 +446,130 @@ auth:
         subscription_id: "YOUR_SUBSCRIPTION_ID"
         location: "westeurope"
 ```
+
+## Sovereign Cloud Support (GCC High, China)
+
+Azure sovereign clouds (US Government / GCC High, China / Mooncake) use different authentication endpoints, API scopes, and storage URLs than Azure Commercial. Atmos supports all Azure clouds through the `cloud_environment` provider setting.
+
+### Azure Government (GCC High)
+
+For organizations operating in Azure Government (including GCC High and DoD regions):
+
+```yaml
+auth:
+  providers:
+    azure-gov:
+      kind: azure/device-code
+      spec:
+        tenant_id: "YOUR_GOV_TENANT_ID"
+        subscription_id: "YOUR_GOV_SUBSCRIPTION_ID"
+        location: "usgovvirginia"
+        cloud_environment: usgovernment
+
+  identities:
+    azure-gov-sub:
+      kind: azure/subscription
+      via:
+        provider: azure-gov
+      principal:
+        subscription_id: "YOUR_GOV_SUBSCRIPTION_ID"
+        location: "usgovvirginia"
+```
+
+**Key differences from commercial:**
+- Login endpoint: `login.microsoftonline.us` (instead of `login.microsoftonline.com`)
+- Portal: `https://portal.azure.us/`
+- Blob storage: `blob.core.usgovcloudapi.net`
+
+### Azure China (Mooncake)
+
+For organizations operating in Azure China:
+
+```yaml
+auth:
+  providers:
+    azure-china:
+      kind: azure/device-code
+      spec:
+        tenant_id: "YOUR_CHINA_TENANT_ID"
+        subscription_id: "YOUR_CHINA_SUBSCRIPTION_ID"
+        location: "chinaeast2"
+        cloud_environment: china
+
+  identities:
+    azure-china-sub:
+      kind: azure/subscription
+      via:
+        provider: azure-china
+      principal:
+        subscription_id: "YOUR_CHINA_SUBSCRIPTION_ID"
+        location: "chinaeast2"
+```
+
+**Key differences from commercial:**
+- Login endpoint: `login.chinacloudapi.cn`
+- Portal: `https://portal.azure.cn/`
+- Blob storage: `blob.core.chinacloudapi.cn`
+
+### GCC High OIDC for CI/CD
+
+For GitHub Actions workflows targeting Azure Government:
+
+```yaml
+auth:
+  providers:
+    azure-gov-oidc:
+      kind: azure/oidc
+      spec:
+        tenant_id: "YOUR_GOV_TENANT_ID"
+        client_id: "YOUR_GOV_APP_CLIENT_ID"
+        subscription_id: "YOUR_GOV_SUBSCRIPTION_ID"
+        cloud_environment: usgovernment
+```
+
+```yaml
+# .github/workflows/deploy-gov.yaml
+jobs:
+  deploy:
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Azure Government
+        run: atmos terraform apply mycomponent -s prod
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_GOV_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_GOV_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_GOV_SUBSCRIPTION_ID }}
+```
+
+### Terraform Backend with Sovereign Clouds
+
+When using `!terraform.state` YAML functions with sovereign clouds, the Terraform azurerm backend `environment` field must be set:
+
+```yaml
+# Stack configuration
+components:
+  terraform:
+    vpc:
+      backend:
+        azurerm:
+          storage_account_name: govstorageaccount
+          container_name: tfstate
+          key: terraform.tfstate
+          environment: usgovernment  # Required for sovereign clouds
+```
+
+Atmos uses this `environment` field to resolve the correct blob storage endpoint when reading Terraform state files.
+
+### Supported Cloud Environments
+
+| `cloud_environment` | Cloud | Login Endpoint | Blob Storage | Portal |
+|---------------------|-------|----------------|--------------|--------|
+| `public` (default) | Commercial | `login.microsoftonline.com` | `blob.core.windows.net` | `portal.azure.com` |
+| `usgovernment` | US Government / GCC High | `login.microsoftonline.us` | `blob.core.usgovcloudapi.net` | `portal.azure.us` |
+| `china` | China (Mooncake) | `login.chinacloudapi.cn` | `blob.core.chinacloudapi.cn` | `portal.azure.cn` |
 
 ## Troubleshooting
 

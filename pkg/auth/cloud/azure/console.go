@@ -13,12 +13,13 @@ import (
 )
 
 const (
-	// AzurePortalURL is the Azure Portal base URL.
-	AzurePortalURL = "https://portal.azure.com/"
-
 	// AzureDefaultSessionDuration is the default session duration (Azure tokens are typically valid for 1 hour).
 	AzureDefaultSessionDuration = 1 * time.Hour
 )
+
+// AzurePortalURL returns the Azure Portal base URL for the public cloud.
+// For sovereign clouds, use GetCloudEnvironment(name).PortalURL instead.
+var AzurePortalURL = PublicCloud.PortalURL
 
 // destinationPattern holds the URL pattern for a destination alias.
 type destinationPattern struct {

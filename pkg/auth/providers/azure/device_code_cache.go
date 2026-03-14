@@ -288,7 +288,7 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 	// Create common MSAL identifiers.
 	ids := msalIdentifiers{
 		homeAccountID: fmt.Sprintf("%s.%s", userOID, p.tenantID),
-		environment:   "login.microsoftonline.com",
+		environment:   p.cloudEnv.LoginEndpoint,
 		clientID:      "04b07795-8ddb-461a-bbee-02f9e1bf7b46", // Azure CLI public client.
 		realm:         p.tenantID,
 	}
@@ -309,13 +309,12 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 
 	// Add management API token.
 	// IMPORTANT: Use only ".default" scope to match Azure CLI's token lookup.
-	// Azure CLI looks up tokens using "https://management.azure.com/.default" as the cache key.
+	// Azure CLI looks up tokens using the management scope as the cache key.
 	// Using a different scope format (like adding user_impersonation) causes lookup failures.
-	scope := "https://management.azure.com/.default"
-	cacheKey := addTokenToCLICache(accessTokenSection, update.AccessToken, update.ExpiresAt, scope, ids)
+	cacheKey := addTokenToCLICache(accessTokenSection, update.AccessToken, update.ExpiresAt, p.cloudEnv.ManagementScope, ids)
 
 	// Add Graph API and KeyVault tokens if available.
-	addOptionalCLITokens(accessTokenSection, update, ids)
+	addOptionalCLITokens(accessTokenSection, update, ids, p.cloudEnv)
 
 	return cacheKey
 }
@@ -336,10 +335,10 @@ func addTokenToCLICache(accessTokenSection map[string]interface{}, token string,
 }
 
 // addOptionalCLITokens adds Graph and KeyVault tokens to CLI cache if available.
-func addOptionalCLITokens(accessTokenSection map[string]interface{}, update *tokenCacheUpdate, ids msalIdentifiers) {
+func addOptionalCLITokens(accessTokenSection map[string]interface{}, update *tokenCacheUpdate, ids msalIdentifiers, cloudEnv *azureCloud.CloudEnvironment) {
 	// Add Graph API token if available.
 	if update.GraphToken != "" {
-		graphKey := addTokenToCLICache(accessTokenSection, update.GraphToken, update.GraphExpiresAt, "https://graph.microsoft.com/.default", ids)
+		graphKey := addTokenToCLICache(accessTokenSection, update.GraphToken, update.GraphExpiresAt, cloudEnv.GraphAPIScope, ids)
 		log.Debug("Added Graph API token to MSAL cache", azureCloud.LogFieldKey, graphKey)
 	} else {
 		log.Debug("No Graph API token available, azuread provider may not work")
@@ -347,7 +346,7 @@ func addOptionalCLITokens(accessTokenSection map[string]interface{}, update *tok
 
 	// Add KeyVault API token if available.
 	if update.KeyVaultToken != "" {
-		kvKey := addTokenToCLICache(accessTokenSection, update.KeyVaultToken, update.KeyVaultExpiresAt, "https://vault.azure.net/.default", ids)
+		kvKey := addTokenToCLICache(accessTokenSection, update.KeyVaultToken, update.KeyVaultExpiresAt, cloudEnv.KeyVaultScope, ids)
 		log.Debug("Added KeyVault API token to MSAL cache", azureCloud.LogFieldKey, kvKey)
 	} else {
 		log.Debug("No KeyVault API token available, KeyVault operations may not work")

@@ -25,17 +25,8 @@ const (
 	// OIDCTimeout is the timeout for HTTP requests.
 	OIDCTimeout = 30 * time.Second
 
-	// Azure AD OAuth2 token endpoint format.
-	azureADTokenEndpoint = "https://login.microsoftonline.com/%s/oauth2/v2.0/token"
-
-	// Default scope for Azure management API.
-	azureManagementScope = "https://management.azure.com/.default"
-
-	// Scope for Microsoft Graph API (required for azuread provider and some az commands).
-	azureGraphAPIScope = "https://graph.microsoft.com/.default"
-
-	// Scope for Azure KeyVault API (optional, for KeyVault operations).
-	azureKeyVaultScope = "https://vault.azure.net/.default"
+	// Azure AD OAuth2 token endpoint format. The %s placeholder is the tenant ID.
+	azureADTokenEndpointFormat = "https://%s/%s/oauth2/v2.0/token"
 
 	// Grant type for client credentials with federated token.
 	grantTypeClientCredentials = "client_credentials"
@@ -56,6 +47,7 @@ type oidcProvider struct {
 	location       string
 	audience       string
 	tokenFilePath  string
+	cloudEnv       *azureCloud.CloudEnvironment // Azure cloud environment (public, usgovernment, china).
 
 	// httpClient is the HTTP client used for requests. If nil, a default client is used.
 	// Uses the shared httpClient.Client interface from pkg/http for consistency.
@@ -67,12 +59,13 @@ type oidcProvider struct {
 
 // oidcConfig holds extracted Azure OIDC configuration from provider spec.
 type oidcConfig struct {
-	TenantID       string
-	ClientID       string
-	SubscriptionID string
-	Location       string
-	Audience       string
-	TokenFilePath  string
+	TenantID         string
+	ClientID         string
+	SubscriptionID   string
+	Location         string
+	Audience         string
+	TokenFilePath    string
+	CloudEnvironment string
 }
 
 // tokenResponse represents the response from Azure AD token endpoint.
@@ -109,6 +102,9 @@ func extractOIDCConfig(spec map[string]interface{}) oidcConfig {
 	if tfp, ok := spec["token_file_path"].(string); ok {
 		config.TokenFilePath = tfp
 	}
+	if ce, ok := spec["cloud_environment"].(string); ok {
+		config.CloudEnvironment = ce
+	}
 
 	return config
 }
@@ -144,6 +140,7 @@ func NewOIDCProvider(name string, config *schema.Provider) (*oidcProvider, error
 		location:       cfg.Location,
 		audience:       cfg.Audience,
 		tokenFilePath:  cfg.TokenFilePath,
+		cloudEnv:       azureCloud.GetCloudEnvironment(cfg.CloudEnvironment),
 	}, nil
 }
 
@@ -180,7 +177,7 @@ func (p *oidcProvider) getTokenEndpoint() string {
 	if p.tokenEndpoint != "" {
 		return p.tokenEndpoint
 	}
-	return fmt.Sprintf(azureADTokenEndpoint, p.tenantID)
+	return fmt.Sprintf(azureADTokenEndpointFormat, p.cloudEnv.LoginEndpoint, p.tenantID)
 }
 
 // Authenticate performs Azure OIDC authentication by exchanging a federated token
@@ -205,7 +202,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 	}
 
 	// Exchange the federated token for the primary Azure Management API token.
-	tokenResp, err := p.exchangeToken(ctx, federatedToken, azureManagementScope)
+	tokenResp, err := p.exchangeToken(ctx, federatedToken, p.cloudEnv.ManagementScope)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +259,7 @@ func (p *oidcProvider) acquireAdditionalTokens(ctx context.Context, federatedTok
 	// Acquire Microsoft Graph API token (required for azuread provider).
 	go func() {
 		defer wg.Done()
-		graphResp, err := p.exchangeToken(ctx, federatedToken, azureGraphAPIScope)
+		graphResp, err := p.exchangeToken(ctx, federatedToken, p.cloudEnv.GraphAPIScope)
 		if err != nil {
 			log.Debug("Failed to acquire Graph API token (azuread provider may not work)", "error", err)
 			return
@@ -278,7 +275,7 @@ func (p *oidcProvider) acquireAdditionalTokens(ctx context.Context, federatedTok
 	// Acquire Azure KeyVault API token (optional, for KeyVault operations).
 	go func() {
 		defer wg.Done()
-		kvResp, err := p.exchangeToken(ctx, federatedToken, azureKeyVaultScope)
+		kvResp, err := p.exchangeToken(ctx, federatedToken, p.cloudEnv.KeyVaultScope)
 		if err != nil {
 			log.Debug("Failed to acquire KeyVault API token (KeyVault operations may not work)", "error", err)
 			return

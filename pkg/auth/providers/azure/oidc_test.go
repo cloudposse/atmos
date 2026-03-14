@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -676,7 +677,7 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 				assert.Equal(t, "client-456", r.FormValue("client_id"))
 				assert.Equal(t, clientAssertionTypeJWT, r.FormValue("client_assertion_type"))
 				assert.Equal(t, "test-federated-token", r.FormValue("client_assertion"))
-				assert.Equal(t, azureManagementScope, r.FormValue("scope"))
+				assert.Equal(t, azureCloud.PublicCloud.ManagementScope, r.FormValue("scope"))
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
@@ -700,7 +701,7 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 
 			// Call exchangeToken with management scope.
 			ctx := context.Background()
-			resp, err := provider.exchangeToken(ctx, "test-federated-token", azureManagementScope)
+			resp, err := provider.exchangeToken(ctx, "test-federated-token", azureCloud.PublicCloud.ManagementScope)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -912,6 +913,7 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 				location:       "eastus",
 				tokenFilePath:  tokenPath,
 				tokenEndpoint:  server.URL,
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			}
 
 			// Call Authenticate.
@@ -971,6 +973,7 @@ func TestOIDCProvider_GetTokenEndpoint(t *testing.T) {
 			tenantID:      "my-tenant-id",
 			clientID:      "client-456",
 			tokenEndpoint: "",
+			cloudEnv:      azureCloud.GetCloudEnvironment(""),
 		}
 
 		endpoint := provider.getTokenEndpoint()
@@ -1189,7 +1192,7 @@ func TestOIDCProvider_ExchangeToken_EdgeCases(t *testing.T) {
 			tokenEndpoint: server.URL,
 		}
 
-		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureManagementScope)
+		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureCloud.PublicCloud.ManagementScope)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.Contains(t, err.Error(), "empty access token")
@@ -1211,7 +1214,7 @@ func TestOIDCProvider_ExchangeToken_EdgeCases(t *testing.T) {
 			tokenEndpoint: server.URL,
 		}
 
-		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureManagementScope)
+		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureCloud.PublicCloud.ManagementScope)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.Contains(t, err.Error(), "failed to decode")
@@ -1332,4 +1335,87 @@ func TestOIDCProvider_FetchGitHubActionsToken_URLValidation(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.Contains(t, err.Error(), "non-empty host")
 	})
+}
+
+func TestOIDCProvider_SovereignCloudEndpoints(t *testing.T) {
+	t.Run("US government token endpoint", func(t *testing.T) {
+		provider := &oidcProvider{
+			name:          "test-oidc",
+			tenantID:      "gov-tenant-123",
+			clientID:      "client-456",
+			cloudEnv:      azureCloud.GetCloudEnvironment("usgovernment"),
+			tokenEndpoint: "",
+		}
+
+		endpoint := provider.getTokenEndpoint()
+		assert.Equal(t, "https://login.microsoftonline.us/gov-tenant-123/oauth2/v2.0/token", endpoint)
+	})
+
+	t.Run("China cloud token endpoint", func(t *testing.T) {
+		provider := &oidcProvider{
+			name:          "test-oidc",
+			tenantID:      "cn-tenant-456",
+			clientID:      "client-789",
+			cloudEnv:      azureCloud.GetCloudEnvironment("china"),
+			tokenEndpoint: "",
+		}
+
+		endpoint := provider.getTokenEndpoint()
+		assert.Equal(t, "https://login.chinacloudapi.cn/cn-tenant-456/oauth2/v2.0/token", endpoint)
+	})
+
+	t.Run("custom endpoint overrides cloud environment", func(t *testing.T) {
+		provider := &oidcProvider{
+			name:          "test-oidc",
+			tenantID:      "tenant-123",
+			clientID:      "client-456",
+			cloudEnv:      azureCloud.GetCloudEnvironment("usgovernment"),
+			tokenEndpoint: "https://custom.endpoint.example.com/token",
+		}
+
+		endpoint := provider.getTokenEndpoint()
+		assert.Equal(t, "https://custom.endpoint.example.com/token", endpoint)
+	})
+}
+
+func TestExtractOIDCConfig_CloudEnvironment(t *testing.T) {
+	tests := []struct {
+		name             string
+		spec             map[string]interface{}
+		expectedCloudEnv string
+	}{
+		{
+			name: "reads cloud_environment from spec",
+			spec: map[string]interface{}{
+				"tenant_id":         "tenant-123",
+				"client_id":         "client-456",
+				"cloud_environment": "usgovernment",
+			},
+			expectedCloudEnv: "usgovernment",
+		},
+		{
+			name: "empty cloud_environment when not specified",
+			spec: map[string]interface{}{
+				"tenant_id": "tenant-123",
+				"client_id": "client-456",
+			},
+			expectedCloudEnv: "",
+		},
+		{
+			name: "china cloud environment",
+			spec: map[string]interface{}{
+				"tenant_id":         "tenant-123",
+				"client_id":         "client-456",
+				"cloud_environment": "china",
+			},
+			expectedCloudEnv: "china",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := extractOIDCConfig(tt.spec)
+			assert.Equal(t, tt.expectedCloudEnv, cfg.CloudEnvironment)
+		})
+	}
 }

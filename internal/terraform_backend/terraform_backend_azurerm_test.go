@@ -387,7 +387,7 @@ func TestReadTerraformBackendAzurerm_MissingStorageAccount(t *testing.T) {
 
 func TestReadTerraformBackendAzurerm_CachedClient(t *testing.T) {
 	// Pre-populate cache with a mock client.
-	cacheKey := "cachedaccount"
+	cacheKey := "cachedaccount:blob.core.windows.net"
 	mockContent := `{"version": 4, "outputs": {"cached": {"value": "from-cache"}}}`
 
 	mockClient := &mockAzureBlobClient{
@@ -930,4 +930,163 @@ func TestReadTerraformBackendAzurerm_Integration_WorkspaceNaming(t *testing.T) {
 			assert.Equal(t, tt.expectedBlobName, actualBlobName)
 		})
 	}
+}
+
+func TestResolveAzureBlobSuffix(t *testing.T) {
+	tests := []struct {
+		name           string
+		environment    string
+		expectedSuffix string
+	}{
+		{
+			name:           "public cloud",
+			environment:    "public",
+			expectedSuffix: "blob.core.windows.net",
+		},
+		{
+			name:           "US government cloud (GCC High)",
+			environment:    "usgovernment",
+			expectedSuffix: "blob.core.usgovcloudapi.net",
+		},
+		{
+			name:           "China cloud (Mooncake)",
+			environment:    "china",
+			expectedSuffix: "blob.core.chinacloudapi.cn",
+		},
+		{
+			name:           "German cloud",
+			environment:    "german",
+			expectedSuffix: "blob.core.cloudapi.de",
+		},
+		{
+			name:           "empty defaults to public",
+			environment:    "",
+			expectedSuffix: "blob.core.windows.net",
+		},
+		{
+			name:           "unknown defaults to public",
+			environment:    "custom-cloud",
+			expectedSuffix: "blob.core.windows.net",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suffix := resolveAzureBlobSuffix(tt.environment)
+			assert.Equal(t, tt.expectedSuffix, suffix)
+		})
+	}
+}
+
+func TestReadTerraformBackendAzurermInternal_SovereignCloud(t *testing.T) {
+	// Test that sovereign cloud blob storage is accessed correctly.
+	tests := []struct {
+		name        string
+		environment string
+	}{
+		{
+			name:        "US government environment",
+			environment: "usgovernment",
+		},
+		{
+			name:        "China environment",
+			environment: "china",
+		},
+		{
+			name:        "public environment",
+			environment: "public",
+		},
+		{
+			name:        "empty environment defaults to public",
+			environment: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expectedContent := `{"version": 4, "outputs": {"env": {"value": "` + tt.environment + `"}}}`
+
+			mockClient := &mockAzureBlobClient{
+				downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+					assert.Equal(t, "tfstate", containerName)
+					assert.Equal(t, "terraform.tfstate", blobName)
+					return createMockDownloadResponse(expectedContent), nil
+				},
+			}
+
+			componentSections := map[string]any{
+				"workspace": "default",
+			}
+			backend := map[string]any{
+				"container_name":       "tfstate",
+				"key":                  "terraform.tfstate",
+				"storage_account_name": "myaccount",
+				"environment":          tt.environment,
+			}
+
+			result, err := ReadTerraformBackendAzurermInternal(mockClient, &componentSections, &backend)
+			require.NoError(t, err)
+			assert.Equal(t, expectedContent, string(result))
+		})
+	}
+}
+
+func TestCacheKeySovereignCloud(t *testing.T) {
+	// Verify that different cloud environments produce different cache keys.
+	tests := []struct {
+		name        string
+		account     string
+		environment string
+		expectedKey string
+	}{
+		{
+			name:        "public cloud cache key",
+			account:     "myaccount",
+			environment: "public",
+			expectedKey: "myaccount:blob.core.windows.net",
+		},
+		{
+			name:        "US government cache key",
+			account:     "myaccount",
+			environment: "usgovernment",
+			expectedKey: "myaccount:blob.core.usgovcloudapi.net",
+		},
+		{
+			name:        "China cache key",
+			account:     "myaccount",
+			environment: "china",
+			expectedKey: "myaccount:blob.core.chinacloudapi.cn",
+		},
+		{
+			name:        "empty environment defaults to public suffix",
+			account:     "myaccount",
+			environment: "",
+			expectedKey: "myaccount:blob.core.windows.net",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			blobSuffix := resolveAzureBlobSuffix(tt.environment)
+			cacheKey := tt.account + ":" + blobSuffix
+			assert.Equal(t, tt.expectedKey, cacheKey)
+		})
+	}
+}
+
+func TestLogAzureRetryExhausted(t *testing.T) {
+	// Verify logAzureRetryExhausted does not panic with various error types.
+	t.Run("with ResponseError", func(t *testing.T) {
+		respErr := &azcore.ResponseError{StatusCode: 500}
+		assert.NotPanics(t, func() {
+			logAzureRetryExhausted(respErr, "test.tfstate", "container", 2)
+		})
+	})
+
+	t.Run("with generic error", func(t *testing.T) {
+		err := fmt.Errorf("network failure")
+		assert.NotPanics(t, func() {
+			logAzureRetryExhausted(err, "test.tfstate", "container", 2)
+		})
+	})
 }
