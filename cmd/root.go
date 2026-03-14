@@ -1863,7 +1863,17 @@ func initCobraConfig() {
 func profileFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "cmd.profileFlagCompletion")()
 
-	atmosCfg, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	// Parse global flags to honor config selection flags.
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+
+	atmosCfg, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
