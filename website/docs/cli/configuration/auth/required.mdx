@@ -33,14 +33,22 @@ auth:
       kind: aws/assume-role
       default: true       # Primary identity (sets AWS_PROFILE)
       required: true      # Auto-authenticate without prompting
+      # ... via, principal, etc. (see identities docs for full config)
     plat-prod:
       kind: aws/assume-role
       required: true      # Auto-authenticate as secondary
+      # ... via, principal, etc.
     plat-staging:
       kind: aws/assume-role
       required: true      # Auto-authenticate as secondary
+      # ... via, principal, etc.
 ```
 </File>
+
+:::note
+These snippets only show the `default` and `required` fields. Each `aws/assume-role` identity also requires
+`via` and `principal` configuration. See [Identities](/cli/configuration/auth/identities) for complete examples.
+:::
 
 The `required` and `default` fields are orthogonal:
 - **`default: true`** — this is the PRIMARY identity (sets `AWS_PROFILE`, credential env vars). Only one allowed.
@@ -82,12 +90,15 @@ components:
             kind: aws/assume-role
             default: true
             required: true
+            # ... via, principal (see identities docs)
           spoke-production:
             kind: aws/assume-role
             required: true
+            # ... via, principal
           spoke-staging:
             kind: aws/assume-role
             required: true
+            # ... via, principal
       vars:
         hub_account_id: "111111111111"
         spoke_accounts:

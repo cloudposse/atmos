@@ -30,13 +30,20 @@ auth:
       kind: aws/assume-role
       default: true       # Primary identity
       required: true      # Auto-authenticate
+      # ... via, principal, etc. (see full identity config below)
     plat-prod:
       kind: aws/assume-role
       required: true      # Auto-authenticate as secondary
+      # ... via, principal, etc.
     plat-staging:
       kind: aws/assume-role
       required: true      # Auto-authenticate as secondary
+      # ... via, principal, etc.
 ```
+
+> This snippet highlights the `default` and `required` fields only.
+> Each identity also needs `via` and `principal` configuration — see the full
+> [identities documentation](/cli/configuration/auth/identities) for complete `aws/assume-role` examples.
 
 ## How It Works
 
