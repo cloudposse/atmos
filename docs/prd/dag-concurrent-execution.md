@@ -277,8 +277,10 @@ func (s *Scheduler) Run(ctx context.Context) *Result
 
 ```go
 func (s *Scheduler) Run(ctx context.Context) *Result {
+    result := &Result{}
     inDegree := computeInDegrees(s.graph)
     ready := make(chan *Node, s.graph.Size())
+    done := make(chan struct{})
 
     // Seed with roots
     for _, node := range s.graph.Roots() {
@@ -292,30 +294,44 @@ func (s *Scheduler) Run(ctx context.Context) *Result {
     completed := 0
     total := s.graph.Size()
 
-    for completed < total {
-        node := <-ready
-        g.Go(func() error {
-            err := node.Execute(ctx)
+    // Scheduler loop — select on ctx.Done() to avoid deadlock on fail-fast
+    for {
+        select {
+        case <-ctx.Done():
+            result.Err = g.Wait()
+            return result
+        case node := <-ready:
+            g.Go(func() error {
+                err := node.Execute(ctx)
 
-            mu.Lock()
-            completed++
-            // Decrement dependents' in-degrees
-            for _, dep := range s.graph.Dependents(node.ID) {
-                inDegree[dep]--
-                if inDegree[dep] == 0 {
-                    ready <- s.graph.GetNode(dep)
+                mu.Lock()
+                completed++
+                // Decrement dependents' in-degrees
+                for _, dep := range s.graph.Dependents(node.ID) {
+                    inDegree[dep]--
+                    if inDegree[dep] == 0 {
+                        // Context-aware send to avoid blocking on cancellation
+                        select {
+                        case ready <- s.graph.GetNode(dep):
+                        case <-ctx.Done():
+                        }
+                    }
                 }
-            }
-            mu.Unlock()
+                if completed == total {
+                    close(done)
+                }
+                mu.Unlock()
 
-            if err != nil && s.failFast {
-                return err  // cancels context
-            }
-            return nil
-        })
+                if err != nil && s.failFast {
+                    return err // cancels context via errgroup
+                }
+                return nil
+            })
+        case <-done:
+            result.Err = g.Wait()
+            return result
+        }
     }
-
-    return g.Wait()
 }
 ```
 
