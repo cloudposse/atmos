@@ -476,3 +476,141 @@ func TestAppendToAffected(t *testing.T) {
 		assert.Nil(t, affectedList[0].Settings)
 	})
 }
+
+// Tests for getFileFolderDependencies helper function.
+
+func TestGetFileFolderDependencies(t *testing.T) {
+	t.Run("extracts file dependencies from dependencies.components", func(t *testing.T) {
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc"},
+					map[string]any{"kind": "file", "path": "configs/app.json"},
+					map[string]any{"kind": "folder", "path": "src/lambda"},
+				},
+			},
+		}
+		settingsSection := map[string]any{}
+
+		deps := getFileFolderDependencies(componentSection, settingsSection)
+
+		// Should only have file and folder entries, not component entries.
+		assert.Len(t, deps, 2)
+		// Check that the file and folder are present.
+		hasFile := false
+		hasFolder := false
+		for _, dep := range deps {
+			if dep.Kind == "file" && dep.Path == "configs/app.json" {
+				hasFile = true
+			}
+			if dep.Kind == "folder" && dep.Path == "src/lambda" {
+				hasFolder = true
+			}
+		}
+		assert.True(t, hasFile, "should contain file dependency")
+		assert.True(t, hasFolder, "should contain folder dependency")
+	})
+
+	t.Run("falls back to settings.depends_on for file/folder deps", func(t *testing.T) {
+		componentSection := map[string]any{
+			"vars": map[string]any{
+				"name": "test",
+			},
+		}
+		settingsSection := map[string]any{
+			"depends_on": map[any]any{
+				1: map[string]any{"component": "vpc"},
+				2: map[string]any{"file": "external/config.yaml"},
+				3: map[string]any{"folder": "shared/modules"},
+			},
+		}
+
+		deps := getFileFolderDependencies(componentSection, settingsSection)
+
+		// Should only have file and folder entries from settings.depends_on.
+		// These are converted to kind/path format.
+		assert.Len(t, deps, 2)
+		hasFile := false
+		hasFolder := false
+		for _, dep := range deps {
+			if dep.Kind == "file" && dep.Path == "external/config.yaml" {
+				hasFile = true
+			}
+			if dep.Kind == "folder" && dep.Path == "shared/modules" {
+				hasFolder = true
+			}
+		}
+		assert.True(t, hasFile, "should contain file dependency")
+		assert.True(t, hasFolder, "should contain folder dependency")
+	})
+
+	t.Run("returns nil when no file/folder dependencies", func(t *testing.T) {
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc"},
+					map[string]any{"component": "rds"},
+				},
+			},
+		}
+		settingsSection := map[string]any{}
+
+		deps := getFileFolderDependencies(componentSection, settingsSection)
+
+		assert.Nil(t, deps)
+	})
+
+	t.Run("returns nil when no dependencies defined", func(t *testing.T) {
+		componentSection := map[string]any{}
+		settingsSection := map[string]any{}
+
+		deps := getFileFolderDependencies(componentSection, settingsSection)
+
+		assert.Nil(t, deps)
+	})
+
+	t.Run("prefers dependencies.components over settings.depends_on", func(t *testing.T) {
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"kind": "file", "path": "new-config.json"},
+				},
+			},
+		}
+		settingsSection := map[string]any{
+			"depends_on": map[any]any{
+				1: map[string]any{"file": "old-config.json"},
+			},
+		}
+
+		deps := getFileFolderDependencies(componentSection, settingsSection)
+
+		assert.Len(t, deps, 1)
+		// Should use the file from dependencies.components, not settings.depends_on.
+		assert.Equal(t, "file", deps[0].Kind)
+		assert.Equal(t, "new-config.json", deps[0].Path)
+	})
+
+	t.Run("handles mixed component and file/folder dependencies", func(t *testing.T) {
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc"},
+					map[string]any{"component": "rds", "stack": "prod"},
+					map[string]any{"kind": "file", "path": "config.json"},
+					map[string]any{"kind": "folder", "path": "modules/"},
+				},
+			},
+		}
+		settingsSection := map[string]any{}
+
+		deps := getFileFolderDependencies(componentSection, settingsSection)
+
+		// Should only return file/folder deps, filtering out component deps.
+		assert.Len(t, deps, 2)
+		for _, dep := range deps {
+			// Should only contain file or folder deps.
+			assert.True(t, dep.IsFileDependency() || dep.IsFolderDependency(), "should only contain file or folder deps")
+		}
+	})
+}
