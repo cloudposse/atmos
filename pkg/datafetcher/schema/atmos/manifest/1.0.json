@@ -1310,14 +1310,6 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "needs": {
-              "type": "array",
-              "description": "List of identity names this component requires. The first identity is primary (sets AWS_PROFILE, etc.). Additional identities have their profiles written to the shared credentials file for multi-account components.",
-              "items": {
-                "type": "string"
-              },
-              "uniqueItems": true
-            },
             "realm": {
               "type": "string",
               "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."
@@ -1449,6 +1441,10 @@
             "default": {
               "type": "boolean",
               "description": "Whether this is the default identity"
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Whether this identity is automatically authenticated without prompting. Required identities are authenticated before commands run."
             },
             "provider": {
               "type": "string",

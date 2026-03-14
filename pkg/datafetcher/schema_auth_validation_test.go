@@ -49,9 +49,9 @@ func TestManifestSchema_AuthDefinitionExists(t *testing.T) {
 	assert.True(t, hasAuth, "terraform_component_manifest should have 'auth' property")
 }
 
-// TestManifestSchema_AuthNeedsField verifies the auth definition includes
-// the needs field with correct type constraints.
-func TestManifestSchema_AuthNeedsField(t *testing.T) {
+// TestManifestSchema_AuthIdentityRequiredField verifies the auth_identity definition
+// includes the required field with correct type constraint.
+func TestManifestSchema_AuthIdentityRequiredField(t *testing.T) {
 	fetcher := &atmosFetcher{}
 	data, err := fetcher.FetchData("atmos://schema/atmos/manifest/1.0")
 	require.NoError(t, err)
@@ -61,8 +61,8 @@ func TestManifestSchema_AuthNeedsField(t *testing.T) {
 	require.NoError(t, err)
 
 	definitions := schemaMap["definitions"].(map[string]interface{})
-	auth := definitions["component_auth"].(map[string]interface{})
-	oneOf := auth["oneOf"].([]interface{})
+	identity := definitions["auth_identity"].(map[string]interface{})
+	oneOf := identity["oneOf"].([]interface{})
 
 	// Find the object variant.
 	var objectVariant map[string]interface{}
@@ -77,20 +77,17 @@ func TestManifestSchema_AuthNeedsField(t *testing.T) {
 
 	props := objectVariant["properties"].(map[string]interface{})
 
-	// Verify needs field.
-	needs, ok := props["needs"].(map[string]interface{})
-	require.True(t, ok, "auth should have 'needs' property")
-	assert.Equal(t, "array", needs["type"], "needs should be an array")
+	// Verify required field.
+	requiredProp, ok := props["required"].(map[string]interface{})
+	require.True(t, ok, "auth_identity should have 'required' property")
+	assert.Equal(t, "boolean", requiredProp["type"], "required should be a boolean")
 
-	items := needs["items"].(map[string]interface{})
-	assert.Equal(t, "string", items["type"], "needs items should be strings")
+	// Verify other identity fields exist.
+	_, hasDefault := props["default"]
+	assert.True(t, hasDefault, "auth_identity should have 'default' property")
 
-	// Verify other auth fields exist.
-	_, hasProviders := props["providers"]
-	assert.True(t, hasProviders, "auth should have 'providers' property")
-
-	_, hasIdentities := props["identities"]
-	assert.True(t, hasIdentities, "auth should have 'identities' property")
+	_, hasKind := props["kind"]
+	assert.True(t, hasKind, "auth_identity should have 'kind' property")
 }
 
 // TestManifestSchema_ValidAuthConfig validates a realistic auth config
@@ -106,7 +103,7 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 		expectErr bool
 	}{
 		{
-			name: "component with auth.needs",
+			name: "component with required identities",
 			manifest: map[string]interface{}{
 				"components": map[string]interface{}{
 					"terraform": map[string]interface{}{
@@ -115,10 +112,6 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 								"enabled": true,
 							},
 							"auth": map[string]interface{}{
-								"needs": []interface{}{
-									"core-network/terraform",
-									"plat-prod/terraform",
-								},
 								"providers": map[string]interface{}{
 									"github-oidc": map[string]interface{}{
 										"kind": "github/oidc",
@@ -126,7 +119,13 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 								},
 								"identities": map[string]interface{}{
 									"core-network/terraform": map[string]interface{}{
-										"kind": "aws/assume-role",
+										"kind":     "aws/assume-role",
+										"default":  true,
+										"required": true,
+									},
+									"plat-prod/terraform": map[string]interface{}{
+										"kind":     "aws/assume-role",
+										"required": true,
 									},
 								},
 							},

@@ -2,14 +2,6 @@ package schema
 
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
-	// Needs declares additional identities this component requires beyond the default.
-	// The default identity is authenticated as the primary (sets AWS_PROFILE, etc.).
-	// If no default identity is configured, the first entry in needs becomes the primary.
-	// All remaining identities in needs are authenticated as secondary — their profiles
-	// are written to the shared credentials file for multi-account Terraform components
-	// (e.g., hub-spoke networking with multiple AWS provider aliases).
-	// The --identity CLI flag overrides the primary identity selection.
-	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	// Realm provides credential isolation between different repositories or customer environments.
 	// Different repositories with the same identity names will have isolated credentials.
 	// If not set, defaults to a SHA256 hash of the CLI config path (first 8 characters).
@@ -64,8 +56,13 @@ type ConsoleConfig struct {
 
 // Identity defines an authentication identity configuration.
 type Identity struct {
-	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Kind    string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Default bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	// Required marks this identity for automatic authentication without prompting.
+	// Multiple identities can be required. Required identities that are not default
+	// are authenticated as secondary — their profiles are written to the shared
+	// credentials file for multi-account Terraform components.
+	Required    bool                   `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
 	Provider    string                 `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider name for direct provider association (for provisioned identities).
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
 	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.

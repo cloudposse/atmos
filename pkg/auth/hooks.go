@@ -96,7 +96,6 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	}
 
 	// Default identity from config is primary when available.
-	// auth.needs is purely additive — it lists extra identities beyond the default.
 	name, err := authManager.GetDefaultIdentity(false)
 	if err == nil && name != "" {
 		return name, nil
@@ -105,17 +104,8 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 		return "", err
 	}
 
-	// Fallback: if no default identity, use first entry in needs as primary.
-	authConfig, decodeErr := decodeAuthConfigFromStack(stackInfo)
-	if decodeErr != nil {
-		return "", decodeErr
-	}
-	if len(authConfig.Needs) > 0 {
-		log.Debug("No default identity configured, using first entry from auth.needs as primary", identityKey, authConfig.Needs[0])
-		return authConfig.Needs[0], nil
-	}
-
-	// Nothing found.
+	// No default identity found — error out.
+	// The "required" field is about auto-authentication, not primary selection.
 	errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
 	return "", errUtils.ErrNoDefaultIdentity
 }
@@ -133,9 +123,9 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 	}
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	// Authenticate additional needed identities so their profiles exist in the shared credentials file.
-	// This is required for Terraform components that use multiple AWS provider aliases.
-	authenticateAdditionalIdentities(ctx, authManager, identityName, stackInfo)
+	// Authenticate additional required identities so their profiles exist in the shared credentials file.
+	// This is needed for Terraform components that use multiple AWS provider aliases.
+	authenticateAdditionalIdentities(ctx, authManager, identityName)
 
 	// Convert ComponentEnvSection to env list for PrepareShellEnvironment.
 	// This includes any component-specific env vars already set in the stack config.
@@ -166,9 +156,9 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 	return nil
 }
 
-// authenticateAdditionalIdentities authenticates non-primary identities from auth.needs.
+// authenticateAdditionalIdentities authenticates non-primary identities marked as required.
 // Failures are non-fatal: errors are logged as warnings but don't fail the hook.
-// This ensures all needed profiles exist in the shared credentials file for Terraform
+// This ensures all required profiles exist in the shared credentials file for Terraform
 // components that use multiple AWS provider aliases (e.g., hub-spoke networking).
 //
 // TODO: Azure credentials are keyed by provider name, not identity. If two identities
@@ -177,20 +167,16 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 // Consider adopting a per-identity storage strategy for Azure if multi-identity Azure
 // support becomes a requirement.
 func authenticateAdditionalIdentities(ctx context.Context, authManager types.AuthManager,
-	primaryIdentity string, stackInfo *schema.ConfigAndStacksInfo,
+	primaryIdentity string,
 ) {
-	authConfig, err := decodeAuthConfigFromStack(stackInfo)
-	if err != nil || len(authConfig.Needs) == 0 {
-		return
-	}
-	for _, identity := range authConfig.Needs {
-		if strings.EqualFold(identity, primaryIdentity) {
+	for name, identity := range authManager.GetIdentities() {
+		if !identity.Required || strings.EqualFold(name, primaryIdentity) {
 			continue
 		}
-		log.Debug("Authenticating additional needed identity", identityKey, identity)
-		if _, err := authManager.Authenticate(ctx, identity); err != nil {
+		log.Debug("Authenticating additional required identity", identityKey, name)
+		if _, err := authManager.Authenticate(ctx, name); err != nil {
 			log.Warn("Failed to authenticate additional identity (non-fatal)",
-				identityKey, identity, "error", err)
+				identityKey, name, "error", err)
 		}
 	}
 }

@@ -1,0 +1,122 @@
+---
+title: Required
+sidebar_position: 4
+sidebar_label: required
+sidebar_class_name: command
+id: required
+description: Mark identities as required for automatic authentication in multi-account Terraform components.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Mark identities as `required: true` so they are automatically authenticated before Terraform runs — without prompting or
+selection.
+</Intro>
+
+## The Problem
+
+When Terraform components use multiple AWS provider aliases for multi-account patterns (e.g., hub-spoke networking or
+cross-account peering), each provider assumes a different IAM role. In CI environments with OIDC authentication, only the
+primary identity's profile is written to the shared credentials file. The additional provider aliases fail because their
+AWS profiles don't exist.
+
+## Configuration
+
+Set `required: true` on any identity that should be automatically authenticated:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    core-network:
+      kind: aws/assume-role
+      default: true       # Primary identity (sets AWS_PROFILE)
+      required: true      # Auto-authenticate without prompting
+    plat-prod:
+      kind: aws/assume-role
+      required: true      # Auto-authenticate as secondary
+    plat-staging:
+      kind: aws/assume-role
+      required: true      # Auto-authenticate as secondary
+```
+</File>
+
+The `required` and `default` fields are orthogonal:
+- **`default: true`** — this is the PRIMARY identity (sets `AWS_PROFILE`, credential env vars). Only one allowed.
+- **`required: true`** — auto-authenticate this identity without prompting. Multiple allowed.
+
+All required identities must be defined in your [identities](/cli/configuration/auth/identities) configuration
+(either globally in `atmos.yaml` or via component-level overrides).
+
+## Behavior
+
+<dl>
+  <dt>`required`</dt>
+  <dd>
+    A boolean field on an identity that marks it for automatic authentication. Before Terraform runs, Atmos
+    authenticates the default identity as the primary, then authenticates every identity with `required: true` and
+    writes all profiles to the shared AWS credentials file.
+
+    - The **default identity** is always the primary, setting `AWS_PROFILE` and default credential environment variables.
+    - Required non-default identities are authenticated as **secondary** — their profiles are written to the shared
+      credentials file, making them available for Terraform provider aliases.
+    - The `--identity` CLI flag takes **precedence** over `default` for primary selection, but required identities
+      are still authenticated as secondary.
+    - Failures for non-primary required identities are **non-fatal** — Atmos logs a warning and continues.
+  </dd>
+</dl>
+
+## Example
+
+A hub-spoke networking component that peers VPCs across three AWS accounts:
+
+<File title="stacks/catalog/transit-gateway.yaml">
+```yaml
+components:
+  terraform:
+    transit-gateway:
+      auth:
+        identities:
+          hub-network:
+            kind: aws/assume-role
+            default: true
+            required: true
+          spoke-production:
+            kind: aws/assume-role
+            required: true
+          spoke-staging:
+            kind: aws/assume-role
+            required: true
+      vars:
+        hub_account_id: "111111111111"
+        spoke_accounts:
+          production: "222222222222"
+          staging: "333333333333"
+```
+</File>
+
+Each identity's AWS profile is available for the corresponding Terraform provider alias:
+
+<File title="components/terraform/transit-gateway/providers.tf">
+```hcl
+provider "aws" {
+  # Uses the default identity (hub-network) — automatically authenticated as primary
+}
+
+provider "aws" {
+  alias   = "production"
+  profile = "spoke-production"
+}
+
+provider "aws" {
+  alias   = "staging"
+  profile = "spoke-staging"
+}
+```
+</File>
+
+## See Also
+
+- [Identities](/cli/configuration/auth/identities) — Configure the identities used with `required: true`
+- [Providers](/cli/configuration/auth/providers) — Configure authentication providers (SSO, OIDC, SAML)
