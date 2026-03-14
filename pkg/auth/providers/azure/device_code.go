@@ -98,6 +98,11 @@ func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodePro
 		return nil, fmt.Errorf("%w: tenant_id is required in spec for Azure device code provider", errUtils.ErrInvalidProviderConfig)
 	}
 
+	// Validate cloud_environment if specified.
+	if err := azureCloud.ValidateCloudEnvironment(cfg.CloudEnvironment); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidProviderConfig, err)
+	}
+
 	return &deviceCodeProvider{
 		name:           name,
 		config:         config,
@@ -345,7 +350,7 @@ func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, cli
 
 	// Start device code flow for management scope.
 	accessToken, expiresOn, err := p.acquireTokenByDeviceCode(ctx, client,
-		[]string{"https://management.azure.com/.default"})
+		[]string{p.cloudEnv.ManagementScope})
 	if err != nil {
 		return result, err
 	}
@@ -417,12 +422,13 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 //nolint:unparam // error return required for future extensibility and interface compatibility
 func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (authTypes.ICredentials, error) {
 	creds := &authTypes.AzureCredentials{
-		AccessToken:    tokens.accessToken,
-		TokenType:      "Bearer",
-		Expiration:     tokens.expiresOn.Format(time.RFC3339),
-		TenantID:       p.tenantID,
-		SubscriptionID: p.subscriptionID,
-		Location:       p.location,
+		AccessToken:      tokens.accessToken,
+		TokenType:        "Bearer",
+		Expiration:       tokens.expiresOn.Format(time.RFC3339),
+		TenantID:         p.tenantID,
+		SubscriptionID:   p.subscriptionID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name, // Propagate cloud environment for MSAL cache.
 	}
 
 	// Add Graph API token if available.
@@ -475,6 +481,10 @@ func (p *deviceCodeProvider) Environment() (map[string]string, error) {
 	if p.location != "" {
 		env["AZURE_LOCATION"] = p.location
 	}
+	if p.cloudEnv.Name != "" && p.cloudEnv.Name != "public" {
+		env["ARM_ENVIRONMENT"] = p.cloudEnv.Name
+		env["AZURE_ENVIRONMENT"] = p.cloudEnv.Name
+	}
 	return env, nil
 }
 
@@ -485,10 +495,11 @@ func (p *deviceCodeProvider) Environment() (map[string]string, error) {
 func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	// Use shared Azure environment preparation.
 	return azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
-		Environ:        environ,
-		SubscriptionID: p.subscriptionID,
-		TenantID:       p.tenantID,
-		Location:       p.location,
+		Environ:          environ,
+		SubscriptionID:   p.subscriptionID,
+		TenantID:         p.tenantID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name,
 	}), nil
 }
 

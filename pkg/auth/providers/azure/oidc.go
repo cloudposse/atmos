@@ -131,6 +131,11 @@ func NewOIDCProvider(name string, config *schema.Provider) (*oidcProvider, error
 		return nil, fmt.Errorf("%w: client_id is required in spec for Azure OIDC provider", errUtils.ErrInvalidProviderConfig)
 	}
 
+	// Validate cloud_environment if specified.
+	if err := azureCloud.ValidateCloudEnvironment(cfg.CloudEnvironment); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidProviderConfig, err)
+	}
+
 	return &oidcProvider{
 		name:           name,
 		config:         config,
@@ -228,7 +233,8 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 		ClientID:           p.clientID,
 		IsServicePrincipal: true,
 		TokenFilePath:      tokenFilePath,
-		FederatedToken:     federatedToken, // Store for Azure CLI service_principal_entries.json.
+		FederatedToken:     federatedToken,  // Store for Azure CLI service_principal_entries.json.
+		CloudEnvironment:   p.cloudEnv.Name, // Propagate cloud environment for MSAL cache.
 	}
 
 	// Acquire additional tokens for Azure CLI and Terraform provider compatibility.
@@ -495,6 +501,10 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 	if p.location != "" {
 		env["AZURE_LOCATION"] = p.location
 	}
+	if p.cloudEnv.Name != "" && p.cloudEnv.Name != "public" {
+		env["ARM_ENVIRONMENT"] = p.cloudEnv.Name
+		env["AZURE_ENVIRONMENT"] = p.cloudEnv.Name
+	}
 	return env, nil
 }
 
@@ -505,10 +515,11 @@ func (p *oidcProvider) PrepareEnvironment(ctx context.Context, environ map[strin
 
 	// Use shared Azure environment preparation.
 	result := azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
-		Environ:        environ,
-		SubscriptionID: p.subscriptionID,
-		TenantID:       p.tenantID,
-		Location:       p.location,
+		Environ:          environ,
+		SubscriptionID:   p.subscriptionID,
+		TenantID:         p.tenantID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name,
 	})
 
 	// Override ARM_USE_CLI to use OIDC instead.

@@ -286,6 +286,7 @@ func TestOIDCProvider_Environment(t *testing.T) {
 				clientID:       "client-456",
 				subscriptionID: "sub-789",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID":       "tenant-123",
@@ -301,6 +302,7 @@ func TestOIDCProvider_Environment(t *testing.T) {
 				clientID:       "client-456",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID": "tenant-123",
@@ -314,6 +316,7 @@ func TestOIDCProvider_Environment(t *testing.T) {
 				clientID:       "",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{},
 		},
@@ -343,6 +346,7 @@ func TestOIDCProvider_PrepareEnvironment(t *testing.T) {
 				clientID:       "client-456",
 				subscriptionID: "sub-789",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"HOME": "/home/user",
@@ -370,6 +374,7 @@ func TestOIDCProvider_PrepareEnvironment(t *testing.T) {
 				tenantID:       "tenant-123",
 				clientID:       "client-456",
 				subscriptionID: "sub-789",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"AZURE_CLIENT_SECRET":            "conflicting-secret",
@@ -405,6 +410,7 @@ func TestOIDCProvider_PrepareEnvironment(t *testing.T) {
 				clientID:       "client-456",
 				subscriptionID: "sub-789",
 				tokenFilePath:  "/custom/token/path",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{},
 			expectedContains: map[string]string{
@@ -1229,6 +1235,7 @@ func TestOIDCProvider_PrepareEnvironment_EdgeCases(t *testing.T) {
 			clientID:       "client-456",
 			subscriptionID: "sub-789",
 			location:       "westus2",
+			cloudEnv:       azureCloud.GetCloudEnvironment(""),
 		}
 
 		// Create temporary token file.
@@ -1261,6 +1268,7 @@ func TestOIDCProvider_PrepareEnvironment_EdgeCases(t *testing.T) {
 			clientID:       "client-456",
 			subscriptionID: "sub-789",
 			tokenFilePath:  tokenPath,
+			cloudEnv:       azureCloud.GetCloudEnvironment(""),
 		}
 
 		env, err := provider.PrepareEnvironment(context.Background(), make(map[string]string))
@@ -1284,6 +1292,7 @@ func TestOIDCProvider_PrepareEnvironment_EdgeCases(t *testing.T) {
 			clientID:       "client-456",
 			subscriptionID: "sub-789",
 			tokenFilePath:  "", // Empty - should use env var.
+			cloudEnv:       azureCloud.GetCloudEnvironment(""),
 		}
 
 		env, err := provider.PrepareEnvironment(context.Background(), make(map[string]string))
@@ -1418,4 +1427,21 @@ func TestExtractOIDCConfig_CloudEnvironment(t *testing.T) {
 			assert.Equal(t, tt.expectedCloudEnv, cfg.CloudEnvironment)
 		})
 	}
+}
+
+func TestNewOIDCProvider_InvalidCloudEnvironment(t *testing.T) {
+	config := &schema.Provider{
+		Kind: "azure/oidc",
+		Spec: map[string]interface{}{
+			"tenant_id":         "tenant-123",
+			"client_id":         "client-456",
+			"cloud_environment": "publicc", // Typo.
+		},
+	}
+
+	_, err := NewOIDCProvider("test", config)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
+	assert.Contains(t, err.Error(), "unknown cloud_environment")
+	assert.Contains(t, err.Error(), "valid values are")
 }

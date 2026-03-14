@@ -1,5 +1,13 @@
 package azure
 
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
+
 // CloudEnvironment defines the endpoints for a specific Azure cloud (public, government, China).
 type CloudEnvironment struct {
 	// Name is the canonical name of the cloud environment.
@@ -16,36 +24,41 @@ type CloudEnvironment struct {
 	BlobStorageSuffix string
 	// PortalURL is the Azure Portal base URL.
 	PortalURL string
+	// AzureProfileEnvName is the environment name used in azureProfile.json (e.g., "AzureCloud").
+	AzureProfileEnvName string
 }
 
 // Well-known Azure cloud environments.
 var cloudEnvironments = map[string]*CloudEnvironment{
 	"public": {
-		Name:              "public",
-		LoginEndpoint:     "login.microsoftonline.com",
-		ManagementScope:   "https://management.azure.com/.default",
-		GraphAPIScope:     "https://graph.microsoft.com/.default",
-		KeyVaultScope:     "https://vault.azure.net/.default",
-		BlobStorageSuffix: "blob.core.windows.net",
-		PortalURL:         "https://portal.azure.com/",
+		Name:                "public",
+		LoginEndpoint:       "login.microsoftonline.com",
+		ManagementScope:     "https://management.azure.com/.default",
+		GraphAPIScope:       "https://graph.microsoft.com/.default",
+		KeyVaultScope:       "https://vault.azure.net/.default",
+		BlobStorageSuffix:   "blob.core.windows.net",
+		PortalURL:           "https://portal.azure.com/",
+		AzureProfileEnvName: "AzureCloud",
 	},
 	"usgovernment": {
-		Name:              "usgovernment",
-		LoginEndpoint:     "login.microsoftonline.us",
-		ManagementScope:   "https://management.usgovcloudapi.net/.default",
-		GraphAPIScope:     "https://graph.microsoft.us/.default",
-		KeyVaultScope:     "https://vault.usgovcloudapi.net/.default",
-		BlobStorageSuffix: "blob.core.usgovcloudapi.net",
-		PortalURL:         "https://portal.azure.us/",
+		Name:                "usgovernment",
+		LoginEndpoint:       "login.microsoftonline.us",
+		ManagementScope:     "https://management.usgovcloudapi.net/.default",
+		GraphAPIScope:       "https://graph.microsoft.us/.default",
+		KeyVaultScope:       "https://vault.usgovcloudapi.net/.default",
+		BlobStorageSuffix:   "blob.core.usgovcloudapi.net",
+		PortalURL:           "https://portal.azure.us/",
+		AzureProfileEnvName: "AzureUSGovernment",
 	},
 	"china": {
-		Name:              "china",
-		LoginEndpoint:     "login.chinacloudapi.cn",
-		ManagementScope:   "https://management.chinacloudapi.cn/.default",
-		GraphAPIScope:     "https://microsoftgraph.chinacloudapi.cn/.default",
-		KeyVaultScope:     "https://vault.azure.cn/.default",
-		BlobStorageSuffix: "blob.core.chinacloudapi.cn",
-		PortalURL:         "https://portal.azure.cn/",
+		Name:                "china",
+		LoginEndpoint:       "login.chinacloudapi.cn",
+		ManagementScope:     "https://management.chinacloudapi.cn/.default",
+		GraphAPIScope:       "https://microsoftgraph.chinacloudapi.cn/.default",
+		KeyVaultScope:       "https://vault.azure.cn/.default",
+		BlobStorageSuffix:   "blob.core.chinacloudapi.cn",
+		PortalURL:           "https://portal.azure.cn/",
+		AzureProfileEnvName: "AzureChinaCloud",
 	},
 }
 
@@ -68,4 +81,18 @@ func KnownCloudEnvironments() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// ValidateCloudEnvironment validates that a cloud environment name is known.
+// Empty string is valid (defaults to "public"). Unknown non-empty values return an error.
+func ValidateCloudEnvironment(name string) error {
+	if name == "" {
+		return nil // Empty defaults to public.
+	}
+	if _, ok := cloudEnvironments[name]; ok {
+		return nil
+	}
+	known := KnownCloudEnvironments()
+	sort.Strings(known)
+	return fmt.Errorf("%w: unknown cloud_environment %q; valid values are: %s", errUtils.ErrInvalidAuthConfig, name, strings.Join(known, ", "))
 }

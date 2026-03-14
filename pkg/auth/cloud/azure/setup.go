@@ -94,11 +94,12 @@ func SetAuthContext(params *SetAuthContextParams) error {
 
 	// Populate Azure auth context as the single source of truth.
 	authContext.Azure = &schema.AzureAuthContext{
-		CredentialsFile: credentialsPath,
-		Profile:         params.IdentityName,
-		SubscriptionID:  azureCreds.SubscriptionID,
-		TenantID:        azureCreds.TenantID,
-		Location:        location,
+		CredentialsFile:  credentialsPath,
+		Profile:          params.IdentityName,
+		SubscriptionID:   azureCreds.SubscriptionID,
+		TenantID:         azureCreds.TenantID,
+		Location:         location,
+		CloudEnvironment: azureCreds.CloudEnvironment,
 		// OIDC-specific fields for Terraform ARM_USE_OIDC support.
 		UseOIDC:       azureCreds.IsServicePrincipal,
 		ClientID:      azureCreds.ClientID,
@@ -174,13 +175,14 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 	// Use shared PrepareEnvironment helper to get properly configured environment.
 	// Pass OIDC fields from auth context for Terraform ARM_USE_OIDC support.
 	environMap = PrepareEnvironment(PrepareEnvironmentConfig{
-		Environ:        environMap,
-		SubscriptionID: azureAuth.SubscriptionID,
-		TenantID:       azureAuth.TenantID,
-		Location:       azureAuth.Location,
-		UseOIDC:        azureAuth.UseOIDC,
-		ClientID:       azureAuth.ClientID,
-		TokenFilePath:  azureAuth.TokenFilePath,
+		Environ:          environMap,
+		SubscriptionID:   azureAuth.SubscriptionID,
+		TenantID:         azureAuth.TenantID,
+		Location:         azureAuth.Location,
+		CloudEnvironment: azureAuth.CloudEnvironment,
+		UseOIDC:          azureAuth.UseOIDC,
+		ClientID:         azureAuth.ClientID,
+		TokenFilePath:    azureAuth.TokenFilePath,
 	})
 
 	// Replace ComponentEnvSection with prepared environment.
@@ -227,7 +229,13 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID, clo
 	updateMSALCacheFromCreds(home, azureCreds, userOID, tenantID, cloudEnv)
 
 	// Update azureProfile.json.
-	if err := updateAzureProfile(home, username, tenantID, subscriptionID, azureCreds.IsServicePrincipal); err != nil {
+	if err := updateAzureProfile(home, ProfileUpdateParams{
+		Username:            username,
+		TenantID:            tenantID,
+		SubscriptionID:      subscriptionID,
+		IsServicePrincipal:  azureCreds.IsServicePrincipal,
+		AzureProfileEnvName: cloudEnv.AzureProfileEnvName,
+	}); err != nil {
 		log.Debug("Failed to update Azure profile", "error", err)
 		// Non-fatal.
 	}
@@ -580,8 +588,17 @@ func addTokenToCache(accessTokenSection map[string]interface{}, params *tokenCac
 	log.Debug("Added "+params.APIName+" token to MSAL cache", "key", cacheKey)
 }
 
+// ProfileUpdateParams contains the parameters for updating an Azure profile subscription entry.
+type ProfileUpdateParams struct {
+	Username            string
+	TenantID            string
+	SubscriptionID      string
+	IsServicePrincipal  bool
+	AzureProfileEnvName string
+}
+
 // updateAzureProfile updates the azureProfile.json file with the current subscription.
-func updateAzureProfile(home, username, tenantID, subscriptionID string, isServicePrincipal bool) error {
+func updateAzureProfile(home string, params ProfileUpdateParams) error {
 	profilePath := filepath.Join(home, ".azure", "azureProfile.json")
 	azureDir := filepath.Dir(profilePath)
 	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
@@ -609,7 +626,7 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string, isServi
 	}
 
 	// Update subscriptions in profile.
-	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, username, tenantID, subscriptionID, isServicePrincipal)
+	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, params)
 
 	// Write updated profile.
 	updatedData, err := json.MarshalIndent(profile, "", "  ")
@@ -633,13 +650,13 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string, isServi
 		return fmt.Errorf("failed to write Azure profile: %w", err)
 	}
 
-	log.Debug("Updated Azure profile", "path", profilePath, "subscription", subscriptionID)
+	log.Debug("Updated Azure profile", "path", profilePath, "subscription", params.SubscriptionID)
 	return nil
 }
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
 // It sets the specified subscription as default and marks all others as not default.
-func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tenantID, subscriptionID string, isServicePrincipal bool) []interface{} {
+func UpdateSubscriptionsInProfile(profile map[string]interface{}, params ProfileUpdateParams) []interface{} {
 	// Get subscriptions array.
 	subscriptionsRaw, ok := profile["subscriptions"].([]interface{})
 	if !ok {
@@ -648,7 +665,7 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 
 	// Determine user type based on authentication method.
 	userType := "user"
-	if isServicePrincipal {
+	if params.IsServicePrincipal {
 		userType = "servicePrincipal"
 	}
 
@@ -661,16 +678,16 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 		}
 
 		subID, _ := sub["id"].(string)
-		if subID == subscriptionID {
+		if subID == params.SubscriptionID {
 			// Update existing subscription.
-			sub["tenantId"] = tenantID
+			sub["tenantId"] = params.TenantID
 			sub["isDefault"] = true
 			sub["state"] = "Enabled"
 			sub[FieldUser] = map[string]interface{}{
-				"name": username,
+				"name": params.Username,
 				"type": userType,
 			}
-			sub["environmentName"] = "AzureCloud"
+			sub["environmentName"] = params.AzureProfileEnvName
 			subscriptionsRaw[i] = sub
 			found = true
 		} else {
@@ -681,16 +698,16 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 	}
 
 	// Add new subscription if not found.
-	if !found && subscriptionID != "" {
+	if !found && params.SubscriptionID != "" {
 		newSub := map[string]interface{}{
-			"id":              subscriptionID,
-			"name":            subscriptionID,
-			"tenantId":        tenantID,
+			"id":              params.SubscriptionID,
+			"name":            params.SubscriptionID,
+			"tenantId":        params.TenantID,
 			"isDefault":       true,
 			"state":           "Enabled",
-			"environmentName": "AzureCloud",
+			"environmentName": params.AzureProfileEnvName,
 			FieldUser: map[string]interface{}{
-				"name": username,
+				"name": params.Username,
 				"type": userType,
 			},
 		}

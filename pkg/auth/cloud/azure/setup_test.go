@@ -126,6 +126,29 @@ func TestSetAuthContext(t *testing.T) {
 			},
 		},
 		{
+			name: "propagates cloud environment to auth context",
+			params: &SetAuthContextParams{
+				AuthContext:  &schema.AuthContext{},
+				StackInfo:    nil,
+				ProviderName: "test-provider",
+				IdentityName: "test-identity",
+				Credentials: &types.AzureCredentials{
+					AccessToken:      "test-token",
+					TenantID:         "tenant-123",
+					SubscriptionID:   "sub-456",
+					Location:         "eastus",
+					Expiration:       now.Add(1 * time.Hour).Format(time.RFC3339),
+					CloudEnvironment: "usgovernment",
+				},
+				BasePath: tmpDir,
+			},
+			expectError: false,
+			checkAuth: func(t *testing.T, authContext *schema.AuthContext) {
+				require.NotNil(t, authContext.Azure)
+				assert.Equal(t, "usgovernment", authContext.Azure.CloudEnvironment)
+			},
+		},
+		{
 			name: "uses component-level location override",
 			params: &SetAuthContextParams{
 				AuthContext: &schema.AuthContext{},
@@ -380,6 +403,29 @@ func TestSetEnvironmentVariables(t *testing.T) {
 				"ARM_TENANT_ID":         "tenant-123",
 				"AZURE_LOCATION":        "eastus",
 				"ARM_LOCATION":          "eastus",
+				"ARM_USE_CLI":           "true",
+			},
+		},
+		{
+			name: "sets ARM_ENVIRONMENT for sovereign cloud",
+			authContext: &schema.AuthContext{
+				Azure: &schema.AzureAuthContext{
+					CredentialsFile:  credPath,
+					Profile:          "test-identity",
+					SubscriptionID:   "sub-456",
+					TenantID:         "tenant-123",
+					Location:         "usgovvirginia",
+					CloudEnvironment: "usgovernment",
+				},
+			},
+			stackInfo: &schema.ConfigAndStacksInfo{
+				ComponentEnvSection: map[string]any{},
+			},
+			expectedContains: map[string]string{
+				"AZURE_SUBSCRIPTION_ID": "sub-456",
+				"ARM_SUBSCRIPTION_ID":   "sub-456",
+				"ARM_ENVIRONMENT":       "usgovernment",
+				"AZURE_ENVIRONMENT":     "usgovernment",
 				"ARM_USE_CLI":           "true",
 			},
 		},
@@ -694,23 +740,25 @@ func TestUpdateAzureProfile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	tests := []struct {
-		name           string
-		setupProfile   func(string)
-		username       string
-		tenantID       string
-		subscriptionID string
-		expectError    bool
-		checkProfile   func(*testing.T, map[string]interface{})
+		name                string
+		setupProfile        func(string)
+		username            string
+		tenantID            string
+		subscriptionID      string
+		azureProfileEnvName string
+		expectError         bool
+		checkProfile        func(*testing.T, map[string]interface{})
 	}{
 		{
 			name: "creates new profile with subscription",
 			setupProfile: func(home string) {
 				// Don't create profile file.
 			},
-			username:       "user@example.com",
-			tenantID:       "tenant-456",
-			subscriptionID: "sub-123",
-			expectError:    false,
+			username:            "user@example.com",
+			tenantID:            "tenant-456",
+			subscriptionID:      "sub-123",
+			azureProfileEnvName: "AzureCloud",
+			expectError:         false,
 			checkProfile: func(t *testing.T, profile map[string]interface{}) {
 				subs, ok := profile["subscriptions"].([]interface{})
 				require.True(t, ok)
@@ -720,6 +768,7 @@ func TestUpdateAzureProfile(t *testing.T) {
 				assert.Equal(t, "sub-123", sub["id"])
 				assert.Equal(t, "tenant-456", sub["tenantId"])
 				assert.True(t, sub["isDefault"].(bool))
+				assert.Equal(t, "AzureCloud", sub["environmentName"])
 			},
 		},
 		{
@@ -740,10 +789,11 @@ func TestUpdateAzureProfile(t *testing.T) {
 				os.MkdirAll(azureDir, 0o700)
 				os.WriteFile(filepath.Join(azureDir, "azureProfile.json"), data, 0o600)
 			},
-			username:       "user@example.com",
-			tenantID:       "new-tenant",
-			subscriptionID: "sub-123",
-			expectError:    false,
+			username:            "user@example.com",
+			tenantID:            "new-tenant",
+			subscriptionID:      "sub-123",
+			azureProfileEnvName: "AzureCloud",
+			expectError:         false,
 			checkProfile: func(t *testing.T, profile map[string]interface{}) {
 				subs, ok := profile["subscriptions"].([]interface{})
 				require.True(t, ok)
@@ -753,6 +803,7 @@ func TestUpdateAzureProfile(t *testing.T) {
 				assert.Equal(t, "sub-123", sub["id"])
 				assert.Equal(t, "new-tenant", sub["tenantId"])
 				assert.True(t, sub["isDefault"].(bool))
+				assert.Equal(t, "AzureCloud", sub["environmentName"])
 			},
 		},
 		{
@@ -768,14 +819,37 @@ func TestUpdateAzureProfile(t *testing.T) {
 				os.MkdirAll(azureDir, 0o700)
 				os.WriteFile(filepath.Join(azureDir, "azureProfile.json"), dataWithBOM, 0o600)
 			},
-			username:       "user@example.com",
-			tenantID:       "tenant-123",
-			subscriptionID: "sub-456",
-			expectError:    false,
+			username:            "user@example.com",
+			tenantID:            "tenant-123",
+			subscriptionID:      "sub-456",
+			azureProfileEnvName: "AzureCloud",
+			expectError:         false,
 			checkProfile: func(t *testing.T, profile map[string]interface{}) {
 				subs, ok := profile["subscriptions"].([]interface{})
 				require.True(t, ok)
 				require.Len(t, subs, 1)
+			},
+		},
+		{
+			name: "sovereign cloud sets correct environment name",
+			setupProfile: func(home string) {
+				// Don't create profile file.
+			},
+			username:            "admin@gov.onmicrosoft.us",
+			tenantID:            "gov-tenant-789",
+			subscriptionID:      "gov-sub-456",
+			azureProfileEnvName: "AzureUSGovernment",
+			expectError:         false,
+			checkProfile: func(t *testing.T, profile map[string]interface{}) {
+				subs, ok := profile["subscriptions"].([]interface{})
+				require.True(t, ok)
+				require.Len(t, subs, 1)
+
+				sub := subs[0].(map[string]interface{})
+				assert.Equal(t, "gov-sub-456", sub["id"])
+				assert.Equal(t, "gov-tenant-789", sub["tenantId"])
+				assert.True(t, sub["isDefault"].(bool))
+				assert.Equal(t, "AzureUSGovernment", sub["environmentName"])
 			},
 		},
 	}
@@ -788,7 +862,13 @@ func TestUpdateAzureProfile(t *testing.T) {
 
 			tt.setupProfile(testHome)
 
-			err := updateAzureProfile(testHome, tt.username, tt.tenantID, tt.subscriptionID, false)
+			err := updateAzureProfile(testHome, ProfileUpdateParams{
+				Username:            tt.username,
+				TenantID:            tt.tenantID,
+				SubscriptionID:      tt.subscriptionID,
+				IsServicePrincipal:  false,
+				AzureProfileEnvName: tt.azureProfileEnvName,
+			})
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1310,4 +1390,55 @@ func TestUpdateMSALCache_ServicePrincipal(t *testing.T) {
 	accountSection, ok := cache["Account"].(map[string]interface{})
 	require.True(t, ok, "Account section should exist")
 	assert.Empty(t, accountSection, "Account section should be empty for service principal")
+}
+
+func TestUpdateMSALCacheFromCreds_SovereignCloud(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	now := time.Now().UTC()
+	accessToken := createTestJWT(map[string]interface{}{"oid": "user-oid-gov", "upn": "admin@gov.onmicrosoft.us"})
+	graphToken := createTestJWT(map[string]interface{}{"oid": "user-oid-gov", "upn": "admin@gov.onmicrosoft.us"})
+	keyVaultToken := createTestJWT(map[string]interface{}{"oid": "user-oid-gov", "upn": "admin@gov.onmicrosoft.us"})
+
+	cloudEnv := GetCloudEnvironment("usgovernment")
+	azureCreds := &types.AzureCredentials{
+		AccessToken:        accessToken,
+		Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
+		GraphAPIToken:      graphToken,
+		GraphAPIExpiration: now.Add(2 * time.Hour).Format(time.RFC3339),
+		KeyVaultToken:      keyVaultToken,
+		KeyVaultExpiration: now.Add(3 * time.Hour).Format(time.RFC3339),
+	}
+
+	updateMSALCacheFromCreds(tmpDir, azureCreds, "user-oid-gov", "gov-tenant", cloudEnv)
+
+	// Verify MSAL cache was created with sovereign cloud scopes.
+	msalCachePath := filepath.Join(tmpDir, ".azure", "msal_token_cache.json")
+	data, err := os.ReadFile(msalCachePath)
+	require.NoError(t, err)
+
+	var cache map[string]interface{}
+	err = json.Unmarshal(data, &cache)
+	require.NoError(t, err)
+
+	// Verify token entries contain US Government scopes.
+	accessTokenSection, ok := cache["AccessToken"].(map[string]interface{})
+	require.True(t, ok)
+
+	var foundGovScope bool
+	for _, entry := range accessTokenSection {
+		tokenEntry, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		target, _ := tokenEntry["target"].(string)
+		if target == cloudEnv.ManagementScope {
+			foundGovScope = true
+			// Verify the environment/realm uses the government login endpoint.
+			realm, _ := tokenEntry["realm"].(string)
+			assert.Equal(t, "gov-tenant", realm)
+			break
+		}
+	}
+	assert.True(t, foundGovScope, "Should find token entry with US Government management scope")
 }

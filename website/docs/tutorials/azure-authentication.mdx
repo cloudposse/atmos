@@ -592,12 +592,15 @@ If you see errors about missing permissions, ensure all 3 token scopes are confi
 ```bash
 # Check MSAL cache contents
 cat ~/.azure/msal_token_cache.json | jq '.AccessToken | keys[]'
-
-# Should see entries for:
-# - management.azure.com
-# - graph.microsoft.com
-# - vault.azure.net
 ```
+
+The expected scope entries depend on your cloud environment:
+
+| Scope | Commercial (`public`) | US Government (`usgovernment`) | China (`china`) |
+|---|---|---|---|
+| **Management** | `management.azure.com` | `management.usgovcloudapi.net` | `management.chinacloudapi.cn` |
+| **Graph API** | `graph.microsoft.com` | `graph.microsoft.us` | `microsoftgraph.chinacloudapi.cn` |
+| **Key Vault** | `vault.azure.net` | `vault.usgovcloudapi.net` | `vault.azure.cn` |
 
 ### Provider Not Found
 

@@ -668,6 +668,7 @@ func TestDeviceCodeProvider_updateAzureProfile(t *testing.T) {
 			provider := &deviceCodeProvider{
 				subscriptionID: tt.subscriptionID,
 				tenantID:       tt.tenantID,
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			}
 
 			err := provider.updateAzureProfile(testHome, tt.username)

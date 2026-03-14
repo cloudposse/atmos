@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -334,6 +335,7 @@ func TestCLIProvider_Environment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID":       "tenant-123",
@@ -347,6 +349,7 @@ func TestCLIProvider_Environment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID": "tenant-123",
@@ -358,6 +361,7 @@ func TestCLIProvider_Environment(t *testing.T) {
 				tenantID:       "",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{},
 		},
@@ -386,6 +390,7 @@ func TestCLIProvider_PrepareEnvironment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"HOME": "/home/user",
@@ -408,6 +413,7 @@ func TestCLIProvider_PrepareEnvironment(t *testing.T) {
 			provider: &cliProvider{
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"AZURE_CLIENT_ID":     "conflicting-client-id",

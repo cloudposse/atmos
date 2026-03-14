@@ -150,7 +150,8 @@ func resolveDestinationWithDefault(dest string, azureCreds *types.AzureCredentia
 	}
 	if destination == "" {
 		// Default to tenant-specific portal home.
-		destination = fmt.Sprintf("%s#@%s", AzurePortalURL, azureCreds.TenantID)
+		portalURL := portalURLForCreds(azureCreds)
+		destination = fmt.Sprintf("%s#@%s", portalURL, azureCreds.TenantID)
 	}
 	return destination, nil
 }
@@ -177,9 +178,11 @@ func ResolveDestination(dest string, azureCreds *types.AzureCredentials) (string
 		return "", err
 	}
 
+	portalURL := portalURLForCreds(azureCreds)
+
 	if dest == "" || dest == "home" {
 		// Tenant home page.
-		return fmt.Sprintf("%s#@%s", AzurePortalURL, azureCreds.TenantID), nil
+		return fmt.Sprintf("%s#@%s", portalURL, azureCreds.TenantID), nil
 	}
 
 	// If already a full URL, pass through unchanged.
@@ -188,7 +191,7 @@ func ResolveDestination(dest string, azureCreds *types.AzureCredentials) (string
 	}
 
 	// Build base URL with tenant context.
-	baseURL := fmt.Sprintf("%s#@%s", AzurePortalURL, azureCreds.TenantID)
+	baseURL := fmt.Sprintf("%s#@%s", portalURL, azureCreds.TenantID)
 
 	// Look up destination pattern.
 	pattern, found := azurePortalDestinations[dest]
@@ -206,6 +209,14 @@ func ResolveDestination(dest string, azureCreds *types.AzureCredentials) (string
 		return baseURL + fmt.Sprintf(pattern.path, azureCreds.SubscriptionID), nil
 	}
 	return baseURL + pattern.path, nil
+}
+
+// portalURLForCreds returns the portal URL based on the cloud environment in the credentials.
+func portalURLForCreds(azureCreds *types.AzureCredentials) string {
+	if azureCreds.CloudEnvironment != "" {
+		return GetCloudEnvironment(azureCreds.CloudEnvironment).PortalURL
+	}
+	return AzurePortalURL
 }
 
 // validateDestinationCredentials validates that credentials have required fields for destination resolution.

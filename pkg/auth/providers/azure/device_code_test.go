@@ -279,6 +279,7 @@ func TestDeviceCodeProvider_Environment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID":       "tenant-123",
@@ -292,6 +293,7 @@ func TestDeviceCodeProvider_Environment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID": "tenant-123",
@@ -303,6 +305,7 @@ func TestDeviceCodeProvider_Environment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID":       "tenant-123",
@@ -315,6 +318,7 @@ func TestDeviceCodeProvider_Environment(t *testing.T) {
 				tenantID:       "",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{},
 		},
@@ -343,6 +347,7 @@ func TestDeviceCodeProvider_PrepareEnvironment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"HOME": "/home/user",
@@ -365,6 +370,7 @@ func TestDeviceCodeProvider_PrepareEnvironment(t *testing.T) {
 			provider: &deviceCodeProvider{
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"AZURE_CLIENT_ID":                "conflicting-client-id",
@@ -750,6 +756,63 @@ func TestNewDeviceCodeProvider_SovereignCloud(t *testing.T) {
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedLogin, provider.cloudEnv.LoginEndpoint)
+		})
+	}
+}
+
+func TestNewDeviceCodeProvider_InvalidCloudEnvironment(t *testing.T) {
+	_, err := NewDeviceCodeProvider("test", &schema.Provider{
+		Kind: "azure/device-code",
+		Spec: map[string]interface{}{
+			"tenant_id":         "tenant-123",
+			"cloud_environment": "publicc", // Typo.
+		},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
+	assert.Contains(t, err.Error(), "unknown cloud_environment")
+}
+
+func TestDeviceCodeProvider_Environment_SovereignCloud(t *testing.T) {
+	tests := []struct {
+		name             string
+		cloudEnvName     string
+		expectedContains map[string]string
+		expectedMissing  []string
+	}{
+		{
+			name:         "US government sets ARM_ENVIRONMENT",
+			cloudEnvName: "usgovernment",
+			expectedContains: map[string]string{
+				"ARM_ENVIRONMENT":   "usgovernment",
+				"AZURE_ENVIRONMENT": "usgovernment",
+			},
+		},
+		{
+			name:            "public does not set ARM_ENVIRONMENT",
+			cloudEnvName:    "public",
+			expectedMissing: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &deviceCodeProvider{
+				tenantID:       "tenant-123",
+				subscriptionID: "sub-456",
+				cloudEnv:       azureCloud.GetCloudEnvironment(tt.cloudEnvName),
+			}
+
+			env, err := provider.Environment()
+			require.NoError(t, err)
+
+			for key, expected := range tt.expectedContains {
+				assert.Equal(t, expected, env[key])
+			}
+			for _, key := range tt.expectedMissing {
+				_, exists := env[key]
+				assert.False(t, exists, "Expected %s to be missing", key)
+			}
 		})
 	}
 }

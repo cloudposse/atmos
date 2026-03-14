@@ -1,79 +1,88 @@
 package azure
 
 import (
+	"errors"
 	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestGetCloudEnvironment(t *testing.T) {
 	tests := []struct {
-		name              string
-		envName           string
-		expectedName      string
-		expectedLogin     string
-		expectedMgmt      string
-		expectedGraph     string
-		expectedKeyVault  string
-		expectedBlobSufx  string
-		expectedPortalURL string
+		name                   string
+		envName                string
+		expectedName           string
+		expectedLogin          string
+		expectedMgmt           string
+		expectedGraph          string
+		expectedKeyVault       string
+		expectedBlobSufx       string
+		expectedPortalURL      string
+		expectedProfileEnvName string
 	}{
 		{
-			name:              "public cloud by name",
-			envName:           "public",
-			expectedName:      "public",
-			expectedLogin:     "login.microsoftonline.com",
-			expectedMgmt:      "https://management.azure.com/.default",
-			expectedGraph:     "https://graph.microsoft.com/.default",
-			expectedKeyVault:  "https://vault.azure.net/.default",
-			expectedBlobSufx:  "blob.core.windows.net",
-			expectedPortalURL: "https://portal.azure.com/",
+			name:                   "public cloud by name",
+			envName:                "public",
+			expectedName:           "public",
+			expectedLogin:          "login.microsoftonline.com",
+			expectedMgmt:           "https://management.azure.com/.default",
+			expectedGraph:          "https://graph.microsoft.com/.default",
+			expectedKeyVault:       "https://vault.azure.net/.default",
+			expectedBlobSufx:       "blob.core.windows.net",
+			expectedPortalURL:      "https://portal.azure.com/",
+			expectedProfileEnvName: "AzureCloud",
 		},
 		{
-			name:              "US government cloud",
-			envName:           "usgovernment",
-			expectedName:      "usgovernment",
-			expectedLogin:     "login.microsoftonline.us",
-			expectedMgmt:      "https://management.usgovcloudapi.net/.default",
-			expectedGraph:     "https://graph.microsoft.us/.default",
-			expectedKeyVault:  "https://vault.usgovcloudapi.net/.default",
-			expectedBlobSufx:  "blob.core.usgovcloudapi.net",
-			expectedPortalURL: "https://portal.azure.us/",
+			name:                   "US government cloud",
+			envName:                "usgovernment",
+			expectedName:           "usgovernment",
+			expectedLogin:          "login.microsoftonline.us",
+			expectedMgmt:           "https://management.usgovcloudapi.net/.default",
+			expectedGraph:          "https://graph.microsoft.us/.default",
+			expectedKeyVault:       "https://vault.usgovcloudapi.net/.default",
+			expectedBlobSufx:       "blob.core.usgovcloudapi.net",
+			expectedPortalURL:      "https://portal.azure.us/",
+			expectedProfileEnvName: "AzureUSGovernment",
 		},
 		{
-			name:              "China cloud",
-			envName:           "china",
-			expectedName:      "china",
-			expectedLogin:     "login.chinacloudapi.cn",
-			expectedMgmt:      "https://management.chinacloudapi.cn/.default",
-			expectedGraph:     "https://microsoftgraph.chinacloudapi.cn/.default",
-			expectedKeyVault:  "https://vault.azure.cn/.default",
-			expectedBlobSufx:  "blob.core.chinacloudapi.cn",
-			expectedPortalURL: "https://portal.azure.cn/",
+			name:                   "China cloud",
+			envName:                "china",
+			expectedName:           "china",
+			expectedLogin:          "login.chinacloudapi.cn",
+			expectedMgmt:           "https://management.chinacloudapi.cn/.default",
+			expectedGraph:          "https://microsoftgraph.chinacloudapi.cn/.default",
+			expectedKeyVault:       "https://vault.azure.cn/.default",
+			expectedBlobSufx:       "blob.core.chinacloudapi.cn",
+			expectedPortalURL:      "https://portal.azure.cn/",
+			expectedProfileEnvName: "AzureChinaCloud",
 		},
 		{
-			name:              "empty string defaults to public",
-			envName:           "",
-			expectedName:      "public",
-			expectedLogin:     "login.microsoftonline.com",
-			expectedMgmt:      "https://management.azure.com/.default",
-			expectedGraph:     "https://graph.microsoft.com/.default",
-			expectedKeyVault:  "https://vault.azure.net/.default",
-			expectedBlobSufx:  "blob.core.windows.net",
-			expectedPortalURL: "https://portal.azure.com/",
+			name:                   "empty string defaults to public",
+			envName:                "",
+			expectedName:           "public",
+			expectedLogin:          "login.microsoftonline.com",
+			expectedMgmt:           "https://management.azure.com/.default",
+			expectedGraph:          "https://graph.microsoft.com/.default",
+			expectedKeyVault:       "https://vault.azure.net/.default",
+			expectedBlobSufx:       "blob.core.windows.net",
+			expectedPortalURL:      "https://portal.azure.com/",
+			expectedProfileEnvName: "AzureCloud",
 		},
 		{
-			name:              "unknown name defaults to public",
-			envName:           "nonexistent",
-			expectedName:      "public",
-			expectedLogin:     "login.microsoftonline.com",
-			expectedMgmt:      "https://management.azure.com/.default",
-			expectedGraph:     "https://graph.microsoft.com/.default",
-			expectedKeyVault:  "https://vault.azure.net/.default",
-			expectedBlobSufx:  "blob.core.windows.net",
-			expectedPortalURL: "https://portal.azure.com/",
+			name:                   "unknown name defaults to public",
+			envName:                "nonexistent",
+			expectedName:           "public",
+			expectedLogin:          "login.microsoftonline.com",
+			expectedMgmt:           "https://management.azure.com/.default",
+			expectedGraph:          "https://graph.microsoft.com/.default",
+			expectedKeyVault:       "https://vault.azure.net/.default",
+			expectedBlobSufx:       "blob.core.windows.net",
+			expectedPortalURL:      "https://portal.azure.com/",
+			expectedProfileEnvName: "AzureCloud",
 		},
 	}
 
@@ -88,6 +97,7 @@ func TestGetCloudEnvironment(t *testing.T) {
 			assert.Equal(t, tt.expectedKeyVault, env.KeyVaultScope)
 			assert.Equal(t, tt.expectedBlobSufx, env.BlobStorageSuffix)
 			assert.Equal(t, tt.expectedPortalURL, env.PortalURL)
+			assert.Equal(t, tt.expectedProfileEnvName, env.AzureProfileEnvName)
 		})
 	}
 }
@@ -136,4 +146,34 @@ func TestGetCloudEnvironmentIsCasePreserving(t *testing.T) {
 	// Keys are lowercase; uppercase should fall back to public.
 	env := GetCloudEnvironment("USGovernment")
 	assert.Equal(t, "public", env.Name, "uppercase lookup should fall back to public cloud")
+}
+
+func TestValidateCloudEnvironment(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expectErr bool
+	}{
+		{name: "empty is valid", input: "", expectErr: false},
+		{name: "public is valid", input: "public", expectErr: false},
+		{name: "usgovernment is valid", input: "usgovernment", expectErr: false},
+		{name: "china is valid", input: "china", expectErr: false},
+		{name: "typo rejects", input: "publicc", expectErr: true},
+		{name: "uppercase rejects", input: "Public", expectErr: true},
+		{name: "unknown rejects", input: "germany", expectErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCloudEnvironment(tt.input)
+			if tt.expectErr {
+				require.Error(t, err)
+				assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "Should wrap ErrInvalidAuthConfig")
+				assert.Contains(t, err.Error(), "unknown cloud_environment")
+				assert.Contains(t, err.Error(), "valid values are")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

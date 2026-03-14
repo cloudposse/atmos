@@ -107,7 +107,7 @@ endpoint set. Default to `"public"` (Azure Commercial) for backward compatibilit
 
 ### 1. Define cloud environment endpoint sets
 
-Create a new file `pkg/auth/providers/azure/cloud_environments.go`:
+Create a new file `pkg/auth/cloud/azure/cloud_environments.go`:
 
 ```go
 // CloudEnvironment defines the endpoints for a specific Azure cloud.
@@ -266,7 +266,8 @@ auth:
   identities:
     gov-sub:
       kind: azure/subscription
-      provider: azure-gov
+      via:
+        provider: azure-gov
       principal:
         subscription_id: !env AZURE_SUBSCRIPTION_ID
 
@@ -291,8 +292,8 @@ terraform:
 
 | File                                                           | Change                                                 |
 |----------------------------------------------------------------|--------------------------------------------------------|
-| `pkg/auth/providers/azure/cloud_environments.go`               | **NEW** — Cloud environment endpoint registry          |
-| `pkg/auth/providers/azure/cloud_environments_test.go`          | **NEW** — Tests for endpoint lookup                    |
+| `pkg/auth/cloud/azure/cloud_environments.go`                   | **NEW** — Cloud environment endpoint registry          |
+| `pkg/auth/cloud/azure/cloud_environments_test.go`              | **NEW** — Tests for endpoint lookup                    |
 | `internal/terraform_backend/terraform_backend_azurerm.go`      | Read `environment` from backend config for blob suffix |
 | `internal/terraform_backend/terraform_backend_azurerm_test.go` | Add sovereign cloud test cases                         |
 | `pkg/auth/providers/azure/oidc.go`                             | Replace hardcoded constants with cloud environment     |
