@@ -109,6 +109,32 @@ func TestNewCLIProvider(t *testing.T) {
 			expectError: true,
 			errorType:   errUtils.ErrInvalidProviderKind,
 		},
+		{
+			name:         "valid config with cloud_environment",
+			providerName: "azure-gov-cli",
+			config: &schema.Provider{
+				Kind: "azure/cli",
+				Spec: map[string]interface{}{
+					"tenant_id":         "gov-tenant",
+					"subscription_id":   "gov-sub",
+					"cloud_environment": "usgovernment",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "invalid cloud_environment rejected",
+			providerName: "azure-cli",
+			config: &schema.Provider{
+				Kind: "azure/cli",
+				Spec: map[string]interface{}{
+					"tenant_id":         "tenant-123",
+					"cloud_environment": "invalid-cloud",
+				},
+			},
+			expectError: true,
+			errorType:   errUtils.ErrInvalidProviderConfig,
+		},
 	}
 
 	for _, tt := range tests {
@@ -140,7 +166,12 @@ func TestNewCLIProvider(t *testing.T) {
 				if loc, ok := tt.config.Spec["location"].(string); ok {
 					assert.Equal(t, loc, provider.location)
 				}
+				if ce, ok := tt.config.Spec["cloud_environment"].(string); ok {
+					assert.Equal(t, ce, provider.cloudEnv.Name)
+				}
 			}
+			// Cloud environment should always be set (defaults to public).
+			assert.NotNil(t, provider.cloudEnv)
 		})
 	}
 }

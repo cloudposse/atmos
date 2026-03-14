@@ -1455,10 +1455,10 @@ func TestNewOIDCProvider_InvalidCloudEnvironment(t *testing.T) {
 
 func TestOIDCProvider_Environment_SovereignCloud(t *testing.T) {
 	tests := []struct {
-		name             string
-		cloudEnvName     string
-		expectedEnvVars  map[string]string
-		unexpectedEnvVar string
+		name              string
+		cloudEnvName      string
+		expectedEnvVars   map[string]string
+		unexpectedEnvVars []string
 	}{
 		{
 			name:         "usgovernment sets ARM_ENVIRONMENT",
@@ -1477,9 +1477,9 @@ func TestOIDCProvider_Environment_SovereignCloud(t *testing.T) {
 			},
 		},
 		{
-			name:             "public does not set ARM_ENVIRONMENT",
-			cloudEnvName:     "public",
-			unexpectedEnvVar: "ARM_ENVIRONMENT",
+			name:              "public does not set sovereign env vars",
+			cloudEnvName:      "public",
+			unexpectedEnvVars: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
 		},
 	}
 
@@ -1500,9 +1500,9 @@ func TestOIDCProvider_Environment_SovereignCloud(t *testing.T) {
 				assert.Equal(t, v, env[k], "Expected %s=%s", k, v)
 			}
 
-			if tt.unexpectedEnvVar != "" {
-				_, exists := env[tt.unexpectedEnvVar]
-				assert.False(t, exists, "Expected %s to not be set", tt.unexpectedEnvVar)
+			for _, k := range tt.unexpectedEnvVars {
+				_, exists := env[k]
+				assert.False(t, exists, "Expected %s to not be set", k)
 			}
 		})
 	}

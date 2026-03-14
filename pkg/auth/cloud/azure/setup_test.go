@@ -1495,6 +1495,11 @@ func TestResolveUsername(t *testing.T) {
 }
 
 func TestUpdateAzureCLIFiles(t *testing.T) {
+	// Redirect HOME/USERPROFILE to a temp directory to avoid polluting the real ~/.azure.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+
 	t.Run("non-Azure credentials returns nil", func(t *testing.T) {
 		// Pass a non-Azure credential type.
 		err := UpdateAzureCLIFiles(nil, "tenant", "sub", "")
@@ -1526,10 +1531,9 @@ func TestUpdateAzureCLIFiles(t *testing.T) {
 		err := UpdateAzureCLIFiles(creds, "tenant-abc", "sub-def", "")
 		assert.NoError(t, err)
 
-		// Verify files were created in home directory.
-		home, _ := os.UserHomeDir()
-		msalPath := filepath.Join(home, ".azure", "msal_token_cache.json")
-		profilePath := filepath.Join(home, ".azure", "azureProfile.json")
+		// Verify files were created in the isolated temp home directory.
+		msalPath := filepath.Join(tmpHome, ".azure", "msal_token_cache.json")
+		profilePath := filepath.Join(tmpHome, ".azure", "azureProfile.json")
 		_, msalErr := os.Stat(msalPath)
 		_, profileErr := os.Stat(profilePath)
 		assert.NoError(t, msalErr, "MSAL cache should exist")
