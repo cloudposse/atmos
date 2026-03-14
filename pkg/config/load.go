@@ -68,7 +68,8 @@ func trackMergedConfigFile(path string) {
 
 const (
 	profileKey       = "profile"
-	profileDelimiter = ","
+	commaDelimiter   = ","
+	profileDelimiter = commaDelimiter
 	// AtmosCliConfigPathEnvVar is the environment variable name for CLI config path.
 	AtmosCliConfigPathEnvVar = "ATMOS_CLI_CONFIG_PATH"
 	// CwdKey is the log key for current working directory.
@@ -151,6 +152,84 @@ func ParseProfilesFromEnvString(envValue string) []string {
 		}
 	}
 	return result
+}
+
+// ConfigSelection holds the config-selection flags parsed early from os.Args
+// before Cobra is initialized (same pattern as profile early-parsing).
+type ConfigSelection struct {
+	BasePath   string
+	Config     []string
+	ConfigPath []string
+}
+
+// ParseConfigSelectionFromOsArgs parses --base-path, --config, and --config-path
+// flags from os.Args using pflag. This is used for early extraction before Cobra
+// parses flags, so that InitCliConfig receives the correct config location.
+func ParseConfigSelectionFromOsArgs(args []string) ConfigSelection {
+	fs := pflag.NewFlagSet("config-selection-parser", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.ParseErrorsAllowlist.UnknownFlags = true
+
+	basePath := fs.String("base-path", "", "Base path")
+	config := fs.StringSlice("config", []string{}, "Config files")
+	configPath := fs.StringSlice("config-path", []string{}, "Config dirs")
+
+	_ = fs.Parse(args)
+
+	var sel ConfigSelection
+
+	if basePath != nil && *basePath != "" {
+		sel.BasePath = strings.TrimSpace(*basePath)
+	}
+
+	if config != nil {
+		for _, v := range *config {
+			if trimmed := strings.TrimSpace(v); trimmed != "" {
+				sel.Config = append(sel.Config, trimmed)
+			}
+		}
+	}
+
+	if configPath != nil {
+		for _, v := range *configPath {
+			if trimmed := strings.TrimSpace(v); trimmed != "" {
+				sel.ConfigPath = append(sel.ConfigPath, trimmed)
+			}
+		}
+	}
+
+	return sel
+}
+
+// ConfigSelectionFromEnv reads config-selection values from environment variables
+// as fallbacks when not provided via CLI flags.
+func ConfigSelectionFromEnv() ConfigSelection {
+	var sel ConfigSelection
+
+	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
+	if v := os.Getenv("ATMOS_BASE_PATH"); v != "" {
+		sel.BasePath = strings.TrimSpace(v)
+	}
+
+	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
+	if v := os.Getenv("ATMOS_CONFIG"); v != "" {
+		for _, part := range strings.Split(v, commaDelimiter) {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				sel.Config = append(sel.Config, trimmed)
+			}
+		}
+	}
+
+	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
+	if v := os.Getenv("ATMOS_CONFIG_PATH"); v != "" {
+		for _, part := range strings.Split(v, commaDelimiter) {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				sel.ConfigPath = append(sel.ConfigPath, trimmed)
+			}
+		}
+	}
+
+	return sel
 }
 
 // getProfilesFromFallbacks handles fallback profile loading when Viper doesn't have profiles set.
