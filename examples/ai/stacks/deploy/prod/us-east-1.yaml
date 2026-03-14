@@ -1,0 +1,38 @@
+# Production stack for us-east-1
+
+import:
+  - mixins/region/us-east-1
+  - mixins/stage/prod
+
+components:
+  terraform:
+
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        vpc_cidr: "10.10.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+        nat_gateway_enabled: true
+        tags:
+          Environment: "production"
+          Region: "us-east-1"
+
+    tgw/attachment:
+      metadata:
+        component: tgw/attachment
+      vars:
+        tags:
+          Environment: "production"
+          Region: "us-east-1"
+      settings:
+        depends_on:
+          1:
+            component: vpc
+          2:
+            # Depends on tgw/hub in the network account in the same region
+            component: tgw/hub
+            stack: "{{ .vars.environment }}-network"

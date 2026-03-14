@@ -1010,6 +1010,16 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 			args:     []string{"terraform", "--use-version"},
 			expected: "",
 		},
+		{
+			name:     "use-version after bare -- is ignored",
+			args:     []string{"terraform", "--", "--use-version=1.2.3"},
+			expected: "",
+		},
+		{
+			name:     "use-version before bare -- is found",
+			args:     []string{"terraform", "--use-version=1.2.3", "--", "plan"},
+			expected: "1.2.3",
+		},
 	}
 
 	for _, tt := range tests {

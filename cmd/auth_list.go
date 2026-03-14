@@ -373,7 +373,7 @@ func loadAuthManagerForList() (authTypes.AuthManager, error) {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
-	manager, err := createAuthManager(&atmosConfig.Auth)
+	manager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrInvalidAuthConfig, err)
 	}

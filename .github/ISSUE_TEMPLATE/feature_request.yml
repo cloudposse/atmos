@@ -30,7 +30,7 @@ body:
       description: A clear and concise description of what you expected.
       placeholder: What happened?
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: use-case
@@ -43,7 +43,7 @@ body:
         Please provide some additional context of why this feature or
         capability will be valuable.
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: ideal-solution
@@ -51,7 +51,7 @@ body:
       label: Describe Ideal Solution
       description: A clear and concise description of what you want to happen.
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: alternatives-considered

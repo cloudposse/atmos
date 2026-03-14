@@ -4,7 +4,7 @@ sidebar_position: 2
 sidebar_label: providers
 sidebar_class_name: command
 id: providers
-description: Configure authentication providers for AWS SSO, SAML, and GitHub OIDC in your `atmos.yaml`.
+description: Configure authentication providers for AWS, Azure, and GCP in your `atmos.yaml`.
 ---
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
@@ -19,7 +19,10 @@ Providers are the upstream systems that Atmos uses to obtain initial credentials
 
 <Experimental />
 
-## AWS IAM Identity Center (SSO)
+<Tabs>
+<TabItem value="aws" label="AWS" default>
+
+## IAM Identity Center (SSO)
 
 The most common provider for AWS organizations using SSO.
 
@@ -101,7 +104,7 @@ These permissions should be attached to the IAM Identity Center permission set t
 
 </details>
 
-## AWS SAML
+## SAML
 
 For organizations using SAML-based identity providers like Okta, Google Apps, or ADFS.
 
@@ -162,30 +165,346 @@ auth:
   <dd>Optional. OIDC audience. Defaults to STS endpoint for the region.</dd>
 </dl>
 
-## Multiple Providers
+</TabItem>
+<TabItem value="azure" label="Azure">
 
-You can configure multiple providers for different use cases:
+## Device Code
+
+For interactive browser-based authentication to Azure, similar to `az login --use-device-code`.
 
 <File title="atmos.yaml">
 ```yaml
 auth:
   providers:
-    # Primary SSO for interactive use
+    azure-interactive:
+      kind: azure/device-code
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/device-code`.</dd>
+
+  <dt>`spec.tenant_id`</dt>
+  <dd>**Required.** Azure AD tenant ID.</dd>
+
+  <dt>`spec.subscription_id`</dt>
+  <dd>Optional. Default Azure subscription ID.</dd>
+
+  <dt>`spec.location`</dt>
+  <dd>Optional. Default Azure region (e.g., `eastus`, `westeurope`).</dd>
+
+  <dt>`spec.client_id`</dt>
+  <dd>Optional. Azure AD application (client) ID. Defaults to Azure CLI's public client ID.</dd>
+</dl>
+
+**How it works:**
+1. Atmos displays a device code and opens `https://microsoft.com/devicelogin`
+2. You enter the code and sign in (with MFA if configured)
+3. Atmos acquires tokens for Azure Resource Manager, Microsoft Graph, and Azure Key Vault
+4. Tokens are cached in `~/.azure/msal_token_cache.json` for Terraform compatibility
+
+:::tip
+For a detailed walkthrough with examples, see the [Azure Authentication Tutorial](/tutorials/azure-authentication).
+:::
+
+## OIDC (Workload Identity Federation)
+
+For CI/CD pipelines using federated identity tokens (GitHub Actions, Azure DevOps, etc.).
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    azure-oidc:
+      kind: azure/oidc
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        client_id: "YOUR_APP_CLIENT_ID"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/oidc`.</dd>
+
+  <dt>`spec.tenant_id`</dt>
+  <dd>**Required.** Azure AD tenant ID.</dd>
+
+  <dt>`spec.client_id`</dt>
+  <dd>**Required.** Azure AD application (client) ID with federated credentials configured.</dd>
+
+  <dt>`spec.subscription_id`</dt>
+  <dd>Optional. Default Azure subscription ID.</dd>
+
+  <dt>`spec.location`</dt>
+  <dd>Optional. Default Azure region.</dd>
+
+  <dt>`spec.audience`</dt>
+  <dd>Optional. OIDC audience for token exchange.</dd>
+
+  <dt>`spec.token_file_path`</dt>
+  <dd>Optional. Path to file containing the OIDC token. If not set, uses environment variables (`ACTIONS_ID_TOKEN_REQUEST_URL` in GitHub Actions).</dd>
+</dl>
+
+### GitHub Actions Setup
+
+<File title=".github/workflows/deploy.yaml">
+```yaml
+jobs:
+  deploy:
+    permissions:
+      id-token: write    # Required for OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy with Atmos
+        run: atmos terraform apply mycomponent -s prod
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+```
+</File>
+
+## CLI
+
+For using existing Azure CLI credentials from `az login`.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    azure-existing:
+      kind: azure/cli
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/cli`.</dd>
+
+  <dt>`spec.tenant_id`</dt>
+  <dd>**Required.** Azure AD tenant ID.</dd>
+
+  <dt>`spec.subscription_id`</dt>
+  <dd>Optional. Default Azure subscription ID.</dd>
+
+  <dt>`spec.location`</dt>
+  <dd>Optional. Default Azure region.</dd>
+</dl>
+
+:::note
+The `azure/cli` provider requires existing Azure CLI credentials. Run `az login` first.
+:::
+
+</TabItem>
+<TabItem value="gcp" label="GCP">
+
+## Application Default Credentials
+
+For local development using existing `gcloud` authentication.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    gcp-adc:
+      kind: gcp/adc
+      project_id: my-gcp-project      # Optional: override default project
+      region: us-central1             # Optional: default region
+      scopes:                         # Optional: custom OAuth scopes
+        - https://www.googleapis.com/auth/cloud-platform
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gcp/adc`.</dd>
+
+  <dt>`project_id`</dt>
+  <dd>Optional. GCP project ID. If not set, uses the project from `gcloud config`.</dd>
+
+  <dt>`region`</dt>
+  <dd>Optional. Default GCP region for resources.</dd>
+
+  <dt>`scopes`</dt>
+  <dd>Optional. OAuth scopes for the access token. Defaults to `https://www.googleapis.com/auth/cloud-platform`.</dd>
+</dl>
+
+:::note
+The `gcp/adc` provider requires existing Application Default Credentials. Run `gcloud auth application-default login` first.
+:::
+
+## Workload Identity Federation
+
+For CI/CD pipelines using OIDC tokens (e.g., GitHub Actions).
+
+**In GitHub Actions, `token_source` is auto-detected** — you only need the WIF pool configuration:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    gcp-wif:
+      kind: gcp/workload-identity-federation
+      project_id: my-gcp-project
+      project_number: "123456789012"
+      workload_identity_pool_id: github-pool
+      workload_identity_provider_id: github-provider
+      service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+```
+</File>
+
+When running in GitHub Actions (detected via `ACTIONS_ID_TOKEN_REQUEST_URL`), Atmos automatically:
+- Sets `token_source.type` to `url`
+- Uses `ACTIONS_ID_TOKEN_REQUEST_URL` as the token endpoint
+- Uses `ACTIONS_ID_TOKEN_REQUEST_TOKEN` as the bearer token
+- Constructs the OIDC `audience` from `project_number`, `workload_identity_pool_id`, and `workload_identity_provider_id`
+- Validates the token URL against known GitHub Actions OIDC hosts (`*.actions.githubusercontent.com`)
+
+For non-GitHub environments, configure `token_source` explicitly:
+
+<File title="atmos.yaml (non-GitHub)">
+```yaml
+auth:
+  providers:
+    gcp-wif:
+      kind: gcp/workload-identity-federation
+      project_number: "123456789012"
+      workload_identity_pool_id: my-pool
+      workload_identity_provider_id: my-provider
+      token_source:
+        type: url
+        url: https://my-oidc-provider.example.com/token
+        audience: //iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/my-pool/providers/my-provider
+        allowed_hosts:
+          - my-oidc-provider.example.com
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gcp/workload-identity-federation`.</dd>
+
+  <dt>`project_id`</dt>
+  <dd>Optional. GCP project ID for the resulting credentials.</dd>
+
+  <dt>`project_number`</dt>
+  <dd>**Required.** GCP project number (numeric) where WIF is configured.</dd>
+
+  <dt>`workload_identity_pool_id`</dt>
+  <dd>**Required.** Workload Identity Pool ID.</dd>
+
+  <dt>`workload_identity_provider_id`</dt>
+  <dd>**Required.** Workload Identity Provider ID within the pool.</dd>
+
+  <dt>`service_account_email`</dt>
+  <dd>Optional. Service account to impersonate after federation. If not set, uses the federated token directly.</dd>
+
+  <dt>`token_source`</dt>
+  <dd>Optional in GitHub Actions (auto-detected). Required for other OIDC providers.</dd>
+
+  <dt>`token_source.type`</dt>
+  <dd>Token source type: `url`, `file`, or `environment`. Auto-detected as `url` in GitHub Actions.</dd>
+
+  <dt>`token_source.environment_variable`</dt>
+  <dd>For `type: environment`. Environment variable containing the OIDC token.</dd>
+
+  <dt>`token_source.file_path`</dt>
+  <dd>For `type: file`. Path to file containing the OIDC token.</dd>
+
+  <dt>`token_source.url`</dt>
+  <dd>For `type: url`. URL to fetch OIDC token. In GitHub Actions, defaults to `ACTIONS_ID_TOKEN_REQUEST_URL`.</dd>
+
+  <dt>`token_source.request_token`</dt>
+  <dd>For `type: url`. Bearer token for authenticating to the OIDC token endpoint. In GitHub Actions, defaults to `ACTIONS_ID_TOKEN_REQUEST_TOKEN`.</dd>
+
+  <dt>`token_source.audience`</dt>
+  <dd>Optional. Audience for the OIDC token request. In GitHub Actions, auto-constructed from `project_number`, `workload_identity_pool_id`, and `workload_identity_provider_id`.</dd>
+
+  <dt>`token_source.allowed_hosts`</dt>
+  <dd>For `type: url`. Allowed hostnames for the token endpoint. Not needed in GitHub Actions (validated against known GitHub hosts automatically).</dd>
+
+  <dt>`scopes`</dt>
+  <dd>Optional. OAuth scopes for the access token.</dd>
+</dl>
+
+### GitHub Actions Setup
+
+In GitHub Actions, the only requirement is `id-token: write` permission. No `token_source` configuration is needed:
+
+<File title=".github/workflows/deploy.yaml">
+```yaml
+jobs:
+  deploy:
+    permissions:
+      id-token: write    # Required for OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy with Atmos
+        run: atmos terraform apply mycomponent -s prod
+```
+</File>
+
+</TabItem>
+</Tabs>
+
+## Multiple Providers
+
+You can configure multiple providers for different use cases and cloud platforms:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    # AWS SSO for interactive use
     company-sso:
       kind: aws/iam-identity-center
       region: us-east-1
       start_url: https://company.awsapps.com/start
 
-    # SAML for legacy systems
-    okta-saml:
-      kind: aws/saml
-      region: us-east-1
-      url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
-
-    # GitHub OIDC for CI/CD
-    github-oidc:
+    # AWS GitHub OIDC for CI/CD
+    aws-github-oidc:
       kind: github/oidc
       region: us-east-1
+
+    # Azure interactive login
+    azure-dev:
+      kind: azure/device-code
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+
+    # Azure OIDC for CI/CD
+    azure-ci:
+      kind: azure/oidc
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        client_id: "YOUR_APP_CLIENT_ID"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+
+    # GCP local development
+    gcp-adc:
+      kind: gcp/adc
+
+    # GCP GitHub Actions (token_source auto-detected)
+    gcp-wif:
+      kind: gcp/workload-identity-federation
+      project_number: "123456789012"
+      workload_identity_pool_id: github-pool
+      workload_identity_provider_id: github-provider
 ```
 </File>
 
@@ -265,9 +584,13 @@ atmos --profile platform auth login
 <DocCardList items={[
   {type: 'link', href: '/cli/commands/auth/login', label: 'atmos auth login', description: 'Authenticate with a configured provider'},
   {type: 'link', href: '/cli/commands/auth/validate', label: 'atmos auth validate', description: 'Validate provider configuration'},
-  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open AWS console in browser'},
+  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open cloud console in browser'},
   {type: 'link', href: '/cli/commands/auth/list', label: 'atmos auth list', description: 'List available identities and providers'},
 ]} />
+
+## Tutorials
+
+- [Azure Authentication](/tutorials/azure-authentication) — Complete guide for Azure device code, OIDC, and CLI authentication
 
 ## See Also
 

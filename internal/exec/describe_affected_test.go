@@ -1125,3 +1125,407 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 	// - The env vars for uw2-network are looked up (they'll get empty strings since not set)
 	// - Performance penalty and potential side effects
 }
+
+// setupDescribeAffectedTestWithFixture is a generic helper that sets up a test environment for describe affected tests.
+// It handles the common setup of copying the fixture, replacing stacks, and initializing git repos.
+func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
+	t.Helper()
+
+	// Check for valid Git remote URL before running the test.
+	tests.RequireGitRemoteWithValidURL(t)
+
+	basePath := filepath.Join("tests", "fixtures", "scenarios", fixtureDir)
+	pathPrefix := "../../"
+
+	stacksPath := filepath.Join(pathPrefix, basePath)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+
+	copyOptions := cp.Options{
+		PreserveTimes: false,
+		PreserveOwner: false,
+		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+			if strings.Contains(src, "node_modules") ||
+				strings.Contains(src, ".terraform") {
+				return true, nil
+			}
+			isSocket, err := u.IsSocket(src)
+			if err != nil {
+				return true, err
+			}
+			if isSocket {
+				return true, nil
+			}
+			return false, nil
+		},
+	}
+
+	// Copy the local repository into a temp dir.
+	err = cp.Copy(pathPrefix, tempDir, copyOptions)
+	require.NoError(t, err)
+
+	// Copy the affected stacks into the `stacks` folder in the temp dir.
+	// This simulates BASE (main) having different content than HEAD (PR branch).
+	err = cp.Copy(filepath.Join(stacksPath, affectedStacksDir), filepath.Join(tempDir, basePath, "stacks"), copyOptions)
+	require.NoError(t, err)
+
+	// Set the correct base path for the cloned remote repo.
+	config.BasePath = basePath
+
+	// Point to the copy of the local repository.
+	repoPath = tempDir
+
+	return config, repoPath
+}
+
+// setupDescribeAffectedNewComponentInBaseTest sets up the test environment for testing
+// the scenario where a new component exists in BASE (main) but not in HEAD (PR branch).
+func setupDescribeAffectedNewComponentInBaseTest(t *testing.T, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
+	t.Helper()
+	return setupDescribeAffectedTestWithFixture(t, "atmos-describe-affected-new-component-in-base", affectedStacksDir)
+}
+
+// TestDescribeAffectedNewComponentInBase tests the scenario where a new component
+// exists in BASE (main branch) but not in HEAD (PR branch).
+// This should NOT fail - the new component should be detected as "net new" and handled gracefully.
+//
+// Scenario:
+// - PR1 introduces prometheus component and merges to main
+// - PR2 (based on old main) runs describe affected against current main
+// - Expected: Atmos should recognize prometheus as new in BASE and handle it gracefully
+// - Current bug: Atmos fails with "Could not find the component prometheus".
+func TestDescribeAffectedNewComponentInBase(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedNewComponentInBaseTest(t, "stacks-with-new-component")
+
+	// Run describe affected comparing HEAD (without prometheus) to BASE (with prometheus).
+	// This should succeed and show prometheus as affected (new component in BASE).
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,  // processTemplates
+		false, // processYamlFunctions - disable to avoid !terraform.state issues
+		nil,
+		false,
+	)
+
+	// The test should pass - new components in BASE should be handled gracefully.
+	require.NoError(t, err)
+
+	// Verify that the new component (prometheus) is detected as affected.
+	var foundPrometheus bool
+	for _, a := range affected {
+		if a.Component == "prometheus" {
+			foundPrometheus = true
+			t.Logf("Found prometheus component as affected in stack %s", a.Stack)
+		}
+	}
+
+	// NOTE: Components that exist only in BASE (not in HEAD) are currently NOT detected
+	// because describe affected iterates over currentStacks (HEAD). This is a known limitation.
+	// This test verifies that describe affected doesn't error when BASE has components that HEAD doesn't have.
+	// TODO: Consider detecting components that exist in BASE but not HEAD in a future enhancement.
+	t.Logf("Found prometheus in affected: %v, total affected: %d", foundPrometheus, len(affected))
+}
+
+// TestDescribeAffectedNewComponentInBaseWithYamlFunctions tests the scenario where
+// BASE has a new component that is referenced via !terraform.state by an existing component.
+// This is the exact scenario that causes the error:
+//
+//	"failed to describe component prometheus in stack ue1-staging"
+//	"YAML function: !terraform.state prometheus workspace_endpoint"
+//	"Could not find the component prometheus in the stack ue1-staging"
+//
+// Root cause: When processing remoteStacks (BASE), YAML functions like !terraform.state
+// call ExecuteDescribeComponent with nil AtmosConfig. This causes ExecuteDescribeComponentWithContext
+// to create a NEW AtmosConfig from the current working directory (HEAD), instead of using the
+// modified config that points to BASE. Since prometheus only exists in BASE, the lookup fails.
+func TestDescribeAffectedNewComponentInBaseWithYamlFunctions(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedNewComponentInBaseTest(t, "stacks-with-new-component-and-reference")
+
+	// Run describe affected comparing HEAD (without prometheus) to BASE (with prometheus + reference).
+	// This currently fails because:
+	// 1. BASE has eks component with: prometheus_endpoint: '!terraform.state prometheus workspace_endpoint'
+	// 2. When processing remoteStacks, the !terraform.state function is evaluated
+	// 3. GetTerraformState calls ExecuteDescribeComponent with nil AtmosConfig
+	// 4. ExecuteDescribeComponentWithContext creates a NEW config from CWD (HEAD)
+	// 5. prometheus doesn't exist in HEAD, so the lookup fails
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true, // processTemplates
+		true, // processYamlFunctions - this triggers the bug
+		nil,
+		false,
+	)
+	// FIXED BEHAVIOR: The fix passes atmosConfig through the YAML function chain to
+	// ExecuteDescribeComponent, so component lookups use BASE paths correctly.
+	//
+	// After the fix, we expect one of these outcomes:
+	// 1. "terraform state not provisioned" - Component IS found in BASE, but since prometheus
+	//    is a mock component with no actual Terraform state, getting the state fails.
+	//    This is expected and shows the fix is working - component lookup now uses BASE paths.
+	// 2. Success - If the error is handled gracefully (e.g., with YQ defaults).
+	if err != nil {
+		errStr := err.Error()
+		// The fix is working if we see "not provisioned" instead of "Could not find".
+		// "not provisioned" means the component WAS found (using BASE paths), but has no state.
+		if strings.Contains(errStr, "prometheus") && strings.Contains(errStr, "not provisioned") {
+			t.Logf("Fix verified! Component found in BASE, but no Terraform state exists (expected for mock): %v", err)
+			// This is actually a success - the component lookup bug is fixed.
+			// The "not provisioned" error is expected for mock components without real Terraform state.
+			return
+		}
+		// OLD BUG: If we still see "Could not find", the fix didn't work.
+		if strings.Contains(errStr, "prometheus") && strings.Contains(errStr, "Could not find") {
+			t.Fatalf("BUG NOT FIXED: Component lookup still failing with: %v", err)
+		}
+		// Unexpected error.
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// If we get here, the bug is fixed!
+	t.Logf("Success! describe affected handled new component in BASE gracefully")
+	t.Logf("Affected components: %d", len(affected))
+	for _, a := range affected {
+		t.Logf("  - %s in %s (affected by: %s)", a.Component, a.Stack, a.Affected)
+	}
+}
+
+// setupDescribeAffectedSourceVendoringTest sets up a test environment for source vendoring scenarios.
+// It returns the atmosConfig and the path to the BASE repo.
+func setupDescribeAffectedSourceVendoringTest(t *testing.T, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
+	t.Helper()
+	return setupDescribeAffectedTestWithFixture(t, "atmos-describe-affected-source-vendoring", affectedStacksDir)
+}
+
+// TestDescribeAffectedSourceVersionChange tests that describe affected detects changes to source.version
+// and provision.workdir configuration.
+// This is a critical test for source vendoring because if source.version changes (e.g., upgrading a module),
+// the component should be marked as affected. Similarly, workdir configuration changes should be detected.
+//
+// Scenario:
+// - HEAD (PR branch): source.version = "1.0.0", component-workdir-only has no workdir
+// - BASE (main branch): source.version = "1.1.0", component-workdir-only has workdir enabled
+// Expected: vpc-source, vpc-source-workdir, and component-workdir-only should be marked as affected.
+func TestDescribeAffectedSourceVersionChange(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedSourceVendoringTest(t, "stacks-with-source-version-change")
+
+	// Run describe affected comparing HEAD (version 1.0.0) to BASE (version 1.1.0).
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,  // processTemplates
+		false, // processYamlFunctions - don't need YAML functions for this test
+		nil,
+		false,
+	)
+	// Check if there was an error.
+	require.NoError(t, err)
+
+	// Log what was found.
+	t.Logf("Found %d affected components", len(affected))
+	for _, a := range affected {
+		t.Logf("  - %s in %s (affected by: %s)", a.Component, a.Stack, a.Affected)
+	}
+
+	// Check if source-vendored components are marked as affected.
+	foundVpcSource := false
+	foundVpcSourceWorkdir := false
+	foundWorkdirOnly := false
+	var vpcSourceReason, vpcSourceWorkdirReason, workdirOnlyReason string
+
+	for _, a := range affected {
+		switch a.Component {
+		case "vpc-source":
+			foundVpcSource = true
+			vpcSourceReason = a.Affected
+		case "vpc-source-workdir":
+			foundVpcSourceWorkdir = true
+			vpcSourceWorkdirReason = a.Affected
+		case "component-workdir-only":
+			foundWorkdirOnly = true
+			workdirOnlyReason = a.Affected
+		}
+	}
+
+	// Verify source.version changes are detected.
+	require.True(t, foundVpcSource, "vpc-source should be affected due to source.version change (1.0.0 -> 1.1.0)")
+	assert.Equal(t, "stack.source", vpcSourceReason, "vpc-source should be affected due to source change")
+
+	require.True(t, foundVpcSourceWorkdir, "vpc-source-workdir should be affected due to source.version change (1.0.0 -> 1.1.0)")
+	assert.Equal(t, "stack.source", vpcSourceWorkdirReason, "vpc-source-workdir should be affected due to source change")
+
+	// Verify provision.workdir changes are detected.
+	require.True(t, foundWorkdirOnly, "component-workdir-only should be affected due to provision.workdir change")
+	assert.Equal(t, "stack.provision", workdirOnlyReason, "component-workdir-only should be affected due to provision change")
+
+	// Ensure the regular component is NOT affected (no changes).
+	for _, a := range affected {
+		if a.Component == "regular-component" {
+			t.Errorf("FAILED: regular-component should NOT be affected (no changes)")
+		}
+	}
+}
+
+// setupDescribeAffectedDeletedDetectionTest sets up the test environment for testing
+// the scenario where components/stacks exist in BASE (main) but have been deleted in HEAD (PR branch).
+func setupDescribeAffectedDeletedDetectionTest(t *testing.T, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
+	t.Helper()
+	return setupDescribeAffectedTestWithFixture(t, "atmos-describe-affected-deleted-detection", affectedStacksDir)
+}
+
+// TestDescribeAffectedDeletedComponentDetection tests the scenario where a component
+// is deleted in HEAD (PR branch) compared to BASE (main branch).
+// This enables CI/CD pipelines to detect resources that need terraform destroy.
+//
+// Scenario:
+// - HEAD (PR branch): monitoring component has been DELETED from staging stack
+// - HEAD (PR branch): production stack has been entirely DELETED
+// - BASE (main branch): has monitoring component and production stack
+// Expected:
+// - monitoring component should be marked as affected with deleted: true, deletion_type: "component"
+// - All components from production stack should be marked with deleted: true, deletion_type: "stack".
+func TestDescribeAffectedDeletedComponentDetection(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedDeletedDetectionTest(t, "stacks-with-deleted-component")
+
+	// Run describe affected comparing HEAD (with deleted components) to BASE (with all components).
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,  // processTemplates
+		false, // processYamlFunctions - don't need YAML functions for this test
+		nil,
+		false,
+	)
+	require.NoError(t, err)
+
+	// Log what was found.
+	t.Logf("Found %d affected components", len(affected))
+	for _, a := range affected {
+		t.Logf("  - %s in %s (affected: %s, deleted: %v, deletion_type: %s)",
+			a.Component, a.Stack, a.Affected, a.Deleted, a.DeletionType)
+	}
+
+	// Track what we find.
+	var (
+		foundMonitoringDeleted bool
+		foundVpcDeletedStack   bool
+		foundEksDeletedStack   bool
+		foundRdsDeletedStack   bool
+		foundAbstractDeleted   bool
+		deletedComponentCount  int
+		deletedStackCount      int
+	)
+
+	for _, a := range affected {
+		// Check for monitoring component deleted from staging stack.
+		if a.Component == "monitoring" && a.Stack == "ue1-staging" {
+			foundMonitoringDeleted = true
+			assert.True(t, a.Deleted, "monitoring should have deleted: true")
+			assert.Equal(t, deletionTypeComponent, a.DeletionType, "monitoring should have deletion_type: component")
+			assert.Equal(t, affectedReasonDeleted, a.Affected, "monitoring should have affected: deleted")
+		}
+
+		// Check for production stack components (entire stack deleted).
+		// Note: Stack names may contain unprocessed templates in some edge cases during
+		// deleted component detection, so we check for both processed and unprocessed versions.
+		// Use HasSuffix to avoid matching unintended stacks like "non-production-staging".
+		// Also check for exact "production" match in case the stack name is just "production".
+		isProductionStack := a.Stack == "ue1-production" || a.Stack == "production" || strings.HasSuffix(a.Stack, "-production")
+		if isProductionStack && a.DeletionType == deletionTypeStack {
+			switch a.Component {
+			case "vpc":
+				foundVpcDeletedStack = true
+			case "eks":
+				foundEksDeletedStack = true
+			case "rds":
+				foundRdsDeletedStack = true
+			}
+			assert.True(t, a.Deleted, "%s in production should have deleted: true", a.Component)
+			assert.Equal(t, deletionTypeStack, a.DeletionType, "%s should have deletion_type: stack", a.Component)
+			assert.Equal(t, affectedReasonDeletedStack, a.Affected, "%s should have affected: deleted.stack", a.Component)
+		}
+
+		// Abstract components should NOT be reported as deleted.
+		if a.Component == "base-monitoring" {
+			foundAbstractDeleted = true
+		}
+
+		// Count deleted components by type.
+		if a.Deleted {
+			switch a.DeletionType {
+			case deletionTypeComponent:
+				deletedComponentCount++
+			case deletionTypeStack:
+				deletedStackCount++
+			}
+		}
+	}
+
+	// Verify monitoring component was detected as deleted.
+	assert.True(t, foundMonitoringDeleted, "monitoring component should be detected as deleted from staging stack")
+
+	// Verify all production stack components were detected as deleted.
+	assert.True(t, foundVpcDeletedStack, "vpc should be detected as deleted (stack deletion)")
+	assert.True(t, foundEksDeletedStack, "eks should be detected as deleted (stack deletion)")
+	assert.True(t, foundRdsDeletedStack, "rds should be detected as deleted (stack deletion)")
+
+	// Verify abstract component is NOT reported as deleted.
+	assert.False(t, foundAbstractDeleted, "abstract component base-monitoring should NOT be reported as deleted")
+
+	// Verify counts.
+	assert.Equal(t, 1, deletedComponentCount, "should have exactly 1 deleted component (monitoring)")
+	assert.Equal(t, 3, deletedStackCount, "should have exactly 3 components deleted from stack (vpc, eks, rds)")
+
+	t.Logf("Deleted detection successful: %d components deleted, %d from deleted stack",
+		deletedComponentCount, deletedStackCount)
+}
+
+// TestDescribeAffectedDeletedComponentFiltering tests filtering deleted components
+// using the stack filter.
+func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedDeletedDetectionTest(t, "stacks-with-deleted-component")
+
+	// Run describe affected with stack filter for staging only.
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"ue1-staging", // Filter to staging stack only
+		true,
+		false,
+		nil,
+		false,
+	)
+	require.NoError(t, err)
+
+	// Should only find monitoring deleted from staging, not production stack deletions.
+	var deletedCount int
+	for _, a := range affected {
+		if a.Deleted {
+			deletedCount++
+			assert.Equal(t, "ue1-staging", a.Stack, "with stack filter, should only find deletions in ue1-staging")
+		}
+	}
+
+	// Should find only the monitoring component deleted.
+	assert.Equal(t, 1, deletedCount, "with stack filter ue1-staging, should find only 1 deleted component")
+}

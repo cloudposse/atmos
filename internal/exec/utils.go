@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 const (
@@ -236,6 +237,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.PackerDirAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.AnsibleDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
 	keyBuilder.WriteString(cacheKeyDelimiter)
 
@@ -312,6 +315,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		atmosConfig.TerraformDirAbsolutePath,
 		atmosConfig.HelmfileDirAbsolutePath,
 		atmosConfig.PackerDirAbsolutePath,
+		atmosConfig.AnsibleDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,
@@ -719,7 +723,13 @@ func ProcessStacks(
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
-		componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
+		// Use delimiter-safe YAML encoding when custom delimiters are configured.
+		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
+		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+			configAndStacksInfo.ComponentSection,
+			atmosConfig.Templates.Settings.Delimiters,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -729,6 +739,11 @@ func ProcessStacks(
 		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
 		if err != nil {
 			return configAndStacksInfo, err
+		}
+
+		// Restore env vars that mapstructure:"-" dropped during Decode.
+		if envMap := extractEnvFromRawMap(configAndStacksInfo.ComponentSettingsSection); len(envMap) > 0 {
+			settingsSectionStruct.Templates.Settings.Env = envMap
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
@@ -874,7 +889,7 @@ func ProcessStacks(
 					}
 
 					// For known OpenTofu features, skip validation. Otherwise, return the error.
-					if !IsOpenTofu(&effectiveConfig) || !isKnownOpenTofuFeature(diagErr) {
+					if !IsOpenTofu(&effectiveConfig, nil) || !isKnownOpenTofuFeature(diagErr) {
 						// For other errors (syntax errors, permission issues, etc.), return error.
 						// Use ErrorBuilder to provide helpful context about the HCL parsing failure.
 						// This fixes https://github.com/cloudposse/atmos/issues/1864 by showing a clear error

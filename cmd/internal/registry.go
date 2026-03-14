@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -335,4 +336,38 @@ func GetSubcommandCompatFlags(providerName, subcommand string) map[string]compat
 		return nil
 	}
 	return providerFlags[subcommand]
+}
+
+// commandFlagRegistries stores FlagRegistry instances per command provider.
+// This allows preprocessCompatibilityFlags to use PreprocessNoOptDefValArgs
+// from the registered flag registries instead of hardcoded flag maps.
+var commandFlagRegistries = struct {
+	mu         sync.RWMutex
+	registries map[string]*flags.FlagRegistry // provider name -> flag registry
+}{
+	registries: make(map[string]*flags.FlagRegistry),
+}
+
+// RegisterCommandFlagRegistry registers a FlagRegistry for a command provider.
+// The providerName is the top-level command (e.g., "terraform").
+// This enables preprocessCompatibilityFlags to use the registry's
+// PreprocessNoOptDefValArgs for normalizing NoOptDefVal flags.
+func RegisterCommandFlagRegistry(providerName string, registry *flags.FlagRegistry) {
+	defer perf.Track(nil, "internal.RegisterCommandFlagRegistry")()
+
+	commandFlagRegistries.mu.Lock()
+	defer commandFlagRegistries.mu.Unlock()
+
+	commandFlagRegistries.registries[providerName] = registry
+}
+
+// GetCommandFlagRegistry returns the FlagRegistry for a command provider.
+// Returns nil if no registry is registered for the provider.
+func GetCommandFlagRegistry(providerName string) *flags.FlagRegistry {
+	defer perf.Track(nil, "internal.GetCommandFlagRegistry")()
+
+	commandFlagRegistries.mu.RLock()
+	defer commandFlagRegistries.mu.RUnlock()
+
+	return commandFlagRegistries.registries[providerName]
 }

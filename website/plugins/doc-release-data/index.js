@@ -135,6 +135,10 @@ function findDocFiles(dir) {
   function walk(currentDir) {
     const entries = fs.readdirSync(currentDir, { withFileTypes: true });
     for (const entry of entries) {
+      // Skip Docusaurus partials (files/dirs starting with _).
+      if (entry.name.startsWith('_')) {
+        continue;
+      }
       const fullPath = path.join(currentDir, entry.name);
       if (entry.isDirectory()) {
         walk(fullPath);
@@ -210,6 +214,10 @@ module.exports = function docReleaseDataPlugin(context, options) {
               // e.g., list-affected.mdx with id: affected -> /list/affected
               finalPath = parentDirPath === '/' ? `/${frontmatter.id}` : `${parentDirPath}/${frontmatter.id}`;
             }
+          } else if (fileName === parentDirName) {
+            // Docusaurus convention: file named same as parent dir becomes the directory index.
+            // e.g., extra-credit/extra-credit.mdx -> /extra-credit
+            finalPath = parentDirPath;
           }
 
           unreleasedDocs.push({

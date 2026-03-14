@@ -325,6 +325,8 @@ tests:
     description: "Test auth login with mock identity (succeeds)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
+    env:
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"

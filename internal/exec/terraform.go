@@ -32,7 +32,7 @@ import (
 	// Import generate package for early file generation.
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 
-	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
 const (
@@ -52,37 +52,16 @@ const (
 )
 
 // resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
-func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+// Returns the ToolchainEnvironment for resolving executable paths downstream.
+func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*dependencies.ToolchainEnvironment, error) {
 	defer perf.Track(atmosConfig, "exec.resolveAndInstallToolchainDeps")()
 
-	// Initialize toolchain with atmosConfig so it uses the configured install path.
-	toolchain.SetAtmosConfig(atmosConfig)
-	resolver := dependencies.NewResolver(atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("terraform", info.StackSection, info.ComponentSection)
+	tenv, err := dependencies.ForComponent(atmosConfig, "terraform", info.StackSection, info.ComponentSection)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		return nil, err
 	}
 
-	if len(deps) == 0 {
-		return nil
-	}
-
-	log.Debug("Installing component dependencies", logFieldComponent, info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-	installer := dependencies.NewInstaller(atmosConfig)
-	if err := installer.EnsureTools(deps); err != nil {
-		return fmt.Errorf("failed to install component dependencies: %w", err)
-	}
-
-	// Build PATH with toolchain binaries and add to component environment.
-	// This does NOT modify the global process environment - only the subprocess environment.
-	toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
-	if err != nil {
-		return fmt.Errorf("failed to build toolchain PATH: %w", err)
-	}
-
-	// Propagate toolchain PATH into environment for subprocess.
-	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
-	return nil
+	return tenv, nil
 }
 
 // ExecuteTerraform executes terraform commands.
@@ -111,12 +90,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "version" {
+		tenv, err := dependencies.ForComponent(&atmosConfig, "terraform", nil, nil)
+		if err != nil {
+			return err
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
-			info.Command,
+			tenv.Resolve(info.Command),
 			[]string{info.SubCommand},
 			"",
-			nil,
+			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr)
 	}
@@ -186,6 +169,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// to access the same authenticated session without re-prompting for credentials.
 	info.AuthManager = authManager
 
+	// Inject auth resolver into identity-aware stores so they can lazily resolve credentials
+	// on first access. This bridges the store system with the auth system.
+	if authManager != nil {
+		resolver := authbridge.NewResolver(authManager, &info)
+		atmosConfig.Stores.SetAuthContextResolver(resolver)
+	}
+
 	// Determine whether to process stacks and check stack configuration.
 	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
 
@@ -231,7 +221,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			}
 
 			// Generate files before path validation.
-			if genErr := generateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
+			if genErr := GenerateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
 				return errors.Join(errUtils.ErrFileOperation, genErr)
 			}
 		}
@@ -302,10 +292,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Resolve and install component dependencies.
+	// tenv is declared outside the block so its EnvVars() can be appended
+	// after all other env assembly, ensuring toolchain PATH takes precedence.
+	var tenv *dependencies.ToolchainEnvironment
 	if shouldProcess {
-		if err := resolveAndInstallToolchainDeps(&atmosConfig, &info); err != nil {
+		tenv, err = resolveAndInstallToolchainDeps(&atmosConfig, &info)
+		if err != nil {
 			return err
 		}
+		info.Command = tenv.Resolve(info.Command)
 	}
 
 	varFile := constructTerraformComponentVarfileName(&info)
@@ -391,7 +386,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Generate files from the generate section when auto_generate_files is enabled.
-	err = generateFilesForComponent(&atmosConfig, &info, workingDir)
+	err = GenerateFilesForComponent(&atmosConfig, &info, workingDir)
 	if err != nil {
 		return err
 	}
@@ -464,6 +459,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Set TF_PLUGIN_CACHE_DIR for Terraform provider caching.
 	pluginCacheEnvList := configurePluginCache(&atmosConfig)
 	info.ComponentEnvList = append(info.ComponentEnvList, pluginCacheEnvList...)
+
+	// Append toolchain PATH last so it takes precedence over any PATH entries
+	// from ComponentEnvSection, auth hooks, or other env sources.
+	if tenv != nil {
+		info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
+	}
 
 	// Print ENV vars if they are found in the component's stack config.
 	if len(info.ComponentEnvList) > 0 {

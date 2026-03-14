@@ -9,6 +9,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -86,6 +87,62 @@ func (i *Installer) ListInstalledVersions(owner, repo string) ([]string, error) 
 	return versions, nil
 }
 
+// InstalledTool represents a tool found in the install directory with its versions.
+type InstalledTool struct {
+	Owner    string
+	Repo     string
+	Versions []string
+}
+
+// ListAllInstalledTools scans the install directory and returns all installed tools.
+// It walks two levels deep: binDir/{owner}/{repo}/ and collects version directories.
+func (i *Installer) ListAllInstalledTools() ([]InstalledTool, error) {
+	defer perf.Track(nil, "toolchain.ListAllInstalledTools")()
+
+	if _, err := os.Stat(i.binDir); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	ownerEntries, err := os.ReadDir(i.binDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read install directory %s: %w", i.binDir, err)
+	}
+
+	var tools []InstalledTool
+	for _, ownerEntry := range ownerEntries {
+		if !ownerEntry.IsDir() {
+			continue
+		}
+		owner := ownerEntry.Name()
+		ownerDir := filepath.Join(i.binDir, owner)
+
+		repoEntries, err := os.ReadDir(ownerDir)
+		if err != nil {
+			continue
+		}
+
+		for _, repoEntry := range repoEntries {
+			if !repoEntry.IsDir() {
+				continue
+			}
+			repo := repoEntry.Name()
+
+			versions, err := i.ListInstalledVersions(owner, repo)
+			if err != nil || len(versions) == 0 {
+				continue
+			}
+
+			tools = append(tools, InstalledTool{
+				Owner:    owner,
+				Repo:     repo,
+				Versions: versions,
+			})
+		}
+	}
+
+	return tools, nil
+}
+
 // searchRegistryForTool searches the Aqua registry for a tool by name.
 func searchRegistryForTool(toolName string) (string, string, error) {
 	defer perf.Track(nil, "searchRegistryForTool")()
@@ -113,7 +170,7 @@ func tryRegistryPaths(paths []string, toolName string) (string, string, error) {
 	defer perf.Track(nil, "tryRegistryPaths")()
 
 	client := httpClient.NewDefaultClient(
-		httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
+		httpClient.WithGitHubToken(github.GetGitHubToken()),
 	)
 
 	for _, path := range paths {

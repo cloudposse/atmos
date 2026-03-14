@@ -1204,6 +1204,120 @@ func TestStandardFlagParser_BindFlagsToViper_EdgeCases(t *testing.T) {
 	})
 }
 
+// TestStandardFlagParser_BindFlagsToViper_WithPrefix tests BindFlagsToViper
+// with a Viper prefix to ensure keys are correctly namespaced.
+// This is a regression test for issue #2076.
+func TestStandardFlagParser_BindFlagsToViper_WithPrefix(t *testing.T) {
+	t.Run("prefixed keys do not collide with root keys", func(t *testing.T) {
+		v := viper.New()
+
+		// Create a global parser binding "profile" to ATMOS_PROFILE.
+		globalParser := NewStandardFlagParser(
+			WithStringSliceFlag("profile", "p", nil, "Configuration profile"),
+			WithEnvVars("profile", "ATMOS_PROFILE"),
+		)
+		globalCmd := &cobra.Command{Use: "root"}
+		globalParser.RegisterFlags(globalCmd)
+		require.NoError(t, globalParser.BindToViper(v))
+
+		// Create a prefixed parser with the same flag name but different env vars.
+		prefixedParser := NewStandardFlagParser(
+			WithViperPrefix("eks"),
+			WithStringFlag("profile", "", "", "AWS CLI profile"),
+			WithEnvVars("profile", "ATMOS_AWS_PROFILE", "AWS_PROFILE"),
+		)
+		prefixedCmd := &cobra.Command{Use: "update-kubeconfig"}
+		prefixedParser.RegisterFlags(prefixedCmd)
+
+		// Bind flags to Viper with the prefix.
+		err := prefixedParser.BindFlagsToViper(prefixedCmd, v)
+		require.NoError(t, err)
+
+		// Set a flag value on the prefixed command.
+		require.NoError(t, prefixedCmd.Flags().Set("profile", "aws-dev"))
+
+		// Re-bind to sync the flag value.
+		err = prefixedParser.BindFlagsToViper(prefixedCmd, v)
+		require.NoError(t, err)
+
+		// Verify prefixed key has the value.
+		assert.Equal(t, "aws-dev", v.GetString("eks.profile"))
+
+		// Verify root key is NOT affected.
+		profiles := v.GetStringSlice("profile")
+		assert.NotContains(t, profiles, "aws-dev",
+			"root 'profile' key should not contain prefixed parser's value")
+	})
+
+	t.Run("inherited flags are bound without prefix", func(t *testing.T) {
+		v := viper.New()
+
+		// Create a parent command with a persistent flag.
+		parent := &cobra.Command{Use: "root"}
+		parent.PersistentFlags().String("logs-level", "info", "Log level")
+
+		// Create a child command.
+		child := &cobra.Command{Use: "child"}
+		parent.AddCommand(child)
+
+		// Create a prefixed parser for the child.
+		childParser := NewStandardFlagParser(
+			WithViperPrefix("child"),
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		childParser.RegisterFlags(child)
+
+		// Bind flags to Viper.
+		err := childParser.BindFlagsToViper(child, v)
+		require.NoError(t, err)
+
+		// Set the inherited flag.
+		require.NoError(t, parent.PersistentFlags().Set("logs-level", "debug"))
+
+		// Re-bind.
+		err = childParser.BindFlagsToViper(child, v)
+		require.NoError(t, err)
+
+		// Inherited flags should be bound WITHOUT the prefix.
+		assert.Equal(t, "debug", v.GetString("logs-level"),
+			"inherited flags should use their name as-is, not prefixed")
+
+		// Child's own flags should be prefixed.
+		assert.Equal(t, "json", v.GetString("child.format"),
+			"child's own flags should be prefixed")
+	})
+
+	t.Run("env vars work with prefixed keys", func(t *testing.T) {
+		v := viper.New()
+
+		parser := NewStandardFlagParser(
+			WithViperPrefix("myprefix"),
+			WithStringFlag("region", "", "", "Region"),
+			WithEnvVars("region", "MY_CUSTOM_REGION"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Bind to Viper first.
+		require.NoError(t, parser.BindToViper(v))
+
+		// Then bind flags.
+		err := parser.BindFlagsToViper(cmd, v)
+		require.NoError(t, err)
+
+		// Set env var.
+		t.Setenv("MY_CUSTOM_REGION", "eu-west-1")
+
+		// Verify prefixed key picks up env var.
+		assert.Equal(t, "eu-west-1", v.GetString("myprefix.region"),
+			"prefixed key should read from bound env var")
+
+		// Root key should NOT be affected.
+		assert.Empty(t, v.GetString("region"),
+			"root 'region' key should not be affected by prefixed binding")
+	})
+}
+
 // TestStringFlag_GetValidValues tests the GetValidValues method.
 func TestStringFlag_GetValidValues(t *testing.T) {
 	t.Run("returns valid values when set", func(t *testing.T) {

@@ -60,12 +60,18 @@ jobs:
             ATMOS_VERSION=${{ github.event.release.tag_name }}
 
       - name: "Verify Image"
+        env:
+          DOCKER_IMAGE: ${{ steps.build.outputs.image }}
+          DOCKER_TAG: ${{ steps.build.outputs.tag }}
         run: |
-          docker pull ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag}}
+          docker pull "$DOCKER_IMAGE:$DOCKER_TAG"
 
       - name: "Job Summary"
+        env:
+          DOCKER_IMAGE: ${{ steps.build.outputs.image }}
+          DOCKER_TAG: ${{ steps.build.outputs.tag }}
         run: |
           echo "## Docker Image Summary" >> $GITHUB_STEP_SUMMARY
           echo '```json' >> $GITHUB_STEP_SUMMARY
-          docker inspect ${{ steps.build.outputs.image }}:${{ steps.build.outputs.tag}}  >> $GITHUB_STEP_SUMMARY
+          docker inspect "$DOCKER_IMAGE:$DOCKER_TAG" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

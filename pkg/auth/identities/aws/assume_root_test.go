@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	testutil "github.com/cloudposse/atmos/tests"
@@ -70,6 +71,29 @@ func TestNewAssumeRootIdentity(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAssumeRootIdentity_SetRealm(t *testing.T) {
+	id, err := NewAssumeRootIdentity("root-access", &schema.Identity{Kind: "aws/assume-root"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRootIdentity)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
 }
 
 func TestAssumeRootIdentity_Validate(t *testing.T) {
@@ -1475,6 +1499,10 @@ func (m *mockAuthManager) ResolvePrincipalSetting(_ string, _ string) (interface
 
 func (m *mockAuthManager) ResolveProviderConfig(_ string) (*schema.Provider, bool) {
 	return nil, false
+}
+
+func (m *mockAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
 }
 
 func TestAssumeRootIdentity_CredentialsExist_ProviderResolutionError(t *testing.T) {

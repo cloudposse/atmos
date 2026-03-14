@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -174,6 +175,14 @@ func (a *authContextWrapper) ResolveProviderConfig(identityName string) (*schema
 	// Return false - this wrapper doesn't have access to provider configuration.
 	// It only propagates existing auth context for nested component resolution.
 	return nil, false
+}
+
+func (a *authContextWrapper) GetRealm() realm.RealmInfo {
+	defer perf.Track(nil, "exec.authContextWrapper.GetRealm")()
+
+	// Return empty realm - this wrapper doesn't track realm information.
+	// It only propagates existing auth context for nested component resolution.
+	return realm.RealmInfo{}
 }
 
 // newAuthContextWrapper creates an AuthManager wrapper that returns the given AuthContext.
