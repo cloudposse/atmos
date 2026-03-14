@@ -553,3 +553,62 @@ func TestParseAzureCLITime(t *testing.T) {
 		})
 	}
 }
+
+func TestCLIProvider_Environment_SovereignCloud(t *testing.T) {
+	tests := []struct {
+		name             string
+		cloudEnvName     string
+		expectedEnvVars  map[string]string
+		unexpectedEnvVar string
+	}{
+		{
+			name:         "usgovernment sets ARM_ENVIRONMENT",
+			cloudEnvName: "usgovernment",
+			expectedEnvVars: map[string]string{
+				"ARM_ENVIRONMENT":   "usgovernment",
+				"AZURE_ENVIRONMENT": "usgovernment",
+			},
+		},
+		{
+			name:         "china sets ARM_ENVIRONMENT",
+			cloudEnvName: "china",
+			expectedEnvVars: map[string]string{
+				"ARM_ENVIRONMENT":   "china",
+				"AZURE_ENVIRONMENT": "china",
+			},
+		},
+		{
+			name:             "public does not set ARM_ENVIRONMENT",
+			cloudEnvName:     "public",
+			unexpectedEnvVar: "ARM_ENVIRONMENT",
+		},
+		{
+			name:             "empty defaults to public, no ARM_ENVIRONMENT",
+			cloudEnvName:     "",
+			unexpectedEnvVar: "ARM_ENVIRONMENT",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &cliProvider{
+				tenantID:       "tenant-123",
+				subscriptionID: "sub-456",
+				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(tt.cloudEnvName),
+			}
+
+			env, err := p.Environment()
+			require.NoError(t, err)
+
+			for k, v := range tt.expectedEnvVars {
+				assert.Equal(t, v, env[k], "Expected %s=%s", k, v)
+			}
+
+			if tt.unexpectedEnvVar != "" {
+				_, exists := env[tt.unexpectedEnvVar]
+				assert.False(t, exists, "Expected %s to not be set", tt.unexpectedEnvVar)
+			}
+		})
+	}
+}

@@ -450,7 +450,7 @@ auth:
 
 ## Sovereign Cloud Support (GCC High, China)
 
-Azure sovereign clouds (US Government / GCC High, China / Mooncake) use different authentication endpoints, API scopes, and storage URLs than Azure Commercial. Atmos supports all Azure clouds through the `cloud_environment` provider setting.
+Azure sovereign clouds (US Government / GCC High, China / Mooncake) use different authentication endpoints, API scopes, and storage URLs than Azure Commercial. Atmos supports Azure Commercial (`public`), Azure Government (`usgovernment`), and Azure China (`china`) through the `cloud_environment` provider setting.
 
 ### Azure Government (GCC High)
 
@@ -526,6 +526,15 @@ auth:
         client_id: "YOUR_GOV_APP_CLIENT_ID"
         subscription_id: "YOUR_GOV_SUBSCRIPTION_ID"
         cloud_environment: usgovernment
+
+  identities:
+    azure-gov-sub:
+      kind: azure/subscription
+      via:
+        provider: azure-gov-oidc
+      principal:
+        subscription_id: "YOUR_GOV_SUBSCRIPTION_ID"
+        location: "usgovvirginia"
 ```
 
 ```yaml
@@ -562,7 +571,7 @@ components:
           environment: usgovernment  # Required for sovereign clouds
 ```
 
-Atmos uses this `environment` field to resolve the correct blob storage endpoint when reading Terraform state files.
+Atmos uses this `environment` field to resolve the correct blob storage endpoint when reading Terraform state files. Additionally, when `cloud_environment` is set to a sovereign cloud, Atmos exports `ARM_ENVIRONMENT` and `AZURE_ENVIRONMENT` to the subprocess environment, which the Terraform `azurerm` provider uses to select the correct Azure Resource Manager endpoints.
 
 ### Supported Cloud Environments
 

@@ -286,7 +286,7 @@ terraform:
 - `cloud_environment` defaults to `"public"` — all existing Azure Commercial users are unaffected
 - The Terraform `azurerm` backend `environment` field already exists in user configs for sovereign
   cloud deployments — no new backend configuration needed
-- Unknown `cloud_environment` values fall back to `"public"` with a warning
+- Unknown `cloud_environment` values cause provider initialization to fail with an error listing valid options; only empty strings default to `"public"`
 
 ## Files Changed
 

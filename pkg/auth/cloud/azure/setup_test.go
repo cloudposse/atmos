@@ -1442,3 +1442,54 @@ func TestUpdateMSALCacheFromCreds_SovereignCloud(t *testing.T) {
 	}
 	assert.True(t, foundGovScope, "Should find token entry with US Government management scope")
 }
+
+func TestResolveUsername(t *testing.T) {
+	tests := []struct {
+		name     string
+		creds    *types.AzureCredentials
+		expected string
+	}{
+		{
+			name: "extracts UPN from valid JWT",
+			creds: &types.AzureCredentials{
+				AccessToken: createTestJWT(map[string]interface{}{
+					"oid": "user-oid",
+					"upn": "alice@contoso.com",
+				}),
+			},
+			expected: "alice@contoso.com",
+		},
+		{
+			name: "falls back to client ID for service principal",
+			creds: &types.AzureCredentials{
+				AccessToken:        "not-a-jwt",
+				IsServicePrincipal: true,
+				ClientID:           "sp-client-id-123",
+			},
+			expected: "sp-client-id-123",
+		},
+		{
+			name: "falls back to user@unknown for user with invalid token",
+			creds: &types.AzureCredentials{
+				AccessToken: "not-a-jwt",
+			},
+			expected: "user@unknown",
+		},
+		{
+			name: "service principal without client ID falls back to user@unknown",
+			creds: &types.AzureCredentials{
+				AccessToken:        "not-a-jwt",
+				IsServicePrincipal: true,
+				ClientID:           "",
+			},
+			expected: "user@unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveUsername(tt.creds)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
