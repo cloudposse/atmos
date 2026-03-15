@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,19 +68,22 @@ func trackMergedConfigFile(path string) {
 
 const (
 	profileKey       = "profile"
-	profileDelimiter = ","
+	commaDelimiter   = ","
+	profileDelimiter = commaDelimiter
 	// AtmosCliConfigPathEnvVar is the environment variable name for CLI config path.
 	AtmosCliConfigPathEnvVar = "ATMOS_CLI_CONFIG_PATH"
 	// CwdKey is the log key for current working directory.
 	cwdKey = "cwd"
 )
 
-// parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
-// This is a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer).
+// ParseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
+// This is used both as a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// and for early profile extraction before Cobra parses flags (same pattern as --chdir).
 // Uses pflag's StringSlice parser to handle all syntax variations correctly.
-func parseProfilesFromOsArgs(args []string) []string {
+func ParseProfilesFromOsArgs(args []string) []string {
 	// Create temporary FlagSet just for parsing --profile.
 	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)                    // Suppress usage/error output from leaking to stderr.
 	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
 
 	// Register profile flag using pflag's StringSlice (handles comma-separated values).
@@ -138,9 +142,9 @@ func parseViperProfilesFromEnv(profiles []string) []string {
 	return parsed
 }
 
-// parseProfilesFromEnvString parses comma-separated profiles from an environment variable value.
+// ParseProfilesFromEnvString parses comma-separated profiles from an environment variable value.
 // Trims whitespace and filters empty entries.
-func parseProfilesFromEnvString(envValue string) []string {
+func ParseProfilesFromEnvString(envValue string) []string {
 	var result []string
 	for _, v := range strings.Split(envValue, profileDelimiter) {
 		if trimmed := strings.TrimSpace(v); trimmed != "" {
@@ -150,19 +154,97 @@ func parseProfilesFromEnvString(envValue string) []string {
 	return result
 }
 
+// ConfigSelection holds the config-selection flags parsed early from os.Args
+// before Cobra is initialized (same pattern as profile early-parsing).
+type ConfigSelection struct {
+	BasePath   string
+	Config     []string
+	ConfigPath []string
+}
+
+// ParseConfigSelectionFromOsArgs parses --base-path, --config, and --config-path
+// flags from os.Args using pflag. This is used for early extraction before Cobra
+// parses flags, so that InitCliConfig receives the correct config location.
+func ParseConfigSelectionFromOsArgs(args []string) ConfigSelection {
+	fs := pflag.NewFlagSet("config-selection-parser", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.ParseErrorsAllowlist.UnknownFlags = true
+
+	basePath := fs.String("base-path", "", "Base path")
+	config := fs.StringSlice("config", []string{}, "Config files")
+	configPath := fs.StringSlice("config-path", []string{}, "Config dirs")
+
+	_ = fs.Parse(args)
+
+	var sel ConfigSelection
+
+	if basePath != nil && *basePath != "" {
+		sel.BasePath = strings.TrimSpace(*basePath)
+	}
+
+	if config != nil {
+		for _, v := range *config {
+			if trimmed := strings.TrimSpace(v); trimmed != "" {
+				sel.Config = append(sel.Config, trimmed)
+			}
+		}
+	}
+
+	if configPath != nil {
+		for _, v := range *configPath {
+			if trimmed := strings.TrimSpace(v); trimmed != "" {
+				sel.ConfigPath = append(sel.ConfigPath, trimmed)
+			}
+		}
+	}
+
+	return sel
+}
+
+// ConfigSelectionFromEnv reads config-selection values from environment variables
+// as fallbacks when not provided via CLI flags.
+func ConfigSelectionFromEnv() ConfigSelection {
+	var sel ConfigSelection
+
+	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
+	if v := os.Getenv("ATMOS_BASE_PATH"); v != "" {
+		sel.BasePath = strings.TrimSpace(v)
+	}
+
+	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
+	if v := os.Getenv("ATMOS_CONFIG"); v != "" {
+		for _, part := range strings.Split(v, commaDelimiter) {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				sel.Config = append(sel.Config, trimmed)
+			}
+		}
+	}
+
+	//nolint:forbidigo // Must use os.Getenv: config selection is processed before Viper configuration loads.
+	if v := os.Getenv("ATMOS_CONFIG_PATH"); v != "" {
+		for _, part := range strings.Split(v, commaDelimiter) {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				sel.ConfigPath = append(sel.ConfigPath, trimmed)
+			}
+		}
+	}
+
+	return sel
+}
+
 // getProfilesFromFallbacks handles fallback profile loading when Viper doesn't have profiles set.
 // Returns profiles and source ("flag" or "env") for logging.
 func getProfilesFromFallbacks() ([]string, string) {
 	// Fallback: For commands with DisableFlagParsing=true, Cobra never parses flags,
 	// so Viper won't have flag values. Manually parse os.Args as fallback.
-	profiles := parseProfilesFromOsArgs(os.Args)
+	profiles := ParseProfilesFromOsArgs(os.Args)
 	if len(profiles) > 0 {
 		return profiles, "flag"
 	}
 
 	// Check environment variable directly as final fallback.
 	if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" { //nolint:forbidigo
-		result := parseProfilesFromEnvString(envProfiles)
+		result := ParseProfilesFromEnvString(envProfiles)
 		if len(result) > 0 {
 			return result, "env"
 		}
