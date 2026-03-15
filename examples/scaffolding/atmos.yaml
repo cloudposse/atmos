@@ -1,0 +1,37 @@
+# Atmos CLI Configuration Template
+# This file is processed by the scaffold command with Go templates.
+# Variables from prompts are accessible via {{ .Config.<name> }}
+# See: https://atmos.tools/cli/configuration
+
+version: 1
+
+# Base path for components, stacks and workflows
+base_path: "."
+
+# Component configuration
+components:
+  terraform:
+    # Path to Terraform components (relative to base_path)
+    base_path: "components/terraform"
+    # Apply auto-generated backend configuration
+    apply_auto_generated_backend_file: true
+
+# Stack configuration
+stacks:
+  # Path to stack files (relative to base_path)
+  base_path: "stacks"
+  # Stack naming pattern
+  name_pattern: "{environment}-{stage}"
+
+# Template configuration
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
+# Logging
+logs:
+  level: info

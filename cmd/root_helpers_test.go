@@ -490,50 +490,40 @@ func TestHandleConfigInitError(t *testing.T) {
 	tests := []struct {
 		name        string
 		initErr     error
-		isVersion   bool
+		args        []string
 		expectError bool
 		expectNil   bool
 	}{
 		{
 			name:      "version command with error returns nil",
 			initErr:   errors.New("config error"),
-			isVersion: true,
+			args:      []string{"atmos", "version"},
 			expectNil: true,
 		},
 		{
 			name:      "config not found returns nil",
 			initErr:   fmt.Errorf("wrapped: %w", cfg.NotFound),
-			isVersion: false,
+			args:      []string{"atmos", "terraform", "plan"},
 			expectNil: true,
 		},
 		{
 			name:        "invalid log level error preserved",
 			initErr:     fmt.Errorf("%w\nSupported levels: Info, Debug", log.ErrInvalidLogLevel),
-			isVersion:   false,
+			args:        []string{"atmos", "terraform", "plan"},
 			expectError: true,
 		},
 		{
 			name:        "other errors returned as-is",
 			initErr:     errors.New("some other error"),
-			isVersion:   false,
+			args:        []string{"atmos", "terraform", "plan"},
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore os.Args for version command detection.
-			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
-
-			if tt.isVersion {
-				os.Args = []string{"atmos", "version"}
-			} else {
-				os.Args = []string{"atmos", "terraform", "plan"}
-			}
-
 			atmosConfig := &schema.AtmosConfiguration{}
-			err := handleConfigInitError(tt.initErr, atmosConfig)
+			err := handleConfigInitErrorWithArgs(tt.initErr, atmosConfig, tt.args)
 
 			switch {
 			case tt.expectNil:
