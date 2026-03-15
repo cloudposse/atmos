@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	l "github.com/cloudposse/atmos/pkg/list"
@@ -429,7 +430,7 @@ func preCustomCommand(
 					fmt.Sprintf("%d. %s %s %s\n", i+1, parentCommand.Use, commandConfig.Name, c.Name),
 				)
 			}
-			log.Info(sb.String())
+			_ = data.Write(sb.String())
 			errUtils.Exit(1)
 		} else {
 			// truly invalid, nothing to do

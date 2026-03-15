@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -170,7 +171,7 @@ func runMainLogic() {
 		filePaths, err := files.GetFiles(config)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		for _, file := range filePaths {
-			log.Info(file)
+			_ = data.Writeln(file)
 		}
 		return
 	}

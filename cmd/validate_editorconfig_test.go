@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
@@ -8,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -74,25 +79,60 @@ func TestInitConfig(t *testing.T) {
 	initializeConfig(editorConfigCmd)
 }
 
-// TestRunMainLogicDryRun tests the dry-run path in runMainLogic.
-func TestRunMainLogicDryRun(t *testing.T) {
-	// Save original state.
-	originalConfig := currentConfig
-	originalCliConfig := cliConfig
-	defer func() {
-		currentConfig = originalConfig
-		cliConfig = originalCliConfig
-	}()
+// TestRunMainLogic_DryRun tests the dry-run mode of runMainLogic.
+// This covers the data.Writeln(file) call at line 172.
+func TestRunMainLogic_DryRun(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	t.Cleanup(data.Reset)
 
-	// Create a minimal config for dry-run mode.
-	cfg := config.NewConfig([]string{})
+	// Create a temp directory for test files.
+	tmpDir := t.TempDir()
+
+	// Create an .editorconfig file.
+	editorConfigContent := `root = true
+
+[*]
+indent_style = space
+indent_size = 2
+`
+	editorConfigPath := filepath.Join(tmpDir, ".editorconfig")
+	err = os.WriteFile(editorConfigPath, []byte(editorConfigContent), 0o644)
+	require.NoError(t, err)
+
+	// Create a test file to be discovered.
+	testFilePath := filepath.Join(tmpDir, "test.txt")
+	err = os.WriteFile(testFilePath, []byte("test content\n"), 0o644)
+	require.NoError(t, err)
+
+	// Change to the temp directory.
+	t.Chdir(tmpDir)
+
+	// Save and restore the original currentConfig.
+	originalConfig := currentConfig
+	defer func() { currentConfig = originalConfig }()
+
+	// Create a new config with DryRun enabled.
+	cfg := config.NewConfig([]string{".editorconfig"})
 	cfg.DryRun = true
 	currentConfig = cfg
-	cliConfig = config.Config{DryRun: true}
 
-	// This should not panic and should list files (if any match).
-	// In dry-run mode, runMainLogic just lists files without validation.
-	runMainLogic()
+	// Capture stdout to assert dry-run output contains discovered files.
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	defer func() { _ = r.Close() }()
+
+	originalStdout := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = originalStdout })
+
+	require.NotPanics(t, runMainLogic)
+
+	require.NoError(t, w.Close())
+	output, err := io.ReadAll(r)
+	require.NoError(t, err)
+	assert.Contains(t, string(output), filepath.Base(testFilePath))
 }
 
 // TestCheckVersion tests the version checking logic.
