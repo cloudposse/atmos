@@ -1284,6 +1284,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/emicklei/proto/blob/v1.14.3/LICENSE
 
+  - github.com/epiclabs-io/diff3
+    License: MIT
+    URL: https://github.com/epiclabs-io/diff3/blob/280ec18688b6/LICENSE
+
   - github.com/expr-lang/expr
     License: MIT
     URL: https://github.com/expr-lang/expr/blob/v1.17.8/LICENSE

@@ -45,6 +45,7 @@ const TAGS_MAP = {
   'devcontainer-build': ['DX'],
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
+  scaffolding: ['Scaffold', 'Init'],
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
 };
@@ -118,6 +119,10 @@ const DOCS_MAP = {
   ],
   'demo-helmfile': [
     { label: 'Helmfile', url: '/stacks/components/helmfile' },
+  ],
+  scaffolding: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },

@@ -1,7 +1,6 @@
 package terraform
 
 import (
-	"os"
 	"testing"
 )
 
@@ -14,20 +13,12 @@ func TestTerraformHeatmapFlag(t *testing.T) {
 	// Test that --heatmap flag is properly detected and enables tracking.
 	// Terraform pass-through flags are separated during preprocessing in Execute()
 	// via the command registry's CompatibilityFlagTranslator.
-	//
-	// Note: This test requires os.Args manipulation because enableHeatmapIfRequested()
-	// scans os.Args directly before flag parsing occurs. This is intentional and
-	// cannot use cmd.SetArgs().
 
-	// Save original os.Args.
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+	// Simulate command line with --heatmap flag using the testable function.
+	args := []string{"atmos", "terraform", "plan", "vpc", "-s", "uw2-prod", "--heatmap"}
 
-	// Simulate command line with --heatmap flag.
-	os.Args = []string{"atmos", "terraform", "plan", "vpc", "-s", "uw2-prod", "--heatmap"}
-
-	// Call enableHeatmapIfRequested which should detect --heatmap in os.Args.
+	// Call enableHeatmapIfRequestedWithArgs which should detect --heatmap in args.
 	// We verify the function doesn't panic - actual heatmap output is tested in integration tests.
 	// Note: perf.EnableTracking state is not directly testable without exposing internal state.
-	enableHeatmapIfRequested()
+	enableHeatmapIfRequestedWithArgs(args)
 }

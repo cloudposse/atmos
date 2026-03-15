@@ -17,12 +17,14 @@ Valid subcommands are:
   • env
   • helmfile
   • help
+  • init
   • list
   • lsp
   • mcp
   • packer
   • pro
   • profile
+  • scaffold
   • show
   • support
   • terraform
