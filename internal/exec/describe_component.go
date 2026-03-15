@@ -141,7 +141,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if explain && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
 		resMap, ok := res.(map[string]any)
 		if !ok {
-			return fmt.Errorf("%w: explain rendering requires a map, got %T", errUtils.ErrInvalidComponent, res)
+			return fmt.Errorf("%w: cannot generate merge trace: component configuration has unexpected format (%T)", errUtils.ErrInvalidComponent, res)
 		}
 		return d.renderExplain(resMap, mergeContext, &atmosConfig, stackFile, file)
 	}

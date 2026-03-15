@@ -39,7 +39,7 @@ type ExplainTraceEntry struct {
 
 // RenderExplainTrace renders a per-key merge trace showing which file "won" for
 // each configuration value and which earlier files were overridden.
-// The output format matches the problem statement:
+// The output format is:
 //
 //	vars.cidr_block = "10.0.0.0/16"
 //	  ● SET by:   stacks/orgs/acme/prod/us-east-2.yaml (line 24)
@@ -323,7 +323,7 @@ func formatExplainValue(v any) string {
 		// Fall back to JSON for complex types.
 		b, err := json.Marshal(v)
 		if err != nil {
-			return fmt.Sprintf("%v", v)
+			return "<complex value>"
 		}
 		return string(b)
 	}

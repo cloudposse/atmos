@@ -1,0 +1,102 @@
+---
+slug: describe-component-explain-merge-trace
+title: "Debug Deep-Merged Configs with atmos describe component --explain"
+authors: [aknysh]
+tags: [feature, dx]
+---
+
+import Terminal from '@site/src/components/Terminal'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+Finding out *why* a Terraform variable has a particular value just became one command away.
+`atmos describe component --explain` shows you a per-key merge trace: which stack file "won,"
+which files were overridden, and what value each file contributed.
+
+<!--truncate-->
+
+## The Problem
+
+Debugging deeply-merged Atmos configuration is one of the most common pain points.
+When you have a vpc component that imports from a catalog, mixes in regional defaults,
+and is overridden in a per-environment stack, the final value for `vars.cidr_block` could
+have come from any of half a dozen files.
+
+`atmos describe component vpc -s us2-prod` tells you the *resolved* state but not the *why*.
+You're left grepping through stacks, tracing imports manually, and guessing.
+
+## The Solution: `--explain`
+
+The new `--explain` flag prints a per-key merge trace that answers the question directly:
+
+<Terminal title="atmos describe component vpc -s us2-prod --explain">
+```console
+$ atmos describe component vpc -s us2-prod --explain
+
+# Merge Trace Legend:
+#   ● SET by:   value defined here (this file wins)
+#   ○ OVERRIDE: value was here but overridden by a later file
+
+# Stack: orgs/acme/plat/prod/us-east-2.yaml
+────────────────────────────────────────────────────────────
+vars.cidr_block = "10.0.0.0/16"
+  ● SET by:   orgs/acme/plat/prod/us-east-2.yaml (line 24)
+  ○ OVERRIDE: catalog/vpc/defaults.yaml (line 10) had "172.16.0.0/16"
+
+vars.region = "us-east-2"
+  ● SET by:   mixins/region/us-east-2.yaml (line 3)
+
+vars.enable_nat_gateway = true
+  ● SET by:   catalog/vpc/defaults.yaml (line 15)
+```
+</Terminal>
+
+For each key you see:
+
+| Symbol | Meaning |
+|--------|---------|
+| `● SET by:` | The file whose value is in effect (lowest import depth = highest priority) |
+| `○ OVERRIDE:` | A file that also defined the key but was superseded |
+
+## How It Works
+
+Atmos already tracks provenance during deep-merging via the `--provenance` flag, which renders
+inline YAML comments. The new `--explain` mode uses the same provenance data but pivots the
+display to a **per-key trace** — making it immediately obvious which file wins and what the
+competing values were.
+
+Each entry in the override history also shows the *actual value* that file had, so you can see
+not just *where* values came from, but also *what they were before being overridden*.
+
+## Usage
+
+```shell
+# Show merge trace for all keys
+atmos describe component vpc -s us2-prod --explain
+
+# Combine with --query to focus on a specific section
+atmos describe component vpc -s us2-prod --explain --query .vars
+
+# Write the trace to a file for review
+atmos describe component vpc -s us2-prod --explain --file trace.txt
+```
+
+## When to Use `--explain`
+
+- **Onboarding**: New team members can understand the inheritance chain without reading all stack files
+- **Debugging overrides**: Quickly identify where an unexpected value is coming from
+- **Pull request reviews**: Verify that a change in one stack file actually affects the expected keys
+- **Audit trails**: Document which file is responsible for each configuration value
+
+## Comparison with `--provenance`
+
+| Flag | Output | Best For |
+|------|--------|----------|
+| `--provenance` | YAML with inline `# ● file:line` comments | Viewing the full config with origin context |
+| `--explain` | Per-key merge trace with SET/OVERRIDE history | Debugging a specific value or override chain |
+
+Both flags use the same underlying provenance tracking engine.
+
+<ActionCard title="Try it today">
+  <PrimaryCTA to="/cli/commands/describe/component">View the command reference</PrimaryCTA>
+</ActionCard>
