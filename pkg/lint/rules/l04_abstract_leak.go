@@ -68,6 +68,9 @@ func (r *l04AbstractLeakRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 				children := inheritedBy[abstractComp]
 				hasConcreteChild := false
 				for _, child := range children {
+					// children are only added to inheritedBy when compData was a valid
+					// map[string]any, so this type assertion should always succeed.
+					// The guard is retained as a defensive safeguard against data corruption.
 					childData, ok := compSection[child].(map[string]any)
 					if !ok {
 						continue

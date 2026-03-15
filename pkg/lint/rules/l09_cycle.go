@@ -80,12 +80,7 @@ func (r *l09CycleRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 					break
 				}
 			}
-			var cyclePath []string
-			if cycleStart >= 0 {
-				cyclePath = append(path[cycleStart:], node)
-			} else {
-				cyclePath = append(path, node)
-			}
+			cyclePath := append(path[cycleStart:], node)
 			cycleKey := fmt.Sprintf("%v", cyclePath)
 			if !cyclePaths[cycleKey] {
 				cyclePaths[cycleKey] = true
@@ -119,9 +114,6 @@ func (r *l09CycleRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 
 // formatCyclePath renders a cycle as "A → B → C → A".
 func formatCyclePath(path []string) string {
-	if len(path) == 0 {
-		return ""
-	}
 	result := path[0]
 	for _, p := range path[1:] {
 		result += " → " + p

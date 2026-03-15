@@ -81,7 +81,6 @@ func (r *l06DRYRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 	}
 
 	var findings []lint.LintFinding
-	seen := make(map[string]bool)
 
 	for compName, varKeys := range stats {
 		for varKey, valueCounts := range varKeys {
@@ -92,11 +91,6 @@ func (r *l06DRYRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 			for value, count := range valueCounts {
 				pct := count * 100 / total
 				if pct >= thresholdPct {
-					key := fmt.Sprintf("%s.%s=%s", compName, varKey, value)
-					if seen[key] {
-						continue
-					}
-					seen[key] = true
 					findings = append(findings, lint.LintFinding{
 						RuleID:    r.ID(),
 						Severity:  r.Severity(),

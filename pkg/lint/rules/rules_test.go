@@ -1367,3 +1367,964 @@ func TestL08SensitiveVarBasePathResolution(t *testing.T) {
 		assert.Equal(t, "L-08", f.RuleID)
 	}
 }
+
+// -- White-box helper tests (using exported aliases from export_test.go) --
+
+func TestFormatCyclePath(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "A", rules.ExportedFormatCyclePath([]string{"A"}))
+	assert.Equal(t, "A → B → A", rules.ExportedFormatCyclePath([]string{"A", "B", "A"}))
+}
+
+func TestConcernGroupLeadingHyphen(t *testing.T) {
+	t.Parallel()
+
+	// A component name starting with "-" yields an empty first segment
+	// so the function returns the full name unchanged.
+	result := rules.ExportedConcernGroup("-foo")
+	assert.Equal(t, "-foo", result)
+
+	// A normal name uses the first segment.
+	assert.Equal(t, "vpc", rules.ExportedConcernGroup("vpc-prod"))
+	assert.Equal(t, "vpc", rules.ExportedConcernGroup("vpc"))
+}
+
+func TestNormalizeForComparison(t *testing.T) {
+	t.Parallel()
+
+	// .yaml extension stripped.
+	assert.Equal(t, "stacks/catalog/vpc", rules.ExportedNormalizeForComparison("stacks/catalog/vpc.yaml"))
+	// .yml extension stripped.
+	assert.Equal(t, "stacks/catalog/ecs", rules.ExportedNormalizeForComparison("stacks/catalog/ecs.yml"))
+	// Trailing slash removed.
+	assert.Equal(t, "stacks/catalog", rules.ExportedNormalizeForComparison("stacks/catalog/"))
+	// No extension remains unchanged.
+	assert.Equal(t, "stacks/catalog/rds", rules.ExportedNormalizeForComparison("stacks/catalog/rds"))
+}
+
+func TestStackNameToFile(t *testing.T) {
+	t.Parallel()
+
+	// Empty basePath returns the name as-is.
+	assert.Equal(t, "my-stack", rules.ExportedStackNameToFile("my-stack", ""))
+
+	// basePath set but name has no slash/extension → returns "".
+	assert.Equal(t, "", rules.ExportedStackNameToFile("my-stack", "/stacks"))
+
+	// Name with slash returns name unchanged (already a path).
+	assert.Equal(t, "us-east-1/prod", rules.ExportedStackNameToFile("us-east-1/prod", "/stacks"))
+
+	// Name with .yaml suffix returns name unchanged.
+	assert.Equal(t, "prod.yaml", rules.ExportedStackNameToFile("prod.yaml", "/stacks"))
+
+	// Name with .yml suffix returns name unchanged.
+	assert.Equal(t, "prod.yml", rules.ExportedStackNameToFile("prod.yml", "/stacks"))
+}
+
+// -- Non-map section guards (defensive branch coverage) --
+
+func TestL01DeadVarNonMapStackSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l01 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-01" {
+			l01 = r
+			break
+		}
+	}
+	require.NotNil(t, l01)
+
+	// A stack section that is not a map[string]any must be skipped gracefully.
+	ctx := makeContext(map[string]any{
+		"bad-stack": "not-a-map",
+	})
+	findings, err := l01.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestL01DeadVarNonMapComponentData(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l01 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-01" {
+			l01 = r
+			break
+		}
+	}
+	require.NotNil(t, l01)
+
+	// Component data that is not a map[string]any should be skipped gracefully.
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			"vars": map[string]any{"unused_var": "value"},
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"comp-a": "not-a-map", // non-map component data
+				},
+			},
+		},
+	})
+	findings, err := l01.Run(ctx)
+	require.NoError(t, err)
+	// The global var is unused because component data couldn't be read.
+	assert.NotEmpty(t, findings)
+}
+
+func TestL02RedundantOverrideNonMapStackSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l02 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-02" {
+			l02 = r
+			break
+		}
+	}
+	require.NotNil(t, l02)
+
+	ctx := makeContext(map[string]any{
+		"bad-stack": "not-a-map",
+	})
+	findings, err := l02.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestL02RedundantOverrideNoInherits(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l02 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-02" {
+			l02 = r
+			break
+		}
+	}
+	require.NotNil(t, l02)
+
+	// Concrete component with no inherits must produce no findings.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-a": map[string]any{
+				"vars": map[string]any{"region": "us-east-1"},
+			},
+		}),
+	})
+	findings, err := l02.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestL02RedundantOverrideUnknownParent(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l02 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-02" {
+			l02 = r
+			break
+		}
+	}
+	require.NotNil(t, l02)
+
+	// Concrete component inheriting from a parent not in the stacks map must produce no findings.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-concrete": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-unknown-parent"},
+				},
+				"vars": map[string]any{"region": "us-east-1"},
+			},
+		}),
+	})
+	findings, err := l02.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestL02RedundantOverrideAbstractWithNoVars(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l02 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-02" {
+			l02 = r
+			break
+		}
+	}
+	require.NotNil(t, l02)
+
+	// Abstract component with no vars section: concrete inheritor cannot be redundant.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-base": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+				// no vars section
+			},
+			"comp-concrete": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-base"},
+				},
+				"vars": map[string]any{"region": "us-east-1"},
+			},
+		}),
+	})
+	findings, err := l02.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestL03ImportDepthEmptyImportsEntry(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l03 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-03" {
+			l03 = r
+			break
+		}
+	}
+	require.NotNil(t, l03)
+
+	// An entry in ImportGraph with an empty imports slice should be skipped.
+	ctx := lint.LintContext{
+		StacksMap:       make(map[string]any),
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph: map[string][]string{
+			"stacks/root.yaml": {}, // empty — should hit the continue branch
+		},
+		LintConfig: schema.LintStacksConfig{MaxImportDepth: 3},
+	}
+	findings, err := l03.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "empty import list should not trigger import depth finding")
+}
+
+func TestL03DfsDepthWithDiamondPattern(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l03 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-03" {
+			l03 = r
+			break
+		}
+	}
+	require.NotNil(t, l03)
+
+	// Diamond pattern: root imports A and B, both import C.
+	// The visited cache in dfsDepth prevents double-counting C.
+	ctx := lint.LintContext{
+		StacksMap:       make(map[string]any),
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph: map[string][]string{
+			"root.yaml": {"a.yaml", "b.yaml"},
+			"a.yaml":    {"c.yaml"},
+			"b.yaml":    {"c.yaml"},
+		},
+		LintConfig: schema.LintStacksConfig{MaxImportDepth: 1},
+	}
+	// root → a → c gives depth 3 which exceeds threshold 1.
+	findings, err := l03.Run(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "diamond with depth 3 should exceed threshold of 1")
+}
+
+func TestL04AbstractLeakNonMapChildData(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l04 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-04" {
+			l04 = r
+			break
+		}
+	}
+	require.NotNil(t, l04)
+
+	// Child component data that is not a map must be skipped gracefully.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-abstract": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+			},
+			// Non-map "inheritor" that cannot be processed — the abstract component should still leak.
+			"comp-bad-child": "not-a-map",
+		}),
+	})
+	findings, err := l04.Run(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "abstract component with non-map child should still be reported as leaking")
+}
+
+func TestL08NonMapStackSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l08 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-08" {
+			l08 = r
+			break
+		}
+	}
+	require.NotNil(t, l08)
+
+	ctx := makeContext(map[string]any{
+		"bad-stack": "not-a-map",
+	})
+	findings, err := l08.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestL08StackNameWithSlash(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l08 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-08" {
+			l08 = r
+			break
+		}
+	}
+	require.NotNil(t, l08)
+
+	// Stack name containing a "/" is treated as a path and returned verbatim by stackNameToFile.
+	ctx := lint.LintContext{
+		StacksMap: map[string]any{
+			"us-east-1/prod": map[string]any{
+				"vars": map[string]any{"api_key": "secret"},
+			},
+		},
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph:     make(map[string][]string),
+		LintConfig:      schema.LintStacksConfig{},
+		StacksBasePath:  "/stacks",
+	}
+	findings, err := l08.Run(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, findings)
+	assert.Equal(t, "us-east-1/prod", findings[0].File)
+}
+
+func TestL09CycleWithHelmfileComponents(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l09 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-09" {
+			l09 = r
+			break
+		}
+	}
+	require.NotNil(t, l09)
+
+	// Cycle detection should work for helmfile components as well.
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			"components": map[string]any{
+				"helmfile": map[string]any{
+					"svc-a": map[string]any{
+						"metadata": map[string]any{
+							"inherits": []any{"svc-b"},
+						},
+					},
+					"svc-b": map[string]any{
+						"metadata": map[string]any{
+							"inherits": []any{"svc-a"},
+						},
+					},
+				},
+			},
+		},
+	})
+	findings, err := l09.Run(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings)
+}
+
+func TestL09CycleNonMapCompData(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l09 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-09" {
+			l09 = r
+			break
+		}
+	}
+	require.NotNil(t, l09)
+
+	// Non-map component data must be skipped gracefully.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-bad": "not-a-map",
+		}),
+	})
+	findings, err := l09.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestL10EnvShadowingNonMapStackSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l10 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-10" {
+			l10 = r
+			break
+		}
+	}
+	require.NotNil(t, l10)
+
+	ctx := makeContext(map[string]any{
+		"bad-stack": "not-a-map",
+	})
+	findings, err := l10.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestL10EnvShadowingNoComponentsSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l10 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-10" {
+			l10 = r
+			break
+		}
+	}
+	require.NotNil(t, l10)
+
+	// Stack with env vars but no components section must produce no findings.
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			"env": map[string]any{"MY_VAR": "global-value"},
+			// no components section
+		},
+	})
+	findings, err := l10.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+func TestExtractInheritsNonListType(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l09 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-09" {
+			l09 = r
+			break
+		}
+	}
+	require.NotNil(t, l09)
+
+	// An "inherits" value that is neither []string nor []any should produce no edges
+	// (graceful handling of unexpected types).
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-a": map[string]any{
+				"metadata": map[string]any{
+					"inherits": 42, // unexpected non-slice type
+				},
+			},
+		}),
+	})
+	findings, err := l09.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "non-list inherits value should be ignored without error")
+}
+
+// TestL01DeadVarGlobalVarsNoComponents covers the path where a stack has global vars
+// but no components section at all.
+func TestL01DeadVarGlobalVarsNoComponents(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l01 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-01" {
+			l01 = r
+			break
+		}
+	}
+	require.NotNil(t, l01)
+
+	// Stack has a global var but no components section — the var is trivially dead.
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			"vars": map[string]any{"orphan_var": "value"},
+			// no "components" key
+		},
+	})
+	findings, err := l01.Run(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings)
+}
+
+// TestL02RedundantOverridePhase2NonMapCompData covers the !ok branch for compData
+// in phase 2 of the redundant override rule.
+func TestL02RedundantOverridePhase2NonMapCompData(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l02 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-02" {
+			l02 = r
+			break
+		}
+	}
+	require.NotNil(t, l02)
+
+	// Components section has one valid abstract comp and one non-map entry.
+	// Phase 2 should skip the non-map entry gracefully.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-base": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+				"vars":     map[string]any{"region": "us-east-1"},
+			},
+			"comp-bad": "not-a-map",
+		}),
+	})
+	findings, err := l02.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL02RedundantOverrideConcreteNoVars covers the case where a concrete component
+// has inherits but no vars section.
+func TestL02RedundantOverrideConcreteNoVars(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l02 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-02" {
+			l02 = r
+			break
+		}
+	}
+	require.NotNil(t, l02)
+
+	// Concrete component inherits from base but has no vars section.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-base": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+				"vars":     map[string]any{"region": "us-east-1"},
+			},
+			"comp-concrete": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-base"},
+				},
+				// no vars section
+			},
+		}),
+	})
+	findings, err := l02.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "concrete component with no vars cannot have redundant overrides")
+}
+
+// TestL03DfsDepthWithCycle covers the visited-node guard in dfsDepth by providing
+// a cyclic import graph.
+func TestL03DfsDepthWithCycle(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l03 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-03" {
+			l03 = r
+			break
+		}
+	}
+	require.NotNil(t, l03)
+
+	// A↔B cycle in the import graph.
+	// dfsDepth uses a visited map to prevent infinite recursion; the visited check
+	// fires when A tries to re-enter B's DFS path (or vice versa).
+	ctx := lint.LintContext{
+		StacksMap:       make(map[string]any),
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph: map[string][]string{
+			"a.yaml": {"b.yaml"},
+			"b.yaml": {"a.yaml"}, // cycle
+		},
+		LintConfig: schema.LintStacksConfig{MaxImportDepth: 1},
+	}
+	// Must not panic and should report findings since depth exceeds threshold.
+	findings, err := l03.Run(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "cyclic import should exceed depth threshold and not cause infinite recursion")
+}
+
+// TestL06DRYNonMapStackSection covers the !ok guard for non-map stack sections.
+func TestL06DRYNonMapStackSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l06 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-06" {
+			l06 = r
+			break
+		}
+	}
+	require.NotNil(t, l06)
+
+	ctx := makeContext(map[string]any{
+		"bad-stack": "not-a-map",
+	})
+	findings, err := l06.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL06DRYNonMapCompData covers the !ok guard for non-map component data.
+func TestL06DRYNonMapCompData(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l06 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-06" {
+			l06 = r
+			break
+		}
+	}
+	require.NotNil(t, l06)
+
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-bad": "not-a-map",
+		}),
+	})
+	findings, err := l06.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL10EnvShadowingNonMapCompData covers the !ok guard for non-map component data.
+func TestL10EnvShadowingNonMapCompData(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l10 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-10" {
+			l10 = r
+			break
+		}
+	}
+	require.NotNil(t, l10)
+
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			"env":        map[string]any{"MY_VAR": "global-value"},
+			"components": map[string]any{"terraform": map[string]any{"comp-bad": "not-a-map"}},
+		},
+	})
+	findings, err := l10.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL09CycleNonMapStackSection covers the !ok guard for non-map stack sections in L-09.
+func TestL09CycleNonMapStackSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l09 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-09" {
+			l09 = r
+			break
+		}
+	}
+	require.NotNil(t, l09)
+
+	ctx := makeContext(map[string]any{
+		"bad-stack": "not-a-map",
+	})
+	findings, err := l09.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL04AbstractLeakNonMapStackSection covers the !ok guard for non-map stack sections in L-04.
+func TestL04AbstractLeakNonMapStackSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l04 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-04" {
+			l04 = r
+			break
+		}
+	}
+	require.NotNil(t, l04)
+
+	ctx := makeContext(map[string]any{
+		"bad-stack": "not-a-map",
+	})
+	findings, err := l04.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL06DRYNonMapComponentsSection covers the !ok guard for non-map components section in L-06.
+func TestL06DRYNonMapComponentsSection(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l06 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-06" {
+			l06 = r
+			break
+		}
+	}
+	require.NotNil(t, l06)
+
+	// Stack with no components section must produce no findings.
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			// no "components" key
+		},
+	})
+	findings, err := l06.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL06DRYComponentWithNoVars covers the case where a component has no vars section.
+func TestL06DRYComponentWithNoVars(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l06 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-06" {
+			l06 = r
+			break
+		}
+	}
+	require.NotNil(t, l06)
+
+	// Component with no vars section must produce no DRY findings.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-a": map[string]any{
+				// no vars section
+			},
+		}),
+	})
+	findings, err := l06.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL08SensitiveVarEmptyVarsMap covers the case where globalVars is an empty map.
+func TestL08SensitiveVarEmptyVarsMap(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l08 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-08" {
+			l08 = r
+			break
+		}
+	}
+	require.NotNil(t, l08)
+
+	// An empty vars map must not produce findings.
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			"vars": map[string]any{}, // empty map
+		},
+	})
+	findings, err := l08.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL09CycleComponentWithNoMetadata covers the !ok guard for components
+// that have no metadata section in L-09.
+func TestL09CycleComponentWithNoMetadata(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l09 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-09" {
+			l09 = r
+			break
+		}
+	}
+	require.NotNil(t, l09)
+
+	// Component without a metadata section must be skipped gracefully.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-no-meta": map[string]any{
+				"vars": map[string]any{"region": "us-east-1"},
+				// no "metadata" key
+			},
+		}),
+	})
+	findings, err := l09.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL02RedundantOverrideVarNotInParent covers the parentHas=false branch
+// where a concrete component has a var the parent does not define.
+func TestL02RedundantOverrideVarNotInParent(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l02 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-02" {
+			l02 = r
+			break
+		}
+	}
+	require.NotNil(t, l02)
+
+	// Concrete component has an extra var not present in the parent — no redundancy.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-base": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+				"vars":     map[string]any{"region": "us-east-1"},
+			},
+			"comp-concrete": map[string]any{
+				"metadata": map[string]any{"inherits": []any{"comp-base"}},
+				"vars": map[string]any{
+					"region":   "us-east-1", // matches parent (redundant)
+					"extra":    "unique",    // not in parent: parentHas=false → no finding
+				},
+			},
+		}),
+	})
+	findings, err := l02.Run(ctx)
+	require.NoError(t, err)
+	// Only "region" is redundant; "extra" is not.
+	require.Len(t, findings, 1)
+	assert.Contains(t, findings[0].Message, "region")
+}
+
+// TestL06DRYSingleStackNoFinding covers the total<2 guard where a component
+// appears in only one stack and therefore cannot be DRY-extracted.
+func TestL06DRYSingleStackNoFinding(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l06 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-06" {
+			l06 = r
+			break
+		}
+	}
+	require.NotNil(t, l06)
+
+	// A single stack with a component: total=1 < 2, so no DRY finding.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-a": map[string]any{
+				"vars": map[string]any{"region": "us-east-1"},
+			},
+		}),
+	})
+	findings, err := l06.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "single-occurrence var cannot be DRY extracted")
+}
+
+// TestL10EnvShadowingEmptyCompEnv covers the len(compEnv)==0 guard.
+func TestL10EnvShadowingEmptyCompEnv(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l10 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-10" {
+			l10 = r
+			break
+		}
+	}
+	require.NotNil(t, l10)
+
+	// Component with an empty env map must produce no findings.
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			"env": map[string]any{"MY_VAR": "global-value"},
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"comp-a": map[string]any{
+						"env": map[string]any{}, // empty env map
+					},
+				},
+			},
+		},
+	})
+	findings, err := l10.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
+
+// TestL01DeadVarEmptyGlobalVars covers the len(globalVars)==0 guard.
+func TestL01DeadVarEmptyGlobalVars(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l01 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-01" {
+			l01 = r
+			break
+		}
+	}
+	require.NotNil(t, l01)
+
+	// An empty vars map has zero global vars, so no dead-var findings.
+	ctx := makeContext(map[string]any{
+		"stack1": map[string]any{
+			"vars": map[string]any{}, // present but empty
+		},
+	})
+	findings, err := l01.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings)
+}
