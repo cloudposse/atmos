@@ -40,6 +40,10 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this stack manifest."
     }
   },
   "additionalProperties": true,

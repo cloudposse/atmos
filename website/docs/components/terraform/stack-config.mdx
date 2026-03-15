@@ -21,6 +21,9 @@ components:
     # the slug of the component
     example:
 
+      # Human-readable description of what this component does in this stack context.
+      description: "Primary VPC for us-east-2. Owns the CIDR 10.10.0.0/16."
+
       # configuration specific to atmos
       metadata:
         # Components can be of type "real" (default) or "abstract"
@@ -52,6 +55,21 @@ components:
 ## Attributes
 
 <dl>
+  <dt>`description` (optional)</dt>
+  <dd>
+  A human-readable description of what this component does in this stack context. Surfaces in `atmos describe component`, `atmos describe stacks`, and AI tooling. Unlike YAML comments, descriptions are schema-validated and filterable.
+
+  **Example:**
+  ```yaml
+  description: "Primary VPC for us-east-2. Owns the CIDR 10.10.0.0/16."
+  ```
+
+  Filter output by description:
+  ```bash
+  atmos describe stacks --sections description
+  ```
+  </dd>
+
   <dt>`vars` (optional)</dt>
   <dd>
   The `vars` section is a free-form map of Terraform variables. These are deep-merged and exported to a `.tfvars` file by Atmos. Use [component validation](/validation/validating) to enforce policies.

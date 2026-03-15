@@ -1293,9 +1293,11 @@ func ExecuteDescribeStacks(
 						if compContent, ok := comp.(map[string]any); ok {
 							// If a sections filter is provided, use those sections to check relevance.
 							// Otherwise, fall back to the default set of meaningful sections.
+							// Include 'description' in the default list so components with only
+							// a description field are not incorrectly pruned as empty.
 							checkSections := sections
 							if len(checkSections) == 0 {
-								checkSections = []string{"vars", "metadata", "settings", "env", "workspace"}
+								checkSections = []string{"vars", "metadata", "settings", "env", "workspace", cfg.DescriptionSectionName}
 							}
 							for _, section := range checkSections {
 								if _, hasSection := compContent[section]; hasSection {
