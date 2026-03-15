@@ -28,13 +28,10 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/otiai10/copy"
 	"github.com/sergi/go-diff/diffmatchpatch"
-	"github.com/stretchr/testify/assert"
 	"go.yaml.in/yaml/v3"
 	"golang.org/x/term"
 
-	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/tests/testhelpers"
@@ -88,6 +85,7 @@ type TestCase struct {
 	Clean         bool              `yaml:"clean"`         // Removes untracked files in work directory
 	Sandbox       interface{}       `yaml:"sandbox"`       // bool (true=random) or string (named) or false (no sandbox)
 	Short         *bool             `yaml:"short"`         // If false, skip when -short flag is passed (defaults to true)
+	Parallel      *bool             `yaml:"parallel"`      // If false, test runs sequentially (defaults to true)
 	Preconditions []string          `yaml:"preconditions"` // Required preconditions for test execution
 	Skip          struct {
 		OS MatchPattern `yaml:"os"`
@@ -209,6 +207,12 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 		if testCase.Short == nil {
 			defaultShort := true
 			testCase.Short = &defaultShort
+		}
+
+		// Default parallel to true if not specified
+		if testCase.Parallel == nil {
+			defaultParallel := true
+			testCase.Parallel = &defaultParallel
 		}
 
 		if testCase.Env == nil {
@@ -722,6 +726,17 @@ func TestMain(m *testing.M) {
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
+	// Pre-build the Atmos binary once before running any tests.
+	// This avoids a race condition that arises when multiple parallel tests
+	// all try to lazily initialise atmosRunner at the same time.
+	atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+	if err := atmosRunner.Build(); err != nil {
+		logger.Warn("Failed to pre-build Atmos binary; tests requiring 'atmos' will be skipped", "error", err)
+		atmosRunner = nil // Signals individual tests to skip themselves.
+	} else {
+		logger.Info("Atmos binary pre-built", "coverageEnabled", coverDir != "")
+	}
+
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
 
 	// Clean up sandboxes.
@@ -769,6 +784,20 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 }
 
 func runCLICommandTest(t *testing.T, tc TestCase) {
+	// Enable parallel test execution unless the test explicitly opts out.
+	// Parallel execution is the default to reduce overall test suite runtime.
+	if tc.Parallel == nil || *tc.Parallel {
+		t.Parallel()
+	}
+
+	// Clone Env immediately to prevent data races: the map inside tc is shared
+	// between goroutines when tests run in parallel.
+	envCopy := make(map[string]string, len(tc.Env))
+	for k, v := range tc.Env {
+		envCopy[k] = v
+	}
+	tc.Env = envCopy
+
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
 		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
@@ -777,13 +806,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Check preconditions before running the test
 	checkPreconditions(t, tc.Preconditions)
 
-	// Initialize AtmosRunner early, before any directory changes, so it can build from the git repo
+	// Skip tests that require the Atmos binary when it could not be built in TestMain.
 	if tc.Command == "atmos" && atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
+		t.Skipf("Atmos binary not available (build failed during TestMain setup)")
 	}
 
 	// Create a context with timeout if specified
@@ -810,30 +835,27 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Otherwise a test may pass/fail due to existing files in the user's HOME directory
 	tempDir := t.TempDir()
 
-	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation
-	// This ensures every test has its own cache and prevents interference
+	// ALWAYS set XDG_CACHE_HOME to a clean temp directory for test isolation.
+	// Each parallel test gets its own XDG dirs so there is no shared state.
+	// No xdg.Reload() or t.Setenv() needed: all vars are passed directly to the
+	// subprocess via cmd.Env rather than via the process environment.
 	xdgCacheHome := filepath.Join(tempDir, ".cache")
 	tc.Env["XDG_CACHE_HOME"] = xdgCacheHome
-	// Also set the process environment so removeCacheFile() uses the test path
-	t.Setenv("XDG_CACHE_HOME", xdgCacheHome)
-	// Reload XDG to pick up the new environment
-	xdg.Reload()
 
 	// Clear github_username environment variables for consistent snapshots.
 	// These are automatically bound to settings.github_username but cause
 	// environment-dependent output. Skip clearing only for vendor tests that need GitHub auth.
-	if !strings.Contains(tc.Name, "vendor") {
-		t.Setenv("ATMOS_GITHUB_USERNAME", "")
-		t.Setenv("GITHUB_ACTOR", "")
-		t.Setenv("GITHUB_USERNAME", "")
-	}
+	// The vars are cleared from the subprocess env later in the envVars filtering step.
+	clearGitHubVarsForSnapshots := !strings.Contains(tc.Name, "vendor")
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
 		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
 	} else {
-		// Set environment variables for the test case
+		// Set environment variables for the test case.
+		// These are written to tc.Env so they reach the subprocess via cmd.Env;
+		// no t.Setenv() is needed or used.
 		tc.Env["HOME"] = tempDir
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
@@ -859,13 +881,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Change to the specified working directory
+	// Resolve the absolute workdir once; used throughout the function.
+	// filepath.Abs is evaluated against the test process's starting directory
+	// (tests/) which is stable across parallel tests since we never call t.Chdir().
+	var absoluteWorkdir string
 	if tc.Workdir != "" {
-		absoluteWorkdir, err := filepath.Abs(tc.Workdir)
+		var err error
+		absoluteWorkdir, err = filepath.Abs(tc.Workdir)
 		if err != nil {
 			t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
 		}
-		t.Chdir(absoluteWorkdir)
 
 		// Setup sandbox environment if enabled
 		var sandboxEnv *testhelpers.SandboxEnvironment
@@ -955,16 +980,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Tests expect BasePath to be "." by default, not the repository root.
 	tc.Env["ATMOS_GIT_ROOT_BASEPATH"] = "false"
 
-	// Remove the cache file before running the test.
-	// This is to ensure that the test is not affected by the cache file.
-	err := removeCacheFile()
-	assert.NoError(t, err, "failed to remove cache file")
-
-	// Preserve the CI environment variables.
-	// This is to ensure that the test is not affected by the CI environment variables.
-	currentEnvVars := telemetry.PreserveCIEnvVars()
-	defer telemetry.RestoreCIEnvVars(currentEnvVars)
-
 	// Force consistent color/terminal environment for reproducible ANSI codes across platforms.
 	// Test cases can still override these by explicitly setting them.
 	if _, exists := tc.Env["TERM"]; !exists {
@@ -975,10 +990,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
 		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table rendering
-	}
-	// Set any environment variables defined in the test case using t.Setenv for proper isolation.
-	for key, value := range tc.Env {
-		t.Setenv(key, value)
 	}
 
 	// Prepare the command based on what's being tested
@@ -994,11 +1005,28 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		cmd = exec.CommandContext(ctx, binaryPath, tc.Args...)
 	}
 
+	// Set the subprocess working directory explicitly.
+	// This replaces the former t.Chdir() call, which is incompatible with t.Parallel()
+	// because the Go testing framework disallows t.Parallel() + t.Chdir() together.
+	// Setting cmd.Dir directly achieves the same isolation without touching the
+	// test goroutine's working directory.
+	if absoluteWorkdir != "" {
+		cmd.Dir = absoluteWorkdir
+	}
+
 	// Preserve GOCOVERDIR if it's already set by atmosRunner
 	existingEnv := cmd.Env
 	if existingEnv == nil {
 		existingEnv = []string{}
 	}
+
+	// Filter CI environment variables from the inherited (process) environment BEFORE
+	// merging test-specific vars.  This mirrors the old PreserveCIEnvVars() approach:
+	// CI vars are stripped from what the runner inherits from the shell, but test cases
+	// that explicitly set a CI var (e.g. "CI: true") will have it restored below via the
+	// tc.Env override loop.  Using a pure-function filter instead of mutating the process
+	// environment makes this approach safe for parallel tests.
+	existingEnv = telemetry.FilterCIEnvVars(existingEnv)
 
 	// Preserve all environment variables from AtmosRunner (including PATH and GOCOVERDIR)
 	// and add/override with test-specific environment variables
@@ -1056,6 +1084,25 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			if strings.HasPrefix(env, atmosVar+"=") {
 				envVars = append(envVars[:i], envVars[i+1:]...)
 				break
+			}
+		}
+	}
+
+	// Clear GitHub username variables for consistent snapshots.
+	// These are automatically bound to settings.github_username in Atmos and
+	// produce environment-dependent output.  Vendor tests are exempted because
+	// they require GitHub auth.
+	if clearGitHubVarsForSnapshots {
+		for _, varName := range []string{"ATMOS_GITHUB_USERNAME", "GITHUB_ACTOR", "GITHUB_USERNAME"} {
+			// Only clear if the test hasn't explicitly set the variable.
+			if _, exists := tc.Env[varName]; exists {
+				continue
+			}
+			for i, env := range envVars {
+				if strings.HasPrefix(env, varName+"=") {
+					envVars = append(envVars[:i], envVars[i+1:]...)
+					break
+				}
 			}
 		}
 	}
@@ -1200,22 +1247,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if !verifySnapshot(t, tc, stdout.String(), stderr.String(), *regenerateSnapshots) {
 		t.Errorf("Description: %s", tc.Description)
 	}
-}
-
-func removeCacheFile() error {
-	cacheFilePath, err := config.GetCacheFilePath()
-	if err != nil {
-		return nil
-	}
-
-	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
-		return nil
-	}
-	err = os.Remove(cacheFilePath)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func TestCLICommands(t *testing.T) {

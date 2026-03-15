@@ -20,6 +20,11 @@
               "description": "If false, skip this test when running with -short flag. Use for tests taking >2 seconds (network I/O, Git operations, heavy processing). Defaults to true.",
               "default": true
             },
+            "parallel": {
+              "type": "boolean",
+              "description": "If false, run this test sequentially (without t.Parallel()). Use for tests that share mutable state such as a named sandbox performing write operations. Defaults to true.",
+              "default": true
+            },
             "tty": {
               "type": "boolean",
               "description": "Whether to run the test with a TTY."

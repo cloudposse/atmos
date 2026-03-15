@@ -140,6 +140,49 @@ func RestoreCIEnvVars(envVars map[string]string) {
 	}
 }
 
+// FilterCIEnvVars removes CI-related environment variables from an env slice.
+// Unlike PreserveCIEnvVars, this is a pure function that does not modify process
+// environment, making it safe to call from parallel tests.
+//
+// Parameters:
+//   - env: A slice of "KEY=VALUE" strings (e.g. from os.Environ() or cmd.Env).
+//
+// Returns a new slice with all CI provider environment variables removed.
+func FilterCIEnvVars(env []string) []string {
+	ciVars := buildCIEnvVarSet()
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		key := e
+		if idx := strings.IndexByte(e, '='); idx >= 0 {
+			key = e[:idx]
+		}
+		if _, isCIVar := ciVars[key]; !isCIVar {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
+}
+
+// buildCIEnvVarSet returns a set of all known CI environment variable names.
+func buildCIEnvVarSet() map[string]struct{} {
+	ciVars := make(map[string]struct{})
+	for _, envVar := range ciProvidersEnvVarsExists {
+		ciVars[envVar] = struct{}{}
+	}
+	for _, values := range ciProvidersEnvVarsEquals {
+		for valueKey := range values {
+			ciVars[valueKey] = struct{}{}
+		}
+	}
+	for _, vars := range ciProvidersEnvVarsAllExist {
+		for _, v := range vars {
+			ciVars[v] = struct{}{}
+		}
+	}
+	ciVars[ciEnvVar] = struct{}{}
+	return ciVars
+}
+
 // applyAlphabeticalOrder is a generic function that processes a map in alphabetical order.
 // It applies a filter function to each value and returns the first key where the filter returns true.
 // V can be either string or map[string]string.
