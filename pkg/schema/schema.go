@@ -106,6 +106,8 @@ type AtmosConfiguration struct {
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
 	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
+	// Lint configures the atmos lint stacks command behavior.
+	Lint LintConfig `yaml:"lint,omitempty" json:"lint,omitempty" mapstructure:"lint"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {

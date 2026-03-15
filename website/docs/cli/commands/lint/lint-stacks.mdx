@@ -1,0 +1,195 @@
+---
+title: atmos lint stacks
+sidebar_label: stacks
+sidebar_class_name: command
+id: stacks
+description: Use this command to lint Atmos stack configurations for quality and best practices.
+---
+
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to analyze Atmos stack YAML configurations for anti-patterns, optimization opportunities, and structural issues.
+</Intro>
+
+<ActionCard title="Configure Lint Settings">
+    Learn how to configure lint rule thresholds and severity overrides in atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/configuration">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
+
+Execute the `lint stacks` command like this:
+
+```shell
+atmos lint stacks
+```
+
+This command is **distinct from `atmos validate stacks`**:
+
+- **`validate stacks`** — checks correctness (YAML syntax, JSON schema, import resolution)
+- **`lint stacks`** — checks quality (DRY-ness, best practices, anti-patterns)
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s`</dt>
+  <dd>Scope linting to a specific stack name or partial match (optional).</dd>
+
+  <dt>`--rule`</dt>
+  <dd>Comma-separated list of rule IDs to run (e.g., `L-02,L-07`). Runs all rules by default.</dd>
+
+  <dt>`--format`</dt>
+  <dd>Output format: `text` (default) or `json`.</dd>
+
+  <dt>`--severity`</dt>
+  <dd>Minimum severity to report: `info` (default), `warning`, or `error`.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Lint all stacks with default settings
+atmos lint stacks
+
+# Output as JSON for downstream tooling
+atmos lint stacks --format json
+
+# Run only specific rules
+atmos lint stacks --rule L-09,L-04
+
+# Only report errors (suppress warnings and info)
+atmos lint stacks --severity error
+
+# Scope to a specific stack
+atmos lint stacks --stack plat-ue2-prod
+```
+
+## Rules
+
+| ID | Name | Severity | Auto-fixable |
+|----|------|----------|-------------|
+| L-01 | Dead Var Detection | warning | no |
+| L-02 | Redundant No-Op Override | warning | yes |
+| L-03 | Import Depth Warning | warning | no |
+| L-04 | Abstract Component Leak | error | no |
+| L-05 | Catalog File Cohesion | info | no |
+| L-06 | DRY Extraction Opportunity | info | no |
+| L-07 | Orphaned Catalog File Detection | warning | no |
+| L-08 | Sensitive Var at Global Scope | warning | no |
+| L-09 | Inheritance Cycle Detection | error | no |
+| L-10 | Env Var Shadowing | warning | no |
+
+### L-01 — Dead Var Detection
+
+Detects top-level `vars:` keys declared in a stack manifest that are not consumed
+by any component in the stack.
+
+### L-02 — Redundant No-Op Override
+
+Detects component vars that override a value with the exact same value the parent
+component would have provided via `metadata.inherits`. These overrides are no-ops
+and can be safely removed.
+
+### L-03 — Import Depth Warning
+
+Warns when the import chain depth for any stack file exceeds the configured
+threshold (default: 3). Configurable via `lint.max_import_depth` in `atmos.yaml`.
+
+### L-04 — Abstract Component Leak
+
+Finds `metadata.type: abstract` components present in a deployable stack that have
+no concrete inheritor. These components are silently skipped at deploy time.
+
+### L-05 — Catalog File Cohesion
+
+Flags catalog files that define components whose names span more than the configured
+number of inferred concern groups (default: 3). Uses the component name prefix as a
+heuristic for concern group detection.
+
+### L-06 — DRY Extraction Opportunity
+
+After resolving all logical stacks, identifies variable values repeated across many
+stacks. If the same value appears in ≥ N% of stacks (default: 80%), suggests
+extracting it to a shared catalog base component.
+
+### L-07 — Orphaned Catalog File Detection
+
+Enumerates all YAML files under the stacks base path and identifies files that are
+not referenced in any import chain.
+
+### L-08 — Sensitive Var at Global Scope
+
+Warns when variable names matching sensitive patterns (`*password*`, `*secret*`,
+`*token*`, `*key*`, `*arn*`, `*account_id*`, `*role*`) appear at global stack scope.
+These should be moved to component scope. Add custom patterns via
+`lint.sensitive_var_patterns` in `atmos.yaml`.
+
+### L-09 — Inheritance Cycle Detection
+
+Builds a directed graph of `metadata.inherits` relationships across all components
+and runs DFS cycle detection. Reports cycles with the full path.
+
+### L-10 — Env Var Shadowing
+
+Detects environment variables that appear at both stack-level `env:` and
+component-level `env:` with different values.
+
+## Configuration
+
+Add a `lint:` section to `atmos.yaml` to customize rule behavior:
+
+```yaml
+lint:
+  max_import_depth: 3          # L-03 threshold (default: 3)
+  dry_threshold_pct: 80        # L-06 trigger percentage (default: 80)
+  sensitive_var_patterns:      # L-08 patterns (merged with defaults)
+    - "*api_key*"
+    - "*webhook_secret*"
+  rules:
+    L-01: warning
+    L-02: warning
+    L-03: error               # override to error for strict enforcement
+    L-04: error
+    L-05: info
+    L-06: info
+    L-07: warning
+    L-08: warning
+    L-09: error
+    L-10: warning
+```
+
+## JSON Output
+
+Use `--format json` to get structured output suitable for piping to `jq` or
+downstream tools:
+
+```json
+{
+  "findings": [
+    {
+      "rule_id": "L-09",
+      "severity": "error",
+      "message": "Inheritance cycle detected: eks-blue → eks-base → eks-blue",
+      "component": "eks-blue",
+      "fix_hint": "Break the cycle by removing one of the inherits entries"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "warnings": 4,
+    "info": 2
+  }
+}
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | No error-severity findings |
+| 1 | One or more error-severity findings (or command error) |
