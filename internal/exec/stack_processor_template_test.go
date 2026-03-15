@@ -111,6 +111,14 @@ func TestEvaluateImportCondition(t *testing.T) {
 			wantErr:   true,
 		},
 		{
+			// An undefined function causes ProcessTmpl to return a parse error.
+			// This exercises the error propagation path from ProcessTmpl.
+			name:      "template parse error propagated",
+			condition: `{{ undefinedFunction . }}`,
+			context:   map[string]any{},
+			wantErr:   true,
+		},
+		{
 			name:      "template TRUE uppercase",
 			condition: "TRUE",
 			context:   map[string]any{},
@@ -189,6 +197,56 @@ func TestBuildImportIfContext(t *testing.T) {
 		}
 		data := buildImportIfContext(map[string]any{}, ctx)
 		assert.Equal(t, "dev", data["stage"])
+	})
+
+	t.Run("includes locals from stackConfigMap", func(t *testing.T) {
+		stackCfg := map[string]any{
+			"locals": map[string]any{
+				"app_name": "myapp",
+				"version":  "1.0",
+			},
+		}
+		data := buildImportIfContext(stackCfg, map[string]any{})
+		locals, ok := data["locals"].(map[string]any)
+		require.True(t, ok, "locals should be present in context")
+		assert.Equal(t, "myapp", locals["app_name"])
+		assert.Equal(t, "1.0", locals["version"])
+	})
+
+	t.Run("includes settings from stackConfigMap", func(t *testing.T) {
+		stackCfg := map[string]any{
+			"settings": map[string]any{
+				"region":  "us-east-1",
+				"enabled": true,
+			},
+		}
+		data := buildImportIfContext(stackCfg, map[string]any{})
+		settings, ok := data["settings"].(map[string]any)
+		require.True(t, ok, "settings should be present in context")
+		assert.Equal(t, "us-east-1", settings["region"])
+		assert.Equal(t, true, settings["enabled"])
+	})
+
+	t.Run("includes both locals and settings with vars", func(t *testing.T) {
+		stackCfg := map[string]any{
+			"vars": map[string]any{
+				"stage": "prod",
+			},
+			"locals": map[string]any{
+				"app": "myapp",
+			},
+			"settings": map[string]any{
+				"feature_flag": true,
+			},
+		}
+		data := buildImportIfContext(stackCfg, map[string]any{})
+		assert.Equal(t, "prod", data["stage"])
+		locals, ok := data["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "myapp", locals["app"])
+		settings, ok := data["settings"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, true, settings["feature_flag"])
 	})
 }
 
@@ -418,7 +476,148 @@ import:
 	})
 }
 
-// TestProcessYAMLConfigFileWithTemplate tests that template files are processed based on their extension.
+// TestImportIfInvalidTemplateReturnsError tests that an invalid import_if expression
+// causes an error to be returned from processYAMLConfigFileWithContextInternal.
+// This covers the error propagation path at the import loop level.
+func TestImportIfInvalidTemplateReturnsError(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{Enabled: true},
+		},
+		Logs: schema.Logs{Level: "Info"},
+	}
+
+	// Create a dummy catalog file so the path exists (import_if error should occur before file I/O).
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "catalog"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "catalog", "dummy.yaml"), []byte("vars: {}"), 0o600))
+
+	// Stack with an import_if that uses an undefined function — causes a template parse error.
+	invalidStack := `
+vars:
+  stage: prod
+
+import:
+  - path: catalog/dummy
+    import_if: "{{ undefinedFunction . }}"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "invalid.yaml"), []byte(invalidStack), 0o600))
+
+	_, _, _, _, _, _, _, _, err := processYAMLConfigFileWithContextInternal(
+		atmosConfig, tempDir,
+		filepath.Join(tempDir, "invalid.yaml"),
+		map[string]map[string]any{},
+		map[string]any{},
+		false, false, false, false,
+		map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{},
+		"", nil,
+	)
+	require.Error(t, err, "expected error when import_if uses an undefined template function")
+	assert.Contains(t, err.Error(), "import_if")
+}
+
+// TestImportIfWithLocalsAndSettings tests that locals and settings from the stack file
+// are available in the import_if template context.
+func TestImportIfWithLocalsAndSettings(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{Enabled: true},
+		},
+		Logs: schema.Logs{Level: "Info"},
+	}
+
+	// Catalog file included only when settings.feature_enabled is true.
+	featureCatalog := `
+components:
+  terraform:
+    feature-component:
+      vars:
+        enabled: true
+`
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "catalog"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "catalog", "feature.yaml"), []byte(featureCatalog), 0o600))
+
+	// Stack with settings-based import condition and locals.
+	stackWithFeature := `
+locals:
+  is_enabled: true
+
+vars:
+  stage: prod
+
+settings:
+  feature_enabled: true
+
+import:
+  - path: catalog/feature
+    import_if: "{{ .settings.feature_enabled }}"
+`
+	stackWithoutFeature := `
+locals:
+  is_enabled: false
+
+vars:
+  stage: prod
+
+settings:
+  feature_enabled: false
+
+import:
+  - path: catalog/feature
+    import_if: "{{ .settings.feature_enabled }}"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "with-feature.yaml"), []byte(stackWithFeature), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "without-feature.yaml"), []byte(stackWithoutFeature), 0o600))
+
+	t.Run("settings.feature_enabled=true includes catalog", func(t *testing.T) {
+		result, _, _, _, _, _, _, _, err := processYAMLConfigFileWithContextInternal(
+			atmosConfig, tempDir,
+			filepath.Join(tempDir, "with-feature.yaml"),
+			map[string]map[string]any{},
+			map[string]any{},
+			false, false, false, false,
+			map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{},
+			"", nil,
+		)
+		require.NoError(t, err)
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok, "expected components section")
+		terraform, ok := components["terraform"].(map[string]any)
+		require.True(t, ok, "expected terraform section")
+		_, hasFeature := terraform["feature-component"]
+		assert.True(t, hasFeature, "feature-component should be included")
+	})
+
+	t.Run("settings.feature_enabled=false excludes catalog", func(t *testing.T) {
+		result, _, _, _, _, _, _, _, err := processYAMLConfigFileWithContextInternal(
+			atmosConfig, tempDir,
+			filepath.Join(tempDir, "without-feature.yaml"),
+			map[string]map[string]any{},
+			map[string]any{},
+			false, false, false, false,
+			map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{},
+			"", nil,
+		)
+		require.NoError(t, err)
+		// When no imports are processed, components section may be absent or empty.
+		components := result["components"]
+		if components != nil {
+			terraform, ok := components.(map[string]any)["terraform"].(map[string]any)
+			if ok {
+				_, hasFeature := terraform["feature-component"]
+				assert.False(t, hasFeature, "feature-component should be excluded")
+			}
+		}
+	})
+}
+
 func TestProcessYAMLConfigFileWithTemplate(t *testing.T) {
 	// Create a temporary directory for test files
 	tempDir := t.TempDir()
