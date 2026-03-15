@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -157,35 +158,46 @@ func (v versionExec) GetLatestVersion(forceCheck bool) (string, bool) {
 }
 
 func (v versionExec) displayVersionInFormat(forceCheck bool, format string) error {
-	version := Version{
-		Version: version.Version,
-		OS:      runtime.GOOS,
-		Arch:    runtime.GOARCH,
-	}
-	if v, ok := v.GetLatestVersion(forceCheck); ok {
-		version.UpdateVersion = strings.TrimPrefix(v, "v")
-	}
 	switch format {
-	case "json":
-		if err := tuiUtils.WriteJSON(version); err != nil {
+	case "plain":
+		// Plain format outputs just the version number without update checking.
+		if err := data.Writeln(version.Version); err != nil {
 			return errUtils.Build(errUtils.ErrVersionDisplayFailed).
 				WithHint("Check if stdout is writable").
-				WithContext("format", "json").
+				WithContext("format", "plain").
 				Err()
 		}
 		return nil
-	case "yaml":
-		if err := tuiUtils.WriteYAML(version); err != nil {
-			return errUtils.Build(errUtils.ErrVersionDisplayFailed).
-				WithHint("Check if stdout is writable").
-				WithContext("format", "yaml").
-				Err()
+	case "json", "yaml":
+		versionInfo := Version{
+			Version: version.Version,
+			OS:      runtime.GOOS,
+			Arch:    runtime.GOARCH,
+		}
+		if updated, ok := v.GetLatestVersion(forceCheck); ok {
+			versionInfo.UpdateVersion = strings.TrimPrefix(updated, "v")
+		}
+		if format == "json" {
+			if err := tuiUtils.WriteJSON(versionInfo); err != nil {
+				return errUtils.Build(errUtils.ErrVersionDisplayFailed).
+					WithHint("Check if stdout is writable").
+					WithContext("format", "json").
+					Err()
+			}
+		} else {
+			if err := tuiUtils.WriteYAML(versionInfo); err != nil {
+				return errUtils.Build(errUtils.ErrVersionDisplayFailed).
+					WithHint("Check if stdout is writable").
+					WithContext("format", "yaml").
+					Err()
+			}
 		}
 		return nil
 	default:
 		return errUtils.Build(errUtils.ErrVersionFormatInvalid).
 			WithExplanationf("The format '%s' is not supported for version output", format).
 			WithExample(versionFormatExample).
+			WithHint("Use --format plain for plain-text version output").
 			WithHint("Use --format json for JSON output").
 			WithHint("Use --format yaml for YAML output").
 			WithContext("format", format).
