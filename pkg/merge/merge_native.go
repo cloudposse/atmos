@@ -1,6 +1,9 @@
 package merge
 
-import "math"
+import (
+	"fmt"
+	"math"
+)
 
 // safeAdd returns a+b, clamped to math.MaxInt on overflow.
 // This prevents integer overflow in size computations passed to make().
@@ -14,16 +17,19 @@ func safeAdd(a, b int) int {
 // deepMergeNative performs a deep merge of src into dst in place.
 //
 // It is semantically equivalent to mergo.Merge(dst, src, mergo.WithOverride, mergo.WithTypeCheck)
-// but uses no reflection and does not require pre-copying the entire src map.
+// but avoids reflection for the hot-path map[string]any/[]any types and does not require
+// pre-copying the entire src map.
 // Values from src are only copied when they are stored as leaves in dst, preventing
 // corruption of the caller's src map through shared pointers in dst.
 //
 // Behaviour summary (matches observed mergo behaviour):
 //   - Both values are map[string]any: recurse, merge in place (no container allocation).
+//   - Typed maps (e.g., map[string]schema.Provider): normalized to map[string]any via deepCopyValue and recursed.
 //   - appendSlice=true and both are slices: append src elements to dst.
 //   - sliceDeepCopy=true and both are slices: element-wise deep-merge.
+//   - dst is []any but src is not a slice: return type mismatch error (WithTypeCheck).
 //   - Otherwise: src value overrides dst value (deep-copied to isolate src from dst).
-func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) {
+func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) error {
 	for k, srcVal := range src {
 		dstVal, exists := dst[k]
 		if !exists {
@@ -37,11 +43,27 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) {
 		// Fast path: both are maps — recurse without allocating a new container.
 		if srcMap, srcIsMap := srcVal.(map[string]any); srcIsMap {
 			if dstMap, dstIsMap := dstVal.(map[string]any); dstIsMap {
-				deepMergeNative(dstMap, srcMap, appendSlice, sliceDeepCopy)
+				if err := deepMergeNative(dstMap, srcMap, appendSlice, sliceDeepCopy); err != nil {
+					return err
+				}
 				continue
 			}
 			// Type mismatch (map vs non-map): src overrides dst.
 			dst[k] = deepCopyValue(srcVal)
+			continue
+		}
+
+		// Handle typed maps (e.g., map[string]schema.Provider): normalize to map[string]any and recurse.
+		// deepCopyValue handles this via reflection-based normalizeValueReflect for non-map[string]any types.
+		if normalizedSrcMap, ok := deepCopyValue(srcVal).(map[string]any); ok {
+			if dstMap, dstIsMap := dstVal.(map[string]any); dstIsMap {
+				if err := deepMergeNative(dstMap, normalizedSrcMap, appendSlice, sliceDeepCopy); err != nil {
+					return err
+				}
+				continue
+			}
+			// Type mismatch (map vs non-map): src overrides dst.
+			dst[k] = normalizedSrcMap
 			continue
 		}
 
@@ -53,9 +75,24 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) {
 						dst[k] = appendSlices(dstSlice, srcSlice)
 					} else {
 						// sliceDeepCopy: element-wise merge.
-						dst[k] = mergeSlicesNative(dstSlice, srcSlice)
+						var err error
+						dst[k], err = mergeSlicesNative(dstSlice, srcSlice)
+						if err != nil {
+							return err
+						}
 					}
 					continue
+				}
+			}
+		}
+
+		// Type check (matches mergo.WithTypeCheck): if dst holds a slice but src is
+		// not a slice, refuse the override to prevent silent data corruption.
+		if _, dstIsSlice := dstVal.([]any); dstIsSlice {
+			if _, srcIsSlice := srcVal.([]any); !srcIsSlice {
+				// Attempt normalization: maybe srcVal is a typed slice.
+				if _, normalizedIsSlice := deepCopyValue(srcVal).([]any); !normalizedIsSlice {
+					return fmt.Errorf("cannot override two slices with different type")
 				}
 			}
 		}
@@ -63,6 +100,7 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) {
 		// Default: src overrides dst (deep copy to isolate src).
 		dst[k] = deepCopyValue(srcVal)
 	}
+	return nil
 }
 
 // toAnySlice tries to return v as []any without allocating when possible.
@@ -95,7 +133,7 @@ func appendSlices(dst, src []any) []any {
 //   - For each position i that exists in both dst and src: if both elements are
 //     map[string]any they are deep-merged; otherwise the dst element is kept.
 //   - Positions that exist only in dst are preserved as-is.
-func mergeSlicesNative(dst, src []any) []any {
+func mergeSlicesNative(dst, src []any) ([]any, error) {
 	result := make([]any, len(dst))
 	copy(result, dst)
 
@@ -117,8 +155,10 @@ func mergeSlicesNative(dst, src []any) []any {
 		for k, v := range dstMap {
 			merged[k] = v
 		}
-		deepMergeNative(merged, srcMap, false, false)
+		if err := deepMergeNative(merged, srcMap, false, false); err != nil {
+			return nil, err
+		}
 		result[i] = merged
 	}
-	return result
+	return result, nil
 }

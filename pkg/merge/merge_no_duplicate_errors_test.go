@@ -68,15 +68,15 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 		},
 	}
 
-	// Create maps that are valid (mergo won't error on these)
+	// Create maps with compatible value types (no type mismatch).
 	map1 := map[string]any{
 		"config": map[string]any{
-			"value": []string{"a", "b"},
+			"value": "original",
 		},
 	}
 	map2 := map[string]any{
 		"config": map[string]any{
-			"value": "string", // Different type, but mergo will just replace
+			"value": "override", // Same type: string → string, replace strategy just overwrites
 		},
 	}
 

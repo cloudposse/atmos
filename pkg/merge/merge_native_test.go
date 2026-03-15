@@ -32,7 +32,7 @@ func TestSafeAdd_Overflow(t *testing.T) {
 func TestDeepMergeNative_NewKeysAddedFromSrc(t *testing.T) {
 	dst := map[string]any{"a": 1}
 	src := map[string]any{"b": 2}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Equal(t, 1, dst["a"])
 	assert.Equal(t, 2, dst["b"])
 }
@@ -40,14 +40,14 @@ func TestDeepMergeNative_NewKeysAddedFromSrc(t *testing.T) {
 func TestDeepMergeNative_SrcOverridesDst(t *testing.T) {
 	dst := map[string]any{"a": "old"}
 	src := map[string]any{"a": "new"}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Equal(t, "new", dst["a"])
 }
 
 func TestDeepMergeNative_SrcNilOverridesDst(t *testing.T) {
 	dst := map[string]any{"a": "existing"}
 	src := map[string]any{"a": nil}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Nil(t, dst["a"])
 }
 
@@ -58,7 +58,7 @@ func TestDeepMergeNative_BothMapsMergedRecursively(t *testing.T) {
 	src := map[string]any{
 		"nested": map[string]any{"b": 20, "c": 30},
 	}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	nested, ok := dst["nested"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, 1, nested["a"])
@@ -69,7 +69,7 @@ func TestDeepMergeNative_BothMapsMergedRecursively(t *testing.T) {
 func TestDeepMergeNative_MapSrcOverridesNonMapDst(t *testing.T) {
 	dst := map[string]any{"k": "string"}
 	src := map[string]any{"k": map[string]any{"x": 1}}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	nested, ok := dst["k"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, 1, nested["x"])
@@ -78,21 +78,21 @@ func TestDeepMergeNative_MapSrcOverridesNonMapDst(t *testing.T) {
 func TestDeepMergeNative_NonMapSrcOverridesMapDst(t *testing.T) {
 	dst := map[string]any{"k": map[string]any{"x": 1}}
 	src := map[string]any{"k": "string"}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Equal(t, "string", dst["k"])
 }
 
 func TestDeepMergeNative_EmptySrcNoChange(t *testing.T) {
 	dst := map[string]any{"a": 1}
 	src := map[string]any{}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Equal(t, map[string]any{"a": 1}, dst)
 }
 
 func TestDeepMergeNative_EmptyDstFilledFromSrc(t *testing.T) {
 	dst := map[string]any{}
 	src := map[string]any{"a": 1, "b": "hello"}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Equal(t, 1, dst["a"])
 	assert.Equal(t, "hello", dst["b"])
 }
@@ -103,7 +103,7 @@ func TestDeepMergeNative_SrcDoesNotMutateSrcData(t *testing.T) {
 		"nested": map[string]any{"x": 1},
 	}
 	dst := map[string]any{}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 
 	// Mutate dst.nested.x — src.nested.x must not change.
 	dstNested := dst["nested"].(map[string]any)
@@ -117,14 +117,14 @@ func TestDeepMergeNative_SliceReplace_SrcReplaceDst(t *testing.T) {
 	// replace mode: src slice replaces dst slice entirely.
 	dst := map[string]any{"list": []any{1, 2, 3}}
 	src := map[string]any{"list": []any{4, 5}}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Equal(t, []any{4, 5}, dst["list"])
 }
 
 func TestDeepMergeNative_SliceAppend(t *testing.T) {
 	dst := map[string]any{"list": []any{1, 2}}
 	src := map[string]any{"list": []any{3, 4}}
-	deepMergeNative(dst, src, true, false)
+	require.NoError(t, deepMergeNative(dst, src, true, false))
 	assert.Equal(t, []any{1, 2, 3, 4}, dst["list"])
 }
 
@@ -132,7 +132,7 @@ func TestDeepMergeNative_SliceAppendDoesNotAliasElements(t *testing.T) {
 	nested := map[string]any{"v": 1}
 	dst := map[string]any{"list": []any{}}
 	src := map[string]any{"list": []any{nested}}
-	deepMergeNative(dst, src, true, false)
+	require.NoError(t, deepMergeNative(dst, src, true, false))
 
 	list := dst["list"].([]any)
 	require.Len(t, list, 1)
@@ -145,7 +145,7 @@ func TestDeepMergeNative_SliceDeepCopy_ScalarsKeepDst(t *testing.T) {
 	// sliceDeepCopy: for scalar elements, dst is preserved (matches mergo).
 	dst := map[string]any{"tags": []any{"base-1", "base-2"}}
 	src := map[string]any{"tags": []any{"override-1"}}
-	deepMergeNative(dst, src, false, true)
+	require.NoError(t, deepMergeNative(dst, src, false, true))
 	// Mergo keeps dst for scalar elements; only map elements are merged.
 	assert.Equal(t, []any{"base-1", "base-2"}, dst["tags"])
 }
@@ -162,7 +162,7 @@ func TestDeepMergeNative_SliceDeepCopy_MapsMerged(t *testing.T) {
 			map[string]any{"id": 2, "extra": "new"},
 		},
 	}
-	deepMergeNative(dst, src, false, true)
+	require.NoError(t, deepMergeNative(dst, src, false, true))
 	items := dst["items"].([]any)
 	require.Len(t, items, 1)
 	item := items[0].(map[string]any)
@@ -176,7 +176,7 @@ func TestDeepMergeNative_SliceDeepCopy_ExtraSrcElementsIgnored(t *testing.T) {
 	// sliceDeepCopy: extra src elements beyond dst length are ignored.
 	dst := map[string]any{"list": []any{1}}
 	src := map[string]any{"list": []any{10, 20, 30}}
-	deepMergeNative(dst, src, false, true)
+	require.NoError(t, deepMergeNative(dst, src, false, true))
 	// Result has dst length (1); extra src elements are dropped.
 	assert.Equal(t, []any{1}, dst["list"])
 }
@@ -185,7 +185,7 @@ func TestDeepMergeNative_TypedSliceInSrcNormalized(t *testing.T) {
 	// src may contain typed slices (e.g. []string) which must be normalised.
 	dst := map[string]any{}
 	src := map[string]any{"strs": []string{"a", "b"}}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Equal(t, []any{"a", "b"}, dst["strs"])
 }
 
@@ -204,11 +204,20 @@ func TestDeepMergeNative_DeepNesting(t *testing.T) {
 			},
 		},
 	}
-	deepMergeNative(dst, src, false, false)
+	require.NoError(t, deepMergeNative(dst, src, false, false))
 	l3 := dst["l1"].(map[string]any)["l2"].(map[string]any)["l3"].(map[string]any)
 	assert.Equal(t, "updated", l3["value"])
 	assert.Equal(t, true, l3["only_dst"])
 	assert.Equal(t, "yes", l3["only_src"])
+}
+
+func TestDeepMergeNative_TypeMismatch_SliceVsString(t *testing.T) {
+	// Type check (mergo.WithTypeCheck): overriding a slice with a non-slice must error.
+	dst := map[string]any{"subnets": []any{"10.0.1.0/24", "10.0.2.0/24"}}
+	src := map[string]any{"subnets": "10.0.100.0/24"}
+	err := deepMergeNative(dst, src, false, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot override two slices with different type")
 }
 
 // ---------------------------------------------------------------------------

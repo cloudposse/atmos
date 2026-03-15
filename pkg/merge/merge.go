@@ -357,7 +357,9 @@ func MergeWithOptions(
 	}
 
 	for _, current := range nonEmptyInputs[1:] {
-		deepMergeNative(merged, current, appendSlice, sliceDeepCopy)
+		if err := deepMergeNative(merged, current, appendSlice, sliceDeepCopy); err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, err)
+		}
 	}
 
 	return merged, nil
