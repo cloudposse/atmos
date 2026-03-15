@@ -1779,3 +1779,54 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 		})
 	}
 }
+
+// TestIsTerraformCurrentWorkspace verifies the helper that detects whether a given workspace
+// name matches the active workspace recorded in the .terraform/environment file.
+func TestIsTerraformCurrentWorkspace(t *testing.T) {
+	t.Run("returns true when environment file contains matching workspace", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("nonprod"), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
+
+	t.Run("returns true when environment file has trailing newline", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("nonprod\n"), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
+
+	t.Run("returns false when workspace does not match", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("staging"), 0o644))
+
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
+
+	t.Run("returns false when environment file does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
+
+	t.Run("returns false when .terraform directory does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
+
+	t.Run("respects TF_DATA_DIR env var", func(t *testing.T) {
+		dir := t.TempDir()
+		customDir := filepath.Join(dir, "custom-tf-dir")
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		t.Setenv("TF_DATA_DIR", customDir)
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
+}

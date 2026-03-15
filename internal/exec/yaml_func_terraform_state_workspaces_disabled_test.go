@@ -39,9 +39,19 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 
 	stack := "test"
 
+	// Define the working directory (workspaces-disabled fixture).
+	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function-workspaces-disabled"
+
+	// Compute the absolute path to the mock component before changing directories so that the
+	// cleanup defer below uses a stable path regardless of the working-directory changes made
+	// by t.Chdir further down.
+	mockComponentPath, err := filepath.Abs(filepath.Join(workDir, "..", "..", "components", "terraform", "mock"))
+	if err != nil {
+		t.Fatalf("Failed to compute absolute mock component path: %v", err)
+	}
+
 	defer func() {
 		// Delete the generated files and folders after the test.
-		mockComponentPath := filepath.Join("..", "..", "tests", "fixtures", "components", "terraform", "mock")
 		// Clean up terraform state files.
 		err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform"))
 		assert.NoError(t, err)
@@ -63,8 +73,6 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 		}
 	}()
 
-	// Define the working directory (workspaces-disabled fixture).
-	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function-workspaces-disabled"
 	t.Chdir(workDir)
 
 	// Deploy component-1 first to create terraform state.

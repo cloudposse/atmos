@@ -247,18 +247,38 @@ func TestProcessCustomYamlTags(t *testing.T) {
 
 	stack := "nonprod"
 
+	// Compute the absolute path to the mock component before any directory changes so that
+	// both the pre-test cleanup and the deferred cleanup use a stable path on all platforms.
+	mockComponentPath, err := filepath.Abs("../../tests/fixtures/components/terraform/mock")
+	if err != nil {
+		t.Fatalf("Failed to compute absolute mock component path: %v", err)
+	}
+
 	defer func() {
-		// Delete the generated files and folders after the test
-		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
+		// Delete the generated files and folders after the test.
+		err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform"))
 		assert.NoError(t, err)
 
-		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
+		err = os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d"))
 		assert.NoError(t, err)
+
+		// Remove any root-level state files that may have been left by other tests
+		// (e.g., when workspaces are disabled the state is stored at terraform.tfstate).
+		_ = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate"))
+		_ = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup"))
 	}()
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function"
 	t.Chdir(workDir)
+
+	// Pre-test cleanup: remove any stale terraform state left by previously-run tests that
+	// share the same mock component directory.  On Windows, file-locking can prevent prior
+	// test teardowns from completing, so we proactively clean here before touching any state.
+	_ = os.RemoveAll(filepath.Join(mockComponentPath, ".terraform"))
+	_ = os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d"))
+	_ = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate"))
+	_ = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup"))
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",

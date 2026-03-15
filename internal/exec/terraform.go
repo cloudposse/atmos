@@ -697,7 +697,18 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 						info.RedirectStdErr,
 					)
 					if err != nil {
-						return err
+						// If `workspace new` also fails with code 1, the workspace may already
+						// be the active workspace (the .terraform/environment file names it) but
+						// its state directory was deleted.  In that case we are already in the
+						// correct workspace and can proceed safely.
+						var newExitCodeErr errUtils.ExitCodeError
+						if errors.As(err, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
+							isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace) {
+							log.Debug("Workspace is already the active workspace; proceeding",
+								"workspace", info.TerraformWorkspace)
+						} else {
+							return err
+						}
 					}
 				}
 			}
