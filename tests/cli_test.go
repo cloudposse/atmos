@@ -1015,6 +1015,11 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// because the Go testing framework disallows t.Parallel() + t.Chdir() together.
 	// Setting cmd.Dir directly achieves the same isolation without touching the
 	// test goroutine's working directory.
+	//
+	// NOTE: cmd.Dir only changes the subprocess's CWD — the test process's CWD remains
+	// the tests/ directory. Any file-existence or file-content checks that use
+	// relative paths must be resolved against absoluteWorkdir explicitly (see
+	// resolveFilePaths / resolveFilePathsMap helpers below).
 	if absoluteWorkdir != "" {
 		cmd.Dir = absoluteWorkdir
 	}
