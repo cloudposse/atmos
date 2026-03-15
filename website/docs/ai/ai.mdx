@@ -41,6 +41,9 @@ atmos ai ask "What stacks do we have?"               # Single question
 atmos ai exec "validate stacks" --format json        # CI/CD automation
 atmos ai sessions list                               # List sessions
 atmos ai skill list                                  # List installed skills
+atmos terraform plan vpc -s prod --ai                              # AI analysis of any command
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform      # With domain expertise
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks  # Multiple skills
 ```
 </Terminal>
 
@@ -57,6 +60,36 @@ atmos ai skill list                                  # List installed skills
     Explore a complete multi-region infrastructure example with Atmos AI, skills, sessions, and tool execution.
     <div>
       <PrimaryCTA to="/examples/ai">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## AI-Powered Command Analysis
+
+Add `--ai` to any Atmos command for instant AI-powered output analysis. Pair with `--skill` for
+domain-specific expertise — multiple skills can be combined with commas or repeated flags.
+
+```bash
+# Basic AI analysis
+atmos terraform plan vpc -s prod --ai
+
+# Single skill for domain expertise
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform
+
+# Multiple skills (comma-separated)
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks
+
+# Multiple skills (repeated flag)
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform --skill atmos-stacks
+
+# Via environment variables
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s prod
+```
+
+<ActionCard title="AI-Powered Command Analysis">
+    Add `--ai` to any Atmos command for instant output analysis. Combine with `--skill` for domain-specific expertise.
+    Multiple skills can be specified with commas (`--skill a,b`) or repeated flags (`--skill a --skill b`).
+    <div>
+      <PrimaryCTA to="/cli/global-flags">Global Flags Reference</PrimaryCTA>
     </div>
 </ActionCard>
 
@@ -77,6 +110,9 @@ atmos ai skill list                                  # List installed skills
 
   <dt>[`atmos ai skill`](/cli/commands/ai/skill)</dt>
   <dd>Install, list, and uninstall community AI skills from GitHub.</dd>
+
+  <dt>[`atmos --ai`](/cli/global-flags)</dt>
+  <dd>Add `--ai` flag to any command for AI-powered output analysis. Use `--skill` flag for domain-specific expertise (supports multiple skills via commas or repeated flag).</dd>
 
   <dt>[`atmos mcp start`](/cli/commands/mcp/start)</dt>
   <dd>Start the MCP server with stdio (default) or HTTP transport.</dd>
