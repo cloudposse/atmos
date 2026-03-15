@@ -33,7 +33,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.55.3
 	github.com/aws/aws-sdk-go-v2/service/organizations v1.50.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.4
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.8
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.1
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.12
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.16
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.8
