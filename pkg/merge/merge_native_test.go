@@ -392,6 +392,119 @@ func BenchmarkMergeNative_FiveInputs(b *testing.B) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Coverage tests for previously uncovered branches
+// ---------------------------------------------------------------------------
+
+// TestDeepMergeNative_TypedMapMergesWithMapDst covers lines 58-63:
+// src contains a typed map (e.g. map[string]schema.Provider) that deepCopyValue
+// normalises to map[string]any, while dst already has a map[string]any at the same
+// key.  The two maps should be recursively merged, not replaced.
+func TestDeepMergeNative_TypedMapMergesWithMapDst(t *testing.T) {
+	dst := map[string]any{
+		"providers": map[string]any{
+			"global": map[string]any{"kind": "aws", "region": "us-east-1"},
+		},
+	}
+	// Use schema.Provider (a real typed-map value) so deepCopyValue goes through
+	// the reflection-based normalisation path.
+	src := map[string]any{
+		"providers": map[string]schema.Provider{
+			"component": {Kind: "azure"},
+		},
+	}
+	require.NoError(t, deepMergeNative(dst, src, false, false))
+	providers, ok := dst["providers"].(map[string]any)
+	require.True(t, ok, "providers should remain map[string]any after typed-map merge")
+	assert.Contains(t, providers, "global", "global entry from dst must be preserved")
+	assert.Contains(t, providers, "component", "component entry from src must be added")
+}
+
+// TestDeepMergeNative_TypedMapOverridesNonMapDst covers lines 64-67:
+// src has a typed map that normalises to map[string]any, but dst holds a
+// non-map value at that key.  The normalised src value should override.
+func TestDeepMergeNative_TypedMapOverridesNonMapDst(t *testing.T) {
+	dst := map[string]any{"providers": "scalar-string"}
+	src := map[string]any{
+		"providers": map[string]schema.Provider{"key": {Kind: "aws"}},
+	}
+	require.NoError(t, deepMergeNative(dst, src, false, false))
+	providers, ok := dst["providers"].(map[string]any)
+	require.True(t, ok, "scalar dst should be overridden by normalised typed map from src")
+	assert.Contains(t, providers, "key")
+}
+
+// TestMergeSlicesNative_DstScalarSrcMap_PreservesDst covers lines 147-151:
+// When dst[i] is a scalar and src[i] is a map, the dst element is preserved.
+func TestMergeSlicesNative_DstScalarSrcMap_PreservesDst(t *testing.T) {
+	dst := []any{"scalar-value"}
+	src := []any{map[string]any{"key": "value"}}
+	result, err := mergeSlicesNative(dst, src)
+	require.NoError(t, err)
+	assert.Equal(t, "scalar-value", result[0], "dst scalar must be preserved when src[i] is a map")
+}
+
+// TestMergeSlicesNative_TypeMismatch_PropagatesError covers lines 158-160:
+// When both slice elements are maps but an inner key has a type mismatch
+// (slice vs non-slice), deepMergeNative returns an error that must propagate.
+func TestMergeSlicesNative_TypeMismatch_PropagatesError(t *testing.T) {
+	dst := []any{map[string]any{"subnets": []any{"10.0.1.0/24"}}}
+	src := []any{map[string]any{"subnets": "10.0.100.0/24"}} // type mismatch: []any vs string
+	_, err := mergeSlicesNative(dst, src)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot override two slices with different type")
+}
+
+// TestDeepMergeNative_SliceDeepCopy_TypeMismatch_PropagatesError covers lines 80-82:
+// In sliceDeepCopy mode an error from mergeSlicesNative must be propagated.
+func TestDeepMergeNative_SliceDeepCopy_TypeMismatch_PropagatesError(t *testing.T) {
+	dst := map[string]any{
+		"items": []any{map[string]any{"subnets": []any{"10.0.1.0/24"}}},
+	}
+	src := map[string]any{
+		"items": []any{map[string]any{"subnets": "10.0.100.0/24"}}, // type mismatch inside slice
+	}
+	err := deepMergeNative(dst, src, false, true) // sliceDeepCopy=true
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot override two slices with different type")
+}
+
+// TestDeepMergeNative_TypedMapRecurse_TypeMismatch_PropagatesError covers lines 60-62:
+// When src contains a typed map that normalises to map[string]any, AND dst already
+// holds a map[string]any at that key, the recursive merge of the two maps may itself
+// encounter a type mismatch — that error must propagate back to the caller.
+func TestDeepMergeNative_TypedMapRecurse_TypeMismatch_PropagatesError(t *testing.T) {
+	// dst["providers"]["my-provider"]["kind"] is a slice.
+	// src["providers"] is a typed map[string]schema.Provider whose entry for
+	// "my-provider" normalises to {"kind": "aws", ...}.  Merging "aws" (string)
+	// into "kind" ([]any) must return a type-mismatch error.
+	dst := map[string]any{
+		"providers": map[string]any{
+			"my-provider": map[string]any{"kind": []any{"not", "a", "string"}},
+		},
+	}
+	src := map[string]any{
+		"providers": map[string]schema.Provider{
+			"my-provider": {Kind: "aws"},
+		},
+	}
+	err := deepMergeNative(dst, src, false, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot override two slices with different type")
+}
+
+// TestMergeWithOptions_TypeMismatch_ReturnsWrappedError covers the error-return path
+// in MergeWithOptions (the deepMergeNative call inside the accumulator loop).
+func TestMergeWithOptions_TypeMismatch_ReturnsWrappedError(t *testing.T) {
+	inputs := []map[string]any{
+		{"subnets": []any{"10.0.1.0/24"}},
+		{"subnets": "not-a-slice"}, // triggers type mismatch in deepMergeNative
+	}
+	_, err := MergeWithOptions(nil, inputs, false, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot override two slices with different type")
+}
+
 // BenchmarkMergeNative_TenInputs measures merge performance for 10 inputs,
 // a worst-case for deep import chains.
 func BenchmarkMergeNative_TenInputs(b *testing.B) {
