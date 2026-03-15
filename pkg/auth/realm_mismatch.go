@@ -120,6 +120,63 @@ func hasCredentialFiles(awsDir string) bool {
 	return false
 }
 
+// deleteLegacyKeyringEntry removes a pre-realm keyring entry after successful
+// authentication. This runs in the post-success path of the Authenticate flow,
+// after authenticateChain and PostAuthenticate have completed, so legacy
+// credentials remain as a fallback if authentication fails.
+func (m *manager) deleteLegacyKeyringEntry(alias string) {
+	if m.realm.Value == "" || m.credentialStore == nil {
+		return
+	}
+	if err := m.credentialStore.Delete(alias, ""); err != nil {
+		log.Warn("Failed to delete legacy keyring entry", "alias", alias, "error", err)
+	} else {
+		log.Debug("Deleted legacy keyring entry (pre-realm)", "alias", alias)
+	}
+}
+
+// deleteLegacyCredentialFiles removes pre-realm credential files after successful
+// authentication. This runs in the post-success path of the Authenticate flow,
+// after authenticateChain and PostAuthenticate have completed, so legacy files
+// remain as a fallback if authentication fails.
+// Scans {baseDir}/aws/{provider}/ for credential and config files and removes them.
+// TODO: Refactor to use a provider/store-owned cleanup hook instead of hardcoding
+// AWS-specific paths here, keeping the auth manager cloud-agnostic.
+func (m *manager) deleteLegacyCredentialFiles() {
+	if m.realm.Value == "" {
+		return
+	}
+
+	baseDir := xdg.LookupXDGConfigDir("")
+	if baseDir == "" {
+		return
+	}
+
+	awsDir := filepath.Join(baseDir, awsDirNameForMismatch)
+	providerDirs, err := os.ReadDir(awsDir)
+	if err != nil {
+		return
+	}
+
+	for _, provider := range providerDirs {
+		if !provider.IsDir() {
+			continue
+		}
+		providerDir := filepath.Join(awsDir, provider.Name())
+		// Remove credential, config, and lock files from legacy (no-realm) path.
+		for _, filename := range []string{"credentials", "config", "credentials.lock", "config.lock"} {
+			filePath := filepath.Join(providerDir, filename)
+			if err := os.Remove(filePath); err == nil {
+				log.Debug("Deleted legacy credential file (pre-realm)", "path", filePath)
+			}
+		}
+		// Remove provider directory if now empty.
+		_ = os.Remove(providerDir)
+	}
+	// Remove aws directory if now empty.
+	_ = os.Remove(awsDir)
+}
+
 // logRealmMismatchWarning emits a warning about credentials existing under a different realm.
 func logRealmMismatchWarning(currentRealm, alternateRealm string) {
 	currentDisplay := currentRealm

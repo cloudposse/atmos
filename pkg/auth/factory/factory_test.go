@@ -165,6 +165,7 @@ func TestNewIdentity_Factory(t *testing.T) {
 		config       *schema.Identity
 		expectError  bool
 		errorType    error
+		errorMsg     string
 	}{
 		{
 			name:         "aws-permission-set-valid",
@@ -257,6 +258,7 @@ func TestNewIdentity_Factory(t *testing.T) {
 			config:       &schema.Identity{Kind: ""},
 			expectError:  true,
 			errorType:    errUtils.ErrInvalidIdentityKind,
+			errorMsg:     "identity is not configured",
 		},
 		{
 			name:         "empty-name-allowed",
@@ -274,6 +276,9 @@ func TestNewIdentity_Factory(t *testing.T) {
 				assert.Error(t, err)
 				if tt.errorType != nil {
 					assert.ErrorIs(t, err, tt.errorType)
+				}
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Nil(t, identity)
 			} else {

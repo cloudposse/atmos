@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -428,6 +432,81 @@ func TestProvidersFlagCompletion_ReturnsSortedProviders(t *testing.T) {
 	// Verify results are sorted alphabetically.
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 	assert.Equal(t, []string{"apple-provider", "mango-provider", "zebra-provider"}, results)
+}
+
+func TestExecuteAuthListCommand_SuggestsProfilesWhenNoAuthConfigured(t *testing.T) {
+	// Setup: Create a temp dir with minimal atmos.yaml (no auth providers/identities)
+	// but with profiles that could contain auth config.
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "atmos.yaml")
+
+	configContent := `auth:
+  realm: test
+  logs:
+    level: Debug
+`
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create profile directories (simulating profiles that may contain auth config).
+	for _, profileName := range []string{"developers", "devops", "superadmin"} {
+		profileDir := filepath.Join(tempDir, "profiles", profileName)
+		err := os.MkdirAll(profileDir, 0o755)
+		require.NoError(t, err)
+
+		// Add a minimal atmos.yaml in each profile so it's discovered.
+		profileConfig := filepath.Join(profileDir, "atmos.yaml")
+		err = os.WriteFile(profileConfig, []byte("# profile config\n"), 0o600)
+		require.NoError(t, err)
+	}
+
+	// Set environment to use test config.
+	t.Chdir(tempDir)
+
+	_ = NewTestKit(t)
+
+	cmd := createTestAuthListCmd()
+	cmd.RunE = executeAuthListCommand
+
+	// Execute the command - should return an error suggesting profiles.
+	err = cmd.Execute()
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthNotConfigured)
+
+	// Verify hints contain profile names and usage suggestion.
+	hints := cockroachErrors.GetAllHints(err)
+	allHints := strings.Join(hints, " ")
+	assert.Contains(t, allHints, "developers")
+	assert.Contains(t, allHints, "devops")
+	assert.Contains(t, allHints, "superadmin")
+	assert.Contains(t, allHints, "--profile")
+}
+
+func TestExecuteAuthListCommand_NoErrorWhenNoProfilesExist(t *testing.T) {
+	// Setup: Create a temp dir with minimal atmos.yaml (no auth, no profiles).
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "atmos.yaml")
+
+	configContent := `auth:
+  realm: test
+`
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// No profiles directory created.
+
+	t.Chdir(tempDir)
+
+	_ = NewTestKit(t)
+
+	cmd := createTestAuthListCmd()
+	cmd.RunE = executeAuthListCommand
+
+	// Execute the command - should NOT return an error (no profiles to suggest).
+	err = cmd.Execute()
+
+	assert.NoError(t, err)
 }
 
 func TestIdentitiesFlagCompletion_ReturnsSortedIdentities(t *testing.T) {
