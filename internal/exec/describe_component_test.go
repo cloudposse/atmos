@@ -13,6 +13,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
+	p "github.com/cloudposse/atmos/pkg/provenance"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -663,9 +664,9 @@ func TestFilterComputedFields(t *testing.T) {
 	}
 }
 
-// TestExecuteDescribeComponentCmd_Explain tests the --explain flag code path
+// TestExecuteDescribeComponentCmd_ProvenanceFull tests the --provenance=full code path
 // using a mocked executeDescribeComponentWithContext to avoid filesystem dependencies.
-func TestExecuteDescribeComponentCmd_Explain(t *testing.T) {
+func TestExecuteDescribeComponentCmd_ProvenanceFull(t *testing.T) {
 	// Build a minimal MergeContext with provenance enabled.
 	buildContextWithProvenance := func() *m.MergeContext {
 		ctx := m.NewMergeContext()
@@ -693,11 +694,12 @@ func TestExecuteDescribeComponentCmd_Explain(t *testing.T) {
 		expectedError bool
 	}{
 		{
-			name: "explain outputs trace to stdout",
+			name: "provenance=full outputs YAML trace",
 			params: DescribeComponentParams{
-				Component: "vpc",
-				Stack:     "prod",
-				Explain:   true,
+				Component:      "vpc",
+				Stack:          "prod",
+				ProvenanceMode: ProvenanceModeFull,
+				Format:         "yaml",
 			},
 			contextResult: &DescribeComponentResult{
 				ComponentSection: componentData,
@@ -706,12 +708,13 @@ func TestExecuteDescribeComponentCmd_Explain(t *testing.T) {
 			},
 		},
 		{
-			name: "explain with file output",
+			name: "provenance=full with file output",
 			params: DescribeComponentParams{
-				Component: "vpc",
-				Stack:     "prod",
-				Explain:   true,
-				File:      filepath.Join(t.TempDir(), "explain-output.txt"),
+				Component:      "vpc",
+				Stack:          "prod",
+				ProvenanceMode: ProvenanceModeFull,
+				Format:         "yaml",
+				File:           filepath.Join(t.TempDir(), "trace-output.yaml"),
 			},
 			contextResult: &DescribeComponentResult{
 				ComponentSection: componentData,
@@ -720,22 +723,22 @@ func TestExecuteDescribeComponentCmd_Explain(t *testing.T) {
 			},
 		},
 		{
-			name: "explain returns error when context call fails",
+			name: "provenance=full returns error when context call fails",
 			params: DescribeComponentParams{
-				Component: "vpc",
-				Stack:     "prod",
-				Explain:   true,
+				Component:      "vpc",
+				Stack:          "prod",
+				ProvenanceMode: ProvenanceModeFull,
 			},
 			contextErr:    assert.AnError,
 			expectedError: true,
 		},
 		{
-			name: "explain returns error when result is not a map (after query)",
+			name: "provenance=full returns error when result is not a map (after query)",
 			params: DescribeComponentParams{
-				Component: "vpc",
-				Stack:     "prod",
-				Explain:   true,
-				Query:     ".vars.cidr_block", // returns a scalar string, not a map
+				Component:      "vpc",
+				Stack:          "prod",
+				ProvenanceMode: ProvenanceModeFull,
+				Query:          ".vars.cidr_block", // returns a scalar string, not a map
 			},
 			contextResult: &DescribeComponentResult{
 				ComponentSection: componentData,
@@ -747,8 +750,11 @@ func TestExecuteDescribeComponentCmd_Explain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Capture what's passed to printOrWriteToFile for assertions.
+			var capturedData any
 			mockedExec := &DescribeComponentExec{
 				printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
+					capturedData = data
 					return nil
 				},
 				IsTTYSupportForStdout: func() bool { return false },
@@ -776,6 +782,11 @@ func TestExecuteDescribeComponentCmd_Explain(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				// Verify the output is an ExplainTraceMap (structured YAML).
+				if tt.contextResult != nil && tt.params.Query != ".vars.cidr_block" {
+					_, ok := capturedData.(*p.ExplainTraceMap)
+					assert.True(t, ok, "expected ExplainTraceMap output for provenance=full")
+				}
 			}
 		})
 	}
@@ -824,9 +835,9 @@ func TestExecuteDescribeComponentCmd_Provenance(t *testing.T) {
 	}
 
 	err := mockedExec.ExecuteDescribeComponentCmd(DescribeComponentParams{
-		Component:  "vpc",
-		Stack:      "prod",
-		Provenance: true,
+		Component:      "vpc",
+		Stack:          "prod",
+		ProvenanceMode: "true",
 	})
 	assert.NoError(t, err)
 }

@@ -37,6 +37,84 @@ type ExplainTraceEntry struct {
 	Overridden []m.ProvenanceEntry
 }
 
+// ExplainSourceEntry is the YAML-serializable form of a provenance winner.
+type ExplainSourceEntry struct {
+	File  string `json:"file" yaml:"file"`
+	Line  int    `json:"line,omitempty" yaml:"line,omitempty"`
+	Depth int    `json:"depth,omitempty" yaml:"depth,omitempty"`
+}
+
+// ExplainOverrideEntry is the YAML-serializable form of a superseded provenance entry.
+type ExplainOverrideEntry struct {
+	File  string `json:"file" yaml:"file"`
+	Line  int    `json:"line,omitempty" yaml:"line,omitempty"`
+	Depth int    `json:"depth,omitempty" yaml:"depth,omitempty"`
+	Value any    `json:"value,omitempty" yaml:"value,omitempty"`
+}
+
+// ExplainKeyTrace is the YAML-serializable trace for a single configuration key.
+type ExplainKeyTrace struct {
+	Value     any                    `json:"value,omitempty" yaml:"value,omitempty"`
+	Winner    *ExplainSourceEntry    `json:"winner,omitempty" yaml:"winner,omitempty"`
+	Overrides []ExplainOverrideEntry `json:"overrides,omitempty" yaml:"overrides,omitempty"`
+}
+
+// ExplainTraceMap is the top-level YAML-serializable merge trace document.
+type ExplainTraceMap struct {
+	Stack string                     `json:"stack,omitempty" yaml:"stack,omitempty"`
+	Trace map[string]ExplainKeyTrace `json:"trace" yaml:"trace"`
+}
+
+// BuildExplainTraceMap builds a structured, YAML/JSON-serializable representation of the
+// per-key merge trace. Use this for --provenance=full output so the result is pipeable,
+// machine-readable, and consistent with the 'atmos describe' YAML design principle.
+func BuildExplainTraceMap(
+	data map[string]any,
+	ctx *m.MergeContext,
+	atmosConfig *schema.AtmosConfiguration,
+	stackFile string,
+) *ExplainTraceMap {
+	defer perf.Track(atmosConfig, "provenance.BuildExplainTraceMap")()
+
+	trace := make(map[string]ExplainKeyTrace)
+
+	if ctx != nil && ctx.IsProvenanceEnabled() {
+		for _, entry := range buildExplainEntries(data, ctx) {
+			keyTrace := ExplainKeyTrace{
+				Value: entry.FinalValue,
+			}
+
+			if entry.Winner != nil {
+				keyTrace.Winner = &ExplainSourceEntry{
+					File:  entry.Winner.File,
+					Line:  entry.Winner.Line,
+					Depth: entry.Winner.Depth,
+				}
+			}
+
+			for i := len(entry.Overridden) - 1; i >= 0; i-- {
+				o := entry.Overridden[i]
+				override := ExplainOverrideEntry{
+					File:  o.File,
+					Line:  o.Line,
+					Depth: o.Depth,
+				}
+				if o.Value != nil {
+					override.Value = o.Value
+				}
+				keyTrace.Overrides = append(keyTrace.Overrides, override)
+			}
+
+			trace[entry.Path] = keyTrace
+		}
+	}
+
+	return &ExplainTraceMap{
+		Stack: stackFile,
+		Trace: trace,
+	}
+}
+
 // RenderExplainTrace renders a per-key merge trace showing which file "won" for
 // each configuration value and which earlier files were overridden.
 // The output format is:

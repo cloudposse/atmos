@@ -21,6 +21,14 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// ProvenanceModeFull is the value for --provenance=full, enabling the full YAML merge-trace.
+const ProvenanceModeFull = "full"
+
+// DescribeComponentParams holds parameters for the describe component command.
+// ProvenanceMode controls provenance rendering:
+//   - "" (empty)  — no provenance (default)
+//   - "true"/"1"  — inline YAML provenance showing the winning source per key
+//   - "full"      — full YAML merge-trace showing all overrides per key
 type DescribeComponentParams struct {
 	Component            string
 	Stack                string
@@ -30,8 +38,7 @@ type DescribeComponentParams struct {
 	Query                string
 	Format               string
 	File                 string
-	Provenance           bool
-	Explain              bool
+	ProvenanceMode       string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
@@ -70,8 +77,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	query := describeComponentParams.Query
 	format := describeComponentParams.Format
 	file := describeComponentParams.File
-	provenance := describeComponentParams.Provenance
-	explain := describeComponentParams.Explain
+	provenanceMode := describeComponentParams.ProvenanceMode
 
 	var err error
 	var atmosConfig schema.AtmosConfiguration
@@ -84,8 +90,8 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		return err
 	}
 
-	// Enable provenance tracking if requested (both --provenance and --explain need it).
-	if provenance || explain {
+	// Enable provenance tracking if any provenance mode is requested.
+	if provenanceMode != "" {
 		atmosConfig.TrackProvenance = true
 	}
 
@@ -93,8 +99,8 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	var mergeContext *m.MergeContext
 	var stackFile string
 
-	if provenance || explain {
-		// Use the context-aware version to get the merge context
+	if provenanceMode != "" {
+		// Use the context-aware version to get the merge context.
 		result, err := d.executeDescribeComponentWithContext(DescribeComponentContextParams{
 			AtmosConfig:          &atmosConfig, // Pass atmosConfig with TrackProvenance = true
 			Component:            component,
@@ -111,10 +117,10 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		mergeContext = result.MergeContext
 		stackFile = result.StackFile
 
-		// Filter out computed fields when provenance is enabled
+		// Filter out computed fields when provenance is enabled.
 		componentSection = FilterComputedFields(componentSection)
 	} else {
-		// Use the standard version
+		// Use the standard version.
 		componentSection, err = d.executeDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            component,
 			Stack:                stack,
@@ -139,17 +145,17 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		res = componentSection
 	}
 
-	// If explain is enabled and we have a merge context, render per-key merge trace.
-	if explain && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
+	// If --provenance=full, render the full YAML merge-trace.
+	if provenanceMode == ProvenanceModeFull && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
 		resMap, ok := res.(map[string]any)
 		if !ok {
 			return fmt.Errorf("%w: cannot generate merge trace: component configuration has unexpected format (%T)", errUtils.ErrInvalidComponent, res)
 		}
-		return d.renderExplain(resMap, mergeContext, &atmosConfig, stackFile, file)
+		return d.renderExplain(resMap, mergeContext, &atmosConfig, stackFile, format, file)
 	}
 
-	// If provenance is enabled and we have a merge context, render with inline provenance
-	if provenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
+	// If --provenance (basic), render with inline YAML provenance comments.
+	if provenanceMode != "" && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
 		resMap, ok := res.(map[string]any)
 		if !ok {
 			return fmt.Errorf("%w: provenance rendering requires a map, got %T", errUtils.ErrInvalidComponent, res)
@@ -271,24 +277,19 @@ func (d *DescribeComponentExec) renderProvenance(
 	return nil
 }
 
-// renderExplain renders a per-key merge trace showing which file "won" for each value.
+// renderExplain renders a full YAML merge-trace for --provenance=full.
+// The output is a structured ExplainTraceMap document serialized via printOrWriteToFile.
+// The format parameter controls the serialization format (yaml or json).
 func (d *DescribeComponentExec) renderExplain(
 	res map[string]any,
 	mergeContext *m.MergeContext,
 	atmosConfig *schema.AtmosConfiguration,
 	stackFile string,
+	format string,
 	file string,
 ) error {
-	output := p.RenderExplainTrace(res, mergeContext, atmosConfig, stackFile)
-
-	// Write to file if specified, otherwise print to stdout
-	if file != "" {
-		return writeOutputToFile(file, output)
-	}
-
-	// Print to stdout (pipeable)
-	fmt.Print(output)
-	return nil
+	traceMap := p.BuildExplainTraceMap(res, mergeContext, atmosConfig, stackFile)
+	return d.printOrWriteToFile(atmosConfig, format, file, traceMap)
 }
 
 // extractImportsList converts imports from any type to []string.

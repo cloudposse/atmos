@@ -476,3 +476,94 @@ func TestRenderExplainTrace_OverrideWithNilValue(t *testing.T) {
 	// The nil-value override should show "no value" since ValueHash is also empty.
 	assert.Contains(t, result, explainValueNone)
 }
+
+// TestBuildExplainTraceMap_NilContext verifies that an empty trace with empty stack is returned when context is nil.
+func TestBuildExplainTraceMap_NilContext(t *testing.T) {
+	result := BuildExplainTraceMap(nil, nil, nil, "")
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Stack)
+	assert.Empty(t, result.Trace)
+}
+
+// TestBuildExplainTraceMap_SingleWinner verifies the trace map for a single provenance entry.
+func TestBuildExplainTraceMap_SingleWinner(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	ctx.RecordProvenance("vars.region", m.ProvenanceEntry{
+		File:  "stacks/prod.yaml",
+		Line:  10,
+		Depth: 1,
+		Value: "us-east-1",
+	})
+
+	data := map[string]any{
+		"vars": map[string]any{"region": "us-east-1"},
+	}
+
+	result := BuildExplainTraceMap(data, ctx, nil, "stacks/prod.yaml")
+	assert.NotNil(t, result)
+	assert.Equal(t, "stacks/prod.yaml", result.Stack)
+	assert.Len(t, result.Trace, 1)
+
+	entry, ok := result.Trace["vars.region"]
+	assert.True(t, ok, "trace should contain vars.region")
+	assert.Equal(t, "us-east-1", entry.Value)
+	assert.NotNil(t, entry.Winner)
+	assert.Equal(t, "stacks/prod.yaml", entry.Winner.File)
+	assert.Equal(t, 10, entry.Winner.Line)
+	assert.Equal(t, 1, entry.Winner.Depth)
+	assert.Empty(t, entry.Overrides)
+}
+
+// TestBuildExplainTraceMap_WithOverride verifies overrides are recorded correctly.
+func TestBuildExplainTraceMap_WithOverride(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	// First entry = deep import (depth 3, will be overridden).
+	ctx.RecordProvenance("vars.cidr_block", m.ProvenanceEntry{
+		File:  "catalog/defaults.yaml",
+		Line:  20,
+		Depth: 3,
+		Value: "172.16.0.0/16",
+	})
+	// Second entry = root stack (depth 1, wins).
+	ctx.RecordProvenance("vars.cidr_block", m.ProvenanceEntry{
+		File:  "stacks/prod.yaml",
+		Line:  5,
+		Depth: 1,
+		Value: "10.0.0.0/16",
+	})
+
+	data := map[string]any{
+		"vars": map[string]any{"cidr_block": "10.0.0.0/16"},
+	}
+
+	result := BuildExplainTraceMap(data, ctx, nil, "stacks/prod.yaml")
+	entry, ok := result.Trace["vars.cidr_block"]
+	assert.True(t, ok)
+	assert.NotNil(t, entry.Winner)
+	assert.Equal(t, "stacks/prod.yaml", entry.Winner.File)
+	assert.Len(t, entry.Overrides, 1)
+	assert.Equal(t, "catalog/defaults.yaml", entry.Overrides[0].File)
+	assert.Equal(t, "172.16.0.0/16", entry.Overrides[0].Value)
+}
+
+// TestBuildExplainTraceMap_InternalPathsFiltered confirms __import__: paths are excluded.
+func TestBuildExplainTraceMap_InternalPathsFiltered(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+	ctx.RecordProvenance("__import__:catalog/vpc", m.ProvenanceEntry{File: "stacks/prod.yaml"})
+	ctx.RecordProvenance("vars.enabled", m.ProvenanceEntry{
+		File:  "stacks/prod.yaml",
+		Depth: 1,
+		Value: true,
+	})
+
+	data := map[string]any{"vars": map[string]any{"enabled": true}}
+
+	result := BuildExplainTraceMap(data, ctx, nil, "")
+	_, hasImport := result.Trace["__import__:catalog/vpc"]
+	assert.False(t, hasImport, "internal __import__ paths should not appear in trace map")
+	_, hasVars := result.Trace["vars.enabled"]
+	assert.True(t, hasVars)
+}

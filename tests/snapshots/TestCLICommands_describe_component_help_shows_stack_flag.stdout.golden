@@ -45,8 +45,7 @@ EXAMPLES
 
 FLAGS
 
-      --explain            Show a per-key merge trace: which file, import level, and deep-merge step set each final
-                           value
+      --explain            Alias for --provenance=full: show a full YAML merge-trace with all overrides per key
 
       --file string        Write the result to the file
 
@@ -60,7 +59,8 @@ FLAGS
       --process-templates  Enable/disable Go template processing in Atmos stack manifests when executing the command
                            (default true)
 
-      --provenance         Enable provenance tracking to show where configuration values originated
+      --provenance string  Show where configuration values originated (use --provenance or --provenance=full for full
+                           merge-trace in YAML)
 
       --skip strings       Skip executing a YAML function in the Atmos stack manifests when executing the command
 
