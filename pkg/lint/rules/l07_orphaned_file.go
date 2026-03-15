@@ -15,8 +15,8 @@ func newL07OrphanedFileRule() lint.LintRule {
 	return &l07OrphanedFileRule{}
 }
 
-func (r *l07OrphanedFileRule) ID() string          { return "L-07" }
-func (r *l07OrphanedFileRule) Name() string        { return "Orphaned Catalog File Detection" }
+func (r *l07OrphanedFileRule) ID() string   { return "L-07" }
+func (r *l07OrphanedFileRule) Name() string { return "Orphaned Catalog File Detection" }
 func (r *l07OrphanedFileRule) Description() string {
 	return "Finds YAML files under the stacks base path that are not referenced by any import chain."
 }

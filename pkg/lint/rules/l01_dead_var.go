@@ -15,8 +15,8 @@ func newL01DeadVarRule() lint.LintRule {
 	return &l01DeadVarRule{}
 }
 
-func (r *l01DeadVarRule) ID() string          { return "L-01" }
-func (r *l01DeadVarRule) Name() string        { return "Dead Var Detection" }
+func (r *l01DeadVarRule) ID() string   { return "L-01" }
+func (r *l01DeadVarRule) Name() string { return "Dead Var Detection" }
 func (r *l01DeadVarRule) Description() string {
 	return "Detects top-level vars declared in stack files that are not consumed by any component in the import chain."
 }

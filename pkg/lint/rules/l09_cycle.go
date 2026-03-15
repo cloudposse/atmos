@@ -14,8 +14,8 @@ func newL09CycleRule() lint.LintRule {
 	return &l09CycleRule{}
 }
 
-func (r *l09CycleRule) ID() string          { return "L-09" }
-func (r *l09CycleRule) Name() string        { return "Inheritance Cycle Detection" }
+func (r *l09CycleRule) ID() string   { return "L-09" }
+func (r *l09CycleRule) Name() string { return "Inheritance Cycle Detection" }
 func (r *l09CycleRule) Description() string {
 	return "Detects circular inheritance chains in component metadata.inherits definitions."
 }

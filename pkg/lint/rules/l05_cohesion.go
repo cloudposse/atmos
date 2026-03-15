@@ -18,8 +18,8 @@ func newL05CohesionRule() lint.LintRule {
 	return &l05CohesionRule{}
 }
 
-func (r *l05CohesionRule) ID() string          { return "L-05" }
-func (r *l05CohesionRule) Name() string        { return "Catalog File Cohesion" }
+func (r *l05CohesionRule) ID() string   { return "L-05" }
+func (r *l05CohesionRule) Name() string { return "Catalog File Cohesion" }
 func (r *l05CohesionRule) Description() string {
 	return "Flags catalog files that define components whose names span more than the configured number of concern groups."
 }

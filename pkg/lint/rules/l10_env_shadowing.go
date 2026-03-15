@@ -15,8 +15,8 @@ func newL10EnvShadowingRule() lint.LintRule {
 	return &l10EnvShadowingRule{}
 }
 
-func (r *l10EnvShadowingRule) ID() string          { return "L-10" }
-func (r *l10EnvShadowingRule) Name() string        { return "Env Var Shadowing" }
+func (r *l10EnvShadowingRule) ID() string   { return "L-10" }
+func (r *l10EnvShadowingRule) Name() string { return "Env Var Shadowing" }
 func (r *l10EnvShadowingRule) Description() string {
 	return "Detects environment variables that appear at both stack-level and component-level with different values, creating confusion about which value takes effect."
 }

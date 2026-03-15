@@ -128,9 +128,9 @@ func TestL04AbstractLeak(t *testing.T) {
 	require.NotNil(t, l04)
 
 	tests := []struct {
-		name          string
-		stacksMap     map[string]any
-		expectLeak    bool
+		name       string
+		stacksMap  map[string]any
+		expectLeak bool
 	}{
 		{
 			name:       "no abstract component",
@@ -200,8 +200,8 @@ func TestL02RedundantOverride(t *testing.T) {
 	assert.True(t, l02.AutoFixable())
 
 	tests := []struct {
-		name           string
-		stacksMap      map[string]any
+		name            string
+		stacksMap       map[string]any
 		expectRedundant bool
 	}{
 		{
@@ -281,9 +281,9 @@ func TestL01DeadVar(t *testing.T) {
 	require.NotNil(t, l01)
 
 	tests := []struct {
-		name        string
-		stacksMap   map[string]any
-		expectDead  bool
+		name       string
+		stacksMap  map[string]any
+		expectDead bool
 	}{
 		{
 			name:       "no dead vars",
@@ -361,10 +361,10 @@ func TestL03ImportDepth(t *testing.T) {
 	require.NotNil(t, l03)
 
 	tests := []struct {
-		name           string
-		importGraph    map[string][]string
-		threshold      int
-		expectTooDeep  bool
+		name          string
+		importGraph   map[string][]string
+		threshold     int
+		expectTooDeep bool
 	}{
 		{
 			name:          "no imports",
@@ -375,7 +375,7 @@ func TestL03ImportDepth(t *testing.T) {
 		{
 			name: "depth within threshold",
 			importGraph: map[string][]string{
-				"root":  {"level1"},
+				"root":   {"level1"},
 				"level1": {"level2"},
 			},
 			threshold:     3,

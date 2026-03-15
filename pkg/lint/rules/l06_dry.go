@@ -17,8 +17,8 @@ func newL06DRYRule() lint.LintRule {
 	return &l06DRYRule{}
 }
 
-func (r *l06DRYRule) ID() string          { return "L-06" }
-func (r *l06DRYRule) Name() string        { return "DRY Extraction Opportunity" }
+func (r *l06DRYRule) ID() string   { return "L-06" }
+func (r *l06DRYRule) Name() string { return "DRY Extraction Opportunity" }
 func (r *l06DRYRule) Description() string {
 	return "Identifies variable values repeated across many stacks that could be extracted to a catalog file."
 }

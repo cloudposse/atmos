@@ -15,8 +15,8 @@ func newL03ImportDepthRule() lint.LintRule {
 	return &l03ImportDepthRule{}
 }
 
-func (r *l03ImportDepthRule) ID() string          { return "L-03" }
-func (r *l03ImportDepthRule) Name() string        { return "Import Depth Warning" }
+func (r *l03ImportDepthRule) ID() string   { return "L-03" }
+func (r *l03ImportDepthRule) Name() string { return "Import Depth Warning" }
 func (r *l03ImportDepthRule) Description() string {
 	return "Warns when the import graph depth for a stack file exceeds the configured threshold."
 }

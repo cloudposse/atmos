@@ -27,8 +27,8 @@ func newL08SensitiveVarRule() lint.LintRule {
 	return &l08SensitiveVarRule{}
 }
 
-func (r *l08SensitiveVarRule) ID() string          { return "L-08" }
-func (r *l08SensitiveVarRule) Name() string        { return "Sensitive Var at Global Scope" }
+func (r *l08SensitiveVarRule) ID() string   { return "L-08" }
+func (r *l08SensitiveVarRule) Name() string { return "Sensitive Var at Global Scope" }
 func (r *l08SensitiveVarRule) Description() string {
 	return "Warns when variable names matching sensitive patterns (passwords, secrets, tokens, etc.) appear at global stack scope instead of component scope."
 }

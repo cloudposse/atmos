@@ -15,8 +15,8 @@ func newL04AbstractLeakRule() lint.LintRule {
 	return &l04AbstractLeakRule{}
 }
 
-func (r *l04AbstractLeakRule) ID() string          { return "L-04" }
-func (r *l04AbstractLeakRule) Name() string        { return "Abstract Component Leak" }
+func (r *l04AbstractLeakRule) ID() string   { return "L-04" }
+func (r *l04AbstractLeakRule) Name() string { return "Abstract Component Leak" }
 func (r *l04AbstractLeakRule) Description() string {
 	return "Finds abstract components present in deployable stacks with no concrete inheritor. " +
 		"These components are silently skipped at deploy time."

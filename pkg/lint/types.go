@@ -117,4 +117,3 @@ type LintSummary struct {
 func (r *LintResult) HasErrors() bool {
 	return r.Summary.Errors > 0
 }
-

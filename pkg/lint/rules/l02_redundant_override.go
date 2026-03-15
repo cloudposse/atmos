@@ -16,8 +16,8 @@ func newL02RedundantOverrideRule() lint.LintRule {
 	return &l02RedundantOverrideRule{}
 }
 
-func (r *l02RedundantOverrideRule) ID() string          { return "L-02" }
-func (r *l02RedundantOverrideRule) Name() string        { return "Redundant No-Op Override" }
+func (r *l02RedundantOverrideRule) ID() string   { return "L-02" }
+func (r *l02RedundantOverrideRule) Name() string { return "Redundant No-Op Override" }
 func (r *l02RedundantOverrideRule) Description() string {
 	return "Detects vars that are set to the same value they would have inherited from the parent component, making them redundant."
 }
