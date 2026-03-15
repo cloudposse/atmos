@@ -206,17 +206,17 @@ func TestFindWinnerIndex(t *testing.T) {
 		{
 			name: "winner is last (lowest depth recorded last)",
 			chain: []m.ProvenanceEntry{
-				{Depth: 3, File: "deep.yaml"},   // base import
-				{Depth: 2, File: "mid.yaml"},    // middle import
-				{Depth: 1, File: "root.yaml"},   // root file = winner
+				{Depth: 3, File: "deep.yaml"}, // base import
+				{Depth: 2, File: "mid.yaml"},  // middle import
+				{Depth: 1, File: "root.yaml"}, // root file = winner
 			},
 			expected: 2, // Last entry has lowest depth
 		},
 		{
 			name: "winner is first (unusual case)",
 			chain: []m.ProvenanceEntry{
-				{Depth: 1, File: "root.yaml"},   // root file recorded first
-				{Depth: 3, File: "deep.yaml"},   // deep import
+				{Depth: 1, File: "root.yaml"}, // root file recorded first
+				{Depth: 3, File: "deep.yaml"}, // deep import
 			},
 			expected: 0, // Index 0 has lowest depth
 		},
@@ -276,10 +276,10 @@ func TestLookupValue(t *testing.T) {
 // TestParseArrayIndex tests array index parsing.
 func TestParseArrayIndex(t *testing.T) {
 	tests := []struct {
-		input    string
-		expIdx   int
-		expKey   string
-		expOK    bool
+		input  string
+		expIdx int
+		expKey string
+		expOK  bool
 	}{
 		{"imports[0]", 0, "imports", true},
 		{"imports[5]", 5, "imports", true},
