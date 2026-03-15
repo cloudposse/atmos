@@ -36,26 +36,26 @@ type DescribeComponentParams struct {
 }
 
 type DescribeComponentExec struct {
-	pageCreator                        pager.PageCreator
-	printOrWriteToFile                 func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
-	IsTTYSupportForStdout              func() bool
-	initCliConfig                      func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
-	executeDescribeComponent           func(params *ExecuteDescribeComponentParams) (map[string]any, error)
+	pageCreator                         pager.PageCreator
+	printOrWriteToFile                  func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
+	IsTTYSupportForStdout               func() bool
+	initCliConfig                       func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
+	executeDescribeComponent            func(params *ExecuteDescribeComponentParams) (map[string]any, error)
 	executeDescribeComponentWithContext func(params DescribeComponentContextParams) (*DescribeComponentResult, error)
-	evaluateYqExpression               func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error)
+	evaluateYqExpression                func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error)
 }
 
 func NewDescribeComponentExec() *DescribeComponentExec {
 	defer perf.Track(nil, "exec.NewDescribeComponentExec")()
 
 	return &DescribeComponentExec{
-		printOrWriteToFile:                 printOrWriteToFile,
-		IsTTYSupportForStdout:              tuiTerm.IsTTYSupportForStdout,
-		pageCreator:                        pager.New(),
-		initCliConfig:                      cfg.InitCliConfig,
-		executeDescribeComponent:           ExecuteDescribeComponent,
+		printOrWriteToFile:                  printOrWriteToFile,
+		IsTTYSupportForStdout:               tuiTerm.IsTTYSupportForStdout,
+		pageCreator:                         pager.New(),
+		initCliConfig:                       cfg.InitCliConfig,
+		executeDescribeComponent:            ExecuteDescribeComponent,
 		executeDescribeComponentWithContext: ExecuteDescribeComponentWithContext,
-		evaluateYqExpression:               u.EvaluateYqExpression,
+		evaluateYqExpression:                u.EvaluateYqExpression,
 	}
 }
 
