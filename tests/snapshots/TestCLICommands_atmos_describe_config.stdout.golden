@@ -154,7 +154,7 @@
       "link_text": {}
     },
     "InjectGithubToken": true,
-    "GithubToken": "",
+    "GithubToken": "<MASKED>",
     "AtmosGithubToken": "",
     "GithubUsername": "",
     "InjectBitbucketToken": true,
@@ -273,5 +273,8 @@
     "context": {}
   },
   "mcp": {},
-  "lsp": {}
+  "lsp": {},
+  "lint": {
+    "stacks": {}
+  }
 }
