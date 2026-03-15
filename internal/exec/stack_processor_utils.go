@@ -966,7 +966,19 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
-		// If the import file is specified without extension, use `.yaml` as default
+		// Evaluate `import_if` condition before doing any file I/O.
+		if importStruct.ImportIf != "" {
+			importIfContext := buildImportIfContext(stackConfigMap, context)
+			include, err := evaluateImportCondition(atmosConfig, importStruct.ImportIf, importIfContext)
+			if err != nil {
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("import '%s' in manifest '%s': %w", imp, relativeFilePath, err)
+			}
+			if !include {
+				log.Debug("Skipping import due to import_if condition", "import", imp, "condition", importStruct.ImportIf, "file", relativeFilePath)
+				continue
+			}
+		}
+
 		impWithExt := imp
 		ext := filepath.Ext(imp)
 		if ext == "" {
@@ -1460,6 +1472,80 @@ func FindComponentDependenciesLegacy(
 	unique := u.UniqueStrings(deps)
 	sort.Strings(unique)
 	return unique, nil
+}
+
+// evaluateImportCondition evaluates an `import_if` Go template expression against the provided
+// context and returns whether the import should be included.
+// An empty condition always returns true.
+// The condition string must be a Go template that produces "true", "1", or "yes" (case-insensitive)
+// to include the import, or any falsy value ("false", "0", "no", "") to skip it.
+func evaluateImportCondition(atmosConfig *schema.AtmosConfiguration, condition string, context map[string]any) (bool, error) {
+	if condition == "" {
+		return true, nil
+	}
+
+	result, err := ProcessTmpl(atmosConfig, "import_if", condition, context, false)
+	if err != nil {
+		return false, fmt.Errorf("evaluating import_if condition %q: %w", condition, err)
+	}
+
+	result = strings.TrimSpace(result)
+	switch strings.ToLower(result) {
+	case "true", "1", "yes":
+		return true, nil
+	case "false", "0", "no", "":
+		return false, nil
+	default:
+		return false, fmt.Errorf("import_if condition %q evaluated to non-boolean value %q", condition, result)
+	}
+}
+
+// buildImportIfContext constructs the template evaluation context for `import_if` expressions.
+// It merges vars from the stack config map and the inherited context, and promotes top-level
+// context vars (stage, tenant, environment, namespace, region) from `vars` so templates can
+// reference both `.stage` and `.vars.stage`.
+// stackConfigMap is the parsed YAML of the current stack file; context is the inherited import
+// context (may be empty or have values from parent imports).
+func buildImportIfContext(stackConfigMap map[string]any, context map[string]any) map[string]any {
+	data := make(map[string]any)
+
+	// Start with any values from the inherited context (e.g. from parent imports).
+	for k, v := range context {
+		data[k] = v
+	}
+
+	// Prefer vars from the current stack file, falling back to context vars.
+	var vars map[string]any
+	if v, ok := stackConfigMap[cfg.VarsSectionName].(map[string]any); ok && len(v) > 0 {
+		vars = v
+	} else if v, ok := context[cfg.VarsSectionName].(map[string]any); ok {
+		vars = v
+	}
+
+	if vars != nil {
+		data[cfg.VarsSectionName] = vars
+
+		// Promote well-known vars to top level so templates can reference them directly.
+		for _, key := range []string{"namespace", "tenant", "environment", "stage", "region"} {
+			if val, ok := vars[key]; ok {
+				// Don't override existing top-level values (from inherited context or
+				// values already promoted from a previous iteration).
+				if _, exists := data[key]; !exists {
+					data[key] = val
+				}
+			}
+		}
+	}
+
+	// Also include locals and settings from the stack config.
+	if locals, ok := stackConfigMap[cfg.LocalsSectionName].(map[string]any); ok {
+		data[cfg.LocalsSectionName] = locals
+	}
+	if settings, ok := stackConfigMap[cfg.SettingsSectionName].(map[string]any); ok {
+		data[cfg.SettingsSectionName] = settings
+	}
+
+	return data
 }
 
 // ProcessImportSection processes the `import` section in stack manifests.

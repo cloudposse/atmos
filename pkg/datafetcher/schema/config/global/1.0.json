@@ -140,6 +140,10 @@
                   "skip_if_missing": {
                     "type": "boolean"
                   },
+                  "import_if": {
+                    "type": "string",
+                    "description": "A Go template expression that evaluates to a boolean. The import is only included if the expression evaluates to true."
+                  },
                   "context": {
                     "type": "object",
                     "additionalProperties": true

@@ -1,0 +1,93 @@
+---
+slug: conditional-imports
+title: "Conditional Imports with import_if"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports native conditional imports via the `import_if` field, letting you include catalog files only when a lightweight Go template expression evaluates to `true` — without reaching for `.yaml.tmpl` files.
+
+<!--truncate-->
+
+## What Changed
+
+Stack manifests now accept an `import_if` field on any structured import entry:
+
+```yaml
+import:
+  - catalog/vpc/defaults
+  - path: catalog/vpc/flow-logs
+    import_if: "{{ eq .stage \"prod\" }}"
+  - path: catalog/compliance/pci
+    import_if: "{{ .vars.pci_scope }}"
+```
+
+The expression is evaluated as a Go template against the current stack's vars context before any file I/O is performed. If the expression evaluates to a falsy value (`false`, `0`, `no`, or an empty string), the import is silently skipped. Otherwise it is included as normal.
+
+## Why This Matters
+
+The official Atmos best practices warn against using `.yaml.tmpl` files as a general escape hatch because they make stacks harder to read and maintain. But teams kept reaching for them just to conditionally include a catalog file.
+
+`import_if` provides a **lightweight native** alternative that:
+
+- Evaluates against the stack's `vars` section with no template engine overhead
+- Supports both `.stage`-style shorthand and `.vars.pci_scope`-style full paths
+- Works with any valid Go/Sprig/Gomplate template expression that returns a boolean-ish value
+- Requires zero changes to existing imports — it's purely additive
+
+## How to Use It
+
+Add `import_if` to any object-form import entry alongside the `path` key:
+
+```yaml
+vars:
+  stage: prod
+  pci_scope: true
+
+import:
+  # Always included
+  - catalog/vpc/defaults
+
+  # Only included in prod
+  - path: catalog/vpc/flow-logs
+    import_if: "{{ eq .stage \"prod\" }}"
+
+  # Only included when pci_scope var is truthy
+  - path: catalog/compliance/pci
+    import_if: "{{ .vars.pci_scope }}"
+```
+
+### Template context
+
+The expression is evaluated with the following data available:
+
+| Key | Description |
+|-----|-------------|
+| `.vars` | The full `vars` map from the current stack file |
+| `.stage` | Shorthand for `.vars.stage` |
+| `.tenant` | Shorthand for `.vars.tenant` |
+| `.environment` | Shorthand for `.vars.environment` |
+| `.namespace` | Shorthand for `.vars.namespace` |
+| `.region` | Shorthand for `.vars.region` |
+| `.locals` | Resolved `locals` section (if present) |
+| `.settings` | `settings` section (if present) |
+
+Any Go, Sprig, or Gomplate template function can be used in the expression.
+
+### Truthiness rules
+
+The expression must produce one of the following output strings (case-insensitive):
+
+| Truthy | Falsy |
+|--------|-------|
+| `true` | `false` |
+| `yes` | `no` |
+| `1` | `0` |
+| | *(empty string)* |
+
+Any other output is an error.
+
+## Get Involved
+
+- [Conditional imports documentation](/stacks/imports#conditional-imports)
+- [GitHub Discussion](https://github.com/cloudposse/atmos/discussions)
