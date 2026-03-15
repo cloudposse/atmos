@@ -1233,18 +1233,21 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Validate file existence
-	if !verifyFileExists(t, tc.Expect.FileExists) {
+	// Validate file existence.
+	// Resolve relative paths against absoluteWorkdir so they work correctly when
+	// running in parallel (we use cmd.Dir instead of t.Chdir, so the test process
+	// CWD is NOT the workdir).
+	if !verifyFileExists(t, resolveFilePaths(tc.Expect.FileExists, absoluteWorkdir)) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
 	// Validate file not existence
-	if !verifyFileNotExists(t, tc.Expect.FileNotExists) {
+	if !verifyFileNotExists(t, resolveFilePaths(tc.Expect.FileNotExists, absoluteWorkdir)) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
 	// Validate file contents
-	if !verifyFileContains(t, tc.Expect.FileContains) {
+	if !verifyFileContains(t, resolveFilePathsMap(tc.Expect.FileContains, absoluteWorkdir)) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 
@@ -1342,6 +1345,42 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 		}
 	}
 	return success
+}
+
+// resolveFilePaths resolves relative file paths against baseDir.
+// Absolute paths are returned unchanged.
+// This is needed because we set cmd.Dir instead of t.Chdir, so relative
+// paths in test expectations must be anchored to the workdir explicitly.
+func resolveFilePaths(files []string, baseDir string) []string {
+	if baseDir == "" || len(files) == 0 {
+		return files
+	}
+	resolved := make([]string, len(files))
+	for i, f := range files {
+		if filepath.IsAbs(f) {
+			resolved[i] = f
+		} else {
+			resolved[i] = filepath.Join(baseDir, f)
+		}
+	}
+	return resolved
+}
+
+// resolveFilePathsMap resolves relative file paths in a map[string][]MatchPattern
+// against baseDir. Absolute paths are returned unchanged.
+func resolveFilePathsMap(filePatterns map[string][]MatchPattern, baseDir string) map[string][]MatchPattern {
+	if baseDir == "" || len(filePatterns) == 0 {
+		return filePatterns
+	}
+	resolved := make(map[string][]MatchPattern, len(filePatterns))
+	for f, patterns := range filePatterns {
+		if filepath.IsAbs(f) {
+			resolved[f] = patterns
+		} else {
+			resolved[filepath.Join(baseDir, f)] = patterns
+		}
+	}
+	return resolved
 }
 
 func verifyFileExists(t *testing.T, files []string) bool {
