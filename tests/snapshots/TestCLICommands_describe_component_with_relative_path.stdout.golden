@@ -498,6 +498,7 @@ deps_all:
   - orgs/cp/_defaults
   - orgs/cp/tenant1/_defaults
   - orgs/cp/tenant1/dev/us-east-2
+description: Top-level component for testing Atmos stack configuration.
 env: {}
 generate: {}
 hooks: {}
