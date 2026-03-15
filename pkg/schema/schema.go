@@ -534,13 +534,33 @@ type CISummaryConfig struct {
 }
 
 // CIChecksConfig configures CI commit status checks.
-// GitHub: Check Runs API, GitLab: Commit Status API.
+// GitHub: Commit Status API, GitLab: Commit Status API.
 type CIChecksConfig struct {
 	// Enabled controls whether commit status checks are created.
 	// When nil (not set), defaults to false (disabled) as checks require extra permissions.
 	// When explicitly set to true, checks are enabled.
-	Enabled       *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	ContextPrefix string `yaml:"context_prefix,omitempty" json:"context_prefix,omitempty" mapstructure:"context_prefix"`
+	Enabled       *bool                  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	ContextPrefix string                 `yaml:"context_prefix,omitempty" json:"context_prefix,omitempty" mapstructure:"context_prefix"`
+	Statuses      CIChecksStatusesConfig `yaml:"statuses,omitempty" json:"statuses,omitempty" mapstructure:"statuses"`
+}
+
+// CIChecksStatusesConfig configures which per-operation commit statuses are created.
+// All fields default to true when nil (not set).
+type CIChecksStatusesConfig struct {
+	// Component controls the component-level status (e.g., atmos/plan/stack/component).
+	Component *bool `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"`
+
+	// Add controls the per-operation add status (e.g., atmos/plan/stack/component/add).
+	// Only created when resources to add > 0.
+	Add *bool `yaml:"add,omitempty" json:"add,omitempty" mapstructure:"add"`
+
+	// Change controls the per-operation change status (e.g., atmos/plan/stack/component/change).
+	// Only created when resources to change > 0.
+	Change *bool `yaml:"change,omitempty" json:"change,omitempty" mapstructure:"change"`
+
+	// Destroy controls the per-operation destroy status (e.g., atmos/plan/stack/component/destroy).
+	// Only created when resources to destroy > 0.
+	Destroy *bool `yaml:"destroy,omitempty" json:"destroy,omitempty" mapstructure:"destroy"`
 }
 
 // CICommentsConfig configures PR/MR comment integration.
