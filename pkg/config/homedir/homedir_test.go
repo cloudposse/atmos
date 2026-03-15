@@ -329,6 +329,7 @@ func TestDir_Error(t *testing.T) {
 	_, err := Dir()
 	assert.Error(t, err, "Dir() should return an error when all lookup methods fail.")
 }
+
 // TestDir_DisableCache verifies that setting DisableCache=true causes Dir()
 // to re-read the home directory on each invocation instead of returning a
 // stale cached value.
@@ -435,7 +436,6 @@ func TestDarwinHomeDirFunc(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
-
 
 func TestExpand(t *testing.T) {
 	Reset() // Clear cache from any previous tests
