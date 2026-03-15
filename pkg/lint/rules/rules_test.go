@@ -1202,3 +1202,170 @@ func TestDefaultRulesIsNil(t *testing.T) {
 	assert.Nil(t, defaultRules)
 }
 
+// TestAllRulesAutoFixable verifies AutoFixable() is called on every rule,
+// ensuring those trivial methods are covered and only L-02 returns true.
+func TestAllRulesAutoFixable(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	autoFixableRules := make([]string, 0)
+	for _, r := range all {
+		if r.AutoFixable() {
+			autoFixableRules = append(autoFixableRules, r.ID())
+		}
+	}
+	// Only L-02 (Redundant No-Op Override) is auto-fixable.
+	assert.Equal(t, []string{"L-02"}, autoFixableRules)
+}
+
+// TestHelpersExtractInheritsStringSlice verifies the []string fast-path in extractInherits.
+// We use L-09 which internally calls extractInherits; a []string inherits list
+// should be handled the same as []any.
+func TestHelpersExtractInheritsStringSlice(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l09 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-09" {
+			l09 = r
+			break
+		}
+	}
+	require.NotNil(t, l09)
+
+	// Use a []string directly instead of []any to exercise the []string branch.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-a": map[string]any{
+				"metadata": map[string]any{
+					// Using []string (not []any) to cover the []string branch.
+					"inherits": []string{"comp-b"},
+				},
+			},
+			"comp-b": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []string{"comp-a"},
+				},
+			},
+		}),
+	})
+	findings, err := l09.Run(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "should detect cycle even with []string inherits")
+}
+
+// TestHelpersAppendIfMissingNoDuplicate ensures appendIfMissing skips duplicates.
+// We exercise this via L-09 which calls appendIfMissing for each parent.
+// If both stacks declare the same parent for a component, only one edge is recorded.
+func TestHelpersAppendIfMissingNoDuplicate(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l09 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-09" {
+			l09 = r
+			break
+		}
+	}
+	require.NotNil(t, l09)
+
+	// Two stacks both declare comp-a inheriting comp-base.
+	// appendIfMissing should only record the edge once — no cycle should be detected.
+	ctx := makeContext(map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-a": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-base"},
+				},
+			},
+		}),
+		"stack2": componentsMap("terraform", map[string]any{
+			"comp-a": map[string]any{
+				"metadata": map[string]any{
+					// Same parent declared again in a second stack — should not create duplicate edge.
+					"inherits": []any{"comp-base"},
+				},
+			},
+		}),
+	})
+	findings, err := l09.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "duplicate inherits entries should not create false cycles")
+}
+
+// TestL05ConcernGroupSingleSegment covers the "no hyphen" branch in concernGroup.
+func TestL05ConcernGroupSingleSegment(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l05 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-05" {
+			l05 = r
+			break
+		}
+	}
+	require.NotNil(t, l05)
+
+	// Components with no hyphen — each becomes its own concern group.
+	// 4 single-word component names exceed the default threshold of 3.
+	ctx := lint.LintContext{
+		StacksMap: make(map[string]any),
+		RawStackConfigs: map[string]map[string]any{
+			"/stacks/catalog/mixed.yaml": {
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc":     map[string]any{},
+						"ecs":     map[string]any{},
+						"rds":     map[string]any{},
+						"eks":     map[string]any{},
+					},
+				},
+			},
+		},
+		ImportGraph: make(map[string][]string),
+		LintConfig:  schema.LintConfig{},
+	}
+	findings, err := l05.Run(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings, "four single-segment concern groups should exceed threshold of 3")
+}
+
+// TestL08SensitiveVarBasePathResolution covers stackNameToFile with basePath set.
+func TestL08SensitiveVarBasePathResolution(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l08 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-08" {
+			l08 = r
+			break
+		}
+	}
+	require.NotNil(t, l08)
+
+	ctx := lint.LintContext{
+		StacksMap: map[string]any{
+			"simple-stack-name": map[string]any{
+				"vars": map[string]any{
+					"my_token": "abc123",
+				},
+			},
+		},
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph:     make(map[string][]string),
+		LintConfig:      schema.LintConfig{},
+		StacksBasePath:  "/stacks",
+	}
+	findings, err := l08.Run(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, findings)
+	for _, f := range findings {
+		assert.Equal(t, "L-08", f.RuleID)
+	}
+}
+
+

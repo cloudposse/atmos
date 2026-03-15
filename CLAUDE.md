@@ -380,6 +380,12 @@ New configs support Go templating with `FuncMap()` from `internal/exec/template_
 ### Code Reuse (MANDATORY)
 Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 
+**Key utilities to reuse (not reinvent):**
+- **YAML file discovery**: Use `u.GetAllYamlFilesInDir(dir)` from `pkg/utils/file_utils.go` — returns relative paths. To get absolute paths, join with the base: `filepath.Join(base, relPath)`. Do NOT reimplement `filepath.WalkDir` for `.yaml`/`.yml` enumeration.
+- **Slice membership**: Use `u.SliceContainsString(slice, str)` from `pkg/utils/slice_utils.go` — do NOT write inline `for` loops to check membership.
+- **Config section constants**: Use `cfg.ComponentsSectionName`, `cfg.TerraformSectionName`, `cfg.HelmfileSectionName`, `cfg.VarsSectionName`, `cfg.MetadataSectionName`, `cfg.EnvSectionName`, `cfg.InheritsSectionName`, `cfg.ImportSectionName` from `pkg/config/const.go` — NEVER hardcode section name strings like `"components"`, `"inherits"`, `"vars"`.
+- **Shared internal helpers**: When a helper function (e.g., `extractInherits`, `getNestedMap`) is used by more than one file in the same package, extract it to a `helpers.go` in that package rather than duplicating it.
+
 ### Cross-Platform (MANDATORY)
 Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
 

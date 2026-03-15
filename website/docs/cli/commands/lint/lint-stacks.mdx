@@ -193,3 +193,20 @@ downstream tools:
 |------|---------|
 | 0 | No error-severity findings |
 | 1 | One or more error-severity findings (or command error) |
+
+## Why Go Instead of Rego
+
+The lint rules are implemented in Go rather than [OPA/Rego](https://www.openpolicyagent.org/) for the following reasons:
+
+**No additional runtime dependency** — Rego requires the OPA runtime or the `go-opa` SDK to be available. Go rules ship inside the `atmos` binary with zero extra dependencies.
+
+**Richer data structures** — The lint rules work against deeply nested `map[string]any` trees (fully resolved logical stacks). Go's type system and reflection make graph traversal (e.g., DFS cycle detection in L-09) and pattern matching (e.g., glob matching in L-08) natural. Expressing the same logic in Rego requires significant boilerplate for comparable traversal.
+
+**Performance** — Go rules execute in microseconds for typical stack sizes. OPA policy evaluation incurs per-query compilation overhead that adds noticeable latency when linting hundreds of stacks.
+
+**Simpler contribution model** — Most Atmos contributors know Go. Adding a new lint rule follows the same patterns as the rest of the codebase (interfaces, constants, tests). Learning Rego introduces a separate language, toolchain, and test framework.
+
+**Validation already uses OPA** — `atmos validate stacks` already delegates JSON Schema validation to OPA/Rego via the `pkg/validate` package. Lint rules are intentionally separate: they check _quality_ rather than _correctness_, and keeping them in Go avoids layering two policy evaluation systems on top of each other.
+
+For policy-based correctness validation (e.g., enforcing naming conventions with custom rules), use `atmos validate stacks` with OPA policies.
+

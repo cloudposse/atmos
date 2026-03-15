@@ -84,16 +84,3 @@ func concernGroup(name string) string {
 	}
 	return name
 }
-
-// getNestedMap retrieves a nested map by key path.
-func getNestedMap(m map[string]any, keys ...string) (map[string]any, bool) {
-	current := m
-	for _, key := range keys {
-		next, ok := current[key].(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		current = next
-	}
-	return current, true
-}

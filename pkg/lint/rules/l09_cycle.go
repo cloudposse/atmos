@@ -117,37 +117,6 @@ func (r *l09CycleRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 	return findings, nil
 }
 
-// extractInherits returns the list of parents from a metadata section.
-func extractInherits(metadata map[string]any) []string {
-	raw, ok := metadata["inherits"]
-	if !ok {
-		return nil
-	}
-	switch v := raw.(type) {
-	case []string:
-		return v
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	}
-	return nil
-}
-
-// appendIfMissing appends s to slice only if not already present.
-func appendIfMissing(slice []string, s string) []string {
-	for _, existing := range slice {
-		if existing == s {
-			return slice
-		}
-	}
-	return append(slice, s)
-}
-
 // formatCyclePath renders a cycle as "A → B → C → A".
 func formatCyclePath(path []string) string {
 	if len(path) == 0 {

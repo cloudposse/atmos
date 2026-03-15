@@ -113,8 +113,10 @@ func LintStacks(
 	// Build import graph from raw stack configs.
 	importGraph := buildImportGraph(rawStackConfigs)
 
-	// Find all YAML files under the stacks base path.
-	allStackFiles, err := findAllYAMLFiles(atmosConfig.StacksBaseAbsolutePath)
+	// Find all YAML files under the stacks base path for orphan detection (L-07).
+	// Use the existing utility and convert relative paths back to absolute,
+	// excluding template files since they are not directly referenced by imports.
+	allStackFiles, err := stackYAMLFiles(atmosConfig.StacksBaseAbsolutePath)
 	if err != nil {
 		log.Debug("Could not enumerate stack files for orphan detection", "error", err)
 		allStackFiles = nil
@@ -168,30 +170,25 @@ func buildImportGraph(rawStackConfigs map[string]map[string]any) map[string][]st
 	return graph
 }
 
-// findAllYAMLFiles returns all .yaml and .yml files under root.
-func findAllYAMLFiles(root string) ([]string, error) {
+// stackYAMLFiles returns all non-template YAML files under root as absolute paths,
+// delegating to u.GetAllYamlFilesInDir and filtering out .tmpl files.
+func stackYAMLFiles(root string) ([]string, error) {
 	if root == "" {
 		return nil, nil
 	}
-	var files []string
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			// Log and skip unreadable directories or files without failing the lint run.
-			log.Debug("Skipping unreadable path during stack file enumeration", "path", path, "error", err)
-			return nil
+	relFiles, err := u.GetAllYamlFilesInDir(root)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]string, 0, len(relFiles))
+	for _, rel := range relFiles {
+		// Skip template files — they are not referenced by import chains.
+		if strings.HasSuffix(rel, ".tmpl") {
+			continue
 		}
-		if !d.IsDir() {
-			ext := strings.ToLower(filepath.Ext(path))
-			if ext == ".yaml" || ext == ".yml" {
-				// Skip template files.
-				if !strings.HasSuffix(path, ".tmpl") {
-					files = append(files, path)
-				}
-			}
-		}
-		return nil
-	})
-	return files, err
+		files = append(files, filepath.Join(root, rel))
+	}
+	return files, nil
 }
 
 // mergedLintConfig returns a LintConfig with defaults applied for missing fields.
