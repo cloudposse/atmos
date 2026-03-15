@@ -73,6 +73,11 @@ var describeComponentCmd = &cobra.Command{
 			return err
 		}
 
+		explain, err := flags.GetBool("explain")
+		if err != nil {
+			return err
+		}
+
 		component := args[0]
 
 		// Determine if we need path resolution.
@@ -171,6 +176,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               format,
 			File:                 file,
 			Provenance:           provenance,
+			Explain:              explain,
 			AuthManager:          authManager,
 		})
 		return err
@@ -187,6 +193,7 @@ func init() {
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
+	describeComponentCmd.PersistentFlags().Bool("explain", false, "Show a per-key merge trace: which file, import level, and deep-merge step set each final value")
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

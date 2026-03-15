@@ -199,6 +199,7 @@ func recordProvenanceEntry(params *provenanceEntryParams) {
 		Type:      pType,
 		ValueHash: hashValue(params.value),
 		Depth:     params.depth,
+		Value:     params.value,
 	}
 
 	params.ctx.RecordProvenance(params.path, entry)

@@ -31,6 +31,7 @@ type DescribeComponentParams struct {
 	Format               string
 	File                 string
 	Provenance           bool
+	Explain              bool
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
@@ -68,6 +69,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	format := describeComponentParams.Format
 	file := describeComponentParams.File
 	provenance := describeComponentParams.Provenance
+	explain := describeComponentParams.Explain
 
 	var err error
 	var atmosConfig schema.AtmosConfiguration
@@ -80,8 +82,8 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		return err
 	}
 
-	// Enable provenance tracking if requested.
-	if provenance {
+	// Enable provenance tracking if requested (both --provenance and --explain need it).
+	if provenance || explain {
 		atmosConfig.TrackProvenance = true
 	}
 
@@ -89,7 +91,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	var mergeContext *m.MergeContext
 	var stackFile string
 
-	if provenance {
+	if provenance || explain {
 		// Use the context-aware version to get the merge context
 		result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
 			AtmosConfig:          &atmosConfig, // Pass atmosConfig with TrackProvenance = true
@@ -133,6 +135,15 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		}
 	} else {
 		res = componentSection
+	}
+
+	// If explain is enabled and we have a merge context, render per-key merge trace.
+	if explain && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
+		resMap, ok := res.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: explain rendering requires a map, got %T", errUtils.ErrInvalidComponent, res)
+		}
+		return d.renderExplain(resMap, mergeContext, &atmosConfig, stackFile, file)
 	}
 
 	// If provenance is enabled and we have a merge context, render with inline provenance
@@ -247,6 +258,26 @@ func (d *DescribeComponentExec) renderProvenance(
 	file string,
 ) error {
 	output := p.RenderInlineProvenanceWithStackFile(res, mergeContext, atmosConfig, stackFile)
+
+	// Write to file if specified, otherwise print to stdout
+	if file != "" {
+		return writeOutputToFile(file, output)
+	}
+
+	// Print to stdout (pipeable)
+	fmt.Print(output)
+	return nil
+}
+
+// renderExplain renders a per-key merge trace showing which file "won" for each value.
+func (d *DescribeComponentExec) renderExplain(
+	res map[string]any,
+	mergeContext *m.MergeContext,
+	atmosConfig *schema.AtmosConfiguration,
+	stackFile string,
+	file string,
+) error {
+	output := p.RenderExplainTrace(res, mergeContext, atmosConfig, stackFile)
 
 	// Write to file if specified, otherwise print to stdout
 	if file != "" {
