@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -231,87 +232,28 @@ func ExecuteDescribeDependents(
 					return nil, err
 				}
 
-				// Get the stack component `settings`.
-				var stackComponentSettingsSection map[string]any
-				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[string]any); !ok {
-					continue
-				}
-
-				// Convert the `settings` section to the `Settings` structure.
-				var stackComponentSettings schema.Settings
-				err = mapstructure.Decode(stackComponentSettingsSection, &stackComponentSettings)
-				if err != nil {
-					return nil, err
-				}
-
-				// Skip if the stack component has an empty `settings.depends_on` section.
-				if reflect.ValueOf(stackComponentSettings).IsZero() ||
-					reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
+				// Get component dependencies from dependencies.components (preferred) or settings.depends_on (legacy).
+				componentDeps, settingsSection, depSource := getComponentDependencies(stackComponentMap)
+				if len(componentDeps) == 0 {
 					continue
 				}
 
 				// Check if the stack component is a dependent of the provided component.
-				for _, dependsOn := range stackComponentSettings.DependsOn {
+				for depIdx := range componentDeps {
+					dependsOn := &componentDeps[depIdx]
 					if dependsOn.Component != args.Component {
 						continue
 					}
 
-					// Include the component if any of the following is true:
-					// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`.
-					// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`.
-					if dependsOn.Stack != "" {
-						if args.Stack != dependsOn.Stack {
-							continue
-						}
-					} else if args.Stack != stackName &&
-						dependsOn.Namespace == "" &&
-						dependsOn.Tenant == "" &&
-						dependsOn.Environment == "" &&
-						dependsOn.Stage == "" {
-						continue
-					}
-
-					// Include the component from the stack if any of the following is true:
-					// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`.
-					// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`.
-					if dependsOn.Namespace != "" {
-						if providedComponentVars.Namespace != dependsOn.Namespace {
-							continue
-						}
-					} else if providedComponentVars.Namespace != stackComponentVars.Namespace {
-						continue
-					}
-
-					// Include the component from the stack if any of the following is true:
-					// - `tenant` is specified in `depends_on` and the provided component's tenant is equal to the tenant in `depends_on`.
-					// - `tenant` is not specified in `depends_on` and the provided component is from the same tenant as the component in `depends_on`.
-					if dependsOn.Tenant != "" {
-						if providedComponentVars.Tenant != dependsOn.Tenant {
-							continue
-						}
-					} else if providedComponentVars.Tenant != stackComponentVars.Tenant {
-						continue
-					}
-
-					// Include the component from the stack if any of the following is true:
-					// - `environment` is specified in `depends_on` and the component's environment is equal to the environment in `depends_on`.
-					// - `environment` is not specified in `depends_on` and the provided component is from the same environment as the component in `depends_on`.
-					if dependsOn.Environment != "" {
-						if providedComponentVars.Environment != dependsOn.Environment {
-							continue
-						}
-					} else if providedComponentVars.Environment != stackComponentVars.Environment {
-						continue
-					}
-
-					// Include the component from the stack if any of the following is true:
-					// - `stage` is specified in `depends_on` and the provided component's stage is equal to the stage in `depends_on`.
-					// - `stage` is not specified in `depends_on` and the provided component is from the same stage as the component in `depends_on`.
-					if dependsOn.Stage != "" {
-						if providedComponentVars.Stage != dependsOn.Stage {
-							continue
-						}
-					} else if providedComponentVars.Stage != stackComponentVars.Stage {
+					// Matching logic depends on the source format.
+					if !isDependencyMatch(&dependencyMatchParams{
+						depSource:             depSource,
+						dependsOn:             dependsOn,
+						args:                  args,
+						stackName:             stackName,
+						providedComponentVars: &providedComponentVars,
+						stackComponentVars:    &stackComponentVars,
+					}) {
 						continue
 					}
 
@@ -334,10 +276,10 @@ func ExecuteDescribeDependents(
 							ComponentFromArg:         stackComponentName,
 							Stack:                    stackName,
 							ComponentVarsSection:     stackComponentVarsSection,
-							ComponentSettingsSection: stackComponentSettingsSection,
+							ComponentSettingsSection: settingsSection,
 							ComponentSection: map[string]any{
 								cfg.VarsSectionName:     stackComponentVarsSection,
-								cfg.SettingsSectionName: stackComponentSettingsSection,
+								cfg.SettingsSectionName: settingsSection,
 							},
 						}
 
@@ -356,7 +298,7 @@ func ExecuteDescribeDependents(
 					}
 
 					if args.IncludeSettings {
-						dependent.Settings = stackComponentSettingsSection
+						dependent.Settings = settingsSection
 					}
 
 					dependents = append(dependents, dependent)
@@ -396,4 +338,125 @@ func sortDependentsByStackSlugRecursive(deps []schema.Dependent) {
 		sortDependentsByStackSlugRecursive(deps[i].Dependents)
 	}
 	sortDependentsByStackSlug(deps)
+}
+
+// dependencySource indicates where dependencies were loaded from.
+type dependencySource int
+
+const (
+	dependencySourceNone dependencySource = iota
+	dependencySourceDependenciesComponents
+	dependencySourceSettingsDependsOn
+)
+
+// getComponentDependencies extracts component dependencies from a component section.
+// It checks dependencies.components first (preferred), then falls back to settings.depends_on (legacy).
+// Returns the list of dependencies, the settings section, and the source of the dependencies.
+func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDependency, map[string]any, dependencySource) {
+	// Get settings section for later use (Spacelift/Atlantis config and IncludeSettings).
+	settingsSection, _ := componentMap["settings"].(map[string]any)
+
+	// Check dependencies.components first (preferred location).
+	if depsSection, ok := componentMap[cfg.DependenciesSectionName].(map[string]any); ok {
+		if _, hasComponents := depsSection["components"]; hasComponents {
+			var deps schema.Dependencies
+			if err := mapstructure.Decode(depsSection, &deps); err == nil && len(deps.Components) > 0 {
+				return deps.Components, settingsSection, dependencySourceDependenciesComponents
+			}
+		}
+	}
+
+	// Fall back to settings.depends_on (legacy location).
+	if settingsSection != nil {
+		var settings schema.Settings
+		if err := mapstructure.Decode(settingsSection, &settings); err == nil {
+			if !reflect.ValueOf(settings.DependsOn).IsZero() && len(settings.DependsOn) > 0 {
+				log.Debug("'settings.depends_on' is deprecated, use 'dependencies.components' instead. See: https://atmos.tools/stacks/dependencies/components")
+				// Convert legacy Context to ComponentDependency.
+				deps := make([]schema.ComponentDependency, 0, len(settings.DependsOn))
+				for key := range settings.DependsOn {
+					ctx := settings.DependsOn[key]
+					deps = append(deps, contextToComponentDependency(&ctx))
+				}
+				return deps, settingsSection, dependencySourceSettingsDependsOn
+			}
+		}
+	}
+
+	return nil, settingsSection, dependencySourceNone
+}
+
+// contextToComponentDependency converts a legacy schema.Context to schema.ComponentDependency.
+// This is used to support the deprecated settings.depends_on format.
+// All context fields are preserved for matching logic.
+func contextToComponentDependency(ctx *schema.Context) schema.ComponentDependency {
+	return schema.ComponentDependency{
+		Component:   ctx.Component,
+		Stack:       ctx.Stack,
+		Namespace:   ctx.Namespace,
+		Tenant:      ctx.Tenant,
+		Environment: ctx.Environment,
+		Stage:       ctx.Stage,
+	}
+}
+
+// dependencyMatchParams groups parameters for dependency matching to stay within argument limits.
+type dependencyMatchParams struct {
+	depSource             dependencySource
+	dependsOn             *schema.ComponentDependency
+	args                  *DescribeDependentsArgs
+	stackName             string
+	providedComponentVars *schema.Context
+	stackComponentVars    *schema.Context
+}
+
+// isDependencyMatch checks whether a dependency matches the provided component based on the source format.
+// For the new format (dependencies.components), it matches on stack field only.
+// For the legacy format (settings.depends_on), it preserves original context-field matching behavior.
+func isDependencyMatch(p *dependencyMatchParams) bool {
+	if p.depSource == dependencySourceDependenciesComponents {
+		return matchNewFormatStack(p.dependsOn, p.args.Stack, p.stackName)
+	}
+	return matchLegacyStack(p.dependsOn, p.args.Stack, p.stackName) &&
+		matchLegacyContextFields(p.dependsOn, p.providedComponentVars, p.stackComponentVars)
+}
+
+// matchNewFormatStack checks stack matching for the new dependencies.components format.
+func matchNewFormatStack(dependsOn *schema.ComponentDependency, argsStack, stackName string) bool {
+	if dependsOn.Stack != "" {
+		return argsStack == dependsOn.Stack
+	}
+	return argsStack == stackName
+}
+
+// matchLegacyStack checks stack matching for the legacy settings.depends_on format.
+func matchLegacyStack(dependsOn *schema.ComponentDependency, argsStack, stackName string) bool {
+	if dependsOn.Stack != "" {
+		return argsStack == dependsOn.Stack
+	}
+	// If no context fields are set, require same stack.
+	if dependsOn.Namespace == "" && dependsOn.Tenant == "" &&
+		dependsOn.Environment == "" && dependsOn.Stage == "" {
+		return argsStack == stackName
+	}
+	return true
+}
+
+// matchLegacyContextFields checks context field matching for the legacy settings.depends_on format.
+// If a field is specified in depends_on, compare against the provided component's context.
+// If a field is NOT specified, compare the depending component's vars against the provided component's vars.
+func matchLegacyContextFields(dependsOn *schema.ComponentDependency, provided, stack *schema.Context) bool {
+	return matchContextField(dependsOn.Namespace, provided.Namespace, stack.Namespace) &&
+		matchContextField(dependsOn.Tenant, provided.Tenant, stack.Tenant) &&
+		matchContextField(dependsOn.Environment, provided.Environment, stack.Environment) &&
+		matchContextField(dependsOn.Stage, provided.Stage, stack.Stage)
+}
+
+// matchContextField checks a single context field for dependency matching.
+// If depValue is set, it must match providedValue. If depValue is empty, providedValue must match stackValue.
+func matchContextField(depValue, providedValue, stackValue string) bool {
+	if depValue != "" {
+		return providedValue == depValue
+	}
+	return providedValue == stackValue
 }
