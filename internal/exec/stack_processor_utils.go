@@ -1528,7 +1528,8 @@ func buildImportIfContext(stackConfigMap map[string]any, context map[string]any)
 		// Promote well-known vars to top level so templates can reference them directly.
 		for _, key := range []string{"namespace", "tenant", "environment", "stage", "region"} {
 			if val, ok := vars[key]; ok {
-				// Don't override existing top-level values from inherited context.
+				// Don't override existing top-level values (from inherited context or
+				// values already promoted from a previous iteration).
 				if _, exists := data[key]; !exists {
 					data[key] = val
 				}

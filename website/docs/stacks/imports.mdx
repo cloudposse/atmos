@@ -328,7 +328,7 @@ The template context for `import_if` includes:
 | `.locals` | Resolved `locals` section (if present) |
 | `.settings` | `settings` section (if present) |
 
-All Sprig and Gomplate template functions are available. The expression must produce one of `true`, `1`, `yes` (truthy) or `false`, `0`, `no`, `` (falsy). Any other output is treated as an error.
+All Sprig and Gomplate template functions are available. The expression must produce one of `true`, `1`, `yes` (truthy) or `false`, `0`, `no`, `""` (empty string, falsy). Any other output is treated as an error.
 
 
 A combination of the two formats is also supported:

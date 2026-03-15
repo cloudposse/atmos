@@ -69,10 +69,10 @@ func TestEvaluateImportCondition(t *testing.T) {
 			want:      false,
 		},
 		{
-			name:      "empty string result",
-			condition: "",
+			name:      "template producing empty string is falsy",
+			condition: `{{ "" }}`,
 			context:   map[string]any{},
-			want:      true,
+			want:      false,
 		},
 		{
 			name:      "template eq stage prod - matches",
