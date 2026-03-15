@@ -33,6 +33,7 @@ func TestGenerateCmd(t *testing.T) {
 		assert.Contains(t, names, "files")
 		assert.Contains(t, names, "varfile")
 		assert.Contains(t, names, "varfiles")
+		assert.Contains(t, names, "planfile")
 	})
 }
 
@@ -164,6 +165,27 @@ func TestVarfilesCmd(t *testing.T) {
 
 // VarfilesCmd wraps cobra.Command for type safety in tests.
 type VarfilesCmd struct {
+	*cobra.Command
+}
+
+func TestPlanfileCmd(t *testing.T) {
+	// Find the planfile command.
+	var planfileCmd *PlanfileCmd
+	for _, cmd := range GenerateCmd.Commands() {
+		if cmd.Name() == "planfile" {
+			planfileCmd = &PlanfileCmd{cmd}
+			break
+		}
+	}
+
+	t.Run("command structure", func(t *testing.T) {
+		require.NotNil(t, planfileCmd)
+		assert.Equal(t, "planfile", planfileCmd.Name())
+	})
+}
+
+// PlanfileCmd wraps cobra.Command for type safety in tests.
+type PlanfileCmd struct {
 	*cobra.Command
 }
 
@@ -356,6 +378,29 @@ func TestFilesParserFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPlanfileValidation tests validation errors in the planfile command.
+func TestPlanfileValidation(t *testing.T) {
+	t.Run("missing component returns error", func(t *testing.T) {
+		// Reset viper to avoid state pollution.
+		v := viper.New()
+		v.Set("stack", "test-stack")
+
+		// Bind the parser to the fresh viper instance.
+		err := planfileParser.BindToViper(v)
+		require.NoError(t, err)
+
+		// Create a test command to execute RunE directly.
+		cmd := &cobra.Command{Use: "planfile"}
+		planfileParser.RegisterFlags(cmd)
+
+		// Execute RunE with no component argument.
+		// In non-TTY environment, the prompt returns ErrInteractiveModeNotAvailable
+		// which is swallowed, leaving component empty and triggering ErrMissingComponent.
+		err = planfileCmd.RunE(cmd, []string{})
+		assert.ErrorIs(t, err, errUtils.ErrMissingComponent)
+	})
 }
 
 // TestBackendValidation tests validation errors in the backend command.

@@ -76,6 +76,14 @@ Generate variable files for all components in all stacks:
 atmos terraform generate varfiles
 ```
 
+### Generate Plan File
+
+Generate and convert a Terraform plan to JSON or YAML:
+
+```shell
+atmos terraform generate planfile vpc -s dev-us-east-1 --format=json
+```
+
 ## Common Flags
 
 <dl>
