@@ -194,50 +194,73 @@ func TestResolveCheckResult(t *testing.T) {
 	})
 }
 
-func TestBuildCheckTitle(t *testing.T) {
+func TestBuildStatusDescription(t *testing.T) {
 	t.Run("with terraform changed result", func(t *testing.T) {
 		result := &plugin.OutputResult{
 			HasChanges: true,
 			Data: &plugin.TerraformOutputData{
-				ChangedResult: "Plan: 5 to add, 2 to change, 1 to destroy.",
+				ChangedResult: "5 to add, 2 to change, 1 to destroy",
 			},
 		}
-		assert.Equal(t, "Plan: 5 to add, 2 to change, 1 to destroy.", buildCheckTitle("plan", result))
+		assert.Equal(t, "5 to add, 2 to change, 1 to destroy", buildStatusDescription("plan", result))
 	})
 
 	t.Run("with changes but no terraform data", func(t *testing.T) {
 		result := &plugin.OutputResult{HasChanges: true}
-		assert.Equal(t, "plan: changes detected", buildCheckTitle("plan", result))
+		assert.Equal(t, "Changes detected", buildStatusDescription("plan", result))
 	})
 
 	t.Run("no changes", func(t *testing.T) {
 		result := &plugin.OutputResult{}
-		assert.Equal(t, "plan: no changes", buildCheckTitle("plan", result))
+		assert.Equal(t, "No changes", buildStatusDescription("plan", result))
 	})
 
 	t.Run("nil result", func(t *testing.T) {
-		assert.Equal(t, "plan: no changes", buildCheckTitle("plan", nil))
+		assert.Equal(t, "No changes", buildStatusDescription("plan", nil))
+	})
+
+	t.Run("with errors", func(t *testing.T) {
+		result := &plugin.OutputResult{HasErrors: true}
+		assert.Equal(t, "Failed", buildStatusDescription("plan", result))
 	})
 }
 
-func TestBuildCheckSummary(t *testing.T) {
-	t.Run("with terraform changed result", func(t *testing.T) {
-		result := &plugin.OutputResult{
-			Data: &plugin.TerraformOutputData{
-				ChangedResult: "Plan: 3 to add, 0 to change, 0 to destroy.",
-			},
+func TestGetContextPrefix(t *testing.T) {
+	t.Run("default when nil config", func(t *testing.T) {
+		assert.Equal(t, "atmos", getContextPrefix(nil))
+	})
+
+	t.Run("default when empty prefix", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		assert.Equal(t, "atmos", getContextPrefix(cfg))
+	})
+
+	t.Run("custom prefix", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{ContextPrefix: "myorg"}},
 		}
-		assert.Equal(t, "Plan: 3 to add, 0 to change, 0 to destroy.", buildCheckSummary(result))
+		assert.Equal(t, "myorg", getContextPrefix(cfg))
+	})
+}
+
+func TestIsStatusEnabled(t *testing.T) {
+	t.Run("nil defaults to true", func(t *testing.T) {
+		assert.True(t, isStatusEnabled(nil))
 	})
 
-	t.Run("nil result returns empty", func(t *testing.T) {
-		assert.Empty(t, buildCheckSummary(nil))
+	t.Run("explicitly true", func(t *testing.T) {
+		assert.True(t, isStatusEnabled(boolPtr(true)))
 	})
 
-	t.Run("no terraform data returns empty", func(t *testing.T) {
-		result := &plugin.OutputResult{}
-		assert.Empty(t, buildCheckSummary(result))
+	t.Run("explicitly false", func(t *testing.T) {
+		assert.False(t, isStatusEnabled(boolPtr(false)))
 	})
+}
+
+func TestFormatResourceCount(t *testing.T) {
+	assert.Equal(t, "1 resource", formatResourceCount(1))
+	assert.Equal(t, "3 resources", formatResourceCount(3))
+	assert.Equal(t, "0 resources", formatResourceCount(0))
 }
 
 func TestParseOutputWithError(t *testing.T) {
@@ -315,7 +338,7 @@ func TestOnBeforePlan_CheckEnabled(t *testing.T) {
 	// Check run should be created.
 	require.Len(t, mp.checkRunCalls, 1)
 	assert.Equal(t, provider.CheckRunStateInProgress, mp.checkRunCalls[0].Status)
-	assert.Equal(t, "atmos/plan: dev/vpc", mp.checkRunCalls[0].Name)
+	assert.Equal(t, "atmos/plan/dev/vpc", mp.checkRunCalls[0].Name)
 }
 
 func TestOnAfterApply_WritesOutputs(t *testing.T) {
@@ -483,11 +506,10 @@ func TestOnAfterPlan_CheckEnabled_UpdatesCheckRun(t *testing.T) {
 	// Check run should have been updated.
 	require.Len(t, mp.updateRunCalls, 1)
 	assert.Equal(t, provider.CheckRunStateSuccess, mp.updateRunCalls[0].Status)
-	assert.Equal(t, "success", mp.updateRunCalls[0].Conclusion)
 	assert.Equal(t, "owner", mp.updateRunCalls[0].Owner)
 	assert.Equal(t, "repo", mp.updateRunCalls[0].Repo)
 	assert.Equal(t, "abc123", mp.updateRunCalls[0].SHA)
-	assert.Equal(t, "atmos/plan: dev/vpc", mp.updateRunCalls[0].Name)
+	assert.Equal(t, "atmos/plan/dev/vpc", mp.updateRunCalls[0].Name)
 }
 
 func TestOnAfterPlan_WithCommandError_FailureCheckRun(t *testing.T) {
@@ -519,7 +541,177 @@ func TestOnAfterPlan_WithCommandError_FailureCheckRun(t *testing.T) {
 	// Check run should be updated with failure.
 	require.Len(t, mp.updateRunCalls, 1)
 	assert.Equal(t, provider.CheckRunStateFailure, mp.updateRunCalls[0].Status)
-	assert.Equal(t, "failure", mp.updateRunCalls[0].Conclusion)
+}
+
+func TestOnAfterPlan_PerOperationStatuses(t *testing.T) {
+	t.Run("creates add/change/destroy statuses when counts > 0", func(t *testing.T) {
+		p := &Plugin{}
+		mp := newMockProvider()
+
+		ctx := &plugin.HookContext{
+			Config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+					Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+					Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
+				},
+			},
+			Provider: mp,
+			Command:  "plan",
+			CICtx: &provider.Context{
+				RepoOwner: "owner",
+				RepoName:  "repo",
+				SHA:       "abc123",
+			},
+			Info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "vpc",
+			},
+			Output: "Plan: 3 to add, 1 to change, 2 to destroy.",
+		}
+
+		err := p.onAfterPlan(ctx)
+		require.NoError(t, err)
+
+		// Component-level status + 3 per-operation statuses.
+		// updateRunCalls has the component-level update.
+		require.Len(t, mp.updateRunCalls, 1)
+		assert.Equal(t, "atmos/plan/dev/vpc", mp.updateRunCalls[0].Name)
+
+		// Per-operation statuses are created via CreateCheckRun.
+		// 1 from onBeforePlan is not called here, so these are only per-op statuses.
+		require.Len(t, mp.checkRunCalls, 3)
+
+		// Verify per-operation status names and descriptions.
+		names := make(map[string]string)
+		for _, call := range mp.checkRunCalls {
+			names[call.Name] = call.Title
+		}
+		assert.Equal(t, "3 resources", names["atmos/plan/dev/vpc/add"])
+		assert.Equal(t, "1 resource", names["atmos/plan/dev/vpc/change"])
+		assert.Equal(t, "2 resources", names["atmos/plan/dev/vpc/destroy"])
+
+		// All per-operation statuses should be success.
+		for _, call := range mp.checkRunCalls {
+			assert.Equal(t, provider.CheckRunStateSuccess, call.Status)
+		}
+	})
+
+	t.Run("skips statuses when counts are 0", func(t *testing.T) {
+		p := &Plugin{}
+		mp := newMockProvider()
+
+		ctx := &plugin.HookContext{
+			Config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+					Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+					Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
+				},
+			},
+			Provider: mp,
+			Command:  "plan",
+			CICtx: &provider.Context{
+				RepoOwner: "owner",
+				RepoName:  "repo",
+				SHA:       "abc123",
+			},
+			Info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "vpc",
+			},
+			Output: "No changes. Your infrastructure matches the configuration.",
+		}
+
+		err := p.onAfterPlan(ctx)
+		require.NoError(t, err)
+
+		// Component-level update only.
+		require.Len(t, mp.updateRunCalls, 1)
+		// No per-operation statuses.
+		assert.Empty(t, mp.checkRunCalls)
+	})
+
+	t.Run("respects statuses config to disable specific operations", func(t *testing.T) {
+		p := &Plugin{}
+		mp := newMockProvider()
+
+		ctx := &plugin.HookContext{
+			Config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+					Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+					Checks: schema.CIChecksConfig{
+						Enabled: boolPtr(true),
+						Statuses: schema.CIChecksStatusesConfig{
+							Add:     boolPtr(false), // Disable add status.
+							Destroy: boolPtr(false), // Disable destroy status.
+						},
+					},
+				},
+			},
+			Provider: mp,
+			Command:  "plan",
+			CICtx: &provider.Context{
+				RepoOwner: "owner",
+				RepoName:  "repo",
+				SHA:       "abc123",
+			},
+			Info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "vpc",
+			},
+			Output: "Plan: 3 to add, 1 to change, 2 to destroy.",
+		}
+
+		err := p.onAfterPlan(ctx)
+		require.NoError(t, err)
+
+		// Only change status should be created (add and destroy disabled).
+		require.Len(t, mp.checkRunCalls, 1)
+		assert.Equal(t, "atmos/plan/dev/vpc/change", mp.checkRunCalls[0].Name)
+	})
+
+	t.Run("custom context prefix", func(t *testing.T) {
+		p := &Plugin{}
+		mp := newMockProvider()
+
+		ctx := &plugin.HookContext{
+			Config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+					Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+					Checks: schema.CIChecksConfig{
+						Enabled:       boolPtr(true),
+						ContextPrefix: "myorg",
+					},
+				},
+			},
+			Provider: mp,
+			Command:  "plan",
+			CICtx: &provider.Context{
+				RepoOwner: "owner",
+				RepoName:  "repo",
+				SHA:       "abc123",
+			},
+			Info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "vpc",
+			},
+			Output: "Plan: 1 to add, 0 to change, 0 to destroy.",
+		}
+
+		err := p.onAfterPlan(ctx)
+		require.NoError(t, err)
+
+		// Component-level status uses custom prefix.
+		require.Len(t, mp.updateRunCalls, 1)
+		assert.Equal(t, "myorg/plan/dev/vpc", mp.updateRunCalls[0].Name)
+
+		// Per-operation status uses custom prefix.
+		require.Len(t, mp.checkRunCalls, 1)
+		assert.Equal(t, "myorg/plan/dev/vpc/add", mp.checkRunCalls[0].Name)
+	})
 }
 
 func TestOnBeforeApply_NoPlanfilePath(t *testing.T) {

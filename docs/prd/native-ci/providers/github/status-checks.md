@@ -6,25 +6,42 @@
 
 **Requirement**: Post commit status checks showing operation progress.
 
-**Implementation**: The plugin's `createCheckRun()` handler creates check runs on "before" events and `updateCheckRun()` handler updates them on "after" events. Check run IDs are correlated via the `CheckRunStore` interface (`sync.Map`-backed singleton) keyed by `stack/component/command`. If no stored ID is found on "after", a new completed check run is created via `createCompletedCheckRun()`. Uses `provider.CreateCheckRun()` and `provider.UpdateCheckRun()` — GitHub implementation in `pkg/ci/providers/github/checks.go`.
+**Implementation**: Uses the GitHub **Commit Status API** (`POST /repos/{owner}/{repo}/statuses/{sha}`) via `Repositories.CreateStatus()`. The plugin's `createCheckRun()` handler sets a `pending` status on "before" events and `updateCheckRun()` handler sets a final status (`success`/`failure`) on "after" events. The Status API is idempotent by `context` string — no ID tracking or fallback logic needed. Additionally, per-operation statuses (`/add`, `/change`, `/destroy`) are created when resource counts > 0.
 
 **Behavior**:
-- Create check run when operation starts ("Plan in progress")
-- Update check run when operation completes with result summary
-- Include component and stack in check name
+- Set commit status to `pending` when operation starts
+- Set commit status to `success`/`failure` when operation completes with resource change summary
+- Include component and stack in the status context string
+- Create per-operation statuses (add/change/destroy) when corresponding resource counts > 0
 - Support configuration via `ci.checks.enabled` (disabled by default)
+- Per-operation statuses individually toggleable via `ci.checks.statuses.*`
 
-**Check States**:
+**Status States**:
 | State | Description |
 |-------|-------------|
-| `in_progress` | Operation started, not yet complete |
+| `pending` | Operation started, not yet complete |
 | `success` | Operation completed successfully |
 | `failure` | Operation failed with errors |
+| `error` | Internal error or cancelled |
+
+**Per-Operation Statuses**:
+
+For each component, additional informational statuses are created when resource counts > 0:
+
+| Context Pattern | When Created | State | Description |
+|----------------|-------------|-------|-------------|
+| `{prefix}/{command}/{stack}/{component}` | Always | `pending` → `success`/`failure` | Resource change summary |
+| `{prefix}/{command}/{stack}/{component}/add` | Only if `to_add > 0` | `success` | `"N resources"` |
+| `{prefix}/{command}/{stack}/{component}/change` | Only if `to_change > 0` | `success` | `"N resources"` |
+| `{prefix}/{command}/{stack}/{component}/destroy` | Only if `to_destroy > 0` | `success` | `"N resources"` |
+
+Per-operation statuses are purely informational (always `success` state). Their **presence** signals the condition (e.g., "there are resources to destroy"). If there are no resources of that type, the status is not created.
 
 **Validation**:
-- Check runs appear in GitHub PR checks section
-- Check description shows resource change summary
-- Disabled by default (requires `checks: write` permission)
+- Commit statuses appear in GitHub PR status section
+- Status description shows resource change summary (e.g., "3 to add, 1 to change, 2 to destroy")
+- Per-operation statuses appear only when counts > 0
+- Disabled by default (requires `statuses: write` permission)
 
 ## FR-9: CI Status Command
 
@@ -35,44 +52,51 @@
 - Show PRs created by user
 - Show PRs requesting review from user
 - Use familiar status icons (checkmark success, x failure, circle pending)
+- Reads both Checks API and Commit Status API results for display
 
 **Validation**:
 - Works in CI and locally (with `GITHUB_TOKEN`)
-- Shows all check runs for current commit
+- Shows all check runs and commit statuses for current commit
 - Matches `gh pr status` UX patterns
 
 ## Live Status Checks
 
-Atmos can post GitHub status checks when operations start and complete—just like CodeRabbit:
+Atmos posts commit statuses when operations start and complete:
 
 ```
-2 pending checks
+2 pending statuses
 
-* Atmos  Plan in progress — vpc in plat-ue2-dev
-* Atmos  Plan in progress — eks in plat-ue2-dev
+* atmos/plan/plat-ue2-dev/vpc  — pending — Plan in progress...
+* atmos/plan/plat-ue2-dev/eks  — pending — Plan in progress...
 ```
 
 When complete:
 
 ```
-2 checks passed
+5 statuses
 
-+ Atmos  Plan complete — 3 to add, 1 to change, 2 to destroy
-+ Atmos  Plan complete — No changes
++ atmos/plan/plat-ue2-dev/vpc       — success — 3 to add, 1 to change, 2 to destroy
++ atmos/plan/plat-ue2-dev/vpc/add   — success — 3 resources
++ atmos/plan/plat-ue2-dev/vpc/change  — success — 1 resource
++ atmos/plan/plat-ue2-dev/vpc/destroy — success — 2 resources
++ atmos/plan/plat-ue2-dev/eks       — success — No changes
 ```
 
-Status checks require the `checks: write` permission and are enabled via configuration:
+Status checks require the `statuses: write` permission and are enabled via configuration:
 
 ```yaml
 ci:
   checks:
     enabled: true
-    context_prefix: "atmos"  # Check name prefix: "atmos/plan — vpc in plat-ue2-dev"
+    context_prefix: "atmos"  # Status context prefix
+    statuses:
+      component: true        # atmos/{command}/{stack}/{component}
+      add: true              # atmos/{command}/{stack}/{component}/add
+      change: true           # atmos/{command}/{stack}/{component}/change
+      destroy: true          # atmos/{command}/{stack}/{component}/destroy
 ```
 
-The `context_prefix` is currently **hardcoded** as `"atmos/"` in `FormatCheckRunName()` (`pkg/ci/internal/provider/check.go`), not yet wired from configuration. Check names follow the pattern: `atmos/{command}: {stack}/{component}`. For example: `atmos/plan: plat-ue2-dev/vpc`.
-
-> **Note**: The `ci.checks.context_prefix` config field exists in the schema but is not read by `FormatCheckRunName()`. Wiring it is a future task.
+The `context_prefix` is read from `ci.checks.context_prefix` config (defaults to `"atmos"`). Status context strings follow the pattern: `{prefix}/{command}/{stack}/{component}`. For example: `atmos/plan/plat-ue2-dev/vpc`.
 
 ## `atmos ci status` Command
 

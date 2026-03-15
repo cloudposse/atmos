@@ -96,10 +96,15 @@ ci:
     # template: "custom-summary.md"
 
   # Commit status checks
-  # GitHub: Check Runs API, GitLab: Commit Status API
+  # GitHub: Commit Status API, GitLab: Commit Status API
   checks:
     enabled: false  # Disabled by default (requires additional permissions)
     context_prefix: "atmos"
+    statuses:
+      component: true  # atmos/{command}/{stack}/{component}
+      add: true        # atmos/{command}/{stack}/{component}/add (only when count > 0)
+      change: true     # atmos/{command}/{stack}/{component}/change (only when count > 0)
+      destroy: true    # atmos/{command}/{stack}/{component}/destroy (only when count > 0)
 
   # PR/MR comments
   # GitHub: PR comments, GitLab: MR notes

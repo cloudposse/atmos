@@ -24,10 +24,9 @@ const (
 // registered at init time based on environment detection alone, without
 // requiring GITHUB_TOKEN to be available at startup.
 type Provider struct {
-	client      *Client
-	clientOnce  sync.Once
-	clientErr   error
-	checkRunIDs sync.Map // name → int64 ID, for correlating CreateCheckRun/UpdateCheckRun.
+	client     *Client
+	clientOnce sync.Once
+	clientErr  error
 }
 
 // NewProvider creates a new GitHub Actions provider.

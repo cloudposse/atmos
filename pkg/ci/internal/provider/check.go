@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"strings"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -120,8 +121,22 @@ type UpdateCheckRunOptions struct {
 }
 
 // FormatCheckRunName creates a standardized check run name for Atmos.
+// Deprecated: Use FormatStatusContext instead.
 func FormatCheckRunName(action, stack, component string) string {
 	defer perf.Track(nil, "provider.FormatCheckRunName")()
 
 	return "atmos/" + action + ": " + stack + "/" + component
+}
+
+// FormatStatusContext creates a standardized status context string for Atmos.
+// Parts are joined with "/" separator.
+// Example: FormatStatusContext("atmos", "plan", "dev", "vpc") -> "atmos/plan/dev/vpc".
+// Example: FormatStatusContext("atmos", "plan", "dev", "vpc", "add") -> "atmos/plan/dev/vpc/add".
+func FormatStatusContext(prefix string, parts ...string) string {
+	defer perf.Track(nil, "provider.FormatStatusContext")()
+
+	allParts := make([]string, 0, 1+len(parts))
+	allParts = append(allParts, prefix)
+	allParts = append(allParts, parts...)
+	return strings.Join(allParts, "/")
 }
