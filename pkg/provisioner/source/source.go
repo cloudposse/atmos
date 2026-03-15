@@ -135,13 +135,24 @@ func DetermineTargetDirectory(
 	defer perf.Track(atmosConfig, "source.DetermineTargetDirectory")()
 
 	// Check for working_directory override in metadata or settings.
-	if workdir := getWorkingDirectoryOverride(componentConfig); workdir != "" {
-		return workdir, nil
+	if wdOverride := getWorkingDirectoryOverride(componentConfig); wdOverride != "" {
+		return wdOverride, nil
 	}
 
 	// Check if workdir is enabled - if so, use workdir path.
-	if isWorkdirEnabled(componentConfig) {
-		return buildWorkdirPath(atmosConfig, componentType, component, componentConfig)
+	if workdir.IsWorkdirEnabled(componentConfig) {
+		var basePath string
+		if atmosConfig != nil {
+			basePath = atmosConfig.BasePath
+		}
+		if path, ok := workdir.ResolvePath(basePath, componentType, component, componentConfig); ok {
+			return path, nil
+		}
+		// Workdir is enabled but stack is missing — error rather than silently falling through.
+		return "", errUtils.Build(errUtils.ErrSourceProvision).
+			WithExplanation("Stack name required when workdir is enabled").
+			WithHint("The 'atmos_stack' field must be present in component config for workdir provisioning").
+			Err()
 	}
 
 	// Get component base path using resolved paths from atmosConfig.
@@ -239,28 +250,4 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType 
 	default:
 		return ""
 	}
-}
-
-// buildWorkdirPath constructs the workdir path: .workdir/<componentType>/<stack>-<component>/.
-func buildWorkdirPath(
-	atmosConfig *schema.AtmosConfiguration,
-	componentType string,
-	component string,
-	componentConfig map[string]any,
-) (string, error) {
-	// Get stack name from component config.
-	stack, _ := componentConfig["atmos_stack"].(string)
-	if stack == "" {
-		return "", errUtils.Build(errUtils.ErrSourceProvision).
-			WithExplanation("Stack name required when workdir is enabled").
-			WithHint("The 'atmos_stack' field must be present in component config for workdir provisioning").
-			Err()
-	}
-
-	basePath := atmosConfig.BasePath
-	if basePath == "" {
-		basePath = "."
-	}
-
-	return workdir.BuildPath(basePath, componentType, component, stack, componentConfig), nil
 }
