@@ -56,8 +56,13 @@ type ConsoleConfig struct {
 
 // Identity defines an authentication identity configuration.
 type Identity struct {
-	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Kind    string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Default bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	// Required marks this identity for automatic authentication without prompting.
+	// Multiple identities can be required. Required identities that are not default
+	// are authenticated as secondary — their profiles are written to the shared
+	// credentials file for multi-account Terraform components.
+	Required    bool                   `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
 	Provider    string                 `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider name for direct provider association (for provisioned identities).
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
 	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
@@ -119,8 +124,10 @@ type EnvironmentVariable struct {
 
 // ComponentAuthConfig defines auth configuration at the component level.
 type ComponentAuthConfig struct {
-	Providers  map[string]Provider `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
-	Identities map[string]Identity `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+	Realm        string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
+	Providers    map[string]Provider    `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
+	Identities   map[string]Identity    `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+	Integrations map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 }
 
 // Integration defines a client-only credential materialization (e.g., ECR, EKS).
