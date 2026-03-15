@@ -156,6 +156,7 @@ func ExecuteDescribeStacks(
 	var overridesSection map[string]any
 	var backendSection map[string]any
 	var backendTypeSection string
+	var descriptionSection string
 	var stackName string
 	var stackManifestName string
 
@@ -335,6 +336,10 @@ func ExecuteDescribeStacks(
 							backendTypeSection = ""
 						}
 
+						if descriptionSection, ok = componentSection[cfg.DescriptionSectionName].(string); !ok {
+							descriptionSection = ""
+						}
+
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
@@ -350,16 +355,17 @@ func ExecuteDescribeStacks(
 							ComponentBackendSection:   backendSection,
 							ComponentBackendType:      backendTypeSection,
 							ComponentSection: map[string]any{
-								cfg.VarsSectionName:        varsSection,
-								cfg.MetadataSectionName:    metadataSection,
-								cfg.SettingsSectionName:    settingsSection,
-								cfg.EnvSectionName:         envSection,
-								cfg.AuthSectionName:        authSection,
-								cfg.ProvidersSectionName:   providersSection,
-								cfg.HooksSectionName:       hooksSection,
-								cfg.OverridesSectionName:   overridesSection,
-								cfg.BackendSectionName:     backendSection,
-								cfg.BackendTypeSectionName: backendTypeSection,
+								cfg.VarsSectionName:         varsSection,
+								cfg.MetadataSectionName:     metadataSection,
+								cfg.SettingsSectionName:     settingsSection,
+								cfg.EnvSectionName:          envSection,
+								cfg.AuthSectionName:         authSection,
+								cfg.ProvidersSectionName:    providersSection,
+								cfg.HooksSectionName:        hooksSection,
+								cfg.OverridesSectionName:    overridesSection,
+								cfg.BackendSectionName:      backendSection,
+								cfg.BackendTypeSectionName:  backendTypeSection,
+								cfg.DescriptionSectionName:  descriptionSection,
 							},
 						}
 
@@ -405,6 +411,9 @@ func ExecuteDescribeStacks(
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
+
+						// Set stack-level description if present and not already set.
+						setStackDescription(finalStacksMap, stackName, stackSection, sections)
 
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 						configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
@@ -591,6 +600,10 @@ func ExecuteDescribeStacks(
 							backendTypeSection = ""
 						}
 
+						if descriptionSection, ok = componentSection[cfg.DescriptionSectionName].(string); !ok {
+							descriptionSection = ""
+						}
+
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
@@ -616,6 +629,7 @@ func ExecuteDescribeStacks(
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
+								cfg.DescriptionSectionName: descriptionSection,
 							},
 						}
 
@@ -661,6 +675,9 @@ func ExecuteDescribeStacks(
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
+
+						// Set stack-level description if present and not already set.
+						setStackDescription(finalStacksMap, stackName, stackSection, sections)
 
 						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
@@ -824,6 +841,10 @@ func ExecuteDescribeStacks(
 							backendTypeSection = ""
 						}
 
+						if descriptionSection, ok = componentSection[cfg.DescriptionSectionName].(string); !ok {
+							descriptionSection = ""
+						}
+
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
@@ -849,6 +870,7 @@ func ExecuteDescribeStacks(
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
+								cfg.DescriptionSectionName: descriptionSection,
 							},
 						}
 
@@ -894,6 +916,9 @@ func ExecuteDescribeStacks(
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
+
+						// Set stack-level description if present and not already set.
+						setStackDescription(finalStacksMap, stackName, stackSection, sections)
 
 						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
@@ -1057,6 +1082,10 @@ func ExecuteDescribeStacks(
 							backendTypeSection = ""
 						}
 
+						if descriptionSection, ok = componentSection[cfg.DescriptionSectionName].(string); !ok {
+							descriptionSection = ""
+						}
+
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
@@ -1082,6 +1111,7 @@ func ExecuteDescribeStacks(
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
+								cfg.DescriptionSectionName: descriptionSection,
 							},
 						}
 
@@ -1127,6 +1157,9 @@ func ExecuteDescribeStacks(
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
+
+						// Set stack-level description if present and not already set.
+						setStackDescription(finalStacksMap, stackName, stackSection, sections)
 
 						configAndStacksInfo.Stack = stackName
 						configAndStacksInfo.ComponentSection["atmos_component"] = componentName
@@ -1258,9 +1291,13 @@ func ExecuteDescribeStacks(
 				if compTypeMap, ok := components.(map[string]any); ok {
 					for _, comp := range compTypeMap {
 						if compContent, ok := comp.(map[string]any); ok {
-							// Check for any meaningful content.
-							relevantSections := []string{"vars", "metadata", "settings", "env", "workspace"}
-							for _, section := range relevantSections {
+							// If a sections filter is provided, use those sections to check relevance.
+							// Otherwise, fall back to the default set of meaningful sections.
+							checkSections := sections
+							if len(checkSections) == 0 {
+								checkSections = []string{"vars", "metadata", "settings", "env", "workspace"}
+							}
+							for _, section := range checkSections {
 								if _, hasSection := compContent[section]; hasSection {
 									hasNonEmptyComponents = true
 									break
@@ -1369,5 +1406,29 @@ func propagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager 
 	managerStackInfo := authManager.GetStackInfo()
 	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+	}
+}
+
+// setStackDescription sets the description field on the stack entry in finalStacksMap
+// if a description is present in the stack manifest and the sections filter allows it.
+// The first non-empty description found wins (idempotent across multiple components).
+func setStackDescription(finalStacksMap map[string]any, stackName string, stackSection any, sections []string) {
+	if len(sections) > 0 && !u.SliceContainsString(sections, cfg.DescriptionSectionName) {
+		return
+	}
+	stackMap, ok := stackSection.(map[string]any)
+	if !ok {
+		return
+	}
+	desc, ok := stackMap[cfg.DescriptionSectionName].(string)
+	if !ok || desc == "" {
+		return
+	}
+	stackEntry, ok := finalStacksMap[stackName].(map[string]any)
+	if !ok {
+		return
+	}
+	if _, exists := stackEntry[cfg.DescriptionSectionName]; !exists {
+		stackEntry[cfg.DescriptionSectionName] = desc
 	}
 }

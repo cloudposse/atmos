@@ -56,6 +56,7 @@ type ComponentProcessorResult struct {
 	ComponentMetadata          map[string]any
 	ComponentDependencies      map[string]any
 	ComponentLocals            map[string]any // Component-level locals for template processing.
+	ComponentDescription       string
 	ComponentCommand           string
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any

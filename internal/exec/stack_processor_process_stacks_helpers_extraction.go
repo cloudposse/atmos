@@ -196,6 +196,13 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentCommand = componentCommand
 	}
 
+	// Extract description field.
+	if i, ok := opts.ComponentMap[cfg.DescriptionSectionName]; ok {
+		if desc, ok := i.(string); ok {
+			result.ComponentDescription = desc
+		}
+	}
+
 	// Terraform-specific: extract generate section for file generation.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := opts.ComponentMap[cfg.GenerateSectionName]; ok {

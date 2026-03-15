@@ -58,6 +58,14 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Extract the stack-level 'description' field if present.
+	var stackManifestDescription string
+	if i, ok := config[cfg.DescriptionSectionName]; ok {
+		if desc, ok := i.(string); ok {
+			stackManifestDescription = desc
+		}
+	}
+
 	globalVarsSection := map[string]any{}
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
@@ -752,6 +760,11 @@ func ProcessStackConfig(
 	// Include the stack-level 'name' field if it was set.
 	if stackManifestName != "" {
 		result[cfg.NameSectionName] = stackManifestName
+	}
+
+	// Include the stack-level 'description' field if it was set.
+	if stackManifestDescription != "" {
+		result[cfg.DescriptionSectionName] = stackManifestDescription
 	}
 
 	return result, nil

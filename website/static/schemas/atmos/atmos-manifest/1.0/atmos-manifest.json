@@ -45,6 +45,10 @@
     },
     "generate": {
       "$ref": "#/definitions/generate"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this stack manifest."
     }
   },
   "additionalProperties": true,
@@ -332,6 +336,10 @@
             },
             "generate": {
               "$ref": "#/definitions/generate"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -439,6 +447,10 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -546,6 +558,10 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []

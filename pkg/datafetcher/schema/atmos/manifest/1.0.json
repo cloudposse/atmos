@@ -43,6 +43,10 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this stack manifest."
     }
   },
   "additionalProperties": true,
@@ -309,6 +313,10 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -401,6 +409,10 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -493,6 +505,10 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []

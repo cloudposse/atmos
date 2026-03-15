@@ -11,6 +11,7 @@ import:
 components:
   terraform:
     top-level-component1:
+      description: "Top-level component for testing Atmos stack configuration."
       settings:
         spacelift:
           workspace_enabled: true

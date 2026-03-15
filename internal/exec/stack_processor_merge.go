@@ -254,6 +254,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		cfg.OverridesSectionName:   result.ComponentOverrides,
 	}
 
+	// Add description if present.
+	if result.ComponentDescription != "" {
+		comp[cfg.DescriptionSectionName] = result.ComponentDescription
+	}
+
 	// Add dependencies if present.
 	if len(finalComponentDependencies) > 0 {
 		comp[cfg.DependenciesSectionName] = finalComponentDependencies
