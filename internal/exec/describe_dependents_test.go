@@ -999,8 +999,9 @@ func TestDescribeDependents_DependenciesComponentsFormat(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
 	require.NoError(t, err, "InitCliConfig failed")
 
-	// Build an OS-specific expected path once.
-	componentPath := filepath.Join("..", "..", "components", "terraform", "mock")
+	// Build OS-specific expected paths.
+	terraformComponentPath := filepath.Join("..", "..", "components", "terraform", "mock")
+	helmfileComponentPath := filepath.Join("..", "..", "components", "helmfile", "mock")
 
 	// Test cases for describe dependents with dependencies.components format.
 	cases := []struct {
@@ -1010,14 +1011,30 @@ func TestDescribeDependents_DependenciesComponentsFormat(t *testing.T) {
 		expected  []schema.Dependent
 	}{
 		{
-			name:      "vpc has dependents subnet and rds (direct dependencies in dev.yaml)",
+			name:      "vpc has dependents including cross-type helmfile and templated stack",
 			component: "vpc",
 			stack:     "dev",
 			expected: []schema.Dependent{
 				{
+					Component:     "eks",
+					ComponentType: "terraform",
+					ComponentPath: terraformComponentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-eks",
+					Stage:         "dev",
+				},
+				{
+					Component:     "nginx",
+					ComponentType: "helmfile",
+					ComponentPath: helmfileComponentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-nginx",
+					Stage:         "dev",
+				},
+				{
 					Component:     "rds",
 					ComponentType: "terraform",
-					ComponentPath: componentPath,
+					ComponentPath: terraformComponentPath,
 					Stack:         "dev",
 					StackSlug:     "dev-rds",
 					Stage:         "dev",
@@ -1025,7 +1042,7 @@ func TestDescribeDependents_DependenciesComponentsFormat(t *testing.T) {
 				{
 					Component:     "subnet",
 					ComponentType: "terraform",
-					ComponentPath: componentPath,
+					ComponentPath: terraformComponentPath,
 					Stack:         "dev",
 					StackSlug:     "dev-subnet",
 					Stage:         "dev",
@@ -1040,7 +1057,7 @@ func TestDescribeDependents_DependenciesComponentsFormat(t *testing.T) {
 				{
 					Component:     "rds",
 					ComponentType: "terraform",
-					ComponentPath: componentPath,
+					ComponentPath: terraformComponentPath,
 					Stack:         "dev",
 					StackSlug:     "dev-rds",
 					Stage:         "dev",

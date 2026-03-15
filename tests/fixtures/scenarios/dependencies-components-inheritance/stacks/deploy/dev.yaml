@@ -42,3 +42,22 @@ components:
         components:
           - component: vpc
           - component: subnet
+
+    # EKS depends on VPC using a templated stack reference.
+    eks:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: vpc
+            stack: "{{ .vars.stage }}"
+
+  helmfile:
+    # Nginx (helmfile) depends on terraform VPC — cross-type dependency.
+    nginx:
+      metadata:
+        component: mock
+      dependencies:
+        components:
+          - component: vpc
+            kind: terraform
