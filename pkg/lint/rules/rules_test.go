@@ -395,10 +395,10 @@ func TestL03ImportDepth(t *testing.T) {
 		{
 			name: "default threshold used when zero",
 			importGraph: map[string][]string{
-				"root":   {"l1"},
-				"l1":     {"l2"},
-				"l2":     {"l3"},
-				"l3":     {"l4"},
+				"root": {"l1"},
+				"l1":   {"l2"},
+				"l2":   {"l3"},
+				"l3":   {"l4"},
 			},
 			threshold:     0, // triggers default of 3
 			expectTooDeep: true,
@@ -478,10 +478,10 @@ func TestL05CohesionRule(t *testing.T) {
 					"components": map[string]any{
 						"terraform": map[string]any{
 							// 4 different concern groups (prefixes): vpc, ecs, rds, eks
-							"vpc-prod":      map[string]any{},
-							"ecs-api":       map[string]any{},
-							"rds-postgres":  map[string]any{},
-							"eks-cluster":   map[string]any{},
+							"vpc-prod":     map[string]any{},
+							"ecs-api":      map[string]any{},
+							"rds-postgres": map[string]any{},
+							"eks-cluster":  map[string]any{},
 						},
 					},
 				},
@@ -738,12 +738,12 @@ func TestL07OrphanedFile(t *testing.T) {
 			expectFindings: false,
 		},
 		{
-			name:          "orphaned file detected",
-			allStackFiles: []string{"/stacks/catalog/unused.yaml"},
-			importGraph:   map[string][]string{},
-			stacksMap:     map[string]any{},
+			name:           "orphaned file detected",
+			allStackFiles:  []string{"/stacks/catalog/unused.yaml"},
+			importGraph:    map[string][]string{},
+			stacksMap:      map[string]any{},
 			rawStackConfig: map[string]map[string]any{},
-			basePath:      "/stacks",
+			basePath:       "/stacks",
 			expectFindings: true,
 		},
 		{
@@ -760,17 +760,17 @@ func TestL07OrphanedFile(t *testing.T) {
 			allStackFiles: []string{"/stacks/catalog/base.yaml"},
 			importGraph:   map[string][]string{},
 			rawStackConfig: map[string]map[string]any{
-				"/stacks/catalog/base": map[string]any{},
+				"/stacks/catalog/base": {},
 			},
 			expectFindings: false,
 		},
 		{
-			name:          "orphaned with no basePath - uses full path",
-			allStackFiles: []string{"/stacks/catalog/unused.yaml"},
-			importGraph:   map[string][]string{},
-			stacksMap:     map[string]any{},
+			name:           "orphaned with no basePath - uses full path",
+			allStackFiles:  []string{"/stacks/catalog/unused.yaml"},
+			importGraph:    map[string][]string{},
+			stacksMap:      map[string]any{},
 			rawStackConfig: map[string]map[string]any{},
-			basePath:      "",
+			basePath:       "",
 			expectFindings: true,
 		},
 	}
@@ -1317,10 +1317,10 @@ func TestL05ConcernGroupSingleSegment(t *testing.T) {
 			"/stacks/catalog/mixed.yaml": {
 				"components": map[string]any{
 					"terraform": map[string]any{
-						"vpc":     map[string]any{},
-						"ecs":     map[string]any{},
-						"rds":     map[string]any{},
-						"eks":     map[string]any{},
+						"vpc": map[string]any{},
+						"ecs": map[string]any{},
+						"rds": map[string]any{},
+						"eks": map[string]any{},
 					},
 				},
 			},
@@ -1367,5 +1367,3 @@ func TestL08SensitiveVarBasePathResolution(t *testing.T) {
 		assert.Equal(t, "L-08", f.RuleID)
 	}
 }
-
-

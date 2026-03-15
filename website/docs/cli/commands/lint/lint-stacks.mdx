@@ -209,4 +209,3 @@ The lint rules are implemented in Go rather than [OPA/Rego](https://www.openpoli
 **Validation already uses OPA** — `atmos validate stacks` already delegates JSON Schema validation to OPA/Rego via the `pkg/validate` package. Lint rules are intentionally separate: they check _quality_ rather than _correctness_, and keeping them in Go avoids layering two policy evaluation systems on top of each other.
 
 For policy-based correctness validation (e.g., enforcing naming conventions with custom rules), use `atmos validate stacks` with OPA policies.
-
