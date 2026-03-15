@@ -1,5 +1,16 @@
 package merge
 
+import "math"
+
+// safeAdd returns a+b, clamped to math.MaxInt on overflow.
+// This prevents integer overflow in size computations passed to make().
+func safeAdd(a, b int) int {
+	if b > math.MaxInt-a {
+		return math.MaxInt
+	}
+	return a + b
+}
+
 // deepMergeNative performs a deep merge of src into dst in place.
 //
 // It is semantically equivalent to mergo.Merge(dst, src, mergo.WithOverride, mergo.WithTypeCheck)
@@ -70,7 +81,7 @@ func toAnySlice(v any) ([]any, bool) {
 // appendSlices returns a new slice containing all elements of dst followed by
 // deep copies of all elements of src.
 func appendSlices(dst, src []any) []any {
-	result := make([]any, len(dst), len(dst)+len(src))
+	result := make([]any, len(dst), safeAdd(len(dst), len(src)))
 	copy(result, dst)
 	for _, v := range src {
 		result = append(result, deepCopyValue(v))
@@ -102,7 +113,7 @@ func mergeSlicesNative(dst, src []any) []any {
 		}
 		// Both are maps: deep-merge into a new container so src is not aliased.
 		// Use combined length as capacity hint to avoid reallocations when src adds new keys.
-		merged := make(map[string]any, len(dstMap)+len(srcMap))
+		merged := make(map[string]any, safeAdd(len(dstMap), len(srcMap)))
 		for k, v := range dstMap {
 			merged[k] = v
 		}

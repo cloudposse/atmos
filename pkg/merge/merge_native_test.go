@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,6 +9,21 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// ---------------------------------------------------------------------------
+// Unit tests for safeAdd
+// ---------------------------------------------------------------------------
+
+func TestSafeAdd_Normal(t *testing.T) {
+	assert.Equal(t, 5, safeAdd(2, 3))
+	assert.Equal(t, 0, safeAdd(0, 0))
+}
+
+func TestSafeAdd_Overflow(t *testing.T) {
+	// Adding two values that would overflow int should clamp to math.MaxInt.
+	assert.Equal(t, math.MaxInt, safeAdd(math.MaxInt, 1))
+	assert.Equal(t, math.MaxInt, safeAdd(math.MaxInt, math.MaxInt))
+}
 
 // ---------------------------------------------------------------------------
 // Unit tests for deepMergeNative
