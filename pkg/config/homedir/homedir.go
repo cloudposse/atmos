@@ -24,6 +24,21 @@ var (
 	ErrHomeDrivePathBlank  = errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
 )
 
+// currentUserFunc is the function used to look up the current OS user.
+// It is a variable so that tests can replace it with a stub to simulate
+// error conditions without needing OS-level changes.
+var currentUserFunc = user.Current
+
+// darwinHomeDirFunc is the function used to look up the home directory on
+// macOS via dscl. It is a variable so that tests can replace it with a stub
+// to exercise the darwin path on other operating systems.
+var darwinHomeDirFunc = getDarwinHomeDir
+
+// shellHomeDirCmd is the shell command used by getHomeFromShell to determine
+// the home directory. It can be replaced in tests to simulate failure or
+// empty-output conditions.
+var shellHomeDirCmd = "cd && pwd"
+
 // Dir returns the home directory for the executing user.
 //
 // This uses an OS-specific method for discovering the home directory.
@@ -100,7 +115,7 @@ func dirUnix() (string, error) {
 
 	// Try OS-specific methods
 	if runtime.GOOS == "darwin" {
-		if home, err := getDarwinHomeDir(); err == nil && home != "" {
+		if home, err := darwinHomeDirFunc(); err == nil && home != "" {
 			return home, nil
 		}
 	} else {
@@ -160,7 +175,7 @@ func getUnixHomeDir() (string, error) {
 	// Use os/user.Current to get the home directory without parsing
 	// /etc/passwd format data directly. This avoids handling raw password
 	// database entries, which can contain sensitive fields.
-	u, err := user.Current()
+	u, err := currentUserFunc()
 	if err != nil {
 		return "", err
 	}
@@ -169,7 +184,7 @@ func getUnixHomeDir() (string, error) {
 
 func getHomeFromShell() (string, error) {
 	var stdout bytes.Buffer
-	cmd := exec.Command("sh", "-c", "cd && pwd")
+	cmd := exec.Command("sh", "-c", shellHomeDirCmd)
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
 		return "", err

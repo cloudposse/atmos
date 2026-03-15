@@ -1,6 +1,7 @@
 package homedir
 
 import (
+	"errors"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -128,7 +129,29 @@ func TestGetHomeFromShell(t *testing.T) {
 	assert.NotEmpty(t, home, "getHomeFromShell should return a non-empty path.")
 }
 
-// TestDirWindows exercises all branches of the dirWindows function directly.
+// TestGetHomeFromShell_Failure covers the error paths in getHomeFromShell using
+// the shellHomeDirCmd variable for dependency injection.
+func TestGetHomeFromShell_Failure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("getHomeFromShell relies on 'sh', which is not available on Windows.")
+	}
+
+	orig := shellHomeDirCmd
+	defer func() { shellHomeDirCmd = orig }()
+
+	t.Run("command failure", func(t *testing.T) {
+		shellHomeDirCmd = "exit 1" // forces cmd.Run() to return an error
+		_, err := getHomeFromShell()
+		assert.Error(t, err, "getHomeFromShell should propagate shell command failures.")
+	})
+
+	t.Run("empty output", func(t *testing.T) {
+		shellHomeDirCmd = "echo -n ''" // forces empty trimmed output
+		_, err := getHomeFromShell()
+		assert.ErrorIs(t, err, ErrBlankOutput, "getHomeFromShell should return ErrBlankOutput for empty output.")
+	})
+}
+
 func TestDirWindows(t *testing.T) {
 	t.Run("HOME env var wins", func(t *testing.T) {
 		t.Setenv("HOME", "/my/home")
@@ -239,9 +262,31 @@ func TestExpand_WithDisabledCache(t *testing.T) {
 
 // TestExpand_DirError verifies that Expand propagates errors from Dir().
 func TestExpand_DirError(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("This test only applies on Windows where HOME/USERPROFILE can be cleared.")
+	if runtime.GOOS == "windows" {
+		// On Windows, clear all env vars to make Dir() fail.
+		Reset()
+		defer Reset()
+
+		DisableCache = true
+		defer func() { DisableCache = false }()
+
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("HOMEPATH", "")
+
+		_, err := Expand("~/test")
+		assert.Error(t, err)
+		return
 	}
+
+	// On Unix, use dependency injection to force Dir() to return an error.
+	origUser := currentUserFunc
+	origShell := shellHomeDirCmd
+	defer func() {
+		currentUserFunc = origUser
+		shellHomeDirCmd = origShell
+	}()
 
 	Reset()
 	defer Reset()
@@ -250,14 +295,40 @@ func TestExpand_DirError(t *testing.T) {
 	defer func() { DisableCache = false }()
 
 	t.Setenv("HOME", "")
-	t.Setenv("USERPROFILE", "")
-	t.Setenv("HOMEDRIVE", "")
-	t.Setenv("HOMEPATH", "")
+	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
+	shellHomeDirCmd = "exit 1"
 
 	_, err := Expand("~/test")
-	assert.Error(t, err)
+	assert.Error(t, err, "Expand should propagate Dir() errors.")
 }
 
+// TestDir_Error verifies that Dir() propagates errors from the underlying
+// OS home-directory lookup when all methods fail.
+func TestDir_Error(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("This test uses Unix-specific injection variables.")
+	}
+
+	origUser := currentUserFunc
+	origShell := shellHomeDirCmd
+	defer func() {
+		currentUserFunc = origUser
+		shellHomeDirCmd = origShell
+	}()
+
+	Reset()
+	defer Reset()
+
+	DisableCache = true
+	defer func() { DisableCache = false }()
+
+	t.Setenv("HOME", "")
+	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
+	shellHomeDirCmd = "exit 1"
+
+	_, err := Dir()
+	assert.Error(t, err, "Dir() should return an error when all lookup methods fail.")
+}
 // TestDir_DisableCache verifies that setting DisableCache=true causes Dir()
 // to re-read the home directory on each invocation instead of returning a
 // stale cached value.
@@ -300,6 +371,71 @@ func TestExpand_TildeOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, tmpDir, result)
 }
+
+// TestGetUnixHomeDir_Error covers the error path in getUnixHomeDir (the function
+// modified by the CodeQL #5157 fix) using dependency injection via currentUserFunc.
+func TestGetUnixHomeDir_Error(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("getUnixHomeDir is not used on Windows.")
+	}
+
+	orig := currentUserFunc
+	defer func() { currentUserFunc = orig }()
+
+	want := errors.New("mock user.Current failure")
+	currentUserFunc = func() (*user.User, error) { return nil, want }
+
+	_, err := getUnixHomeDir()
+	// getUnixHomeDir returns the error directly without wrapping, so use Equal.
+	assert.Equal(t, want, err, "getUnixHomeDir should propagate the error from currentUserFunc.")
+}
+
+// TestDirUnix_ShellFallback covers the getHomeFromShell() fallback path in
+// dirUnix when getUnixHomeDir returns an error (HOME is also unset).
+func TestDirUnix_ShellFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("dirUnix is not used on Windows.")
+	}
+
+	orig := currentUserFunc
+	defer func() { currentUserFunc = orig }()
+
+	currentUserFunc = func() (*user.User, error) {
+		return nil, errors.New("mock user.Current failure")
+	}
+
+	t.Setenv("HOME", "") // ensure env-var path is skipped
+
+	home, err := dirUnix()
+	require.NoError(t, err, "dirUnix should fall back to getHomeFromShell when getUnixHomeDir fails.")
+	assert.NotEmpty(t, home, "shell fallback should return a non-empty home directory.")
+}
+
+// TestDarwinHomeDirFunc verifies that darwinHomeDirFunc can be replaced with a
+// stub, exercising the injection point used on macOS. Because runtime.GOOS
+// cannot be changed at test time, the darwin branch inside dirUnix() itself
+// cannot be reached on Linux/Windows; these tests cover the stub in isolation.
+func TestDarwinHomeDirFunc(t *testing.T) {
+	orig := darwinHomeDirFunc
+	defer func() { darwinHomeDirFunc = orig }()
+
+	t.Run("returns injected home dir", func(t *testing.T) {
+		fakeHome := t.TempDir()
+		darwinHomeDirFunc = func() (string, error) { return fakeHome, nil }
+
+		home, err := darwinHomeDirFunc()
+		require.NoError(t, err)
+		assert.Equal(t, fakeHome, home)
+	})
+
+	t.Run("propagates injected error", func(t *testing.T) {
+		darwinHomeDirFunc = func() (string, error) { return "", errors.New("dscl not available") }
+
+		_, err := darwinHomeDirFunc()
+		assert.Error(t, err)
+	})
+}
+
 
 func TestExpand(t *testing.T) {
 	Reset() // Clear cache from any previous tests
