@@ -6,9 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -111,6 +114,22 @@ func TestDescribeStacksExec(t *testing.T) {
 				}
 			},
 			expectedError: "execution error",
+		},
+		{
+			name: "with invalid yq query returns error",
+			args: &DescribeStacksArgs{
+				Query: ".[[bad-syntax",
+			},
+			setupMocks: func(ctrl *gomock.Controller) *describeStacksExec {
+				return &describeStacksExec{
+					pageCreator:           pager.NewMockPageCreator(ctrl),
+					isTTYSupportForStdout: func() bool { return false },
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+						return map[string]any{"hello": "test"}, nil
+					},
+				}
+			},
+			expectedError: "EvaluateYqExpression",
 		},
 	}
 
@@ -250,4 +269,186 @@ func TestExecuteDescribeStacks_Ansible(t *testing.T) {
 	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".dev.components.ansible.hello-world.settings.ansible.playbook")
 	assert.Nil(t, err)
 	assert.Equal(t, "site.yml", val)
+}
+
+// ---------------------------------------------------------------------------
+// NewDescribeStacksExec
+// ---------------------------------------------------------------------------
+
+func TestNewDescribeStacksExec(t *testing.T) {
+	exec := NewDescribeStacksExec()
+	assert.NotNil(t, exec)
+}
+
+// ---------------------------------------------------------------------------
+// getComponentBasePath
+// ---------------------------------------------------------------------------
+
+func TestGetComponentBasePath_AllCases(t *testing.T) {
+	ac := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+			Helmfile:  schema.Helmfile{BasePath: "components/helmfile"},
+			Packer:    schema.Packer{BasePath: "components/packer"},
+			Ansible:   schema.Ansible{BasePath: "components/ansible"},
+		},
+	}
+
+	tests := []struct {
+		kind string
+		want string
+	}{
+		{cfg.TerraformSectionName, "components/terraform"},
+		{cfg.HelmfileSectionName, "components/helmfile"},
+		{cfg.PackerSectionName, "components/packer"},
+		{cfg.AnsibleSectionName, "components/ansible"},
+		{"unknown", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.kind, func(t *testing.T) {
+			assert.Equal(t, tc.want, getComponentBasePath(ac, tc.kind))
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// buildComponentInfo
+// ---------------------------------------------------------------------------
+
+func TestBuildComponentInfo_EmptyFinalComponent(t *testing.T) {
+	// When the componentSection has no "component" key, finalComponent is "" and
+	// we return early without a component_path.
+	ac := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	cs := map[string]any{} // no "component" key
+
+	result := buildComponentInfo(ac, cs, cfg.TerraformSectionName)
+
+	assert.Equal(t, cfg.TerraformSectionName, result["component_type"])
+	assert.NotContains(t, result, cfg.ComponentPathSectionName)
+}
+
+func TestBuildComponentInfo_EmptyBasePath(t *testing.T) {
+	// When the AtmosConfiguration has no basePath for the kind, we return early.
+	ac := &schema.AtmosConfiguration{} // no terraform basePath
+	cs := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+	}
+
+	result := buildComponentInfo(ac, cs, cfg.TerraformSectionName)
+
+	assert.Equal(t, cfg.TerraformSectionName, result["component_type"])
+	assert.NotContains(t, result, cfg.ComponentPathSectionName)
+}
+
+func TestBuildComponentInfo_WithFolderPrefix(t *testing.T) {
+	ac := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	cs := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+		cfg.MetadataSectionName: map[string]any{
+			"component_folder_prefix": "networking",
+		},
+	}
+
+	result := buildComponentInfo(ac, cs, cfg.TerraformSectionName)
+
+	assert.Equal(t, cfg.TerraformSectionName, result["component_type"])
+	assert.Equal(t, "components/terraform/networking/vpc", result[cfg.ComponentPathSectionName])
+}
+
+func TestBuildComponentInfo_NoPrefixInMetadata(t *testing.T) {
+	// Metadata exists but no component_folder_prefix.
+	ac := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+	cs := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+		cfg.MetadataSectionName:  map[string]any{"component": "base-vpc"},
+	}
+
+	result := buildComponentInfo(ac, cs, cfg.TerraformSectionName)
+
+	assert.Equal(t, "components/terraform/vpc", result[cfg.ComponentPathSectionName])
+}
+
+// ---------------------------------------------------------------------------
+// propagateAuth
+// ---------------------------------------------------------------------------
+
+func TestPropagateAuth_WithNonNilAuthContext(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	expectedAuthContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile: "my-profile",
+			Region:  "us-east-1",
+		},
+	}
+
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: expectedAuthContext,
+	}
+
+	mockAuthManager := types.NewMockAuthManager(ctrl)
+	mockAuthManager.EXPECT().GetStackInfo().Return(authStackInfo).Times(1)
+
+	info := &schema.ConfigAndStacksInfo{}
+	propagateAuth(info, mockAuthManager)
+
+	assert.Equal(t, mockAuthManager, info.AuthManager)
+	assert.Equal(t, expectedAuthContext, info.AuthContext)
+}
+
+func TestPropagateAuth_WithNilAuthContext(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: nil,
+	}
+
+	mockAuthManager := types.NewMockAuthManager(ctrl)
+	mockAuthManager.EXPECT().GetStackInfo().Return(authStackInfo).Times(1)
+
+	info := &schema.ConfigAndStacksInfo{}
+	propagateAuth(info, mockAuthManager)
+
+	assert.Equal(t, mockAuthManager, info.AuthManager)
+	assert.Nil(t, info.AuthContext)
+}
+
+// ---------------------------------------------------------------------------
+// ExecuteDescribeStacks – error paths via integration fixture
+// ---------------------------------------------------------------------------
+
+func TestExecuteDescribeStacks_IncludeEmptyStacks(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// With includeEmptyStacks=true all stacks should be returned even if they have no components.
+	stacksMap, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"", nil, nil, nil, false, false, false,
+		true, // includeEmptyStacks
+		nil, nil,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, stacksMap)
 }

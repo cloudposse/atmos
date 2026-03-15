@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -709,4 +710,526 @@ func TestApplyTerraformMetadataInheritance_SkipsNonStringInherit(t *testing.T) {
 	require.NoError(t, err)
 	// No merge because baseComponentMetadata is empty.
 	assert.Equal(t, metadata, result)
+}
+
+// ---------------------------------------------------------------------------
+// applyTerraformMetadataInheritance – with real base component
+// ---------------------------------------------------------------------------
+
+func TestApplyTerraformMetadataInheritance_WithBaseComponent(t *testing.T) {
+	// Default AtmosConfiguration has metadata inheritance enabled (default=true).
+	ac := &schema.AtmosConfiguration{}
+
+	allComponents := map[string]any{
+		"base-foo-comp": map[string]any{
+			"metadata": map[string]any{
+				"foo": "bar",
+				"baz": "qux",
+			},
+		},
+	}
+
+	metadata := map[string]any{
+		cfg.InheritsSectionName: []any{"base-foo-comp"},
+		"own-key":               "own-value",
+	}
+
+	result, err := applyTerraformMetadataInheritance(
+		ac, allComponents, "foo-comp", "foo-stack.yaml", metadata,
+	)
+
+	require.NoError(t, err)
+	// The result should be the merged metadata (base overridden by component).
+	assert.Equal(t, "bar", result["foo"])
+	assert.Equal(t, "qux", result["baz"])
+	assert.Equal(t, "own-value", result["own-key"])
+}
+
+func TestApplyTerraformMetadataInheritance_WorkspaceOverride(t *testing.T) {
+	// When the component has an explicit terraform_workspace in merged metadata,
+	// the workspace_pattern and workspace_template are deleted.
+	ac := &schema.AtmosConfiguration{}
+
+	allComponents := map[string]any{
+		"base-ws-comp": map[string]any{
+			"metadata": map[string]any{
+				"terraform_workspace_pattern":  "{env}-{stage}",
+				"terraform_workspace_template": "{{ .env }}-{{ .stage }}",
+			},
+		},
+	}
+
+	metadata := map[string]any{
+		cfg.InheritsSectionName: []any{"base-ws-comp"},
+		"terraform_workspace":   "my-custom-workspace",
+	}
+
+	result, err := applyTerraformMetadataInheritance(
+		ac, allComponents, "ws-comp", "ws-stack.yaml", metadata,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "my-custom-workspace", result["terraform_workspace"])
+	// Pattern and template should be removed when explicit workspace is set.
+	assert.NotContains(t, result, "terraform_workspace_pattern")
+	assert.NotContains(t, result, "terraform_workspace_template")
+}
+
+// ---------------------------------------------------------------------------
+// describeStacksProcessor method tests
+// ---------------------------------------------------------------------------
+
+// newMinimalProcessor creates a processor with default config and empty result map.
+func newMinimalProcessor() *describeStacksProcessor {
+	return newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{},
+		"",    // filterByStack
+		nil,   // components
+		nil,   // componentTypes
+		nil,   // sections
+		false, // processTemplates
+		false, // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+	)
+}
+
+func TestProcessStackFile_NonMapInput(t *testing.T) {
+	// When stackSection is not a map, processStackFile should return nil.
+	p := newMinimalProcessor()
+	err := p.processStackFile("test.yaml", "not-a-map")
+	require.NoError(t, err)
+}
+
+func TestProcessStackFile_NoComponentsSection(t *testing.T) {
+	// When the stack has no "components" key, processStackFile should return nil.
+	p := newMinimalProcessor()
+	stackMap := map[string]any{"other_key": "value"}
+	err := p.processStackFile("test.yaml", stackMap)
+	require.NoError(t, err)
+}
+
+func TestProcessStackFile_ComponentTypeFilterSkipsNonMatching(t *testing.T) {
+	// When componentTypes filter is set, types not in the filter should be skipped.
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{},
+		"",
+		nil,
+		[]string{"helmfile"}, // only helmfile, not terraform
+		nil,
+		false, false, false, nil, nil,
+	)
+
+	stackMap := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: map[string]any{
+				"vpc": map[string]any{"vars": map[string]any{}},
+			},
+			// No helmfile components
+		},
+	}
+
+	err := p.processStackFile("test.yaml", stackMap)
+	require.NoError(t, err)
+	// Terraform was filtered out, no components should be in finalStacksMap.
+}
+
+func TestProcessStackFile_TypeSectionNotAMap(t *testing.T) {
+	// When a component type section is not a map, the type should be skipped (continue).
+	p := newMinimalProcessor()
+	stackMap := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: "not-a-map", // invalid type → continue
+		},
+	}
+
+	err := p.processStackFile("test.yaml", stackMap)
+	require.NoError(t, err) // should not fail, just skip
+}
+
+func TestProcessStackFile_ProcessComponentTypeSectionError(t *testing.T) {
+	// When a component type section contains a non-map component entry, processComponentTypeSection
+	// should return an error which processStackFile propagates.
+	p := newMinimalProcessor()
+	stackMap := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: map[string]any{
+				"vpc": "not-a-map", // invalid component entry → error
+			},
+		},
+	}
+
+	err := p.processStackFile("test.yaml", stackMap)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid")
+}
+
+func TestProcessComponentTypeSection_ComponentSectionNotMap(t *testing.T) {
+	// When a component entry in the type section is not a map, an error is returned.
+	p := newMinimalProcessor()
+	typeSection := map[string]any{
+		"vpc": "not-a-map",
+	}
+	err := p.processComponentTypeSection(
+		"test.yaml", "", cfg.TerraformSectionName, typeSection,
+		processComponentTypeOpts{},
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid")
+}
+
+func TestProcessComponentEntry_ComponentFilterExcluded(t *testing.T) {
+	// When p.components filters out this component, processComponentEntry returns nil.
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{},
+		"",
+		[]string{"other-component"}, // filter: only "other-component"
+		nil, nil, false, false, false, nil, nil,
+	)
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+		"vars":                   map[string]any{},
+	}
+	allTypeComponents := map[string]any{
+		"vpc": componentSection,
+	}
+
+	err := p.processComponentEntry(
+		"test.yaml", "", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	// "vpc" was filtered out, so nothing should appear in finalStacksMap.
+	if entry, ok := p.finalStacksMap["test.yaml"]; ok {
+		entryMap := entry.(map[string]any)
+		if comps, ok := entryMap[cfg.ComponentsSectionName].(map[string]any); ok {
+			if tf, ok := comps[cfg.TerraformSectionName].(map[string]any); ok {
+				assert.NotContains(t, tf, "vpc", "vpc should have been filtered out")
+			}
+		}
+	}
+}
+
+func TestProcessComponentEntry_EmptyStackName(t *testing.T) {
+	// When stackFileName is "" and no name template/pattern, stackName falls back to "".
+	// Line 223-225: stackName = stackFileName (both "").
+	p := newMinimalProcessor()
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+		"vars":                   map[string]any{"region": "us-east-1"},
+	}
+	allTypeComponents := map[string]any{
+		"vpc": componentSection,
+	}
+
+	err := p.processComponentEntry(
+		"", // empty stackFileName
+		"", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	// Stack entry for "" should exist.
+	assert.Contains(t, p.finalStacksMap, "")
+}
+
+func TestProcessComponentEntry_ResolveStackNameError(t *testing.T) {
+	// When NameTemplate is invalid, resolveStackName returns an error.
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{
+			Stacks: schema.Stacks{
+				NameTemplate: "{{.invalid_open", // invalid Go template
+			},
+		},
+		"", nil, nil, nil, false, false, false, nil, nil,
+	)
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+	}
+	allTypeComponents := map[string]any{"vpc": componentSection}
+
+	err := p.processComponentEntry(
+		"test.yaml", "", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.Error(t, err)
+}
+
+// ---------------------------------------------------------------------------
+// processComponentTypeSection – additional coverage
+// ---------------------------------------------------------------------------
+
+func TestProcessComponentTypeSection_DefaultsComponentKey(t *testing.T) {
+	// When a component section has no "component" key, it should be defaulted to the component name.
+	// Lines 161-163 in processComponentTypeSection.
+	p := newMinimalProcessor()
+
+	typeSection := map[string]any{
+		"vpc": map[string]any{
+			"vars": map[string]any{"region": "us-east-1"},
+			// No "component" key – should be set to "vpc" by processComponentTypeSection.
+		},
+	}
+
+	err := p.processComponentTypeSection(
+		"test.yaml", "", cfg.TerraformSectionName, typeSection,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	// The component key should have been set to "vpc" in the section map.
+	vpcSection := typeSection["vpc"].(map[string]any)
+	assert.Equal(t, "vpc", vpcSection[cfg.ComponentSectionName])
+}
+
+func TestProcessComponentTypeSection_ProcessComponentEntryError(t *testing.T) {
+	// When processComponentEntry returns an error (e.g., invalid name template),
+	// processComponentTypeSection should propagate the error (lines 168-170).
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{
+			Stacks: schema.Stacks{
+				NameTemplate: "{{.bad", // invalid Go template → resolveStackName fails
+			},
+		},
+		"", nil, nil, nil, false, false, false, nil, nil,
+	)
+
+	typeSection := map[string]any{
+		"vpc": map[string]any{cfg.ComponentSectionName: "vpc"},
+	}
+
+	err := p.processComponentTypeSection(
+		"test.yaml", "", cfg.TerraformSectionName, typeSection,
+		processComponentTypeOpts{},
+	)
+
+	require.Error(t, err)
+}
+
+// ---------------------------------------------------------------------------
+// processComponentEntry – error path coverage
+// ---------------------------------------------------------------------------
+
+func TestProcessComponentEntry_FindComponentsDerivedError(t *testing.T) {
+	// When allTypeComponents contains a non-map entry, FindComponentsDerivedFromBaseComponents
+	// returns an error which processComponentEntry propagates (lines 187-189).
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{},
+		"",
+		[]string{"base-vpc"}, // non-empty components filter triggers FindComponentsDerivedFromBaseComponents
+		nil, nil, false, false, false, nil, nil,
+	)
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+	}
+	allTypeComponents := map[string]any{
+		"vpc":      componentSection,
+		"bad-comp": "not-a-map", // non-map entry causes FindComponentsDerivedFromBaseComponents to error
+	}
+
+	err := p.processComponentEntry(
+		"test.yaml", "", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.Error(t, err)
+}
+
+func TestProcessComponentEntry_ApplyMetadataInheritanceError(t *testing.T) {
+	// When the base component's metadata section is not a map, ProcessBaseComponentConfig errors,
+	// which propagates through applyTerraformMetadataInheritance and processComponentEntry (lines 199-201).
+	// Use unique names to avoid global BaseComponentConfig cache collisions.
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{}, // default: metadata inheritance enabled
+		"", nil, nil, nil, false, false, false, nil, nil,
+	)
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "inherit-error-vpc",
+		cfg.MetadataSectionName: map[string]any{
+			cfg.InheritsSectionName: []any{"base-inherit-error"},
+		},
+	}
+	allTypeComponents := map[string]any{
+		"inherit-error-vpc": componentSection,
+		// base component has metadata but it's a string (invalid) → ProcessBaseComponentConfig errors
+		"base-inherit-error": map[string]any{
+			"metadata": "not-a-map",
+		},
+	}
+
+	err := p.processComponentEntry(
+		"inherit-error-stack.yaml", "", cfg.TerraformSectionName,
+		"inherit-error-vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{applyMetadataInheritance: true},
+	)
+
+	require.Error(t, err)
+}
+
+func TestProcessComponentEntry_BuildWorkspaceError(t *testing.T) {
+	// When metadata has an invalid terraform_workspace_template, BuildTerraformWorkspace fails
+	// and processComponentEntry propagates the error (lines 249-251).
+	p := newMinimalProcessor()
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+		cfg.MetadataSectionName: map[string]any{
+			"terraform_workspace_template": "{{.bad", // invalid Go template
+		},
+	}
+	allTypeComponents := map[string]any{
+		"vpc": componentSection,
+	}
+
+	err := p.processComponentEntry(
+		"test.yaml", "", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{buildWorkspace: true},
+	)
+
+	require.Error(t, err)
+}
+
+// ---------------------------------------------------------------------------
+// applyTerraformMetadataInheritance – ProcessBaseComponentConfig error
+// ---------------------------------------------------------------------------
+
+func TestApplyTerraformMetadataInheritance_BaseComponentConfigError(t *testing.T) {
+	// When the base component has an invalid "metadata" section (not a map),
+	// ProcessBaseComponentConfig returns an error (lines 609-611).
+	// Use unique stack/component names to avoid global cache collision with other tests.
+	ac := &schema.AtmosConfiguration{}
+
+	allComponents := map[string]any{
+		"base-error-comp": map[string]any{
+			"metadata": "not-a-map", // invalid metadata type → ProcessBaseComponentConfig errors
+		},
+	}
+
+	metadata := map[string]any{
+		cfg.InheritsSectionName: []any{"base-error-comp"},
+	}
+
+	_, err := applyTerraformMetadataInheritance(
+		ac, allComponents, "error-comp", "error-stack.yaml", metadata,
+	)
+
+	require.Error(t, err)
+}
+
+// ---------------------------------------------------------------------------
+// processComponentSectionTemplates – direct error path tests
+// ---------------------------------------------------------------------------
+
+// yamlMarshalError implements yaml.Marshaler and always returns an error,
+// allowing us to trigger the ConvertToYAMLPreservingDelimiters error path in tests.
+type yamlMarshalError struct{}
+
+func (y yamlMarshalError) MarshalYAML() (interface{}, error) {
+	return nil, errors.New("yaml marshal error for testing")
+}
+
+func TestProcessComponentSectionTemplates_ConvertToYAMLError(t *testing.T) {
+	// A value whose MarshalYAML method returns an error triggers the
+	// ConvertToYAMLPreservingDelimiters error path (lines 506-508).
+	ac := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{}
+
+	componentSection := map[string]any{
+		"key": yamlMarshalError{},
+	}
+
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	require.Error(t, err)
+}
+
+func TestProcessComponentSectionTemplates_MapstructureDecodeError(t *testing.T) {
+	// When settingsSection contains a string value for a nested struct field, mapstructure.Decode
+	// returns an error (lines 511-513).
+	ac := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{},
+	}
+
+	componentSection := map[string]any{"vars": map[string]any{}}
+	// "templates" expects a nested struct but gets a string → mapstructure decoding fails.
+	settingsSection := map[string]any{
+		"templates": map[string]any{
+			"settings": "not-a-struct",
+		},
+	}
+
+	_, err := processComponentSectionTemplates(ac, info, componentSection, settingsSection)
+	require.Error(t, err)
+}
+
+func TestProcessComponentSectionTemplates_ProcessTmplError(t *testing.T) {
+	// When templates are enabled and the component section has an invalid Go template,
+	// ProcessTmplWithDatasources fails (lines 529-531).
+	ac := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true, // must enable templating for ProcessTmplWithDatasources to run
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{},
+	}
+
+	// An unclosed Go template directive causes ProcessTmplWithDatasources to return an error.
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"bad_template": "{{ .bad_open",
+		},
+	}
+
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	require.Error(t, err)
+}
+
+func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
+	// When processTemplates=true and the component section has an invalid Go template,
+	// processComponentSectionTemplates returns an error which processComponentEntry propagates (lines 264-266).
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{
+			Templates: schema.Templates{
+				Settings: schema.TemplatesSettings{
+					Enabled: true,
+				},
+			},
+		},
+		"", nil, nil, nil,
+		true,  // processTemplates = true
+		false, // processYamlFunctions
+		false, nil, nil,
+	)
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+		"vars": map[string]any{
+			"bad": "{{ .bad_open", // invalid Go template causes processComponentSectionTemplates to fail
+		},
+	}
+	allTypeComponents := map[string]any{"vpc": componentSection}
+
+	err := p.processComponentEntry(
+		"test.yaml", "", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.Error(t, err)
 }
