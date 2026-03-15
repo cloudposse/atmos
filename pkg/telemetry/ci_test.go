@@ -377,7 +377,7 @@ func TestFilterCIEnvVars(t *testing.T) {
 		t.Parallel()
 
 		input := []string{
-			"CI",          // No '=' separator.
+			"CI", // No '=' separator.
 			"HOME=/home",
 		}
 
