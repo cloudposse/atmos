@@ -7,6 +7,7 @@ description: Use these commands to lint Atmos stack configurations for quality a
 ---
 
 import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
 
 <Intro>
 Use the `atmos lint` commands to analyze Atmos stack configurations for anti-patterns, optimization opportunities, and structural issues. Linting is distinct from `atmos validate stacks`: validation checks correctness, while linting checks quality, DRY-ness, and best practices.
@@ -20,6 +21,4 @@ atmos lint [subcommand] [flags]
 
 ## Subcommands
 
-| Command | Description |
-|---------|-------------|
-| [`atmos lint stacks`](lint-stacks) | Lint all stack YAML configurations |
+<DocCardList />
