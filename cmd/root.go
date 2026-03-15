@@ -67,6 +67,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/env"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
+	_ "github.com/cloudposse/atmos/cmd/lint"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"

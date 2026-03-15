@@ -17,6 +17,7 @@ Valid subcommands are:
   • env
   • helmfile
   • help
+  • lint
   • list
   • lsp
   • mcp

@@ -1,5 +1,5 @@
 
-👽 test darwin/arm64
+👽 test linux/amd64
 
 Atmos is a framework for orchestrating and operating infrastructure workflows
 across multiple cloud and DevOps toolchains.
@@ -33,6 +33,7 @@ AVAILABLE COMMANDS
       env                                    Output environment variables configured in atmos.yaml
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
+      lint [command]                         Lint configurations for quality and best practices
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
       mcp [command] [EXPERIMENTAL]           Manage Model Context Protocol (MCP) server
