@@ -112,6 +112,9 @@ atmos describe component vpc -s plat-ue2-prod --pager=more
 
 atmos describe component vpc -s tenant1-ue2-dev --provenance
 
+# Debug deep-merged config: show per-key merge trace
+atmos describe component vpc -s tenant1-ue2-dev --explain
+
 # Authenticate before describing (when YAML functions require credentials)
 atmos describe component vpc -s tenant1-ue2-dev --identity my-aws-identity
 
@@ -146,6 +149,7 @@ cd components/terraform/vpc
 atmos describe component . --stack dev --format json
 atmos describe component . --stack dev --query .vars.tags
 atmos describe component . --stack dev --provenance
+atmos describe component . --stack dev --explain
 ```
 
 ## Arguments
@@ -211,6 +215,26 @@ atmos describe component . --stack dev --provenance
       <li>No inline comments (JSON doesn't support comments)</li>
     </ul>
     <code>atmos describe component &lt;c&gt; -s &lt;stack&gt; --provenance</code>
+  </dd>
+
+  <dt>`--explain` <em>(optional)</em></dt>
+  <dd>
+    Show a per-key merge trace: for each configuration value, display which file "won" and which
+    earlier files were overridden. This is the fastest way to debug deep-merged stack configurations
+    and understand <em>why</em> a value has a particular setting.
+    <br/><br/>
+    <strong>Output format:</strong>
+    <pre>
+    {`vars.cidr_block = "10.0.0.0/16"
+  ● SET by:   orgs/acme/prod/us-east-2.yaml (line 24)
+  ○ OVERRIDE: catalog/vpc/defaults.yaml (line 10) had "172.16.0.0/16"`}
+    </pre>
+    <strong>Legend:</strong>
+    <ul>
+      <li><code>● SET by:</code> — The file whose value won (lowest import depth = highest priority)</li>
+      <li><code>○ OVERRIDE:</code> — A file whose value was superseded by a later file</li>
+    </ul>
+    <code>atmos describe component &lt;c&gt; -s &lt;stack&gt; --explain</code>
   </dd>
 
   <dt>`--pager` <em>(optional)</em></dt>

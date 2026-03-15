@@ -47,6 +47,11 @@ type ProvenanceEntry struct {
 
 	// Depth is the inheritance depth (0=parent stack, 1=direct import, 2+=nested imports).
 	Depth int
+
+	// Value is the actual value at this merge level.
+	// Populated when provenance tracking is enabled (e.g., --provenance or --explain flags).
+	// nil for map/array nodes (only scalar leaf values are stored).
+	Value any
 }
 
 // ProvenanceEntryParams contains parameters for creating a provenance entry.
@@ -68,6 +73,7 @@ func NewProvenanceEntry(params ProvenanceEntryParams) *ProvenanceEntry {
 		Type:      params.Type,
 		ValueHash: hashValue(params.Value),
 		Depth:     params.Depth,
+		Value:     params.Value,
 	}
 }
 
@@ -112,6 +118,7 @@ func (p *ProvenanceEntry) Clone() *ProvenanceEntry {
 		Type:      p.Type,
 		ValueHash: p.ValueHash,
 		Depth:     p.Depth,
+		Value:     p.Value,
 	}
 }
 

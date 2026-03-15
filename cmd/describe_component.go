@@ -68,9 +68,20 @@ var describeComponentCmd = &cobra.Command{
 			return err
 		}
 
-		provenance, err := flags.GetBool("provenance")
+		provenance, err := flags.GetString("provenance")
 		if err != nil {
 			return err
+		}
+
+		explain, err := flags.GetBool("explain")
+		if err != nil {
+			return err
+		}
+
+		// --explain is an alias for --provenance=full.
+		provenanceMode := provenance
+		if explain {
+			provenanceMode = e.ProvenanceModeFull
 		}
 
 		component := args[0]
@@ -170,7 +181,7 @@ var describeComponentCmd = &cobra.Command{
 			Query:                query,
 			Format:               format,
 			File:                 file,
-			Provenance:           provenance,
+			ProvenanceMode:       provenanceMode,
 			AuthManager:          authManager,
 		})
 		return err
@@ -186,7 +197,10 @@ func init() {
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
-	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
+	describeComponentCmd.PersistentFlags().String("provenance", "", "Show where configuration values originated (use --provenance or --provenance=full for full merge-trace in YAML)")
+	describeComponentCmd.PersistentFlags().Bool("explain", false, "Alias for --provenance=full: show a full YAML merge-trace with all overrides per key")
+	// --provenance alone (without a value) activates basic provenance mode.
+	describeComponentCmd.PersistentFlags().Lookup("provenance").NoOptDefVal = "true"
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
