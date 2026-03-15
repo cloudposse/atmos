@@ -998,3 +998,51 @@ func TestCompatibilityFlagTranslator_ShorthandNormalization(t *testing.T) {
 		})
 	}
 }
+
+// TestCompatibilityFlagTranslator_UnknownBehavior verifies that unknown/custom CompatibilityBehavior
+// values fall through to the default case (passed as-is to Atmos args).
+// This tests the defensive default branches in applyFlagBehaviorWithEquals and
+// applyFlagBehaviorWithoutEquals.
+func TestCompatibilityFlagTranslator_UnknownBehavior(t *testing.T) {
+	// Use a custom behavior value that is not MapToAtmosFlag or AppendToSeparated.
+	unknownBehavior := CompatibilityBehavior(999)
+
+	tests := []struct {
+		name              string
+		args              []string
+		flagMap           map[string]CompatibilityFlag
+		expectedAtmosArgs []string
+		expectedSeparated []string
+	}{
+		{
+			name: "unknown behavior with equals syntax",
+			args: []string{"-custom=value"},
+			flagMap: map[string]CompatibilityFlag{
+				"-custom": {Behavior: unknownBehavior, Target: "--custom"},
+			},
+			// default branch: pass original arg to atmos args.
+			expectedAtmosArgs: []string{"-custom=value"},
+			expectedSeparated: []string{},
+		},
+		{
+			name: "unknown behavior without equals syntax",
+			args: []string{"-custom", "value"},
+			flagMap: map[string]CompatibilityFlag{
+				"-custom": {Behavior: unknownBehavior, Target: "--custom"},
+			},
+			// default branch: pass the flag arg to atmos, ignore the value.
+			expectedAtmosArgs: []string{"-custom", "value"},
+			expectedSeparated: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			translator := NewCompatibilityFlagTranslator(tt.flagMap)
+			atmosArgs, separatedArgs := translator.Translate(tt.args)
+
+			assert.Equal(t, tt.expectedAtmosArgs, atmosArgs)
+			assert.Equal(t, tt.expectedSeparated, separatedArgs)
+		})
+	}
+}

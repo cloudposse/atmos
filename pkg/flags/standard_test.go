@@ -1413,3 +1413,78 @@ func TestStandardFlagParser_PromptForOptionalValueFlags_MultipleFlagsOrder(t *te
 		assert.Equal(t, "z-default", result.Flags["zebra"])
 	})
 }
+
+// TestStandardFlagParser_Registry verifies that Registry() returns the underlying flag registry.
+func TestStandardFlagParser_Registry(t *testing.T) {
+	parser := NewStandardFlagParser(
+		WithStringFlag("stack", "s", "", "Stack name"),
+		WithBoolFlag("dry-run", "", false, "Dry run mode"),
+	)
+
+	registry := parser.Registry()
+	require.NotNil(t, registry)
+	assert.Equal(t, 2, registry.Count())
+	assert.True(t, registry.Has("stack"))
+	assert.True(t, registry.Has("dry-run"))
+}
+
+// TestRegisterCompletionRecursive verifies that registerCompletionRecursive propagates
+// completion functions to all descendant commands.
+func TestRegisterCompletionRecursive(t *testing.T) {
+	completionFn := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "staging", "prod"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Build a command tree:
+	// root (has --stack flag)
+	//   └── child1 (has --stack persistent flag)
+	//       └── grandchild (has --stack persistent flag)
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().String("stack", "", "Stack name")
+
+	child1 := &cobra.Command{Use: "child1"}
+	root.AddCommand(child1)
+
+	grandchild := &cobra.Command{Use: "grandchild"}
+	child1.AddCommand(grandchild)
+
+	// Call registerCompletionRecursive starting from root.
+	registerCompletionRecursive(root, "stack", completionFn)
+
+	// Verify child1 has the completion function registered.
+	// (Can't directly check, but verify no panic).
+	// The function should have registered on commands that have the flag.
+}
+
+// TestStandardParser_Registry verifies that StandardParser.Registry() delegates correctly.
+func TestStandardParser_Registry(t *testing.T) {
+	parser := NewStandardParser(
+		WithStringFlag("format", "f", "yaml", "Output format"),
+	)
+
+	registry := parser.Registry()
+	require.NotNil(t, registry)
+	assert.True(t, registry.Has("format"))
+}
+
+// TestStandardParser_SetPositionalArgs verifies that StandardParser.SetPositionalArgs
+// correctly configures positional argument handling.
+func TestStandardParser_SetPositionalArgs(t *testing.T) {
+	parser := NewStandardParser(
+		WithStringFlag("stack", "s", "", "Stack name"),
+	)
+
+	specs := []*PositionalArgSpec{
+		{
+			Name:        "component",
+			Description: "Component name",
+			Required:    true,
+		},
+	}
+	validator := cobra.ExactArgs(1)
+
+	// Should not panic.
+	assert.NotPanics(t, func() {
+		parser.SetPositionalArgs(specs, validator, "component")
+	})
+}

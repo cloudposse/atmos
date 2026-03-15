@@ -463,3 +463,73 @@ type errorReader struct{}
 func (e *errorReader) Read(p []byte) (n int, err error) {
 	return 0, fmt.Errorf("read error")
 }
+
+func TestWithTransport(t *testing.T) {
+	// Create a mock transport that records requests.
+	var capturedReq *http.Request
+	mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		capturedReq = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("ok")),
+		}, nil
+	})
+
+	// Create client with custom transport.
+	client := NewDefaultClient(WithTransport(mockTransport))
+	assert.NotNil(t, client)
+
+	// Make a request to verify custom transport is used.
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com/test", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.NotNil(t, capturedReq, "mock transport should have captured the request")
+	assert.Equal(t, "http://example.com/test", capturedReq.URL.String())
+}
+
+// TestGitHubAuthenticatedTransport_NilBase verifies that when Base transport is nil,
+// the GitHubAuthenticatedTransport falls back to http.DefaultTransport.
+func TestGitHubAuthenticatedTransport_NilBase(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	transport := &GitHubAuthenticatedTransport{
+		Base:        nil, // Explicitly set to nil - should fall back to http.DefaultTransport.
+		GitHubToken: "",
+	}
+
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// TestGetGitHubTokenFromEnv_ViperPrecedence verifies that the viper value takes
+// precedence over environment variables.
+func TestGetGitHubTokenFromEnv_ViperPrecedence(t *testing.T) {
+	t.Setenv("ATMOS_GITHUB_TOKEN", "env-token")
+	t.Setenv("GITHUB_TOKEN", "fallback-token")
+
+	v := viper.GetViper()
+	_ = v.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+
+	// Override viper to simulate --github-token flag.
+	v.Set("github-token", "viper-token")
+	t.Cleanup(func() {
+		v.Set("github-token", "")
+	})
+
+	got := GetGitHubTokenFromEnv()
+	assert.Equal(t, "viper-token", got)
+}
