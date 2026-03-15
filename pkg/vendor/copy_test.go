@@ -373,7 +373,7 @@ func TestShouldIncludeFile(t *testing.T) {
 		{name: "multiple patterns first matches", patterns: []string{"*.tf", "*.md"}, path: "main.tf", skip: false},
 		{name: "multiple patterns second matches", patterns: []string{"*.tf", "*.md"}, path: "README.md", skip: false},
 		{name: "multiple patterns none match", patterns: []string{"*.tf", "*.md"}, path: "main.go", skip: true},
-		{name: "invalid pattern", patterns: []string{"[invalid"}, path: "main.tf", skip: true, hasErr: true},
+		{name: "invalid pattern", patterns: []string{"[invalid"}, path: "main.tf", skip: false, hasErr: true},
 	}
 
 	for _, tt := range tests {
