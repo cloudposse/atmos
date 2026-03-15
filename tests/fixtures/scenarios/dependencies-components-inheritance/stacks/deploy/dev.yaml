@@ -17,7 +17,7 @@ components:
       metadata:
         component: mock
 
-    # VPC inherits base dependencies AND adds its own.
+    # VPC defines its own dependencies; parent entries are replaced.
     vpc:
       # Child dependencies replace parent (base.yaml deps are NOT inherited).
       dependencies:

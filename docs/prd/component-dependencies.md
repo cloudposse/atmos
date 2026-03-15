@@ -166,17 +166,17 @@ The `ComponentDependency` struct provides helper methods:
 
 ```go
 // IsFileDependency returns true if this is a file dependency.
-func (d ComponentDependency) IsFileDependency() bool {
+func (d *ComponentDependency) IsFileDependency() bool {
     return d.Kind == "file"
 }
 
 // IsFolderDependency returns true if this is a folder dependency.
-func (d ComponentDependency) IsFolderDependency() bool {
+func (d *ComponentDependency) IsFolderDependency() bool {
     return d.Kind == "folder"
 }
 
 // IsComponentDependency returns true if this is a component dependency (not file or folder).
-func (d ComponentDependency) IsComponentDependency() bool {
+func (d *ComponentDependency) IsComponentDependency() bool {
     return d.Kind != "file" && d.Kind != "folder"
 }
 ```

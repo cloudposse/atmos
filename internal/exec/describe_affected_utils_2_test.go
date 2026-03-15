@@ -614,3 +614,313 @@ func TestGetFileFolderDependencies(t *testing.T) {
 		}
 	})
 }
+
+func TestIsComponentDependentFolderOrFileChangedIndexed_AdditionalCases(t *testing.T) {
+	// Create temp files to act as changed files.
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+	require.NoError(t, os.WriteFile(configFile, []byte("{}"), 0o644))
+
+	lambdaDir := filepath.Join(tmpDir, "src", "lambda")
+	require.NoError(t, os.MkdirAll(lambdaDir, 0o755))
+	lambdaFile := filepath.Join(lambdaDir, "handler.py")
+	require.NoError(t, os.WriteFile(lambdaFile, []byte("def handler(): pass"), 0o644))
+
+	otherFile := filepath.Join(tmpDir, "unrelated.txt")
+	require.NoError(t, os.WriteFile(otherFile, []byte("hello"), 0o644))
+
+	tests := []struct {
+		name              string
+		changedFiles      []string
+		deps              []schema.ComponentDependency
+		expectChanged     bool
+		expectChangedType string
+		expectChangedPath string
+		expectError       bool
+	}{
+		{
+			name:          "no deps returns unchanged",
+			changedFiles:  []string{configFile},
+			deps:          []schema.ComponentDependency{},
+			expectChanged: false,
+		},
+		{
+			name:         "file dependency matches changed file",
+			changedFiles: []string{configFile},
+			deps: []schema.ComponentDependency{
+				{Kind: "file", Path: configFile},
+			},
+			expectChanged:     true,
+			expectChangedType: "file",
+			expectChangedPath: configFile,
+		},
+		{
+			name:         "file dependency does not match",
+			changedFiles: []string{otherFile},
+			deps: []schema.ComponentDependency{
+				{Kind: "file", Path: configFile},
+			},
+			expectChanged: false,
+		},
+		{
+			name:         "folder dependency matches file in folder",
+			changedFiles: []string{lambdaFile},
+			deps: []schema.ComponentDependency{
+				{Kind: "folder", Path: filepath.Join(tmpDir, "src", "lambda")},
+			},
+			expectChanged:     true,
+			expectChangedType: "folder",
+			expectChangedPath: filepath.Join(tmpDir, "src", "lambda"),
+		},
+		{
+			name:         "folder dependency does not match file outside folder",
+			changedFiles: []string{otherFile},
+			deps: []schema.ComponentDependency{
+				{Kind: "folder", Path: filepath.Join(tmpDir, "src", "lambda")},
+			},
+			expectChanged: false,
+		},
+		{
+			name:         "skips component dependencies",
+			changedFiles: []string{configFile},
+			deps: []schema.ComponentDependency{
+				{Kind: "terraform", Component: "vpc"},
+				{Kind: "", Component: "rds"},
+			},
+			expectChanged: false,
+		},
+		{
+			name:         "mixed deps only checks file and folder",
+			changedFiles: []string{configFile},
+			deps: []schema.ComponentDependency{
+				{Kind: "terraform", Component: "vpc"},
+				{Kind: "file", Path: configFile},
+				{Kind: "folder", Path: filepath.Join(tmpDir, "other")},
+			},
+			expectChanged:     true,
+			expectChangedType: "file",
+			expectChangedPath: configFile,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build a minimal changedFilesIndex.
+			idx := &changedFilesIndex{
+				allFiles: tt.changedFiles,
+			}
+
+			changed, changedType, changedPath, err := isComponentDependentFolderOrFileChangedIndexed(idx, tt.deps)
+
+			if tt.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectChanged, changed)
+			if tt.expectChanged {
+				assert.Equal(t, tt.expectChangedType, changedType)
+				assert.Equal(t, tt.expectChangedPath, changedPath)
+			}
+		})
+	}
+}
+
+func TestMatchNewFormatStack(t *testing.T) {
+	tests := []struct {
+		name      string
+		dep       schema.ComponentDependency
+		argsStack string
+		stackName string
+		expected  bool
+	}{
+		{
+			name:      "explicit stack matches argsStack",
+			dep:       schema.ComponentDependency{Stack: "prod-ue1"},
+			argsStack: "prod-ue1",
+			stackName: "dev-ue1",
+			expected:  true,
+		},
+		{
+			name:      "explicit stack does not match argsStack",
+			dep:       schema.ComponentDependency{Stack: "prod-ue1"},
+			argsStack: "dev-ue1",
+			stackName: "dev-ue1",
+			expected:  false,
+		},
+		{
+			name:      "empty stack defaults to same stack match",
+			dep:       schema.ComponentDependency{},
+			argsStack: "dev-ue1",
+			stackName: "dev-ue1",
+			expected:  true,
+		},
+		{
+			name:      "empty stack defaults to same stack no match",
+			dep:       schema.ComponentDependency{},
+			argsStack: "prod-ue1",
+			stackName: "dev-ue1",
+			expected:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchNewFormatStack(&tt.dep, tt.argsStack, tt.stackName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMatchLegacyStack(t *testing.T) {
+	tests := []struct {
+		name      string
+		dep       schema.ComponentDependency
+		argsStack string
+		stackName string
+		expected  bool
+	}{
+		{
+			name:      "explicit stack matches",
+			dep:       schema.ComponentDependency{Stack: "prod-ue1"},
+			argsStack: "prod-ue1",
+			stackName: "dev-ue1",
+			expected:  true,
+		},
+		{
+			name:      "explicit stack does not match",
+			dep:       schema.ComponentDependency{Stack: "prod-ue1"},
+			argsStack: "dev-ue1",
+			stackName: "dev-ue1",
+			expected:  false,
+		},
+		{
+			name:      "no context fields requires same stack match",
+			dep:       schema.ComponentDependency{},
+			argsStack: "dev-ue1",
+			stackName: "dev-ue1",
+			expected:  true,
+		},
+		{
+			name:      "no context fields requires same stack no match",
+			dep:       schema.ComponentDependency{},
+			argsStack: "prod-ue1",
+			stackName: "dev-ue1",
+			expected:  false,
+		},
+		{
+			name:      "with context fields returns true regardless of stack",
+			dep:       schema.ComponentDependency{Environment: "ue1"},
+			argsStack: "prod-ue1",
+			stackName: "dev-ue1",
+			expected:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchLegacyStack(&tt.dep, tt.argsStack, tt.stackName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestMatchLegacyContextFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		dep      schema.ComponentDependency
+		provided *schema.Context
+		stack    *schema.Context
+		expected bool
+	}{
+		{
+			name: "all fields match when specified",
+			dep: schema.ComponentDependency{
+				Namespace:   "acme",
+				Tenant:      "tenant1",
+				Environment: "ue1",
+				Stage:       "prod",
+			},
+			provided: &schema.Context{Namespace: "acme", Tenant: "tenant1", Environment: "ue1", Stage: "prod"},
+			stack:    &schema.Context{},
+			expected: true,
+		},
+		{
+			name: "namespace mismatch",
+			dep: schema.ComponentDependency{
+				Namespace: "other",
+			},
+			provided: &schema.Context{Namespace: "acme"},
+			stack:    &schema.Context{Namespace: "acme"},
+			expected: false,
+		},
+		{
+			name: "no fields specified falls through to stack comparison",
+			dep:  schema.ComponentDependency{},
+			provided: &schema.Context{
+				Namespace: "acme", Tenant: "tenant1", Environment: "ue1", Stage: "prod",
+			},
+			stack: &schema.Context{
+				Namespace: "acme", Tenant: "tenant1", Environment: "ue1", Stage: "prod",
+			},
+			expected: true,
+		},
+		{
+			name: "unspecified fields fall back to stack context mismatch",
+			dep:  schema.ComponentDependency{},
+			provided: &schema.Context{
+				Namespace: "acme",
+			},
+			stack: &schema.Context{
+				Namespace: "other",
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchLegacyContextFields(&tt.dep, tt.provided, tt.stack)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestContextToComponentDependency(t *testing.T) {
+	tests := []struct {
+		name    string
+		context schema.Context
+	}{
+		{
+			name: "converts all fields",
+			context: schema.Context{
+				Component:   "vpc",
+				Stack:       "tenant1-ue1-prod",
+				Namespace:   "acme",
+				Tenant:      "tenant1",
+				Environment: "ue1",
+				Stage:       "prod",
+			},
+		},
+		{
+			name: "converts with empty fields",
+			context: schema.Context{
+				Component: "rds",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dep := contextToComponentDependency(&tt.context)
+
+			assert.Equal(t, tt.context.Component, dep.Component)
+			assert.Equal(t, tt.context.Stack, dep.Stack)
+			assert.Equal(t, tt.context.Namespace, dep.Namespace)
+			assert.Equal(t, tt.context.Tenant, dep.Tenant)
+			assert.Equal(t, tt.context.Environment, dep.Environment)
+			assert.Equal(t, tt.context.Stage, dep.Stage)
+		})
+	}
+}
