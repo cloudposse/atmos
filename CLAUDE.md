@@ -166,6 +166,7 @@ Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public
 - Command constructor functions (e.g., `DescribeCommand()`, `ListCommand()`)
 - Simple factory functions that just return structs
 - Functions that only delegate to another tracked function
+- Pure validation/lookup functions with no I/O (e.g., `ValidateCloudEnvironment()`, `ResolveDestination()`)
 
 ### Configuration Loading
 Precedence: CLI flags → ENV vars → config files → defaults (use Viper)

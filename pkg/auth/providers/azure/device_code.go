@@ -38,16 +38,18 @@ type deviceCodeProvider struct {
 	subscriptionID string
 	location       string
 	clientID       string
+	cloudEnv       *azureCloud.CloudEnvironment // Azure cloud environment (public, usgovernment, china).
 	cacheStorage   CacheStorage
 	realm          string // Credential isolation realm set by auth manager.
 }
 
 // deviceCodeConfig holds extracted Azure configuration from provider spec.
 type deviceCodeConfig struct {
-	TenantID       string
-	SubscriptionID string
-	Location       string
-	ClientID       string
+	TenantID         string
+	SubscriptionID   string
+	Location         string
+	ClientID         string
+	CloudEnvironment string
 }
 
 // extractDeviceCodeConfig extracts Azure config from provider spec.
@@ -72,6 +74,9 @@ func extractDeviceCodeConfig(spec map[string]interface{}) deviceCodeConfig {
 	if cid, ok := spec["client_id"].(string); ok && cid != "" {
 		config.ClientID = cid
 	}
+	if ce, ok := spec["cloud_environment"].(string); ok {
+		config.CloudEnvironment = ce
+	}
 
 	return config
 }
@@ -93,6 +98,11 @@ func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodePro
 		return nil, fmt.Errorf("%w: tenant_id is required in spec for Azure device code provider", errUtils.ErrInvalidProviderConfig)
 	}
 
+	// Validate cloud_environment if specified.
+	if err := azureCloud.ValidateCloudEnvironment(cfg.CloudEnvironment); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidProviderConfig, err)
+	}
+
 	return &deviceCodeProvider{
 		name:           name,
 		config:         config,
@@ -100,6 +110,7 @@ func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodePro
 		subscriptionID: cfg.SubscriptionID,
 		location:       cfg.Location,
 		clientID:       cfg.ClientID,
+		cloudEnv:       azureCloud.GetCloudEnvironment(cfg.CloudEnvironment),
 		cacheStorage:   &defaultCacheStorage{},
 	}, nil
 }
@@ -137,7 +148,7 @@ func (p *deviceCodeProvider) createMSALClient() (public.Client, error) {
 	// This client will automatically persist refresh tokens.
 	client, err := public.New(
 		p.clientID,
-		public.WithAuthority(fmt.Sprintf("https://login.microsoftonline.com/%s", p.tenantID)),
+		public.WithAuthority(fmt.Sprintf("https://%s/%s", p.cloudEnv.LoginEndpoint, p.tenantID)),
 		public.WithCache(msalCache),
 	)
 	if err != nil {
@@ -281,7 +292,7 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 
 	// Try to get management token silently.
 	mgmtResult, err := client.AcquireTokenSilent(ctx,
-		[]string{"https://management.azure.com/.default"},
+		[]string{p.cloudEnv.ManagementScope},
 		public.WithSilentAccount(account),
 	)
 	if err != nil {
@@ -295,7 +306,7 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 
 	// Try to get Graph token silently.
 	graphResult, err := client.AcquireTokenSilent(ctx,
-		[]string{"https://graph.microsoft.com/.default"},
+		[]string{p.cloudEnv.GraphAPIScope},
 		public.WithSilentAccount(account),
 	)
 	if err == nil {
@@ -308,7 +319,7 @@ func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, clie
 
 	// Try to get KeyVault token silently.
 	kvResult, err := client.AcquireTokenSilent(ctx,
-		[]string{"https://vault.azure.net/.default"},
+		[]string{p.cloudEnv.KeyVaultScope},
 		public.WithSilentAccount(account),
 	)
 	if err == nil {
@@ -339,7 +350,7 @@ func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, cli
 
 	// Start device code flow for management scope.
 	accessToken, expiresOn, err := p.acquireTokenByDeviceCode(ctx, client,
-		[]string{"https://management.azure.com/.default"})
+		[]string{p.cloudEnv.ManagementScope})
 	if err != nil {
 		return result, err
 	}
@@ -375,7 +386,7 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 	// Request Graph API token for azuread provider (silently, using refresh token).
 	log.Debug("Requesting Graph API token for azuread provider")
 	graphResult, err := client.AcquireTokenSilent(ctx,
-		[]string{"https://graph.microsoft.com/.default"},
+		[]string{p.cloudEnv.GraphAPIScope},
 		public.WithSilentAccount(account),
 	)
 	if err != nil {
@@ -391,7 +402,7 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 	// Request KeyVault token for azurerm provider KeyVault operations (silently).
 	log.Debug("Requesting KeyVault token for azurerm provider")
 	kvResult, err := client.AcquireTokenSilent(ctx,
-		[]string{"https://vault.azure.net/.default"},
+		[]string{p.cloudEnv.KeyVaultScope},
 		public.WithSilentAccount(account),
 	)
 	if err != nil {
@@ -411,12 +422,13 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 //nolint:unparam // error return required for future extensibility and interface compatibility
 func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (authTypes.ICredentials, error) {
 	creds := &authTypes.AzureCredentials{
-		AccessToken:    tokens.accessToken,
-		TokenType:      "Bearer",
-		Expiration:     tokens.expiresOn.Format(time.RFC3339),
-		TenantID:       p.tenantID,
-		SubscriptionID: p.subscriptionID,
-		Location:       p.location,
+		AccessToken:      tokens.accessToken,
+		TokenType:        "Bearer",
+		Expiration:       tokens.expiresOn.Format(time.RFC3339),
+		TenantID:         p.tenantID,
+		SubscriptionID:   p.subscriptionID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name, // Propagate cloud environment for MSAL cache.
 	}
 
 	// Add Graph API token if available.
@@ -469,6 +481,10 @@ func (p *deviceCodeProvider) Environment() (map[string]string, error) {
 	if p.location != "" {
 		env["AZURE_LOCATION"] = p.location
 	}
+	if p.cloudEnv.Name != "" && p.cloudEnv.Name != "public" {
+		env["ARM_ENVIRONMENT"] = p.cloudEnv.Name
+		env["AZURE_ENVIRONMENT"] = p.cloudEnv.Name
+	}
 	return env, nil
 }
 
@@ -479,10 +495,11 @@ func (p *deviceCodeProvider) Environment() (map[string]string, error) {
 func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	// Use shared Azure environment preparation.
 	return azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
-		Environ:        environ,
-		SubscriptionID: p.subscriptionID,
-		TenantID:       p.tenantID,
-		Location:       p.location,
+		Environ:          environ,
+		SubscriptionID:   p.subscriptionID,
+		TenantID:         p.tenantID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name,
 	}), nil
 }
 

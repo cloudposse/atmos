@@ -668,6 +668,7 @@ func TestDeviceCodeProvider_updateAzureProfile(t *testing.T) {
 			provider := &deviceCodeProvider{
 				subscriptionID: tt.subscriptionID,
 				tenantID:       tt.tenantID,
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			}
 
 			err := provider.updateAzureProfile(testHome, tt.username)
@@ -717,6 +718,7 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 		name:           "test-provider",
 		tenantID:       "tenant-123",
 		subscriptionID: "sub-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
 		config: &schema.Provider{
 			Kind: "azure/device-code",
 			Spec: map[string]interface{}{
