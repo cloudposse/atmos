@@ -531,7 +531,8 @@ imports:
   - orgs/cp/tenant1/_defaults
   - orgs/cp/tenant1/dev/_defaults
 inheritance: []
-metadata: {}
+metadata:
+  description: Top-level component for testing Atmos stack configuration.
 overrides:
   providers:
     context: {}

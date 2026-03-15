@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
-description: "Tenant1 US East 2 development stack."
+metadata:
+  description: "Tenant1 US East 2 development stack."
 
 import:
   - mixins/region/us-east-2

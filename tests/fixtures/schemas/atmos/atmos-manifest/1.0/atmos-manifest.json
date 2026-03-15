@@ -46,9 +46,8 @@
     "generate": {
       "$ref": "#/definitions/generate"
     },
-    "description": {
-      "type": "string",
-      "description": "Human-readable description of this stack manifest."
+    "metadata": {
+      "$ref": "#/definitions/metadata"
     }
   },
   "additionalProperties": true,
@@ -336,10 +335,6 @@
             },
             "generate": {
               "$ref": "#/definitions/generate"
-            },
-            "description": {
-              "type": "string",
-              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -447,10 +442,6 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
-            },
-            "description": {
-              "type": "string",
-              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -558,10 +549,6 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
-            },
-            "description": {
-              "type": "string",
-              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -646,6 +633,10 @@
             "locked": {
               "type": "boolean",
               "description": "Flag to lock the component and prevent modifications while allowing read operations"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []

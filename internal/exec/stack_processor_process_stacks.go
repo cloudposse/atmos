@@ -58,11 +58,15 @@ func ProcessStackConfig(
 		}
 	}
 
-	// Extract the stack-level 'description' field if present.
+	// Extract the stack-level 'description' field from metadata.description if present.
 	var stackManifestDescription string
-	if i, ok := config[cfg.DescriptionSectionName]; ok {
-		if desc, ok := i.(string); ok {
-			stackManifestDescription = desc
+	if metaI, ok := config[cfg.MetadataSectionName]; ok {
+		if meta, ok := metaI.(map[string]any); ok {
+			if i, ok := meta[cfg.DescriptionSectionName]; ok {
+				if desc, ok := i.(string); ok {
+					stackManifestDescription = desc
+				}
+			}
 		}
 	}
 

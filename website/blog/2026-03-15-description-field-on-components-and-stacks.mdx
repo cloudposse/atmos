@@ -5,13 +5,13 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
-Stacks and components now support a native `description` field for inline documentation that surfaces in `atmos describe` output and enables AI tooling to understand your infrastructure.
+Stacks and components now support a native `description` field under `metadata` for inline documentation that surfaces in `atmos describe` output and enables AI tooling to understand your infrastructure.
 
 <!--truncate-->
 
 ## What Changed
 
-Atmos now supports a first-class `description` field on both stack manifests and individual component definitions. Descriptions are surfaced in `atmos describe component`, `atmos describe stacks`, and available as a filterable section.
+Atmos now supports a first-class `description` field on both stack manifests and individual component definitions, written as `metadata.description`. Descriptions are surfaced in `atmos describe component`, `atmos describe stacks`, and available as a filterable section.
 
 **Component-level description:**
 
@@ -20,7 +20,8 @@ Atmos now supports a first-class `description` field on both stack manifests and
 components:
   terraform:
     vpc:
-      description: "Primary VPC for us-east-2. Owns the CIDR 10.10.0.0/16."
+      metadata:
+        description: "Primary VPC for us-east-2. Owns the CIDR 10.10.0.0/16."
       vars:
         cidr_block: "10.10.0.0/16"
 ```
@@ -29,7 +30,8 @@ components:
 
 ```yaml
 # stacks/orgs/acme/prod/us-east-2.yaml
-description: "Production US East 2 stack. Runs all customer-facing workloads."
+metadata:
+  description: "Production US East 2 stack. Runs all customer-facing workloads."
 
 import:
   - catalog/terraform/vpc
@@ -40,23 +42,24 @@ import:
 
 Large organizations managing 50+ components and dozens of stacks face a discoverability problem: the only documentation layer was YAML comments, which get lost during merges and never surface in CLI output or tooling.
 
-With `description`:
+With `metadata.description`:
 
 - **Human discoverability**: `atmos describe stacks --sections description` shows what every component does at a glance.
 - **AI integration**: Atmos AI and the Atmos MCP server can now answer "what does this component do?" with meaningful context from your own stack definitions.
 - **Lintable**: Unlike comments, `description` is part of the schema and can be validated with JSON Schema.
-- **Inheritable**: Component descriptions follow the same inheritance rules as `vars` — a base component description is the fallback, overridden by the instance's own description.
+- **Inheritable**: Component descriptions follow the same metadata inheritance rules — a base component description is the fallback, overridden by the instance's own description.
 
 ## How to Use It
 
-Add `description` to any component or stack manifest:
+Add `metadata.description` to any component or stack manifest:
 
 ```yaml
 # stacks/catalog/terraform/eks.yaml
 components:
   terraform:
     eks:
-      description: "Managed EKS cluster. Uses Karpenter for node provisioning."
+      metadata:
+        description: "Managed EKS cluster. Uses Karpenter for node provisioning."
       vars:
         cluster_name: "main"
 ```

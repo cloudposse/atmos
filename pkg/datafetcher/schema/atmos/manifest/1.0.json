@@ -44,9 +44,8 @@
     "workflows": {
       "$ref": "#/definitions/workflows"
     },
-    "description": {
-      "type": "string",
-      "description": "Human-readable description of this stack manifest."
+    "metadata": {
+      "$ref": "#/definitions/metadata"
     }
   },
   "additionalProperties": true,
@@ -313,10 +312,6 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
-            },
-            "description": {
-              "type": "string",
-              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -409,10 +404,6 @@
             },
             "command": {
               "$ref": "#/definitions/command"
-            },
-            "description": {
-              "type": "string",
-              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -505,10 +496,6 @@
             },
             "command": {
               "$ref": "#/definitions/command"
-            },
-            "description": {
-              "type": "string",
-              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []
@@ -597,6 +584,10 @@
             "locked": {
               "type": "boolean",
               "description": "Flag to lock the component and prevent modifications while allowing read operations"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []

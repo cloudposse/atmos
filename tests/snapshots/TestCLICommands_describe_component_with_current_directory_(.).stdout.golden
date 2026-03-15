@@ -504,7 +504,8 @@ generate: {}
 hooks: {}
 imports: []
 inheritance: []
-metadata: {}
+metadata:
+  description: Top-level component for testing Atmos stack configuration.
 overrides:
   providers:
     context: {}
