@@ -61,12 +61,18 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert data to YAML: %w", err)
 	}
 
+	// UnwrapScalar=false preserves YAML type information for scalar values.
+	// When true, yq strips surrounding quotes (e.g. `"true"` becomes bare `true`), causing
+	// the downstream YAML parser to lose the original Go type: a string "true" would be
+	// decoded as bool true, a string "42" as int 42, and so on.
+	// Setting UnwrapScalar=false keeps the yq encoder's quoting intact so that the
+	// YAML round-trip correctly reconstructs the original types.
 	pref := yqlib.YamlPreferences{
 		Indent:                      2,
 		ColorsEnabled:               false,
 		LeadingContentPreProcessing: true,
 		PrintDocSeparators:          true,
-		UnwrapScalar:                true,
+		UnwrapScalar:                false,
 		EvaluateTogether:            false,
 	}
 
@@ -80,10 +86,11 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 
 	trimmedResult := strings.TrimSpace(result)
 
-	// Handle scalar strings that could be misinterpreted by the YAML parser.
-	// When yq returns a scalar with UnwrapScalar=true, special characters like trailing
-	// colons can cause the YAML parser to misinterpret the value as a map.
-	// E.g., "arn:aws:secretsmanager:...::password::" would become {"password:": null}.
+	// isScalarString and isMisinterpretedScalar are safety-net guards that were
+	// necessary when UnwrapScalar=true caused the YAML parser to misinterpret scalar
+	// strings (e.g., ARNs or IPv6 addresses ending with "::").  With UnwrapScalar=false
+	// yq now emits properly quoted scalars so these cases are handled by the standard
+	// YAML round-trip below.  The checks are kept as a defensive fallback.
 	if isScalarString(trimmedResult) {
 		return trimmedResult, nil
 	}
@@ -94,8 +101,7 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to unmarshal result: %w", err)
 	}
 
-	// Check if the YAML parser misinterpreted a scalar string as a map.
-	// This happens when the string contains colons that look like YAML map syntax.
+	// Defensive fallback: detect strings the YAML parser might still misinterpret as maps.
 	if isMisinterpretedScalar(&node, trimmedResult) {
 		return trimmedResult, nil
 	}
@@ -114,9 +120,14 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	return res, nil
 }
 
-// isScalarString checks if the yq result appears to be a simple scalar string value
-// that should not be parsed as YAML. This handles edge cases where the YAML parser
-// would misinterpret the string (e.g., strings ending with colons).
+// isScalarString was the primary guard when UnwrapScalar=true was used in
+// EvaluateYqExpression. It detected scalar strings that the downstream YAML
+// parser would misinterpret (e.g., "#comment" stripped as a comment, or
+// "arn:...::password::" misread as a YAML map).
+//
+// With UnwrapScalar=false yq now emits properly-quoted scalars, so this
+// function is rarely triggered. It is kept as a defensive fallback for any
+// edge cases not covered by the standard YAML round-trip.
 func isScalarString(s string) bool {
 	// Handle strings starting with # (comments would be stripped by YAML parser).
 	if strings.HasPrefix(s, "#") && !strings.Contains(s, "\n") {
