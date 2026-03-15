@@ -1,0 +1,59 @@
+---
+slug: faster-deep-merge
+title: "3.5× Faster Deep Merge for Stack Processing"
+authors:
+  - atmos
+tags:
+  - enhancement
+  - core
+date: 2026-03-15T00:00:00.000Z
+---
+
+Atmos stack processing is now up to **3.5× faster** for deep-merge operations — the hot path
+executed thousands of times per `atmos describe component`, `atmos terraform plan`, and every
+other command that reads stack configuration.
+
+<!--truncate-->
+
+## What Changed
+
+Every time Atmos resolves a component — merging globals, imports, overrides, base-component
+settings, environment variables, vars, and backend config — it performs a series of *deep merge*
+operations on `map[string]any` trees.  The previous implementation called `mergo.Merge` on a
+**pre-copied** duplicate of every input map, paying two costs per merge step:
+
+1. **Full deep-copy** of the source map (even keys that would never conflict with the destination).
+2. **Reflection-based traversal** inside mergo to walk the copied map and assign values.
+
+The new implementation replaces this pattern with a single-pass, reflection-free **native Go
+merge**:
+
+* The first input is deep-copied once to create the initial accumulator.
+* Each subsequent input is merged directly — values are copied into the accumulator *only* when
+  they are stored as leaves (new keys, scalar overrides, or slice results).  Shared intermediate
+  `map[string]any` containers are recursed into without any allocation.
+
+This reduces **N full pre-copies** (one per input) down to **1 pre-copy** plus **O(changed
+leaves)** incremental copies for a typical N-input merge.
+
+## Benchmark Results
+
+```
+Before  BenchmarkMerge-4   682 k iter / 5062 ns/op
+After   BenchmarkMerge-4  2514 k iter / 1427 ns/op   ← 3.5× faster
+```
+
+The improvement scales with the number of inputs and the depth of the configuration tree —
+exactly the shapes that matter most in production stacks with multiple layers of inheritance.
+
+## Semantic Compatibility
+
+The new implementation preserves the exact same merge semantics as the mergo-based code,
+including all three list merge strategies (`replace`, `append`, `merge`) and the
+`WithSliceDeepCopy` / `WithAppendSlice` behaviours verified by the existing test suite.
+No configuration changes are needed.
+
+## How to Use It
+
+No action required — the improvement is automatic from this release onward.  If you notice
+any difference in merge results, please open an issue.

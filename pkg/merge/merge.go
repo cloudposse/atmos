@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"strings"
 
-	"dario.cat/mergo"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -346,40 +344,20 @@ func MergeWithOptions(
 	}
 
 	// Standard merge path for multiple non-empty inputs.
-	merged := map[string]any{}
+	//
+	// Strategy: deep-copy the first input to create the initial accumulator, then
+	// merge each subsequent input into it using deepMergeNative.  deepMergeNative
+	// only copies values that are placed as leaves in the accumulator, so it avoids
+	// the full pre-copy that the old mergo-based loop required on every iteration.
+	// This reduces the number of full DeepCopyMap calls from N to 1 and eliminates
+	// reflection overhead from mergo for every subsequent merge.
+	merged, err := DeepCopyMap(nonEmptyInputs[0])
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
+	}
 
-	for index := range nonEmptyInputs {
-		current := nonEmptyInputs[index]
-
-		// Due to a bug in `mergo.Merge`
-		// (Note: in the `for` loop, it DOES modify the source of the previous loop iteration if it's a complex map and `mergo` gets a pointer to it,
-		// not only the destination of the current loop iteration),
-		// we don't give it our maps directly; we deep copy them using our custom DeepCopyMap (faster than YAML serialization),
-		// so `mergo` does not have access to the original pointers.
-		// Deep copy preserves types and is sufficient because the data is already in Go map format with custom tags already processed.
-		dataCurrent, err := DeepCopyMap(current)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
-		}
-
-		var opts []func(*mergo.Config)
-		opts = append(opts, mergo.WithOverride, mergo.WithTypeCheck)
-
-		// This was fixed/broken in https://github.com/imdario/mergo/pull/231/files
-		// It was released in https://github.com/imdario/mergo/releases/tag/v0.3.14
-		// It was not working before in `github.com/imdario/mergo` so we need to disable it in our code
-		// opts = append(opts, mergo.WithOverwriteWithEmptyValue)
-
-		if sliceDeepCopy {
-			opts = append(opts, mergo.WithSliceDeepCopy)
-		} else if appendSlice {
-			opts = append(opts, mergo.WithAppendSlice)
-		}
-
-		if err := mergo.Merge(&merged, dataCurrent, opts...); err != nil {
-			// Return the error without debug logging.
-			return nil, fmt.Errorf("%w: mergo merge failed: %w", errUtils.ErrMerge, err)
-		}
+	for _, current := range nonEmptyInputs[1:] {
+		deepMergeNative(merged, current, appendSlice, sliceDeepCopy)
 	}
 
 	return merged, nil
