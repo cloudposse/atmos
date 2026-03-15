@@ -292,7 +292,44 @@ The `import` section supports the following fields:
   <dt>`skip_if_missing` - (boolean)</dt>
   <dd>Set it to `true` to ignore the imported manifest if it does not exist, and don't throw an error. This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.</dd>
 
+  <dt>`import_if` - (string)</dt>
+  <dd>A Go template expression that is evaluated against the current stack's vars before any file I/O is performed. The import is only included when the expression evaluates to a truthy value (`true`, `1`, or `yes`). If the expression evaluates to a falsy value (`false`, `0`, `no`, or empty string), the import is silently skipped. The expression has access to all top-level vars (e.g. `.stage`, `.tenant`, `.environment`, `.namespace`, `.region`) as well as the full vars map (e.g. `.vars.pci_scope`) and all Sprig/Gomplate functions.</dd>
+
 </dl>
+
+## Conditional Imports
+
+Use `import_if` to conditionally include catalog files based on stack context without resorting to `.yaml.tmpl` files:
+
+```yaml title="stacks/orgs/cp/tenant1/prod/us-east-2.yaml"
+vars:
+  stage: prod
+  pci_scope: true
+
+import:
+  # Always included
+  - catalog/vpc/defaults
+
+  # Only included in prod environments
+  - path: catalog/vpc/flow-logs
+    import_if: "{{ eq .stage \"prod\" }}"
+
+  # Only included when pci_scope var is truthy
+  - path: catalog/compliance/pci
+    import_if: "{{ .vars.pci_scope }}"
+```
+
+The template context for `import_if` includes:
+
+| Key | Description |
+|-----|-------------|
+| `.vars` | The full `vars` map from the current stack file |
+| `.stage` | Shorthand for `.vars.stage` (and similarly for `tenant`, `environment`, `namespace`, `region`) |
+| `.locals` | Resolved `locals` section (if present) |
+| `.settings` | `settings` section (if present) |
+
+All Sprig and Gomplate template functions are available. The expression must produce one of `true`, `1`, `yes` (truthy) or `false`, `0`, `no`, `` (falsy). Any other output is treated as an error.
+
 
 A combination of the two formats is also supported:
 
