@@ -2,7 +2,7 @@
 slug: describe-stacks-complexity-reduction
 title: "98% Complexity Reduction in describe stacks"
 authors: [rb]
-tags: [dx, core]
+tags: [dx]
 ---
 
 `ExecuteDescribeStacks` was the most complex function in the entire Atmos codebase — cyclomatic complexity of **247** and cognitive complexity of **1252**. We broke it apart.
@@ -55,7 +55,7 @@ The public API is **completely unchanged**. `ExecuteDescribeStacks` accepts the 
 
 ## New Unit Tests
 
-47 new unit tests cover every pure helper function at 100%:
+80+ unit tests now cover every pure helper function at near-100%:
 
 ```go
 // Example: testing shouldFilterByStack in isolation
