@@ -10,6 +10,10 @@ VERSION=test
 
 export CGO_ENABLED=0
 
+# Number of tests to run in parallel within a package.
+# Defaults to GOMAXPROCS (number of CPUs).  Override with: make testacc PARALLEL=8
+PARALLEL ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+
 # Detect git worktree and set GOFLAGS accordingly.
 # In worktrees, buildvcs fails because .git is in a different location.
 IS_WORKTREE := $(shell [ "$$(git rev-parse --git-dir 2>/dev/null)" != "$$(git rev-parse --git-common-dir 2>/dev/null)" ] && echo true)
@@ -90,12 +94,12 @@ deps:
 	go mod download
 
 testacc: deps
-	@echo "Running acceptance tests"
-	go test $(TEST) $(TESTARGS) -timeout 40m
+	@echo "Running acceptance tests (parallel=$(PARALLEL))"
+	go test $(TEST) $(TESTARGS) -timeout 40m -parallel $(PARALLEL)
 
 # Run tests with subprocess coverage collection (Go 1.20+)
 testacc-cover: deps
-	@scripts/collect-coverage.sh "$(TEST)" "$(TESTARGS)"
+	@PARALLEL=$(PARALLEL) scripts/collect-coverage.sh "$(TEST)" "$(TESTARGS)"
 
 # Run acceptance tests with coverage report
 testacc-coverage: testacc-cover

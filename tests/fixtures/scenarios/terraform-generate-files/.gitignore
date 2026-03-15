@@ -4,6 +4,7 @@ metadata.json
 config.yaml
 bucket_config.tf
 README.md
+*-context.json
 
 # Terraform files
 .terraform/

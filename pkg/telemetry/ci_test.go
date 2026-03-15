@@ -325,3 +325,78 @@ func TestHelperFunctions(t *testing.T) {
 		assert.False(t, isEnvVarEquals("NON_EXISTENT_VAR", "any"))
 	})
 }
+
+func TestFilterCIEnvVars(t *testing.T) {
+	t.Run("removes known CI vars from env slice", func(t *testing.T) {
+		t.Parallel()
+
+		input := []string{
+			"HOME=/home/user",
+			"GITHUB_ACTIONS=true",
+			"CI=true",
+			"PATH=/usr/bin:/bin",
+			"TRAVIS=true",
+		}
+
+		result := FilterCIEnvVars(input)
+
+		// Non-CI vars must be preserved.
+		assert.Contains(t, result, "HOME=/home/user")
+		assert.Contains(t, result, "PATH=/usr/bin:/bin")
+
+		// Known CI vars must be removed.
+		for _, entry := range result {
+			assert.NotContains(t, entry, "GITHUB_ACTIONS=")
+			assert.NotContains(t, entry, "CI=")
+			assert.NotContains(t, entry, "TRAVIS=")
+		}
+	})
+
+	t.Run("preserves non-CI vars unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		input := []string{
+			"USER=alice",
+			"SHELL=/bin/bash",
+			"TERM=xterm-256color",
+		}
+
+		result := FilterCIEnvVars(input)
+
+		assert.Equal(t, input, result)
+	})
+
+	t.Run("handles empty input", func(t *testing.T) {
+		t.Parallel()
+
+		result := FilterCIEnvVars([]string{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("handles entries without value", func(t *testing.T) {
+		t.Parallel()
+
+		input := []string{
+			"CI", // No '=' separator.
+			"HOME=/home",
+		}
+
+		result := FilterCIEnvVars(input)
+
+		// "CI" without '=' has key "CI" which should be filtered.
+		assert.NotContains(t, result, "CI")
+		assert.Contains(t, result, "HOME=/home")
+	})
+
+	t.Run("does not modify the original slice", func(t *testing.T) {
+		t.Parallel()
+
+		input := []string{"CI=true", "HOME=/home"}
+		original := make([]string, len(input))
+		copy(original, input)
+
+		FilterCIEnvVars(input)
+
+		assert.Equal(t, original, input)
+	})
+}

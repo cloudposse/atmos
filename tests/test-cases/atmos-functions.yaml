@@ -2,6 +2,7 @@ tests:
   - name: terraform output function
     enabled: true
     tty: true
+    parallel: false
     sandbox: "atmos-functions"
     description: "Ensure the !terraform.output function works."
     workdir: "fixtures/scenarios/atmos-functions/"
@@ -28,6 +29,7 @@ tests:
   - name: terraform output function (no tty)
     enabled: true
     tty: false
+    parallel: false
     sandbox: "atmos-functions"
     description: "Ensure the !terraform.output function works."
     workdir: "fixtures/scenarios/atmos-functions/"
@@ -51,6 +53,7 @@ tests:
   - name: "!env function test"
     enabled: true
     tty: false
+    parallel: false
     sandbox: "atmos-functions"
     description: "Ensure the !env function works."
     workdir: "fixtures/scenarios/atmos-functions/"
@@ -71,6 +74,7 @@ tests:
   - name: "!terraform.output from component with !env function test"
     enabled: true
     tty: false
+    parallel: false
     sandbox: "atmos-functions"
     description: "Ensure !terraform.output from component with !env function works."
     workdir: "fixtures/scenarios/atmos-functions/"

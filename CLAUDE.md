@@ -223,6 +223,15 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Commands**: `make test-short` (quick), `make testacc` (all), `make testacc-cover` (coverage)
 
+**Parallel Execution**: Acceptance tests run in parallel by default via `t.Parallel()`.  Each test case gets its own `t.TempDir()` for HOME/XDG isolation — no shared state.  Tests that modify shared directories (e.g., named sandboxes running terraform apply) must set `parallel: false` in their YAML.
+
+**Parallel Rules for TestCLI:**
+- `t.Setenv()` and `t.Chdir()` are **incompatible** with `t.Parallel()` in Go 1.24+.  Use direct `cmd.Env` manipulation and `cmd.Dir` instead.
+- CI vars are filtered from the **inherited** process env before `tc.Env` is merged, so tests can explicitly re-add CI vars (e.g. `CI: "true"`) without them being filtered out.
+- `atmosRunner` is initialized once in `TestMain`, not lazily per-test, to avoid data races.
+- `cmd.Dir` sets the **subprocess** working directory; `os.Stat`/`os.ReadFile` in the test process use the test binary's starting dir. Relative paths in `FileExists`/`FileNotExists`/`FileContains` are resolved against `absoluteWorkdir` via `resolveFilePaths`/`resolveFilePathsMap` helpers.
+- Named sandboxes with terraform state (write operations) AND ordering dependencies between tests **must** use `parallel: false` on ALL related tests. Tests 3 and 4 of `atmos-functions.yaml` are an example: test 4 reads terraform state written by test 3.
+
 **Fixtures**: `tests/test-cases/` for integration tests
 
 **Golden Snapshots (MANDATORY):**
