@@ -146,7 +146,7 @@ func TestGetHomeFromShell_Failure(t *testing.T) {
 	})
 
 	t.Run("empty output", func(t *testing.T) {
-		shellHomeDirCmd = "echo -n ''" // forces empty trimmed output
+		shellHomeDirCmd = "printf ''" // forces empty trimmed output (POSIX compliant, unlike "echo -n")
 		_, err := getHomeFromShell()
 		assert.ErrorIs(t, err, ErrBlankOutput, "getHomeFromShell should return ErrBlankOutput for empty output.")
 	})
@@ -281,11 +281,15 @@ func TestExpand_DirError(t *testing.T) {
 	}
 
 	// On Unix, use dependency injection to force Dir() to return an error.
+	// On darwin, darwinHomeDirFunc must also be mocked because dirUnix() tries
+	// it before currentUserFunc, and the real dscl command succeeds on macOS.
 	origUser := currentUserFunc
 	origShell := shellHomeDirCmd
+	origDarwin := darwinHomeDirFunc
 	defer func() {
 		currentUserFunc = origUser
 		shellHomeDirCmd = origShell
+		darwinHomeDirFunc = origDarwin
 	}()
 
 	Reset()
@@ -296,6 +300,7 @@ func TestExpand_DirError(t *testing.T) {
 
 	t.Setenv("HOME", "")
 	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
+	darwinHomeDirFunc = func() (string, error) { return "", errors.New("mock darwin failure") }
 	shellHomeDirCmd = "exit 1"
 
 	_, err := Expand("~/test")
@@ -309,11 +314,15 @@ func TestDir_Error(t *testing.T) {
 		t.Skip("This test uses Unix-specific injection variables.")
 	}
 
+	// On darwin, darwinHomeDirFunc must also be mocked because dirUnix() tries
+	// it before currentUserFunc, and the real dscl command succeeds on macOS.
 	origUser := currentUserFunc
 	origShell := shellHomeDirCmd
+	origDarwin := darwinHomeDirFunc
 	defer func() {
 		currentUserFunc = origUser
 		shellHomeDirCmd = origShell
+		darwinHomeDirFunc = origDarwin
 	}()
 
 	Reset()
@@ -324,6 +333,7 @@ func TestDir_Error(t *testing.T) {
 
 	t.Setenv("HOME", "")
 	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
+	darwinHomeDirFunc = func() (string, error) { return "", errors.New("mock darwin failure") }
 	shellHomeDirCmd = "exit 1"
 
 	_, err := Dir()
