@@ -9,7 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth"
-	"github.com/cloudposse/atmos/pkg/config"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -153,7 +153,7 @@ func TestExecuteDescribeStacks_Packer(t *testing.T) {
 	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	stacksMap, err := ExecuteDescribeStacks(
@@ -201,7 +201,7 @@ func TestExecuteDescribeStacks_Ansible(t *testing.T) {
 	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	stacksMap, err := ExecuteDescribeStacks(
@@ -250,4 +250,95 @@ func TestExecuteDescribeStacks_Ansible(t *testing.T) {
 	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".dev.components.ansible.hello-world.settings.ansible.playbook")
 	assert.Nil(t, err)
 	assert.Equal(t, "site.yml", val)
+}
+
+// TestSetStackDescription covers all branches of the setStackDescription helper.
+func TestSetStackDescription(t *testing.T) {
+	t.Run("sections filter excludes description – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		stackSection := map[string]any{cfg.DescriptionSectionName: "some description"}
+		// sections is non-empty but does not include "description", so the early return should fire.
+		setStackDescription(finalMap, "my-stack", stackSection, []string{"vars"})
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		_, exists := stackEntry[cfg.DescriptionSectionName]
+		assert.False(t, exists, "description should not be set when it is absent from the sections filter")
+	})
+
+	t.Run("stackSection not a map – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		// Pass a non-map stackSection value.
+		setStackDescription(finalMap, "my-stack", "not-a-map", nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		_, exists := stackEntry[cfg.DescriptionSectionName]
+		assert.False(t, exists, "description should not be set when stackSection is not a map")
+	})
+
+	t.Run("description key missing from stackSection – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		stackSection := map[string]any{"vars": map[string]any{}}
+		setStackDescription(finalMap, "my-stack", stackSection, nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		_, exists := stackEntry[cfg.DescriptionSectionName]
+		assert.False(t, exists, "description should not be set when key is absent")
+	})
+
+	t.Run("description is empty string – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		stackSection := map[string]any{cfg.DescriptionSectionName: ""}
+		setStackDescription(finalMap, "my-stack", stackSection, nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		_, exists := stackEntry[cfg.DescriptionSectionName]
+		assert.False(t, exists, "description should not be set when value is empty string")
+	})
+
+	t.Run("finalStacksMap entry not a map – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": "not-a-map",
+		}
+		stackSection := map[string]any{cfg.DescriptionSectionName: "some description"}
+		// Should not panic; the non-map stack entry triggers the guard and returns.
+		setStackDescription(finalMap, "my-stack", stackSection, nil)
+		// Entry remains unchanged.
+		assert.Equal(t, "not-a-map", finalMap["my-stack"])
+	})
+
+	t.Run("description set on first call", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		stackSection := map[string]any{cfg.DescriptionSectionName: "hello world"}
+		setStackDescription(finalMap, "my-stack", stackSection, nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "hello world", stackEntry[cfg.DescriptionSectionName])
+	})
+
+	t.Run("idempotent – second call does not overwrite", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{
+				cfg.DescriptionSectionName: "original",
+			},
+		}
+		stackSection := map[string]any{cfg.DescriptionSectionName: "overwrite-attempt"}
+		setStackDescription(finalMap, "my-stack", stackSection, nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "original", stackEntry[cfg.DescriptionSectionName], "existing description should not be overwritten")
+	})
+
+	t.Run("sections filter includes description – description is set", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		stackSection := map[string]any{cfg.DescriptionSectionName: "filtered in"}
+		setStackDescription(finalMap, "my-stack", stackSection, []string{cfg.DescriptionSectionName})
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "filtered in", stackEntry[cfg.DescriptionSectionName])
+	})
 }

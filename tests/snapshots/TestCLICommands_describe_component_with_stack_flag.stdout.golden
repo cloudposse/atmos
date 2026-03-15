@@ -996,6 +996,7 @@ deps_all:
   - mixins/tenant/plat
   - orgs/acme/_defaults
   - orgs/acme/plat/dev/us-east-2
+description: Virtual Private Cloud with subnets and NAT gateway
 env: {}
 generate: {}
 hooks: {}
