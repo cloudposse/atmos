@@ -852,6 +852,28 @@ func TestUpdateAzureProfile(t *testing.T) {
 				assert.Equal(t, "AzureUSGovernment", sub["environmentName"])
 			},
 		},
+		{
+			name: "china cloud sets correct environment name",
+			setupProfile: func(home string) {
+				// Don't create profile file.
+			},
+			username:            "admin@contoso.partner.onmschina.cn",
+			tenantID:            "china-tenant-101",
+			subscriptionID:      "china-sub-202",
+			azureProfileEnvName: "AzureChinaCloud",
+			expectError:         false,
+			checkProfile: func(t *testing.T, profile map[string]interface{}) {
+				subs, ok := profile["subscriptions"].([]interface{})
+				require.True(t, ok)
+				require.Len(t, subs, 1)
+
+				sub := subs[0].(map[string]interface{})
+				assert.Equal(t, "china-sub-202", sub["id"])
+				assert.Equal(t, "china-tenant-101", sub["tenantId"])
+				assert.True(t, sub["isDefault"].(bool))
+				assert.Equal(t, "AzureChinaCloud", sub["environmentName"])
+			},
+		},
 	}
 
 	for _, tt := range tests {
