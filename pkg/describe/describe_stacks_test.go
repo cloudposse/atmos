@@ -481,136 +481,136 @@ func TestDescribeStacksWithEmptySectionFiltering(t *testing.T) {
 // TestDescribeStacksComponentDescription verifies that the description field on a component
 // is included in the describe stacks output.
 func TestDescribeStacksComponentDescription(t *testing.T) {
-configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-assert.Nil(t, err)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	assert.Nil(t, err)
 
-stack := "tenant1-ue2-dev"
-components := []string{"top-level-component1"}
-componentTypes := []string{"terraform"}
+	stack := "tenant1-ue2-dev"
+	components := []string{"top-level-component1"}
+	componentTypes := []string{"terraform"}
 
-stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, nil, false, false)
-assert.Nil(t, err)
-assert.NotNil(t, stacks)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, nil, false, false)
+	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-stackMap, ok := stacks[stack].(map[string]any)
-assert.True(t, ok, "stack entry should be a map")
+	stackMap, ok := stacks[stack].(map[string]any)
+	assert.True(t, ok, "stack entry should be a map")
 
-componentsMap, ok := stackMap["components"].(map[string]any)
-assert.True(t, ok, "stack should have components section")
+	componentsMap, ok := stackMap["components"].(map[string]any)
+	assert.True(t, ok, "stack should have components section")
 
-terraformMap, ok := componentsMap["terraform"].(map[string]any)
-assert.True(t, ok, "components should have terraform section")
+	terraformMap, ok := componentsMap["terraform"].(map[string]any)
+	assert.True(t, ok, "components should have terraform section")
 
-component, ok := terraformMap["top-level-component1"].(map[string]any)
-assert.True(t, ok, "terraform should have top-level-component1")
+	component, ok := terraformMap["top-level-component1"].(map[string]any)
+	assert.True(t, ok, "terraform should have top-level-component1")
 
-description, ok := component["description"].(string)
-assert.True(t, ok, "component should have description field")
-assert.Equal(t, "Top-level component for testing Atmos stack configuration.", description)
+	description, ok := component["description"].(string)
+	assert.True(t, ok, "component should have description field")
+	assert.Equal(t, "Top-level component for testing Atmos stack configuration.", description)
 }
 
 // TestDescribeStacksStackDescription verifies that the description field at the stack level
 // is included in the describe stacks output.
 func TestDescribeStacksStackDescription(t *testing.T) {
-configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-assert.Nil(t, err)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	assert.Nil(t, err)
 
-stack := "tenant1-ue2-dev"
+	stack := "tenant1-ue2-dev"
 
-stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, false)
-assert.Nil(t, err)
-assert.NotNil(t, stacks)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, nil, nil, nil, false, false)
+	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-stackMap, ok := stacks[stack].(map[string]any)
-assert.True(t, ok, "stack entry should be a map")
+	stackMap, ok := stacks[stack].(map[string]any)
+	assert.True(t, ok, "stack entry should be a map")
 
-description, ok := stackMap["description"].(string)
-assert.True(t, ok, "stack should have description field")
-assert.Equal(t, "Tenant1 US East 2 development stack.", description)
+	description, ok := stackMap["description"].(string)
+	assert.True(t, ok, "stack should have description field")
+	assert.Equal(t, "Tenant1 US East 2 development stack.", description)
 }
 
 // TestDescribeStacksDescriptionSectionFilter verifies that filtering by the description section
 // includes the description field and excludes others.
 func TestDescribeStacksDescriptionSectionFilter(t *testing.T) {
-configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-assert.Nil(t, err)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	assert.Nil(t, err)
 
-stack := "tenant1-ue2-dev"
-components := []string{"top-level-component1"}
-componentTypes := []string{"terraform"}
-sections := []string{"description"}
+	stack := "tenant1-ue2-dev"
+	components := []string{"top-level-component1"}
+	componentTypes := []string{"terraform"}
+	sections := []string{"description"}
 
-stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, sections, false, false)
-assert.Nil(t, err)
-assert.NotNil(t, stacks)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, sections, false, false)
+	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-stackMap, ok := stacks[stack].(map[string]any)
-assert.True(t, ok, "stack entry should be a map")
+	stackMap, ok := stacks[stack].(map[string]any)
+	assert.True(t, ok, "stack entry should be a map")
 
-// Stack-level description should be present.
-description, ok := stackMap["description"].(string)
-assert.True(t, ok, "stack should have description field when filtering by description section")
-assert.Equal(t, "Tenant1 US East 2 development stack.", description)
+	// Stack-level description should be present.
+	description, ok := stackMap["description"].(string)
+	assert.True(t, ok, "stack should have description field when filtering by description section")
+	assert.Equal(t, "Tenant1 US East 2 development stack.", description)
 
-componentsMap, ok := stackMap["components"].(map[string]any)
-assert.True(t, ok, "stack should have components section")
+	componentsMap, ok := stackMap["components"].(map[string]any)
+	assert.True(t, ok, "stack should have components section")
 
-terraformMap, ok := componentsMap["terraform"].(map[string]any)
-assert.True(t, ok, "components should have terraform section")
+	terraformMap, ok := componentsMap["terraform"].(map[string]any)
+	assert.True(t, ok, "components should have terraform section")
 
-component, ok := terraformMap["top-level-component1"].(map[string]any)
-assert.True(t, ok, "terraform should have top-level-component1")
+	component, ok := terraformMap["top-level-component1"].(map[string]any)
+	assert.True(t, ok, "terraform should have top-level-component1")
 
-// Component description should be present.
-compDescription, ok := component["description"].(string)
-assert.True(t, ok, "component should have description field when filtering by description section")
-assert.Equal(t, "Top-level component for testing Atmos stack configuration.", compDescription)
+	// Component description should be present.
+	compDescription, ok := component["description"].(string)
+	assert.True(t, ok, "component should have description field when filtering by description section")
+	assert.Equal(t, "Top-level component for testing Atmos stack configuration.", compDescription)
 
-// No other sections like vars should be present.
-_, hasVars := component["vars"]
-assert.False(t, hasVars, "vars should not be present when filtering by description section only")
+	// No other sections like vars should be present.
+	_, hasVars := component["vars"]
+	assert.False(t, hasVars, "vars should not be present when filtering by description section only")
 }
 
 // TestDescribeStacksNoDescriptionField verifies that components without a description field
 // don't have the description field in the output when it's empty and includeEmpty is false.
 func TestDescribeStacksNoDescriptionField(t *testing.T) {
-configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
-atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-assert.Nil(t, err)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	assert.Nil(t, err)
 
-includeEmpty := false
-atmosConfig.Describe.Settings.IncludeEmpty = &includeEmpty
+	includeEmpty := false
+	atmosConfig.Describe.Settings.IncludeEmpty = &includeEmpty
 
-stack := "tenant1-ue2-dev"
-components := []string{"test/test-component"}
-componentTypes := []string{"terraform"}
+	stack := "tenant1-ue2-dev"
+	components := []string{"test/test-component"}
+	componentTypes := []string{"terraform"}
 
-stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, nil, false, false)
-assert.Nil(t, err)
-assert.NotNil(t, stacks)
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, nil, false, false)
+	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
 
-stackMap, ok := stacks[stack].(map[string]any)
-assert.True(t, ok, "stack entry should be a map")
+	stackMap, ok := stacks[stack].(map[string]any)
+	assert.True(t, ok, "stack entry should be a map")
 
-componentsMap, ok := stackMap["components"].(map[string]any)
-assert.True(t, ok)
+	componentsMap, ok := stackMap["components"].(map[string]any)
+	assert.True(t, ok)
 
-terraformMap, ok := componentsMap["terraform"].(map[string]any)
-assert.True(t, ok)
+	terraformMap, ok := componentsMap["terraform"].(map[string]any)
+	assert.True(t, ok)
 
-component, ok := terraformMap["test/test-component"].(map[string]any)
-assert.True(t, ok, "terraform should have test/test-component")
+	component, ok := terraformMap["test/test-component"].(map[string]any)
+	assert.True(t, ok, "terraform should have test/test-component")
 
-// test/test-component has no description field - it should not appear as a non-empty string.
-desc := component["description"]
-if descStr, ok := desc.(string); ok {
-assert.Empty(t, descStr, "description should be empty if not set in YAML")
-}
+	// test/test-component has no description field - it should not appear as a non-empty string.
+	desc := component["description"]
+	if descStr, ok := desc.(string); ok {
+		assert.Empty(t, descStr, "description should be empty if not set in YAML")
+	}
 }
