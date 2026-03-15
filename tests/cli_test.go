@@ -57,6 +57,11 @@ var (
 )
 var logger *log.AtmosLogger
 
+// gitHubUsernameVars lists environment variables that expose the GitHub username.
+// They are cleared from the subprocess environment (unless the test explicitly sets them)
+// to produce consistent golden snapshots across local and CI environments.
+var gitHubUsernameVars = []string{"ATMOS_GITHUB_USERNAME", "GITHUB_ACTOR", "GITHUB_USERNAME"}
+
 type Expectation struct {
 	Stdout                   []MatchPattern            `yaml:"stdout"`                     // Expected stdout output (non-TTY mode)
 	Stderr                   []MatchPattern            `yaml:"stderr"`                     // Expected stderr output (non-TTY mode)
@@ -1093,7 +1098,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// produce environment-dependent output.  Vendor tests are exempted because
 	// they require GitHub auth.
 	if clearGitHubVarsForSnapshots {
-		for _, varName := range []string{"ATMOS_GITHUB_USERNAME", "GITHUB_ACTOR", "GITHUB_USERNAME"} {
+		for _, varName := range gitHubUsernameVars {
 			// Only clear if the test hasn't explicitly set the variable.
 			if _, exists := tc.Env[varName]; exists {
 				continue

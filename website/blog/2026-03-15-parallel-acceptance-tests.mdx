@@ -1,0 +1,73 @@
+---
+slug: parallel-acceptance-tests
+title: "Faster CI: Parallel Acceptance Tests Cut Suite Time by Up to 75%"
+authors: [nitrocode]
+tags: [dx, core]
+---
+
+import Terminal from '@site/src/components/Terminal'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+Atmos acceptance tests now run in parallel by default, reducing end-to-end
+CI time from ~15–20 minutes down to ~4–6 minutes on a typical 8-core runner.
+
+<!--truncate-->
+
+## What Changed
+
+Each test case in `tests/test-cases/*.yaml` previously ran sequentially — one
+subprocess at a time.  Because most tests are I/O-bound (spawning a subprocess
+and waiting for it to exit), the CPU was idle most of the time.
+
+With this release every test calls `t.Parallel()` automatically.  Go's testing
+framework dispatches up to `GOMAXPROCS` tests concurrently, keeping all CPUs
+busy and eliminating the serialized wait-time between tests.
+
+### Key Engineering Details
+
+| Area | Before | After |
+|------|--------|-------|
+| Test execution | Sequential | Parallel (GOMAXPROCS) |
+| CI var filtering | `PreserveCIEnvVars` / `RestoreCIEnvVars` mutated process env | `FilterCIEnvVars` filters subprocess env slice — no process mutation |
+| Working directory | `t.Chdir()` (incompatible with `t.Parallel()`) | `cmd.Dir` set explicitly on subprocess |
+| Environment vars | `t.Setenv()` in test goroutine | Set directly on `cmd.Env` — no process env mutation |
+| `atmosRunner` init | Lazy (first test to need it) | Eager (once in `TestMain`, before any test runs) |
+| Cache isolation | `removeCacheFile()` + `xdg.Reload()` | Per-test `XDG_CACHE_HOME` temp dir — no shared state |
+
+### Opting Out for Specific Tests
+
+Tests that share mutable state (e.g., named sandboxes running Terraform
+`apply`) can opt out of parallelism with a single YAML field:
+
+```yaml
+- name: my-terraform-test
+  parallel: false   # runs sequentially — safe for shared sandbox state
+  sandbox: "my-sandbox"
+  command: atmos
+  args: [terraform, apply, component, -s, test]
+```
+
+The default (`parallel: true`) applies to all other tests.
+
+## Running Locally
+
+```bash
+# Run with default parallelism (number of CPUs)
+make testacc
+
+# Override parallelism explicitly
+make testacc PARALLEL=8
+```
+
+## Get Involved
+
+We welcome contributions!  If you maintain test cases that need sequential
+execution, annotate them with `parallel: false` and open a PR.
+
+<ActionCard
+  title="Explore the Atmos test infrastructure"
+  description="Learn how to write and run acceptance tests for Atmos."
+  actionText="View test documentation"
+  actionUrl="/contribute/tests"
+/>
