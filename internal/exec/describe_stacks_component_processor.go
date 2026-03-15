@@ -617,7 +617,7 @@ func applyTerraformMetadataInheritance(
 
 	merged, err := m.Merge(atmosConfig, []map[string]any{
 		baseComponentConfig.BaseComponentMetadata, // base (lower priority)
-		metadataSection,                           // component (higher priority)
+		metadataSection, // component (higher priority)
 	})
 	if err != nil {
 		return nil, err

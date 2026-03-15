@@ -200,7 +200,6 @@ func TestResolveStackName_NameTemplateError(t *testing.T) {
 	require.Error(t, err)
 }
 
-
 func TestResolveStackName_PatternValidationFallback(t *testing.T) {
 	// When the pattern doesn't match the filename, it falls back to the filename.
 	ac := &schema.AtmosConfiguration{
@@ -375,9 +374,9 @@ func TestAddSectionsToComponentEntry_FilterSections(t *testing.T) {
 func TestAddSectionsToComponentEntry_SkipsEmptyMapsWhenIncludeEmptyFalse(t *testing.T) {
 	dest := map[string]any{}
 	src := map[string]any{
-		"vars":     map[string]any{},                    // empty map → should be skipped
-		"settings": map[string]any{"key": "val"},        // non-empty → should be included
-		"label":    "not-a-map",                         // non-map → always included
+		"vars":     map[string]any{},             // empty map → should be skipped
+		"settings": map[string]any{"key": "val"}, // non-empty → should be included
+		"label":    "not-a-map",                  // non-map → always included
 	}
 
 	addSectionsToComponentEntry(dest, src, nil, false)
@@ -553,7 +552,6 @@ func TestStackHasNonEmptyComponents_WithEnv(t *testing.T) {
 	}
 	assert.True(t, stackHasNonEmptyComponents(comps))
 }
-
 
 func TestStackHasNonEmptyComponents_NoRelevantSections(t *testing.T) {
 	comps := map[string]any{
