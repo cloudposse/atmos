@@ -176,7 +176,9 @@ func findAllYAMLFiles(root string) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil //nolint:nilerr // skip unreadable dirs
+			// Log and skip unreadable directories or files without failing the lint run.
+			log.Debug("Skipping unreadable path during stack file enumeration", "path", path, "error", err)
+			return nil
 		}
 		if !d.IsDir() {
 			ext := strings.ToLower(filepath.Ext(path))
