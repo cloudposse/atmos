@@ -9,17 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/lint"
 )
 
-// defaultSensitiveVarPatterns lists built-in patterns to check.
-var defaultSensitiveVarPatterns = []string{
-	"*password*",
-	"*secret*",
-	"*token*",
-	"*key*",
-	"*arn*",
-	"*account_id*",
-	"*role*",
-}
-
 // l08SensitiveVarRule warns when sensitive-looking variable names appear at global stack scope.
 type l08SensitiveVarRule struct{}
 
@@ -36,21 +25,9 @@ func (r *l08SensitiveVarRule) Severity() lint.Severity { return lint.SeverityWar
 func (r *l08SensitiveVarRule) AutoFixable() bool       { return false }
 
 func (r *l08SensitiveVarRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
+	// Sensitive var patterns come from the merged lint config (defaults are applied
+	// in mergedLintConfig in internal/exec/lint_stacks.go so this slice is never empty).
 	patterns := ctx.LintConfig.SensitiveVarPatterns
-	if len(patterns) == 0 {
-		patterns = defaultSensitiveVarPatterns
-	} else {
-		// Merge with defaults (deduplicate).
-		seen := make(map[string]bool)
-		merged := make([]string, 0, len(defaultSensitiveVarPatterns)+len(patterns))
-		for _, p := range append(defaultSensitiveVarPatterns, patterns...) {
-			if !seen[p] {
-				seen[p] = true
-				merged = append(merged, p)
-			}
-		}
-		patterns = merged
-	}
 
 	var findings []lint.LintFinding
 
@@ -101,8 +78,12 @@ func stackNameToFile(stackName, basePath string) string {
 	if basePath == "" {
 		return stackName
 	}
-	// Stack name may already be a relative path.
-	if strings.Contains(stackName, "/") || strings.HasSuffix(stackName, ".yaml") || strings.HasSuffix(stackName, ".yml") {
+	// Stack name may already be a relative or absolute path (contains a path separator
+	// on either Unix '/' or Windows '\', or has a YAML file extension).
+	if strings.ContainsRune(stackName, filepath.Separator) ||
+		strings.ContainsRune(stackName, '/') ||
+		strings.HasSuffix(stackName, ".yaml") ||
+		strings.HasSuffix(stackName, ".yml") {
 		return stackName
 	}
 	return ""

@@ -11,6 +11,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// defaultSensitiveVarPatterns mirrors the defaults applied by mergedLintConfig
+// in internal/exec/lint_stacks.go.  Tests that exercise L-08 with the default
+// patterns must set these explicitly because the rule no longer hard-codes them.
+var defaultSensitiveVarPatterns = []string{
+	"*password*", "*secret*", "*token*", "*key*",
+	"*arn*", "*account_id*", "*role*",
+}
+
 // makeContext creates a minimal LintContext for testing.
 func makeContext(stacksMap map[string]any) lint.LintContext {
 	return lint.LintContext{
@@ -827,7 +835,7 @@ func TestL08SensitiveVar(t *testing.T) {
 	tests := []struct {
 		name            string
 		stacksMap       map[string]any
-		extraPatterns   []string
+		patterns        []string
 		expectSensitive bool
 	}{
 		{
@@ -839,6 +847,7 @@ func TestL08SensitiveVar(t *testing.T) {
 					},
 				},
 			},
+			patterns:        defaultSensitiveVarPatterns,
 			expectSensitive: true,
 		},
 		{
@@ -850,6 +859,7 @@ func TestL08SensitiveVar(t *testing.T) {
 					},
 				},
 			},
+			patterns:        defaultSensitiveVarPatterns,
 			expectSensitive: false,
 		},
 		{
@@ -861,7 +871,7 @@ func TestL08SensitiveVar(t *testing.T) {
 					},
 				},
 			},
-			extraPatterns:   []string{"*api_key*"},
+			patterns:        []string{"*api_key*"},
 			expectSensitive: true,
 		},
 		{
@@ -873,6 +883,7 @@ func TestL08SensitiveVar(t *testing.T) {
 					},
 				},
 			},
+			patterns:        defaultSensitiveVarPatterns,
 			expectSensitive: true,
 		},
 	}
@@ -885,7 +896,7 @@ func TestL08SensitiveVar(t *testing.T) {
 				RawStackConfigs: make(map[string]map[string]any),
 				ImportGraph:     make(map[string][]string),
 				LintConfig: schema.LintStacksConfig{
-					SensitiveVarPatterns: tt.extraPatterns,
+					SensitiveVarPatterns: tt.patterns,
 				},
 			}
 			findings, err := l08.Run(ctx)
@@ -1046,7 +1057,9 @@ func TestEngineRunWithFilter(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig:  schema.LintStacksConfig{},
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
+		},
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -1071,6 +1084,7 @@ func TestEngineRunWithSeverityOverride(t *testing.T) {
 		},
 		ImportGraph: map[string][]string{},
 		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
 			Rules: map[string]string{
 				"L-08": "error", // override to error
 			},
@@ -1103,7 +1117,9 @@ func TestEngineRunMinSeverityFilter(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig:  schema.LintStacksConfig{},
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
+		},
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -1125,7 +1141,9 @@ func TestEngineRunNoRulesFilter(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig:  schema.LintStacksConfig{},
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
+		},
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -1150,7 +1168,9 @@ func TestEngineRunSortedFindings(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig:  schema.LintStacksConfig{},
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
+		},
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -1357,8 +1377,10 @@ func TestL08SensitiveVarBasePathResolution(t *testing.T) {
 		},
 		RawStackConfigs: make(map[string]map[string]any),
 		ImportGraph:     make(map[string][]string),
-		LintConfig:      schema.LintStacksConfig{},
-		StacksBasePath:  "/stacks",
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
+		},
+		StacksBasePath: "/stacks",
 	}
 	findings, err := l08.Run(ctx)
 	require.NoError(t, err)
@@ -1714,8 +1736,10 @@ func TestL08StackNameWithSlash(t *testing.T) {
 		},
 		RawStackConfigs: make(map[string]map[string]any),
 		ImportGraph:     make(map[string][]string),
-		LintConfig:      schema.LintStacksConfig{},
-		StacksBasePath:  "/stacks",
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
+		},
+		StacksBasePath: "/stacks",
 	}
 	findings, err := l08.Run(ctx)
 	require.NoError(t, err)
@@ -2231,8 +2255,8 @@ func TestL02RedundantOverrideVarNotInParent(t *testing.T) {
 			"comp-concrete": map[string]any{
 				"metadata": map[string]any{"inherits": []any{"comp-base"}},
 				"vars": map[string]any{
-					"region":   "us-east-1", // matches parent (redundant)
-					"extra":    "unique",    // not in parent: parentHas=false → no finding
+					"region": "us-east-1", // matches parent (redundant)
+					"extra":  "unique",    // not in parent: parentHas=false → no finding
 				},
 			},
 		}),

@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/lint"
@@ -70,8 +71,8 @@ func (r *l07OrphanedFileRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 
 // normalizeForComparison strips common path variations for robust comparison.
 func normalizeForComparison(path string) string {
-	// Remove trailing slash.
-	if len(path) > 0 && path[len(path)-1] == '/' {
+	// Remove trailing path separator (handles both '/' on Unix and '\' on Windows).
+	if len(path) > 0 && os.IsPathSeparator(path[len(path)-1]) {
 		path = path[:len(path)-1]
 	}
 	// Remove common YAML extensions for comparison since import keys may omit them.
