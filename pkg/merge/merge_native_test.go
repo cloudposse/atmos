@@ -308,11 +308,11 @@ func BenchmarkMergeNative_TwoInputs(b *testing.B) {
 	}
 	input1 := map[string]any{
 		"vars": map[string]any{
-			"region":    "us-east-1",
-			"env":       "prod",
-			"tags":      []any{"env:prod"},
-			"count":     3,
-			"enabled":   true,
+			"region":  "us-east-1",
+			"env":     "prod",
+			"tags":    []any{"env:prod"},
+			"count":   3,
+			"enabled": true,
 		},
 		"settings": map[string]any{
 			"spacelift": map[string]any{"enabled": true},
@@ -320,8 +320,8 @@ func BenchmarkMergeNative_TwoInputs(b *testing.B) {
 	}
 	input2 := map[string]any{
 		"vars": map[string]any{
-			"region":  "us-west-2",
-			"extra":   "value",
+			"region": "us-west-2",
+			"extra":  "value",
 		},
 		"settings": map[string]any{
 			"spacelift": map[string]any{"workspace": "prod"},
