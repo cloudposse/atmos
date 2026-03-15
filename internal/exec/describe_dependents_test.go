@@ -158,6 +158,26 @@ func TestGetComponentDependencies(t *testing.T) {
 		assert.Equal(t, "folder", deps[2].Kind)
 		assert.Equal(t, "src/lambda", deps[2].Path)
 	})
+
+	t.Run("handles cross-type kind in dependencies.components", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc", "kind": "terraform"},
+					map[string]any{"component": "chart", "kind": "helmfile"},
+				},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+		assert.Equal(t, dependencySourceDependenciesComponents, source)
+
+		assert.Len(t, deps, 2)
+		assert.Equal(t, "vpc", deps[0].Component)
+		assert.Equal(t, "terraform", deps[0].Kind)
+		assert.Equal(t, "chart", deps[1].Component)
+		assert.Equal(t, "helmfile", deps[1].Kind)
+	})
 }
 
 func TestGetComponentDependenciesListMergeBehavior(t *testing.T) {

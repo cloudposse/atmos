@@ -195,7 +195,7 @@ The `getComponentDependencies()` function:
 The `getFileFolderDependencies()` function:
 1. Filters dependencies by `IsFileDependency()` or `IsFolderDependency()`
 2. Uses `dep.Path` for the file/folder location
-3. Supports legacy `file`/`folder` fields for backward compatibility
+3. Supports legacy `file`/`folder` fields for backward compatibility.
 
 ## Migration from `settings.depends_on`
 

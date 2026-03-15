@@ -18,6 +18,11 @@ func TestComponentDependency_IsFileDependency(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "file kind without path still returns true",
+			dep:      ComponentDependency{Kind: "file"},
+			expected: true,
+		},
+		{
 			name:     "folder kind returns false",
 			dep:      ComponentDependency{Kind: "folder", Path: "src/"},
 			expected: false,
@@ -50,6 +55,11 @@ func TestComponentDependency_IsFolderDependency(t *testing.T) {
 		{
 			name:     "folder kind returns true",
 			dep:      ComponentDependency{Kind: "folder", Path: "src/lambda"},
+			expected: true,
+		},
+		{
+			name:     "folder kind without path still returns true",
+			dep:      ComponentDependency{Kind: "folder"},
 			expected: true,
 		},
 		{
@@ -100,6 +110,11 @@ func TestComponentDependency_IsComponentDependency(t *testing.T) {
 		{
 			name:     "packer kind returns true",
 			dep:      ComponentDependency{Kind: "packer", Component: "ami"},
+			expected: true,
+		},
+		{
+			name:     "plugin kind returns true",
+			dep:      ComponentDependency{Kind: "plugin", Component: "custom"},
 			expected: true,
 		},
 		{

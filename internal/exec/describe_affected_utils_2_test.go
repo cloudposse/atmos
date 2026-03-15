@@ -723,6 +723,11 @@ func TestIsComponentDependentFolderOrFileChangedIndexed_AdditionalCases(t *testi
 				assert.Equal(t, tt.expectChangedType, changedType)
 				assert.Equal(t, tt.expectChangedPath, changedPath)
 			}
+			// When no file/folder deps exist, metadata should be empty.
+			if len(tt.deps) == 0 {
+				assert.Empty(t, changedType, "changedType should be empty when no deps")
+				assert.Empty(t, changedPath, "changedPath should be empty when no deps")
+			}
 		})
 	}
 }
