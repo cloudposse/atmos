@@ -5,9 +5,9 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -24,10 +24,20 @@ var (
 	ErrHomeDrivePathBlank  = errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
 )
 
-const (
-	passwdFieldCount   = 7
-	passwdHomeDirIndex = 5
-)
+// currentUserFunc is the function used to look up the current OS user.
+// It is a variable so that tests can replace it with a stub to simulate
+// error conditions without needing OS-level changes.
+var currentUserFunc = user.Current
+
+// darwinHomeDirFunc is the function used to look up the home directory on
+// macOS via dscl. It is a variable so that tests can replace it with a stub
+// to exercise the darwin path on other operating systems.
+var darwinHomeDirFunc = getDarwinHomeDir
+
+// shellHomeDirCmd is the shell command used by getHomeFromShell to determine
+// the home directory. It can be replaced in tests to simulate failure or
+// empty-output conditions.
+var shellHomeDirCmd = "cd && pwd"
 
 // Dir returns the home directory for the executing user.
 //
@@ -105,7 +115,7 @@ func dirUnix() (string, error) {
 
 	// Try OS-specific methods
 	if runtime.GOOS == "darwin" {
-		if home, err := getDarwinHomeDir(); err == nil && home != "" {
+		if home, err := darwinHomeDirFunc(); err == nil && home != "" {
 			return home, nil
 		}
 	} else {
@@ -162,35 +172,19 @@ func getDarwinHomeDir() (string, error) {
 }
 
 func getUnixHomeDir() (string, error) {
-	var stdout bytes.Buffer
-	cmd := exec.Command("getent", "passwd", strconv.Itoa(os.Getuid()))
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		if !errors.Is(err, exec.ErrNotFound) {
-			return "", err
-		}
-		return "", nil
+	// Use os/user.Current to get the home directory without parsing
+	// /etc/passwd format data directly. This avoids handling raw password
+	// database entries, which can contain sensitive fields.
+	u, err := currentUserFunc()
+	if err != nil {
+		return "", err
 	}
-
-	passwd := strings.TrimSpace(stdout.String())
-	if passwd == "" {
-		return "", nil
-	}
-
-	// username:password:uid:gid:gecos:home:shell
-	// lgtm[go/clear-text-logging]
-	// The password field in modern /etc/passwd is 'x', not the actual password.
-	// We only extract the home directory field and do not log sensitive data.
-	passwdParts := strings.SplitN(passwd, ":", passwdFieldCount)
-	if len(passwdParts) > passwdHomeDirIndex {
-		return passwdParts[passwdHomeDirIndex], nil
-	}
-	return "", nil
+	return u.HomeDir, nil
 }
 
 func getHomeFromShell() (string, error) {
 	var stdout bytes.Buffer
-	cmd := exec.Command("sh", "-c", "cd && pwd")
+	cmd := exec.Command("sh", "-c", shellHomeDirCmd)
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
 		return "", err
