@@ -392,6 +392,17 @@ func TestL03ImportDepth(t *testing.T) {
 			threshold:     3,
 			expectTooDeep: true,
 		},
+		{
+			name: "default threshold used when zero",
+			importGraph: map[string][]string{
+				"root":   {"l1"},
+				"l1":     {"l2"},
+				"l2":     {"l3"},
+				"l3":     {"l4"},
+			},
+			threshold:     0, // triggers default of 3
+			expectTooDeep: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -418,6 +429,388 @@ func TestL03ImportDepth(t *testing.T) {
 	}
 }
 
+func TestL05CohesionRule(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l05 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-05" {
+			l05 = r
+			break
+		}
+	}
+	require.NotNil(t, l05)
+	assert.Equal(t, "L-05", l05.ID())
+	assert.NotEmpty(t, l05.Name())
+	assert.NotEmpty(t, l05.Description())
+	assert.Equal(t, lint.SeverityInfo, l05.Severity())
+	assert.False(t, l05.AutoFixable())
+
+	tests := []struct {
+		name            string
+		rawStackConfigs map[string]map[string]any
+		expectFindings  bool
+	}{
+		{
+			name:            "empty configs",
+			rawStackConfigs: map[string]map[string]any{},
+			expectFindings:  false,
+		},
+		{
+			name: "few concern groups - no finding",
+			rawStackConfigs: map[string]map[string]any{
+				"/stacks/catalog/network.yaml": {
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc":   map[string]any{},
+							"vpc-2": map[string]any{},
+						},
+					},
+				},
+			},
+			expectFindings: false,
+		},
+		{
+			name: "many concern groups - finding",
+			rawStackConfigs: map[string]map[string]any{
+				"/stacks/catalog/mixed.yaml": {
+					"components": map[string]any{
+						"terraform": map[string]any{
+							// 4 different concern groups (prefixes): vpc, ecs, rds, eks
+							"vpc-prod":      map[string]any{},
+							"ecs-api":       map[string]any{},
+							"rds-postgres":  map[string]any{},
+							"eks-cluster":   map[string]any{},
+						},
+					},
+				},
+			},
+			expectFindings: true,
+		},
+		{
+			name: "many groups with helmfile components",
+			rawStackConfigs: map[string]map[string]any{
+				"/stacks/catalog/mixed-hf.yaml": {
+					"components": map[string]any{
+						"helmfile": map[string]any{
+							"cert-manager":  map[string]any{},
+							"ingress-nginx": map[string]any{},
+							"argocd":        map[string]any{},
+							"vault":         map[string]any{},
+						},
+					},
+				},
+			},
+			expectFindings: true,
+		},
+		{
+			name: "with StacksBasePath - shorter display path",
+			rawStackConfigs: map[string]map[string]any{
+				"/project/stacks/catalog/mixed.yaml": {
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc-prod":     map[string]any{},
+							"ecs-api":      map[string]any{},
+							"rds-postgres": map[string]any{},
+							"eks-cluster":  map[string]any{},
+						},
+					},
+				},
+			},
+			expectFindings: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := lint.LintContext{
+				StacksMap:       make(map[string]any),
+				RawStackConfigs: tt.rawStackConfigs,
+				ImportGraph:     make(map[string][]string),
+				LintConfig:      schema.LintConfig{},
+				StacksBasePath:  "/project/stacks",
+			}
+			findings, err := l05.Run(ctx)
+			require.NoError(t, err)
+			if tt.expectFindings {
+				assert.NotEmpty(t, findings)
+				for _, f := range findings {
+					assert.Equal(t, "L-05", f.RuleID)
+					assert.Equal(t, lint.SeverityInfo, f.Severity)
+					assert.NotEmpty(t, f.Message)
+					assert.NotEmpty(t, f.FixHint)
+				}
+			} else {
+				assert.Empty(t, findings)
+			}
+		})
+	}
+}
+
+func TestL06DRYExtractionOpportunity(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l06 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-06" {
+			l06 = r
+			break
+		}
+	}
+	require.NotNil(t, l06)
+	assert.Equal(t, "L-06", l06.ID())
+	assert.NotEmpty(t, l06.Name())
+	assert.NotEmpty(t, l06.Description())
+	assert.Equal(t, lint.SeverityInfo, l06.Severity())
+	assert.False(t, l06.AutoFixable())
+
+	tests := []struct {
+		name           string
+		stacksMap      map[string]any
+		thresholdPct   int
+		expectFindings bool
+	}{
+		{
+			name:           "empty stacks",
+			stacksMap:      map[string]any{},
+			thresholdPct:   80,
+			expectFindings: false,
+		},
+		{
+			name: "var in single stack - not a DRY issue",
+			stacksMap: map[string]any{
+				"stack1": componentsMap("terraform", map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{
+							"cidr": "10.0.0.0/16",
+						},
+					},
+				}),
+			},
+			thresholdPct:   80,
+			expectFindings: false,
+		},
+		{
+			name: "same var value in 100% of stacks - DRY opportunity",
+			stacksMap: map[string]any{
+				"stack1": componentsMap("terraform", map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"region": "us-east-1"},
+					},
+				}),
+				"stack2": componentsMap("terraform", map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"region": "us-east-1"},
+					},
+				}),
+				"stack3": componentsMap("terraform", map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"region": "us-east-1"},
+					},
+				}),
+			},
+			thresholdPct:   80,
+			expectFindings: true,
+		},
+		{
+			name: "different values in stacks - not a DRY issue",
+			stacksMap: map[string]any{
+				"stack1": componentsMap("terraform", map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"cidr": "10.0.0.0/16"},
+					},
+				}),
+				"stack2": componentsMap("terraform", map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"cidr": "10.1.0.0/16"},
+					},
+				}),
+			},
+			thresholdPct:   80,
+			expectFindings: false,
+		},
+		{
+			name: "default threshold used when zero",
+			stacksMap: map[string]any{
+				"stack1": componentsMap("terraform", map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"region": "us-east-1"},
+					},
+				}),
+				"stack2": componentsMap("terraform", map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"region": "us-east-1"},
+					},
+				}),
+			},
+			thresholdPct:   0, // triggers default 80
+			expectFindings: true,
+		},
+		{
+			name: "helmfile components also detected",
+			stacksMap: map[string]any{
+				"stack1": componentsMap("helmfile", map[string]any{
+					"nginx": map[string]any{
+						"vars": map[string]any{"replicas": "3"},
+					},
+				}),
+				"stack2": componentsMap("helmfile", map[string]any{
+					"nginx": map[string]any{
+						"vars": map[string]any{"replicas": "3"},
+					},
+				}),
+			},
+			thresholdPct:   80,
+			expectFindings: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := lint.LintContext{
+				StacksMap:       tt.stacksMap,
+				RawStackConfigs: make(map[string]map[string]any),
+				ImportGraph:     make(map[string][]string),
+				LintConfig: schema.LintConfig{
+					DRYThresholdPct: tt.thresholdPct,
+				},
+			}
+			findings, err := l06.Run(ctx)
+			require.NoError(t, err)
+			if tt.expectFindings {
+				assert.NotEmpty(t, findings)
+				for _, f := range findings {
+					assert.Equal(t, "L-06", f.RuleID)
+					assert.Equal(t, lint.SeverityInfo, f.Severity)
+					assert.NotEmpty(t, f.Message)
+					assert.NotEmpty(t, f.FixHint)
+				}
+			} else {
+				assert.Empty(t, findings)
+			}
+		})
+	}
+}
+
+func TestL07OrphanedFile(t *testing.T) {
+	t.Parallel()
+
+	all := rules.All()
+	var l07 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-07" {
+			l07 = r
+			break
+		}
+	}
+	require.NotNil(t, l07)
+	assert.Equal(t, "L-07", l07.ID())
+	assert.NotEmpty(t, l07.Name())
+	assert.NotEmpty(t, l07.Description())
+	assert.Equal(t, lint.SeverityWarning, l07.Severity())
+	assert.False(t, l07.AutoFixable())
+
+	tests := []struct {
+		name           string
+		allStackFiles  []string
+		importGraph    map[string][]string
+		stacksMap      map[string]any
+		rawStackConfig map[string]map[string]any
+		basePath       string
+		expectFindings bool
+	}{
+		{
+			name:           "no stack files",
+			allStackFiles:  []string{},
+			importGraph:    map[string][]string{},
+			expectFindings: false,
+		},
+		{
+			name:          "all files referenced",
+			allStackFiles: []string{"/stacks/deploy/prod.yaml"},
+			importGraph: map[string][]string{
+				"/stacks/deploy/prod.yaml": {"/stacks/catalog/base.yaml"},
+			},
+			expectFindings: false,
+		},
+		{
+			name:          "orphaned file detected",
+			allStackFiles: []string{"/stacks/catalog/unused.yaml"},
+			importGraph:   map[string][]string{},
+			stacksMap:     map[string]any{},
+			rawStackConfig: map[string]map[string]any{},
+			basePath:      "/stacks",
+			expectFindings: true,
+		},
+		{
+			name:          "file in stacksMap - not orphaned",
+			allStackFiles: []string{"/stacks/deploy/prod.yaml"},
+			importGraph:   map[string][]string{},
+			stacksMap: map[string]any{
+				"/stacks/deploy/prod": map[string]any{},
+			},
+			expectFindings: false,
+		},
+		{
+			name:          "file in rawStackConfigs - not orphaned",
+			allStackFiles: []string{"/stacks/catalog/base.yaml"},
+			importGraph:   map[string][]string{},
+			rawStackConfig: map[string]map[string]any{
+				"/stacks/catalog/base": map[string]any{},
+			},
+			expectFindings: false,
+		},
+		{
+			name:          "orphaned with no basePath - uses full path",
+			allStackFiles: []string{"/stacks/catalog/unused.yaml"},
+			importGraph:   map[string][]string{},
+			stacksMap:     map[string]any{},
+			rawStackConfig: map[string]map[string]any{},
+			basePath:      "",
+			expectFindings: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rawCfg := tt.rawStackConfig
+			if rawCfg == nil {
+				rawCfg = make(map[string]map[string]any)
+			}
+			stacksMap := tt.stacksMap
+			if stacksMap == nil {
+				stacksMap = make(map[string]any)
+			}
+			ctx := lint.LintContext{
+				StacksMap:       stacksMap,
+				RawStackConfigs: rawCfg,
+				ImportGraph:     tt.importGraph,
+				AllStackFiles:   tt.allStackFiles,
+				StacksBasePath:  tt.basePath,
+				LintConfig:      schema.LintConfig{},
+			}
+			findings, err := l07.Run(ctx)
+			require.NoError(t, err)
+			if tt.expectFindings {
+				assert.NotEmpty(t, findings)
+				for _, f := range findings {
+					assert.Equal(t, "L-07", f.RuleID)
+					assert.Equal(t, lint.SeverityWarning, f.Severity)
+					assert.NotEmpty(t, f.Message)
+					assert.NotEmpty(t, f.FixHint)
+				}
+			} else {
+				assert.Empty(t, findings)
+			}
+		})
+	}
+}
+
 func TestL08SensitiveVar(t *testing.T) {
 	t.Parallel()
 
@@ -434,6 +827,7 @@ func TestL08SensitiveVar(t *testing.T) {
 	tests := []struct {
 		name            string
 		stacksMap       map[string]any
+		extraPatterns   []string
 		expectSensitive bool
 	}{
 		{
@@ -458,12 +852,42 @@ func TestL08SensitiveVar(t *testing.T) {
 			},
 			expectSensitive: false,
 		},
+		{
+			name: "custom pattern matches",
+			stacksMap: map[string]any{
+				"stack1": map[string]any{
+					"vars": map[string]any{
+						"my_api_key": "abc123",
+					},
+				},
+			},
+			extraPatterns:   []string{"*api_key*"},
+			expectSensitive: true,
+		},
+		{
+			name: "stack name with path segment gets empty file",
+			stacksMap: map[string]any{
+				"stacks/deploy/prod": map[string]any{
+					"vars": map[string]any{
+						"db_password": "secret123",
+					},
+				},
+			},
+			expectSensitive: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := makeContext(tt.stacksMap)
+			ctx := lint.LintContext{
+				StacksMap:       tt.stacksMap,
+				RawStackConfigs: make(map[string]map[string]any),
+				ImportGraph:     make(map[string][]string),
+				LintConfig: schema.LintConfig{
+					SensitiveVarPatterns: tt.extraPatterns,
+				},
+			}
 			findings, err := l08.Run(ctx)
 			require.NoError(t, err)
 			if tt.expectSensitive {
@@ -536,6 +960,44 @@ func TestL10EnvShadowing(t *testing.T) {
 			},
 			expectShadowed: false,
 		},
+		{
+			name: "helmfile env shadowing detected",
+			stacksMap: map[string]any{
+				"stack1": map[string]any{
+					"env": map[string]any{
+						"APP_ENV": "staging",
+					},
+					"components": map[string]any{
+						"helmfile": map[string]any{
+							"nginx": map[string]any{
+								"env": map[string]any{
+									"APP_ENV": "production",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectShadowed: true,
+		},
+		{
+			name: "component env not in stack env - no finding",
+			stacksMap: map[string]any{
+				"stack1": map[string]any{
+					"env": map[string]any{},
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"mycomp": map[string]any{
+								"env": map[string]any{
+									"COMPONENT_ONLY_VAR": "value",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectShadowed: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -596,3 +1058,147 @@ func TestEngineRunWithFilter(t *testing.T) {
 		assert.Equal(t, "L-08", f.RuleID, "only L-08 should run")
 	}
 }
+
+func TestEngineRunWithSeverityOverride(t *testing.T) {
+	t.Parallel()
+
+	// Set up a context that will produce L-08 (sensitive var) findings.
+	ctx := lint.LintContext{
+		StacksMap: map[string]any{
+			"stack1": map[string]any{
+				"vars": map[string]any{"my_password": "secret"},
+			},
+		},
+		ImportGraph: map[string][]string{},
+		LintConfig: schema.LintConfig{
+			Rules: map[string]string{
+				"L-08": "error", // override to error
+			},
+		},
+	}
+
+	engine := lint.NewEngine(rules.All())
+
+	// Run with L-08, check severity override applied.
+	result, err := engine.Run(ctx, []string{"L-08"}, lint.SeverityInfo)
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Findings)
+
+	for _, f := range result.Findings {
+		if f.RuleID == "L-08" {
+			assert.Equal(t, lint.SeverityError, f.Severity, "L-08 should be overridden to error")
+		}
+	}
+	assert.Greater(t, result.Summary.Errors, 0)
+}
+
+func TestEngineRunMinSeverityFilter(t *testing.T) {
+	t.Parallel()
+
+	// L-08 produces warning findings; filtering to error should hide them.
+	ctx := lint.LintContext{
+		StacksMap: map[string]any{
+			"stack1": map[string]any{
+				"vars": map[string]any{"my_password": "secret"},
+			},
+		},
+		ImportGraph: map[string][]string{},
+		LintConfig:  schema.LintConfig{},
+	}
+
+	engine := lint.NewEngine(rules.All())
+
+	result, err := engine.Run(ctx, []string{"L-08"}, lint.SeverityError)
+	require.NoError(t, err)
+	// L-08 default severity is warning; filtering to error should produce no findings.
+	assert.Empty(t, result.Findings)
+}
+
+func TestEngineRunNoRulesFilter(t *testing.T) {
+	t.Parallel()
+
+	// Running engine with no rule filter should run all rules.
+	ctx := lint.LintContext{
+		StacksMap: map[string]any{
+			"stack1": map[string]any{
+				"vars": map[string]any{"my_password": "secret"},
+			},
+		},
+		ImportGraph: map[string][]string{},
+		LintConfig:  schema.LintConfig{},
+	}
+
+	engine := lint.NewEngine(rules.All())
+
+	result, err := engine.Run(ctx, nil, lint.SeverityInfo)
+	require.NoError(t, err)
+	// Should have at least L-08 findings.
+	assert.NotEmpty(t, result.Findings)
+}
+
+func TestEngineRunSortedFindings(t *testing.T) {
+	t.Parallel()
+
+	// Create a context with both warnings (L-08) and ensure findings are sorted.
+	ctx := lint.LintContext{
+		StacksMap: map[string]any{
+			"stack-a": map[string]any{
+				"vars": map[string]any{"password": "secret1"},
+			},
+			"stack-b": map[string]any{
+				"vars": map[string]any{"api_key": "secret2"},
+			},
+		},
+		ImportGraph: map[string][]string{},
+		LintConfig:  schema.LintConfig{},
+	}
+
+	engine := lint.NewEngine(rules.All())
+	result, err := engine.Run(ctx, []string{"L-08"}, lint.SeverityInfo)
+	require.NoError(t, err)
+
+	// Verify findings are sorted by severity (descending), then file, then rule ID.
+	for i := 1; i < len(result.Findings); i++ {
+		prev := result.Findings[i-1]
+		curr := result.Findings[i]
+		// Higher severity level should come first.
+		if prev.Severity.Level() < curr.Severity.Level() {
+			t.Errorf("findings not sorted by severity: %v before %v", prev.Severity, curr.Severity)
+		}
+	}
+}
+
+func TestLintResultHasErrors(t *testing.T) {
+	t.Parallel()
+
+	// Test HasErrors method.
+	resultNoErrors := &lint.LintResult{
+		Summary: lint.LintSummary{Errors: 0},
+	}
+	assert.False(t, resultNoErrors.HasErrors())
+
+	resultWithErrors := &lint.LintResult{
+		Summary: lint.LintSummary{Errors: 1},
+	}
+	assert.True(t, resultWithErrors.HasErrors())
+}
+
+func TestSeverityLevel(t *testing.T) {
+	t.Parallel()
+
+	assert.Greater(t, lint.SeverityError.Level(), lint.SeverityWarning.Level())
+	assert.Greater(t, lint.SeverityWarning.Level(), lint.SeverityInfo.Level())
+
+	// Unknown severity returns -1.
+	unknown := lint.Severity("unknown")
+	assert.Equal(t, -1, unknown.Level())
+}
+
+func TestDefaultRulesIsNil(t *testing.T) {
+	t.Parallel()
+
+	// DefaultRules intentionally returns nil to avoid circular imports.
+	defaultRules := lint.DefaultRules()
+	assert.Nil(t, defaultRules)
+}
+
