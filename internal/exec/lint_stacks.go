@@ -16,6 +16,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -74,7 +75,7 @@ func ExecuteLintStacksCmd(cmd *cobra.Command, args []string) error {
 	case "json":
 		return renderLintJSON(result)
 	default:
-		renderLintText(result, &atmosConfig)
+		renderLintText(result)
 	}
 
 	if result.HasErrors() {
@@ -123,7 +124,7 @@ func LintStacks(
 	}
 
 	// Merge lint config defaults.
-	lintConfig := mergedLintConfig(atmosConfig.Lint)
+	lintConfig := mergedLintConfig(atmosConfig.Lint.Stacks)
 
 	ctx := lint.LintContext{
 		StacksMap:       stacksMap,
@@ -191,8 +192,8 @@ func stackYAMLFiles(root string) ([]string, error) {
 	return files, nil
 }
 
-// mergedLintConfig returns a LintConfig with defaults applied for missing fields.
-func mergedLintConfig(cfg schema.LintConfig) schema.LintConfig {
+// mergedLintConfig returns a LintStacksConfig with defaults applied for missing fields.
+func mergedLintConfig(cfg schema.LintStacksConfig) schema.LintStacksConfig {
 	if cfg.MaxImportDepth <= 0 {
 		cfg.MaxImportDepth = 3
 	}
@@ -222,10 +223,10 @@ func mergedLintConfig(cfg schema.LintConfig) schema.LintConfig {
 	return cfg
 }
 
-// renderLintText renders findings in human-readable text format.
-func renderLintText(result *lint.LintResult, atmosConfig *schema.AtmosConfiguration) {
+// renderLintText renders findings in human-readable text format using the ui package.
+func renderLintText(result *lint.LintResult) {
 	if len(result.Findings) == 0 {
-		u.PrintMessage("✓ No lint findings.")
+		ui.Success("No lint findings.")
 		return
 	}
 
@@ -254,24 +255,32 @@ func renderLintText(result *lint.LintResult, atmosConfig *schema.AtmosConfigurat
 		})
 
 		for _, f := range findings {
-			icon := severityIcon(f.Severity)
 			location := f.File
 			if f.Line > 0 {
 				location = fmt.Sprintf("%s:%d", location, f.Line)
 			}
+			var msg string
 			if location != "" {
-				u.PrintMessage(fmt.Sprintf("%s [%s] %s  (%s)", icon, f.RuleID, f.Message, location))
+				msg = fmt.Sprintf("[%s] %s  (%s)", f.RuleID, f.Message, location)
 			} else {
-				u.PrintMessage(fmt.Sprintf("%s [%s] %s", icon, f.RuleID, f.Message))
+				msg = fmt.Sprintf("[%s] %s", f.RuleID, f.Message)
+			}
+			switch sev {
+			case lint.SeverityError:
+				ui.Error(msg)
+			case lint.SeverityWarning:
+				ui.Warning(msg)
+			default:
+				ui.Info(msg)
 			}
 			if f.FixHint != "" {
-				u.PrintMessage(fmt.Sprintf("  → %s", f.FixHint))
+				ui.Writeln(fmt.Sprintf("  → %s", f.FixHint))
 			}
 		}
 	}
 
-	u.PrintMessage("")
-	u.PrintMessage(fmt.Sprintf(
+	ui.Writeln("")
+	ui.Writeln(fmt.Sprintf(
 		"Summary: %d error(s), %d warning(s), %d info",
 		result.Summary.Errors,
 		result.Summary.Warnings,
@@ -284,16 +293,4 @@ func renderLintJSON(result *lint.LintResult) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(result)
-}
-
-// severityIcon returns a text icon for the given severity.
-func severityIcon(s lint.Severity) string {
-	switch s {
-	case lint.SeverityError:
-		return "✗"
-	case lint.SeverityWarning:
-		return "⚠"
-	default:
-		return "ℹ"
-	}
 }

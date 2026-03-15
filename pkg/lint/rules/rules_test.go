@@ -17,7 +17,7 @@ func makeContext(stacksMap map[string]any) lint.LintContext {
 		StacksMap:       stacksMap,
 		RawStackConfigs: make(map[string]map[string]any),
 		ImportGraph:     make(map[string][]string),
-		LintConfig:      schema.LintConfig{},
+		LintConfig:      schema.LintStacksConfig{},
 	}
 }
 
@@ -411,7 +411,7 @@ func TestL03ImportDepth(t *testing.T) {
 			ctx := lint.LintContext{
 				StacksMap:   make(map[string]any),
 				ImportGraph: tt.importGraph,
-				LintConfig: schema.LintConfig{
+				LintConfig: schema.LintStacksConfig{
 					MaxImportDepth: tt.threshold,
 				},
 			}
@@ -529,7 +529,7 @@ func TestL05CohesionRule(t *testing.T) {
 				StacksMap:       make(map[string]any),
 				RawStackConfigs: tt.rawStackConfigs,
 				ImportGraph:     make(map[string][]string),
-				LintConfig:      schema.LintConfig{},
+				LintConfig:      schema.LintStacksConfig{},
 				StacksBasePath:  "/project/stacks",
 			}
 			findings, err := l05.Run(ctx)
@@ -675,7 +675,7 @@ func TestL06DRYExtractionOpportunity(t *testing.T) {
 				StacksMap:       tt.stacksMap,
 				RawStackConfigs: make(map[string]map[string]any),
 				ImportGraph:     make(map[string][]string),
-				LintConfig: schema.LintConfig{
+				LintConfig: schema.LintStacksConfig{
 					DRYThresholdPct: tt.thresholdPct,
 				},
 			}
@@ -792,7 +792,7 @@ func TestL07OrphanedFile(t *testing.T) {
 				ImportGraph:     tt.importGraph,
 				AllStackFiles:   tt.allStackFiles,
 				StacksBasePath:  tt.basePath,
-				LintConfig:      schema.LintConfig{},
+				LintConfig:      schema.LintStacksConfig{},
 			}
 			findings, err := l07.Run(ctx)
 			require.NoError(t, err)
@@ -884,7 +884,7 @@ func TestL08SensitiveVar(t *testing.T) {
 				StacksMap:       tt.stacksMap,
 				RawStackConfigs: make(map[string]map[string]any),
 				ImportGraph:     make(map[string][]string),
-				LintConfig: schema.LintConfig{
+				LintConfig: schema.LintStacksConfig{
 					SensitiveVarPatterns: tt.extraPatterns,
 				},
 			}
@@ -1046,7 +1046,7 @@ func TestEngineRunWithFilter(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig:  schema.LintConfig{},
+		LintConfig:  schema.LintStacksConfig{},
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -1070,7 +1070,7 @@ func TestEngineRunWithSeverityOverride(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig: schema.LintConfig{
+		LintConfig: schema.LintStacksConfig{
 			Rules: map[string]string{
 				"L-08": "error", // override to error
 			},
@@ -1103,7 +1103,7 @@ func TestEngineRunMinSeverityFilter(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig:  schema.LintConfig{},
+		LintConfig:  schema.LintStacksConfig{},
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -1125,7 +1125,7 @@ func TestEngineRunNoRulesFilter(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig:  schema.LintConfig{},
+		LintConfig:  schema.LintStacksConfig{},
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -1150,7 +1150,7 @@ func TestEngineRunSortedFindings(t *testing.T) {
 			},
 		},
 		ImportGraph: map[string][]string{},
-		LintConfig:  schema.LintConfig{},
+		LintConfig:  schema.LintStacksConfig{},
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -1326,7 +1326,7 @@ func TestL05ConcernGroupSingleSegment(t *testing.T) {
 			},
 		},
 		ImportGraph: make(map[string][]string),
-		LintConfig:  schema.LintConfig{},
+		LintConfig:  schema.LintStacksConfig{},
 	}
 	findings, err := l05.Run(ctx)
 	require.NoError(t, err)
@@ -1357,7 +1357,7 @@ func TestL08SensitiveVarBasePathResolution(t *testing.T) {
 		},
 		RawStackConfigs: make(map[string]map[string]any),
 		ImportGraph:     make(map[string][]string),
-		LintConfig:      schema.LintConfig{},
+		LintConfig:      schema.LintStacksConfig{},
 		StacksBasePath:  "/stacks",
 	}
 	findings, err := l08.Run(ctx)

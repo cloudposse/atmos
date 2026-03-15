@@ -141,26 +141,27 @@ component-level `env:` with different values.
 
 ## Configuration
 
-Add a `lint:` section to `atmos.yaml` to customize rule behavior:
+Add a `lint.stacks:` section to `atmos.yaml` to customize rule behavior:
 
 ```yaml
 lint:
-  max_import_depth: 3          # L-03 threshold (default: 3)
-  dry_threshold_pct: 80        # L-06 trigger percentage (default: 80)
-  sensitive_var_patterns:      # L-08 patterns (merged with defaults)
-    - "*api_key*"
-    - "*webhook_secret*"
-  rules:
-    L-01: warning
-    L-02: warning
-    L-03: error               # override to error for strict enforcement
-    L-04: error
-    L-05: info
-    L-06: info
-    L-07: warning
-    L-08: warning
-    L-09: error
-    L-10: warning
+  stacks:
+    max_import_depth: 3          # L-03 threshold (default: 3)
+    dry_threshold_pct: 80        # L-06 trigger percentage (default: 80)
+    sensitive_var_patterns:      # L-08 patterns (merged with defaults)
+      - "*api_key*"
+      - "*webhook_secret*"
+    rules:
+      L-01: warning
+      L-02: warning
+      L-03: error               # override to error for strict enforcement
+      L-04: error
+      L-05: info
+      L-06: info
+      L-07: warning
+      L-08: warning
+      L-09: error
+      L-10: warning
 ```
 
 ## JSON Output

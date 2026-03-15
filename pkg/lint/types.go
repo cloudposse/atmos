@@ -50,8 +50,8 @@ type LintFinding struct {
 	FixHint string `json:"fix_hint,omitempty"`
 }
 
-// LintConfig is an alias for schema.LintConfig for use within the lint package.
-type LintConfig = schema.LintConfig
+// LintConfig is an alias for schema.LintStacksConfig for use within the lint package.
+type LintConfig = schema.LintStacksConfig
 
 // LintContext holds all data available to lint rules during execution.
 type LintContext struct {
