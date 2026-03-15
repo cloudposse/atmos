@@ -1,0 +1,115 @@
+---
+slug: remote-stack-imports
+title: "Remote Stack Imports"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports importing stack configurations from remote URLs. Reference shared configurations from GitHub, S3, GCS, or any HTTP endpoint directly in your stack files.
+
+<!--truncate-->
+
+## What Changed
+
+Stack imports now support remote URLs alongside local file paths. The import syntax remains the same, but Atmos detects remote URLs and downloads them automatically using go-getter:
+
+```yaml
+import:
+  # Local import - works as before
+  - catalog/base
+
+  # Remote imports - NEW
+  - https://raw.githubusercontent.com/cloudposse/atmos/main/stacks/catalog/shared.yaml
+  - github.com/myorg/shared-config//stacks/defaults.yaml?ref=v1.0.0
+  - s3::https://s3.amazonaws.com/my-bucket/configs/base.yaml
+```
+
+## Why This Matters
+
+Teams often need to share stack configurations across multiple repositories or organizations. Previously, this required vendoring shared configs or maintaining copies in each repository. Now you can reference shared configurations directly from their source:
+
+- **Central catalogs**: Maintain organization-wide defaults in a single repository
+- **Version pinning**: Reference specific versions with Git refs (`?ref=v1.0.0`)
+- **Cross-team sharing**: Import configurations from other teams without duplication
+- **External standards**: Pull in compliance or security baselines from external sources
+
+## Supported URL Formats
+
+Remote imports leverage [go-getter](https://github.com/hashicorp/go-getter) for downloading. Here are some common formats:
+
+| Format | Example |
+|--------|---------|
+| HTTP | `http://example.com/config.yaml` |
+| HTTPS | `https://example.com/config.yaml` |
+| GitHub | `github.com/org/repo//path/to/file.yaml` |
+| Git with ref | `github.com/org/repo//path?ref=v1.0.0` |
+| S3 | `s3::https://s3.amazonaws.com/bucket/key.yaml` |
+| GCS | `gcs::gs://bucket/path/config.yaml` |
+| Git SSH | `git@github.com:org/repo.git//path/to/file.yaml` |
+
+See the [go-getter documentation](https://github.com/hashicorp/go-getter#url-format) for additional supported formats.
+
+## How to Use It
+
+### Basic Remote Import
+
+Reference a remote configuration directly:
+
+```yaml
+# stacks/deploy/production.yaml
+import:
+  - https://raw.githubusercontent.com/myorg/shared-configs/main/base.yaml
+
+vars:
+  environment: production
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+### Version-Pinned Imports
+
+Pin imports to specific Git refs for reproducibility:
+
+```yaml
+import:
+  # Pin to a specific tag
+  - github.com/myorg/shared-configs//catalog/defaults.yaml?ref=v2.1.0
+
+  # Pin to a specific commit
+  - github.com/myorg/shared-configs//catalog/security.yaml?ref=abc123
+```
+
+### Skip Missing Remote Imports
+
+Use `skip_if_missing` for optional remote configurations:
+
+```yaml
+import:
+  - path: "https://internal.example.com/optional-overrides.yaml"
+    skip_if_missing: true
+```
+
+## Example
+
+We've added a complete example demonstrating remote stack imports:
+
+```bash
+cd examples/remote-stack-imports
+atmos describe stacks
+```
+
+The example shows both local and remote imports working together, with proper configuration merging and inheritance.
+
+:::note
+This feature was previously documented but not yet implemented. We apologize for this oversight. Remote stack imports now work as documented, exactly like [remote imports for atmos.yaml](/cli/configuration/imports).
+:::
+
+## Get Involved
+
+We'd love to hear how you're using remote stack imports. Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or encounter edge cases.
+
+For more details, see the [Stack Imports](/stacks/imports) documentation.
