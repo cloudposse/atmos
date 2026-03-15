@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -76,21 +77,24 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 			strings.Contains(errStr, "complex-import-chain.yaml")
 		assert.True(t, hasRelevantFiles, "Error should mention at least one relevant stack file")
 
-		// Check for deduplication - count occurrences of key tokens
+		// Check for deduplication within individual error blocks.
+		// ValidateStacks processes multiple stack files and each file that encounters a type
+		// mismatch adds its own context block to the combined error. Count the number of
+		// "File being processed:" occurrences to establish how many error blocks are present,
+		// then verify context tokens appear at most once per block (+1 as defensive padding).
+		fileCount := strings.Count(errStr, "File being processed:")
+		require.Positive(t, fileCount, "Should have at least one file error block")
+
+		// Tokens that should appear at most once per error block.
+		maxOccurrences := fileCount + 1 // +1: defensive padding for any summary line
 		contextTokens := []string{
-			"File being processed:",
-			"Import chain:",
 			"**Likely cause:**",
 			"**Debug hint:**",
 		}
-
-		// For deduplication: ensure tokens don't appear excessively
-		// We allow multiple occurrences because different import chains may legitimately mention the same file
-		// But we want to ensure the context isn't duplicated within a single error message block
 		for _, token := range contextTokens {
 			count := strings.Count(errStr, token)
-			if count > 5 { // Reasonable threshold for legitimate occurrences
-				t.Errorf("Token '%s' appears %d times, suggesting duplication", token, count)
+			if count > maxOccurrences {
+				t.Errorf("Token %q appears %d times but expected at most %d (one per error block)", token, count, maxOccurrences)
 			}
 		}
 

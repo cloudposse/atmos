@@ -95,6 +95,29 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	}
 }
 
+// isTerraformCurrentWorkspace reports whether the given workspace name matches the workspace
+// recorded in the .terraform/environment file inside componentPath.
+// This is used to detect the edge case where the environment file already names the target
+// workspace but the corresponding state directory was deleted (e.g. by a previous test or a
+// partial cleanup on Windows).  In that scenario `terraform workspace new <name>` returns exit
+// code 1 even though we are already in the right workspace, so we should not treat the failure
+// as a fatal error.
+func isTerraformCurrentWorkspace(componentPath, workspace string) bool {
+	tfDataDir := os.Getenv("TF_DATA_DIR")
+	if tfDataDir == "" {
+		tfDataDir = ".terraform"
+	}
+	if !filepath.IsAbs(tfDataDir) {
+		tfDataDir = filepath.Join(componentPath, tfDataDir)
+	}
+	envFile := filepath.Join(filepath.Clean(tfDataDir), "environment")
+	data, err := os.ReadFile(envFile)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(data)) == workspace
+}
+
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Auto-generate backend file
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
