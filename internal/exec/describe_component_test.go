@@ -11,6 +11,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -660,4 +661,172 @@ func TestFilterComputedFields(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestExecuteDescribeComponentCmd_Explain tests the --explain flag code path
+// using a mocked executeDescribeComponentWithContext to avoid filesystem dependencies.
+func TestExecuteDescribeComponentCmd_Explain(t *testing.T) {
+	// Build a minimal MergeContext with provenance enabled.
+	buildContextWithProvenance := func() *m.MergeContext {
+		ctx := m.NewMergeContext()
+		ctx.EnableProvenance()
+		ctx.RecordProvenance("vars.cidr_block", m.ProvenanceEntry{
+			File:  "stacks/prod.yaml",
+			Line:  5,
+			Depth: 1,
+			Value: "10.0.0.0/16",
+		})
+		return ctx
+	}
+
+	componentData := map[string]any{
+		"vars": map[string]any{
+			"cidr_block": "10.0.0.0/16",
+		},
+	}
+
+	tests := []struct {
+		name          string
+		params        DescribeComponentParams
+		contextResult *DescribeComponentResult
+		contextErr    error
+		expectedError bool
+	}{
+		{
+			name: "explain outputs trace to stdout",
+			params: DescribeComponentParams{
+				Component: "vpc",
+				Stack:     "prod",
+				Explain:   true,
+			},
+			contextResult: &DescribeComponentResult{
+				ComponentSection: componentData,
+				MergeContext:     buildContextWithProvenance(),
+				StackFile:        "stacks/prod.yaml",
+			},
+		},
+		{
+			name: "explain with file output",
+			params: DescribeComponentParams{
+				Component: "vpc",
+				Stack:     "prod",
+				Explain:   true,
+				File:      filepath.Join(t.TempDir(), "explain-output.txt"),
+			},
+			contextResult: &DescribeComponentResult{
+				ComponentSection: componentData,
+				MergeContext:     buildContextWithProvenance(),
+				StackFile:        "stacks/prod.yaml",
+			},
+		},
+		{
+			name: "explain returns error when context call fails",
+			params: DescribeComponentParams{
+				Component: "vpc",
+				Stack:     "prod",
+				Explain:   true,
+			},
+			contextErr:    assert.AnError,
+			expectedError: true,
+		},
+		{
+			name: "explain returns error when result is not a map (after query)",
+			params: DescribeComponentParams{
+				Component: "vpc",
+				Stack:     "prod",
+				Explain:   true,
+				Query:     ".vars.cidr_block", // returns a scalar string, not a map
+			},
+			contextResult: &DescribeComponentResult{
+				ComponentSection: componentData,
+				MergeContext:     buildContextWithProvenance(),
+				StackFile:        "stacks/prod.yaml",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockedExec := &DescribeComponentExec{
+				printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
+					return nil
+				},
+				IsTTYSupportForStdout: func() bool { return false },
+				executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+					return componentData, nil
+				},
+				executeDescribeComponentWithContext: func(params DescribeComponentContextParams) (*DescribeComponentResult, error) {
+					return tt.contextResult, tt.contextErr
+				},
+				initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+					return schema.AtmosConfiguration{}, nil
+				},
+				evaluateYqExpression: func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
+					// For the "scalar after query" test, return a string to trigger the non-map error.
+					if yq == ".vars.cidr_block" {
+						return "10.0.0.0/16", nil
+					}
+					return data, nil
+				},
+			}
+
+			err := mockedExec.ExecuteDescribeComponentCmd(tt.params)
+
+			if tt.expectedError || tt.params.Query == ".vars.cidr_block" {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestExecuteDescribeComponentCmd_Provenance tests the --provenance flag code path
+// using a mocked executeDescribeComponentWithContext.
+func TestExecuteDescribeComponentCmd_Provenance(t *testing.T) {
+	buildContextWithProvenance := func() *m.MergeContext {
+		ctx := m.NewMergeContext()
+		ctx.EnableProvenance()
+		ctx.RecordProvenance("vars.cidr_block", m.ProvenanceEntry{
+			File:  "stacks/prod.yaml",
+			Line:  5,
+			Depth: 1,
+			Value: "10.0.0.0/16",
+		})
+		return ctx
+	}
+
+	componentData := map[string]any{
+		"vars": map[string]any{"cidr_block": "10.0.0.0/16"},
+	}
+
+	mockedExec := &DescribeComponentExec{
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+			return componentData, nil
+		},
+		executeDescribeComponentWithContext: func(params DescribeComponentContextParams) (*DescribeComponentResult, error) {
+			return &DescribeComponentResult{
+				ComponentSection: componentData,
+				MergeContext:     buildContextWithProvenance(),
+				StackFile:        "stacks/prod.yaml",
+			}, nil
+		},
+		initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		evaluateYqExpression: func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
+			return data, nil
+		},
+	}
+
+	err := mockedExec.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component:  "vpc",
+		Stack:      "prod",
+		Provenance: true,
+	})
+	assert.NoError(t, err)
 }

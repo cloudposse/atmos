@@ -179,6 +179,8 @@ func TestFormatExplainValue(t *testing.T) {
 		{"non-empty map", map[string]any{"a": 1, "b": 2}, "{2 keys}"},
 		{"empty slice", []any{}, "[]"},
 		{"non-empty slice", []any{"a", "b", "c"}, "[3 items]"},
+		// JSON fallback for types not matched by explicit cases.
+		{"json fallback struct", struct{ Name string }{"alice"}, `{"Name":"alice"}`},
 	}
 
 	for _, tt := range tests {
@@ -187,6 +189,13 @@ func TestFormatExplainValue(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	// Channel type cannot be marshaled to JSON, triggering the error fallback path.
+	t.Run("json marshal error fallback", func(t *testing.T) {
+		ch := make(chan int)
+		result := formatExplainValue(ch)
+		assert.Equal(t, "<complex value>", result)
+	})
 }
 
 // TestFindWinnerIndex tests that the winner is correctly identified as the entry with lowest depth.
@@ -263,6 +272,12 @@ func TestLookupValue(t *testing.T) {
 		{"array first element", "imports[0]", "catalog/vpc"},
 		{"array second element", "imports[1]", "mixins/region"},
 		{"array out of bounds", "imports[5]", nil},
+		// Key doesn't exist in map when using array index notation.
+		{"array key missing in map", "nonexistent[0]", nil},
+		// Traversing through a scalar (non-map) intermediate node.
+		{"non-map intermediate", "vars.cidr_block.sub", nil},
+		// Array index notation when current value is not a map.
+		{"array index on non-map", "imports.sub[0]", nil},
 	}
 
 	for _, tt := range tests {
@@ -286,6 +301,10 @@ func TestParseArrayIndex(t *testing.T) {
 		{"plain", 0, "", false},
 		{"no_close[1", 0, "", false},
 		{"vars", 0, "", false},
+		// Non-numeric index causes Sscanf to fail → false.
+		{"key[abc]", 0, "", false},
+		// Closing bracket before opening bracket.
+		{"key]1[", 0, "", false},
 	}
 
 	for _, tt := range tests {
@@ -318,6 +337,63 @@ func TestFilterExplainPaths(t *testing.T) {
 	assert.Contains(t, result, "imports[0]")
 	assert.NotContains(t, result, "__import__:catalog/vpc")
 	assert.NotContains(t, result, "__import_meta__:catalog/vpc")
+}
+
+// TestRenderOverrideLine_NilValueEmptyHash tests that an override entry with nil
+// value and empty hash shows the "no value" message.
+func TestRenderOverrideLine_NilValueEmptyHash(t *testing.T) {
+	entry := &m.ProvenanceEntry{
+		File:      "catalog/vpc/defaults.yaml",
+		Line:      10,
+		Depth:     2,
+		Value:     nil,
+		ValueHash: "",
+	}
+
+	var buf strings.Builder
+	renderOverrideLine(&buf, entry)
+	result := buf.String()
+
+	assert.Contains(t, result, explainOverrideLabel)
+	assert.Contains(t, result, explainValueNone)
+}
+
+// TestRenderOverrideLine_NilValueWithHash tests that an override entry with nil
+// value but non-empty hash shows neither "had" nor "no value" (silent).
+func TestRenderOverrideLine_NilValueWithHash(t *testing.T) {
+	entry := &m.ProvenanceEntry{
+		File:      "catalog/vpc/defaults.yaml",
+		Line:      10,
+		Depth:     2,
+		Value:     nil,
+		ValueHash: "abc123",
+	}
+
+	var buf strings.Builder
+	renderOverrideLine(&buf, entry)
+	result := buf.String()
+
+	assert.Contains(t, result, explainOverrideLabel)
+	// When Value is nil and ValueHash is non-empty, no "had ..." is appended.
+	assert.NotContains(t, result, explainValueHadPrefix)
+	assert.NotContains(t, result, explainValueNone)
+}
+
+// TestRenderOverrideLine_LineZero tests that a zero line number is omitted.
+func TestRenderOverrideLine_LineZero(t *testing.T) {
+	entry := &m.ProvenanceEntry{
+		File:  "catalog/vpc/defaults.yaml",
+		Line:  0,
+		Depth: 2,
+		Value: "172.16.0.0/16",
+	}
+
+	var buf strings.Builder
+	renderOverrideLine(&buf, entry)
+	result := buf.String()
+
+	assert.Contains(t, result, explainOverrideLabel)
+	assert.NotContains(t, result, "line")
 }
 
 // TestRenderExplainTrace_Legend tests that the legend is included in output.
@@ -362,4 +438,41 @@ func TestRenderExplainTrace_MultipleKeys(t *testing.T) {
 
 	assert.Contains(t, result, "vars.cidr_block")
 	assert.Contains(t, result, "vars.region")
+}
+
+// TestRenderExplainTrace_OverrideWithNilValue tests that an override entry with
+// nil value and empty hash displays "no value" in the trace.
+func TestRenderExplainTrace_OverrideWithNilValue(t *testing.T) {
+	ctx := m.NewMergeContext()
+	ctx.EnableProvenance()
+
+	// Base entry with no value (nil Value, empty ValueHash).
+	ctx.RecordProvenance("vars.cidr_block", m.ProvenanceEntry{
+		File:      "catalog/vpc/defaults.yaml",
+		Line:      10,
+		Depth:     2,
+		Value:     nil,
+		ValueHash: "",
+	})
+	// Winner with actual value.
+	ctx.RecordProvenance("vars.cidr_block", m.ProvenanceEntry{
+		File:  "stacks/prod.yaml",
+		Line:  5,
+		Depth: 1,
+		Value: "10.0.0.0/16",
+	})
+
+	data := map[string]any{
+		"vars": map[string]any{
+			"cidr_block": "10.0.0.0/16",
+		},
+	}
+
+	result := RenderExplainTrace(data, ctx, nil, "")
+
+	assert.Contains(t, result, "vars.cidr_block")
+	assert.Contains(t, result, explainSetByLabel)
+	assert.Contains(t, result, explainOverrideLabel)
+	// The nil-value override should show "no value" since ValueHash is also empty.
+	assert.Contains(t, result, explainValueNone)
 }
