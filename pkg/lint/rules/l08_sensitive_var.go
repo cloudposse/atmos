@@ -80,8 +80,7 @@ func stackNameToFile(stackName, basePath string) string {
 	}
 	// Stack name may already be a relative or absolute path (contains a path separator
 	// on either Unix '/' or Windows '\', or has a YAML file extension).
-	if strings.ContainsRune(stackName, filepath.Separator) ||
-		strings.ContainsRune(stackName, '/') ||
+	if strings.ContainsAny(stackName, `/\`) ||
 		strings.HasSuffix(stackName, ".yaml") ||
 		strings.HasSuffix(stackName, ".yml") {
 		return stackName
