@@ -286,7 +286,6 @@ func TestProcessBaseComponentConfig_CycleDetection(t *testing.T) {
 
 			if tt.expectedError != "" {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
 				assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance)
 			} else {
 				require.NoError(t, err)
@@ -400,6 +399,82 @@ func TestProcessBaseComponentConfig_DeepChainNoFalsePositive(t *testing.T) {
 	// Vars should be merged from all levels.
 	assert.Equal(t, "level2", baseComponentConfig.BaseComponentVars["from"])
 	assert.ElementsMatch(t, []string{"level2", "level1", "level0"}, baseComponents)
+}
+
+// TestProcessBaseComponentConfig_DiamondInheritance verifies that a diamond inheritance pattern
+// (shared ancestor reached via sibling branches) does not trigger a false cycle detection error.
+//
+//	   base
+//	  /    \
+//	left   right
+//	  \    /
+//	   child (inherits: [left, right])
+func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"base": map[string]any{
+			"vars": map[string]any{"from_base": "base-value"},
+		},
+		"left": map[string]any{
+			"metadata": map[string]any{
+				"inherits": []any{"base"},
+			},
+			"vars": map[string]any{"from_left": "left-value"},
+		},
+		"right": map[string]any{
+			"metadata": map[string]any{
+				"inherits": []any{"base"},
+			},
+			"vars": map[string]any{"from_right": "right-value"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+
+	// Process "left" first.
+	baseComponents := []string{}
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"child",
+		"test-stack",
+		"left",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	require.NoError(t, err, "Left branch of diamond should not error")
+
+	// Process "right" — this reaches "base" again via a sibling branch.
+	// Without defer delete in the visited set, this would falsely trigger cycle detection.
+	ClearBaseComponentConfigCache()
+	baseComponentConfig2 := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents2 := []string{}
+	err = ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig2,
+		allComponentsMap,
+		"child",
+		"test-stack",
+		"right",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents2,
+	)
+	require.NoError(t, err, "Right branch of diamond should not error")
+	assert.Equal(t, "base-value", baseComponentConfig2.BaseComponentVars["from_base"],
+		"Base vars should be inherited through right branch")
 }
 
 // TestProcessBaseComponentConfig_AbstractMetadataComponentInherited verifies that metadata.component

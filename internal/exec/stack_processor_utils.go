@@ -1675,13 +1675,17 @@ func processBaseComponentConfigInternal(
 		return nil
 	}
 
-	// Cycle detection: check if we've already visited this (component, baseComponent) pair.
+	// Cycle detection: check if we've already visited this (component, baseComponent) pair
+	// on the current DFS path. The defer delete ensures entries are cleaned up on backtrack,
+	// so diamond inheritance (shared ancestor reached via sibling branches) is not falsely
+	// flagged as circular.
 	visitKey := component + ":" + baseComponent
 	if visited[visitKey] {
 		return fmt.Errorf("%w: '%s' -> '%s' in the stack '%s'",
 			errUtils.ErrCircularComponentInheritance, component, baseComponent, stack)
 	}
 	visited[visitKey] = true
+	defer delete(visited, visitKey)
 
 	var baseComponentVars map[string]any
 	var baseComponentSettings map[string]any
