@@ -104,10 +104,11 @@ auth:
   providers:
     gcp-adc:
       kind: gcp/adc
-      project_id: my-gcp-project        # Optional, defaults to gcloud config
-      region: us-central1               # Optional
-      scopes:
-        - https://www.googleapis.com/auth/cloud-platform
+      spec:
+        project_id: my-gcp-project        # Optional, defaults to gcloud config
+        region: us-central1               # Optional
+        scopes:
+          - https://www.googleapis.com/auth/cloud-platform
 ```
 
 ### GCP Workload Identity Federation
@@ -119,11 +120,12 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_id: my-gcp-project
-      project_number: "123456789012"
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
-      service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+      spec:
+        project_id: my-gcp-project
+        project_number: "123456789012"
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
+        service_account_email: ci-sa@my-project.iam.gserviceaccount.com
 ```
 
 For non-GitHub environments, configure `token_source` explicitly with `type` (`url`, `file`, or `environment`),

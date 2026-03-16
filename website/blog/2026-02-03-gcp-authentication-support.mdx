@@ -28,7 +28,8 @@ auth:
   providers:
     gcp-adc:
       kind: gcp/adc
-      project_id: my-project
+      spec:
+        project_id: my-project
 
   identities:
     terraform:
@@ -47,10 +48,11 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_number: "123456789012"
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
-      service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+      spec:
+        project_number: "123456789012"
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
+        service_account_email: ci-sa@my-project.iam.gserviceaccount.com
 ```
 
 In GitHub Actions, Atmos automatically detects `ACTIONS_ID_TOKEN_REQUEST_URL`, constructs the correct WIF audience, and fetches the OIDC token — no manual `token_source`, `url`, or `audience` configuration required. Just ensure your workflow has `id-token: write` permission.
