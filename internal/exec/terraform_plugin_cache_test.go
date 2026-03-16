@@ -1,9 +1,12 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -249,6 +252,78 @@ func TestConfigurePluginCache(t *testing.T) {
 
 			if tt.expectCustomDir {
 				assert.Contains(t, result[0], tt.expectedDirPrefix)
+			}
+		})
+	}
+}
+
+func TestBuildInitEnvList(t *testing.T) {
+	baseEnv := []string{
+		"TF_IN_AUTOMATION=true",
+		"OTHER_VAR=value",
+	}
+	pluginCacheEnv := []string{
+		"TF_PLUGIN_CACHE_DIR=/cache/dir",
+		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true",
+	}
+	fullEnv := append(baseEnv, pluginCacheEnv...)
+
+	tests := []struct {
+		name             string
+		setupLockFile    bool
+		pluginCacheEnv   []string
+		inputEnv         []string
+		expectedContains []string
+		expectedAbsent   []string
+	}{
+		{
+			name:             "lock file exists - plugin cache vars preserved",
+			setupLockFile:    true,
+			pluginCacheEnv:   pluginCacheEnv,
+			inputEnv:         fullEnv,
+			expectedContains: fullEnv,
+		},
+		{
+			name:             "no lock file - plugin cache vars removed",
+			setupLockFile:    false,
+			pluginCacheEnv:   pluginCacheEnv,
+			inputEnv:         fullEnv,
+			expectedContains: baseEnv,
+			expectedAbsent:   pluginCacheEnv,
+		},
+		{
+			name:             "no lock file, no plugin cache env - env unchanged",
+			setupLockFile:    false,
+			pluginCacheEnv:   nil,
+			inputEnv:         baseEnv,
+			expectedContains: baseEnv,
+		},
+		{
+			name:             "no lock file, empty plugin cache env - env unchanged",
+			setupLockFile:    false,
+			pluginCacheEnv:   []string{},
+			inputEnv:         baseEnv,
+			expectedContains: baseEnv,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			if tt.setupLockFile {
+				lockFile := filepath.Join(dir, ".terraform.lock.hcl")
+				err := os.WriteFile(lockFile, []byte("# lock file"), 0o644)
+				require.NoError(t, err)
+			}
+
+			result := buildInitEnvList(dir, tt.inputEnv, tt.pluginCacheEnv)
+
+			for _, expected := range tt.expectedContains {
+				assert.Contains(t, result, expected)
+			}
+			for _, absent := range tt.expectedAbsent {
+				assert.NotContains(t, result, absent)
 			}
 		})
 	}

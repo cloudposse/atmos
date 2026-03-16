@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	stdio "io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,24 @@ const (
 	osWindows             = "windows"
 )
 
+// shellCommandOpts holds optional configuration for ExecuteShellCommand.
+type shellCommandOpts struct {
+	stderrFilter func(stdio.Writer) stdio.Writer
+}
+
+// ShellCommandOpt is a functional option for ExecuteShellCommand.
+type ShellCommandOpt func(*shellCommandOpts)
+
+// WithStderrFilter wraps the resolved stderr writer with the given filter function.
+// The filter receives the fully configured, masked stderr writer and returns a new
+// writer that may transform or suppress output (e.g. dropping specific warnings).
+// If the returned writer implements io.Closer, it will be closed after the command exits.
+func WithStderrFilter(filter func(stdio.Writer) stdio.Writer) ShellCommandOpt {
+	return func(opts *shellCommandOpts) {
+		opts.stderrFilter = filter
+	}
+}
+
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -41,8 +60,15 @@ func ExecuteShellCommand(
 	env []string,
 	dryRun bool,
 	redirectStdError string,
+	opts ...ShellCommandOpt,
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
+
+	// Parse functional options.
+	options := &shellCommandOpts{}
+	for _, opt := range opts {
+		opt(options)
+	}
 
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
@@ -70,16 +96,16 @@ func ExecuteShellCommand(
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = ioLayer.MaskWriter(os.Stdout)
 
-	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
+	if runtime.GOOS == osWindows && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
 	}
 
-	if redirectStdError == "/dev/stderr" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+	// Resolve the stderr writer based on redirectStdError.
+	var stderrWriter stdio.Writer
+	if redirectStdError == "/dev/stderr" || redirectStdError == "" {
+		stderrWriter = ioLayer.MaskWriter(os.Stderr)
 	} else if redirectStdError == "/dev/stdout" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stdout)
-	} else if redirectStdError == "" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+		stderrWriter = ioLayer.MaskWriter(os.Stdout)
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
@@ -94,8 +120,17 @@ func ExecuteShellCommand(
 			}
 		}(f)
 
-		cmd.Stderr = ioLayer.MaskWriter(f)
+		stderrWriter = ioLayer.MaskWriter(f)
 	}
+
+	// Apply the optional stderr filter on top of the resolved writer.
+	// The filter receives the masked writer so secrets are redacted before filtering.
+	if options.stderrFilter != nil {
+		stderrWriter = options.stderrFilter(stderrWriter)
+	}
+
+	cmd.Stderr = stderrWriter
+
 	log.Debug("Executing", "command", cmd.String())
 
 	if dryRun {
@@ -103,6 +138,15 @@ func ExecuteShellCommand(
 	}
 
 	err = cmd.Run()
+
+	// Flush any buffered content in the stderr writer (e.g. incomplete diagnostic blocks
+	// left over if the subprocess exits abnormally before writing the closing ╵ line).
+	if closer, ok := stderrWriter.(stdio.Closer); ok {
+		if closeErr := closer.Close(); closeErr != nil {
+			log.Debug("Failed to flush stderr writer", "error", closeErr)
+		}
+	}
+
 	if err != nil {
 		// Extract exit code from error to preserve it.
 		// This is critical for commands like `terraform plan -detailed-exitcode`
