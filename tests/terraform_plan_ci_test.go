@@ -41,9 +41,9 @@ func TestTerraformPlanCI(t *testing.T) {
 
 	// Verify CI check run messages appear on stderr.
 	stderrOutput := stderr.String()
-	assert.Contains(t, stderrOutput, "Check run created: atmos/plan: prod/mycomponent",
+	assert.Contains(t, stderrOutput, "Check run created: atmos/plan/prod/mycomponent",
 		"Expected check run creation message on stderr")
-	assert.Contains(t, stderrOutput, "Check run completed: atmos/plan: prod/mycomponent",
+	assert.Contains(t, stderrOutput, "Check run completed: atmos/plan/prod/mycomponent",
 		"Expected check run completion message on stderr")
 }
 

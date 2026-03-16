@@ -30,9 +30,9 @@ tests:
     expect:
       exit_code: 0
       stderr:
-        - "Check run created: atmos/plan: prod/mycomponent"
-        - "Check run completed: atmos/plan: prod/mycomponent"
-        - "Title: Running plan"
+        - "Check run created: atmos/plan/prod/mycomponent"
+        - "Check run completed: atmos/plan/prod/mycomponent"
+        - "Title: plan in progress..."
         - "Title: 1 resource to add"
         - "has_changes=true"
         - "has_errors=false"
@@ -55,9 +55,9 @@ tests:
     expect:
       exit_code: 0
       stderr:
-        - !not "Check run created: atmos/plan: prod/mycomponent"
-        - !not "Check run completed: atmos/plan: prod/mycomponent"
-        - !not "Title: Running plan"
+        - !not "Check run created: atmos/plan/prod/mycomponent"
+        - !not "Check run completed: atmos/plan/prod/mycomponent"
+        - !not "Title: plan in progress..."
         - !not "Title: 1 resource to add"
         - !not "has_changes=true"
         - !not "has_errors=false"
@@ -81,9 +81,9 @@ tests:
     expect:
       exit_code: 1
       stderr:
-        - "Check run created: atmos/plan: prod/mycomponent/failure"
-        - !not "Check run completed: atmos/plan: prod/mycomponent/failure"
-        - "Check run failed: atmos/plan: prod/mycomponent/failure"
+        - "Check run created: atmos/plan/prod/mycomponent/failure"
+        - !not "Check run completed: atmos/plan/prod/mycomponent/failure"
+        - "Check run failed: atmos/plan/prod/mycomponent/failure"
         - "has_changes=false"
         - "has_errors=true"
         - "exit_code=1"
