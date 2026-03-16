@@ -186,32 +186,32 @@ func TestDescribeAffectedCmd_Error(t *testing.T) {
 // current branch has no stacks (e.g., a brand-new or empty main branch).
 // Regression test for: https://github.com/cloudposse/atmos/issues/2183
 func TestDescribeAffectedWithEmptyStacks(t *testing.T) {
-_ = NewTestKit(t)
+	_ = NewTestKit(t)
 
-// Reset Viper to prevent environment leakage between tests.
-viper.Reset()
-t.Setenv("ATMOS_IDENTITY", "")
-t.Setenv("IDENTITY", "")
+	// Reset Viper to prevent environment leakage between tests.
+	viper.Reset()
+	t.Setenv("ATMOS_IDENTITY", "")
+	t.Setenv("IDENTITY", "")
 
-// Point to a fixture with an atmos.yaml but NO stack files in the stacks directory.
-stacksPath := "../tests/fixtures/scenarios/atmos-describe-affected-empty-stacks"
-t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-t.Setenv("ATMOS_BASE_PATH", stacksPath)
+	// Point to a fixture with an atmos.yaml but NO stack files in the stacks directory.
+	stacksPath := "../tests/fixtures/scenarios/atmos-describe-affected-empty-stacks"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-ctrl := gomock.NewController(t)
-defer ctrl.Finish()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-describeAffectedMock := exec.NewMockDescribeAffectedExec(ctrl)
-describeAffectedMock.EXPECT().Execute(gomock.Any()).Return(nil)
+	describeAffectedMock := exec.NewMockDescribeAffectedExec(ctrl)
+	describeAffectedMock.EXPECT().Execute(gomock.Any()).Return(nil)
 
-run := getRunnableDescribeAffectedCmd(
-func(opts ...AtmosValidateOption) {},
-exec.ParseDescribeAffectedCliArgs,
-func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec {
-return describeAffectedMock
-},
-)
+	run := getRunnableDescribeAffectedCmd(
+		func(opts ...AtmosValidateOption) {},
+		exec.ParseDescribeAffectedCliArgs,
+		func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec {
+			return describeAffectedMock
+		},
+	)
 
-err := run(describeAffectedCmd, []string{})
-assert.NoError(t, err, "describe affected should succeed even when the current branch has no stacks")
+	err := run(describeAffectedCmd, []string{})
+	assert.NoError(t, err, "describe affected should succeed even when the current branch has no stacks")
 }
