@@ -1,8 +1,8 @@
 # PRD: DAG-Based Concurrent Execution
 
 **Status:** Draft
-**Version:** 1.0
-**Last Updated:** 2026-03-13
+**Version:** 2.0
+**Last Updated:** 2026-03-16
 **Author:** Erik Osterman
 
 ---
@@ -40,11 +40,11 @@ In order to get here, there are several related concerns this PRD also addresses
 |--------|------------------|----------|
 | **Scheduling model** | Level-based (Phase 1), ready-queue (later phase) | **Ready-queue from the start** — level-based is a known anti-pattern that Terragrunt already abandoned |
 | **Scope** | Terraform-only | **Component-type-agnostic** — scheduler works across Terraform, Packer, Ansible, custom registry types |
-| **Architecture** | Extends `internal/exec/terraform_all.go` | **New `pkg/scheduler/` package** — separates scheduling concern from component-type execution |
+| **Architecture** | Extends `internal/exec/terraform_all.go` | **Three-layer design** — `pkg/scheduler/` (scheduling), `pkg/process/` (subprocess lifecycle), `pkg/scheduler/adapters/` (tool-specific) |
 | **Industry grounding** | References Atmos internals | **Benchmarked against Terragrunt, TerraMate, Make, Ninja, Bazel, Buck2** — all converge on ready-queue |
-| **Foundation PRs** | Two foundation PRs (stream injection, routing consolidation) before any concurrency | **Scheduler is independent** — can land without stream refactoring by using per-node output capture |
+| **Foundation PRs** | Two foundation PRs (stream injection, routing consolidation) before any concurrency | **Foundation packages first** — `pkg/process/` + `pkg/io/` extensions land as Phase 1, scheduler as Phase 2 |
 | **Mixed-type DAGs** | Not addressed | **First-class concern** — Packer AMI → Terraform EC2 dependencies |
-| **Component registry** | Not addressed | **Scheduler integrates with `ComponentProvider.Execute()`** for registered types |
+| **Component registry** | Not addressed | **Adapter pattern** — `ComponentProviderAdapter` wraps `ComponentProvider.Execute()` for registered types |
 
 **Key disagreement: Level-based vs ready-queue.** PR #2159 proposes level-based scheduling for Phase 1, citing simplicity and debuggability. However:
 - Terragrunt explicitly abandoned level-based for ready-queue ([#3629](https://github.com/gruntwork-io/terragrunt/issues/3629))
@@ -237,6 +237,28 @@ Fully implemented and shipped (#1516):
 - `stack_processor_process_stacks.go` — WaitGroup for parallel stack processing
 - No errgroup, no semaphore patterns currently used
 
+### I/O Layer (`pkg/io/`)
+The I/O package provides the stream isolation primitives that per-node output will build on:
+- `interfaces.go` — Core contracts: `Context` (combines streams + masker), `Streams`, `Masker`, `Config`
+- `streams.go` — `maskedWriter` wraps `io.Writer` to transform content on each `Write()` call; `dynamicMaskedWriter` resolves writers at write time
+- `context.go` — `io.Context` implementation: `Write()` is the choke point where all output flows through masking
+- `global.go` — Global singletons: `Data` (stdout) and `UI` (stderr) writers
+- `WithStreams()` option already supports custom streams (used in tests) — this is the extension point for per-node stream isolation
+- Two-channel design: **Data** (stdout, pipeable) and **UI** (stderr, human-readable)
+
+### Task Runner (`pkg/runner/`)
+- `CommandRunner` interface with `RunShell()` and `RunAtmos()` — task-level execution (shell commands, atmos sub-commands)
+- `Run()` / `RunAll()` with timeout support via `context.WithTimeout()`
+- Interface-driven with `//go:generate mockgen` — already mockable
+- This is **task-level** (workflow tasks with stack/command semantics), not subprocess-level. The new `pkg/process/` package will be lower-level: raw subprocess lifecycle with injected streams.
+
+### Subprocess Execution (`internal/exec/shell_utils.go`)
+- `ExecuteShellCommand()` — the refactoring target. Currently hardcodes `cmd.Stdout = ioLayer.MaskWriter(os.Stdout)` and `cmd.Stderr = ioLayer.MaskWriter(os.Stderr)`
+- Merges environment: system + `atmos.yaml` global env + command-specific env
+- Preserves exit codes: `exec.ExitError` → `errUtils.ExitCodeError`
+- Propagates TTY: injects `ATMOS_FORCE_TTY=true` when parent has TTY
+- `terraform_plan_diff.go` swaps global `os.Stdout` to capture output — race condition under concurrency
+
 ### Routing Gap
 - `--all` for Terraform goes through `ExecuteTerraformAll()` (dependency-aware, sequential)
 - `--components`, `--query` still route through `ExecuteTerraformQuery()` (no DAG awareness)
@@ -244,40 +266,196 @@ Fully implemented and shipped (#1516):
 
 ---
 
-## Recommended Architecture: DAG Scheduler
+## Recommended Architecture: Three-Layer Design
 
-### Core Abstraction: `pkg/scheduler/`
+A scheduler solves DAG ordering and concurrency, but it does not by itself solve: stream isolation, signal forwarding / graceful shutdown, stdin policy for interactive commands, per-node log capture and labeling, or child-process cleanup and exit handling. Those are process-management concerns that deserve a separate reusable package boundary.
 
-A component-type-agnostic scheduler that takes a DAG and executes nodes concurrently:
+### Layer 1: `pkg/scheduler/` — Pure Scheduling
+
+The scheduler is a component-type-agnostic DAG executor. **Nodes are pure scheduling data — they do not know how to execute themselves.** Execution is delegated to a `Dispatcher` interface, which decouples scheduling logic from process management and tool-specific concerns.
 
 ```go
-// Node represents a unit of work in the execution DAG
+// Node is pure scheduling data.
+// It does not know how to execute itself.
 type Node struct {
-    ID           string
-    Component    string
-    Stack        string
-    Type         string // "terraform", "ansible", "packer", etc.
-    Execute      func(ctx context.Context) error
+    ID        string // unique DAG node ID: "terraform/tenant1-ue2-dev/vpc"
+    Component string
+    Stack     string
+    Type      string // "terraform", "packer", "ansible", etc.
+    Ref       any    // tool-specific payload prepared earlier
+}
+
+// Dispatcher is called by the scheduler to execute a node.
+// The orchestrator implements this interface.
+type Dispatcher interface {
+    Dispatch(ctx context.Context, node *Node) (*Result, error)
 }
 
 // Scheduler manages concurrent DAG execution
 type Scheduler struct {
     graph          *dependency.Graph
+    dispatcher     Dispatcher
     maxConcurrency int
     failFast       bool
     onNodeStart    func(node *Node)
-    onNodeComplete func(node *Node, err error)
+    onNodeComplete func(node *Node, result *Result, err error)
 }
 
 // Run executes the DAG with bounded concurrency
-func (s *Scheduler) Run(ctx context.Context) *Result
+func (s *Scheduler) Run(ctx context.Context) *AggregateResult
 ```
 
-### Implementation (Ready-Queue + errgroup)
+### Layer 2: `pkg/process/` — Generic Subprocess Lifecycle
+
+A reusable package for subprocess management. Not Terraform-specific — usable anywhere Atmos needs to run a child process with controlled I/O and signal handling.
 
 ```go
-func (s *Scheduler) Run(ctx context.Context) *Result {
-    result := &Result{}
+// TaskSpec is the generic process contract.
+// Adapters translate tool-specific nodes into this shape.
+type TaskSpec struct {
+    Command     []string
+    Dir         string
+    Env         []string
+    Interactive bool
+}
+
+// Streams are injected by the orchestrator/process layer.
+// This is what lets concurrent nodes avoid shared stdio.
+type Streams struct {
+    Stdin  io.Reader
+    Stdout io.Writer
+    Stderr io.Writer
+}
+
+// Result is the generic execution result returned by the process layer.
+type Result struct {
+    ExitCode   int
+    StartedAt  time.Time
+    FinishedAt time.Time
+    Err        error
+}
+
+// Runner owns subprocess lifecycle.
+// This is the reusable process package, not Terraform-specific code.
+type Runner interface {
+    Run(ctx context.Context, spec *TaskSpec, streams *Streams) (*Result, error)
+}
+```
+
+**Runner responsibilities:**
+- Spawn child process with injected streams (stdin/stdout/stderr)
+- Forward SIGINT/SIGTERM to child process with configurable grace period
+- Wait for child process, capture exit code
+- Clean up on context cancellation
+
+**Relationship to existing `pkg/runner/`:** The existing `CommandRunner` interface handles workflow task execution (shell tasks, atmos sub-commands with stack/command semantics). `pkg/process/` is lower-level — it manages raw subprocess lifecycle with injected streams. They are complementary, not competing. `pkg/runner/` could eventually be refactored to use `pkg/process/` internally.
+
+### Layer 3: `pkg/scheduler/adapters/` — Tool-Specific Adapters
+
+Adapters translate tool-specific semantics into the generic `TaskSpec` / `Result` contract. Each adapter handles preparation (auth, hooks, env, command construction) and finalization (hooks, store writes, post-processing).
+
+```go
+// Adapter owns tool-specific execution semantics.
+// Scheduler uses adapters; adapters use the process layer.
+type Adapter interface {
+    Prepare(ctx context.Context, node *scheduler.Node) (*process.TaskSpec, error)
+    Finalize(ctx context.Context, node *scheduler.Node, result *process.Result) error
+}
+
+// Registry resolves adapters by node type.
+type Registry interface {
+    Get(nodeType string) (Adapter, bool)
+    MustGet(nodeType string) Adapter
+}
+```
+
+**Concrete adapters:**
+
+```go
+// TerraformAdapter — in pkg/scheduler/adapters/terraform.go
+type TerraformAdapter struct{}
+
+func (a *TerraformAdapter) Prepare(ctx context.Context, node *scheduler.Node) (*process.TaskSpec, error) {
+    info := node.Ref.(*TerraformInfo)
+    // Tool-specific preparation:
+    // - validate workdir
+    // - resolve auth context
+    // - build terraform args
+    // - run before-hooks
+    // - decide whether interactive mode is allowed
+    return &process.TaskSpec{
+        Command: []string{"terraform", "apply", "-auto-approve"},
+        Dir:     info.Dir,
+        Env:     info.Env,
+    }, nil
+}
+
+func (a *TerraformAdapter) Finalize(ctx context.Context, node *scheduler.Node, result *process.Result) error {
+    // - run after-apply hooks
+    // - update stores
+    // - publish plan/apply metadata
+    return nil
+}
+
+// PackerAdapter — in pkg/scheduler/adapters/packer.go
+// AnsibleAdapter — in pkg/scheduler/adapters/ansible.go
+// ComponentProviderAdapter — wraps ComponentProvider.Execute() for registered types
+```
+
+**Why adapters live in `pkg/scheduler/adapters/` (not `internal/exec/`):** The long-term goal is to eliminate `internal/exec/`. No new files should be added to exec. Adapters call into existing exec functions where needed, but the adapter code itself lives in its own package.
+
+### Orchestrator: `pkg/scheduler/orchestrator.go`
+
+The orchestrator combines all three layers. It implements `scheduler.Dispatcher` and is the integration point where scheduling, process management, and tool-specific logic come together.
+
+```go
+// Orchestrator implements Dispatcher by combining process runner + adapter registry.
+type Orchestrator struct {
+    runner   process.Runner
+    registry adapters.Registry
+}
+
+// Dispatch shows the intended boundary:
+// scheduler drives execution order,
+// adapter translates tool semantics,
+// process runner owns subprocess execution.
+func (o *Orchestrator) Dispatch(ctx context.Context, node *Node) (*Result, error) {
+    adapter := o.registry.MustGet(node.Type)
+
+    // Tool-specific preparation:
+    // auth/bootstrap, hooks, cwd/env resolution, command construction
+    spec, err := adapter.Prepare(ctx, node)
+    if err != nil {
+        return nil, err
+    }
+
+    // Create per-node isolated streams (see "Output Under Concurrency")
+    streams := io.NewNodeStreams(node.ID, ...)
+
+    // Generic subprocess lifecycle:
+    // stream isolation, signal forwarding, wait/kill, exit handling
+    result, err := o.runner.Run(ctx, spec, streams)
+    if err != nil {
+        return nil, err
+    }
+
+    // Tool-specific completion semantics:
+    // hooks, store writes, planfile handling, post-processing
+    if err := adapter.Finalize(ctx, node, result); err != nil {
+        return nil, err
+    }
+
+    return result, nil
+}
+```
+
+### Scheduler Implementation (Ready-Queue + errgroup)
+
+The scheduling algorithm is unchanged from v1 — the only difference is that `node.Execute(ctx)` becomes `s.dispatcher.Dispatch(ctx, node)`:
+
+```go
+func (s *Scheduler) Run(ctx context.Context) *AggregateResult {
+    result := &AggregateResult{}
     inDegree := computeInDegrees(s.graph)
     ready := make(chan *Node, s.graph.Size())
     done := make(chan struct{})
@@ -302,9 +480,10 @@ func (s *Scheduler) Run(ctx context.Context) *Result {
             return result
         case node := <-ready:
             g.Go(func() error {
-                err := node.Execute(ctx)
+                nodeResult, err := s.dispatcher.Dispatch(ctx, node)
 
                 mu.Lock()
+                result.Nodes = append(result.Nodes, nodeResult)
                 completed++
                 // Decrement dependents' in-degrees
                 for _, dep := range s.graph.Dependents(node.ID) {
@@ -343,52 +522,38 @@ func (s *Scheduler) Run(ctx context.Context) *Result {
 | Concurrency control | `--max-concurrency N` | Like Terragrunt's `--parallelism` |
 | Default concurrency | 1 (sequential) | Safe default, opt-in parallelism |
 | Failure mode | `--fail-fast` (default) vs `--keep-going` | Like Make's behavior |
-| Component types | Type-agnostic scheduler | Execute function is a closure |
+| Node execution | Dispatcher interface (not closures) | Decouples scheduling from execution; testable with mock dispatchers |
+| Process management | Separate `pkg/process/` | Reusable beyond scheduler; clean subprocess lifecycle |
+| Tool specifics | Adapter pattern (Prepare/Finalize) | Structured contract for tool-specific semantics; registry-driven |
+| Stream isolation | Extend `pkg/io/` | Reuse existing masking infrastructure; add per-node prefixing |
 | Destroy ordering | Reverse topological order | Already implemented in Atmos |
+| No new exec files | Adapters in `pkg/scheduler/adapters/` | `internal/exec/` is being phased out — no new investment there |
 
 ### How It Spans Component Types (Without Migrating Legacy Built-ins)
 
-The scheduler doesn't care about component types. Each node carries an `Execute` closure. **Legacy built-ins (Terraform, Packer) do NOT need to be migrated to the `ComponentProvider` interface** — they're wrapped in closures at the scheduling boundary:
+The scheduler doesn't care about component types — it dispatches to the orchestrator, which resolves the appropriate adapter via the registry. **Legacy built-ins (Terraform, Packer) do NOT need to be migrated to the `ComponentProvider` interface** — they get their own adapters that call into existing execution functions:
 
 ```go
-// Terraform — wrap existing ExecuteTerraform()
-terraformNode := &scheduler.Node{
-    ID: "vpc/tenant1-ue2-dev",
-    Execute: func(ctx context.Context) error {
-        return ExecuteTerraform(nodeInfo)  // existing function, unchanged
-    },
-}
-
-// Packer — wrap existing ExecutePacker()
-packerNode := &scheduler.Node{
-    ID: "ami-builder/tenant1-ue2-dev",
-    Execute: func(ctx context.Context) error {
-        return ExecutePacker(nodeInfo)  // existing function, unchanged
-    },
-}
-
-// Ansible — goes through component registry
-ansibleNode := &scheduler.Node{
-    ID: "playbook/tenant1-ue2-dev",
-    Execute: func(ctx context.Context) error {
-        provider := component.MustGetProvider("ansible")
-        return provider.Execute(execCtx)
-    },
-}
+// TerraformAdapter.Prepare() calls into existing execution setup
+// PackerAdapter.Prepare() calls into existing packer setup
+// AnsibleAdapter wraps ComponentProvider.Execute() via ComponentProviderAdapter
+// Custom types also go through ComponentProviderAdapter
 ```
 
 **Why this works without migration:**
-- `ExecuteTerraform()` and `ExecutePacker()` are self-contained functions that accept parameters — no deep coupling to global state
-- Both follow the same pattern: setup → write files → call shell command
-- Closure wrapping adds zero overhead and doesn't touch core logic
-- Legacy built-ins can be migrated to `ComponentProvider` later independently — the scheduler doesn't care either way
+- Each adapter encapsulates the tool-specific preparation and finalization logic
+- Adapters call into existing execution functions — no duplication, no deep coupling
+- Legacy built-ins can be migrated to `ComponentProvider` later independently
+- The adapter registry follows the same pattern as `pkg/component/` and `pkg/store/`
 
 ### Integration Path
 
-1. **`pkg/scheduler/`** — New package with `Scheduler`, `Node`, `Result` types
-2. **`internal/exec/terraform_all.go`** — Replace sequential loop in `executeInDependencyOrder()` with scheduler
-3. **Extend to other types** — Build mixed-type DAGs where Packer/Ansible/custom components participate via closures
-4. **Unify routing** — `--all`, `--components`, `--query` all flow through the scheduler
+1. **`pkg/process/`** — New package: `Runner`, `TaskSpec`, `Streams`, `Result`
+2. **`pkg/scheduler/`** — New package: `Scheduler`, `Node`, `Dispatcher`, `Orchestrator`, `Result`
+3. **`pkg/scheduler/adapters/`** — Tool-specific adapters: `TerraformAdapter`, `PackerAdapter`, etc.
+4. **`pkg/io/`** — Extend with `prefixedWriter` and `NewNodeStreams()` factory
+5. **`internal/exec/terraform_all.go`** — Wire orchestrator into `executeInDependencyOrder()` (modify existing file, no new files in exec)
+6. **Unify routing** — `--all`, `--components`, `--query` all flow through the scheduler
 
 ---
 
@@ -466,18 +631,30 @@ Under concurrency, there are two distinct output streams per node that both need
 
 2. **Subprocess output** (Terraform's stdout/stderr) — Needs a `prefixedWriter` wrapping the `io.Writer` passed to `cmd.Stdout`/`cmd.Stderr`. This is new — currently subprocesses bypass the `io.Context` layer and write directly to `os.Stdout`.
 
-### Implementation Approach
+### Implementation Approach: Extending `pkg/io/`
 
-Stream injection is a prerequisite for the scheduler, not a future optimization. The approach:
+Stream injection is a prerequisite for the scheduler, not a future optimization. The approach extends `pkg/io/` — the package that already owns stream abstraction and secret masking:
 
-1. Create a `prefixedWriter` (following the `maskedWriter` pattern in `pkg/io/streams.go`) that prepends `[component/stack]` to each line
-2. Refactor `ExecuteShellCommand()` to accept optional `io.Writer` for stdout/stderr (backward-compatible: `nil` means use `os.Stdout`/`os.Stderr`)
-3. Each scheduler worker creates its output pipeline:
+**New types in `pkg/io/`:**
+
+1. **`prefixedWriter`** — follows the exact same `maskedWriter` pattern in `pkg/io/streams.go` (lines 97-124). Wraps an `io.Writer` and prepends a configurable prefix (e.g., `[vpc/tenant1-ue2-dev]`) to each line of output. Line-prefixed output is a general I/O concern reusable beyond scheduling.
+
+2. **`NewNodeStreams()`** — factory that composes the per-node output pipeline:
+   ```go
+   func NewNodeStreams(prefix string, masker Masker, terminal io.Writer, logFile io.Writer) *Streams
+   ```
+   Each node's stream pipeline:
+   - `maskedWriter` → applies secret masking (shared global `Masker` — thread-safe, secrets are process-wide)
    - `prefixedWriter` → labels each line with the node ID
    - `io.MultiWriter` → tees to both the terminal (labeled) and the log file (raw)
-   - `maskedWriter` → applies secret masking (preserving existing behavior)
-4. Each worker gets a `logger.WithPrefix("[component/stack]")` for Atmos-level log messages
-5. The `os.Stdout` swap pattern in `terraform_plan_diff.go` is eliminated — replaced by passing the writer directly
+
+**Note on `maskedWriter` vs `dynamicMaskedWriter`:** The `dynamicMaskedWriter` pattern (line 129 of `streams.go`) resolves writers at write time via `getWriter func() io.Writer`. This is needed for the global singletons but NOT for per-node streams — each node has fixed writers. Use the simpler `maskedWriter` directly.
+
+**Refactoring existing code:**
+
+3. Refactor `ExecuteShellCommand()` to accept optional `process.Streams` for stdout/stderr (backward-compatible: `nil` means use `os.Stdout`/`os.Stderr` as today)
+4. The `os.Stdout` swap pattern in `terraform_plan_diff.go` is eliminated — replaced by passing a buffer writer as the stdout stream to the process runner, then reading the buffer after execution
+5. Each worker gets a `logger.WithPrefix("[component/stack]")` for Atmos-level log messages
 6. When `--max-concurrency 1`, output goes directly to stdout/stderr as today — no behavior change, no prefixes
 
 ---
@@ -516,12 +693,19 @@ for i := range executionOrder {
     }
 }
 
-// NEW (scheduler — ready-queue with bounded concurrency)
-scheduler := scheduler.New(graph,
+// NEW (three-layer — orchestrator drives scheduler + process runner + adapters)
+orch := scheduler.NewOrchestrator(
+    process.NewExecRunner(),
+    adapters.NewRegistry(
+        adapters.WithTerraform(&adapters.TerraformAdapter{}),
+        adapters.WithPacker(&adapters.PackerAdapter{}),
+    ),
+)
+sched := scheduler.New(graph, orch,
     scheduler.WithMaxConcurrency(maxConcurrency),
     scheduler.WithFailFast(true),
 )
-result := scheduler.Run(ctx)
+result := sched.Run(ctx)
 ```
 
 The graph construction (`buildTerraformDependencyGraph()`, `DependencyParser`) is **unchanged**. The scheduler consumes the same `*dependency.Graph` that exists today.
@@ -540,7 +724,7 @@ The existing `pkg/dependency/` package is well-designed:
 
 This stays exactly as-is. It's a data structure package — no execution logic.
 
-### New `pkg/scheduler/` (execution engine)
+### New `pkg/scheduler/` (scheduling + orchestration)
 
 The scheduler is a separate concern from the graph:
 - `pkg/dependency/` = "what's the order?" (data)
@@ -548,25 +732,62 @@ The scheduler is a separate concern from the graph:
 
 ```
 pkg/scheduler/
-├── scheduler.go      # Scheduler struct, Run(), Options
-├── node.go           # ExecutableNode (wraps dependency.Node + Execute closure)
-├── result.go         # Result, NodeResult, status enum
-├── options.go        # Functional options (WithMaxConcurrency, WithFailFast, etc.)
-└── scheduler_test.go # Unit tests
+├── scheduler.go       # Scheduler struct, Run(), Dispatcher interface
+├── orchestrator.go    # Orchestrator: combines scheduler + process runner + adapter registry
+├── node.go            # Node (pure scheduling data: ID, Type, Ref)
+├── result.go          # AggregateResult, NodeResult, Status enum
+├── options.go         # Functional options (WithMaxConcurrency, WithFailFast, etc.)
+├── scheduler_test.go
+├── orchestrator_test.go
+└── adapters/
+    ├── adapter.go     # Adapter interface, Registry interface
+    ├── registry.go    # Default registry implementation
+    ├── terraform.go   # TerraformAdapter (Prepare/Finalize)
+    ├── packer.go      # PackerAdapter
+    ├── ansible.go     # AnsibleAdapter (wraps ComponentProvider)
+    └── adapter_test.go
 ```
 
-This follows Atmos's existing pattern of purpose-built packages (`pkg/store/`, `pkg/git/`, `pkg/component/`).
+### New `pkg/process/` (subprocess lifecycle)
 
-### No separate "DAG package" needed
+Generic subprocess management — reusable beyond the scheduler:
 
-The graph/DAG primitives already exist in `pkg/dependency/`. Adding a third package would create unnecessary indirection. The split is clean:
+```
+pkg/process/
+├── runner.go          # Runner interface, TaskSpec, Streams, Result
+├── exec_runner.go     # Default implementation using os/exec
+├── options.go         # Functional options (timeouts, signal grace period)
+└── runner_test.go
+```
+
+### Extended `pkg/io/` (stream isolation)
+
+New additions to the existing I/O package:
+
+```
+pkg/io/
+├── ...                # existing files unchanged
+├── prefixed_writer.go # prefixedWriter (follows maskedWriter pattern)
+└── node_streams.go    # NewNodeStreams() factory for per-node output pipelines
+```
+
+### No new files in `internal/exec/` (MANDATORY)
+
+The long-term goal is to eliminate `internal/exec/`. All new code goes into `pkg/` packages. Existing exec files are modified to wire in the orchestrator, but no new files are created there.
+
+### Package Responsibility Summary
 
 | Concern | Package | Responsibility |
 |---------|---------|----------------|
-| Graph structure | `pkg/dependency/` | Build, sort, filter, query |
-| Concurrent execution | `pkg/scheduler/` | Ready-queue, worker pool, results |
-| Component execution | `internal/exec/` | Terraform/Packer/Ansible-specific logic |
-| Component abstraction | `pkg/component/` | `ComponentProvider` interface + registry |
+| Graph structure | `pkg/dependency/` | Build, sort, filter, query (unchanged) |
+| Scheduling | `pkg/scheduler/` | Ready-queue, worker pool, dispatch, results |
+| Orchestration | `pkg/scheduler/` | Combines scheduler + process runner + adapters |
+| Tool adapters | `pkg/scheduler/adapters/` | Prepare (→ TaskSpec) and Finalize per tool type |
+| Subprocess lifecycle | `pkg/process/` | Spawn/wait/stop/kill, stream injection, signal handling |
+| Stream isolation | `pkg/io/` | Per-node streams, prefix writers, masking (extended) |
+| Component abstraction | `pkg/component/` | `ComponentProvider` interface + registry (unchanged) |
+
+This follows Atmos's existing pattern of purpose-built packages (`pkg/store/`, `pkg/git/`, `pkg/component/`).
 
 ---
 
@@ -611,26 +832,29 @@ When users enable `--max-concurrency > 1`, understanding the DAG is critical for
 
 ## Phased Rollout
 
-### Phase 1: Core Scheduler + Terraform
-1. Refactor `ExecuteShellCommand()` to accept optional `io.Writer` for stdout/stderr (stream injection)
-2. Create `pkg/scheduler/` with ready-queue scheduler, `Node`, `Result`, `Options`
-3. Wire into `executeInDependencyOrder()` in `internal/exec/terraform_all.go`
-4. Add `--max-concurrency N` flag (default: 1 = sequential, backward-compatible)
-5. Per-node output: live labeled streaming to terminal + log files in component workdir
-6. JSON summary output (`--output json`)
-7. Require `-auto-approve` when `--max-concurrency > 1` for `apply`/`destroy`
-8. Eliminate the `os.Stdout` swap pattern in `terraform_plan_diff.go`
+### Phase 1: Foundation Packages
+1. Create `pkg/process/` with `Runner` interface, `TaskSpec`, `Streams`, `Result`, default exec-based implementation
+2. Extend `pkg/io/` with `prefixedWriter` and `NewNodeStreams()` factory (reuse existing `maskedWriter` pattern)
+3. Refactor `ExecuteShellCommand()` to accept optional `process.Streams` parameter (backward-compatible: `nil` means current behavior)
+4. Eliminate the `os.Stdout` swap pattern in `terraform_plan_diff.go` — replaced by stream injection
 
-### Phase 2: Routing Consolidation
+### Phase 2: Scheduler + Terraform Adapter
+1. Create `pkg/scheduler/` with pure scheduling logic (`Scheduler`, `Node`, `Dispatcher` interface, `AggregateResult`)
+2. Create `pkg/scheduler/orchestrator.go` combining scheduler + process runner + adapter registry
+3. Create `pkg/scheduler/adapters/` with `TerraformAdapter` (Prepare/Finalize calling existing exec functions)
+4. Wire orchestrator into `executeInDependencyOrder()` in `internal/exec/terraform_all.go` (modify existing file, no new files in exec)
+5. Add `--max-concurrency N` flag (default: 1 = sequential, backward-compatible)
+6. Per-node output: live labeled streaming to terminal + log files in component workdir
+7. JSON summary output (`--output json`)
+8. Require `-auto-approve` when `--max-concurrency > 1` for `apply`/`destroy`
+
+### Phase 3: Routing Consolidation + Multi-Type DAGs
 1. Converge `--components` and `--query` onto the DAG-backed executor (currently `ExecuteTerraformQuery`)
 2. Unify `--affected` path to use the scheduler
 3. Add `--fail-fast` / `--keep-going` flags
-
-### Phase 3: Multi-Type DAGs
-1. Extend graph building to include Packer and Ansible nodes
-2. Cross-type `depends_on` syntax (e.g., `component: ami-builder, type: packer`)
-3. Route registered component types through `ComponentProvider.Execute()`
-4. Route legacy built-ins through their existing execution functions
+4. Create `PackerAdapter`, `AnsibleAdapter` (wraps `ComponentProvider`), `ComponentProviderAdapter` for registered types
+5. Extend graph building to include Packer and Ansible nodes
+6. Cross-type `depends_on` syntax (e.g., `component: ami-builder, type: packer`)
 
 ### Phase 4: Advanced Scheduling
 1. Per-type concurrency limits (resource pools, like Ninja)
@@ -665,8 +889,12 @@ Notable details from PR #2159 that should be preserved:
 
 ### Resolved Questions
 - **Package location**: `pkg/scheduler/` (separate from `pkg/dependency/`)
-- **Legacy built-ins**: NOT migrated — wrapped in closures at the scheduler boundary
-- **Stream injection**: Required as part of Phase 1. Refactor `ExecuteShellCommand()` to accept `io.Writer`. Both live streaming and per-node log files are needed — they are complementary, not alternatives.
+- **Scheduler vs process separation**: The scheduler is pure scheduling data + ready queue. The process runner (`pkg/process/`) owns subprocess lifecycle. They are connected via the `Dispatcher` interface and `Adapter` pattern, with the orchestrator as the integration point.
+- **Legacy built-ins**: NOT migrated to `ComponentProvider` — they get dedicated adapters (`TerraformAdapter`, `PackerAdapter`) that call into existing execution functions
+- **Stream injection**: Required as Phase 1 foundation. Extends `pkg/io/` with `prefixedWriter` and `NewNodeStreams()`. Process runner accepts injected `Streams` instead of hardcoding `os.Stdout`/`os.Stderr`. Both live streaming and per-node log files are needed — they are complementary, not alternatives.
+- **`pkg/io/` reuse**: Per-node stream isolation extends the existing `pkg/io/` package. The shared global `Masker` instance handles secret masking (thread-safe, secrets are process-wide). `prefixedWriter` follows the existing `maskedWriter` pattern.
+- **No new exec files**: Adapters and orchestrator live in `pkg/scheduler/` and `pkg/scheduler/adapters/`, NOT in `internal/exec/`. The long-term goal is to eliminate `internal/exec/`.
+- **`pkg/process/` vs `pkg/runner/`**: `pkg/process/` is subprocess-level (spawn, streams, signals, exit codes). `pkg/runner/` is task-level (shell tasks, atmos sub-commands). Different abstraction levels, complementary.
 - **Default concurrency**: `1` (sequential, backward-compatible), configurable via `atmos.yaml`, ENV, or CLI flag
 - **Cross-type dependency syntax**: Solved by PR #2193 — new `dependencies.components` format with `kind` field for cross-type dependencies (terraform/helmfile/packer/plugin). The scheduler consumes this format via the graph builder.
 
@@ -675,6 +903,10 @@ Notable details from PR #2159 that should be preserved:
 ## Verification
 
 - Unit tests for scheduler: diamond DAG, linear chain, fan-out, fan-in, single node, error propagation, fail-fast vs keep-going
+- Unit tests for `pkg/process/`: stream injection (stdout/stderr go to injected writers, not os.Stdout), signal forwarding (SIGINT/SIGTERM), exit code preservation
+- Unit tests for adapters: `Prepare` returns correct `TaskSpec` (command, dir, env), `Finalize` handles hooks/stores
+- Unit tests for `prefixedWriter`: correct line-by-line prefixing, partial writes, empty lines, concurrent writes
 - Integration test: `atmos terraform plan --all --max-concurrency 4` on test fixtures with `depends_on`
+- Integration test: mixed-type DAG (Terraform + Packer nodes) with adapter registry
 - Benchmark: 100-node graph scheduling overhead < 100ms
 - Backward compatibility: `--max-concurrency 1` produces identical output to current sequential execution
