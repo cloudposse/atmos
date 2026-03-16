@@ -115,7 +115,7 @@ func TestCommandProviderImplementations(t *testing.T) {
 			providerName:      "uninstall",
 			commandName:       "uninstall",
 			group:             "Toolchain Commands",
-			expectFlagsParser: false,
+			expectFlagsParser: true,
 			getFlagsBuilder:   func() flags.Builder { return (&UninstallCommandProvider{}).GetFlagsBuilder() },
 		},
 		{
