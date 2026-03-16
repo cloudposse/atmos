@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -155,6 +156,9 @@ func (m *manager) deleteLegacyCredentialFiles() {
 	awsDir := filepath.Join(baseDir, awsDirNameForMismatch)
 	providerDirs, err := os.ReadDir(awsDir)
 	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			log.Warn("Failed to read legacy credential directory", "path", awsDir, "error", err)
+		}
 		return
 	}
 
@@ -162,19 +166,30 @@ func (m *manager) deleteLegacyCredentialFiles() {
 		if !provider.IsDir() {
 			continue
 		}
-		providerDir := filepath.Join(awsDir, provider.Name())
-		// Remove credential, config, and lock files from legacy (no-realm) path.
-		for _, filename := range []string{"credentials", "config", "credentials.lock", "config.lock"} {
-			filePath := filepath.Join(providerDir, filename)
-			if err := os.Remove(filePath); err == nil {
-				log.Debug("Deleted legacy credential file (pre-realm)", "path", filePath)
-			}
-		}
-		// Remove provider directory if now empty.
-		_ = os.Remove(providerDir)
+		cleanLegacyProviderDir(filepath.Join(awsDir, provider.Name()))
 	}
 	// Remove aws directory if now empty.
-	_ = os.Remove(awsDir)
+	removeIfEmpty(awsDir)
+}
+
+// cleanLegacyProviderDir removes credential, config, and lock files from a legacy provider directory.
+func cleanLegacyProviderDir(providerDir string) {
+	for _, filename := range []string{"credentials", "config", "credentials.lock", "config.lock"} {
+		filePath := filepath.Join(providerDir, filename)
+		if err := os.Remove(filePath); err == nil {
+			log.Debug("Deleted legacy credential file (pre-realm)", "path", filePath)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			log.Warn("Failed to delete legacy credential file", "path", filePath, "error", err)
+		}
+	}
+	removeIfEmpty(providerDir)
+}
+
+// removeIfEmpty removes a directory if it is empty, logging unexpected errors.
+func removeIfEmpty(dir string) {
+	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Debug("Could not remove legacy directory (may not be empty)", "path", dir, "error", err)
+	}
 }
 
 // logRealmMismatchWarning emits a warning about credentials existing under a different realm.

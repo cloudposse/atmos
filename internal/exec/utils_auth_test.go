@@ -149,15 +149,48 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 			},
 		},
 		{
-			name: "realm included when set",
+			name: "realm included when explicitly configured",
 			config: &schema.AtmosConfiguration{
 				Auth: schema.AuthConfig{
-					Realm: "my-project",
+					Realm:       "my-project",
+					RealmSource: "config",
 				},
 			},
 			expected: map[string]any{
 				"realm": "my-project",
 			},
+		},
+		{
+			name: "realm included when set via env",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "env-realm",
+					RealmSource: "env",
+				},
+			},
+			expected: map[string]any{
+				"realm": "env-realm",
+			},
+		},
+		{
+			name: "realm excluded when auto-computed from config-path",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "b80ea18be93f8201",
+					RealmSource: "config-path",
+				},
+			},
+			expected: map[string]any{},
+		},
+		{
+			name: "realm excluded when default",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "default",
+					RealmSource: "default",
+				},
+			},
+			expected: map[string]any{},
 		},
 		{
 			name: "realm excluded when empty",
@@ -169,10 +202,11 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 			expected: map[string]any{},
 		},
 		{
-			name: "all sections including realm",
+			name: "all sections including explicit realm",
 			config: &schema.AtmosConfiguration{
 				Auth: schema.AuthConfig{
-					Realm: "prod-realm",
+					Realm:       "prod-realm",
+					RealmSource: "config",
 					Providers: map[string]schema.Provider{
 						"aws": {Kind: "aws-iam"},
 					},
@@ -822,10 +856,11 @@ func TestGetMergedAuthConfigWithFetcher_RealmPropagatedWithEmptyStack(t *testing
 }
 
 func TestMergeGlobalAuthConfig_RealmPropagated(t *testing.T) {
-	// Verify realm is included in the merged auth section map.
+	// Verify explicitly configured realm is included in the merged auth section map.
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
-			Realm: "my-project",
+			Realm:       "my-project",
+			RealmSource: "config",
 			Providers: map[string]schema.Provider{
 				"aws": {Kind: "aws-iam"},
 			},
@@ -843,6 +878,24 @@ func TestMergeGlobalAuthConfig_NoRealmConfigured(t *testing.T) {
 	// When no realm is configured, the merged map should not contain a "realm" key.
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	componentSection := map[string]any{}
+
+	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
+	assert.NotContains(t, result, "realm")
+	assert.Contains(t, result, "providers")
+}
+
+func TestMergeGlobalAuthConfig_AutoRealmExcluded(t *testing.T) {
+	// Auto-computed realm (from config-path hash) should not appear in merged output.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "b80ea18be93f8201",
+			RealmSource: "config-path",
 			Providers: map[string]schema.Provider{
 				"aws": {Kind: "aws-iam"},
 			},

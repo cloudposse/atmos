@@ -77,9 +77,7 @@
   "atmos_manifest": "legacy-prod",
   "atmos_stack": "my-legacy-prod-stack",
   "atmos_stack_file": "legacy-prod",
-  "auth": {
-    "realm": "04bfae195bf1970c"
-  },
+  "auth": {},
   "backend": {},
   "backend_type": "",
   "cli_args": [

@@ -8,6 +8,7 @@ import (
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -507,6 +508,63 @@ func TestExecuteAuthListCommand_NoErrorWhenNoProfilesExist(t *testing.T) {
 	err = cmd.Execute()
 
 	assert.NoError(t, err)
+}
+
+func TestExecuteAuthListCommand_ProfileFlagSuppressesNoAuthError(t *testing.T) {
+	// Regression test: when --profile loads a profile that contains auth config,
+	// ErrAuthNotConfigured must NOT be returned, even though the base atmos.yaml
+	// has no auth providers/identities.
+	tempDir := t.TempDir()
+
+	// Base atmos.yaml: no auth providers/identities.
+	baseConfig := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(baseConfig, []byte(`auth:
+  realm: test
+`), 0o600)
+	require.NoError(t, err)
+
+	// Profile "devops" contains auth providers and identities.
+	profileDir := filepath.Join(tempDir, "profiles", "devops")
+	require.NoError(t, os.MkdirAll(profileDir, 0o755))
+	profileConfig := filepath.Join(profileDir, "atmos.yaml")
+	err = os.WriteFile(profileConfig, []byte(`auth:
+  providers:
+    my-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://example.awsapps.com/start
+  identities:
+    dev-role:
+      kind: aws/permission-set
+      provider: my-sso
+      permission_set: DevOps
+`), 0o600)
+	require.NoError(t, err)
+
+	t.Chdir(tempDir)
+
+	_ = NewTestKit(t)
+
+	cmd := createTestAuthListCmd()
+	cmd.RunE = executeAuthListCommand
+
+	// Set profile via Viper (matching how global flag binding works in real execution).
+	// In production, RootCmd's persistent --profile flag is bound to Viper via BindToViper.
+	// loadAuthManagerForList calls flags.ParseGlobalFlags which reads v.GetStringSlice("profile").
+	v := viper.GetViper()
+	v.Set("profile", []string{"devops"})
+	t.Cleanup(func() { v.Set("profile", []string{}) })
+
+	// Execute — should NOT return ErrAuthNotConfigured because the profile
+	// contributes auth providers/identities to the merged configuration.
+	err = cmd.Execute()
+	// The command should succeed (no ErrAuthNotConfigured) or fail for a different
+	// reason (e.g., mock provider not available). Either way, it must not be
+	// ErrAuthNotConfigured which would mean --profile was ignored.
+	if err != nil {
+		assert.NotErrorIs(t, err, errUtils.ErrAuthNotConfigured,
+			"--profile should load auth config and suppress ErrAuthNotConfigured")
+	}
 }
 
 func TestIdentitiesFlagCompletion_ReturnsSortedIdentities(t *testing.T) {

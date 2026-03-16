@@ -52,8 +52,7 @@ atmos_component: vpc
 atmos_manifest: orgs/acme/plat/dev/us-east-2
 atmos_stack: plat-ue2-dev
 atmos_stack_file: orgs/acme/plat/dev/us-east-2
-auth:
-  realm: b14b9545124ec327
+auth: {}
 backend: {}
 backend_type: ""
 cli_args:

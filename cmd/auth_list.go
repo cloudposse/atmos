@@ -8,12 +8,14 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authList "github.com/cloudposse/atmos/pkg/auth/list"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/profile"
@@ -404,15 +406,13 @@ func suggestProfilesForAuth(atmosConfig *schema.AtmosConfiguration) error {
 func loadAuthManagerForList(cmd *cobra.Command) (authTypes.AuthManager, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "cmd.loadAuthManagerForList")()
 
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
-		configAndStacksInfo.AtmosBasePath = bp
-	}
-	if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
-		configAndStacksInfo.AtmosConfigFilesFromArg = cfgFiles
-	}
-	if cfgDirs, _ := cmd.Flags().GetStringSlice("config-path"); len(cfgDirs) > 0 {
-		configAndStacksInfo.AtmosConfigDirsFromArg = cfgDirs
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)

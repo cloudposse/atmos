@@ -2152,85 +2152,75 @@ func TestManager_ResolveProviderConfig(t *testing.T) {
 	}
 }
 
-func TestInitializeIdentities_EmptyKindWithProfile(t *testing.T) {
-	m := &manager{
-		config: &schema.AuthConfig{
-			Identities: map[string]schema.Identity{
-				"core-root/terraform": {Kind: ""}, // Empty kind - not configured in profile.
+func TestInitializeIdentities(t *testing.T) {
+	tests := []struct {
+		name             string
+		identities       map[string]schema.Identity
+		stackInfo        *schema.ConfigAndStacksInfo
+		expectError      bool
+		expectedSentinel error
+		expectedDetails  []string
+		expectedCount    int
+	}{
+		{
+			name:       "empty kind with profile suggests profile mismatch",
+			identities: map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo: &schema.ConfigAndStacksInfo{
+				ProfilesFromArg: []string{"marketplace"},
 			},
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"core-root/terraform", "is not configured in the", "marketplace"},
 		},
-		identities: make(map[string]types.Identity),
-		stackInfo: &schema.ConfigAndStacksInfo{
-			ProfilesFromArg: []string{"marketplace"},
+		{
+			name:             "empty kind without profile suggests specifying one",
+			identities:       map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo:        &schema.ConfigAndStacksInfo{},
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"core-root/terraform", "is not configured", "Did you forget to specify a profile?"},
+		},
+		{
+			name:             "empty kind with nil stackInfo suggests specifying profile",
+			identities:       map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo:        nil,
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"Did you forget to specify a profile?"},
+		},
+		{
+			name:          "valid kind succeeds",
+			identities:    map[string]schema.Identity{"mock-identity": {Kind: "mock"}},
+			stackInfo:     &schema.ConfigAndStacksInfo{},
+			expectError:   false,
+			expectedCount: 1,
 		},
 	}
 
-	err := m.initializeIdentities()
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				config: &schema.AuthConfig{
+					Identities: tt.identities,
+				},
+				identities: make(map[string]types.Identity),
+				stackInfo:  tt.stackInfo,
+			}
 
-	// Explanation is stored as a detail on the structured error.
-	details := cockroachErrors.GetAllDetails(err)
-	require.NotEmpty(t, details)
-	assert.Contains(t, details[0], "core-root/terraform")
-	assert.Contains(t, details[0], "is not configured in the")
-	assert.Contains(t, details[0], "marketplace")
-}
+			err := m.initializeIdentities()
 
-func TestInitializeIdentities_EmptyKindWithoutProfile(t *testing.T) {
-	m := &manager{
-		config: &schema.AuthConfig{
-			Identities: map[string]schema.Identity{
-				"core-root/terraform": {Kind: ""}, // Empty kind - not configured.
-			},
-		},
-		identities: make(map[string]types.Identity),
-		stackInfo:  &schema.ConfigAndStacksInfo{},
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedSentinel)
+				details := cockroachErrors.GetAllDetails(err)
+				require.NotEmpty(t, details)
+				for _, expected := range tt.expectedDetails {
+					assert.Contains(t, details[0], expected)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, m.identities, tt.expectedCount)
+			}
+		})
 	}
-
-	err := m.initializeIdentities()
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
-
-	details := cockroachErrors.GetAllDetails(err)
-	require.NotEmpty(t, details)
-	assert.Contains(t, details[0], "core-root/terraform")
-	assert.Contains(t, details[0], "is not configured")
-	assert.Contains(t, details[0], "Did you forget to specify a profile?")
-}
-
-func TestInitializeIdentities_EmptyKindNilStackInfo(t *testing.T) {
-	m := &manager{
-		config: &schema.AuthConfig{
-			Identities: map[string]schema.Identity{
-				"core-root/terraform": {Kind: ""},
-			},
-		},
-		identities: make(map[string]types.Identity),
-		stackInfo:  nil,
-	}
-
-	err := m.initializeIdentities()
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
-
-	details := cockroachErrors.GetAllDetails(err)
-	require.NotEmpty(t, details)
-	assert.Contains(t, details[0], "Did you forget to specify a profile?")
-}
-
-func TestInitializeIdentities_ValidKindSucceeds(t *testing.T) {
-	m := &manager{
-		config: &schema.AuthConfig{
-			Identities: map[string]schema.Identity{
-				"mock-identity": {Kind: "mock"},
-			},
-		},
-		identities: make(map[string]types.Identity),
-		stackInfo:  &schema.ConfigAndStacksInfo{},
-	}
-
-	err := m.initializeIdentities()
-	assert.NoError(t, err)
-	assert.Len(t, m.identities, 1)
 }

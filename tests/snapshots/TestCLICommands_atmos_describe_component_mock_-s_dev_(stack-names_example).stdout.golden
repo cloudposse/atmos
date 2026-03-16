@@ -75,9 +75,7 @@
   "atmos_manifest": "dev",
   "atmos_stack": "dev",
   "atmos_stack_file": "dev",
-  "auth": {
-    "realm": "178007337c087aed"
-  },
+  "auth": {},
   "backend": {},
   "backend_type": "",
   "cli_args": [

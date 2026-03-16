@@ -277,7 +277,7 @@ func TestNewIdentity_Factory(t *testing.T) {
 				if tt.errorType != nil {
 					assert.ErrorIs(t, err, tt.errorType)
 				}
-				if tt.errorMsg != "" {
+				if tt.errorMsg != "" && err != nil {
 					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Nil(t, identity)
