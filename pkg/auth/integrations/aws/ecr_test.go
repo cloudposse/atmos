@@ -479,4 +479,3 @@ func TestECRIntegration_Execute_Idempotent(t *testing.T) {
 	err = integration.Execute(context.Background(), nil)
 	require.NoError(t, err)
 }
-
