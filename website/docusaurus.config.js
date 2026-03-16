@@ -191,7 +191,7 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/dependencies',
-                        to: '/stacks/settings/depends_on'
+                        to: '/stacks/dependencies/components'
                     },
                     {
                         from: '/core-concepts/stacks/hooks',

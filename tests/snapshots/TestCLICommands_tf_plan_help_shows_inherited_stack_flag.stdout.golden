@@ -50,6 +50,8 @@ FLAGS
 
 GLOBAL FLAGS
 
+      --ai                        Enable AI-powered analysis of command output
+
       --append-user-agent string  Customize User-Agent string in Terraform provider requests (sets
                                   TF_APPEND_USER_AGENT)
 
@@ -134,6 +136,9 @@ GLOBAL FLAGS
                                   current branch
 
       --sha string                Git commit SHA with which to compare the current branch
+
+      --skill strings             Specify skills for AI analysis context (comma-separated or repeated flag, requires --
+                                  ai)
 
       --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
 

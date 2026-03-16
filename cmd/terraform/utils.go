@@ -103,9 +103,8 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 
 	if hooks != nil && hooks.HasHooks() {
 		log.Info("Running hooks", "event", event)
-		err := hooks.RunAll(event, &atmosConfig, &info, cmd_, args)
-		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err := hooks.RunAll(event, &atmosConfig, &info, cmd_, args); err != nil {
+			return err
 		}
 	}
 
@@ -233,9 +232,7 @@ func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schem
 	a.Upload = false
 	a.OutputFile = ""
 
-	err = e.ExecuteTerraformAffected(&a, info)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	return nil
+	return e.ExecuteTerraformAffected(&a, info)
 }
 
 // isMultiComponentExecution checks if the command should be routed to multi-component execution.
@@ -246,7 +243,14 @@ func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 // executeSingleComponent executes terraform for a single component.
 func executeSingleComponent(info *schema.ConfigAndStacksInfo, shellOpts ...e.ShellCommandOption) error {
 	log.Debug("Routing to ExecuteTerraform (single-component)")
-	return e.ExecuteTerraform(*info, shellOpts...)
+	err := e.ExecuteTerraform(*info, shellOpts...)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrPlanHasDiff) {
+			errUtils.CheckErrorAndPrint(err, "", "")
+		}
+		return err
+	}
+	return nil
 }
 
 // newTerraformPassthroughSubcommand creates a Cobra subcommand that delegates to the parent
@@ -349,19 +353,20 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	}
 
 	if info.NeedHelp {
-		err := actualCmd.Usage()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return nil
+		return actualCmd.Usage()
 	}
 
 	// Handle --identity flag for interactive selection when used without a value.
 	if info.Identity == cfg.IdentityFlagSelectValue {
-		handleInteractiveIdentitySelection(&info)
+		if err := handleInteractiveIdentitySelection(&info); err != nil {
+			return err
+		}
 	}
 
 	// Check Terraform Single-Component and Multi-Component flags.
-	err = checkTerraformFlags(&info)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err = checkTerraformFlags(&info); err != nil {
+		return err
+	}
 
 	// Fire before.terraform.deploy CI hook after stack processing is complete.
 	// This runs inside RunE (not PreRunE) because ProcessCommandLineArgs eagerly
@@ -378,9 +383,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	}
 	if isMultiComponentExecution(&info) {
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
-		err = e.ExecuteTerraformQuery(&info)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return nil
+		return e.ExecuteTerraformQuery(&info)
 	}
 
 	// Verify stored planfile matches current state before deploying.
@@ -438,19 +441,19 @@ func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 }
 
 // handleInteractiveIdentitySelection handles the case where --identity was used without a value.
-func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
+func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) error {
 	// Initialize CLI config to get auth configuration.
 	// Use false to skip stack processing - only auth config is needed.
 	atmosConfig, err := cfg.InitCliConfig(*info, false)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err), "", "")
+		return fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	// Check if auth is configured. If not, we can't select an identity.
 	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
 		// User explicitly requested identity selection (--identity or --identity=)
 		// but no authentication is configured. This is an error.
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: no authentication configured", errUtils.ErrNoIdentitiesAvailable), "", "")
+		return fmt.Errorf("%w: no authentication configured", errUtils.ErrNoIdentitiesAvailable)
 	}
 
 	// Create auth manager to enable identity selection.
@@ -461,7 +464,7 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 		cfg.IdentityFlagSelectValue,
 	)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf(errWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+		return fmt.Errorf(errWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Get default identity with forced interactive selection.
@@ -469,17 +472,15 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 	selectedIdentity, err := authManager.GetDefaultIdentity(true)
 	if err != nil {
 		// Check if user explicitly aborted (Ctrl+C, ESC, etc.).
-		// In this case, we want to exit immediately without showing an error.
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			log.Debug("User aborted identity selection, exiting with SIGINT code")
-			// Exit immediately with POSIX SIGINT exit code.
-			// Note: We bypass error formatting as user abort is not an error condition.
-			errUtils.Exit(errUtils.ExitCodeSIGINT)
+			return errUtils.WithExitCode(err, errUtils.ExitCodeSIGINT)
 		}
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf(errWrapFormat, errUtils.ErrDefaultIdentity, err), "", "")
+		return fmt.Errorf(errWrapFormat, errUtils.ErrDefaultIdentity, err)
 	}
 
 	info.Identity = selectedIdentity
+	return nil
 }
 
 // resolveAndPromptForArgs handles path resolution and interactive prompts for component/stack.
