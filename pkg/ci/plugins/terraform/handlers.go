@@ -501,16 +501,18 @@ func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
 	return nil
 }
 
-// createCheckRun creates a new check run with in_progress status.
+// createCheckRun creates a commit status with pending state.
 func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.createCheckRun")()
 
-	name := provider.FormatCheckRunName(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	prefix := getContextPrefix(ctx.Config)
+	name := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
 
 	opts := &provider.CreateCheckRunOptions{
-		Name:   name,
-		Status: provider.CheckRunStateInProgress,
-		Title:  fmt.Sprintf("Running %s...", ctx.Command),
+		Name:       name,
+		Status:     provider.CheckRunStateInProgress,
+		Title:      fmt.Sprintf("%s in progress...", ctx.Command),
+		DetailsURL: getGitHubActionsRunURL(),
 	}
 
 	if ctx.CICtx != nil {
@@ -527,45 +529,100 @@ func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 			Err()
 	}
 
-	log.Debug("Created check run", "name", name, "id", checkRun.ID)
+	log.Debug("Created commit status", "name", name, "id", checkRun.ID)
 	return nil
 }
 
-// updateCheckRun updates an existing check run with the final result.
-// The provider handles ID correlation internally (or falls back to creating
-// a new completed check run if no prior CreateCheckRun was called).
+// updateCheckRun updates the component-level commit status and creates per-operation
+// statuses (add/change/destroy) based on resource counts and configuration.
 func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputResult) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.updateCheckRun")()
 
-	name := provider.FormatCheckRunName(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
-	status, conclusion := resolveCheckResult(ctx)
-	now := time.Now()
+	prefix := getContextPrefix(ctx.Config)
+	name := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	status, _ := resolveCheckResult(ctx)
 
-	opts := &provider.UpdateCheckRunOptions{
-		Name:        name,
-		Status:      status,
-		Conclusion:  conclusion,
-		Title:       buildCheckTitle(ctx.Command, result),
-		Summary:     buildCheckSummary(result),
-		CompletedAt: &now,
+	// Update component-level status.
+	statusesCfg := getChecksStatuses(ctx.Config)
+	if isStatusEnabled(statusesCfg.Component) {
+		opts := &provider.UpdateCheckRunOptions{
+			Name:   name,
+			Status: status,
+			Title:  buildStatusDescription(ctx.Command, result),
+		}
+
+		if ctx.CICtx != nil {
+			opts.Owner = ctx.CICtx.RepoOwner
+			opts.Repo = ctx.CICtx.RepoName
+			opts.SHA = ctx.CICtx.SHA
+		}
+
+		_, err := ctx.Provider.UpdateCheckRun(context.Background(), opts)
+		if err != nil {
+			return errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).
+				WithCause(err).
+				WithContext("name", name).
+				Err()
+		}
+
+		log.Debug("Updated commit status", "name", name, "status", status)
 	}
 
-	if ctx.CICtx != nil {
-		opts.Owner = ctx.CICtx.RepoOwner
-		opts.Repo = ctx.CICtx.RepoName
-		opts.SHA = ctx.CICtx.SHA
-	}
+	// Create per-operation statuses (only when counts > 0).
+	p.createPerOperationStatuses(ctx, result, prefix, statusesCfg)
 
-	_, err := ctx.Provider.UpdateCheckRun(context.Background(), opts)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).
-			WithCause(err).
-			WithContext("name", name).
-			Err()
-	}
-
-	log.Debug("Updated check run", "name", name, "status", status)
 	return nil
+}
+
+// createPerOperationStatuses creates per-operation commit statuses (add/change/destroy)
+// based on resource counts. Each status is only created when the corresponding count > 0.
+func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plugin.OutputResult, prefix string, statusesCfg schema.CIChecksStatusesConfig) {
+	if result == nil {
+		return
+	}
+
+	tfData, ok := result.Data.(*plugin.TerraformOutputData)
+	if !ok || tfData == nil {
+		return
+	}
+
+	type opStatus struct {
+		operation string
+		count     int
+		enabled   *bool
+	}
+
+	operations := []opStatus{
+		{"add", tfData.ResourceCounts.Create, statusesCfg.Add},
+		{"change", tfData.ResourceCounts.Change, statusesCfg.Change},
+		{"destroy", tfData.ResourceCounts.Destroy, statusesCfg.Destroy},
+	}
+
+	for _, op := range operations {
+		if !isStatusEnabled(op.enabled) || op.count <= 0 {
+			continue
+		}
+
+		opName := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg, op.operation)
+		opts := &provider.CreateCheckRunOptions{
+			Name:   opName,
+			Status: provider.CheckRunStateSuccess,
+			Title:  formatResourceCount(op.count),
+		}
+
+		if ctx.CICtx != nil {
+			opts.Owner = ctx.CICtx.RepoOwner
+			opts.Repo = ctx.CICtx.RepoName
+			opts.SHA = ctx.CICtx.SHA
+		}
+
+		_, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
+		if err != nil {
+			log.Warn("CI per-operation status creation skipped", "name", opName, "error", err)
+		} else {
+			log.Debug("Created per-operation status", "name", opName, "count", op.count)
+		}
+	}
 }
 
 // resolveArtifactPath derives the planfile path from component and stack information.
@@ -706,30 +763,72 @@ func resolveCheckResult(ctx *plugin.HookContext) (provider.CheckRunState, string
 	return provider.CheckRunStateSuccess, "success"
 }
 
-// buildCheckTitle creates a human-readable title for a completed check run.
-func buildCheckTitle(command string, result *plugin.OutputResult) string {
-	if result != nil {
-		if tfData, ok := result.Data.(*plugin.TerraformOutputData); ok && tfData.ChangedResult != "" {
-			return tfData.ChangedResult
-		}
-
-		if result.HasChanges {
-			return fmt.Sprintf("%s: changes detected", command)
-		}
+// buildStatusDescription creates a resource change summary for the commit status description.
+// Returns only the resource changes (e.g., "3 to add, 1 to change, 2 to destroy"),
+// not the command or stack/component which are already in the context string.
+func buildStatusDescription(command string, result *plugin.OutputResult) string {
+	if result == nil {
+		return "No changes"
 	}
 
-	return fmt.Sprintf("%s: no changes", command)
+	if result.HasErrors {
+		return "Failed"
+	}
+
+	if tfData, ok := result.Data.(*plugin.TerraformOutputData); ok && tfData.ChangedResult != "" {
+		return tfData.ChangedResult
+	}
+
+	if result.HasChanges {
+		return "Changes detected"
+	}
+
+	return "No changes"
 }
 
-// buildCheckSummary creates a brief summary for a completed check run.
-func buildCheckSummary(result *plugin.OutputResult) string {
-	if result != nil {
-		if tfData, ok := result.Data.(*plugin.TerraformOutputData); ok && tfData.ChangedResult != "" {
-			return tfData.ChangedResult
-		}
+// getContextPrefix returns the context prefix from configuration, defaulting to "atmos".
+func getContextPrefix(cfg *schema.AtmosConfiguration) string {
+	if cfg != nil && cfg.CI.Checks.ContextPrefix != "" {
+		return cfg.CI.Checks.ContextPrefix
+	}
+	return "atmos"
+}
+
+// getChecksStatuses returns the checks statuses config.
+func getChecksStatuses(cfg *schema.AtmosConfiguration) schema.CIChecksStatusesConfig {
+	if cfg == nil {
+		return schema.CIChecksStatusesConfig{}
+	}
+	return cfg.CI.Checks.Statuses
+}
+
+// isStatusEnabled returns true if the status is enabled (nil defaults to true).
+func isStatusEnabled(enabled *bool) bool {
+	if enabled == nil {
+		return true
+	}
+	return *enabled
+}
+
+// formatResourceCount formats a resource count as "N resources" or "1 resource".
+func formatResourceCount(count int) string {
+	if count == 1 {
+		return "1 resource"
+	}
+	return fmt.Sprintf("%d resources", count)
+}
+
+// getGitHubActionsRunURL constructs the GitHub Actions run URL from environment variables.
+func getGitHubActionsRunURL() string {
+	serverURL := os.Getenv("GITHUB_SERVER_URL")
+	repo := os.Getenv("GITHUB_REPOSITORY")
+	runID := os.Getenv("GITHUB_RUN_ID")
+
+	if serverURL == "" || repo == "" || runID == "" {
+		return ""
 	}
 
-	return ""
+	return serverURL + "/" + repo + "/actions/runs/" + runID
 }
 
 // logCheckRunError logs check run errors at an appropriate level.

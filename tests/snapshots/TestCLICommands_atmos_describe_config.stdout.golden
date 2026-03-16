@@ -269,7 +269,9 @@
   "ci": {
     "output": {},
     "summary": {},
-    "checks": {},
+    "checks": {
+      "statuses": {}
+    },
     "comments": {},
     "templates": {}
   },
