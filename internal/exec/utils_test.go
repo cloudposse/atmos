@@ -160,6 +160,79 @@ func TestGenerateComponentProviderOverrides(t *testing.T) {
 				"provider": map[string]any(nil),
 			},
 		},
+		{
+			name: "multi-region-with-aliases",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "use1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			name: "multi-region-multiple-aliases",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.uswest2": map[string]any{
+					"region": "us-west-2",
+					"alias":  "uswest2",
+				},
+				"aws.euwest1": map[string]any{
+					"region": "eu-west-1",
+					"alias":  "euwest1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1"},
+						map[string]any{"region": "eu-west-1", "alias": "euwest1"},
+						map[string]any{"region": "us-west-2", "alias": "uswest2"},
+					},
+				},
+			},
+		},
+		{
+			name: "mixed-providers-with-aliases",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.use2": map[string]any{
+					"region": "us-east-2",
+					"alias":  "use2",
+				},
+				"google": map[string]any{
+					"project": "my-project",
+					"region":  "us-central1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1"},
+						map[string]any{"region": "us-east-2", "alias": "use2"},
+					},
+					"google": map[string]any{
+						"project": "my-project",
+						"region":  "us-central1",
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

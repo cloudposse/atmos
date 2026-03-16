@@ -2,6 +2,8 @@ package output
 
 import (
 	"path/filepath"
+	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -137,6 +139,70 @@ func generateProviderOverrides(providerOverrides map[string]any, _ *schema.AuthC
 	defer perf.Track(nil, "output.generateProviderOverrides")()
 
 	return map[string]any{
-		"provider": providerOverrides,
+		"provider": ProcessProviderAliases(providerOverrides),
 	}
+}
+
+// ProcessProviderAliases groups providers that use dot notation (e.g., "aws.alias") into arrays.
+// This converts the Atmos shorthand notation into the Terraform JSON provider format.
+// For example, {"aws": {...}, "aws.use1": {...}} becomes {"aws": [{...}, {...}]}.
+func ProcessProviderAliases(providerOverrides map[string]any) map[string]any {
+	if len(providerOverrides) == 0 {
+		return providerOverrides
+	}
+
+	// Find all base names that have aliased configurations (with dot notation).
+	baseNamesWithAliases := make(map[string]bool)
+	for key := range providerOverrides {
+		if idx := strings.Index(key, "."); idx > 0 {
+			baseName := key[:idx]
+			baseNamesWithAliases[baseName] = true
+		}
+	}
+
+	// If no aliased providers, return as-is.
+	if len(baseNamesWithAliases) == 0 {
+		return providerOverrides
+	}
+
+	result := make(map[string]any, len(providerOverrides))
+
+	// Build arrays for base providers that have aliases.
+	for baseName := range baseNamesWithAliases {
+		var configs []any
+
+		// Add the base config first (if it exists).
+		if config, exists := providerOverrides[baseName]; exists {
+			configs = append(configs, config)
+		}
+
+		// Add aliased configs in sorted order for determinism.
+		var aliasedKeys []string
+		for key := range providerOverrides {
+			if strings.HasPrefix(key, baseName+".") {
+				aliasedKeys = append(aliasedKeys, key)
+			}
+		}
+		sort.Strings(aliasedKeys)
+		for _, key := range aliasedKeys {
+			configs = append(configs, providerOverrides[key])
+		}
+
+		result[baseName] = configs
+	}
+
+	// Copy over providers that don't have aliases.
+	for key, config := range providerOverrides {
+		// Skip dot-notation keys (already processed above).
+		if strings.Contains(key, ".") {
+			continue
+		}
+		// Skip base providers that have aliases (already processed above).
+		if baseNamesWithAliases[key] {
+			continue
+		}
+		result[key] = config
+	}
+
+	return result
 }

@@ -312,6 +312,53 @@ func TestGenerateProviderOverrides(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "multi-region with provider aliases",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "use1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			name: "multi-region with multiple aliases",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.uswest2": map[string]any{
+					"region": "us-west-2",
+					"alias":  "uswest2",
+				},
+				"aws.euwest1": map[string]any{
+					"region": "eu-west-1",
+					"alias":  "euwest1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1"},
+						map[string]any{"region": "eu-west-1", "alias": "euwest1"},
+						map[string]any{"region": "us-west-2", "alias": "uswest2"},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
