@@ -485,14 +485,15 @@ func (s *Scheduler) Run(ctx context.Context) *AggregateResult {
                 mu.Lock()
                 result.Nodes = append(result.Nodes, nodeResult)
                 completed++
-                // Decrement dependents' in-degrees
-                for _, dep := range s.graph.Dependents(node.ID) {
-                    inDegree[dep]--
-                    if inDegree[dep] == 0 {
-                        // Context-aware send to avoid blocking on cancellation
-                        select {
-                        case ready <- s.graph.GetNode(dep):
-                        case <-ctx.Done():
+                if err == nil {
+                    // Only successful nodes unblock dependents
+                    for _, dep := range s.graph.Dependents(node.ID) {
+                        inDegree[dep]--
+                        if inDegree[dep] == 0 {
+                            select {
+                            case ready <- s.graph.GetNode(dep):
+                            case <-ctx.Done():
+                            }
                         }
                     }
                 }
@@ -643,10 +644,11 @@ Stream injection is a prerequisite for the scheduler, not a future optimization.
    ```go
    func NewNodeStreams(prefix string, masker Masker, terminal io.Writer, logFile io.Writer) *Streams
    ```
-   Each node's stream pipeline:
+   Each node's stream pipeline branches after masking so the terminal gets labeled output while the log file receives raw (masked-only) output:
    - `maskedWriter` → applies secret masking (shared global `Masker` — thread-safe, secrets are process-wide)
-   - `prefixedWriter` → labels each line with the node ID
-   - `io.MultiWriter` → tees to both the terminal (labeled) and the log file (raw)
+   - Branch 1 (terminal): `prefixedWriter(maskedWriter)` → labels each line with the node ID → writes to terminal
+   - Branch 2 (log file): `maskedWriter` → writes directly to log file (no prefix)
+   - `io.MultiWriter` → composes `prefixedTerminalWriter` and `maskedLogWriter` into the single `io.Writer` handed to the process
 
 **Note on `maskedWriter` vs `dynamicMaskedWriter`:** The `dynamicMaskedWriter` pattern (line 129 of `streams.go`) resolves writers at write time via `getWriter func() io.Writer`. This is needed for the global singletons but NOT for per-node streams — each node has fixed writers. Use the simpler `maskedWriter` directly.
 
