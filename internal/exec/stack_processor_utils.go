@@ -78,15 +78,78 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		return &extractLocalsResult{}, nil
 	}
 
-	// Use ProcessStackLocals which handles global and section-level scopes.
-	// Note: At this early stage, stack name is not yet determined, so we pass empty string.
-	// YAML functions that require stack context won't work here, but Go templates will.
-	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath, "")
+	// Derive the stack name from the file path so that YAML functions like
+	// !terraform.state (2-arg form) can resolve their implicit stack reference.
+	// Previously, an empty string was passed here, which caused !terraform.state
+	// to fail with "stack is required" (see GitHub issue #2080).
+	currentStack := deriveStackNameForLocals(atmosConfig, rawConfig, filePath)
+
+	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath, currentStack)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
 	return buildLocalsResult(rawConfig, localsCtx), nil
+}
+
+// deriveStackNameForLocals derives the stack name from the file path and raw config
+// so that YAML functions in locals (like !terraform.state) can use stack context.
+// This uses the same logic as describe_locals.go (deriveStackName) to compute the
+// stack name from the file path, vars section, and atmos config.
+// Returns empty string if the stack name cannot be determined.
+func deriveStackNameForLocals(atmosConfig *schema.AtmosConfiguration, rawConfig map[string]any, filePath string) string {
+	if atmosConfig == nil {
+		return ""
+	}
+
+	// Extract vars section for stack name derivation.
+	var varsSection map[string]any
+	if vs, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
+		varsSection = vs
+	}
+
+	// Compute relative stack file name from file path.
+	stackFileName := computeStackFileName(atmosConfig, filePath)
+	if stackFileName == "" {
+		return ""
+	}
+
+	return deriveStackName(atmosConfig, stackFileName, varsSection, rawConfig)
+}
+
+// computeStackFileName computes the relative stack file name from an absolute file path
+// by stripping the stacks base path prefix and the file extension.
+// This produces a name like "deploy/dev" or "orgs/acme/plat/dev/us-east-1".
+func computeStackFileName(atmosConfig *schema.AtmosConfiguration, filePath string) string {
+	if atmosConfig == nil {
+		return ""
+	}
+
+	// Get the absolute stacks base path.
+	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	absStacksBasePath, err := filepath.Abs(stacksBasePath)
+	if err != nil {
+		return ""
+	}
+
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return ""
+	}
+
+	// Strip the base path prefix.
+	rel, err := filepath.Rel(absStacksBasePath, absFilePath)
+	if err != nil {
+		return ""
+	}
+
+	// Remove file extension (.yaml, .yml, etc.).
+	ext := filepath.Ext(rel)
+	if ext != "" {
+		rel = rel[:len(rel)-len(ext)]
+	}
+
+	return rel
 }
 
 // buildLocalsResult builds an extractLocalsResult from raw config and resolved locals context.

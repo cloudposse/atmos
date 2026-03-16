@@ -28,8 +28,8 @@ atmos describe locals myapp -s prod
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `stacks/deploy/dev.yaml` | Development stack with locals |
-| `stacks/deploy/prod.yaml` | Production stack with locals |
-| `components/terraform/myapp/main.tf` | Terraform component |
+| File                                 | Purpose                       |
+|--------------------------------------|-------------------------------|
+| `stacks/deploy/dev.yaml`             | Development stack with locals |
+| `stacks/deploy/prod.yaml`            | Production stack with locals  |
+| `components/terraform/myapp/main.tf` | Terraform component           |

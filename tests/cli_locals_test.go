@@ -1316,3 +1316,62 @@ func TestLocalsWithYamlFunctionsEnv(t *testing.T) {
 	assert.Equal(t, "static-test-value", vars["static_value"],
 		"static_value should be passed through unchanged")
 }
+
+// TestLocalsGoTemplateConditionalWithEnvSet tests that Go template conditionals
+// in locals work correctly when the !env var is set (if branch taken).
+// This is the integration test for user-reported Issue 1 (GitHub #2080 related).
+// Uses a separate fixture to avoid stack cache interference with other tests.
+func TestLocalsGoTemplateConditionalWithEnvSet(t *testing.T) {
+	t.Setenv("ATMOS_TEST_CONDITIONAL_PR_SET", "42")
+	t.Setenv("ATMOS_TEST_CONDITIONAL_PR_EMPTY", "")
+
+	t.Chdir("./fixtures/scenarios/locals-conditional")
+
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "conditional-pr-set",
+		Stack:                "pr-set",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	assert.Equal(t, "datastreampr42", vars["datastream_name"],
+		"datastream_name should use pr_number when set")
+	assert.Equal(t, "preview", vars["deploy_env"],
+		"deploy_env should be 'preview' when pr_number is set")
+	assert.Equal(t, "42", vars["pr_number"],
+		"pr_number should be the env var value")
+}
+
+// TestLocalsGoTemplateConditionalWithEnvEmpty tests that Go template conditionals
+// in locals work correctly when the !env var is empty (else branch taken).
+// Uses a separate fixture and env var to avoid stack cache interference.
+func TestLocalsGoTemplateConditionalWithEnvEmpty(t *testing.T) {
+	t.Setenv("ATMOS_TEST_CONDITIONAL_PR_SET", "")
+	t.Setenv("ATMOS_TEST_CONDITIONAL_PR_EMPTY", "")
+
+	t.Chdir("./fixtures/scenarios/locals-conditional")
+
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "conditional-pr-empty",
+		Stack:                "pr-empty",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	assert.Equal(t, "datastream", vars["datastream_name"],
+		"datastream_name should use default when pr_number is empty")
+	assert.Equal(t, "production", vars["deploy_env"],
+		"deploy_env should be 'production' when pr_number is empty")
+	assert.Equal(t, "", vars["pr_number"],
+		"pr_number should be empty when env var is not set")
+}
