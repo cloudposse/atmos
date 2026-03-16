@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -541,7 +540,7 @@ func processComponentSectionTemplates(
 				err = errors.Join(err, templateErr)
 			}
 		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return nil, err
 	}
 	return converted, nil
 }

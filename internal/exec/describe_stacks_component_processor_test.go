@@ -1233,3 +1233,137 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 
 	require.Error(t, err)
 }
+
+// ---------------------------------------------------------------------------
+// processComponentSectionYAMLFunctions – error path
+// ---------------------------------------------------------------------------
+
+func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
+// When a value in the component section contains a YAML function tag that
+// references a nonexistent command, ProcessCustomYamlTags returns an error
+// which processComponentSectionYAMLFunctions propagates (lines 563-565).
+ac := &schema.AtmosConfiguration{}
+info := &schema.ConfigAndStacksInfo{}
+
+// !exec with a nonexistent command causes ProcessTagExec to fail.
+componentSection := map[string]any{
+"vars": map[string]any{
+"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+},
+}
+
+_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil)
+require.Error(t, err)
+}
+
+// ---------------------------------------------------------------------------
+// processComponentEntry – processYamlFunctions error path (lines 272-274)
+// ---------------------------------------------------------------------------
+
+func TestProcessComponentEntry_ProcessYAMLFunctionsError(t *testing.T) {
+// When processYamlFunctions=true and a YAML function tag fails,
+// processComponentSectionYAMLFunctions returns an error (lines 272-274).
+p := newDescribeStacksProcessor(
+&schema.AtmosConfiguration{},
+"", nil, nil, nil,
+false, // processTemplates
+true,  // processYamlFunctions = true
+false, nil, nil,
+)
+
+componentSection := map[string]any{
+cfg.ComponentSectionName: "yaml-func-err",
+"vars": map[string]any{
+"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+},
+}
+allTypeComponents := map[string]any{"yaml-func-err": componentSection}
+
+err := p.processComponentEntry(
+"yaml-func-err.yaml", "", cfg.TerraformSectionName,
+"yaml-func-err", componentSection, allTypeComponents,
+processComponentTypeOpts{},
+)
+
+require.Error(t, err)
+}
+
+// ---------------------------------------------------------------------------
+// applyTerraformMetadataInheritance – merge error via invalid strategy (lines 622-624)
+// ---------------------------------------------------------------------------
+
+func TestApplyTerraformMetadataInheritance_MergeError(t *testing.T) {
+	// Strategy: pre-populate the processBaseComponentConfig cache (keyed on
+	// stack:component:baseComponent only – NOT on atmosConfig) with a valid
+	// first call so that a second call with an invalid ListMergeStrategy
+	// bypasses processBaseComponentConfigInternal via the cache hit and
+	// reaches the m.Merge at lines 618-624 where the invalid strategy fails.
+	const (
+		stackFile  = "merge-err-stack-unique.yaml"
+		compName   = "merge-err-comp-unique"
+		baseComp   = "base-merge-err-comp-unique"
+	)
+
+	// Step 1: warm the cache with a valid config.
+	validAc := &schema.AtmosConfiguration{}
+	allComponents := map[string]any{
+		baseComp: map[string]any{
+			// Give the base component non-empty metadata so BaseComponentMetadata
+			// is populated and the early-return at line 614 is NOT taken.
+			"metadata": map[string]any{
+				"description": "base component",
+			},
+		},
+	}
+	metadata := map[string]any{
+		cfg.InheritsSectionName: []any{baseComp},
+	}
+	_, err := applyTerraformMetadataInheritance(validAc, allComponents, compName, stackFile, metadata)
+	require.NoError(t, err, "step 1 (cache warm-up) must succeed")
+
+	// Step 2: use an invalid ListMergeStrategy.  ProcessBaseComponentConfig will
+	// hit the cache (same key) and return without calling m.Merge internally,
+	// but applyTerraformMetadataInheritance calls m.Merge at line 618 with the
+	// invalid-strategy config → error at lines 622-624.
+	invalidAc := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "invalid-strategy-xyz",
+		},
+	}
+	metadata2 := map[string]any{
+		cfg.InheritsSectionName: []any{baseComp},
+	}
+	_, err = applyTerraformMetadataInheritance(invalidAc, allComponents, compName, stackFile, metadata2)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid list merge strategy")
+}
+
+// ---------------------------------------------------------------------------
+// processComponentSectionTemplates – templates-disabled success (covers the
+// templates.Settings.Enabled == false evaluation inside processComponentSectionTemplates).
+// Note: the u.UnmarshalYAML error branch (lines 534-544) is a defensive code path:
+// ConvertToYAMLPreservingDelimiters always produces valid YAML, and
+// ProcessTmplWithDatasources either errors (caught earlier) or returns valid YAML.
+// After the refactoring from errUtils.CheckErrorPrintAndExit → return nil, err,
+// the function now correctly propagates errors instead of terminating the process.
+// ---------------------------------------------------------------------------
+
+func TestProcessComponentSectionTemplates_TemplatesDisabledSuccess(t *testing.T) {
+	// Verify that with templates disabled the component section passes through
+	// unchanged (ProcessTmplWithDatasources returns the YAML as-is) and that
+	// the refactored code does not panic or exit.
+	ac := &schema.AtmosConfiguration{} // Templates.Settings.Enabled == false by default
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"region": "us-east-1",
+		},
+	}
+
+	result, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "us-east-1", vars["region"])
+}

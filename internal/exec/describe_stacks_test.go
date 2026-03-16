@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -451,4 +452,92 @@ func TestExecuteDescribeStacks_IncludeEmptyStacks(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, stacksMap)
+}
+
+// TestExecuteDescribeStacks_FindStacksMapError exercises the FindStacksMap error branch
+// in ExecuteDescribeStacks (lines 134-136) by using an atmos.yaml that points to a
+// stacks directory containing a syntactically invalid YAML file.
+func TestExecuteDescribeStacks_FindStacksMapError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "components", "terraform"), 0o755))
+
+	// Create a YAML file with invalid syntax to force ProcessYAMLConfigFiles to error.
+	badYAML := ": - badly_formatted_yaml\n  unclosed_block:\n bad_indent"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "bad.yaml"), []byte(badYAML), 0o644))
+
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// ignoreMissingFiles=false forces FindStacksMap to propagate the parse error.
+	_, err = ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	require.Error(t, err)
+}
+
+// TestExecuteDescribeStacks_SkipEmptyStacks exercises the skip-empty-stacks branch
+// in ExecuteDescribeStacks (lines 156-157): stacks with no components and no imports
+// are skipped when includeEmptyStacks=false (the default).
+func TestExecuteDescribeStacks_SkipEmptyStacks(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "components", "terraform"), 0o755))
+
+	// Stack file with only vars — no components and no imports.
+	emptyStack := "vars:\n  region: us-east-1\n  environment: dev\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "empty.yaml"), []byte(emptyStack), 0o644))
+
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// includeEmptyStacks=false: the stack with no components/imports is skipped.
+	result, err := ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, result, "stack with no components/imports should be skipped")
+}
+
+// TestExecuteDescribeStacks_ProcessStackFileError exercises the processStackFile error branch
+// in ExecuteDescribeStacks (lines 166-168) by configuring an invalid stacks.name_template
+// that causes resolveStackName to fail when a component is processed.
+func TestExecuteDescribeStacks_ProcessStackFileError(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	vpcDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	// Minimal main.tf so the component directory exists.
+	require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "main.tf"), []byte(""), 0o644))
+
+	// Stack file with a component so processComponentEntry (and resolveStackName) is reached.
+	stackContent := "components:\n  terraform:\n    vpc:\n      vars:\n        region: us-east-1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "stack.yaml"), []byte(stackContent), 0o644))
+
+	// atmos.yaml with an invalid Go template for name_template — causes resolveStackName to fail.
+	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\n  name_template: \"{{.unclosed_template\"\ncomponents:\n  terraform:\n    base_path: components/terraform\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	_, err = ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	require.Error(t, err)
 }
