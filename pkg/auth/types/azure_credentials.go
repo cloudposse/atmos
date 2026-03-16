@@ -37,6 +37,9 @@ type AzureCredentials struct {
 	// This is stored during authentication for use by Azure CLI.
 	// In GitHub Actions, this is obtained dynamically, not from a file.
 	FederatedToken string `json:"-"` // Don't persist - it's ephemeral.
+	// CloudEnvironment is the Azure cloud environment name ("public", "usgovernment", "china").
+	// Used to select correct endpoints when writing MSAL cache entries.
+	CloudEnvironment string `json:"cloud_environment,omitempty"`
 }
 
 // IsExpired returns true if the credentials are expired.
