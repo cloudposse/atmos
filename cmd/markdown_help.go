@@ -41,6 +41,18 @@ var examples = map[string]ExampleContent{
 	"atmos_aws_eks_update_kubeconfig": {
 		Suggestion: "https://atmos.tools/cli/commands/aws/eks-update-kubeconfig",
 	},
+	"atmos_ai": {
+		Suggestion: "https://atmos.tools/cli/commands/ai/",
+	},
+	"atmos_ai_chat": {
+		Suggestion: "https://atmos.tools/cli/commands/ai/chat",
+	},
+	"atmos_ai_ask": {
+		Suggestion: "https://atmos.tools/cli/commands/ai/ask",
+	},
+	"atmos_ai_help": {
+		Suggestion: "https://atmos.tools/cli/commands/ai/help",
+	},
 }
 
 func init() {

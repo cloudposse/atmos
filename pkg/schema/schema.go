@@ -100,6 +100,12 @@ type AtmosConfiguration struct {
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	// AI settings.
+	AI AISettings `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
+	// MCP (Model Context Protocol) server settings.
+	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
+	// LSP settings.
+	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -416,6 +422,10 @@ type TemplatesSettings struct {
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
 	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	// IgnoreMissingTemplateValues is the global default for ignoring missing template values.
+	// When true, template processing will not fail if a template variable is missing.
+	// This can be overridden per-import using the import's own ignore_missing_template_values setting.
+	IgnoreMissingTemplateValues bool `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 }
 
 type TemplatesSettingsSprig struct {
@@ -431,6 +441,14 @@ type TemplatesSettingsGomplate struct {
 	Enabled     bool                                           `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 	Timeout     int                                            `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
 	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
+}
+
+// SourceSettings holds global source configuration defaults for JIT-vendored components.
+type SourceSettings struct {
+	// TTL is the default cache duration for JIT-vendored sources.
+	// Applied to all components unless overridden per-component.
+	// If not set, cached sources are reused indefinitely.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 type Terraform struct {
@@ -456,6 +474,8 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 type TerraformInit struct {
@@ -483,6 +503,8 @@ type Helmfile struct {
 	// during Helmfile operations when set to true.
 	// Generated files are defined in the component's generate section.
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 type Packer struct {
@@ -492,6 +514,8 @@ type Packer struct {
 	// during Packer operations when set to true.
 	// Generated files are defined in the component's generate section.
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 // Ansible defines configuration for Ansible components.
@@ -774,6 +798,10 @@ type AzureAuthContext struct {
 	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
 	// Optional - if not set, AZURE_FEDERATED_TOKEN_FILE env var will be used.
 	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
+
+	// CloudEnvironment is the Azure cloud environment name ("public", "usgovernment", "china").
+	// Used to set ARM_ENVIRONMENT for Terraform and other Azure tooling in sovereign clouds.
+	CloudEnvironment string `json:"cloud_environment,omitempty" yaml:"cloud_environment,omitempty"`
 }
 
 // GCPAuthContext holds GCP-specific authentication context.
@@ -1094,15 +1122,15 @@ type ConfigSources map[string]map[string]ConfigSourcesItem
 // Atmos vendoring (`vendor.yaml` file)
 
 type AtmosVendorSource struct {
-	Component     string       `yaml:"component" json:"component" mapstructure:"component"`
-	Source        string       `yaml:"source" json:"source" mapstructure:"source"`
-	Version       string       `yaml:"version" json:"version" mapstructure:"version"`
-	File          string       `yaml:"file" json:"file" mapstructure:"file"`
-	Targets       []string     `yaml:"targets" json:"targets" mapstructure:"targets"`
-	IncludedPaths []string     `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
-	ExcludedPaths []string     `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
-	Tags          []string     `yaml:"tags" json:"tags" mapstructure:"tags"`
-	Retry         *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	Component     string             `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string             `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string             `yaml:"version" json:"version" mapstructure:"version"`
+	File          string             `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       AtmosVendorTargets `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string           `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string           `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
+	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 }
 
 type AtmosVendorSpec struct {

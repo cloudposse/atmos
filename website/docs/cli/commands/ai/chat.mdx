@@ -1,0 +1,291 @@
+---
+title: atmos ai chat
+sidebar_label: chat
+sidebar_class_name: command
+id: chat
+description: Start an interactive AI chat session with the Atmos AI assistant
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to start an interactive chat session with the Atmos AI assistant. Get intelligent help with Atmos concepts, configuration analysis, and best practices.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure AI">
+    Learn how to configure AI providers, skills, tools, and sessions in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos ai chat --help" slug="atmos-ai-chat--help" />
+
+## Description
+
+The `atmos ai chat` command opens a terminal-based chat interface where you can have extended conversations with the AI assistant about your Atmos infrastructure.
+
+The AI assistant has access to your current Atmos configuration and can help with:
+- Explaining Atmos concepts and architecture
+- Analyzing your specific components and stacks
+- Suggesting optimizations and best practices
+- Debugging configuration issues
+- Providing step-by-step implementation guidance
+
+## Usage
+
+```shell
+atmos ai chat [flags]
+```
+
+### Flags
+
+<dl>
+  <dt>`--session <name>`</dt>
+  <dd>Start or resume a named session. If the session doesn't exist, it will be created. If it exists, the conversation history will be loaded.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Start anonymous session (auto-generated name)
+atmos ai chat
+
+# Start or resume named session
+atmos ai chat --session vpc-refactor
+
+# Resume existing session
+atmos ai chat --session my-session
+```
+
+## Examples
+
+### Basic Chat Session
+
+```shell
+atmos ai chat
+```
+
+This opens an interactive chat where you can ask questions like:
+
+```
+You: What components are available in my configuration?
+AI: Based on your configuration, I can see the following components...
+
+You: How do I validate my stack configuration?
+AI: You can validate stack configurations using...
+```
+
+### Using with Different Providers
+
+All configured providers are available concurrently. Press `Ctrl+P` during a chat session to switch between them.
+
+## Interactive Features
+
+The chat interface supports:
+- **Multi-turn conversations**: Ask follow-up questions
+- **Context awareness**: The AI remembers your conversation
+- **Markdown rendering**: AI responses rendered with rich formatting (bold, italic, lists, tables)
+- **Syntax highlighting**: Code blocks displayed with language-specific syntax highlighting
+- **History navigation**: Navigate through previous messages with ↑/↓ arrow keys (like Bash history)
+- **Multi-line input**: Press `Shift+Enter` or `Alt+Enter` to add newlines in your messages
+- **Skill switching**: Press `Ctrl+A` to switch between [21+ specialized AI skills](/cli/configuration/ai/skills) (e.g., `atmos-terraform`, `atmos-stacks`, `atmos-validation`)
+- **Session management**: Press `Ctrl+L` to switch between sessions without leaving the chat
+- **Provider switching**: Press `Ctrl+P` to switch between configured AI providers mid-conversation
+- **Session history**: See session metadata (name, created date, message count) in the header
+- **Exit commands**: Type `exit`, `quit`, or press `Ctrl+C` to close the chat
+
+### Keyboard Shortcuts
+
+<dl>
+  <dt>`Enter`</dt>
+  <dd>Send message.</dd>
+
+  <dt>`Shift+Enter` or `Alt+Enter`</dt>
+  <dd>Add newline (multi-line input).</dd>
+
+  <dt>`↑`</dt>
+  <dd>Navigate to previous message in history.</dd>
+
+  <dt>`↓`</dt>
+  <dd>Navigate to next message in history.</dd>
+
+  <dt>`Ctrl+L`</dt>
+  <dd>Open session picker.</dd>
+
+  <dt>`Ctrl+N`</dt>
+  <dd>Create new session.</dd>
+
+  <dt>`Ctrl+A`</dt>
+  <dd>Switch AI skill.</dd>
+
+  <dt>`Ctrl+P`</dt>
+  <dd>Switch AI provider.</dd>
+
+  <dt>`Ctrl+C`</dt>
+  <dd>Quit chat.</dd>
+</dl>
+
+### History Navigation
+
+Navigate through your previous messages using the arrow keys, just like in Bash or Zsh:
+
+```
+You: What components are available?
+AI: [Response about components...]
+
+# Press ↑ to recall your last message
+You: What components are available?  [← Previous message restored]
+
+# Edit and resend, or press ↓ to return to empty input
+```
+
+**How it works:**
+- Press `↑` to recall previous messages, starting from most recent
+- Press `↓` to move forward through history
+- When you reach the end of history (↓ past the last message), your original unsent input is restored
+- Sending a message automatically resets history navigation
+
+This is especially useful for:
+- Reusing similar queries with minor changes
+- Correcting typos in sent messages
+- Iterating on complex questions
+- Avoiding retyping long commands
+
+### Markdown Rendering & Syntax Highlighting
+
+AI responses are automatically rendered with rich markdown formatting for better readability:
+
+**Supported Formatting:**
+- **Bold** and *italic* text
+- Headers and subheadings
+- Bulleted and numbered lists
+- Tables with proper alignment
+- Code blocks with syntax highlighting
+- Blockquotes and horizontal rules
+
+### Multi-line Messages
+
+You can compose multi-line messages using `Shift+Enter`:
+
+```
+You: I need help with a complex Terraform configuration. Here's what I'm trying to do:
+[Shift+Enter]
+1. Create a VPC with multiple subnets
+[Shift+Enter]
+2. Set up route tables for each subnet
+[Shift+Enter]
+3. Configure NAT gateways
+[Enter to send]
+```
+
+This is especially useful for:
+- Pasting code snippets
+- Writing detailed questions
+- Formatting structured information
+- Creating multi-paragraph descriptions
+
+### Session Picker
+
+While chatting, press `Ctrl+L` to open the session picker:
+
+```
+Session List
+↑/↓: Navigate | Enter: Select | Esc/q: Back | Ctrl+C: Quit
+
+→ vpc-refactor (Jan 20, 14:30, 47 messages)
+  rds-troubleshooting (Jan 18, 09:15, 23 messages)
+  session-20251015-091032 (Jan 15, 09:10, 12 messages)
+```
+
+**Session Picker Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate sessions
+- `Enter` - Switch to selected session
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit application
+
+This allows you to seamlessly switch between different conversation topics without restarting the chat.
+
+### Provider Switching
+
+While chatting, press `Ctrl+P` to switch between configured AI providers:
+
+```
+Provider Selection
+↑/↓: Navigate | Enter: Select | Esc/q: Back | Ctrl+C: Quit
+
+→ Anthropic Claude - Industry-leading reasoning and coding
+  OpenAI GPT - Most popular, widely adopted models
+  Google Gemini - Strong multimodal capabilities
+  xAI Grok - Real-time data access
+  Ollama - Local models for privacy and offline use
+```
+
+**Provider Switching Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate providers
+- `Enter` - Switch to selected provider
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit application
+
+When you switch providers:
+- **Message history is preserved** - Continue your conversation with a different AI
+- **Session is updated** - The new provider is saved to your session
+- **Seamless transition** - No need to restart the chat or lose context
+
+**Example Use Case:**
+```
+You: [Using Claude] Explain the difference between Terraform and Helmfile
+Claude: [Detailed technical explanation...]
+
+[Press Ctrl+P, switch to GPT-4]
+
+You: Can you give me a simpler explanation?
+GPT-4: [Alternative explanation with different perspective...]
+```
+
+This feature is useful for:
+- Comparing responses from different AI models
+- Using specialized models for specific tasks
+- Switching to local models (Ollama) for privacy-sensitive questions
+- Trying different providers to find the best fit for your workflow
+
+**Note:** Only providers configured in your `atmos.yaml` will appear in the provider picker.
+
+## Common Use Cases
+
+### Learning Atmos Concepts
+
+```
+You: I'm new to Atmos. What should I know about stacks and components?
+AI: [Provides detailed explanation of Atmos architecture]
+```
+
+### Debugging Configuration Issues
+
+```
+You: I'm getting a validation error for my vpc component. How do I fix it?
+AI: [Analyzes the error and provides specific guidance]
+```
+
+### Best Practices
+
+```
+You: What's the best way to organize my stack configurations?
+AI: [Suggests organizational patterns and best practices]
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Ask a single question without entering chat mode'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+  {type: 'link', href: '/cli/configuration/ai/skills', label: 'AI Skills', description: 'Install and switch between 21+ specialized AI skills'},
+]} />

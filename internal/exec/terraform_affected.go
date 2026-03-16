@@ -123,11 +123,11 @@ func executeAffectedComponents(affectedList []schema.Affected, info *schema.Conf
 			err = executeTerraformAffectedComponentInDepOrder(
 				info,
 				affectedList,
-				affected.Component,
-				affected.Stack,
-				"",
-				"",
-				affected.Dependents,
+				&affectedDepOrderParams{
+					AffectedComponent: affected.Component,
+					AffectedStack:     affected.Stack,
+					Dependents:        affected.Dependents,
+				},
 				args,
 			)
 			if err != nil {

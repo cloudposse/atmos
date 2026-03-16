@@ -1,0 +1,155 @@
+---
+title: MCP Configuration
+sidebar_label: mcp
+sidebar_class_name: command
+id: mcp
+description: Configure the Atmos MCP server and AI tool settings in your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The Atmos MCP server exposes Atmos AI tools via the Model Context Protocol. It must be **explicitly enabled**
+separately from AI features, since it opens a communication channel that external clients can connect to.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  enabled: true       # Required — MCP is off by default
+ai:
+  enabled: true
+  tools:
+    enabled: true
+```
+</File>
+
+:::info Opt-In Only
+The MCP server is **disabled by default** and must be explicitly enabled with `mcp.enabled: true`.
+Enabling AI features (`ai.enabled: true`) does **not** enable MCP. The default **stdio** transport
+runs as a local subprocess with no network exposure.
+:::
+
+## Configuration Reference
+
+### Minimal Setup
+
+Three settings are required to start the MCP server:
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  enabled: true       # Enable the MCP server
+ai:
+  enabled: true       # Enable AI features
+  tools:
+    enabled: true     # Enable tool execution
+```
+</File>
+
+### Full Configuration
+
+For more control, you can specify providers, tool restrictions, and confirmation behavior:
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  enabled: true
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+
+  tools:
+    enabled: true
+    require_confirmation: true
+    allowed_tools:
+      - atmos_describe_component
+      - atmos_list_stacks
+      - atmos_validate_stacks
+    blocked_tools:
+      - execute_bash_command
+```
+</File>
+
+### MCP Settings
+
+<dl>
+  <dt>`mcp.enabled`</dt>
+  <dd>Enable the MCP server (default: `false`). Must be explicitly set to `true` before `atmos mcp start` will work.</dd>
+</dl>
+
+:::note
+The MCP server itself does not require an API key. The tools it exposes use your configured AI provider settings.
+Provider configuration is only needed if you also use `atmos ai chat` or `atmos ai ask`.
+:::
+
+### Tool Settings
+
+The MCP server exposes all tools configured in `ai.tools`. See [AI Tools Configuration](/cli/configuration/ai/tools) for the full reference of tool settings including:
+
+<dl>
+  <dt>`tools.enabled`</dt>
+  <dd>Enable or disable tool execution (default: `false`). Must be `true` for the MCP server to expose any tools.</dd>
+
+  <dt>`tools.require_confirmation`</dt>
+  <dd>When accessed via MCP, tools execute without interactive confirmation prompts. Use `allowed_tools` and `blocked_tools` to control access.</dd>
+
+  <dt>`tools.allowed_tools`</dt>
+  <dd>Tools available for execution. Supports wildcards like `atmos_describe_*` (default: `[]` = all tools).</dd>
+
+  <dt>`tools.blocked_tools`</dt>
+  <dd>Tools completely blocked from execution (default: `[]`).</dd>
+</dl>
+
+### Available Tools
+
+When connected, the MCP server exposes all enabled Atmos AI tools:
+
+<dl>
+  <dt>`atmos_describe_component`</dt>
+  <dd>Get detailed component configuration for a stack.</dd>
+
+  <dt>`atmos_list_stacks`</dt>
+  <dd>List and filter stacks.</dd>
+
+  <dt>`atmos_validate_stacks`</dt>
+  <dd>Validate stack configurations.</dd>
+
+  <dt>`describe_affected`</dt>
+  <dd>Show components affected by git changes.</dd>
+
+  <dt>`read_component_file`</dt>
+  <dd>Read a component source file.</dd>
+
+  <dt>`read_stack_file`</dt>
+  <dd>Read a stack configuration file.</dd>
+
+  <dt>`write_component_file`</dt>
+  <dd>Modify a component file.</dd>
+
+  <dt>`write_stack_file`</dt>
+  <dd>Modify a stack file.</dd>
+</dl>
+
+All tools respect your configured [permission settings](/cli/configuration/ai/tools).
+
+## Guides
+
+- **[MCP Server Integration](/ai/mcp-server)** — Client setup guides for Claude Desktop, VS Code, Cursor, and other MCP clients
+- **[AI Tools](/cli/configuration/ai/tools)** — Full tool configuration reference
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/mcp/start', label: 'atmos mcp start', description: 'Start the Atmos MCP server for AI client integration'},
+]} />

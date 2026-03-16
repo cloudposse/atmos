@@ -15,6 +15,8 @@ The `auth` section configures how Atmos obtains and manages credentials for clou
 ## Use Cases
 
 - **AWS SSO Integration:** Authenticate via AWS IAM Identity Center (SSO) for seamless credential management.
+- **Azure Authentication:** Authenticate via device code flow, OIDC (workload identity), or existing Azure CLI credentials. Supports Azure Commercial, Government (GCC High), and China (Mooncake) clouds via the `cloud_environment` setting.
+- **GCP Authentication:** Authenticate via Application Default Credentials or Workload Identity Federation.
 - **Role Assumption Chains:** Configure multi-account access through role assumption.
 - **Credential Storage:** Securely store and retrieve credentials using system keyrings.
 - **Environment Injection:** Automatically inject credentials as environment variables for components.
@@ -81,7 +83,7 @@ auth:
 
 <dl>
   <dt>`kind`</dt>
-  <dd>Provider type (`aws-sso`, `static`).</dd>
+  <dd>Provider type (e.g., `aws/iam-identity-center`, `azure/device-code`, `azure/oidc`, `azure/cli`, `gcp/adc`, `gcp/workload-identity-federation`).</dd>
 
   <dt>`start_url`</dt>
   <dd>AWS SSO portal URL.</dd>
@@ -134,7 +136,7 @@ auth:
 
 <dl>
   <dt>`kind`</dt>
-  <dd>Identity type (`aws`).</dd>
+  <dd>Identity type (e.g., `aws/permission-set`, `aws/assume-role`, `azure/subscription`, `gcp/service-account`, `gcp/project`).</dd>
 
   <dt>`via.provider`</dt>
   <dd>Provider to use for authentication.</dd>
@@ -427,6 +429,9 @@ atmos auth switch prod-admin
 
 ## Related
 
+- [Authentication Providers](/cli/configuration/auth/providers) — Configure AWS, Azure, and GCP providers
+- [Authentication Identities](/cli/configuration/auth/identities) — Configure identities for all cloud providers
+- [Azure Authentication Tutorial](/tutorials/azure-authentication) — Complete Azure auth guide
 - [Environment Variables (env)](/stacks/env)
 - [Settings](/stacks/settings)
 - [Terraform Providers](/stacks/providers)
