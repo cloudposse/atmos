@@ -1445,7 +1445,7 @@ func Execute() error {
 	// Skip processing for version command to ensure it always works, even if aliases
 	// reference commands that don't exist in this version of Atmos.
 	if initErr == nil && !isVersionCommand() {
-		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 		if err != nil {
 			return err
 		}

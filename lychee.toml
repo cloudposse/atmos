@@ -44,6 +44,8 @@ exclude = [
   "refspecs\\.linuxfoundation\\.org",
   # Kubernetes.io (rate limits and connection resets in CI)
   "kubernetes\\.io",
+  # GitHub docs (intermittent 503s in CI)
+  "docs\\.github\\.com",
   # Cloudinary image resizing proxy
   "img\\.cloudposse\\.com",
   # atmos.tools URLs (can't verify website links locally)
