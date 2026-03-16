@@ -116,6 +116,9 @@ type UpdateCheckRunOptions struct {
 	// Summary is an updated markdown summary.
 	Summary string
 
+	// DetailsURL is a link back to the CI run.
+	DetailsURL string
+
 	// CompletedAt is when the check run completed.
 	CompletedAt *time.Time
 }

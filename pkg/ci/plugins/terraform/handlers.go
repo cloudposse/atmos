@@ -546,9 +546,10 @@ func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputRe
 	statusesCfg := getChecksStatuses(ctx.Config)
 	if isStatusEnabled(statusesCfg.Component) {
 		opts := &provider.UpdateCheckRunOptions{
-			Name:   name,
-			Status: status,
-			Title:  buildStatusDescription(ctx.Command, result),
+			Name:       name,
+			Status:     status,
+			Title:      buildStatusDescription(ctx.Command, result),
+			DetailsURL: getGitHubActionsRunURL(),
 		}
 
 		if ctx.CICtx != nil {
@@ -605,9 +606,10 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 
 		opName := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg, op.operation)
 		opts := &provider.CreateCheckRunOptions{
-			Name:   opName,
-			Status: provider.CheckRunStateSuccess,
-			Title:  formatResourceCount(op.count),
+			Name:       opName,
+			Status:     provider.CheckRunStateSuccess,
+			Title:      formatResourceCount(op.count),
+			DetailsURL: getGitHubActionsRunURL(),
 		}
 
 		if ctx.CICtx != nil {

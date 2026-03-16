@@ -60,7 +60,7 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateChec
 func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	state := mapCheckRunStateToStatusState(opts.Status)
 
-	status, err := p.setCommitStatus(ctx, opts.Owner, opts.Repo, opts.SHA, opts.Name, state, opts.Title, "")
+	status, err := p.setCommitStatus(ctx, opts.Owner, opts.Repo, opts.SHA, opts.Name, state, opts.Title, opts.DetailsURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrCICheckRunUpdateFailed, err)
 	}
