@@ -9,6 +9,7 @@ permissions:
   actions: write
 jobs:
   autofix:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on:
       - runs-on=${{github.run_id}}
       - runner=terraform
