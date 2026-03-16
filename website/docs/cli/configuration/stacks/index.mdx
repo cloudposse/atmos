@@ -10,6 +10,7 @@ import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
+import Deprecated from '@site/src/components/Deprecated'
 
 <Intro>
 The `stacks` section of the `atmos.yaml` defines how Atmos locates and manages your stack configurations. Think of it as the bootstrapping configuration. Here you can define the stack name pattern or template used to build the "slugs" and specify where to find stack files.
@@ -96,7 +97,9 @@ stacks:
 
   <dt>`name_pattern`</dt>
   <dd>
-    **⚠️ Deprecated.** Use `name_template` instead for more flexibility and reliability. `name_pattern` uses predefined tokens mapped to fixed variable names and may cause errors in certain contexts.
+    <Deprecated feature="name_pattern" />
+
+    Use `name_template` instead for more flexibility and reliability. `name_pattern` uses predefined tokens mapped to fixed variable names and may cause errors in certain contexts.
 
     **Environment variable:** `ATMOS_STACKS_NAME_PATTERN`
 
