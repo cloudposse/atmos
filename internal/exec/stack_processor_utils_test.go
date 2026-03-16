@@ -133,7 +133,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 				tt.component,
 				tt.stack,
 				tt.baseComponent,
-				"/dummy/path",
+				filepath.Join("dummy", "path"),
 				true,
 				&baseComponents,
 			)
@@ -279,7 +279,7 @@ func TestProcessBaseComponentConfig_CycleDetection(t *testing.T) {
 				tt.component,
 				"test-stack",
 				tt.baseComponent,
-				"/dummy/path",
+				filepath.Join("dummy", "path"),
 				false,
 				&baseComponents,
 			)
@@ -347,7 +347,7 @@ func TestProcessBaseComponentConfig_AbstractComponentSkip(t *testing.T) {
 		"iam-delegated-roles",
 		"test-stack",
 		"iam-delegated-roles-defaults",
-		"/dummy/path",
+		filepath.Join("dummy", "path"),
 		false,
 		&baseComponents,
 	)
@@ -391,7 +391,7 @@ func TestProcessBaseComponentConfig_DeepChainNoFalsePositive(t *testing.T) {
 		"child",
 		"test-stack",
 		"level2",
-		"/dummy/path",
+		filepath.Join("dummy", "path"),
 		false,
 		&baseComponents,
 	)
@@ -478,7 +478,7 @@ func TestProcessBaseComponentConfig_AbstractMetadataComponentInherited(t *testin
 		"eks/service/app1",
 		"test-stack",
 		"eks/service/defaults",
-		"/dummy/path",
+		filepath.Join("dummy", "path"),
 		false,
 		&baseComponents,
 	)
@@ -563,7 +563,7 @@ func TestProcessBaseComponentConfig_AbstractMetadataComponentNotInherited_WhenDi
 		"eks/service/app1",
 		"test-stack",
 		"eks/service/defaults",
-		"/dummy/path",
+		filepath.Join("dummy", "path"),
 		false,
 		&baseComponents,
 	)

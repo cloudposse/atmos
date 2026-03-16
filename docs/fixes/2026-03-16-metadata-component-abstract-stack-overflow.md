@@ -64,8 +64,9 @@ until the Go goroutine stack limit is exhausted.
 
 ### Workaround
 
-Remove `metadata.component` from abstract component definitions. Since abstract components cannot be
-applied/deployed, `metadata.component` on them is functionally a no-op:
+On affected versions before this fix, a temporary workaround is to remove `metadata.component` from
+the abstract component definition. Note that this also prevents inheriting `metadata.component` into
+concrete components, so it should only be used as a short-term mitigation:
 
 ```yaml
 components:
@@ -257,7 +258,7 @@ This fix was **deferred** because:
 |-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
 | `errors/errors.go`                            | Added `ErrCircularComponentInheritance` sentinel error                                                                                      |
 | `internal/exec/stack_processor_utils.go`      | Added visited-set cycle detection to `processBaseComponentConfigInternal`; skip abstract component chain in `metadata.component` resolution |
-| `internal/exec/stack_processor_utils_test.go` | Added 10 test cases across 5 test functions for cycle detection, abstract component skip, metadata inheritance, and deep chain validation |
+| `internal/exec/stack_processor_utils_test.go` | Added 8 test cases across 5 test functions for cycle detection, abstract component skip, metadata inheritance, and deep chain validation |
 
 ---
 
