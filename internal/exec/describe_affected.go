@@ -139,7 +139,17 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	if info, err := ProcessCommandLineArgs("", cmd, args, nil); err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
-		return DescribeAffectedCmdArgs{}, err
+		if !errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+			return DescribeAffectedCmdArgs{}, err
+		}
+		// The current branch has no stack files (e.g., a brand-new/empty main branch).
+		// Fall back to config-only initialization so the command can proceed and treat
+		// the current HEAD as having no stacks (all BASE stacks will be shown as affected).
+		log.Debug("No stack manifests found in current branch; proceeding with empty stack list for describe affected")
+		atmosConfig, err = cfg.InitCliConfig(info, false)
+		if err != nil {
+			return DescribeAffectedCmdArgs{}, fmt.Errorf("failed to initialize config after finding no stacks in current branch: %w", err)
+		}
 	}
 	if err := ValidateStacks(&atmosConfig); err != nil {
 		return DescribeAffectedCmdArgs{}, err

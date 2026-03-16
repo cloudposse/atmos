@@ -17,7 +17,16 @@ var describeAffectedCmd = &cobra.Command{
 	Long:               "Identify and list Atmos components and stacks impacted by changes between two Git commits.",
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	RunE:               getRunnableDescribeAffectedCmd(checkAtmosConfig, exec.ParseDescribeAffectedCliArgs, exec.NewDescribeAffectedExec),
+	RunE: getRunnableDescribeAffectedCmd(
+		// Disable the stacks directory existence check so that `describe affected` can run even when the
+		// current branch has no stacks (e.g., a brand-new/empty main branch).
+		// The command must still find and parse a valid `atmos.yaml`.
+		func(opts ...AtmosValidateOption) {
+			checkAtmosConfig(append(opts, WithStackValidation(false))...)
+		},
+		exec.ParseDescribeAffectedCliArgs,
+		exec.NewDescribeAffectedExec,
+	),
 }
 
 func init() {
