@@ -1101,6 +1101,34 @@ func TestExampleLocalsDescribeLocals(t *testing.T) {
 	assert.Equal(t, "acme-development-dev", locals["full_name"], "locals.full_name mismatch")
 	assert.Equal(t, "v1", locals["app_version"], "locals.app_version should access settings.version")
 	assert.Equal(t, "dev", locals["stage_name"], "locals.stage_name should access vars.stage")
+
+	// Verify Sprig function results.
+	assert.Equal(t, "ACME", locals["namespace_upper"], "locals.namespace_upper should be uppercased via Sprig")
+}
+
+// TestExampleLocalsWorkerComponent tests the myapp-worker component
+// which uses locals to build a suffixed full_name.
+func TestExampleLocalsWorkerComponent(t *testing.T) {
+	t.Chdir("../examples/locals")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "myapp-worker",
+		Stack:                "dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	assert.Equal(t, "acme", vars["name"], "worker name should use locals.namespace")
+	assert.Equal(t, "acme-development-dev-worker", vars["full_name"],
+		"worker full_name should append -worker suffix")
 }
 
 // =============================================================================
