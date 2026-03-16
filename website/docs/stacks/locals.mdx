@@ -20,23 +20,38 @@ The `locals` section defines file-scoped temporary variables for use within temp
 
 - **Reduce Repetition:** Define common values once and reference them throughout the file.
 - **Build Complex Values:** Construct naming conventions, tags, or resource identifiers from simpler components.
-- **Improve Readability:** Give meaningful names to computed values instead of repeating expressions.
-- **Template Composition:** Build values incrementally by referencing other locals.
+- **Cross-Component References:** Use `!terraform.state` to pull outputs from other components into locals.
+- **Conditional Logic:** Use Go template conditionals with `!env` results for environment-aware configuration.
 
 ## How Locals Work
 
 Locals are similar to [Terraform locals](https://developer.hashicorp.com/terraform/language/values/locals) and [Terragrunt locals](https://terragrunt.gruntwork.io/docs/reference/config-blocks-and-attributes/#locals):
 
 1. **File-Scoped:** Locals are only available within the file where they are defined. They do not inherit across imports.
-2. **Dependency Resolution:** Locals can reference other locals using `{{ .locals.name }}` syntax. Atmos automatically determines the correct resolution order.
-3. **Cycle Detection:** Circular references are detected and reported with clear error messages.
+2. **Dependency Resolution:** Locals can reference other locals using `{{ .locals.name }}` syntax. Atmos automatically determines the correct resolution order using topological sort.
+3. **Cycle Detection:** Circular references are detected and reported with clear error messages showing the dependency path (e.g., `a -> b -> c -> a`).
 4. **Template Support:** Locals support Go templates with [Sprig functions](http://masterminds.github.io/sprig/).
+5. **YAML Functions:** Locals support `!env`, `!terraform.state`, `!store`, `!exec`, and other [YAML functions](/functions/yaml).
+
+### Processing Pipeline
+
+Locals are resolved in a specific order during stack configuration loading:
+
+```text
+1. Parse raw YAML → extract locals sections (global, terraform, helmfile, packer)
+2. Build dependency graph (extract {{ .locals.X }} references)
+3. Topological sort with cycle detection
+4. Resolve in order: YAML functions first (!env, !terraform.state), then Go templates
+5. Make resolved locals available to component templates
+```
+
+YAML functions are always resolved before Go templates. This means you can fetch a value with `!env` or `!terraform.state` and then use it in a Go template expression in another local.
 
 ## Configuration Scopes
 
 Locals can be defined at three levels within a file, each inheriting from its parent:
 
-```
+```text
 Global locals → Component-type locals (terraform/helmfile/packer) → Component-level locals
 ```
 
@@ -188,7 +203,7 @@ Locals support full Go template syntax with [Sprig functions](http://masterminds
 locals:
   name: myapp
   environment: production
-  upper_name: "{{ .locals.name | upper }}"
+  upper_name: '{{ .locals.name | upper }}'
   log_level: '{{ if eq .locals.environment "production" }}warn{{ else }}debug{{ end }}'
 ```
 
@@ -204,39 +219,40 @@ Locals support all Atmos [YAML functions](/functions/yaml), enabling dynamic val
 | `!terraform.state` | Terraform state queries | `!terraform.state vpc .vpc_id` |
 | `!terraform.output` | Terraform outputs | `!terraform.output vpc .vpc_id` |
 
-### Example: Environment Variables
+### Environment Variables with Conditionals
 
-Use `!env` to inject environment-specific values into locals:
+Use `!env` with Go template conditionals to build environment-aware values:
 
 ```yaml
 locals:
-  # Fetch from environment variables
-  api_endpoint: !env API_ENDPOINT
-  db_host: !env DATABASE_HOST
+  # Fetch PR number from CI environment (may or may not be set)
+  pr_number: !env PR_NUMBER
 
-  # Combine with Go templates
-  api_url: "https://{{ .locals.api_endpoint }}/api/v1"
-  connection_string: "postgresql://app@{{ .locals.db_host }}:5432/mydb"
+  # Conditional: use PR-specific name in CI, default otherwise
+  deploy_target: '{{ if .locals.pr_number }}preview-{{ .locals.pr_number }}{{ else }}stable{{ end }}'
+  datastream: '{{ if .locals.pr_number }}ds-pr{{ .locals.pr_number }}{{ else }}ds-main{{ end }}'
 
 components:
   terraform:
-    backend:
+    app:
       vars:
-        api_url: "{{ .locals.api_url }}"
-        database_url: "{{ .locals.connection_string }}"
+        deploy_target: "{{ .locals.deploy_target }}"
 ```
 
-### Example: Cross-Component References
+### Cross-Component References
 
-Use `!terraform.state` or `!terraform.output` to reference outputs from other components:
+Use `!terraform.state` to reference outputs from other components. The 2-argument form uses the current stack automatically:
 
 ```yaml
 locals:
-  # Fetch VPC outputs from another component's state
+  # 2-arg form: component + output (uses current stack)
   vpc_id: !terraform.state vpc .vpc_id
   private_subnets: !terraform.state vpc .private_subnet_ids
 
-  # Build derived values
+  # 3-arg form: component + explicit stack + output
+  shared_vpc_id: !terraform.state vpc shared .vpc_id
+
+  # Build derived values from state outputs
   cluster_name: "eks-{{ .locals.vpc_id }}"
 
 components:
@@ -246,49 +262,6 @@ components:
         vpc_id: "{{ .locals.vpc_id }}"
         subnet_ids: "{{ .locals.private_subnets }}"
         name: "{{ .locals.cluster_name }}"
-```
-
-### Example: Secret Management
-
-Use `!store` to fetch secrets from your configured store:
-
-```yaml
-locals:
-  # Fetch secrets from store
-  db_password: !store secrets/database .password
-  api_key: !store secrets/api .key
-
-  # Build connection strings
-  database_url: "postgresql://app:{{ .locals.db_password }}@db.example.com/mydb"
-
-components:
-  terraform:
-    app:
-      vars:
-        database_url: "{{ .locals.database_url }}"
-        api_key: "{{ .locals.api_key }}"
-```
-
-### Example: Dynamic Values with Exec
-
-Use `!exec` to run commands and capture output:
-
-```yaml
-locals:
-  # Get current git commit
-  git_commit: !exec git rev-parse --short HEAD
-
-  # Get current timestamp
-  build_time: !exec date -u +%Y%m%d%H%M%S
-
-  # Build version string
-  version: "{{ .locals.git_commit }}-{{ .locals.build_time }}"
-
-components:
-  terraform:
-    app:
-      vars:
-        image_tag: "{{ .locals.version }}"
 ```
 
 ### Combining YAML Functions with Templates
@@ -423,7 +396,7 @@ locals:
   domain: "{{ .settings.region }}.example.com"  # Error if no settings defined
 ```
 
-```
+```text
 Error: map has no entry for key "settings"
 ```
 
@@ -440,6 +413,7 @@ locals:
 2. **Build incrementally**—compose complex values from simpler locals.
 3. **Keep locals close** to where they're used (component-level when possible).
 4. **Use vars for cross-file sharing**—locals are file-scoped by design.
+5. **Use the 2-arg form** of `!terraform.state` in locals—the current stack is derived automatically.
 
 ## Try It
 
@@ -451,3 +425,4 @@ locals:
 - [Environment Variables (env)](/stacks/env)
 - [Settings](/stacks/settings)
 - [Imports](/stacks/imports)
+- [YAML Functions](/functions/yaml)
