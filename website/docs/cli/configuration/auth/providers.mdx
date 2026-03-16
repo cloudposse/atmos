@@ -200,6 +200,9 @@ auth:
 
   <dt>`spec.client_id`</dt>
   <dd>Optional. Azure AD application (client) ID. Defaults to Azure CLI's public client ID.</dd>
+
+  <dt>`spec.cloud_environment`</dt>
+  <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
 </dl>
 
 **How it works:**
@@ -251,6 +254,9 @@ auth:
 
   <dt>`spec.token_file_path`</dt>
   <dd>Optional. Path to file containing the OIDC token. If not set, uses environment variables (`ACTIONS_ID_TOKEN_REQUEST_URL` in GitHub Actions).</dd>
+
+  <dt>`spec.cloud_environment`</dt>
+  <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
 </dl>
 
 ### GitHub Actions Setup
@@ -302,10 +308,72 @@ auth:
 
   <dt>`spec.location`</dt>
   <dd>Optional. Default Azure region.</dd>
+
+  <dt>`spec.cloud_environment`</dt>
+  <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
 </dl>
 
 :::note
 The `azure/cli` provider requires existing Azure CLI credentials. Run `az login` first.
+:::
+
+## Sovereign Clouds (GCC High, China)
+
+Azure sovereign clouds use different authentication endpoints and API scopes than Azure Commercial (public). Set `cloud_environment` in your provider spec to target the correct cloud:
+
+<File title="atmos.yaml (Azure Government / GCC High)">
+```yaml
+auth:
+  providers:
+    azure-gov:
+      kind: azure/device-code
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: usgovvirginia
+        cloud_environment: usgovernment
+```
+</File>
+
+<File title="atmos.yaml (Azure China / Mooncake)">
+```yaml
+auth:
+  providers:
+    azure-china:
+      kind: azure/oidc
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        client_id: "YOUR_APP_CLIENT_ID"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        cloud_environment: china
+```
+</File>
+
+When `cloud_environment` is set, Atmos automatically adjusts:
+- **Login endpoint** (e.g., `login.microsoftonline.us` for GCC High, `login.chinacloudapi.cn` for China)
+- **API scopes** (Azure Resource Manager, Microsoft Graph, KeyVault)
+- **Blob storage URLs** used by `!terraform.state` YAML functions
+- **Portal URLs** for `atmos auth console`
+
+| Cloud | `cloud_environment` | Login Endpoint | Blob Storage Suffix |
+|-------|---------------------|----------------|---------------------|
+| Commercial | `public` (default) | `login.microsoftonline.com` | `blob.core.windows.net` |
+| US Government / GCC High | `usgovernment` | `login.microsoftonline.us` | `blob.core.usgovcloudapi.net` |
+| China (Mooncake) | `china` | `login.chinacloudapi.cn` | `blob.core.chinacloudapi.cn` |
+
+:::tip
+Sovereign cloud support also affects the Terraform azurerm backend. Set `environment` in your backend configuration to match:
+
+```yaml
+backend:
+  azurerm:
+    storage_account_name: mystorageaccount
+    container_name: tfstate
+    key: terraform.tfstate
+    environment: usgovernment  # Matches Terraform azurerm backend "environment" field
+```
+
+This ensures `!terraform.state` YAML functions use the correct blob storage endpoint.
 :::
 
 </TabItem>

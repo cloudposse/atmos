@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -2604,4 +2605,318 @@ func TestAtmosProTemplateRegression(t *testing.T) {
 	require.True(t, ok, "component input should be a string")
 	assert.Equal(t, "{{ .atmos_component }}", componentInput,
 		"Template {{ .atmos_component }} should be preserved during import, not processed")
+}
+
+// TestComputeStackFileName tests that computeStackFileName correctly strips the
+// stacks base path and file extension to produce a relative stack file name.
+func TestComputeStackFileName(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		filePath string
+		expected string
+	}{
+		{
+			name: "simple deploy path with name_pattern",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name: "nested org path",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "orgs", "acme", "plat", "dev", "us-east-1.yaml"),
+			expected: filepath.Join("orgs", "acme", "plat", "dev", "us-east-1"),
+		},
+		{
+			name: "yml extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "prod.yml"),
+			expected: filepath.Join("deploy", "prod"),
+		},
+		{
+			name: "yaml.tmpl extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml.tmpl"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name: "yml.tmpl extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yml.tmpl"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name: "no known extension returns path as-is",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.json"),
+			expected: filepath.Join("deploy", "dev.json"),
+		},
+		{
+			name: "file with no extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name:     "nil config returns empty",
+			config:   nil,
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml"),
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.config == nil {
+				result := computeStackFileName(tt.config, tt.filePath)
+				assert.Empty(t, result)
+				return
+			}
+			result := computeStackFileName(tt.config, tt.filePath)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestDeriveStackNameForLocals tests that deriveStackNameForLocals correctly
+// derives the stack name from file path and raw config for locals processing.
+func TestDeriveStackNameForLocals(t *testing.T) {
+	t.Run("derives stack name from name_pattern and vars", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{
+			BasePath: "project",
+			Stacks: schema.Stacks{
+				BasePath:    "stacks",
+				NamePattern: "{stage}",
+			},
+		}
+		rawConfig := map[string]any{
+			"vars": map[string]any{
+				"stage": "dev",
+			},
+		}
+		result := deriveStackNameForLocals(config, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
+		assert.Equal(t, "dev", result)
+	})
+
+	t.Run("nil config returns empty", func(t *testing.T) {
+		rawConfig := map[string]any{
+			"vars": map[string]any{"stage": "dev"},
+		}
+		result := deriveStackNameForLocals(nil, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
+		assert.Empty(t, result)
+	})
+
+	t.Run("no vars uses filename as stack name", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{
+			BasePath: "project",
+			Stacks: schema.Stacks{
+				BasePath: "stacks",
+			},
+		}
+		rawConfig := map[string]any{}
+		result := deriveStackNameForLocals(config, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
+		// Without name_pattern or name_template, falls back to file name.
+		assert.Equal(t, filepath.Join("deploy", "dev"), result)
+	})
+}
+
+// TestExtractLocalsFromRawYAML_StackNameDerived tests that extractLocalsFromRawYAML
+// derives the stack name from the file path and passes it to ProcessStackLocals,
+// rather than passing an empty string. This is the fix for GitHub issue #2080.
+func TestExtractLocalsFromRawYAML_StackNameDerived(t *testing.T) {
+	// This test verifies that locals with Go template conditionals using !env work correctly.
+	// Issue 1 from the fix doc: Go template conditionals were broken in v1.200.0 but work now.
+	t.Setenv("PR_NUMBER", "42")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  pr_number: !env PR_NUMBER
+  datastream_name: '{{ if .locals.pr_number }}datastreampr{{ .locals.pr_number }}{{ else }}datastream{{ end }}'
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "42", result.locals["pr_number"])
+	assert.Equal(t, "datastreampr42", result.locals["datastream_name"])
+}
+
+// TestExtractLocalsFromRawYAML_GoTemplateConditionalEmpty tests Go template conditionals
+// when the environment variable is empty (the else branch should be taken).
+func TestExtractLocalsFromRawYAML_GoTemplateConditionalEmpty(t *testing.T) {
+	// When PR_NUMBER is empty, the else branch should produce "datastream".
+	t.Setenv("PR_NUMBER_EMPTY_TEST", "")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  pr_number: !env PR_NUMBER_EMPTY_TEST
+  datastream_name: '{{ if .locals.pr_number }}datastreampr{{ .locals.pr_number }}{{ else }}datastream{{ end }}'
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "", result.locals["pr_number"])
+	assert.Equal(t, "datastream", result.locals["datastream_name"])
+}
+
+// TestExtractLocalsFromRawYAML_TerraformStateInLocals tests that !terraform.state
+// in locals correctly receives the derived stack name instead of empty string.
+// This is the core test for the GitHub issue #2080 fix.
+func TestExtractLocalsFromRawYAML_TerraformStateInLocals(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	// Create a temp directory structure that simulates a real Atmos project.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	stackFile := filepath.Join(stacksDir, "dev.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{stage}",
+		},
+	}
+
+	// The mock expects to be called with stack="dev" (derived from file path + name_pattern + vars).
+	// Before the fix, stack would be "" causing the "stack is required" error.
+	mockStateGetterObj.EXPECT().
+		GetState(
+			atmosConfig,
+			gomock.Any(),
+			"dev",        // stack - derived from name_pattern {stage} + vars.stage=dev
+			"vpc",        // component
+			".vpc_id",    // output
+			false,        // skipCache
+			gomock.Any(), // authContext
+			gomock.Any(), // authManager
+		).
+		Return("vpc-12345", nil)
+
+	yamlContent := `
+vars:
+  stage: dev
+
+locals:
+  vpc_id: !terraform.state vpc .vpc_id
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "vpc-12345", result.locals["vpc_id"])
+}
+
+// TestExtractLocalsFromRawYAML_TerraformStateComposedLocals tests that !terraform.state
+// results can be used in composed locals via Go templates.
+func TestExtractLocalsFromRawYAML_TerraformStateComposedLocals(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	stackFile := filepath.Join(stacksDir, "prod.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{stage}",
+		},
+	}
+
+	// Mock two separate !terraform.state calls.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "prod", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-prod-99", nil)
+
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "prod", "vpc", ".private_subnet_ids", false, gomock.Any(), gomock.Any()).
+		Return("subnet-a,subnet-b", nil)
+
+	yamlContent := `
+vars:
+  stage: prod
+
+locals:
+  vpc_id: !terraform.state vpc .vpc_id
+  subnet_ids: !terraform.state vpc .private_subnet_ids
+  vpc_info: "vpc={{ .locals.vpc_id }}, subnets={{ .locals.subnet_ids }}"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "vpc-prod-99", result.locals["vpc_id"])
+	assert.Equal(t, "subnet-a,subnet-b", result.locals["subnet_ids"])
+	assert.Equal(t, "vpc=vpc-prod-99, subnets=subnet-a,subnet-b", result.locals["vpc_info"])
+}
+
+// TestExtractLocalsFromRawYAML_TerraformState3ArgForm tests that !terraform.state
+// with 3 args (explicit stack) still works correctly.
+func TestExtractLocalsFromRawYAML_TerraformState3ArgForm(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// 3-arg form uses the explicit stack "shared", not the derived stack.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "shared", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-shared-01", nil)
+
+	yamlContent := `
+locals:
+  vpc_id: !terraform.state vpc shared .vpc_id
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "vpc-shared-01", result.locals["vpc_id"])
 }
