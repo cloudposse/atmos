@@ -4,111 +4,60 @@ sidebar_label: list
 sidebar_class_name: command
 sidebar_position: 4
 id: list
-description: List Terraform planfiles stored in a backend.
+description: List Terraform plan files from the configured storage backend.
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-List planfiles stored in a storage backend, optionally filtering by prefix. Useful for finding planfiles for a specific stack or component.
+List Terraform plan files from the configured storage backend. Optionally filter by component (positional arg) and/or stack (`-s` flag). By default, only planfiles for the current SHA are shown. Use `--all` to show all SHAs.
 </Intro>
 
 <Experimental/>
 
-<ActionCard title="Configure CI Integration">
-    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
-    <div>
-      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
-    </div>
-</ActionCard>
-
 ## Usage
 
 ```shell
-atmos terraform planfile list [prefix] [options]
+atmos terraform planfile list [component] [flags]
 ```
 
 ## Arguments
 
 <dl>
-  <dt>`[prefix]`</dt>
-  <dd>Optional prefix to filter planfiles. Can be a stack name, stack/component path, or any prefix.</dd>
+  <dt>`[component]`</dt>
+  <dd>Optional component name to filter planfiles.</dd>
 </dl>
 
 ## Flags
 
 <dl>
-  <dt>`--store`</dt>
-  <dd>Name of the storage backend to use (as configured in `atmos.yaml` under `components.terraform.planfiles.stores`). Auto-detected from environment when not specified.</dd>
+  <dt>`--all`</dt>
+  <dd>Show planfiles for all SHAs (bypass SHA filter).</dd>
 
   <dt>`--format`</dt>
-  <dd>Output format: `table` (default) or `json`.</dd>
+  <dd>Output format: `table` (default), `json`, `yaml`, `csv`, `tsv`.</dd>
+
+  <dt>`--store`</dt>
+  <dd>Storage backend to use (default from config).</dd>
 </dl>
 
 ## Examples
 
-### List all planfiles
-
 ```shell
+# List planfiles for the current SHA
 atmos terraform planfile list
-```
 
-### List by stack
+# List all planfiles (all SHAs)
+atmos terraform planfile list --all
 
-```shell
-atmos terraform planfile list dev-us-east-1
-```
+# List planfiles for a specific component
+atmos terraform planfile list vpc -s dev-us-east-1
 
-### List by stack and component
-
-```shell
-atmos terraform planfile list dev-us-east-1/vpc
-```
-
-### JSON output for scripting
-
-```shell
+# JSON output for scripting
 atmos terraform planfile list --format json
-```
 
-### List from specific store
-
-```shell
+# List from a specific store
 atmos terraform planfile list --store s3
-```
-
-## Output
-
-### Table format (default)
-
-```
-KEY                                    SIZE     MODIFIED              CHANGES
-dev-us-east-1/vpc/abc123.tfplan       12.4 KB  2024-01-15 10:30:00  +5 ~2 -1
-dev-us-east-1/vpc/def456.tfplan       11.2 KB  2024-01-14 15:45:00  +3 ~0 -0
-staging/rds/ghi789.tfplan             8.9 KB   2024-01-13 09:15:00  +1 ~1 -0
-```
-
-### JSON format
-
-```json
-[
-  {
-    "key": "dev-us-east-1/vpc/abc123.tfplan",
-    "size": 12698,
-    "last_modified": "2024-01-15T10:30:00Z",
-    "metadata": {
-      "stack": "dev-us-east-1",
-      "component": "vpc",
-      "sha": "abc123",
-      "has_changes": true,
-      "additions": 5,
-      "changes": 2,
-      "destructions": 1
-    }
-  }
-]
 ```
 
 ## Related

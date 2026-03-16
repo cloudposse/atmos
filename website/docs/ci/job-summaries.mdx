@@ -70,16 +70,100 @@ terraform outputs that were produced.
   </dd>
 </dl>
 
-## Template Format
+## Template Customization
 
-Summaries use Go templates with access to plan/apply context. The default templates are embedded
-in the binary at `pkg/ci/plugins/terraform/templates/`.
+Override the default plan and apply summary templates with your own Markdown templates.
+Templates use Go template syntax with access to plan/apply context data.
 
-See [Template Customization](/ci/template-customization) for details on creating custom templates.
+### Custom Template Configuration
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  templates:
+    base_path: ".atmos/ci/templates"
+    terraform:
+      plan: "plan.md"
+      apply: "apply.md"
+```
+</File>
+
+<dl>
+  <dt>`ci.templates.base_path`</dt>
+  <dd>
+    Directory containing custom template files, relative to the repository root.
+
+    **Default:** `.atmos/ci/templates`
+  </dd>
+
+  <dt>`ci.templates.terraform.plan`</dt>
+  <dd>
+    Filename of the custom plan summary template within the base path.
+
+    **Default:** `plan.md` (built-in)
+  </dd>
+
+  <dt>`ci.templates.terraform.apply`</dt>
+  <dd>
+    Filename of the custom apply summary template within the base path.
+
+    **Default:** `apply.md` (built-in)
+  </dd>
+</dl>
+
+### Template Context
+
+Templates receive a context object with plan/apply data. The built-in templates are located at
+`pkg/ci/plugins/terraform/templates/` in the Atmos source.
+
+#### Plan Template Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Component` | string | Component name |
+| `.Stack` | string | Stack name |
+| `.Command` | string | Terraform command (`plan`) |
+| `.HasChanges` | bool | Whether the plan has changes |
+| `.Additions` | int | Number of resources to create |
+| `.Changes` | int | Number of resources to change |
+| `.Destructions` | int | Number of resources to destroy |
+| `.Imports` | int | Number of resources to import |
+| `.Summary` | string | One-line plan summary |
+| `.Resources` | object | Resource lists by action type |
+| `.Warnings` | []string | Terraform warning messages |
+
+#### Apply Template Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Component` | string | Component name |
+| `.Stack` | string | Stack name |
+| `.Command` | string | Terraform command (`apply`) |
+| `.Success` | bool | Whether apply succeeded |
+| `.Summary` | string | One-line apply summary |
+| `.Resources` | object | Resource lists by action type |
+| `.Outputs` | map | Terraform outputs |
+| `.Warnings` | []string | Terraform warning messages |
+
+### Example Custom Template
+
+<File title=".atmos/ci/templates/plan.md">
+```markdown
+## {{ .Component }} / {{ .Stack }}
+
+{{ if .HasChanges }}
+**Changes detected:** {{ .Additions }} to add, {{ .Changes }} to change, {{ .Destructions }} to destroy
+
+{{ if gt .Destructions 0 }}
+> **Warning:** This plan destroys resources!
+{{ end }}
+{{ else }}
+No changes. Infrastructure is up-to-date.
+{{ end }}
+```
+</File>
 
 ## Related
 
 - [Native CI Overview](/ci) - Feature overview
-- [GitHub Actions](/ci/github-actions) - Workflow examples
-- [Template Customization](/ci/template-customization) - Custom templates
 - [CI Configuration](/cli/configuration/ci) - Full configuration reference

@@ -4,88 +4,57 @@ sidebar_label: delete
 sidebar_class_name: command
 sidebar_position: 5
 id: delete
-description: Delete a Terraform planfile from remote storage.
+description: Delete Terraform plan files from the configured storage backend.
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Delete a planfile from a storage backend. Requires the `--force` flag to confirm deletion and prevent accidental data loss.
+Delete Terraform plan files from the configured storage backend. The component is an optional positional argument and the stack can be specified via `-s`/`--stack`. By default, only planfiles for the current SHA are deleted. Use `--all` to delete all SHAs. Use `--force` to skip the interactive confirmation prompt.
 </Intro>
 
 <Experimental/>
 
-<ActionCard title="Configure CI Integration">
-    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
-    <div>
-      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
-    </div>
-</ActionCard>
-
 ## Usage
 
 ```shell
-atmos terraform planfile delete <key> [options]
+atmos terraform planfile delete [component] [flags]
 ```
 
 ## Arguments
 
 <dl>
-  <dt>`<key>`</dt>
-  <dd>Storage key of the planfile to delete (required). Format: `{stack}/{component}/{sha}.tfplan`</dd>
+  <dt>`[component]`</dt>
+  <dd>Component name to delete planfiles for (optional). When omitted, operates on all components matching the stack filter.</dd>
 </dl>
 
 ## Flags
 
 <dl>
-  <dt>`--force` / `-f`</dt>
-  <dd>Required flag to confirm deletion. Without this flag, the command will fail with an error.</dd>
+  <dt>`--all`</dt>
+  <dd>Delete planfiles for all SHAs (bypass SHA filter).</dd>
+
+  <dt>`-f`, `--force`</dt>
+  <dd>Skip confirmation prompt.</dd>
 
   <dt>`--store`</dt>
-  <dd>Name of the storage backend to use (as configured in `atmos.yaml` under `components.terraform.planfiles.stores`). Auto-detected from environment when not specified.</dd>
+  <dd>Storage backend to use (default from config).</dd>
 </dl>
 
 ## Examples
 
-### Delete a planfile
-
 ```shell
-atmos terraform planfile delete dev-us-east-1/vpc/abc123.tfplan --force
-```
+# Delete planfiles for a component in a stack (current SHA only)
+atmos terraform planfile delete vpc -s dev-us-east-1
 
-### Delete from specific store
+# Delete all SHAs for a component
+atmos terraform planfile delete vpc -s dev-us-east-1 --all
 
-```shell
-atmos terraform planfile delete dev-us-east-1/vpc/abc123.tfplan \
-  --store s3 \
-  --force
-```
+# Delete without confirmation
+atmos terraform planfile delete vpc -s dev-us-east-1 --force
 
-### Attempting to delete without --force
-
-```shell
-atmos terraform planfile delete dev-us-east-1/vpc/abc123.tfplan
-# Error: planfile delete requires force flag: dev-us-east-1/vpc/abc123.tfplan
-# Hint: Use --force to confirm deletion
-```
-
-## Safety
-
-The `--force` flag is required to prevent accidental deletion. This is a destructive operation:
-- Deleted planfiles cannot be recovered
-- Any apply jobs depending on the planfile will fail
-
-## Cleanup Scripts
-
-To clean up old planfiles, combine with `list`:
-
-```shell
-# Delete planfiles older than 7 days (example script)
-atmos terraform planfile list --format json | \
-  jq -r '.[] | select(.last_modified < "'$(date -d '7 days ago' -Iseconds)'") | .key' | \
-  xargs -I {} atmos terraform planfile delete {} --force
+# Delete from a specific store
+atmos terraform planfile delete vpc -s dev-us-east-1 --store s3 --force
 ```
 
 ## Related

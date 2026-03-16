@@ -4,114 +4,64 @@ sidebar_label: upload
 sidebar_class_name: command
 sidebar_position: 2
 id: upload
-description: Upload a Terraform planfile to remote storage.
+description: Upload a Terraform plan file to the configured storage backend.
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Upload a Terraform planfile to a storage backend for later use. This is useful in CI/CD pipelines where the plan and apply steps run in separate jobs.
+Upload a Terraform plan file to the configured storage backend. The component is specified as a positional argument and the stack via `-s`/`--stack`. The storage backend is configured in `atmos.yaml` under `terraform.planfiles`. Supported backends: `local/dir`, `aws/s3`, `github/artifacts`. When `--planfile` is omitted, the planfile path is derived from component and stack.
 </Intro>
 
 <Experimental/>
 
-<ActionCard title="Configure CI Integration">
-    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
-    <div>
-      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
-    </div>
-</ActionCard>
-
 ## Usage
 
 ```shell
-atmos terraform planfile upload [options]
+atmos terraform planfile upload <component> [flags]
 ```
+
+## Arguments
+
+<dl>
+  <dt>`<component>`</dt>
+  <dd>Component name to upload the planfile for (required).</dd>
+</dl>
 
 ## Flags
 
 <dl>
   <dt>`--planfile`</dt>
-  <dd>Path to the local planfile to upload. Optional when `--component` and `--stack` are provided (the path is derived automatically).</dd>
+  <dd>Path to the planfile to upload. When omitted, derived from component/stack.</dd>
 
-  <dt>`--stack` / `-s`</dt>
-  <dd>Stack name. Used for generating the storage key and resolving the planfile path when `--planfile` is not specified.</dd>
-
-  <dt>`--component`</dt>
-  <dd>Component name. Used for generating the storage key and resolving the planfile path when `--planfile` is not specified.</dd>
+  <dt>`--lockfile`</dt>
+  <dd>Path to `.terraform.lock.hcl`. Default: auto-detected from planfile path.</dd>
 
   <dt>`--sha`</dt>
-  <dd>Git commit SHA. Used for generating the storage key. Defaults to current HEAD.</dd>
-
-  <dt>`--key`</dt>
-  <dd>Override the auto-generated storage key. Format: `{stack}/{component}/{sha}.tfplan`</dd>
+  <dd>Git SHA for metadata. Default: current HEAD.</dd>
 
   <dt>`--store`</dt>
-  <dd>Name of the storage backend to use (as configured in `atmos.yaml` under `components.terraform.planfiles.stores`). Auto-detected from environment when not specified.</dd>
+  <dd>Storage backend to use (default from config).</dd>
 </dl>
 
 ## Examples
 
-### Upload with auto-detected planfile path
-
-When `--planfile` is omitted, the path is derived from `--component` and `--stack`:
-
 ```shell
-atmos terraform planfile upload \
-  --stack dev-us-east-1 \
-  --component vpc
+# Upload with auto-detected planfile path
+atmos terraform planfile upload vpc -s dev-us-east-1
+
+# Upload with explicit planfile path
+atmos terraform planfile upload vpc -s dev-us-east-1 --planfile vpc.planfile
+
+# Upload with explicit lockfile
+atmos terraform planfile upload vpc -s dev-us-east-1 --lockfile .terraform.lock.hcl
+
+# Upload to a specific store
+atmos terraform planfile upload vpc -s dev-us-east-1 --store s3
+
+# Upload with explicit SHA
+atmos terraform planfile upload vpc -s dev-us-east-1 --sha abc123def
 ```
-
-### Upload with explicit planfile path
-
-```shell
-atmos terraform planfile upload \
-  --planfile vpc.planfile \
-  --stack dev-us-east-1 \
-  --component vpc
-```
-
-### Upload with explicit key
-
-```shell
-atmos terraform planfile upload \
-  --planfile vpc.planfile \
-  --key "dev-us-east-1/vpc/abc123.tfplan"
-```
-
-### Upload to specific store
-
-```shell
-atmos terraform planfile upload \
-  --planfile vpc.planfile \
-  --stack dev-us-east-1 \
-  --component vpc \
-  --store s3
-```
-
-### Upload in GitHub Actions
-
-```yaml
-- name: Upload planfile
-  run: |
-    atmos terraform planfile upload \
-      --stack ${{ matrix.stack }} \
-      --component ${{ matrix.component }} \
-      --sha ${{ github.sha }}
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-## Storage Key Generation
-
-When `--key` is not specified, the key is generated from:
-- Stack name (from `--stack`)
-- Component name (from `--component`)
-- Git SHA (from `--sha` or current HEAD)
-
-Pattern: `{stack}/{component}/{sha}.tfplan`
 
 ## Related
 

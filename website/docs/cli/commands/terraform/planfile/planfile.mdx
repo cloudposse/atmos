@@ -56,32 +56,6 @@ Atmos supports multiple storage backends for planfiles:
   </dd>
 </dl>
 
-## Key Format
-
-Planfiles are stored with keys in the format:
-
-```
-{stack}/{component}/{sha}.tfplan
-```
-
-For example: `dev-us-east-1/vpc/abc123def.tfplan`
-
-## Environment Variables
-
-<dl>
-  <dt>`ATMOS_PLANFILE_BUCKET`</dt>
-  <dd>S3 bucket name for storing planfiles. When set, automatically uses S3 backend.</dd>
-
-  <dt>`ATMOS_PLANFILE_PREFIX`</dt>
-  <dd>Optional prefix for S3 keys (e.g., `planfiles/production`).</dd>
-
-  <dt>`AWS_REGION`</dt>
-  <dd>AWS region for S3 operations.</dd>
-
-  <dt>`GITHUB_TOKEN`</dt>
-  <dd>GitHub token for GitHub Artifacts backend. Automatically available in GitHub Actions.</dd>
-</dl>
-
 ## Related
 
 - [CI Configuration](/cli/configuration/ci) - Configure CI integration in `atmos.yaml`

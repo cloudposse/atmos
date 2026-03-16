@@ -64,18 +64,21 @@ ci:
 
 ## Features
 
-<KeyPoints>
-- Rich job summaries with resource badges and collapsible diffs
-- Live status checks showing "Plan in progress" / "Plan complete"
-- Terraform outputs exported to `$GITHUB_OUTPUT`
-- Stored planfile verification on deploy (drift detection)
-- Same command works locally and in CI
-</KeyPoints>
-
 ### [Job Summaries](/ci/job-summaries)
 
 Rich Markdown summaries with resource counts, inline badges, and collapsible diffs written
-to `$GITHUB_STEP_SUMMARY`. Includes separate templates for plan and apply results.
+to `$GITHUB_STEP_SUMMARY`. Includes separate templates for plan and apply results. Templates
+are fully customizable with Go template syntax.
+
+### [Outputs](/cli/configuration/ci/output)
+
+Terraform plan and apply results exported as CI output variables for use in downstream jobs.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`.
+
+### [Checks](/cli/configuration/ci/checks)
+
+Live commit status checks showing real-time operation progress — "Plan in progress" while
+running and "3 to add, 1 to change, 0 to destroy" when complete.
 
 ### [Planfile Storage](/ci/planfile-storage)
 
@@ -83,18 +86,9 @@ Store and retrieve planfiles across CI pipeline stages using S3, GitHub Artifact
 filesystem. The `deploy` command downloads stored planfiles, generates a fresh plan, and
 performs a semantic comparison to detect drift before applying.
 
-### [GitHub Actions](/ci/github-actions)
-
-Workflows, permissions, matrix strategy with `describe affected`, OIDC authentication,
-and deploy with plan verification.
-
-### [Template Customization](/ci/template-customization)
-
-Override default plan and apply summary templates with your own Markdown.
-
 ## Commands
 
-CI features are activated with the `--ci` flag on existing Terraform commands or automatically running in CI environment (example: on Github Action):
+CI features are activated with the `--ci` flag on existing Terraform commands or automatically when running in a CI environment (e.g. GitHub Actions):
 
 <dl>
   <dt>[`atmos terraform plan [--ci]`](/cli/commands/terraform/plan)</dt>
@@ -117,19 +111,13 @@ CI features are activated with the `--ci` flag on existing Terraform commands or
 
 Atmos auto-detects the CI environment and selects the appropriate provider:
 
-| Provider | Detection | Features |
-|----------|-----------|----------|
-| **GitHub Actions** | `GITHUB_ACTIONS=true` | Job summaries, check runs, output variables, PR comments |
-| **Generic CI** | `CI=true` | Output variables, basic status reporting |
+<dl>
+  <dt>**GitHub Actions**</dt>
+  <dd>Integrates with GitHub job summaries, commit status checks, and output variables. Requires `GITHUB_TOKEN` for checks and PR features.</dd>
 
-## CI Detection
-
-CI mode is auto-enabled when any of these environment variables are set:
-
-- `CI=true` (set by most CI providers)
-- `GITHUB_ACTIONS=true` (set by GitHub Actions)
-
-Override with the `--ci` flag.
+  <dt>**Generic CI**</dt>
+  <dd>Prints summaries, checks, and outputs to stdout. Useful for local development and testing, or any CI provider without native integration.</dd>
+</dl>
 
 ## Legacy GitHub Actions
 
