@@ -53,7 +53,8 @@ atmos_component: top-level-component1
 atmos_manifest: orgs/cp/tenant1/dev/us-east-2
 atmos_stack: tenant1-ue2-dev
 atmos_stack_file: orgs/cp/tenant1/dev/us-east-2
-auth: {}
+auth:
+  realm: b80ea18be93f8201
 backend:
   acl: bucket-owner-full-control
   bucket: cp-ue2-root-tfstate

@@ -51,7 +51,8 @@ atmos_component: test-component
 atmos_manifest: test-stack
 atmos_stack: test
 atmos_stack_file: test-stack
-auth: {}
+auth:
+  realm: a14b6bb632762f7d
 backend: {}
 backend_type: ""
 cli_args:

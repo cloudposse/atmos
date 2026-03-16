@@ -188,6 +188,9 @@ func buildGlobalAuthSection(atmosConfig *schema.AtmosConfiguration) map[string]a
 	if atmosConfig.Auth.Keyring.Type != "" {
 		globalAuthSection["keyring"] = atmosConfig.Auth.Keyring
 	}
+	if atmosConfig.Auth.Realm != "" {
+		globalAuthSection["realm"] = atmosConfig.Auth.Realm
+	}
 
 	return globalAuthSection
 }
