@@ -32,7 +32,7 @@ Locals are similar to [Terraform locals](https://developer.hashicorp.com/terrafo
 1. **File-Scoped:** Locals are only available within the file where they are defined. They do not inherit across imports.
 2. **Dependency Resolution:** Locals can reference other locals using `{{ .locals.name }}` syntax. Atmos automatically determines the correct resolution order using topological sort.
 3. **Cycle Detection:** Circular references are detected and reported with clear error messages showing the dependency path (e.g., `a -> b -> c -> a`).
-4. **Template Support:** Locals support Go templates with [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/), and [Atmos template functions](/templates/functions).
+4. **Template Support:** Locals support Go templates with [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/), and [Atmos template functions](/functions/template).
 5. **YAML Functions:** Locals support `!env`, `!terraform.state`, `!store`, `!exec`, and other [YAML functions](/functions/yaml).
 
 ### Processing Pipeline
@@ -200,7 +200,7 @@ vars:
 
 ## Using Templates
 
-Locals support full Go template syntax with [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/), and [Atmos template functions](/templates/functions):
+Locals support full Go template syntax with [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/), and [Atmos template functions](/functions/template):
 
 ```yaml
 locals:
