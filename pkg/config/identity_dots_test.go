@@ -76,8 +76,8 @@ func TestIdentityNamesWithDots(t *testing.T) {
 // TestIdentityNamesWithDotsErrorHandling tests that fixAuthIdentities gracefully handles edge cases.
 func TestIdentityNamesWithDotsErrorHandling(t *testing.T) {
 	tests := []struct {
-		name              string
-		configContent     string
+		name               string
+		configContent      string
 		expectedIdentities int
 	}{
 		{
@@ -156,7 +156,7 @@ func TestIdentityNamesWithDotsErrorHandling(t *testing.T) {
 			require.NoError(t, err, "Config loading should not fail")
 
 			// Check that the expected number of identities are loaded.
-			assert.Len(t, config.Auth.Identities, tt.expectedIdentities, 
+			assert.Len(t, config.Auth.Identities, tt.expectedIdentities,
 				"Should have %d identities", tt.expectedIdentities)
 		})
 	}
