@@ -182,79 +182,82 @@ operates on processed maps where `mergeComponentConfigurations` has already adde
 
 ## Fix
 
-Two issues need to be addressed:
+Two fixes were implemented, with a third considered but deferred:
 
-### Issue 1: Cycle Detection in `processBaseComponentConfigInternal`
+### Fix 1: Cycle Detection via Visited-Set (Implemented)
 
-Add a visited-set parameter to `processBaseComponentConfigInternal` to detect cycles and return an error
-instead of recursing infinitely. The visited set tracks `(component, baseComponent)` pairs:
+Added a `visited map[string]bool` parameter to `processBaseComponentConfigInternal` that tracks
+`(component, baseComponent)` pairs during recursion. If a pair is encountered again, the function
+returns a `ErrCircularComponentInheritance` error instead of recursing infinitely.
+
+The visited map is created in `ProcessBaseComponentConfig` (the public entry point) and passed through
+all recursive calls:
 
 ```go
-func processBaseComponentConfigInternal(
-    // ... existing params ...
-    visited map[string]bool,  // NEW: cycle detection
-) error {
-    if component == baseComponent {
-        return nil
-    }
+// ProcessBaseComponentConfig (public entry point):
+visited := make(map[string]bool)
+err := processBaseComponentConfigInternal(..., visited)
 
-    // Cycle detection: check if we've already processed this (component, baseComponent) pair.
-    visitKey := component + ":" + baseComponent
-    if visited[visitKey] {
-        return fmt.Errorf("circular component reference detected: %s -> %s", component, baseComponent)
-    }
-    visited[visitKey] = true
-    defer delete(visited, visitKey)  // Clean up after processing.
+// processBaseComponentConfigInternal (recursive implementation):
+visitKey := component + ":" + baseComponent
+if visited[visitKey] {
+    return fmt.Errorf("%w: '%s' -> '%s' in the stack '%s'",
+        ErrCircularComponentInheritance, component, baseComponent, stack)
+}
+visited[visitKey] = true
+```
 
-    // ... rest of function ...
+This ensures that any reference cycle — regardless of complexity (2-node, 3-node, or N-node) — is
+detected and reported as a clear error instead of crashing with a stack overflow.
+
+A new sentinel error `ErrCircularComponentInheritance` was added to `errors/errors.go`.
+
+### Fix 2: Skip `metadata.component` on Abstract Components (Implemented)
+
+When processing the `metadata.component` reference in `processBaseComponentConfigInternal`, the fix
+skips the component chain resolution if the base component is marked as `type: abstract`. Abstract
+components can't be deployed, so their `metadata.component` pointer serves no functional purpose in
+inheritance resolution.
+
+The implementation uses the existing `isAbstractComponent()` helper from
+`describe_affected_deleted.go`:
+
+```go
+// Before following the "component" reference chain, check if this is an abstract component.
+isAbstract := isAbstractComponent(baseComponentMap)
+
+if !isAbstract {
+    if baseComponentOfBaseComponent, exists := baseComponentMap["component"]; exists {
+        // ... existing recursion (component chain resolution) ...
+    }
 }
 ```
 
-This ensures that any reference cycle — regardless of complexity — is detected and reported as a clear
-error instead of crashing with a stack overflow.
+This directly prevents the specific user-reported pattern where an abstract component's promoted
+`component` key creates a circular reference back to the real component.
 
-### Issue 2: Skip `metadata.component` on Abstract Components
-
-When processing the `metadata.component` reference in `processBaseComponentConfigInternal`, skip it if
-the component is marked as `type: abstract`. Abstract components can't be deployed, so their
-`metadata.component` pointer serves no functional purpose in inheritance resolution:
-
-```go
-// Line 1710: Skip component reference for abstract components.
-if baseComponentOfBaseComponent, exists := baseComponentMap["component"]; exists {
-    // Check if this is an abstract component — skip component chain for abstract types.
-    if componentMetadata, ok := baseComponentMap["metadata"].(map[string]any); ok {
-        if compType, ok := componentMetadata["type"].(string); ok && compType == "abstract" {
-            // Abstract components don't need component chain resolution.
-            goto skipComponentChain
-        }
-    }
-    // ... existing recursion ...
-}
-skipComponentChain:
-```
-
-Alternatively, the `describe_stacks.go` metadata inheritance code could check for abstract components
-and skip re-processing them entirely.
-
-### Issue 3: Cache Key Consistency
+### Fix 3: Cache Key Consistency (Not Implemented)
 
 The `ProcessBaseComponentConfig` cache key uses `stack:component:baseComponent`. Phase 1 uses the
-computed stack name while Phase 2 uses `stackFileName`. Normalizing the cache key (e.g., always using
-the computed stack name) would allow Phase 2 to reuse Phase 1's cached results, avoiding the
-re-processing entirely.
+computed stack name (e.g., `"tenant1-ue2-dev"`) while Phase 2 uses `stackFileName` (e.g., `"deploy"`),
+causing a cache miss.
+
+This fix was **deferred** because:
+- Phase 1 and Phase 2 operate on different data (raw vs. processed component maps passed via
+  `allComponentsMap`), so reusing Phase 1's cached results for Phase 2 could produce incorrect
+  inheritance resolution
+- Fixes 1 and 2 already fully prevent the stack overflow
+- The cache mismatch only causes redundant work, not incorrect behavior
 
 ---
 
-## Files to Modify
+## Files Modified
 
-| File                                                              | Change                                                                                                 |
-|-------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
-| `internal/exec/stack_processor_utils.go`                          | Add visited-set cycle detection to `processBaseComponentConfigInternal`; skip abstract component chain |
-| `internal/exec/describe_stacks.go`                                | Consider normalizing cache key or skipping abstract components in metadata inheritance                 |
-| `internal/exec/stack_processor_utils_test.go`                     | Tests for cycle detection, abstract component handling                                                 |
-| `internal/exec/abstract_component_describe_stacks_test.go`        | Integration test reproducing the stack overflow                                                        |
-| `tests/fixtures/scenarios/abstract-component-metadata-component/` | Test fixture with abstract + real component pair                                                       |
+| File                                          | Change                                                                                                                                      |
+|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| `errors/errors.go`                            | Added `ErrCircularComponentInheritance` sentinel error                                                                                      |
+| `internal/exec/stack_processor_utils.go`      | Added visited-set cycle detection to `processBaseComponentConfigInternal`; skip abstract component chain in `metadata.component` resolution |
+| `internal/exec/stack_processor_utils_test.go` | Added 10 test cases across 5 test functions for cycle detection, abstract component skip, metadata inheritance, and deep chain validation |
 
 ---
 
@@ -268,17 +271,35 @@ re-processing entirely.
 
 ---
 
-## Test Plan
+## Test Coverage
 
-### Unit Tests
+### Unit Tests Added
 
-- `TestProcessBaseComponentConfig_CycleDetection` — verify circular references are detected and reported
-- `TestProcessBaseComponentConfig_AbstractComponentSkip` — verify abstract components skip component chain
-- `TestProcessBaseComponentConfig_DeepInheritanceChain` — verify non-circular deep chains still work
+- **`TestProcessBaseComponentConfig_CycleDetection`** (4 cases):
+  - `direct-cycle-via-component-key` — A references B, B references A via top-level `component` key
+  - `cycle-via-inherits` — A inherits from B, B inherits from A
+  - `three-component-cycle` — A→B→C→A cycle that the simple `component == baseComponent` guard cannot catch
+  - `no-cycle-valid-chain` — valid inheritance chain (A←B) works without false positive
 
-### Integration Tests
+- **`TestProcessBaseComponentConfig_AbstractComponentSkip`** (1 case):
+  - Reproduces the exact user-reported pattern: abstract component with promoted `component` key that
+    would cause infinite recursion without the abstract skip
 
-- `TestAbstractComponentMetadataComponent_DescribeStacks` — reproduce the exact user-reported config pattern
-- `TestAbstractComponentMetadataComponent_DescribeComponent` — verify `describe component` works with
-  abstract components that have `metadata.component`
-- Verify all existing inheritance tests continue to pass
+- **`TestProcessBaseComponentConfig_DeepChainNoFalsePositive`** (1 case):
+  - 3-level inheritance chain (level0←level1←level2) works correctly, verifying that the cycle
+    detection doesn't produce false positives on deep but valid chains
+
+- **`TestProcessBaseComponentConfig_AbstractMetadataComponentInherited`** (1 case):
+  - Verifies that `metadata.component` on an abstract base component IS properly inherited by real
+    components through metadata inheritance. Asserts `BaseComponentMetadata["component"]` is populated,
+    vars/backend are inherited, and `metadata.type` is NOT inherited.
+
+- **`TestProcessBaseComponentConfig_AbstractMetadataComponentNotInherited_WhenDisabled`** (1 case):
+  - Same pattern but with metadata inheritance disabled — confirms `metadata.component` is NOT
+    inherited while regular vars still are.
+
+### Existing Tests
+
+All existing `TestProcessBaseComponentConfig` tests (3 cases) and all metadata inheritance tests
+(`TestMetadataFieldsInheritance`, `TestAbstractComponentBackendGeneration`, etc.) continue to pass
+unchanged.

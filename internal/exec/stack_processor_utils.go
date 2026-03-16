@@ -1634,6 +1634,7 @@ func ProcessBaseComponentConfig(
 	}
 
 	// Process normally if not cached.
+	visited := make(map[string]bool)
 	err := processBaseComponentConfigInternal(
 		atmosConfig,
 		baseComponentConfig,
@@ -1644,6 +1645,7 @@ func ProcessBaseComponentConfig(
 		componentBasePath,
 		checkBaseComponentExists,
 		baseComponents,
+		visited,
 	)
 	if err != nil {
 		return err
@@ -1667,10 +1669,19 @@ func processBaseComponentConfigInternal(
 	componentBasePath string,
 	checkBaseComponentExists bool,
 	baseComponents *[]string,
+	visited map[string]bool,
 ) error {
 	if component == baseComponent {
 		return nil
 	}
+
+	// Cycle detection: check if we've already visited this (component, baseComponent) pair.
+	visitKey := component + ":" + baseComponent
+	if visited[visitKey] {
+		return fmt.Errorf("%w: '%s' -> '%s' in the stack '%s'",
+			errUtils.ErrCircularComponentInheritance, component, baseComponent, stack)
+	}
+	visited[visitKey] = true
 
 	var baseComponentVars map[string]any
 	var baseComponentSettings map[string]any
@@ -1706,27 +1717,35 @@ func processBaseComponentConfigInternal(
 			baseComponentMap = baseComponentMapOfStrings
 		}
 
-		// First, process the base component(s) of this base component
-		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
-			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
-			if !ok {
-				return fmt.Errorf("%w 'component:' of the component '%s' in the stack '%s'",
-					errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
-			}
+		// First, process the base component(s) of this base component.
+		// Skip component chain resolution for abstract components — their metadata.component
+		// is a pointer to the Terraform directory but should not trigger inheritance traversal.
+		// Following it on processed data (where mergeComponentConfigurations has promoted
+		// metadata.component to a top-level "component" key) can create circular references.
+		isAbstract := isAbstractComponent(baseComponentMap)
+		if !isAbstract {
+			if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+				baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
+				if !ok {
+					return fmt.Errorf("%w 'component:' of the component '%s' in the stack '%s'",
+						errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
+				}
 
-			err := processBaseComponentConfigInternal(
-				atmosConfig,
-				baseComponentConfig,
-				allComponentsMap,
-				baseComponent,
-				stack,
-				baseComponentOfBaseComponentString,
-				componentBasePath,
-				checkBaseComponentExists,
-				baseComponents,
-			)
-			if err != nil {
-				return err
+				err := processBaseComponentConfigInternal(
+					atmosConfig,
+					baseComponentConfig,
+					allComponentsMap,
+					baseComponent,
+					stack,
+					baseComponentOfBaseComponentString,
+					componentBasePath,
+					checkBaseComponentExists,
+					baseComponents,
+					visited,
+				)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1769,6 +1788,7 @@ func processBaseComponentConfigInternal(
 						componentBasePath,
 						checkBaseComponentExists,
 						baseComponents,
+						visited,
 					)
 					if err != nil {
 						return err
