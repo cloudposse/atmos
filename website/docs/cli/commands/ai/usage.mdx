@@ -29,6 +29,31 @@ and [21+ specialized skills](/cli/configuration/ai/skills) you can switch betwee
 
 <Screengrab title="atmos ai --help" slug="atmos-ai--help" />
 
+## Global `--ai` Flag
+
+You can also add `--ai` to **any** Atmos command to get AI-powered analysis of the output — no need
+to use `atmos ai` subcommands. Pair with `--skill` for domain-specific expertise
+(the `--skill` flag requires `--ai`). Multiple skills can be combined with commas or repeated flags.
+
+```shell
+# AI analyzes the terraform plan output
+atmos terraform plan vpc -s ue1-prod --ai
+
+# AI uses Terraform expertise for deeper analysis
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
+
+# Combine multiple skills (comma-separated)
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform,atmos-stacks
+
+# Combine multiple skills (repeated flag)
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform --skill atmos-stacks
+
+# Enable via environment variables
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s ue1-prod
+```
+
+See [Global Flags](/cli/global-flags) for details.
+
 ## Subcommands
 
 <DocCardList />
