@@ -11,7 +11,9 @@ import Experimental from '@site/src/components/Experimental'
 import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
-The `locals` section defines file-scoped temporary variables for use within templates. Unlike `vars`, `settings`, and `env`, locals do **not** inherit across file boundaries—they are resolved within a single file and can reference each other with automatic dependency resolution.
+The `locals` section defines file-scoped temporary variables for use within templates.
+Unlike `vars`, `settings`, and `env`, locals do **not** inherit across file boundaries—they are resolved within a
+single file and can reference each other with automatic dependency resolution.
 </Intro>
 
 <Experimental />
@@ -30,7 +32,7 @@ Locals are similar to [Terraform locals](https://developer.hashicorp.com/terrafo
 1. **File-Scoped:** Locals are only available within the file where they are defined. They do not inherit across imports.
 2. **Dependency Resolution:** Locals can reference other locals using `{{ .locals.name }}` syntax. Atmos automatically determines the correct resolution order using topological sort.
 3. **Cycle Detection:** Circular references are detected and reported with clear error messages showing the dependency path (e.g., `a -> b -> c -> a`).
-4. **Template Support:** Locals support Go templates with [Sprig functions](http://masterminds.github.io/sprig/).
+4. **Template Support:** Locals support Go templates with [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/), and [Atmos template functions](/templates/functions).
 5. **YAML Functions:** Locals support `!env`, `!terraform.state`, `!store`, `!exec`, and other [YAML functions](/functions/yaml).
 
 ### Processing Pipeline
@@ -38,21 +40,22 @@ Locals are similar to [Terraform locals](https://developer.hashicorp.com/terrafo
 Locals are resolved in a specific order during stack configuration loading:
 
 ```text
-1. Parse raw YAML → extract locals sections (global, terraform, helmfile, packer)
+1. Parse raw YAML → extract locals sections (global, terraform, helmfile, packer, absible, etc.)
 2. Build dependency graph (extract {{ .locals.X }} references)
 3. Topological sort with cycle detection
-4. Resolve in order: YAML functions first (!env, !terraform.state), then Go templates
-5. Make resolved locals available to component templates
+4. Resolve YAML functions (!env, !terraform.state)
+5. Make resolved locals available to templates
 ```
 
-YAML functions are always resolved before Go templates. This means you can fetch a value with `!env` or `!terraform.state` and then use it in a Go template expression in another local.
+YAML functions are always resolved before Go templates.
+This means you can fetch a value with `!env` or `!terraform.state` and then use it in a Go template expression in another local.
 
 ## Configuration Scopes
 
 Locals can be defined at three levels within a file, each inheriting from its parent:
 
 ```text
-Global locals → Component-type locals (terraform/helmfile/packer) → Component-level locals
+Global locals → Component-type locals (terraform/helmfile/packer/absible) → Component-level locals
 ```
 
 When the same key exists at multiple levels, the most specific scope wins.
@@ -102,7 +105,7 @@ locals:
 ```
 </File>
 
-This design ensures predictability—you can understand a file without tracing imports.
+This design ensures predictability — you can understand a file without tracing imports.
 
 <details>
 <summary>How does processing work?</summary>
@@ -143,7 +146,7 @@ flowchart TB
 
 ## Dependency Resolution
 
-Locals can reference other locals in any order—Atmos resolves them automatically:
+Locals can reference other locals in any order — Atmos resolves them automatically:
 
 ```yaml
 locals:
@@ -160,12 +163,12 @@ Circular references are detected and reported with clear error messages showing 
 
 Locals can access `settings`, `vars`, and `env` defined in the **same file**:
 
-| Section | Syntax | Description |
-|---------|--------|-------------|
-| `locals` | `{{ .locals.name }}` | Other locals in the same file |
-| `settings` | `{{ .settings.key }}` | Settings defined in the same file |
-| `vars` | `{{ .vars.key }}` | Variables defined in the same file |
-| `env` | `{{ .env.KEY }}` | Environment variables defined in the same file |
+| Section    | Syntax                | Description                                    |
+|------------|-----------------------|------------------------------------------------|
+| `locals`   | `{{ .locals.name }}`  | Other locals in the same file                  |
+| `settings` | `{{ .settings.key }}` | Settings defined in the same file              |
+| `vars`     | `{{ .vars.key }}`     | Variables defined in the same file             |
+| `env`      | `{{ .env.KEY }}`      | Environment variables defined in the same file |
 
 ```yaml
 settings:
@@ -197,7 +200,7 @@ vars:
 
 ## Using Templates
 
-Locals support full Go template syntax with [Sprig functions](http://masterminds.github.io/sprig/):
+Locals support full Go template syntax with [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/), and [Atmos template functions](/templates/functions):
 
 ```yaml
 locals:
@@ -211,13 +214,13 @@ locals:
 
 Locals support all Atmos [YAML functions](/functions/yaml), enabling dynamic value resolution from external sources:
 
-| Function | Description | Example |
-|----------|-------------|---------|
-| `!env` | Environment variables | `!env API_ENDPOINT` |
-| `!exec` | Command execution | `!exec echo hello` |
-| `!store` | Store lookups | `!store secrets/db .password` |
-| `!terraform.state` | Terraform state queries | `!terraform.state vpc .vpc_id` |
-| `!terraform.output` | Terraform outputs | `!terraform.output vpc .vpc_id` |
+| Function            | Description             | Example                         |
+|---------------------|-------------------------|---------------------------------|
+| `!env`              | Environment variables   | `!env API_ENDPOINT`             |
+| `!exec`             | Command execution       | `!exec echo hello`              |
+| `!store`            | Store lookups           | `!store secrets/db .password`   |
+| `!terraform.state`  | Terraform state queries | `!terraform.state vpc .vpc_id`  |
+| `!terraform.output` | Terraform outputs       | `!terraform.output vpc .vpc_id` |
 
 ### Environment Variables with Conditionals
 
@@ -364,11 +367,11 @@ terraform:
 
 ## Locals vs Vars
 
-| Aspect | `locals` | `vars` |
-|--------|----------|--------|
-| **Scope** | File-scoped only | Inherits across imports |
-| **Purpose** | Temporary values for DRY | Input variables for components |
-| **Output** | Not passed to components | Passed to Terraform/Helmfile/Packer |
+| Aspect                | `locals`                      | `vars`                                    |
+|-----------------------|-------------------------------|-------------------------------------------|
+| **Scope**             | File-scoped only              | Inherits across imports                   |
+| **Purpose**           | Temporary values for DRY      | Input variables for components            |
+| **Output**            | Not passed to components      | Passed to Terraform/Helmfile/Packer       |
 | **Cross-File Access** | Cannot access imported values | Can access merged values from all imports |
 
 Use `locals` for intermediate computations within a single file, and `vars` for values that need to be passed to components or shared across files.
