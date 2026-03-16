@@ -485,7 +485,7 @@ All tests pass after the fix.
 
 ### Unit Tests (`internal/exec/`)
 
-- `TestComputeStackFileName` — 4 cases (simple path, nested org path, yml extension, nil config)
+- `TestComputeStackFileName` — 8 cases (simple path, nested org, yml, yaml.tmpl, yml.tmpl, unknown extension, no extension, nil config)
 - `TestDeriveStackNameForLocals` — 3 cases (name_pattern, nil config, no vars)
 - `TestExtractLocalsFromRawYAML_StackNameDerived` — confirms `!env` + Go template conditionals work
 - `TestExtractLocalsFromRawYAML_GoTemplateConditionalEmpty` — confirms empty env var takes else branch
