@@ -798,6 +798,10 @@ type AzureAuthContext struct {
 	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
 	// Optional - if not set, AZURE_FEDERATED_TOKEN_FILE env var will be used.
 	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
+
+	// CloudEnvironment is the Azure cloud environment name ("public", "usgovernment", "china").
+	// Used to set ARM_ENVIRONMENT for Terraform and other Azure tooling in sovereign clouds.
+	CloudEnvironment string `json:"cloud_environment,omitempty" yaml:"cloud_environment,omitempty"`
 }
 
 // GCPAuthContext holds GCP-specific authentication context.

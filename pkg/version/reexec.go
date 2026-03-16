@@ -367,7 +367,6 @@ func findOrInstallPRVersionWithConfig(prNumber int, cfg *ReexecConfig) (string, 
 		return "", errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install Atmos from PR #%d", prNumber).
-			WithHint("Check GitHub Actions artifacts availability and authentication").
 			Err()
 	}
 
@@ -395,7 +394,6 @@ func findOrInstallSHAVersionWithConfig(sha string, cfg *ReexecConfig) (string, e
 		return "", errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install Atmos from SHA %s", sha).
-			WithHint("Check GitHub Actions artifacts availability and authentication").
 			Err()
 	}
 

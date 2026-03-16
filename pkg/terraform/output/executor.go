@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -386,24 +387,34 @@ func (e *Executor) execute(
 		return nil, err
 	}
 
-	// Step 3: Generate backend file if needed.
+	// Step 3: Resolve toolchain dependencies and executable path.
+	// This ensures that toolchain-installed executables (e.g., tofu via `atmos toolchain install`)
+	// are found even when they are not on the system PATH. Without this, template functions like
+	// atmos.Component() and YAML functions like !terraform.output fail with "executable not found".
+	tenv, err := dependencies.ForSections(atmosConfig, sections)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve toolchain for %s in %s: %w", component, stack, err)
+	}
+	config.Executable = tenv.Resolve(config.Executable)
+
+	// Step 4: Generate backend file if needed.
 	backendGen := &defaultBackendGenerator{}
 	if err := backendGen.GenerateBackendIfNeeded(config, component, stack, authContext); err != nil {
 		return nil, err
 	}
 
-	// Step 4: Generate provider overrides if needed.
+	// Step 5: Generate provider overrides if needed.
 	if err := backendGen.GenerateProvidersIfNeeded(config, authContext); err != nil {
 		return nil, err
 	}
 
-	// Step 5: Create terraform runner.
+	// Step 6: Create terraform runner.
 	runner, err := e.runnerFactory(config.ComponentPath, config.Executable)
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 6: Configure quiet mode if requested.
+	// Step 7: Configure quiet mode if requested.
 	var stderrCapture *quietModeWriter
 	if opts != nil && opts.QuietMode {
 		runner.SetStdout(io.Discard)
@@ -411,11 +422,17 @@ func (e *Executor) execute(
 		runner.SetStderr(stderrCapture)
 	}
 
-	// Step 7: Setup environment variables.
+	// Step 8: Setup environment variables.
 	envSetup := &defaultEnvironmentSetup{}
 	environMap, err := envSetup.SetupEnvironment(config, authContext)
 	if err != nil {
 		return nil, err
+	}
+	// Prepend toolchain bin dirs to subprocess PATH so terraform/tofu subprocesses
+	// can also find toolchain-installed binaries. Uses PrependToPath to preserve
+	// any PATH overrides from the component's env section.
+	if len(tenv.ToolchainDirs()) > 0 {
+		environMap["PATH"] = tenv.PrependToPath(environMap["PATH"])
 	}
 	if len(environMap) > 0 {
 		if err := runner.SetEnv(environMap); err != nil {
@@ -423,7 +440,7 @@ func (e *Executor) execute(
 		}
 	}
 
-	// Step 8: Clean workspace and run terraform init.
+	// Step 9: Clean workspace and run terraform init.
 	workspaceMgr := &defaultWorkspaceManager{}
 	workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
 
@@ -431,18 +448,18 @@ func (e *Executor) execute(
 		return nil, err
 	}
 
-	// Step 9: Ensure workspace exists and is selected.
+	// Step 10: Ensure workspace exists and is selected.
 	if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
 		return nil, err
 	}
 
-	// Step 10: Execute terraform output.
+	// Step 11: Execute terraform output.
 	outputMeta, err := e.runOutput(ctx, runner, component, stack, stderrCapture)
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 11: Process and convert output values.
+	// Step 12: Process and convert output values.
 	return processOutputs(outputMeta, atmosConfig), nil
 }
 

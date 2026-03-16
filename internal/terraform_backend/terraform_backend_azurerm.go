@@ -91,16 +91,20 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 		return nil, errUtils.ErrStorageAccountRequired
 	}
 
-	// Cache by storage account only (client can access any container in the account).
-	cacheKey := storageAccountName
+	// Determine blob storage suffix from the backend "environment" field.
+	// This matches Terraform's azurerm backend "environment" field for sovereign clouds.
+	blobSuffix := resolveAzureBlobSuffix(GetBackendAttribute(backend, "environment"))
+
+	// Cache by storage account + suffix (different clouds use different endpoints).
+	cacheKey := storageAccountName + ":" + blobSuffix
 
 	// Check the cache.
 	if cached, ok := azureBlobClientCache.Load(cacheKey); ok {
 		return cached.(AzureBlobAPI), nil
 	}
 
-	// Construct the blob service URL.
-	serviceURL := fmt.Sprintf("https://%s.blob.core.windows.net/", storageAccountName)
+	// Construct the blob service URL using the correct suffix for the cloud environment.
+	serviceURL := fmt.Sprintf("https://%s.%s/", storageAccountName, blobSuffix)
 
 	// Use DefaultAzureCredential for authentication.
 	// This supports multiple authentication methods:
@@ -271,6 +275,24 @@ func ReadTerraformBackendAzurermInternal(
 	}
 
 	return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetBlobFromAzure, lastErr)
+}
+
+// azureBlobSuffixMap maps Terraform azurerm backend "environment" values to blob storage suffixes.
+// These match the environment names accepted by the Terraform azurerm backend provider.
+var azureBlobSuffixMap = map[string]string{
+	"public":       "blob.core.windows.net",
+	"usgovernment": "blob.core.usgovcloudapi.net",
+	"german":       "blob.core.cloudapi.de",
+	"china":        "blob.core.chinacloudapi.cn",
+}
+
+// resolveAzureBlobSuffix returns the blob storage suffix for the given Terraform azurerm backend environment.
+// If empty or unknown, defaults to the Azure public cloud suffix.
+func resolveAzureBlobSuffix(environment string) string {
+	if suffix, ok := azureBlobSuffixMap[environment]; ok {
+		return suffix
+	}
+	return "blob.core.windows.net"
 }
 
 // logAzureRetryExhausted logs a warning when all retries are exhausted for Azure Blob operations.
