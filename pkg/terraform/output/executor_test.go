@@ -1269,12 +1269,11 @@ func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	mockRunner := NewMockTerraformRunner(ctrl)
 	customFactory := func(workdir, executable string) (TerraformRunner, error) {
-
-    return mockRunner, nil
+		return mockRunner, nil
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
-  
+
 	// Clear cache.
 	stackSlug := "noskip-stack-noskip-component"
 	terraformOutputsCache.Delete(stackSlug)
@@ -1391,7 +1390,7 @@ func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
 	ctx := context.Background()
 	outputs, err := exec.execute(ctx, atmosConfig, "comp", "stack", sections, nil, &OutputOptions{QuietMode: true, SkipInit: true})
 	require.NoError(t, err)
-	assert.Equal(t, "skip_init_direct", outputs["result"]) 
+	assert.Equal(t, "skip_init_direct", outputs["result"])
 }
 
 // TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable verifies that the executor
@@ -1409,23 +1408,22 @@ func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) 
 	t.Cleanup(func() {
 		toolchain.SetAtmosConfig(origToolchainConfig)
 	})
- 
-  ctrl := gomock.NewController(t)
+
+	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockDescriber := NewMockComponentDescriber(ctrl)
 	mockRunner := NewMockTerraformRunner(ctrl)
 
-  // Track what executable path is passed to the runner factory.
+	// Track what executable path is passed to the runner factory.
 	var capturedExecutable string
 	customFactory := func(workdir, executable string) (TerraformRunner, error) {
-    capturedExecutable = executable
+		capturedExecutable = executable
 		return mockRunner, nil
 	}
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
-  
 	// Create a temp dir structure simulating a toolchain install.
 	tempDir := t.TempDir()
 	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
