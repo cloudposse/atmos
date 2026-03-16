@@ -122,7 +122,7 @@ Final resolved locals
 **File-Scoped Locals (Global + Section):**
 - Defined once per file.
 - Available to all components of compatible type.
-- Cannot be overridden by individual components.
+- Can be overridden by component-level locals (more specific scope wins).
 - Use for: common values, naming conventions, shared computed values.
 
 **Component-Level Locals:**

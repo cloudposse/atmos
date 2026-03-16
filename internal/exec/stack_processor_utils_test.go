@@ -2619,34 +2619,70 @@ func TestComputeStackFileName(t *testing.T) {
 		{
 			name: "simple deploy path with name_pattern",
 			config: &schema.AtmosConfiguration{
-				BasePath: "/project",
+				BasePath: "project",
 				Stacks:   schema.Stacks{BasePath: "stacks"},
 			},
-			filePath: "/project/stacks/deploy/dev.yaml",
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml"),
 			expected: filepath.Join("deploy", "dev"),
 		},
 		{
 			name: "nested org path",
 			config: &schema.AtmosConfiguration{
-				BasePath: "/project",
+				BasePath: "project",
 				Stacks:   schema.Stacks{BasePath: "stacks"},
 			},
-			filePath: "/project/stacks/orgs/acme/plat/dev/us-east-1.yaml",
+			filePath: filepath.Join("project", "stacks", "orgs", "acme", "plat", "dev", "us-east-1.yaml"),
 			expected: filepath.Join("orgs", "acme", "plat", "dev", "us-east-1"),
 		},
 		{
 			name: "yml extension",
 			config: &schema.AtmosConfiguration{
-				BasePath: "/project",
+				BasePath: "project",
 				Stacks:   schema.Stacks{BasePath: "stacks"},
 			},
-			filePath: "/project/stacks/deploy/prod.yml",
+			filePath: filepath.Join("project", "stacks", "deploy", "prod.yml"),
 			expected: filepath.Join("deploy", "prod"),
+		},
+		{
+			name: "yaml.tmpl extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml.tmpl"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name: "yml.tmpl extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yml.tmpl"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name: "no known extension returns path as-is",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.json"),
+			expected: filepath.Join("deploy", "dev.json"),
+		},
+		{
+			name: "file with no extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev"),
+			expected: filepath.Join("deploy", "dev"),
 		},
 		{
 			name:     "nil config returns empty",
 			config:   nil,
-			filePath: "/project/stacks/deploy/dev.yaml",
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml"),
 			expected: "",
 		},
 	}
@@ -2669,7 +2705,7 @@ func TestComputeStackFileName(t *testing.T) {
 func TestDeriveStackNameForLocals(t *testing.T) {
 	t.Run("derives stack name from name_pattern and vars", func(t *testing.T) {
 		config := &schema.AtmosConfiguration{
-			BasePath: "/project",
+			BasePath: "project",
 			Stacks: schema.Stacks{
 				BasePath:    "stacks",
 				NamePattern: "{stage}",
@@ -2680,7 +2716,7 @@ func TestDeriveStackNameForLocals(t *testing.T) {
 				"stage": "dev",
 			},
 		}
-		result := deriveStackNameForLocals(config, rawConfig, "/project/stacks/deploy/dev.yaml")
+		result := deriveStackNameForLocals(config, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
 		assert.Equal(t, "dev", result)
 	})
 
@@ -2688,19 +2724,19 @@ func TestDeriveStackNameForLocals(t *testing.T) {
 		rawConfig := map[string]any{
 			"vars": map[string]any{"stage": "dev"},
 		}
-		result := deriveStackNameForLocals(nil, rawConfig, "/project/stacks/deploy/dev.yaml")
+		result := deriveStackNameForLocals(nil, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
 		assert.Empty(t, result)
 	})
 
 	t.Run("no vars uses filename as stack name", func(t *testing.T) {
 		config := &schema.AtmosConfiguration{
-			BasePath: "/project",
+			BasePath: "project",
 			Stacks: schema.Stacks{
 				BasePath: "stacks",
 			},
 		}
 		rawConfig := map[string]any{}
-		result := deriveStackNameForLocals(config, rawConfig, "/project/stacks/deploy/dev.yaml")
+		result := deriveStackNameForLocals(config, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
 		// Without name_pattern or name_template, falls back to file name.
 		assert.Equal(t, filepath.Join("deploy", "dev"), result)
 	})

@@ -143,10 +143,18 @@ func computeStackFileName(atmosConfig *schema.AtmosConfiguration, filePath strin
 		return ""
 	}
 
-	// Remove file extension (.yaml, .yml, etc.).
-	ext := filepath.Ext(rel)
-	if ext != "" {
-		rel = rel[:len(rel)-len(ext)]
+	// Remove known stack/template suffixes (longest first to handle .yaml.tmpl correctly).
+	for _, suffix := range []string{
+		u.YamlTemplateExtension, // .yaml.tmpl
+		u.YmlTemplateExtension,  // .yml.tmpl
+		u.YamlFileExtension,     // .yaml
+		u.YmlFileExtension,      // .yml
+	} {
+		if strings.HasSuffix(rel, suffix) {
+			rel = strings.TrimSuffix(rel, suffix)
+
+			break
+		}
 	}
 
 	return rel

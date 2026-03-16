@@ -46,8 +46,8 @@ components:
         full_name: "{{ .locals.full_name }}"
         tags: "{{ .locals.default_tags }}"
 
-    # Section-level locals (under terraform:) inherit from global locals.
-    # This shows that you can also define locals here.
+    # Another component reusing global locals.
+    # Section-level locals can also be defined under `terraform.locals` when needed.
     myapp-worker:
       metadata:
         component: myapp
