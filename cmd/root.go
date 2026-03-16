@@ -1412,8 +1412,15 @@ func Execute() error {
 	}
 
 	configSel := cfg.ParseConfigSelectionFromOsArgs(os.Args[1:])
-	if configSel.BasePath == "" && len(configSel.Config) == 0 && len(configSel.ConfigPath) == 0 {
-		configSel = cfg.ConfigSelectionFromEnv()
+	envSel := cfg.ConfigSelectionFromEnv()
+	if configSel.BasePath == "" {
+		configSel.BasePath = envSel.BasePath
+	}
+	if len(configSel.Config) == 0 {
+		configSel.Config = envSel.Config
+	}
+	if len(configSel.ConfigPath) == 0 {
+		configSel.ConfigPath = envSel.ConfigPath
 	}
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
