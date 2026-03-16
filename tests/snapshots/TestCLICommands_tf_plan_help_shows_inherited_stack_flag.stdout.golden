@@ -34,6 +34,8 @@ FLAGS
 
       --auto-generate-backend-file string  Override auto_generate_backend_file setting from atmos.yaml (true/false)
 
+      --ci                                 Enable CI mode for automated pipelines (writes job summary, outputs)
+
   -h, --help                               help for plan
 
       --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)

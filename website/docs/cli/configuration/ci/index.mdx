@@ -1,0 +1,130 @@
+---
+title: CI Configuration
+sidebar_label: ci
+sidebar_class_name: command
+id: ci
+description: Configure native CI/CD integration for GitHub Actions and other CI providers
+---
+
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `ci` section of `atmos.yaml` configures native CI/CD integration, including output variables,
+job summaries, status checks, PR comments, and template overrides.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  enabled: true
+  output:
+    enabled: true
+    variables:
+      - has_changes
+      - has_additions
+      - has_destructions
+      - plan_summary
+  summary:
+    enabled: true
+  checks:
+    enabled: false
+  comments:
+    enabled: true
+    behavior: upsert
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`ci.enabled`</dt>
+  <dd>
+    Explicitly enable or disable CI mode. When not set, CI mode is auto-detected from
+    environment variables (`CI=true` or `GITHUB_ACTIONS=true`).
+
+    **Default:** Auto-detected
+  </dd>
+</dl>
+
+## Sections
+
+<DocCardList />
+
+## Full Example
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  # Auto-enabled when CI detected, or set explicitly
+  enabled: true
+
+  # Output variables for downstream jobs
+  output:
+    enabled: true
+    variables:
+      - has_changes
+      - has_additions
+      - has_destructions
+      - artifact_key
+      - plan_summary
+
+  # Job summary with plan/apply results
+  summary:
+    enabled: true
+
+  # Commit status checks
+  checks:
+    enabled: true
+    context_prefix: "atmos"
+
+  # PR/MR comments
+  comments:
+    enabled: true
+    behavior: upsert
+
+  # Template overrides
+  templates:
+    base_path: ".atmos/ci/templates"
+    terraform:
+      plan: "plan.md"
+      apply: "apply.md"
+```
+</File>
+
+## CI Detection
+
+CI mode is auto-enabled when any of these environment variables are set:
+
+- `CI=true` (set by most CI providers)
+- `GITHUB_ACTIONS=true` (set by GitHub Actions)
+
+Override with the `--ci` flag or `ci.enabled` configuration.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ATMOS_CI` | Explicitly enable CI mode (`true`/`false`) |
+| `CI` | Standard CI environment variable (set by most CI providers) |
+| `GITHUB_ACTIONS` | Set by GitHub Actions runner |
+| `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API token (required for status checks and PR comments) |
+| `GITHUB_OUTPUT` | File path for CI output variables (set by GitHub Actions) |
+| `GITHUB_STEP_SUMMARY` | File path for job summaries (set by GitHub Actions) |
+| `GITHUB_REPOSITORY` | Repository name in `owner/repo` format |
+| `GITHUB_SHA` | Current commit SHA |
+
+## Related
+
+- [Native CI Overview](/ci) - Feature overview and quick start
+- [Native CI Overview](/ci) - Feature overview
+- [Planfile Storage](/ci/planfile-storage) - Store and verify planfiles
+- [`atmos terraform plan --ci`](/cli/commands/terraform/plan) - Plan with CI integration
+- [`atmos terraform deploy --ci`](/cli/commands/terraform/deploy) - Deploy with plan verification

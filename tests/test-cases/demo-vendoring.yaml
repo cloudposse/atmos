@@ -18,6 +18,7 @@ tests:
       # PTY not supported on windows
       os: !not windows
     expect:
+      timeout: "5m"
       tty:
         - "Pulling"
         - "github/stargazers"
@@ -43,6 +44,7 @@ tests:
     env:
       ATMOS_LOGS_LEVEL: Debug
     expect:
+      timeout: "5m"
       diff: []
       stderr:
         - 'No TTY detected\. Falling back to basic output\.'

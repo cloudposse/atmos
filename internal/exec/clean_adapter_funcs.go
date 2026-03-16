@@ -53,6 +53,13 @@ func ConstructTerraformComponentPlanfileNameForClean(info *schema.ConfigAndStack
 	return constructTerraformComponentPlanfileName(info)
 }
 
+// ConstructTerraformComponentPlanfilePath exports the planfile path constructor for use by other packages.
+func ConstructTerraformComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(atmosConfig, "exec.ConstructTerraformComponentPlanfilePath")()
+
+	return constructTerraformComponentPlanfilePath(atmosConfig, info)
+}
+
 // GetAllStacksComponentsPathsForClean delegates to pkg/terraform/clean.GetAllStacksComponentsPaths.
 func GetAllStacksComponentsPathsForClean(stacksMap map[string]any) []string {
 	defer perf.Track(nil, "exec.GetAllStacksComponentsPathsForClean")()
