@@ -21,6 +21,14 @@ func init() {
 	integrations.Register(integrations.KindAWSEKS, NewEKSIntegration)
 }
 
+// eksClientFactory creates an EKS client from credentials. Overridable in tests.
+var eksClientFactory = func(ctx context.Context, creds types.ICredentials, region string) (awsCloud.EKSClient, error) {
+	return awsCloud.NewEKSClient(ctx, creds, region)
+}
+
+// eksDescribeCluster describes an EKS cluster. Overridable in tests.
+var eksDescribeCluster = awsCloud.DescribeCluster
+
 // EKSIntegration implements the aws/eks integration type.
 type EKSIntegration struct {
 	name     string
@@ -97,13 +105,13 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	log.Debug("Configuring kubeconfig for EKS cluster", "cluster", e.cluster.Name, "region", e.cluster.Region)
 
 	// Create EKS client.
-	client, err := awsCloud.NewEKSClient(ctx, creds, e.cluster.Region)
+	client, err := eksClientFactory(ctx, creds, e.cluster.Region)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
 	// Describe cluster to get endpoint and certificate data.
-	info, err := awsCloud.DescribeCluster(ctx, client, e.cluster.Name, e.cluster.Region)
+	info, err := eksDescribeCluster(ctx, client, e.cluster.Name, e.cluster.Region)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}

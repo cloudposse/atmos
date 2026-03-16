@@ -370,3 +370,150 @@ func TestWriteClusterConfig_DefaultUpdateMode(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, loaded.Clusters, info.ARN)
 }
+
+func TestListClusterARNs_Success(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	// Write two clusters.
+	info1 := testClusterInfo()
+	err = mgr.WriteClusterConfig(info1, "dev-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+
+	info2 := &awsCloud.EKSClusterInfo{
+		Name:                     "staging-cluster",
+		Endpoint:                 "https://YYYY.gr7.us-east-1.eks.amazonaws.com",
+		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
+		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/staging-cluster",
+		Region:                   "us-east-1",
+	}
+	err = mgr.WriteClusterConfig(info2, "staging-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+
+	arns, err := mgr.ListClusterARNs()
+	require.NoError(t, err)
+	assert.Len(t, arns, 2)
+	assert.Contains(t, arns, info1.ARN)
+	assert.Contains(t, arns, info2.ARN)
+}
+
+func TestListClusterARNs_NonexistentFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nonexistent", "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	arns, err := mgr.ListClusterARNs()
+	require.NoError(t, err)
+	assert.Nil(t, arns)
+}
+
+func TestListClusterARNs_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	// Write empty kubeconfig.
+	config := clientcmdapi.NewConfig()
+	err := clientcmd.WriteToFile(*config, path)
+	require.NoError(t, err)
+
+	mgr, mgrErr := NewKubeconfigManager(path, "")
+	require.NoError(t, mgrErr)
+
+	arns, err := mgr.ListClusterARNs()
+	require.NoError(t, err)
+	assert.Empty(t, arns)
+}
+
+func TestDefaultKubeconfigPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	path, err := DefaultKubeconfigPath()
+	require.NoError(t, err)
+	assert.Contains(t, path, "kube")
+	assert.Contains(t, path, "config")
+}
+
+func TestNewKubeconfigManager_DefaultPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	mgr, err := NewKubeconfigManager("", "")
+	require.NoError(t, err)
+	assert.Contains(t, mgr.GetPath(), "kube")
+	assert.Contains(t, mgr.GetPath(), "config")
+}
+
+func TestWriteClusterConfig_InvalidUpdateMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	info := testClusterInfo()
+	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "invalid")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
+	assert.Contains(t, err.Error(), "invalid update mode")
+}
+
+func TestWriteClusterConfig_ErrorMode_ContextCollision(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	info := testClusterInfo()
+	err = mgr.WriteClusterConfig(info, "dev-eks", "dev-admin", "merge")
+	require.NoError(t, err)
+
+	// Write a different cluster but with same alias (context name).
+	info2 := &awsCloud.EKSClusterInfo{
+		Name:                     "other-cluster",
+		Endpoint:                 "https://OTHER.eks.amazonaws.com",
+		CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte(testCARawPEM)),
+		ARN:                      "arn:aws:eks:us-east-1:123456789012:cluster/other-cluster",
+		Region:                   "us-east-1",
+	}
+	err = mgr.WriteClusterConfig(info2, "dev-eks", "other-admin", "error")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
+	assert.Contains(t, err.Error(), "context dev-eks already exists")
+}
+
+func TestWriteClusterConfig_ErrorMode_NewFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	// Error mode on new file should succeed.
+	info := testClusterInfo()
+	err = mgr.WriteClusterConfig(info, "", "dev-admin", "error")
+	require.NoError(t, err)
+
+	loaded, err := clientcmd.LoadFromFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, loaded.Clusters, info.ARN)
+}
+
+func TestBuildClusterConfig_RawPEMCertificate(t *testing.T) {
+	// If certificate data is already raw PEM (not base64), it should be used as-is.
+	info := &awsCloud.EKSClusterInfo{
+		Name:                     "dev-cluster",
+		Endpoint:                 "https://example.eks.amazonaws.com",
+		CertificateAuthorityData: "not-valid-base64!@#$",
+		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster",
+		Region:                   "us-east-2",
+	}
+
+	config := BuildClusterConfig(info, "dev", "admin")
+	cluster := config.Clusters[info.ARN]
+	assert.Equal(t, []byte("not-valid-base64!@#$"), cluster.CertificateAuthorityData)
+}

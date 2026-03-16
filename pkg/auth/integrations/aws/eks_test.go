@@ -1,6 +1,8 @@
 package aws
 
 import (
+	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -510,4 +513,321 @@ func TestEKSIntegration_ResolveKubeconfigSettings_WithSettings(t *testing.T) {
 	assert.Equal(t, "/custom/path", path)
 	assert.Equal(t, "0644", mode)
 	assert.Equal(t, "replace", update)
+}
+
+func TestEKSIntegration_Execute_Success(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
+
+	// Override factory functions for testing.
+	origClientFactory := eksClientFactory
+	origDescribe := eksDescribeCluster
+	t.Cleanup(func() {
+		eksClientFactory = origClientFactory
+		eksDescribeCluster = origDescribe
+	})
+
+	eksClientFactory = func(_ context.Context, _ types.ICredentials, _ string) (awsCloud.EKSClient, error) {
+		return nil, nil // Client unused since we also override DescribeCluster.
+	}
+
+	eksDescribeCluster = func(_ context.Context, _ awsCloud.EKSClient, _, _ string) (*awsCloud.EKSClusterInfo, error) {
+		return &awsCloud.EKSClusterInfo{
+			Name:                     "dev-cluster",
+			Endpoint:                 "https://example.eks.amazonaws.com",
+			CertificateAuthorityData: "dGVzdA==",
+			ARN:                      clusterARN,
+			Region:                   "us-east-2",
+		}, nil
+	}
+
+	integration := &EKSIntegration{
+		name:     "test-eks",
+		identity: "dev-admin",
+		cluster: &schema.EKSCluster{
+			Name:   "dev-cluster",
+			Region: "us-east-2",
+			Alias:  "dev-eks",
+			Kubeconfig: &schema.KubeconfigSettings{
+				Path:   kubeconfigPath,
+				Update: "merge",
+			},
+		},
+	}
+
+	err := integration.Execute(t.Context(), nil)
+	require.NoError(t, err)
+
+	// Verify kubeconfig was written.
+	config, loadErr := loadKubeconfig(kubeconfigPath)
+	require.NoError(t, loadErr)
+	assert.Contains(t, config.Clusters, clusterARN)
+	assert.Contains(t, config.Contexts, "dev-eks")
+	assert.Equal(t, "dev-eks", config.CurrentContext)
+}
+
+func TestEKSIntegration_Execute_NoAlias(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
+
+	origClientFactory := eksClientFactory
+	origDescribe := eksDescribeCluster
+	t.Cleanup(func() {
+		eksClientFactory = origClientFactory
+		eksDescribeCluster = origDescribe
+	})
+
+	eksClientFactory = func(_ context.Context, _ types.ICredentials, _ string) (awsCloud.EKSClient, error) {
+		return nil, nil
+	}
+
+	eksDescribeCluster = func(_ context.Context, _ awsCloud.EKSClient, _, _ string) (*awsCloud.EKSClusterInfo, error) {
+		return &awsCloud.EKSClusterInfo{
+			Name:                     "dev-cluster",
+			Endpoint:                 "https://example.eks.amazonaws.com",
+			CertificateAuthorityData: "dGVzdA==",
+			ARN:                      clusterARN,
+			Region:                   "us-east-2",
+		}, nil
+	}
+
+	integration := &EKSIntegration{
+		name:     "test-eks",
+		identity: "dev-admin",
+		cluster: &schema.EKSCluster{
+			Name:   "dev-cluster",
+			Region: "us-east-2",
+			// No Alias — context name should default to ARN.
+			Kubeconfig: &schema.KubeconfigSettings{
+				Path: kubeconfigPath,
+			},
+		},
+	}
+
+	err := integration.Execute(t.Context(), nil)
+	require.NoError(t, err)
+
+	config, loadErr := loadKubeconfig(kubeconfigPath)
+	require.NoError(t, loadErr)
+	assert.Equal(t, clusterARN, config.CurrentContext)
+}
+
+func TestEKSIntegration_Execute_ClientFactoryError(t *testing.T) {
+	origClientFactory := eksClientFactory
+	t.Cleanup(func() { eksClientFactory = origClientFactory })
+
+	eksClientFactory = func(_ context.Context, _ types.ICredentials, _ string) (awsCloud.EKSClient, error) {
+		return nil, fmt.Errorf("credentials invalid")
+	}
+
+	integration := &EKSIntegration{
+		name:     "test-eks",
+		identity: "dev-admin",
+		cluster: &schema.EKSCluster{
+			Name:   "dev-cluster",
+			Region: "us-east-2",
+		},
+	}
+
+	err := integration.Execute(t.Context(), nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrEKSIntegrationFailed)
+	assert.Contains(t, err.Error(), "credentials invalid")
+}
+
+func TestEKSIntegration_Execute_DescribeClusterError(t *testing.T) {
+	origClientFactory := eksClientFactory
+	origDescribe := eksDescribeCluster
+	t.Cleanup(func() {
+		eksClientFactory = origClientFactory
+		eksDescribeCluster = origDescribe
+	})
+
+	eksClientFactory = func(_ context.Context, _ types.ICredentials, _ string) (awsCloud.EKSClient, error) {
+		return nil, nil
+	}
+
+	eksDescribeCluster = func(_ context.Context, _ awsCloud.EKSClient, _, _ string) (*awsCloud.EKSClusterInfo, error) {
+		return nil, fmt.Errorf("cluster not found")
+	}
+
+	integration := &EKSIntegration{
+		name:     "test-eks",
+		identity: "dev-admin",
+		cluster: &schema.EKSCluster{
+			Name:   "dev-cluster",
+			Region: "us-east-2",
+		},
+	}
+
+	err := integration.Execute(t.Context(), nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrEKSIntegrationFailed)
+	assert.Contains(t, err.Error(), "cluster not found")
+}
+
+func TestEKSIntegration_Execute_ReplaceMode(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
+
+	origClientFactory := eksClientFactory
+	origDescribe := eksDescribeCluster
+	t.Cleanup(func() {
+		eksClientFactory = origClientFactory
+		eksDescribeCluster = origDescribe
+	})
+
+	eksClientFactory = func(_ context.Context, _ types.ICredentials, _ string) (awsCloud.EKSClient, error) {
+		return nil, nil
+	}
+
+	eksDescribeCluster = func(_ context.Context, _ awsCloud.EKSClient, _, _ string) (*awsCloud.EKSClusterInfo, error) {
+		return &awsCloud.EKSClusterInfo{
+			Name:                     "dev-cluster",
+			Endpoint:                 "https://example.eks.amazonaws.com",
+			CertificateAuthorityData: "dGVzdA==",
+			ARN:                      clusterARN,
+			Region:                   "us-east-2",
+		}, nil
+	}
+
+	integration := &EKSIntegration{
+		name:     "test-eks",
+		identity: "dev-admin",
+		cluster: &schema.EKSCluster{
+			Name:   "dev-cluster",
+			Region: "us-east-2",
+			Alias:  "dev-eks",
+			Kubeconfig: &schema.KubeconfigSettings{
+				Path:   kubeconfigPath,
+				Update: "replace",
+			},
+		},
+	}
+
+	err := integration.Execute(t.Context(), nil)
+	require.NoError(t, err)
+
+	config, loadErr := loadKubeconfig(kubeconfigPath)
+	require.NoError(t, loadErr)
+	assert.Contains(t, config.Clusters, clusterARN)
+}
+
+func TestEKSIntegration_Cleanup_NoAliasWithARNInKubeconfig(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
+
+	// Write a kubeconfig with the cluster ARN as context name (no alias case).
+	info := &awsCloud.EKSClusterInfo{
+		Name:                     "dev-cluster",
+		Endpoint:                 "https://example.eks.amazonaws.com",
+		CertificateAuthorityData: "dGVzdA==",
+		ARN:                      clusterARN,
+		Region:                   "us-east-2",
+	}
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+	err = mgr.WriteClusterConfig(info, "", "dev-admin", "merge")
+	require.NoError(t, err)
+
+	// Verify entry exists.
+	arns, err := mgr.ListClusterARNs()
+	require.NoError(t, err)
+	assert.Contains(t, arns, clusterARN)
+
+	// Cleanup without alias - should find ARN by cluster name suffix.
+	integration := &EKSIntegration{
+		name:     "test",
+		identity: "dev-admin",
+		cluster: &schema.EKSCluster{
+			Name:   "dev-cluster",
+			Region: "us-east-2",
+			// No alias.
+			Kubeconfig: &schema.KubeconfigSettings{
+				Path: kubeconfigPath,
+			},
+		},
+	}
+
+	err = integration.Cleanup(t.Context())
+	require.NoError(t, err)
+
+	// Verify entries were removed.
+	arns, err = mgr.ListClusterARNs()
+	require.NoError(t, err)
+	assert.NotContains(t, arns, clusterARN)
+}
+
+func TestEKSIntegration_FindClusterARN_MultipleCluster(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+
+	// Write two clusters.
+	for _, cluster := range []struct {
+		name  string
+		arn   string
+		alias string
+	}{
+		{"dev-cluster", "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster", "dev"},
+		{"prod-cluster", "arn:aws:eks:us-west-2:123456789012:cluster/prod-cluster", "prod"},
+	} {
+		info := &awsCloud.EKSClusterInfo{
+			Name:                     cluster.name,
+			Endpoint:                 "https://example.eks.amazonaws.com",
+			CertificateAuthorityData: "dGVzdA==",
+			ARN:                      cluster.arn,
+			Region:                   "us-east-2",
+		}
+		err = mgr.WriteClusterConfig(info, cluster.alias, "admin", "merge")
+		require.NoError(t, err)
+	}
+
+	// findClusterARN should find the correct one.
+	integration := &EKSIntegration{
+		cluster: &schema.EKSCluster{
+			Name:   "prod-cluster",
+			Region: "us-west-2",
+			Kubeconfig: &schema.KubeconfigSettings{
+				Path: kubeconfigPath,
+			},
+		},
+	}
+
+	arn, err := integration.findClusterARN(mgr)
+	require.NoError(t, err)
+	assert.Equal(t, "arn:aws:eks:us-west-2:123456789012:cluster/prod-cluster", arn)
+}
+
+func TestEKSIntegration_FindClusterARN_NoMatch(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+
+	// Write a cluster that won't match.
+	info := &awsCloud.EKSClusterInfo{
+		Name:                     "other-cluster",
+		Endpoint:                 "https://example.eks.amazonaws.com",
+		CertificateAuthorityData: "dGVzdA==",
+		ARN:                      "arn:aws:eks:us-east-2:123456789012:cluster/other-cluster",
+		Region:                   "us-east-2",
+	}
+	err = mgr.WriteClusterConfig(info, "other", "admin", "merge")
+	require.NoError(t, err)
+
+	integration := &EKSIntegration{
+		cluster: &schema.EKSCluster{
+			Name:   "missing-cluster",
+			Region: "us-east-2",
+			Kubeconfig: &schema.KubeconfigSettings{
+				Path: kubeconfigPath,
+			},
+		},
+	}
+
+	_, err = integration.findClusterARN(mgr)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no cluster ARN found matching missing-cluster")
 }
