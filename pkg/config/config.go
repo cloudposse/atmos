@@ -30,10 +30,13 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if err != nil {
 		return atmosConfig, err
 	}
-	// Process the base path specified in the Terraform provider (which calls into the atmos code)
-	// This overrides all other atmos base path configs (`atmos.yaml`, ENV var `ATMOS_BASE_PATH`)
+	// Process the base path specified by the Terraform provider `atmos_base_path` parameter
+	// or CLI `--base-path` flag. This overrides all other base path configs.
+	// Convert to absolute path immediately (relative to CWD) to prevent resolveAbsolutePath
+	// from routing it through git root discovery — explicitly provided paths are always
+	// CWD-relative, not git-root-relative.
 	if configAndStacksInfo.AtmosBasePath != "" {
-		atmosConfig.BasePath = configAndStacksInfo.AtmosBasePath
+		atmosConfig.BasePath = resolveSimpleRelativeBasePath(configAndStacksInfo.AtmosBasePath)
 	}
 
 	// After unmarshalling, ensure AppendUserAgent is set if still empty
@@ -232,6 +235,38 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 //   - ".." or "../foo" means dirname(atmos.yaml)/../foo (config-file-relative navigation)
 //
 // This follows the convention of tsconfig.json, package.json, .eslintrc - paths in
+// resolveSimpleRelativeBasePath converts "simple relative" base paths to absolute (CWD-relative).
+// Simple relative paths are those that don't start with ".", "..", "./", or "../" and are not
+// absolute. These paths would otherwise be mis-routed through git root discovery by
+// resolveAbsolutePath. Paths starting with "." or ".." are intentionally config-file-relative
+// and are returned unchanged for resolveAbsolutePath to handle.
+func resolveSimpleRelativeBasePath(basePath string) string {
+	if basePath == "" || filepath.IsAbs(basePath) {
+		return basePath
+	}
+
+	sep := string(filepath.Separator)
+
+	isConfigRelative := basePath == "." ||
+		basePath == ".." ||
+		strings.HasPrefix(basePath, "./") ||
+		strings.HasPrefix(basePath, "."+sep) ||
+		strings.HasPrefix(basePath, "../") ||
+		strings.HasPrefix(basePath, ".."+sep)
+
+	if isConfigRelative {
+		return basePath
+	}
+
+	// Simple relative path — resolve to CWD.
+	absPath, err := filepath.Abs(basePath)
+	if err != nil {
+		return basePath
+	}
+
+	return absPath
+}
+
 // config files are relative to the config file location, not where you run from.
 // Use the !cwd YAML tag if you need paths relative to CWD.
 func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
@@ -291,7 +326,29 @@ func tryResolveWithGitRoot(path string, isExplicitRelative bool, cliConfigPath s
 		return absPath, nil
 	}
 
-	return filepath.Join(gitRoot, path), nil
+	// For simple relative paths, try git root first but fall back to CWD if the
+	// git-root-joined path doesn't exist. This handles the case where ATMOS_BASE_PATH
+	// is set to a CWD-relative path (e.g., ".terraform/modules/monorepo") but the
+	// git root is a different directory.
+	gitRootJoined := filepath.Join(gitRoot, path)
+	if _, err := os.Stat(gitRootJoined); err == nil {
+		return gitRootJoined, nil
+	}
+
+	// Git root path doesn't exist — try CWD-relative.
+	cwdJoined, err := filepath.Abs(path)
+	if err != nil {
+		return gitRootJoined, err
+	}
+	if _, err := os.Stat(cwdJoined); err == nil {
+		log.Trace("Path not found at git root, using CWD-relative path",
+			"path", path, "git_root", gitRoot, "resolved", cwdJoined)
+		return cwdJoined, nil
+	}
+
+	// Neither exists — return git root path (original behavior) so the error message
+	// is consistent with pre-fix behavior.
+	return gitRootJoined, nil
 }
 
 // tryResolveWithConfigPath resolves a path using cliConfigPath as the base,

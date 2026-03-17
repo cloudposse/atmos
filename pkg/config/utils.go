@@ -54,7 +54,13 @@ func FindAllStackConfigsInPathsForStack(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				return nil, nil, false, err
+				return nil, nil, false, errUtils.Build(err).
+					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
+					WithHint("Check that the stacks directory exists and contains stack configuration files").
+					WithContext("pattern", patterns[0]).
+					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
+					WithExitCode(2).
+					Err()
 			}
 			// If there's no error but still no matches, we continue to the next path
 			// This happens when the pattern is valid but no files match it
@@ -147,7 +153,13 @@ func FindAllStackConfigsInPaths(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, errUtils.Build(err).
+					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
+					WithHint("Check that the stacks directory exists and contains stack configuration files").
+					WithContext("pattern", patterns[0]).
+					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
+					WithExitCode(2).
+					Err()
 			}
 			// If there's no error but still no matches, we continue to the next path
 			// This happens when the pattern is valid but no files match it
