@@ -276,6 +276,14 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		m.triggerIntegrations(ctx, identityName, finalCreds)
 	}
 
+	// Clean up legacy (pre-realm) keyring and file entries to prevent realm mismatch warnings.
+	// This runs after successful authentication so legacy credentials remain as a fallback
+	// if authentication fails.
+	m.deleteLegacyCredentialFiles()
+	for _, step := range chain {
+		m.deleteLegacyKeyringEntry(step)
+	}
+
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
 }
 
@@ -572,6 +580,29 @@ func (m *manager) initializeProviders() error {
 // legacy path behavior with no realm subdirectory.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
+		// Check for unconfigured identities (empty kind) before attempting factory creation.
+		// This produces a clear, actionable error instead of the confusing "unsupported identity kind: ".
+		if identityConfig.Kind == "" {
+			builder := errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+				WithContext("identity", name)
+
+			if m.stackInfo != nil && len(m.stackInfo.ProfilesFromArg) > 0 {
+				profileNames := strings.Join(m.stackInfo.ProfilesFromArg, ", ")
+				builder = builder.
+					WithExplanationf("Identity %q is not configured in the `%s` profile.", name, profileNames).
+					WithHint("Switch to a profile that includes this identity")
+			} else {
+				builder = builder.
+					WithExplanationf("Identity %q is not configured. Did you forget to specify a profile?", name)
+			}
+
+			err := builder.
+				WithHint("Run `atmos profile list` to see available profiles").
+				WithExitCode(1).Err()
+			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
+			return err
+		}
+
 		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
 			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
