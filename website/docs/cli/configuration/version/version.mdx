@@ -47,10 +47,13 @@ version:
 
 <dl>
   <dt>`ATMOS_USE_VERSION`</dt>
-  <dd>Specify which version of Atmos to use. Equivalent to `--use-version`.</dd>
+  <dd>Specify which version of Atmos to use. Env var equivalent of `--use-version` flag.</dd>
+
+  <dt>`ATMOS_VERSION_USE`</dt>
+  <dd>Internal env var set by the `--use-version` flag. Highest precedence in version resolution.</dd>
 
   <dt>`ATMOS_VERSION`</dt>
-  <dd>Convenience alias for `ATMOS_USE_VERSION`.</dd>
+  <dd>Convenience alias matching `tfenv`/`goenv` conventions. Lower precedence than `ATMOS_VERSION_USE`.</dd>
 
   <dt>`ATMOS_VERSION_CHECK_ENABLED`</dt>
   <dd>Enable or disable automatic version checking.</dd>

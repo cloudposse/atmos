@@ -88,26 +88,41 @@ Version sources are evaluated in this order (highest to lowest priority):
 
 | Priority | Source | Example |
 |----------|--------|---------|
-| 1 | `--use-version` flag | `atmos --use-version 1.201.0 ...` |
-| 2 | `ATMOS_USE_VERSION` env var | `ATMOS_USE_VERSION=1.201.0 atmos ...` |
-| 3 | `ATMOS_VERSION` env var | `ATMOS_VERSION=1.201.0 atmos ...` |
+| 1 | `--use-version` flag | `atmos --use-version 1.201.0 terraform plan` |
+| 2 | `ATMOS_VERSION_USE` env var | `ATMOS_VERSION_USE=1.201.0 atmos terraform plan` |
+| 3 | `ATMOS_VERSION` env var | `ATMOS_VERSION=1.201.0 atmos terraform plan` |
 | 4 | `version.use` in `atmos.yaml` | `version: use: "1.199.0"` |
+
+The `--use-version` flag and `ATMOS_USE_VERSION` env var both set `ATMOS_VERSION_USE` internally,
+so they share the same priority level.
 
 ## Environment Variables
 
 <dl>
   <dt>`ATMOS_USE_VERSION`</dt>
   <dd>
-    Specify which version of Atmos to use. Equivalent to `--use-version`.
+    Specify which version of Atmos to use. This is the env var equivalent of the `--use-version` flag.
+    Internally, it feeds the flag value which sets `ATMOS_VERSION_USE`.
 
     ```bash
     ATMOS_USE_VERSION=1.199.0 atmos terraform plan -s mystack
     ```
   </dd>
 
+  <dt>`ATMOS_VERSION_USE`</dt>
+  <dd>
+    The internal env var checked directly by the version resolution logic. Set automatically by the
+    `--use-version` flag and `ATMOS_USE_VERSION`. Can also be set directly for highest precedence.
+
+    ```bash
+    ATMOS_VERSION_USE=1.199.0 atmos terraform plan -s mystack
+    ```
+  </dd>
+
   <dt>`ATMOS_VERSION`</dt>
   <dd>
-    Convenience alias for `ATMOS_USE_VERSION`. Matches common conventions used by tools like `tfenv` and `goenv`.
+    Convenience alias matching conventions used by tools like `tfenv` and `goenv`.
+    Lower precedence than `ATMOS_VERSION_USE`.
 
     ```bash
     export ATMOS_VERSION=1.199.0
