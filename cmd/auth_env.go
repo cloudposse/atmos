@@ -11,10 +11,14 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// authEnvParser handles flag parsing with Viper precedence for the auth env command.
+var authEnvParser *flags.StandardParser
 
 // authEnvCmd exports authentication environment variables.
 var authEnvCmd = &cobra.Command{
@@ -24,15 +28,21 @@ var authEnvCmd = &cobra.Command{
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get output format and file from Viper (honors CLI > ENV > config > defaults).
-		formatStr := viper.GetString("auth_env_format")
+		// Parse flags using Viper (respects precedence: flags > env > config > defaults).
+		v := viper.GetViper()
+		if err := authEnvParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Get output format and file from Viper.
+		formatStr := v.GetString("format")
 		if formatStr == "" {
 			formatStr = "bash"
 		}
-		outputFile := viper.GetString("auth_env_output_file")
+		outputFile := v.GetString("output-file")
 
 		// Get login flag.
-		login, _ := cmd.Flags().GetBool("login")
+		login := v.GetBool("login")
 
 		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -118,21 +128,21 @@ var authEnvCmd = &cobra.Command{
 }
 
 func init() {
-	authEnvCmd.Flags().StringP("format", "f", "bash", "Output format: bash, dotenv, github, json")
-	authEnvCmd.Flags().StringP("output-file", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)")
-	authEnvCmd.Flags().Bool("login", false, "Trigger authentication if credentials are missing or expired (default: false)")
+	// Create parser with auth-env-specific flags using functional options.
+	authEnvParser = flags.NewStandardParser(
+		flags.WithStringFlag("format", "f", "bash", "Output format: bash, dotenv, env, github, json"),
+		flags.WithStringFlag("output-file", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)"),
+		flags.WithBoolFlag("login", "", false, "Trigger authentication if credentials are missing or expired"),
+		flags.WithEnvVars("format", "ATMOS_AUTH_ENV_FORMAT"),
+		flags.WithEnvVars("output-file", "ATMOS_AUTH_ENV_OUTPUT_FILE"),
+	)
 
-	if err := viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT"); err != nil {
-		log.Trace("Failed to bind auth_env_format environment variable", "error", err)
-	}
-	if err := viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format")); err != nil {
-		log.Trace("Failed to bind auth_env_format flag", "error", err)
-	}
-	if err := viper.BindEnv("auth_env_output_file", "ATMOS_AUTH_ENV_OUTPUT_FILE"); err != nil {
-		log.Trace("Failed to bind auth_env_output_file environment variable", "error", err)
-	}
-	if err := viper.BindPFlag("auth_env_output_file", authEnvCmd.Flags().Lookup("output-file")); err != nil {
-		log.Trace("Failed to bind auth_env_output_file flag", "error", err)
+	// Register flags using the standard RegisterFlags method.
+	authEnvParser.RegisterFlags(authEnvCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := authEnvParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
 	}
 
 	// Register format completion using pkg/env supported formats plus JSON.

@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestOutput(t *testing.T) {
@@ -97,7 +99,7 @@ func TestOutput(t *testing.T) {
 		assert.Contains(t, string(content), "ATMOS_EOF_CERT\n")
 	})
 
-	t.Run("json format to stdout", func(t *testing.T) {
+	t.Run("json format to stdout without atmosConfig", func(t *testing.T) {
 		data := map[string]string{
 			"VAR1": "value1",
 		}
@@ -117,6 +119,52 @@ func TestOutput(t *testing.T) {
 		output := string(buf[:n])
 
 		assert.Contains(t, output, `"VAR1": "value1"`)
+	})
+
+	t.Run("json format to stdout with atmosConfig", func(t *testing.T) {
+		data := map[string]string{
+			"VAR1": "value1",
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		cfg := &schema.AtmosConfiguration{}
+		err := Output(data, "json", "", WithAtmosConfig(cfg))
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, `"VAR1": "value1"`)
+	})
+
+	t.Run("env format to stdout", func(t *testing.T) {
+		data := map[string]string{
+			"VAR1": "value1",
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := Output(data, "env", "")
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, "VAR1=value1")
+		assert.NotContains(t, output, "export")
 	})
 
 	t.Run("json format to file", func(t *testing.T) {
@@ -243,6 +291,38 @@ func TestOutputOptions(t *testing.T) {
 		opt := WithAtmosConfig(nil)
 		opt(cfg)
 		assert.Nil(t, cfg.atmosConfig)
+	})
+}
+
+func TestWriteToFileWithModeError(t *testing.T) {
+	t.Run("returns error for invalid path", func(t *testing.T) {
+		err := writeToFileWithMode("/nonexistent/dir/file", "content", DefaultOutputFileMode)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "open file")
+	})
+}
+
+func TestOutputWithFormatOptions(t *testing.T) {
+	t.Run("WithFormatOptions passes options to FormatData", func(t *testing.T) {
+		data := map[string]string{
+			"var1": "value1",
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := Output(data, "bash", "", WithFormatOptions(WithExport(true)))
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, "export var1=value1")
 	})
 }
 
