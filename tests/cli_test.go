@@ -1153,6 +1153,25 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		envVars = append(envVars, fmt.Sprintf("%s=%s", xdgVar, xdgPath))
 	}
 
+	// Give each parallel test subprocess its own GOCOVERDIR subdirectory to prevent
+	// rename races. When multiple parallel tests share one GOCOVERDIR, they all try
+	// to write the same covmeta.<hash> file on exit (the hash is deterministic from
+	// the binary), and the atomic rename fails on macOS. Using a per-test directory
+	// avoids the conflict; coverage files are merged into the shared dir afterward.
+	if coverDir != "" {
+		perTestCoverDir := filepath.Join(tempDir, "gocoverdir")
+		if err := os.MkdirAll(perTestCoverDir, 0o755); err == nil {
+			for i, env := range envVars {
+				if strings.HasPrefix(env, "GOCOVERDIR=") {
+					envVars[i] = fmt.Sprintf("GOCOVERDIR=%s", perTestCoverDir)
+					break
+				}
+			}
+			// After the subprocess exits, merge its coverage data into the shared dir.
+			defer mergeIntoCoverDir(perTestCoverDir, coverDir)
+		}
+	}
+
 	cmd.Env = envVars
 
 	var stdout, stderr bytes.Buffer
@@ -1879,6 +1898,49 @@ func cleanDirectory(t *testing.T, workdir string) error {
 	}
 
 	return nil
+}
+
+// mergeIntoCoverDir copies coverage data files produced by a single subprocess
+// from src (a per-test GOCOVERDIR) into dst (the shared GOCOVERDIR).
+//
+// Go coverage-instrumented binaries write two kinds of files to GOCOVERDIR:
+//   - covmeta.<hash>       – package-level metadata; identical for every run of
+//     the same binary.  We skip the copy if the file already exists in dst
+//     because the content is always the same.
+//   - covcounters.<hash>.<pid>.<nanos> – per-execution counter data; unique per
+//     process (the name includes PID and nanosecond timestamp), so no conflict.
+//
+// This is safe to call concurrently from multiple goroutines because:
+//   - covmeta writes are idempotent (same content, skip-if-exists check races
+//     are harmless since content is identical).
+//   - covcounters names are globally unique, so concurrent copies never
+//     overwrite each other.
+func mergeIntoCoverDir(src, dst string) {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		// covmeta files are identical for all runs of the same binary; skip copy
+		// if the destination already exists to avoid unnecessary I/O and races.
+		if strings.HasPrefix(entry.Name(), "covmeta.") {
+			if _, statErr := os.Stat(dstPath); statErr == nil {
+				continue
+			}
+		}
+
+		data, readErr := os.ReadFile(srcPath)
+		if readErr != nil {
+			continue
+		}
+		_ = os.WriteFile(dstPath, data, 0o644) //nolint:gosec
+	}
 }
 
 // findGitRepo finds the Git repository root.

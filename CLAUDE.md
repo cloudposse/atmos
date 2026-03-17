@@ -231,6 +231,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 - `atmosRunner` is initialized once in `TestMain`, not lazily per-test, to avoid data races.
 - `cmd.Dir` sets the **subprocess** working directory; `os.Stat`/`os.ReadFile` in the test process use the test binary's starting dir. Relative paths in `FileExists`/`FileNotExists`/`FileContains` are resolved against `absoluteWorkdir` via `resolveFilePaths`/`resolveFilePathsMap` helpers.
 - Named sandboxes with terraform state (write operations) AND ordering dependencies between tests **must** use `parallel: false` on ALL related tests. Tests 3 and 4 of `atmos-functions.yaml` are an example: test 4 reads terraform state written by test 3.
+- **GOCOVERDIR isolation**: Each parallel test subprocess gets its own per-test GOCOVERDIR under `t.TempDir()`. Go coverage binaries write a `covmeta.<hash>` file on exit; with a shared GOCOVERDIR all parallel processes race to write the same filename (hash is deterministic from the binary), causing rename failures that corrupt stderr. The `mergeIntoCoverDir` helper in `cli_test.go` copies per-test coverage data back into the shared dir after each subprocess exits.
 
 **Fixtures**: `tests/test-cases/` for integration tests
 
