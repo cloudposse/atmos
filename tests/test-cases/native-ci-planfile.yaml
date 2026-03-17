@@ -3,6 +3,7 @@
 tests:
   - name: "atmos terraform planfile list"
     enabled: true
+    parallel: false
     snapshot: false
     description: "Verify 'atmos terraform planfile list' command exists and returns exit code 0."
     workdir: "fixtures/scenarios/native-ci"
@@ -16,6 +17,7 @@ tests:
 
   - name: "atmos terraform plan with ci"
     enabled: true
+    parallel: false
     snapshot: false
     description: "Runs 'atmos terraform plan mycomponent -s prod --ci' and checks for summary output and two checks."
     workdir: "fixtures/scenarios/native-ci"
@@ -42,6 +44,7 @@ tests:
 
   - name: "atmos terraform plan without ci"
     enabled: true
+    parallel: false
     snapshot: false
     description: "Runs 'atmos terraform plan mycomponent -s prod --ci' and checks for summary output and two checks."
     workdir: "fixtures/scenarios/native-ci"
@@ -67,6 +70,7 @@ tests:
 
   - name: "atmos terraform plan with ci failure"
     enabled: true
+    parallel: false
     snapshot: false
     description: "Runs 'atmos terraform plan mycomponent/failure -s prod --ci' and checks for summary output and two checks."
     workdir: "fixtures/scenarios/native-ci"
@@ -97,6 +101,7 @@ tests:
 
   - name: "atmos terraform plan with ci no changes"
     enabled: true
+    parallel: false
     snapshot: false
     description: "Runs 'atmos terraform plan mycomponent/no-changes -s prod --ci' and checks summary renders the no-changes template."
     workdir: "fixtures/scenarios/native-ci"
@@ -123,6 +128,7 @@ tests:
 
   - name: "atmos terraform plan with github actions env"
     enabled: true
+    parallel: false
     sandbox: true
     clean: true
     snapshot: false

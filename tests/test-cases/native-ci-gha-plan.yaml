@@ -3,6 +3,7 @@
 tests:
   - name: "atmos terraform plan ci summary no changes"
     enabled: true
+    parallel: false
     snapshot: false
     description: "Runs 'atmos terraform plan foobar -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the no-changes golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
@@ -41,6 +42,7 @@ tests:
 
   - name: "atmos terraform plan ci summary with changes"
     enabled: true
+    parallel: false
     snapshot: false
     description: "Runs 'atmos terraform plan foobar/changes -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the changes golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
@@ -84,6 +86,7 @@ tests:
 
   - name: "atmos terraform plan ci summary with failure"
     enabled: true
+    parallel: false
     snapshot: false
     description: "Runs 'atmos terraform plan foobar-fail -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the failure golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
