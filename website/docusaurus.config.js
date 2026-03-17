@@ -191,7 +191,7 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/dependencies',
-                        to: '/stacks/settings/depends_on'
+                        to: '/stacks/dependencies/components'
                     },
                     {
                         from: '/core-concepts/stacks/hooks',
@@ -312,13 +312,11 @@ const config = {
                     // Terraform generate command reorganization
                     {from: '/cli/commands/terraform/terraform-generate-backend', to: '/cli/commands/terraform/generate/backend'},
                     {from: '/cli/commands/terraform/terraform-generate-backends', to: '/cli/commands/terraform/generate/backends'},
-                    {from: '/cli/commands/terraform/terraform-generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
                     {from: '/cli/commands/terraform/terraform-generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/terraform-generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
                     // Legacy generate command paths (without terraform- prefix)
                     {from: '/cli/commands/terraform/generate-backend', to: '/cli/commands/terraform/generate/backend'},
                     {from: '/cli/commands/terraform/generate-backends', to: '/cli/commands/terraform/generate/backends'},
-                    {from: '/cli/commands/terraform/generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
                     {from: '/cli/commands/terraform/generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
                 ],

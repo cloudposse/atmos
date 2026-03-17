@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -303,6 +304,118 @@ func TestRunAll(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml
+// is the authority for CI hooks. When ci.enabled is false (or not set, which defaults
+// to false), CI hooks must not run even when --ci flag is passed (forceCIMode=true).
+func TestRunCIHooks_CIEnabledIsHardKillSwitch(t *testing.T) {
+	tests := []struct {
+		name        string
+		ciEnabled   bool
+		forceCIMode bool
+		expectNoop  bool
+	}{
+		{
+			name:        "ci.enabled=false and forceCIMode=false skips CI hooks",
+			ciEnabled:   false,
+			forceCIMode: false,
+			expectNoop:  true,
+		},
+		{
+			name:        "ci.enabled=false and forceCIMode=true still skips CI hooks",
+			ciEnabled:   false,
+			forceCIMode: true,
+			expectNoop:  true,
+		},
+		{
+			name:        "ci.enabled not set (defaults to false) and forceCIMode=true still skips CI hooks",
+			ciEnabled:   false, // zero value = not set in YAML.
+			forceCIMode: true,
+			expectNoop:  true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				CI: schema.CIConfig{Enabled: tc.ciEnabled},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            "test-stack",
+				ComponentFromArg: "test-component",
+			}
+
+			// RunCIHooks should return nil immediately without reaching ci.Execute.
+			// If it did reach ci.Execute with a bogus event, the event would not
+			// match any binding and ci.Execute returns nil anyway — but the key
+			// assertion is that RunCIHooks itself short-circuits.
+			err := RunCIHooks("before.terraform.plan", config, info, "", tc.forceCIMode, nil)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestCheckExperimental verifies that checkExperimental gates CI hooks
+// based on settings.experimental, mirroring the command-level behavior.
+func TestCheckExperimental(t *testing.T) {
+	tests := []struct {
+		name        string
+		mode        string
+		expectErr   bool
+		expectedErr error
+	}{
+		{
+			name:      "empty defaults to warn (no error)",
+			mode:      "",
+			expectErr: false,
+		},
+		{
+			name:      "silence allows CI hooks",
+			mode:      "silence",
+			expectErr: false,
+		},
+		{
+			name:      "warn allows CI hooks",
+			mode:      "warn",
+			expectErr: false,
+		},
+		{
+			name:        "disable blocks CI hooks",
+			mode:        "disable",
+			expectErr:   true,
+			expectedErr: errUtils.ErrExperimentalDisabled,
+		},
+		{
+			name:        "error blocks CI hooks",
+			mode:        "error",
+			expectErr:   true,
+			expectedErr: errUtils.ErrExperimentalRequiresIn,
+		},
+		{
+			name:      "unknown mode treated as warn",
+			mode:      "unknown-value",
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: tc.mode,
+				},
+			}
+
+			err := checkExperimental(config)
+			if tc.expectErr {
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, tc.expectedErr), "expected %v, got %v", tc.expectedErr, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

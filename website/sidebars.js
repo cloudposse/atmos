@@ -206,6 +206,17 @@ module.exports = {
                 {type: 'doc', id: 'ai/ai', label: 'Atmos AI'},
                 {
                     type: 'category',
+                    label: 'Native CI',
+                    collapsible: true,
+                    collapsed: true,
+                    link: { type: 'doc', id: 'ci/ci' },
+                    items: [
+                        {type: 'doc', id: 'ci/job-summaries', label: 'Job Summaries'},
+                        {type: 'doc', id: 'ci/planfile-storage', label: 'Planfile Storage'},
+                    ]
+                },
+                {
+                    type: 'category',
                     label: 'Setup Editor (IDE)',
                     link: {type: 'doc', id: 'projects/setup-editor/index'},
                     items: [

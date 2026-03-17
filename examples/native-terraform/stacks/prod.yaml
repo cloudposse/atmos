@@ -1,0 +1,21 @@
+# Prod stack — fully converted to native YAML.
+# Uses explicit `name` to override the filename.
+# Reference with: atmos terraform plan vpc -s production
+# Note: Using `-s prod` will NOT work because the canonical name is "production".
+name: production
+
+import:
+  - _defaults
+
+vars:
+  environment: prod
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"
+        environment: prod
+        tags:
+          Environment: Production
+          Team: platform

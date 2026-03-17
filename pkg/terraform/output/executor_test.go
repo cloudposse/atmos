@@ -1206,6 +1206,193 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 	}
 }
 
+// TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace verifies that when skipInit=true,
+// GetAllOutputs skips CleanWorkspace, terraform init, and workspace operations, only running
+// terraform output. This is critical for CI PostRunE context where the component was just
+// applied and auth credentials may not be available for re-initialization.
+func TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache.
+	stackSlug := "skipinit-stack-skipinit-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	sections := validSections()
+
+	// DescribeComponent should be called with ProcessYamlFunctions=false when skipInit=true and authManager=nil.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.False(t, params.ProcessYamlFunctions,
+				"ProcessYamlFunctions should be false when skipInit=true and authManager=nil")
+			return sections, nil
+		},
+	)
+
+	// Quiet mode sets stdout/stderr.
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+
+	// Init and workspace operations should NOT be called.
+	// (If they were called, the test would fail with "unexpected call".)
+
+	// Only terraform output should be called.
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-skipinit"`)},
+	}, nil)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "skipinit-component", "skipinit-stack", true, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-skipinit", outputs["vpc_id"])
+}
+
+// TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace verifies that when
+// skipInit=false, GetAllOutputs runs the full init/workspace sequence as normal.
+func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache.
+	stackSlug := "noskip-stack-noskip-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	sections := validSections()
+
+	// DescribeComponent should be called with ProcessYamlFunctions=true when skipInit=false.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.True(t, params.ProcessYamlFunctions,
+				"ProcessYamlFunctions should be true when skipInit=false")
+			return sections, nil
+		},
+	)
+
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+
+	// Init and workspace operations SHOULD be called.
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-noskip"`)},
+	}, nil)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "noskip-component", "noskip-stack", false, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-noskip", outputs["vpc_id"])
+}
+
+// TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions verifies that
+// when skipInit=true but authManager is provided, YAML functions are still processed.
+func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache.
+	stackSlug := "skipauth-stack-skipauth-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	sections := validSections()
+
+	// Use a non-nil authManager (string is fine since it won't be type-asserted in this path).
+	fakeAuthManager := "fake-auth-manager"
+
+	// DescribeComponent should be called with ProcessYamlFunctions=true when authManager is non-nil.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.True(t, params.ProcessYamlFunctions,
+				"ProcessYamlFunctions should be true when authManager is provided, even with skipInit=true")
+			assert.Equal(t, fakeAuthManager, params.AuthManager,
+				"AuthManager should be passed through")
+			return sections, nil
+		},
+	)
+
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+
+	// Init should NOT be called (skipInit=true).
+	// Only terraform output should be called.
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-auth"`)},
+	}, nil)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "skipauth-component", "skipauth-stack", true, fakeAuthManager)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-auth", outputs["vpc_id"])
+}
+
+// TestExecutor_Execute_SkipInit_DirectCall verifies SkipInit behavior at the execute() level.
+func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Setup expectations — no Init or Workspace calls expected.
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"result": {Value: []byte(`"skip_init_direct"`)},
+	}, nil)
+
+	ctx := context.Background()
+	outputs, err := exec.execute(ctx, atmosConfig, "comp", "stack", sections, nil, &OutputOptions{QuietMode: true, SkipInit: true})
+	require.NoError(t, err)
+	assert.Equal(t, "skip_init_direct", outputs["result"])
+}
+
 // TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable verifies that the executor
 // resolves toolchain-installed executables to absolute paths before passing them to the
 // runner factory. This ensures that template functions like atmos.Component() and YAML
