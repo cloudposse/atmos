@@ -751,8 +751,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			exitCode = 0
 		}
 
-		// Upload plan status if requested.
-		if uploadStatusFlag && shouldUploadStatus(&info) {
+		// Upload status if requested (plan) or automatically (apply).
+		if (uploadStatusFlag || info.SubCommand == "apply") && shouldUploadStatus(&info) {
 			client, cerr := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
 			if cerr != nil {
 				return cerr

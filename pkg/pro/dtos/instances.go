@@ -24,5 +24,6 @@ type InstanceStatusUploadRequest struct {
 	RepoHost      string `json:"repo_host"`
 	Component     string `json:"component"`
 	Stack         string `json:"stack"`
-	HasDrift      bool   `json:"has_drift"`
+	Command       string `json:"command"`
+	ExitCode      int    `json:"exit_code"`
 }
