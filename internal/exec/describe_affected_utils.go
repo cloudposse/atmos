@@ -132,7 +132,10 @@ func executeDescribeAffected(
 	if err != nil {
 		// Propagate unexpected errors (permission issues, invalid paths, etc.) to avoid silently
 		// producing incorrect results.
-		if !errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+		// ErrNoStackManifestsFound and ErrFailedToFindImport both indicate that no stack manifests
+		// were found in the BASE ref, which is a valid scenario (e.g. all stacks are new in HEAD,
+		// or the stacks directory did not exist in the BASE ref).
+		if !errors.Is(err, errUtils.ErrNoStackManifestsFound) && !errors.Is(err, errUtils.ErrFailedToFindImport) {
 			return nil, nil, nil, err
 		}
 		// No stack manifests found in BASE means all stacks were deleted in HEAD.

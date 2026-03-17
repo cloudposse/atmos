@@ -50,14 +50,17 @@ func FindAllStackConfigsInPathsForStack(
 
 		// If no matches were found across all patterns, we perform an additional check:
 		// We try to get matches for the first pattern only to determine if there's a genuine error
-		// (like permission issues or invalid path) versus simply no matching files.
+		// (like permission issues or invalid pattern syntax) versus simply no matching files.
+		// ErrFailedToFindImport means no files matched the glob (not a real error), so we continue
+		// to the next path in that case rather than propagating it as a failure.
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
-			if err != nil {
+			if err != nil && !errors.Is(err, errUtils.ErrFailedToFindImport) {
 				return nil, nil, false, err
 			}
-			// If there's no error but still no matches, we continue to the next path
-			// This happens when the pattern is valid but no files match it
+			// If there's no error (or only ErrFailedToFindImport) but still no matches,
+			// we continue to the next path.
+			// This happens when the pattern is valid but no files match it.
 			continue
 		}
 
@@ -143,14 +146,17 @@ func FindAllStackConfigsInPaths(
 
 		// If no matches were found across all patterns, we perform an additional check:
 		// We try to get matches for the first pattern only to determine if there's a genuine error
-		// (like permission issues or invalid path) versus simply no matching files.
+		// (like permission issues or invalid pattern syntax) versus simply no matching files.
+		// ErrFailedToFindImport means no files matched the glob (not a real error), so we continue
+		// to the next path in that case rather than propagating it as a failure.
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
-			if err != nil {
+			if err != nil && !errors.Is(err, errUtils.ErrFailedToFindImport) {
 				return nil, nil, err
 			}
-			// If there's no error but still no matches, we continue to the next path
-			// This happens when the pattern is valid but no files match it
+			// If there's no error (or only ErrFailedToFindImport) but still no matches,
+			// we continue to the next path.
+			// This happens when the pattern is valid but no files match it.
 			continue
 		}
 

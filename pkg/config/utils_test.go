@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -393,4 +394,48 @@ func TestFindAllStackConfigsInPaths(t *testing.T) {
 	assert.Equal(t, "deploy/prod.yaml", relativePaths[1])
 	assert.Equal(t, "deploy/sandbox.yaml", relativePaths[2])
 	assert.Equal(t, "deploy/staging.yaml", relativePaths[3])
+}
+
+// TestFindAllStackConfigsInPathsForStack_NonExistentPath tests that when the stacks directory
+// does not exist (e.g. in a remote/base repo during describe-affected), the function returns
+// ErrNoStackManifestsFound instead of ErrFailedToFindImport.
+// Regression test for: https://github.com/cloudposse/atmos/issues/2179
+func TestFindAllStackConfigsInPathsForStack_NonExistentPath(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: "/nonexistent/path/stacks",
+	}
+
+	_, _, _, err := FindAllStackConfigsInPathsForStack(
+		atmosConfig,
+		"",
+		[]string{"/nonexistent/path/stacks/**/*.yaml"},
+		[]string{},
+	)
+
+	assert.Error(t, err)
+	// Must NOT be ErrFailedToFindImport - that would cause describe-affected to fail instead of
+	// treating the empty BASE as valid ("all stacks are new").
+	assert.NotErrorIs(t, err, errUtils.ErrFailedToFindImport)
+	// Must be ErrNoStackManifestsFound so callers can handle it correctly.
+	assert.ErrorIs(t, err, errUtils.ErrNoStackManifestsFound)
+}
+
+// TestFindAllStackConfigsInPaths_NonExistentPath tests that when the stacks directory
+// does not exist, the function does NOT return ErrFailedToFindImport (it returns nil error
+// with empty paths, since FindAllStackConfigsInPaths does not error on empty results).
+func TestFindAllStackConfigsInPaths_NonExistentPath(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: "/nonexistent/path/stacks",
+	}
+
+	absolutePaths, _, err := FindAllStackConfigsInPaths(
+		&atmosConfig,
+		[]string{"/nonexistent/path/stacks/**/*.yaml"},
+		[]string{},
+	)
+
+	// FindAllStackConfigsInPaths returns nil error with empty results (not ErrFailedToFindImport)
+	// when no stacks are found.
+	assert.NoError(t, err)
+	assert.Empty(t, absolutePaths)
 }
