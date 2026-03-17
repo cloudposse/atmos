@@ -59,7 +59,6 @@ func FindAllStackConfigsInPathsForStack(
 					WithHint("Check that the stacks directory exists and contains stack configuration files").
 					WithContext("pattern", patterns[0]).
 					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
-					WithExitCode(2).
 					Err()
 			}
 			// If there's no error but still no matches, we continue to the next path
@@ -158,7 +157,6 @@ func FindAllStackConfigsInPaths(
 					WithHint("Check that the stacks directory exists and contains stack configuration files").
 					WithContext("pattern", patterns[0]).
 					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
-					WithExitCode(2).
 					Err()
 			}
 			// If there's no error but still no matches, we continue to the next path

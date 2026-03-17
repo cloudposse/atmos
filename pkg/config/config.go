@@ -9,6 +9,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -331,19 +332,32 @@ func tryResolveWithGitRoot(path string, isExplicitRelative bool, cliConfigPath s
 	// is set to a CWD-relative path (e.g., ".terraform/modules/monorepo") but the
 	// git root is a different directory.
 	gitRootJoined := filepath.Join(gitRoot, path)
-	if _, err := os.Stat(gitRootJoined); err == nil {
+	if _, statErr := os.Stat(gitRootJoined); statErr == nil {
 		return gitRootJoined, nil
+	} else if !os.IsNotExist(statErr) {
+		return "", errUtils.Build(errUtils.ErrStatFile).
+			WithCause(statErr).
+			WithExplanation(fmt.Sprintf("Cannot access path: %q", gitRootJoined)).
+			Err()
 	}
 
 	// Git root path doesn't exist — try CWD-relative.
 	cwdJoined, err := filepath.Abs(path)
 	if err != nil {
-		return gitRootJoined, err
+		return "", errUtils.Build(errUtils.ErrPathResolution).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to CWD", path)).
+			Err()
 	}
-	if _, err := os.Stat(cwdJoined); err == nil {
+	if _, statErr := os.Stat(cwdJoined); statErr == nil {
 		log.Trace("Path not found at git root, using CWD-relative path",
 			"path", path, "git_root", gitRoot, "resolved", cwdJoined)
 		return cwdJoined, nil
+	} else if !os.IsNotExist(statErr) {
+		return "", errUtils.Build(errUtils.ErrStatFile).
+			WithCause(statErr).
+			WithExplanation(fmt.Sprintf("Cannot access path: %q", cwdJoined)).
+			Err()
 	}
 
 	// Neither exists — return git root path (original behavior) so the error message

@@ -151,46 +151,79 @@ func TestInitCliConfig_EnvVarBasePath_ResolvesRelativeToCWD(t *testing.T) {
 }
 
 // TestTryResolveWithGitRoot_ExistingPathAtGitRoot verifies that when a simple relative path
-// (like "stacks") exists at the git root, tryResolveWithGitRoot returns the git-root-joined
-// path. This ensures the "run Atmos from any subdirectory" feature is not broken by the
-// os.Stat fallback added to fix ATMOS_BASE_PATH resolution.
+// exists at the git root, resolveAbsolutePath returns the git-root-joined path. This ensures
+// the "run Atmos from any subdirectory" feature is not broken by the os.Stat fallback added
+// to fix ATMOS_BASE_PATH resolution.
 func TestTryResolveWithGitRoot_ExistingPathAtGitRoot(t *testing.T) {
-	tmpDir := t.TempDir()
+	gitRoot := getGitRootOrEmpty()
+	require.NotEmpty(t, gitRoot, "test requires git root discovery")
 
-	// Resolve symlinks (macOS /var -> /private/var).
+	// Choose a path that exists at the repo root.
+	pathAtGitRoot := "go.mod"
+	_, err := os.Stat(filepath.Join(gitRoot, pathAtGitRoot))
+	require.NoError(t, err)
+
+	// Move to a nested CWD where "go.mod" does NOT exist, to exercise the git-root resolution path.
+	t.Chdir(filepath.Join(gitRoot, "pkg", "config"))
+
+	resolved, err := resolveAbsolutePath(pathAtGitRoot, "")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(gitRoot, pathAtGitRoot), resolved)
+}
+
+// TestTryResolveWithGitRoot_CWDFallback verifies that when a simple relative path does NOT
+// exist at the git root but DOES exist relative to CWD, the resolver falls back to the
+// CWD-relative path. This is the core fix for the ATMOS_BASE_PATH scenario.
+func TestTryResolveWithGitRoot_CWDFallback(t *testing.T) {
+	gitRoot := getGitRootOrEmpty()
+	require.NotEmpty(t, gitRoot, "test requires git root discovery")
+
+	// Create a temp directory to use as CWD.
+	tmpDir := t.TempDir()
 	tmpDir, err := filepath.EvalSymlinks(tmpDir)
 	require.NoError(t, err)
 
-	// Create a "stacks" directory at the git root (simulates typical project layout).
-	stacksDir := filepath.Join(tmpDir, "stacks")
-	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	// Create a unique path that exists at CWD but NOT at git root.
+	cwdOnlyPath := filepath.Join("test-cwd-fallback-unique-dir", "nested")
+	absExpected := filepath.Join(tmpDir, cwdOnlyPath)
+	require.NoError(t, os.MkdirAll(absExpected, 0o755))
 
-	// Create a subdirectory to simulate CWD being a component directory.
-	subDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
-	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	// Verify the path does NOT exist at git root.
+	_, statErr := os.Stat(filepath.Join(gitRoot, cwdOnlyPath))
+	require.True(t, os.IsNotExist(statErr), "path should not exist at git root")
 
-	// Change to subdirectory — simulates running Atmos from a component dir.
-	t.Chdir(subDir)
+	// Change to tmpDir so CWD-relative resolution finds the path.
+	t.Chdir(tmpDir)
 
-	// Call tryResolveWithGitRoot directly. The "stacks" path exists at the git root (tmpDir)
-	// but NOT at CWD (subDir). It should resolve to the git root version.
-	// We simulate this by temporarily setting the git root.
-	// Instead of calling the internal function directly, we verify via resolveAbsolutePath
-	// which uses the same code path.
+	resolved, err := resolveAbsolutePath(cwdOnlyPath, "")
+	require.NoError(t, err)
+	assert.Equal(t, absExpected, resolved,
+		"should fall back to CWD-relative path when git root path doesn't exist")
+}
 
-	// Verify the stacks dir does NOT exist relative to CWD.
-	_, statErr := os.Stat(filepath.Join(subDir, "stacks"))
-	assert.True(t, os.IsNotExist(statErr), "stacks should not exist at CWD")
+// TestTryResolveWithGitRoot_NeitherExists verifies that when a simple relative path exists
+// at neither git root nor CWD, the resolver returns the git-root-joined path (original
+// behavior for consistent error messages).
+func TestTryResolveWithGitRoot_NeitherExists(t *testing.T) {
+	gitRoot := getGitRootOrEmpty()
+	require.NotEmpty(t, gitRoot, "test requires git root discovery")
 
-	// Verify the stacks dir DOES exist relative to the project root.
-	_, statErr = os.Stat(stacksDir)
-	assert.NoError(t, statErr, "stacks should exist at project root")
+	// Use a path that doesn't exist anywhere.
+	nonexistentPath := "nonexistent-path-that-should-not-exist-anywhere-12345"
+
+	resolved, err := resolveAbsolutePath(nonexistentPath, "")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(gitRoot, nonexistentPath), resolved,
+		"should return git-root-joined path when neither location exists")
 }
 
 // TestResolveSimpleRelativeBasePath verifies the helper function that converts
 // simple relative paths to absolute (CWD-relative) while leaving config-relative
 // paths (starting with "." or "..") unchanged.
 func TestResolveSimpleRelativeBasePath(t *testing.T) {
+	absSample, err := filepath.Abs(filepath.Join("tmp", "atmos"))
+	require.NoError(t, err)
+
 	tests := []struct {
 		name     string
 		input    string
@@ -205,7 +238,7 @@ func TestResolveSimpleRelativeBasePath(t *testing.T) {
 		},
 		{
 			name:    "absolute path returned as-is",
-			input:   "/usr/local/atmos",
+			input:   absSample,
 			wantAbs: true,
 		},
 		{
