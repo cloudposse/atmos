@@ -121,6 +121,6 @@ tests:
           - 'Invalid function argument'
           - 'Failed because failure mode is enabled'
         "github-output-failure.txt":
-          - "has_changes=false"
+          - "has_changes=true"
           - "has_errors=true"
           - "exit_code=1"
