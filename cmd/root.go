@@ -63,6 +63,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/ai/skill"
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/aws"
+	_ "github.com/cloudposse/atmos/cmd/ci"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
