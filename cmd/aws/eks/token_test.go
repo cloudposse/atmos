@@ -1,4 +1,4 @@
-package cmd
+package eks
 
 import (
 	"os"
@@ -12,50 +12,54 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestAuthEKSTokenCmd_Help(t *testing.T) {
-	assert.Equal(t, "eks-token", authEKSTokenCmd.Use)
-	assert.Equal(t, "Generate an EKS bearer token for kubectl", authEKSTokenCmd.Short)
-	assert.Contains(t, authEKSTokenCmd.Long, "ExecCredential")
+func TestTokenCmd_Help(t *testing.T) {
+	assert.Equal(t, "token", tokenCmd.Use)
+	assert.Equal(t, "Generate an EKS bearer token for kubectl", tokenCmd.Short)
+	assert.Contains(t, tokenCmd.Long, "ExecCredential")
 }
 
-func TestAuthEKSTokenCmd_HasFlags(t *testing.T) {
-	_ = NewTestKit(t)
-
+func TestTokenCmd_HasFlags(t *testing.T) {
 	// Verify --cluster-name flag exists.
-	clusterFlag := authEKSTokenCmd.Flags().Lookup("cluster-name")
+	clusterFlag := tokenCmd.Flags().Lookup("cluster-name")
 	require.NotNil(t, clusterFlag)
 	assert.Equal(t, "", clusterFlag.DefValue)
 
 	// Verify --region flag exists.
-	regionFlag := authEKSTokenCmd.Flags().Lookup("region")
+	regionFlag := tokenCmd.Flags().Lookup("region")
 	require.NotNil(t, regionFlag)
 	assert.Equal(t, "", regionFlag.DefValue)
+
+	// Verify --identity flag exists.
+	identityFlag := tokenCmd.Flags().Lookup("identity")
+	require.NotNil(t, identityFlag)
+	assert.Equal(t, "", identityFlag.DefValue)
+	assert.Equal(t, "i", identityFlag.Shorthand)
 }
 
-func TestAuthEKSTokenCmd_NoArgs(t *testing.T) {
+func TestTokenCmd_NoArgs(t *testing.T) {
 	// Command accepts no positional args.
-	assert.Nil(t, authEKSTokenCmd.Args(authEKSTokenCmd, []string{}))
-	assert.NotNil(t, authEKSTokenCmd.Args(authEKSTokenCmd, []string{"extra"}))
+	assert.Nil(t, tokenCmd.Args(tokenCmd, []string{}))
+	assert.NotNil(t, tokenCmd.Args(tokenCmd, []string{"extra"}))
 }
 
-func TestAuthEKSTokenCmd_ParentIsAuthCmd(t *testing.T) {
-	assert.NotNil(t, authEKSTokenCmd.Parent())
-	if authEKSTokenCmd.Parent() != nil {
-		assert.Equal(t, "auth", authEKSTokenCmd.Parent().Name())
+func TestTokenCmd_ParentIsEksCmd(t *testing.T) {
+	assert.NotNil(t, tokenCmd.Parent())
+	if tokenCmd.Parent() != nil {
+		assert.Equal(t, "eks", tokenCmd.Parent().Name())
 	}
 }
 
-func TestAuthEKSTokenCmd_SilencesUsage(t *testing.T) {
+func TestTokenCmd_SilencesUsage(t *testing.T) {
 	// Usage should be silenced since kubectl calls this automatically.
-	assert.True(t, authEKSTokenCmd.SilenceUsage)
+	assert.True(t, tokenCmd.SilenceUsage)
 }
 
-func TestAuthEKSTokenCmd_LongDescription(t *testing.T) {
-	assert.Contains(t, authEKSTokenCmd.Long, "kubectl exec credential plugin")
-	assert.Contains(t, authEKSTokenCmd.Long, "--cluster-name")
-	assert.Contains(t, authEKSTokenCmd.Long, "--region")
-	assert.Contains(t, authEKSTokenCmd.Long, "--identity")
-	assert.Contains(t, authEKSTokenCmd.Long, "Examples:")
+func TestTokenCmd_LongDescription(t *testing.T) {
+	assert.Contains(t, tokenCmd.Long, "kubectl exec credential plugin")
+	assert.Contains(t, tokenCmd.Long, "--cluster-name")
+	assert.Contains(t, tokenCmd.Long, "--region")
+	assert.Contains(t, tokenCmd.Long, "--identity")
+	assert.Contains(t, tokenCmd.Long, "Examples:")
 }
 
 func TestResolveDefaultIdentity_NilConfig(t *testing.T) {
@@ -172,4 +176,41 @@ func TestExecCredentialStruct(t *testing.T) {
 	assert.Equal(t, "client.authentication.k8s.io/v1beta1", cred.APIVersion)
 	assert.Equal(t, "ExecCredential", cred.Kind)
 	assert.Equal(t, "k8s-aws-v1.test-token", cred.Status.Token)
+}
+
+func TestResolveIdentity_Flag(t *testing.T) {
+	// Create a temporary command to test identity resolution.
+	cmd := tokenCmd
+	// Reset flag for test.
+	err := cmd.Flags().Set("identity", "test-identity")
+	require.NoError(t, err)
+
+	result := resolveIdentity(cmd)
+	assert.Equal(t, "test-identity", result)
+
+	// Reset.
+	t.Cleanup(func() {
+		_ = cmd.Flags().Set("identity", "")
+	})
+}
+
+func TestResolveIdentity_EnvVar(t *testing.T) {
+	t.Setenv("ATMOS_IDENTITY", "env-identity")
+
+	// Create a fresh command to avoid flag state from other tests.
+	cmd := tokenCmd
+	_ = cmd.Flags().Set("identity", "")
+
+	result := resolveIdentity(cmd)
+	assert.Equal(t, "env-identity", result)
+}
+
+func TestResolveIdentity_Empty(t *testing.T) {
+	t.Setenv("ATMOS_IDENTITY", "")
+
+	cmd := tokenCmd
+	_ = cmd.Flags().Set("identity", "")
+
+	result := resolveIdentity(cmd)
+	assert.Equal(t, "", result)
 }

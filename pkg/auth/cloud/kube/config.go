@@ -205,8 +205,9 @@ func BuildClusterConfig(info *awsCloud.EKSClusterInfo, alias, identityName strin
 
 	// Build exec plugin args.
 	execArgs := []string{
-		"auth",
-		"eks-token",
+		"aws",
+		"eks",
+		"token",
 		"--cluster-name",
 		info.Name,
 		"--region",

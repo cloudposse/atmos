@@ -6,7 +6,6 @@ Valid subcommands are:
 
   • console
   • ecr-login
-  • eks-token
   • env
   • exec
   • list

@@ -1,4 +1,4 @@
-package cmd
+package eks
 
 import (
 	"context"
@@ -25,9 +25,9 @@ import (
 // execCredentialAPIVersion is the Kubernetes exec credential plugin API version.
 const execCredentialAPIVersion = "client.authentication.k8s.io/v1beta1"
 
-// authEKSTokenCmd generates a short-lived EKS bearer token for kubectl.
-var authEKSTokenCmd = &cobra.Command{
-	Use:   "eks-token",
+// tokenCmd generates a short-lived EKS bearer token for kubectl.
+var tokenCmd = &cobra.Command{
+	Use:   "token",
 	Short: "Generate an EKS bearer token for kubectl",
 	Long: `Generate a short-lived EKS bearer token using STS pre-signed GetCallerIdentity URL.
 
@@ -40,14 +40,14 @@ kubectl to call this command for token generation.
 
 Examples:
   # Generate token for a cluster (typically called by kubectl)
-  atmos auth eks-token --cluster-name my-cluster --region us-east-2
+  atmos aws eks token --cluster-name my-cluster --region us-east-2
 
   # Generate token using a specific identity
-  atmos auth eks-token --cluster-name my-cluster --region us-east-2 --identity dev-admin`,
+  atmos aws eks token --cluster-name my-cluster --region us-east-2 --identity dev-admin`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
-	RunE:               executeAuthEKSTokenCommand,
+	RunE:               executeTokenCommand,
 	// Suppress usage on errors since kubectl invokes this automatically.
 	SilenceUsage: true,
 }
@@ -65,15 +65,13 @@ type execCredentialStatus struct {
 	Token               string `json:"token"`
 }
 
-func executeAuthEKSTokenCommand(cmd *cobra.Command, args []string) error {
-	handleHelpRequest(cmd, args)
-
+func executeTokenCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
-	defer perf.Track(&atmosConfig, "cmd.executeAuthEKSTokenCommand")()
+	defer perf.Track(&atmosConfig, "eks.executeTokenCommand")()
 
 	ctx := context.Background()
 
@@ -90,14 +88,14 @@ func executeAuthEKSTokenCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve identity: flag > env var > default.
-	identityName := GetIdentityFromFlags(cmd, os.Args)
+	identityName := resolveIdentity(cmd)
 
 	log.Debug("Generating EKS token", "cluster", clusterName, "region", region, "identity", identityName)
 
 	// Authenticate to get credentials.
 	// Skip integrations to avoid rewriting the kubeconfig during token generation.
 	ctx = auth.ContextWithSkipIntegrations(ctx)
-	creds, err := authenticateForEKSToken(ctx, &atmosConfig.Auth, atmosConfig.CliConfigPath, identityName)
+	creds, err := authenticateForToken(ctx, &atmosConfig.Auth, atmosConfig.CliConfigPath, identityName)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSTokenGeneration, err)
 	}
@@ -106,7 +104,7 @@ func executeAuthEKSTokenCommand(cmd *cobra.Command, args []string) error {
 	// for the STS presign call. This ensures credentials are available regardless
 	// of how the exec plugin is invoked (e.g., by kubectl).
 	if err := exportAWSCredsToEnv(creds); err != nil {
-		log.Warn("eks-token: failed to export AWS credentials to environment", "error", err)
+		log.Warn("eks token: failed to export AWS credentials to environment", "error", err)
 	}
 
 	// Generate token.
@@ -133,9 +131,25 @@ func executeAuthEKSTokenCommand(cmd *cobra.Command, args []string) error {
 	return data.Write(string(output))
 }
 
-// authenticateForEKSToken authenticates an identity and returns credentials.
-func authenticateForEKSToken(ctx context.Context, authConfig *schema.AuthConfig, cliConfigPath, identityName string) (types.ICredentials, error) {
-	defer perf.Track(nil, "cmd.authenticateForEKSToken")()
+// resolveIdentity resolves the identity name from flag, env var, or returns empty.
+func resolveIdentity(cmd *cobra.Command) string {
+	// Check flag first.
+	identity, _ := cmd.Flags().GetString("identity")
+	if identity != "" {
+		return identity
+	}
+
+	// Fall back to environment variable.
+	if envIdentity := os.Getenv("ATMOS_IDENTITY"); envIdentity != "" {
+		return envIdentity
+	}
+
+	return ""
+}
+
+// authenticateForToken authenticates an identity and returns credentials.
+func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cliConfigPath, identityName string) (types.ICredentials, error) {
+	defer perf.Track(nil, "eks.authenticateForToken")()
 
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
@@ -188,7 +202,7 @@ func resolveDefaultIdentity(authConfig *schema.AuthConfig) string {
 // exportAWSCredsToEnv sets AWS credential environment variables in the current process.
 // This ensures the AWS SDK can authenticate for the STS presign call used in token generation.
 func exportAWSCredsToEnv(creds types.ICredentials) error {
-	defer perf.Track(nil, "cmd.exportAWSCredsToEnv")()
+	defer perf.Track(nil, "eks.exportAWSCredsToEnv")()
 
 	awsCreds, ok := creds.(*types.AWSCredentials)
 	if !ok {
@@ -224,7 +238,8 @@ func exportAWSCredsToEnv(creds types.ICredentials) error {
 }
 
 func init() {
-	authEKSTokenCmd.Flags().String("cluster-name", "", "EKS cluster name (required)")
-	authEKSTokenCmd.Flags().String("region", "", "AWS region (required)")
-	authCmd.AddCommand(authEKSTokenCmd)
+	tokenCmd.Flags().String("cluster-name", "", "EKS cluster name (required)")
+	tokenCmd.Flags().String("region", "", "AWS region (required)")
+	tokenCmd.Flags().StringP("identity", "i", "", "Atmos identity to authenticate with")
+	EksCmd.AddCommand(tokenCmd)
 }
