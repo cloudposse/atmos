@@ -148,19 +148,14 @@ ci:
     terraform:
       plan: "plan.md"
       apply: "apply.md"
-```
 
-To store planfiles across CI pipeline stages, add:
-
-```yaml
+# To store planfiles across CI pipeline stages, add:
 components:
   terraform:
     planfiles:
       # Stores are tried in priority order
       priority:
         - "github"
-        - "s3"
-        - "local"
 
       # Named stores
       stores:
@@ -169,19 +164,7 @@ components:
           options:
             retention_days: 7
 
-        s3:
-          type: aws/s3
-          options:
-            bucket: "my-terraform-planfiles"
-            prefix: "atmos/"
-            region: "us-east-1"
-
-        local:
-          type: local/dir
-          options:
-            path: ".atmos/planfiles"
 ```
-
 </TabItem>
 </Tabs>
 
