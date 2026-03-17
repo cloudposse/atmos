@@ -437,6 +437,7 @@ var (
 	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
 	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
 	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
+	ErrCircularComponentInheritance     = ErrStackCircularInheritance
 
 	// Terraform-specific subsection errors.
 	ErrInvalidTerraformCommand            = errors.New("invalid terraform command")
