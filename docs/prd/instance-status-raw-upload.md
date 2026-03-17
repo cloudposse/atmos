@@ -2,16 +2,9 @@
 
 ## Overview
 
-The Atmos CLI sends raw execution results (command + exit code) to Atmos Pro after `terraform plan` and `terraform apply`. Atmos Pro interprets the data server-side. The CLI is a dumb pipe — it does not map exit codes to status strings.
+Previously, the Atmos CLI interpreted terraform exit codes locally — mapping them to status strings like `"in_sync"` or `"drifted"` — before sending the result to Atmos Pro. This meant Atmos Pro never saw the raw data, status interpretation was coupled to CLI releases, and error exit codes were silently dropped.
 
-This is the CLI-side counterpart to the full PRD in the Atmos Pro repo:
-**`cloudposse-corp/apps` → `apps/atmos-pro/prd/instance-status-from-workflow-hooks.md`**
-
-Refer to that document for the complete design rationale, server-side interpretation logic, webhook fallback strategy, considered alternatives, and rollout plan.
-
-## Linear
-
-[AP-163](https://linear.app/cloudposse/issue/AP-163/investigate-unknown-status-issue-reported-by-daniel)
+This change makes the CLI a dumb pipe: it sends the raw command (`plan` or `apply`) and exit code to Atmos Pro, which interprets them server-side. This lets Atmos Pro evolve status logic without requiring CLI updates. The upload is also extended from plan-only to both plan and apply, eliminating the "Unknown" status problem on the dashboard.
 
 ## What Changed in the CLI
 
