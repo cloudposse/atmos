@@ -25,6 +25,17 @@ import (
 // execCredentialAPIVersion is the Kubernetes exec credential plugin API version.
 const execCredentialAPIVersion = "client.authentication.k8s.io/v1beta1"
 
+// initCliConfigFn loads Atmos CLI configuration. Overridable in tests.
+var initCliConfigFn = func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	return cfg.InitCliConfig(info, processStacks)
+}
+
+// authenticateForTokenFn authenticates an identity and returns credentials. Overridable in tests.
+var authenticateForTokenFn = authenticateForToken
+
+// getEKSTokenFn generates an EKS bearer token. Overridable in tests.
+var getEKSTokenFn = awsCloud.GetToken
+
 // tokenCmd generates a short-lived EKS bearer token for kubectl.
 var tokenCmd = &cobra.Command{
 	Use:   "token",
@@ -67,7 +78,7 @@ type execCredentialStatus struct {
 
 func executeTokenCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := initCliConfigFn(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
@@ -95,7 +106,7 @@ func executeTokenCommand(cmd *cobra.Command, args []string) error {
 	// Authenticate to get credentials.
 	// Skip integrations to avoid rewriting the kubeconfig during token generation.
 	ctx = auth.ContextWithSkipIntegrations(ctx)
-	creds, err := authenticateForToken(ctx, &atmosConfig.Auth, atmosConfig.CliConfigPath, identityName)
+	creds, err := authenticateForTokenFn(ctx, &atmosConfig.Auth, atmosConfig.CliConfigPath, identityName)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSTokenGeneration, err)
 	}
@@ -108,7 +119,7 @@ func executeTokenCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate token.
-	token, expiresAt, err := awsCloud.GetToken(ctx, creds, clusterName, region)
+	token, expiresAt, err := getEKSTokenFn(ctx, creds, clusterName, region)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSTokenGeneration, err)
 	}
