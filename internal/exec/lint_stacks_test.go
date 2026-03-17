@@ -197,8 +197,8 @@ func TestStackYAMLFiles(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "stack.yaml"), []byte("vars: {}"), 0600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "template.yaml.tmpl"), []byte("{{ .var }}"), 0600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "stack.yaml"), []byte("vars: {}"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "template.yaml.tmpl"), []byte("{{ .var }}"), 0o600))
 
 		files, err := stackYAMLFiles(dir)
 		require.NoError(t, err)
@@ -214,7 +214,7 @@ func TestStackYAMLFiles(t *testing.T) {
 	t.Run("returns absolute paths", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "dev.yaml"), []byte("vars: {}"), 0600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "dev.yaml"), []byte("vars: {}"), 0o600))
 
 		files, err := stackYAMLFiles(dir)
 		require.NoError(t, err)
@@ -234,9 +234,9 @@ func TestStackYAMLFiles(t *testing.T) {
 	t.Run("multiple yaml files returned", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "dev.yaml"), []byte("vars: {}"), 0600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "prod.yaml"), []byte("vars: {}"), 0600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "template.yaml.tmpl"), []byte("{{ . }}"), 0600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "dev.yaml"), []byte("vars: {}"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "prod.yaml"), []byte("vars: {}"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "template.yaml.tmpl"), []byte("{{ . }}"), 0o600))
 
 		files, err := stackYAMLFiles(dir)
 		require.NoError(t, err)

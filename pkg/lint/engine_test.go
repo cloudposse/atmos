@@ -13,11 +13,11 @@ type errRuleForTest struct {
 	runErr error
 }
 
-func (r *errRuleForTest) ID() string                             { return "E-01" }
-func (r *errRuleForTest) Name() string                           { return "Error Rule" }
-func (r *errRuleForTest) Description() string                    { return "Always returns an error." }
-func (r *errRuleForTest) Severity() Severity                     { return SeverityError }
-func (r *errRuleForTest) AutoFixable() bool                      { return false }
+func (r *errRuleForTest) ID() string                               { return "E-01" }
+func (r *errRuleForTest) Name() string                             { return "Error Rule" }
+func (r *errRuleForTest) Description() string                      { return "Always returns an error." }
+func (r *errRuleForTest) Severity() Severity                       { return SeverityError }
+func (r *errRuleForTest) AutoFixable() bool                        { return false }
 func (r *errRuleForTest) Run(_ LintContext) ([]LintFinding, error) { return nil, r.runErr }
 
 // TestDefaultRules verifies that DefaultRules returns nil (rules come from pkg/lint/rules.All).
