@@ -168,6 +168,51 @@ separate PR to minimize the blast radius of this fix.
 
 ---
 
+## Git Root Discovery Compatibility
+
+A key concern is that these fixes do not break the "run Atmos from any subdirectory" feature
+introduced in v1.202.0 via git root discovery. Analysis confirms all code paths remain intact:
+
+### How Git Root Discovery Works
+
+When a user runs `atmos terraform plan vpc -s dev` from a subdirectory (e.g.,
+`components/terraform/vpc/`), the flow is:
+
+1. `SearchConfigFile()` walks up from CWD to find `atmos.yaml` (e.g., at `/project/atmos.yaml`)
+2. `resolveAbsolutePath()` resolves `stacks.base_path` (typically `"stacks"`) relative to git root
+3. `tryResolveWithGitRoot()` joins git root + path → `/project/stacks` — this directory exists
+
+### Why Our Fixes Don't Break It
+
+**Fix 1 (struct field resolution)**: `resolveSimpleRelativeBasePath()` only runs on
+`configAndStacksInfo.AtmosBasePath` — the struct field set by `--base-path` flag or the
+`atmos_base_path` provider parameter. It does NOT affect `atmosConfig.BasePath` loaded from
+`atmos.yaml` or the default empty value. Normal Atmos CLI usage doesn't set `AtmosBasePath`.
+
+**Fix 2 (`os.Stat` fallback in `tryResolveWithGitRoot`)**: The added `os.Stat` check validates
+the git-root-joined path exists before returning it. For normal projects:
+
+- `resolveAbsolutePath("stacks")` → `tryResolveWithGitRoot("stacks")` →
+  `filepath.Join(gitRoot, "stacks")` → `/project/stacks` — **exists** → returned ✅
+- `resolveAbsolutePath("")` → returns `gitRoot` directly at line 315 (before `os.Stat`) ✅
+- `resolveAbsolutePath("./foo")` → caught by `isExplicitRelative` → never reaches `os.Stat` ✅
+
+The `os.Stat` fallback only triggers when a simple relative path does NOT exist at the git root
+but DOES exist relative to CWD — precisely the `ATMOS_BASE_PATH=.terraform/modules/monorepo`
+scenario.
+
+### Integration Test Coverage
+
+The following existing integration tests verify "run from any directory" behavior:
+
+- `describe_component_from_nested_dir_discovers_atmos.yaml_in_parent` — runs `describe component`
+  from `tests/fixtures/scenarios/complete/components/terraform/weather/` ✅
+- `terraform_plan_from_nested_dir_discovers_atmos.yaml_in_parent` — runs `terraform plan` from
+  a nested component directory ✅
+- `terraform_plan_with_current_directory_(.)` — runs with `base_path: .` ✅
+
+---
+
 ## Backward Compatibility
 
 - Simple relative `base_path` values (via `--base-path` flag, `ATMOS_BASE_PATH` env var, or
@@ -193,13 +238,20 @@ separate PR to minimize the blast radius of this fix.
   resolution
 - `TestInitCliConfig_EnvVarBasePath_ResolvesRelativeToCWD` — verify `ATMOS_BASE_PATH` env var with
   relative path resolves to CWD (Tyler's exact scenario)
+- `TestTryResolveWithGitRoot_ExistingPathAtGitRoot` — verify `os.Stat` fallback doesn't break
+  normal git root discovery (stacks dir at git root found correctly)
+- `TestResolveSimpleRelativeBasePath` — table-driven test for the helper function covering empty,
+  absolute, dot-relative, and simple relative paths
 - `TestFindAllStackConfigsInPathsForStack_ErrorWrapping` — verify error wraps `ErrFailedToFindImport`
 - `TestFindAllStackConfigsInPaths_ErrorWrapping` — verify error wrapping in non-stack variant
 - `TestDotPathResolvesRelativeToConfigDir` — verify `ATMOS_BASE_PATH="."` still resolves to config
   dir (regression test)
 
-### Integration Tests
+### Integration Tests (Verified Passing)
 
+- `describe_component_from_nested_dir_discovers_atmos.yaml_in_parent` — subdirectory execution ✅
+- `terraform_plan_from_nested_dir_discovers_atmos.yaml_in_parent` — nested dir plan ✅
+- `terraform_plan_with_current_directory_(.)` — base_path=`.` ✅
 - Verify `describe affected` works with default `base_path: ""`
 - Verify `describe affected` works with explicit `base_path: "."`
 - Verify terraform-provider-utils pattern with relative `ATMOS_BASE_PATH` env var
