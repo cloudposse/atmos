@@ -1239,21 +1239,21 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
-// When a value in the component section contains a YAML function tag that
-// references a nonexistent command, ProcessCustomYamlTags returns an error
-// which processComponentSectionYAMLFunctions propagates (lines 563-565).
-ac := &schema.AtmosConfiguration{}
-info := &schema.ConfigAndStacksInfo{}
+	// When a value in the component section contains a YAML function tag that
+	// references a nonexistent command, ProcessCustomYamlTags returns an error
+	// which processComponentSectionYAMLFunctions propagates (lines 563-565).
+	ac := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{}
 
-// !exec with a nonexistent command causes ProcessTagExec to fail.
-componentSection := map[string]any{
-"vars": map[string]any{
-"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
-},
-}
+	// !exec with a nonexistent command causes ProcessTagExec to fail.
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+		},
+	}
 
-_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil)
-require.Error(t, err)
+	_, err := processComponentSectionYAMLFunctions(ac, info, componentSection, nil)
+	require.Error(t, err)
 }
 
 // ---------------------------------------------------------------------------
@@ -1261,31 +1261,31 @@ require.Error(t, err)
 // ---------------------------------------------------------------------------
 
 func TestProcessComponentEntry_ProcessYAMLFunctionsError(t *testing.T) {
-// When processYamlFunctions=true and a YAML function tag fails,
-// processComponentSectionYAMLFunctions returns an error (lines 272-274).
-p := newDescribeStacksProcessor(
-&schema.AtmosConfiguration{},
-"", nil, nil, nil,
-false, // processTemplates
-true,  // processYamlFunctions = true
-false, nil, nil,
-)
+	// When processYamlFunctions=true and a YAML function tag fails,
+	// processComponentSectionYAMLFunctions returns an error (lines 272-274).
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{},
+		"", nil, nil, nil,
+		false, // processTemplates
+		true,  // processYamlFunctions = true
+		false, nil, nil,
+	)
 
-componentSection := map[string]any{
-cfg.ComponentSectionName: "yaml-func-err",
-"vars": map[string]any{
-"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
-},
-}
-allTypeComponents := map[string]any{"yaml-func-err": componentSection}
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "yaml-func-err",
+		"vars": map[string]any{
+			"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+		},
+	}
+	allTypeComponents := map[string]any{"yaml-func-err": componentSection}
 
-err := p.processComponentEntry(
-"yaml-func-err.yaml", "", cfg.TerraformSectionName,
-"yaml-func-err", componentSection, allTypeComponents,
-processComponentTypeOpts{},
-)
+	err := p.processComponentEntry(
+		"yaml-func-err.yaml", "", cfg.TerraformSectionName,
+		"yaml-func-err", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
 
-require.Error(t, err)
+	require.Error(t, err)
 }
 
 // ---------------------------------------------------------------------------
@@ -1299,9 +1299,9 @@ func TestApplyTerraformMetadataInheritance_MergeError(t *testing.T) {
 	// bypasses processBaseComponentConfigInternal via the cache hit and
 	// reaches the m.Merge at lines 618-624 where the invalid strategy fails.
 	const (
-		stackFile  = "merge-err-stack-unique.yaml"
-		compName   = "merge-err-comp-unique"
-		baseComp   = "base-merge-err-comp-unique"
+		stackFile = "merge-err-stack-unique.yaml"
+		compName  = "merge-err-comp-unique"
+		baseComp  = "base-merge-err-comp-unique"
 	)
 
 	// Step 1: warm the cache with a valid config.
