@@ -178,22 +178,24 @@ func TestTryResolveWithGitRoot_CWDFallback(t *testing.T) {
 	gitRoot := getGitRootOrEmpty()
 	require.NotEmpty(t, gitRoot, "test requires git root discovery")
 
-	// Create a temp directory to use as CWD.
-	tmpDir := t.TempDir()
-	tmpDir, err := filepath.EvalSymlinks(tmpDir)
-	require.NoError(t, err)
+	// Create a subdirectory inside the git repo to use as CWD.
+	// Must be inside the repo so getGitRootOrEmpty() still returns the git root.
+	cwdDir := filepath.Join(gitRoot, "pkg", "config", "testdata-cwd-fallback")
+	require.NoError(t, os.MkdirAll(cwdDir, 0o755))
+	t.Cleanup(func() { os.RemoveAll(cwdDir) })
 
 	// Create a unique path that exists at CWD but NOT at git root.
-	cwdOnlyPath := filepath.Join("test-cwd-fallback-unique-dir", "nested")
-	absExpected := filepath.Join(tmpDir, cwdOnlyPath)
+	cwdOnlyPath := "test-cwd-fallback-unique-dir-12345"
+	absExpected := filepath.Join(cwdDir, cwdOnlyPath)
 	require.NoError(t, os.MkdirAll(absExpected, 0o755))
+	t.Cleanup(func() { os.RemoveAll(absExpected) })
 
 	// Verify the path does NOT exist at git root.
 	_, statErr := os.Stat(filepath.Join(gitRoot, cwdOnlyPath))
 	require.True(t, os.IsNotExist(statErr), "path should not exist at git root")
 
-	// Change to tmpDir so CWD-relative resolution finds the path.
-	t.Chdir(tmpDir)
+	// Change to cwdDir so CWD-relative resolution finds the path.
+	t.Chdir(cwdDir)
 
 	resolved, err := resolveAbsolutePath(cwdOnlyPath, "")
 	require.NoError(t, err)
