@@ -2008,69 +2008,69 @@ func TestProcessSingleCommand(t *testing.T) {
 // are parsed correctly after the strings.SplitN fix.  Previously these would have returned
 // an error; now they succeed and preserve the full value including any embedded '=' signs.
 func Test_processArgsAndFlags_equalsInValues(t *testing.T) {
-tests := []struct {
-name              string
-componentType     string
-inputArgsAndFlags []string
-checkField        func(got schema.ArgsAndFlagsInfo) string
-wantValue         string
-}{
-{
-name:              "terraform-command with '=' in value",
-componentType:     "terraform",
-inputArgsAndFlags: []string{"plan", "--terraform-command=tf=alt"},
-checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.TerraformCommand },
-wantValue:         "tf=alt",
-},
-{
-name:              "query with JMESPath equality expression",
-componentType:     "terraform",
-inputArgsAndFlags: []string{"plan", "--query=.tags[?env==prod]"},
-checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.Query },
-wantValue:         ".tags[?env==prod]",
-},
-{
-name:              "append-user-agent with key=value pair",
-componentType:     "terraform",
-inputArgsAndFlags: []string{"plan", "--append-user-agent=App=MyApp/1.0"},
-checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.AppendUserAgent },
-wantValue:         "App=MyApp/1.0",
-},
-{
-name:              "redirect-stderr with path containing '='",
-componentType:     "terraform",
-inputArgsAndFlags: []string{"plan", "--redirect-stderr=/tmp/log=stderr"},
-checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.RedirectStdErr },
-wantValue:         "/tmp/log=stderr",
-},
-{
-name:              "planfile with path containing '='",
-componentType:     "terraform",
-inputArgsAndFlags: []string{"plan", "--planfile=/tmp/plan=file.tfplan"},
-checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.PlanFile },
-wantValue:         "/tmp/plan=file.tfplan",
-},
-{
-name:              "settings-list-merge-strategy with '=' in value",
-componentType:     "terraform",
-inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy=append=extra"},
-checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.SettingsListMergeStrategy },
-wantValue:         "append=extra",
-},
-{
-name:              "cluster-name with '=' in value (e.g., IAM role ARN)",
-componentType:     "helmfile",
-inputArgsAndFlags: []string{"sync", "--cluster-name=cluster=extra"},
-checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.ClusterName },
-wantValue:         "cluster=extra",
-},
-}
+	tests := []struct {
+		name              string
+		componentType     string
+		inputArgsAndFlags []string
+		checkField        func(got schema.ArgsAndFlagsInfo) string
+		wantValue         string
+	}{
+		{
+			name:              "terraform-command with '=' in value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--terraform-command=tf=alt"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.TerraformCommand },
+			wantValue:         "tf=alt",
+		},
+		{
+			name:              "query with JMESPath equality expression",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--query=.tags[?env==prod]"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.Query },
+			wantValue:         ".tags[?env==prod]",
+		},
+		{
+			name:              "append-user-agent with key=value pair",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--append-user-agent=App=MyApp/1.0"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.AppendUserAgent },
+			wantValue:         "App=MyApp/1.0",
+		},
+		{
+			name:              "redirect-stderr with path containing '='",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--redirect-stderr=/tmp/log=stderr"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.RedirectStdErr },
+			wantValue:         "/tmp/log=stderr",
+		},
+		{
+			name:              "planfile with path containing '='",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--planfile=/tmp/plan=file.tfplan"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.PlanFile },
+			wantValue:         "/tmp/plan=file.tfplan",
+		},
+		{
+			name:              "settings-list-merge-strategy with '=' in value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy=append=extra"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.SettingsListMergeStrategy },
+			wantValue:         "append=extra",
+		},
+		{
+			name:              "cluster-name with '=' in value (e.g., IAM role ARN)",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--cluster-name=cluster=extra"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.ClusterName },
+			wantValue:         "cluster=extra",
+		},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
-require.NoError(t, err)
-assert.Equal(t, tt.wantValue, tt.checkField(got))
-})
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantValue, tt.checkField(got))
+		})
+	}
 }
