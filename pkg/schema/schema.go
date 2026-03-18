@@ -807,6 +807,7 @@ type ArgsAndFlagsInfo struct {
 	PlanFile                  string
 	DryRun                    bool
 	SkipInit                  bool
+	UploadStatus              bool
 	NeedHelp                  bool
 	JsonSchemaDir             string
 	OpaDir                    string
@@ -997,6 +998,7 @@ type ConfigAndStacksInfo struct {
 	VerifyPlan                bool
 	DryRun                    bool
 	SkipInit                  bool
+	UploadStatus              bool
 	ComponentInheritanceChain []string
 	ComponentImportsSection   []string
 	NeedHelp                  bool

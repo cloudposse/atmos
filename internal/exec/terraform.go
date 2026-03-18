@@ -573,7 +573,14 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 
 	// Prepare the terraform command.
 	allArgsAndFlags := strings.Fields(info.SubCommand)
-	uploadStatusFlag := false
+
+	// Resolve upload-status flag: prefer the structured field set by Cobra/Viper,
+	// fall back to parsing AdditionalArgsAndFlags for backward compatibility
+	// (e.g., when invoked via legacy code paths that bypass Cobra).
+	uploadStatusFlag := info.UploadStatus
+	if !uploadStatusFlag {
+		uploadStatusFlag = parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
+	}
 
 	switch info.SubCommand {
 	case "plan":
@@ -585,8 +592,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 			!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
 			allArgsAndFlags = append(allArgsAndFlags, []string{outFlag, planFile}...)
 		}
-		// Check if the upload flag is present and parse its value (supports --flag, --flag=true, --flag=false forms).
-		uploadStatusFlag = parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
 		// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by Atmos.
 		info.AdditionalArgsAndFlags = u.SliceRemoveFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
