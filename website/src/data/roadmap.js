@@ -418,7 +418,7 @@ export const roadmapConfig = {
       title: 'Code Quality and Test Coverage',
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
-        '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. Embracing AI-assisted development while maintaining high standards.',
+        '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. In 2026, critical high-complexity functions are being refactored with 100% coverage. Embracing AI-assisted development while maintaining high standards.',
       progress: 80,
       status: 'in-progress',
       milestones: [
@@ -432,6 +432,7 @@ export const roadmapConfig = {
         { label: 'Terraform command registry', status: 'in-progress', quarter: 'q4-2025', pr: 1891, changelog: 'terraform-command-registry-pattern', description: 'Centralized Terraform command configuration for consistent behavior across CI and local.', benefits: 'Terraform commands behave identically everywhere. CI matches local exactly.' },
         { label: 'Multiple terraform output formats', status: 'shipped', quarter: 'q4-2025', description: 'Export terraform outputs in multiple formats (JSON, YAML, HCL, env, dotenv, bash, CSV, TSV) with options for uppercase keys and nested value flattening.', benefits: 'Integrate terraform outputs directly into CI workflows. Export to GitHub Actions env format, source as bash exports, or pipe as CSV without jq gymnastics.' },
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.', category: 'featured', priority: 'high', benefits: 'Even more confidence in changes. Edge cases are covered before users hit them.' },
+        { label: 'processArgsAndFlags refactored: 100% coverage', status: 'shipped', quarter: 'q1-2026', pr: 2225, changelog: 'process-args-flags-refactor', description: 'The highest-cyclomatic-complexity function refactored using a table-driven DRY pattern (26 flag definitions in a single table). All helper functions — parseFlagValue, parseIdentityFlag, parseFromPlanFlag — achieve 100% unit test coverage.', benefits: 'Flag parsing is now fully tested and maintainable. Adding a new CLI flag is a single table entry instead of 7-8 lines of copy-paste code.' },
       ],
       issues: [],
       prs: [],

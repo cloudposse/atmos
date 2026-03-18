@@ -176,60 +176,60 @@ func TestParseIdentityFlag(t *testing.T) {
 // TestParseFromPlanFlag tests the parseFromPlanFlag helper function directly.
 func TestParseFromPlanFlag(t *testing.T) {
 	tests := []struct {
-		name                 string
-		arg                  string
-		args                 []string
-		index                int
-		expectedUsePlan      bool
-		expectedPlanFile     string
+		name            string
+		arg             string
+		args            []string
+		index           int
+		wantUsePlan     bool
+		wantPlanFile    string
 	}{
 		{
-			name:            "exact flag alone enables plan mode without path",
-			arg:             cfg.FromPlanFlag,
-			args:            []string{cfg.FromPlanFlag},
-			index:           0,
-			expectedUsePlan: true,
-			expectedPlanFile: "",
+			name:        "exact flag alone enables plan mode without path",
+			arg:         cfg.FromPlanFlag,
+			args:        []string{cfg.FromPlanFlag},
+			index:       0,
+			wantUsePlan: true,
+			wantPlanFile: "",
 		},
 		{
-			name:             "exact flag followed by non-flag path uses path",
-			arg:              cfg.FromPlanFlag,
-			args:             []string{cfg.FromPlanFlag, "my-plan.tfplan"},
-			index:            0,
-			expectedUsePlan:  true,
-			expectedPlanFile: "my-plan.tfplan",
+			name:         "exact flag followed by non-flag path uses path",
+			arg:          cfg.FromPlanFlag,
+			args:         []string{cfg.FromPlanFlag, "my-plan.tfplan"},
+			index:        0,
+			wantUsePlan:  true,
+			wantPlanFile: "my-plan.tfplan",
 		},
 		{
-			name:            "exact flag followed by another flag uses no path",
-			arg:             cfg.FromPlanFlag,
-			args:            []string{cfg.FromPlanFlag, "--dry-run"},
-			index:           0,
-			expectedUsePlan: true,
-			expectedPlanFile: "",
+			name:        "exact flag followed by another flag uses no path",
+			arg:         cfg.FromPlanFlag,
+			args:        []string{cfg.FromPlanFlag, "--dry-run"},
+			index:       0,
+			wantUsePlan: true,
+			wantPlanFile: "",
 		},
 		{
-			name:             "equals form with path sets plan mode and path",
-			arg:              cfg.FromPlanFlag + "=my-plan.tfplan",
-			args:             []string{cfg.FromPlanFlag + "=my-plan.tfplan"},
-			index:            0,
-			expectedUsePlan:  true,
-			expectedPlanFile: "my-plan.tfplan",
+			name:         "equals form with path sets plan mode and path",
+			arg:          cfg.FromPlanFlag + "=my-plan.tfplan",
+			args:         []string{cfg.FromPlanFlag + "=my-plan.tfplan"},
+			index:        0,
+			wantUsePlan:  true,
+			wantPlanFile: "my-plan.tfplan",
 		},
 		{
-			name:            "equals form with empty path enables plan mode without path",
-			arg:             cfg.FromPlanFlag + "=",
-			args:            []string{cfg.FromPlanFlag + "="},
-			index:           0,
-			expectedUsePlan: true,
-			expectedPlanFile: "",
+			name:        "equals form with empty path enables plan mode without path",
+			arg:         cfg.FromPlanFlag + "=",
+			args:        []string{cfg.FromPlanFlag + "="},
+			index:       0,
+			wantUsePlan: true,
+			wantPlanFile: "",
 		},
 		{
-			name:            "non-matching arg does not modify fields",
-			arg:             "--other-flag",
-			args:            []string{"--other-flag", "val"},
-			index:           0,
-			expectedUsePlan: false,
-			expectedPlanFile: "",
+			name:        "non-matching arg does not modify fields",
+			arg:         "--other-flag",
+			args:        []string{"--other-flag", "val"},
+			index:       0,
+			wantUsePlan: false,
+			wantPlanFile: "",
 		},
 	}
 
@@ -237,8 +237,8 @@ func TestParseFromPlanFlag(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var info schema.ArgsAndFlagsInfo
 			parseFromPlanFlag(&info, tt.arg, tt.args, tt.index)
-			assert.Equal(t, tt.expectedUsePlan, info.UseTerraformPlan)
-			assert.Equal(t, tt.expectedPlanFile, info.PlanFile)
+			assert.Equal(t, tt.wantUsePlan, info.UseTerraformPlan)
+			assert.Equal(t, tt.wantPlanFile, info.PlanFile)
 		})
 	}
 }
@@ -633,4 +633,15 @@ func TestProcessArgsAndFlags_SingleCommandError(t *testing.T) {
 	// This causes processSingleCommand to return an error.
 	_, err := processArgsAndFlags("terraform", []string{"plan", "--"})
 	assert.Error(t, err)
+}
+
+// TestParseQuotedCompoundSubcommand_DefensiveCheck tests the defensive len(parts) != 2 guard.
+// While parseCompoundSubcommand only calls parseQuotedCompoundSubcommand when the argument
+// contains a space (ensuring SplitN always returns 2 parts), the defensive check protects
+// against future refactoring that could violate that contract.
+func TestParseQuotedCompoundSubcommand_DefensiveCheck(t *testing.T) {
+	// Calling the function directly with a no-space string exercises the defensive guard.
+	// SplitN("plan", " ", 2) returns []string{"plan"} with len 1, triggering the nil return.
+	result := parseQuotedCompoundSubcommand("plan")
+	assert.Nil(t, result, "parseQuotedCompoundSubcommand should return nil for a no-space string")
 }

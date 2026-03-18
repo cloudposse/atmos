@@ -257,8 +257,11 @@ func parseCompoundSubcommand(args []string) *compoundSubcommandResult {
 // parseQuotedCompoundSubcommand parses a quoted compound subcommand like "providers lock".
 func parseQuotedCompoundSubcommand(arg string) *compoundSubcommandResult {
 	parts := strings.SplitN(arg, " ", 2)
-	// parts is guaranteed to have exactly 2 elements because the caller verifies that
-	// arg contains a space before invoking this function.
+	// Defensive guard: the caller ensures arg contains a space (and thus SplitN always yields 2
+	// elements), but this check protects against future refactoring that could violate that contract.
+	if len(parts) != 2 {
+		return nil
+	}
 	first, second := parts[0], parts[1]
 
 	switch first {
