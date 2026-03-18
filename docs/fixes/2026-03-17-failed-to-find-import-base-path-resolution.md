@@ -121,24 +121,40 @@ zero matches even when the directory exists but no files match the pattern.
 
 ## Fix
 
-### Fix 1: Convert Simple Relative Base Paths to Absolute (CWD-Relative)
+### Fix 1: Source-Aware Base Path Resolution
 
-When `BasePath` is explicitly provided by the user (via `--base-path`, `ATMOS_BASE_PATH` env var, or
-the `atmos_base_path` parameter in `terraform-provider-utils`), and it is a "simple relative" path
-(not starting with `.`, `..`, `./`, or `../`), convert it to absolute immediately using
-`filepath.Abs()` (which resolves relative to CWD).
+Base path values are now classified into four categories (see `docs/prd/base-path-resolution-semantics.md`):
+
+| Category | Pattern | Resolution |
+|----------|---------|------------|
+| **Empty** | `""`, unset | Git root → config dir → CWD (smart default) |
+| **Dot** | `"."`, `"./foo"`, `".."`, `"../foo"` | Source-dependent anchor (see below) |
+| **Bare** | `"foo"`, `"foo/bar"`, `".terraform/..."` | Git root search, source-independent |
+| **Absolute** | `"/abs/path"` | Pass through unchanged |
+
+**Source-dependent anchoring for dot-prefixed paths:**
+
+A `BasePathSource` field on `AtmosConfiguration` tracks whether the base path came from a runtime
+source (env var, CLI flag, provider parameter) or from the config file (`atmos.yaml`). This field is
+set to `"runtime"` in three places:
+
+- `InitCliConfig` — when `configAndStacksInfo.AtmosBasePath` is set (struct field from `--base-path`
+  or `atmos_base_path`)
+- `processEnvVars` — when `ATMOS_BASE_PATH` env var is set
+
+`resolveAbsolutePath()` now accepts a `source` parameter and routes dot-prefixed paths through
+`resolveDotPrefixPath()`, which resolves:
+- **Runtime source** (`"runtime"`): relative to CWD (shell convention)
+- **Config source** (default): relative to the directory containing `atmos.yaml`
+
+Bare paths go through `tryResolveWithGitRoot()` regardless of source — they are source-independent.
 
 **File:** `pkg/config/config.go`
 
-In `InitCliConfig`, after `processAtmosConfigs()`:
-1. Check `configAndStacksInfo.AtmosBasePath` first (highest priority — provider/CLI struct field)
-2. Fall back to `os.Getenv("ATMOS_BASE_PATH")` (env var)
-3. If the path is a simple relative path, convert to absolute via `filepath.Abs()` (CWD-relative)
-4. If the path starts with `.` or `..`, leave it for `resolveAbsolutePath()` to handle
-   (config-file-relative — preserves existing behavior for `ATMOS_BASE_PATH="."`)
-
-This happens before `AtmosConfigAbsolutePaths` runs, so `resolveAbsolutePath()` sees an absolute
-path and returns it as-is, bypassing git root discovery entirely.
+**Tyler's scenario fix:** `ATMOS_BASE_PATH=./.terraform/modules/monorepo` (dot-slash prefix) now
+correctly resolves relative to CWD because the env var is marked as a runtime source. The bare form
+`ATMOS_BASE_PATH=.terraform/modules/monorepo` goes through git root search with an `os.Stat`
+fallback to CWD when the git-root-joined path doesn't exist.
 
 ### Fix 2: Improve Error Messages
 
@@ -161,10 +177,11 @@ separate PR to minimize the blast radius of this fix.
 
 | File                                       | Change                                                                         |
 |--------------------------------------------|--------------------------------------------------------------------------------|
-| `pkg/config/config.go`                     | Convert simple relative base paths to absolute (CWD-relative) in InitCliConfig |
-| `pkg/config/utils.go`                      | Wrap errors with builder pattern, actionable hints, and context                |
+| `pkg/config/config.go`                     | Source-aware resolution: `BasePathSource` tracking, `resolveDotPrefixPath()`, `os.Stat` fallback in `tryResolveWithGitRoot()`, error builder pattern for all path errors |
+| `pkg/config/utils.go`                      | Set `BasePathSource = "runtime"` in `processEnvVars()` and `setBasePaths()`, wrap errors with builder pattern |
+| `pkg/schema/schema.go`                     | Add `BasePathSource` field to `AtmosConfiguration`                             |
 | `pkg/utils/glob_utils.go`                  | Add actionable hints to GetGlobMatches error                                   |
-| `pkg/config/base_path_resolution_test.go`  | Tests for base path resolution and error wrapping                              |
+| `pkg/config/base_path_resolution_test.go`  | Tests for source-aware resolution, `BasePathSource` tracking, and error wrapping |
 
 ---
 
@@ -217,15 +234,17 @@ The following existing integration tests verify "run from any directory" behavio
 
 ## Backward Compatibility
 
-- Simple relative `base_path` values (via `--base-path` flag, `ATMOS_BASE_PATH` env var, or
-  `atmos_base_path` provider parameter) will resolve relative to CWD instead of git root —
-  this restores the pre-v1.202.0 behavior for explicitly set paths
-- Config-relative paths (`"."`, `"./foo"`, `"../foo"`) continue to resolve relative to `atmos.yaml`
-  location — no change
-- Default/empty `base_path` continues to use git root discovery (the v1.202.0 behavior)
-- Error messages become more informative with actionable hints — no behavioral change, just better
-  diagnostics
-- `ATMOS_GIT_ROOT_BASEPATH=false` continues to work as a full opt-out of git root discovery
+- **Dot-prefixed paths from runtime sources** (`ATMOS_BASE_PATH="."`, `--base-path=./foo`): now
+  resolve relative to CWD (shell convention). Previously resolved relative to config dir. This is
+  a semantic change but matches user expectations — in a shell, `.` means "here" (CWD)
+- **Dot-prefixed paths from config file** (`base_path: "."` in `atmos.yaml`): continue to resolve
+  relative to the directory containing `atmos.yaml` — no change
+- **Bare paths** (`"stacks"`, `".terraform/modules/monorepo"`): go through git root search
+  regardless of source, with `os.Stat` fallback to CWD — source-independent
+- **Default/empty `base_path`**: continues to use git root discovery (the v1.202.0 behavior)
+- **Error messages**: more informative with actionable hints and error builder pattern — no
+  behavioral change, just better diagnostics
+- **`ATMOS_GIT_ROOT_BASEPATH=false`**: continues to work as a full opt-out of git root discovery
 
 ---
 
@@ -233,21 +252,33 @@ The following existing integration tests verify "run from any directory" behavio
 
 ### Unit Tests (Implemented)
 
-- `TestInitCliConfig_ExplicitBasePath_ResolvesRelativeToCWD` — verify struct field base path resolves
-  to CWD
+- `TestInitCliConfig_ExplicitBasePath_DotSlash_ResolvesRelativeToCWD` — verify struct field base
+  path with dot-slash resolves to CWD (Tyler's scenario)
 - `TestInitCliConfig_ExplicitBasePath_AbsolutePassedThrough` — verify absolute path is unchanged
 - `TestInitCliConfig_EmptyBasePath_DefaultsToAbsolute` — verify empty base path uses default
   resolution
-- `TestInitCliConfig_EnvVarBasePath_ResolvesRelativeToCWD` — verify `ATMOS_BASE_PATH` env var with
-  relative path resolves to CWD (Tyler's exact scenario)
-- `TestTryResolveWithGitRoot_ExistingPathAtGitRoot` — verify `os.Stat` fallback doesn't break
-  normal git root discovery (stacks dir at git root found correctly)
-- `TestResolveSimpleRelativeBasePath` — table-driven test for the helper function covering empty,
-  absolute, dot-relative, and simple relative paths
+- `TestInitCliConfig_EnvVarBasePath_DotSlash_ResolvesRelativeToCWD` — verify `ATMOS_BASE_PATH`
+  env var with dot-slash resolves to CWD
+- `TestInitCliConfig_EnvVarBasePath_Dot_ResolvesToCWD` — verify `ATMOS_BASE_PATH="."` resolves
+  to CWD (not config dir) in shell context
+- `TestInitCliConfig_BasePathSource_SetForStructField` — verify `BasePathSource` is `"runtime"`
+  when `AtmosBasePath` is set via struct field
+- `TestInitCliConfig_BasePathSource_SetForEnvVar` — verify `BasePathSource` is `"runtime"` when
+  `ATMOS_BASE_PATH` env var is set
+- `TestResolveAbsolutePath_DotPrefix_SourceAware` — table-driven test for source-dependent
+  dot-prefix resolution (config → config dir, runtime → CWD)
+- `TestResolveAbsolutePath_BarePath_SourceIndependent` — verify bare paths resolve identically
+  regardless of source
+- `TestResolveAbsolutePath_AbsolutePassThrough` — verify absolute paths pass through unchanged
+- `TestResolveAbsolutePath_BarePathNoGitRoot` — verify bare path fallback to config dir then CWD
+- `TestResolveDotPrefixPath_NoConfigPath_FallsToCWD` — verify dot-prefix fallback to CWD
+- `TestResolveDotPrefixPath_DotDotSlash_Runtime` — verify `../c` from runtime resolves to CWD
+- `TestTryResolveWithConfigPath_AllBranches` — all branches of config path fallback
+- `TestTryResolveWithGitRoot_ExistingPathAtGitRoot` — verify git root discovery works normally
+- `TestTryResolveWithGitRoot_CWDFallback` — verify `os.Stat` fallback to CWD
+- `TestTryResolveWithGitRoot_NeitherExists` — verify git-root-joined path returned as default
 - `TestFindAllStackConfigsInPathsForStack_ErrorWrapping` — verify error wraps `ErrFailedToFindImport`
 - `TestFindAllStackConfigsInPaths_ErrorWrapping` — verify error wrapping in non-stack variant
-- `TestDotPathResolvesRelativeToConfigDir` — verify `ATMOS_BASE_PATH="."` still resolves to config
-  dir (regression test)
 
 ### Integration Tests (Verified Passing)
 

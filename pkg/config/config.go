@@ -259,7 +259,10 @@ func resolveDotPrefixPath(path, cliConfigPath, source string) (string, error) {
 		// Runtime source: dot means CWD (shell convention).
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			return "", fmt.Errorf("resolving path %q relative to CWD: %w", path, err)
+			return "", errUtils.Build(errUtils.ErrPathResolution).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to CWD", path)).
+				Err()
 		}
 		return absPath, nil
 	}
@@ -269,7 +272,10 @@ func resolveDotPrefixPath(path, cliConfigPath, source string) (string, error) {
 		basePath := filepath.Join(cliConfigPath, path)
 		absPath, err := filepath.Abs(basePath)
 		if err != nil {
-			return "", fmt.Errorf("resolving path %q relative to config %q: %w", path, cliConfigPath, err)
+			return "", errUtils.Build(errUtils.ErrPathResolution).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath)).
+				Err()
 		}
 		return absPath, nil
 	}
@@ -277,7 +283,10 @@ func resolveDotPrefixPath(path, cliConfigPath, source string) (string, error) {
 	// No config path: fall back to CWD (last resort).
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("resolving path %q: %w", path, err)
+		return "", errUtils.Build(errUtils.ErrPathResolution).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Cannot resolve path %q", path)).
+			Err()
 	}
 	return absPath, nil
 }
@@ -300,7 +309,10 @@ func tryResolveWithGitRoot(path string, isExplicitRelative bool, cliConfigPath s
 		basePath := filepath.Join(gitRoot, path)
 		absPath, err := filepath.Abs(basePath)
 		if err != nil {
-			return "", fmt.Errorf("resolving path %q relative to git root %q: %w", path, gitRoot, err)
+			return "", errUtils.Build(errUtils.ErrPathResolution).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to git root %q", path, gitRoot)).
+				Err()
 		}
 		return absPath, nil
 	}
@@ -351,14 +363,20 @@ func tryResolveWithConfigPath(path string, cliConfigPath string) (string, error)
 		if path == "" {
 			absPath, err := filepath.Abs(cliConfigPath)
 			if err != nil {
-				return "", fmt.Errorf("resolving config path %q: %w", cliConfigPath, err)
+				return "", errUtils.Build(errUtils.ErrPathResolution).
+					WithCause(err).
+					WithExplanation(fmt.Sprintf("Cannot resolve config path %q", cliConfigPath)).
+					Err()
 			}
 			return absPath, nil
 		}
 		basePath := filepath.Join(cliConfigPath, path)
 		absPath, err := filepath.Abs(basePath)
 		if err != nil {
-			return "", fmt.Errorf("resolving path %q relative to config %q: %w", path, cliConfigPath, err)
+			return "", errUtils.Build(errUtils.ErrPathResolution).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath)).
+				Err()
 		}
 		return absPath, nil
 	}
@@ -366,7 +384,10 @@ func tryResolveWithConfigPath(path string, cliConfigPath string) (string, error)
 	// Last resort (3rd fallback): resolve relative to CWD.
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("resolving path %q: %w", path, err)
+		return "", errUtils.Build(errUtils.ErrPathResolution).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Cannot resolve path %q", path)).
+			Err()
 	}
 	return absPath, nil
 }
