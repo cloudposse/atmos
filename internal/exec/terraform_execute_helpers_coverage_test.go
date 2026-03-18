@@ -18,7 +18,7 @@ package exec
 //   - resolveExitCode (nil, ExitCodeError, generic)
 //   - executeMainTerraformCommand (bare-workspace short-circuit)
 //   - cleanupTerraformFiles (actual file creation/removal)
-//   - setupTerraformAuth (empty-config path)
+//   - setupTerraformAuth (empty-config, ErrInvalidComponent, auth-creator error, identity storage, nil-manager)
 //   - prepareComponentExecution (error paths)
 //   - executeCommandPipeline (early TTY error)
 
@@ -591,7 +591,7 @@ func TestCleanupTerraformFiles_MissingFiles_NoError(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// setupTerraformAuth (empty-config basic path)
+// setupTerraformAuth
 // ──────────────────────────────────────────────────────────────────────────────
 
 // TestSetupTerraformAuth_EmptyConfig_NoProviders verifies that with an empty
@@ -610,6 +610,95 @@ func TestSetupTerraformAuth_EmptyConfig_NoProviders(t *testing.T) {
 	// With no auth providers configured the AuthManager should be nil.
 	assert.Nil(t, authMgr)
 	assert.Nil(t, info.AuthManager)
+}
+
+// TestSetupTerraformAuth_ErrInvalidComponent verifies that ErrInvalidComponent is
+// propagated directly without additional sentinel wrapping.  This prevents auth prompts
+// when the caller references a component that does not exist.
+func TestSetupTerraformAuth_ErrInvalidComponent(t *testing.T) {
+	orig := defaultComponentConfigFetcher
+	t.Cleanup(func() { defaultComponentConfigFetcher = orig })
+	defaultComponentConfigFetcher = func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, errUtils.ErrInvalidComponent
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "nonexistent",
+	}
+
+	_, err := setupTerraformAuth(&atmosConfig, &info)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidComponent), "expected ErrInvalidComponent but got: %v", err)
+	// Must NOT be additionally wrapped — doing so would change the sentinel seen by callers.
+	assert.False(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "ErrInvalidComponent must not be wrapped with ErrInvalidAuthConfig")
+}
+
+// TestSetupTerraformAuth_AuthCreatorError_WrapsWithSentinel verifies that errors
+// returned by the auth manager creator are wrapped with ErrFailedToInitializeAuthManager,
+// keeping parity with createAndAuthenticateAuthManagerWithDeps.
+func TestSetupTerraformAuth_AuthCreatorError_WrapsWithSentinel(t *testing.T) {
+	orig := defaultAuthManagerCreator
+	t.Cleanup(func() { defaultAuthManagerCreator = orig })
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return nil, errors.New("auth backend unavailable")
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{}
+
+	_, err := setupTerraformAuth(&atmosConfig, &info)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToInitializeAuthManager), "expected ErrFailedToInitializeAuthManager but got: %v", err)
+}
+
+// TestSetupTerraformAuth_IdentityStoredAndManagerSet verifies that when the auth creator
+// returns a non-nil AuthManager:
+//   - info.Identity is set to the last element of the auth chain (auto-detection).
+//   - info.AuthManager is populated with the returned manager.
+//   - The returned manager matches what was injected.
+func TestSetupTerraformAuth_IdentityStoredAndManagerSet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockMgr := mockTypes.NewMockAuthManager(ctrl)
+	mockMgr.EXPECT().GetChain().Return([]string{"base-role", "aws-dev"})
+
+	orig := defaultAuthManagerCreator
+	t.Cleanup(func() { defaultAuthManagerCreator = orig })
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return mockMgr, nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{Identity: ""}
+
+	mgr, err := setupTerraformAuth(&atmosConfig, &info)
+	require.NoError(t, err)
+	assert.Equal(t, mockMgr, mgr)
+	// storeAutoDetectedIdentity takes the last element of the chain.
+	assert.Equal(t, "aws-dev", info.Identity)
+	assert.Equal(t, mockMgr, info.AuthManager)
+}
+
+// TestSetupTerraformAuth_NilManager_NoAuthBridge verifies that when the auth creator
+// returns nil (no auth configured), info.AuthManager is left nil and the store auth-bridge
+// is not injected (no panic on nil Stores).
+func TestSetupTerraformAuth_NilManager_NoAuthBridge(t *testing.T) {
+	orig := defaultAuthManagerCreator
+	t.Cleanup(func() { defaultAuthManagerCreator = orig })
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return nil, nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{}
+
+	assert.NotPanics(t, func() {
+		mgr, err := setupTerraformAuth(&atmosConfig, &info)
+		require.NoError(t, err)
+		assert.Nil(t, mgr)
+		assert.Nil(t, info.AuthManager)
+	})
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
