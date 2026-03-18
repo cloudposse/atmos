@@ -78,6 +78,8 @@ func prepareComponentExecution(
 	if err = auth.TerraformPreHook(atmosConfig, info); err != nil {
 		log.Error("Error executing 'atmos auth terraform pre-hook'",
 			logFieldComponent, info.ComponentFromArg, "error", err)
+		// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
+		// Authentication setup failures must not silently produce unauthenticated terraform commands.
 		return nil, err
 	}
 

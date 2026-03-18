@@ -78,7 +78,13 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	// getMergedAuthConfig logs on debug when falling back to global config after an error.
 	mergedAuthConfig, err := getMergedAuthConfig(atmosConfig, info)
 	if err != nil {
-		return nil, err
+		// Propagate ErrInvalidComponent directly — prevents an auth prompt for a nonexistent component.
+		if errors.Is(err, errUtils.ErrInvalidComponent) {
+			return nil, err
+		}
+		// Wrap unexpected errors (e.g. MergeComponentAuthFromConfig failures) with the sentinel
+		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps.
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Create and authenticate the AuthManager using the same injectable creator as
@@ -89,7 +95,8 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
 		}
-		return nil, err
+		// Wrap auth creation failures with the sentinel to match createAndAuthenticateAuthManagerWithDeps.
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Persist the auto-detected identity so downstream hooks don't re-prompt.
