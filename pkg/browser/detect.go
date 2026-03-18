@@ -19,6 +19,13 @@ const (
 	chromePath = "Google/Chrome/Application"
 )
 
+// Package-level function variables for testability.
+var (
+	osStat       = os.Stat
+	execLookPath = exec.LookPath
+	userCurrent  = user.Current
+)
+
 // ChromeInfo holds information about a detected Chrome/Chromium installation.
 type ChromeInfo struct {
 	// Path is the full path to the Chrome executable.
@@ -59,7 +66,7 @@ func detectChromeDarwin() (*ChromeInfo, error) {
 	}
 
 	for _, app := range apps {
-		if _, err := os.Stat(app.path); err == nil {
+		if _, err := osStat(app.path); err == nil {
 			log.Debug("Found Chrome on macOS", "app", app.name, "path", app.path)
 			return &ChromeInfo{
 				Path:         app.path,
@@ -82,7 +89,7 @@ func detectChromeLinux() (*ChromeInfo, error) {
 	}
 
 	for _, name := range candidates {
-		path, err := exec.LookPath(name)
+		path, err := execLookPath(name)
 		if err == nil {
 			log.Debug("Found Chrome on Linux", "name", name, "path", path)
 			return &ChromeInfo{
@@ -117,7 +124,7 @@ func detectChromeWindows() (*ChromeInfo, error) {
 	candidates = append(candidates, filepath.Join(programFilesX86Vals...))
 
 	// User LocalAppData path (for per-user Chrome installations).
-	if usr, err := user.Current(); err == nil {
+	if usr, err := userCurrent(); err == nil {
 		localAppDataVals := []string{
 			usr.HomeDir,
 			"AppData",
@@ -129,7 +136,7 @@ func detectChromeWindows() (*ChromeInfo, error) {
 	}
 
 	for _, path := range candidates {
-		if _, err := os.Stat(path); err == nil {
+		if _, err := osStat(path); err == nil {
 			log.Debug("Found Chrome on Windows", "path", path)
 			return &ChromeInfo{
 				Path: path,
@@ -138,7 +145,7 @@ func detectChromeWindows() (*ChromeInfo, error) {
 	}
 
 	// Try PATH as fallback.
-	path, err := exec.LookPath(chromeExe)
+	path, err := execLookPath(chromeExe)
 	if err == nil {
 		return &ChromeInfo{
 			Path: path,

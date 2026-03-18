@@ -57,7 +57,7 @@ type ConsoleConfig struct {
 
 // AuthConsoleConfig defines global console behavior settings under auth.console.
 type AuthConsoleConfig struct {
-	IsolatedSessions *bool `yaml:"isolated_sessions,omitempty" json:"isolated_sessions,omitempty" mapstructure:"isolated_sessions"` // Enable isolated browser sessions per identity.
+	Isolated *bool `yaml:"isolated,omitempty" json:"isolated,omitempty" mapstructure:"isolated"` // Enable isolated browser sessions per identity.
 }
 
 // Identity defines an authentication identity configuration.

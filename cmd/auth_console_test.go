@@ -953,26 +953,26 @@ func TestResolveConsoleIsolated(t *testing.T) {
 			name:     "flag set to true takes precedence",
 			flagSet:  true,
 			flagVal:  true,
-			config:   &schema.AuthConsoleConfig{IsolatedSessions: &falseVal},
+			config:   &schema.AuthConsoleConfig{Isolated: &falseVal},
 			expected: true,
 		},
 		{
 			name:     "flag set to false takes precedence",
 			flagSet:  true,
 			flagVal:  false,
-			config:   &schema.AuthConsoleConfig{IsolatedSessions: &trueVal},
+			config:   &schema.AuthConsoleConfig{Isolated: &trueVal},
 			expected: false,
 		},
 		{
-			name:     "config isolated_sessions true when flag not set",
+			name:     "config isolated true when flag not set",
 			flagSet:  false,
-			config:   &schema.AuthConsoleConfig{IsolatedSessions: &trueVal},
+			config:   &schema.AuthConsoleConfig{Isolated: &trueVal},
 			expected: true,
 		},
 		{
-			name:     "config isolated_sessions false when flag not set",
+			name:     "config isolated false when flag not set",
 			flagSet:  false,
-			config:   &schema.AuthConsoleConfig{IsolatedSessions: &falseVal},
+			config:   &schema.AuthConsoleConfig{Isolated: &falseVal},
 			expected: false,
 		},
 		{
@@ -982,7 +982,7 @@ func TestResolveConsoleIsolated(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "config isolated_sessions nil defaults to false",
+			name:     "config isolated nil defaults to false",
 			flagSet:  false,
 			config:   &schema.AuthConsoleConfig{},
 			expected: false,
@@ -993,6 +993,10 @@ func TestResolveConsoleIsolated(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &cobra.Command{}
 			cmd.Flags().BoolVar(&consoleIsolated, "isolated", false, "isolated flag")
+
+			// Save and restore package-level state.
+			origIsolated := consoleIsolated
+			t.Cleanup(func() { consoleIsolated = origIsolated })
 
 			if tt.flagSet {
 				consoleIsolated = tt.flagVal

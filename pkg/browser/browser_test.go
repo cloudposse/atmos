@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // mockRunner records command invocations for testing.
@@ -130,10 +132,98 @@ func TestNew_DefaultOpener(t *testing.T) {
 	assert.IsType(t, &defaultOpener{}, opener, "without isolation, should return defaultOpener")
 }
 
-func TestNew_IsolatedOpener_FallsBackWithoutChrome(t *testing.T) {
-	// DetectChrome may or may not find Chrome depending on the test environment.
-	// The key behavior: New() should never panic and should always return a valid Opener.
+func TestNew_IsolatedOpener_ReturnsIsolatedWhenChromeFound(t *testing.T) {
+	orig := detectChromeFn
+	detectChromeFn = func() (*ChromeInfo, error) {
+		return &ChromeInfo{Path: "/fake/chrome", UseMacOSOpen: false}, nil
+	}
+	t.Cleanup(func() { detectChromeFn = orig })
+
 	runner := &mockRunner{}
 	opener := New(WithIsolatedSession("/tmp/test-session"), WithCommandRunner(runner))
-	assert.NotNil(t, opener, "should always return a non-nil opener")
+	assert.IsType(t, &isolatedOpener{}, opener, "should return isolatedOpener when Chrome is found")
+}
+
+func TestNew_IsolatedOpener_FallsBackWhenChromeNotFound(t *testing.T) {
+	orig := detectChromeFn
+	detectChromeFn = func() (*ChromeInfo, error) {
+		return nil, errUtils.ErrChromeNotFound
+	}
+	t.Cleanup(func() { detectChromeFn = orig })
+
+	runner := &mockRunner{}
+	opener := New(WithIsolatedSession("/tmp/test-session"), WithCommandRunner(runner))
+	assert.IsType(t, &defaultOpener{}, opener, "should fall back to defaultOpener when Chrome is not found")
+}
+
+func TestIsolatedOpener_Open_DirectInvocation(t *testing.T) {
+	// Tests the Linux/Windows code path (UseMacOSOpen=false) without platform skip.
+	runner := &mockRunner{}
+	opener := &isolatedOpener{
+		chrome: &ChromeInfo{
+			Path:         "/usr/bin/google-chrome",
+			UseMacOSOpen: false,
+		},
+		sessionDir: "/tmp/test-session",
+		runner:     runner,
+	}
+
+	err := opener.Open("https://example.com")
+	require.NoError(t, err)
+
+	call := runner.lastCall()
+	assert.Equal(t, "/usr/bin/google-chrome", call.Name)
+	assert.Equal(t, "--user-data-dir=/tmp/test-session", call.Args[0])
+	assert.Equal(t, "https://example.com", call.Args[1])
+}
+
+func TestIsolatedOpener_Open_MacOSOpen(t *testing.T) {
+	// Tests the macOS code path (UseMacOSOpen=true) without platform skip.
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS-specific test")
+	}
+
+	runner := &mockRunner{}
+	opener := &isolatedOpener{
+		chrome: &ChromeInfo{
+			Path:         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+			UseMacOSOpen: true,
+			AppName:      "Google Chrome",
+		},
+		sessionDir: "/tmp/test-session",
+		runner:     runner,
+	}
+
+	err := opener.Open("https://example.com")
+	require.NoError(t, err)
+
+	call := runner.lastCall()
+	assert.Equal(t, "open", call.Name)
+	assert.Contains(t, call.Args, "--user-data-dir=/tmp/test-session")
+	assert.Contains(t, call.Args, "https://example.com")
+}
+
+func TestIsolatedOpener_Open_RunnerError(t *testing.T) {
+	runner := &mockRunner{returnErr: assert.AnError}
+	opener := &isolatedOpener{
+		chrome: &ChromeInfo{
+			Path:         "/usr/bin/google-chrome",
+			UseMacOSOpen: false,
+		},
+		sessionDir: "/tmp/test-session",
+		runner:     runner,
+	}
+
+	err := opener.Open("https://example.com")
+	assert.Error(t, err)
+	assert.Equal(t, assert.AnError, err)
+}
+
+func TestDefaultOpener_Open_RunnerError(t *testing.T) {
+	runner := &mockRunner{returnErr: assert.AnError}
+	opener := &defaultOpener{runner: runner}
+
+	err := opener.Open("https://example.com")
+	assert.Error(t, err)
+	assert.Equal(t, assert.AnError, err)
 }

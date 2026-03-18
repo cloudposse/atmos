@@ -359,7 +359,7 @@ func consoleSessionDir(realm, identityName string) (string, error) {
 }
 
 // resolveConsoleIsolated resolves whether to use isolated browser sessions.
-// Flag takes precedence over auth.console.isolated_sessions config.
+// Flag takes precedence over auth.console.isolated config.
 func resolveConsoleIsolated(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) bool {
 	defer perf.Track(nil, "cmd.resolveConsoleIsolated")()
 
@@ -369,8 +369,8 @@ func resolveConsoleIsolated(cmd *cobra.Command, atmosConfig *schema.AtmosConfigu
 	}
 
 	// Check auth.console config.
-	if atmosConfig.Auth.Console != nil && atmosConfig.Auth.Console.IsolatedSessions != nil {
-		return *atmosConfig.Auth.Console.IsolatedSessions
+	if atmosConfig.Auth.Console != nil && atmosConfig.Auth.Console.Isolated != nil {
+		return *atmosConfig.Auth.Console.Isolated
 	}
 
 	// Default: no isolation (backward-compatible).

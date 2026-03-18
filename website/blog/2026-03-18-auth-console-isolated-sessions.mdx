@@ -18,7 +18,7 @@ Enable it globally in your `atmos.yaml`:
 ```yaml
 auth:
   console:
-    isolated_sessions: true
+    isolated: true
 ```
 
 Or per-invocation with the `--isolated` flag:
@@ -33,6 +33,10 @@ Both sessions run simultaneously in separate browser windows with fully isolated
 ## Why This Matters
 
 Teams working across multiple cloud accounts frequently need to have several consoles open at once — comparing configurations, debugging cross-account issues, or monitoring deployments across environments. Cloud providers like AWS and Azure enforce a single session per browser context, forcing users to log out and back in every time they switch accounts.
+
+If you've ever seen this, you know the pain:
+
+![AWS requires you to log out before signing into a different account](/img/changelog/aws-logout-conflict.png)
 
 Isolated sessions solve this by giving each identity its own Chrome browser profile via `--user-data-dir`. This works for any provider that `atmos auth console` supports — AWS, Azure, and others as they're added. Sessions are deterministic per identity, so reopening the same identity reuses its profile (no re-login needed within the session lifetime). Different identities are fully isolated.
 

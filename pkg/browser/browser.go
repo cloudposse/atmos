@@ -63,6 +63,9 @@ func WithCommandRunner(runner CommandRunner) Option {
 	}
 }
 
+// detectChromeFn is the function used to detect Chrome. Overridable in tests.
+var detectChromeFn = DetectChrome
+
 // New returns an Opener configured with the given options.
 // When WithIsolatedSession is provided and Chrome is available, returns an isolated opener.
 // Otherwise, returns a default system-browser opener.
@@ -77,7 +80,7 @@ func New(opts ...Option) Opener {
 	}
 
 	if cfg.isolated {
-		chrome, err := DetectChrome()
+		chrome, err := detectChromeFn()
 		if err != nil {
 			log.Warn("Isolated browser sessions require Chrome/Chromium. Falling back to default browser.", "error", err)
 			return &defaultOpener{runner: cfg.runner}
