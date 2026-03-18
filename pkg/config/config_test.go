@@ -1340,7 +1340,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("returns git root when path is empty and git available", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("", false, "")
+		result, err := tryResolveWithGitRoot("", "")
 		require.NoError(t, err)
 		// We're in a git repo, so should get the git root.
 		assert.NotEmpty(t, result)
@@ -1352,24 +1352,15 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithGitRoot("", false, configPath)
+		result, err := tryResolveWithGitRoot("", configPath)
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
-	})
-
-	t.Run("resolves explicit relative path with git root", func(t *testing.T) {
-		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
-
-		result, err := tryResolveWithGitRoot("./subdir", true, "")
-		require.NoError(t, err)
-		assert.True(t, filepath.IsAbs(result))
-		assert.Contains(t, result, "subdir")
 	})
 
 	t.Run("joins simple relative path with git root", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("stacks", false, "")
+		result, err := tryResolveWithGitRoot("stacks", "")
 		require.NoError(t, err)
 		assert.Contains(t, result, "stacks")
 	})

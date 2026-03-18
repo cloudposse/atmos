@@ -249,7 +249,19 @@ func resolveAbsolutePath(path string, cliConfigPath string, source string) (stri
 
 	// For empty path or simple relative paths (like "stacks", "components/terraform"):
 	// Try git root first.
-	return tryResolveWithGitRoot(path, isExplicitRelative, cliConfigPath)
+	return tryResolveWithGitRoot(path, cliConfigPath)
+}
+
+// absPathOrError resolves a path to absolute form, wrapping any error with ErrPathResolution.
+func absPathOrError(path, context string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrPathResolution).
+			WithCause(err).
+			WithExplanation(context).
+			Err()
+	}
+	return absPath, nil
 }
 
 // resolveDotPrefixPath resolves dot-prefixed paths (".", "./foo", "..", "../foo").
@@ -257,43 +269,24 @@ func resolveAbsolutePath(path string, cliConfigPath string, source string) (stri
 func resolveDotPrefixPath(path, cliConfigPath, source string) (string, error) {
 	if source == "runtime" {
 		// Runtime source: dot means CWD (shell convention).
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return "", errUtils.Build(errUtils.ErrPathResolution).
-				WithCause(err).
-				WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to CWD", path)).
-				Err()
-		}
-		return absPath, nil
+		return absPathOrError(path, fmt.Sprintf("Cannot resolve path %q relative to CWD", path))
 	}
 
 	// Config source: dot means config directory (config-file convention).
 	if cliConfigPath != "" {
-		basePath := filepath.Join(cliConfigPath, path)
-		absPath, err := filepath.Abs(basePath)
-		if err != nil {
-			return "", errUtils.Build(errUtils.ErrPathResolution).
-				WithCause(err).
-				WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath)).
-				Err()
-		}
-		return absPath, nil
+		return absPathOrError(filepath.Join(cliConfigPath, path),
+			fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath))
 	}
 
 	// No config path: fall back to CWD (last resort).
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", errUtils.Build(errUtils.ErrPathResolution).
-			WithCause(err).
-			WithExplanation(fmt.Sprintf("Cannot resolve path %q", path)).
-			Err()
-	}
-	return absPath, nil
+	return absPathOrError(path, fmt.Sprintf("Cannot resolve path %q", path))
 }
 
 // tryResolveWithGitRoot attempts to resolve a path using git root as the base.
 // If git root is unavailable, falls back to cliConfigPath, then CWD.
-func tryResolveWithGitRoot(path string, isExplicitRelative bool, cliConfigPath string) (string, error) {
+// This function only handles empty and bare paths — dot-prefixed paths are
+// routed to resolveDotPrefixPath() before reaching here.
+func tryResolveWithGitRoot(path string, cliConfigPath string) (string, error) {
 	gitRoot := getGitRootOrEmpty()
 	if gitRoot == "" {
 		return tryResolveWithConfigPath(path, cliConfigPath)
@@ -302,19 +295,6 @@ func tryResolveWithGitRoot(path string, isExplicitRelative bool, cliConfigPath s
 	// Git root available - resolve relative to it.
 	if path == "" {
 		return gitRoot, nil
-	}
-
-	// For explicit relative paths without cliConfigPath, resolve relative to git root.
-	if isExplicitRelative {
-		basePath := filepath.Join(gitRoot, path)
-		absPath, err := filepath.Abs(basePath)
-		if err != nil {
-			return "", errUtils.Build(errUtils.ErrPathResolution).
-				WithCause(err).
-				WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to git root %q", path, gitRoot)).
-				Err()
-		}
-		return absPath, nil
 	}
 
 	// For simple relative paths, try git root first but fall back to CWD if the
@@ -332,12 +312,9 @@ func tryResolveWithGitRoot(path string, isExplicitRelative bool, cliConfigPath s
 	}
 
 	// Git root path doesn't exist — try CWD-relative.
-	cwdJoined, err := filepath.Abs(path)
+	cwdJoined, err := absPathOrError(path, fmt.Sprintf("Cannot resolve path %q relative to CWD", path))
 	if err != nil {
-		return "", errUtils.Build(errUtils.ErrPathResolution).
-			WithCause(err).
-			WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to CWD", path)).
-			Err()
+		return "", err
 	}
 	if _, statErr := os.Stat(cwdJoined); statErr == nil {
 		log.Trace("Path not found at git root, using CWD-relative path",
@@ -361,35 +338,14 @@ func tryResolveWithConfigPath(path string, cliConfigPath string) (string, error)
 	// Fallback: resolve relative to atmos.yaml dir (cliConfigPath).
 	if cliConfigPath != "" {
 		if path == "" {
-			absPath, err := filepath.Abs(cliConfigPath)
-			if err != nil {
-				return "", errUtils.Build(errUtils.ErrPathResolution).
-					WithCause(err).
-					WithExplanation(fmt.Sprintf("Cannot resolve config path %q", cliConfigPath)).
-					Err()
-			}
-			return absPath, nil
+			return absPathOrError(cliConfigPath, fmt.Sprintf("Cannot resolve config path %q", cliConfigPath))
 		}
-		basePath := filepath.Join(cliConfigPath, path)
-		absPath, err := filepath.Abs(basePath)
-		if err != nil {
-			return "", errUtils.Build(errUtils.ErrPathResolution).
-				WithCause(err).
-				WithExplanation(fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath)).
-				Err()
-		}
-		return absPath, nil
+		return absPathOrError(filepath.Join(cliConfigPath, path),
+			fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath))
 	}
 
 	// Last resort (3rd fallback): resolve relative to CWD.
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", errUtils.Build(errUtils.ErrPathResolution).
-			WithCause(err).
-			WithExplanation(fmt.Sprintf("Cannot resolve path %q", path)).
-			Err()
-	}
-	return absPath, nil
+	return absPathOrError(path, fmt.Sprintf("Cannot resolve path %q", path))
 }
 
 // getGitRootOrEmpty returns the git repository root path, or empty string if not in a git repo.
