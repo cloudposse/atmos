@@ -336,6 +336,187 @@ func TestTryResolveWithGitRoot_NeitherExists(t *testing.T) {
 		"should return git-root-joined path when neither location exists")
 }
 
+// TestResolveDotPrefixPath_NoConfigPath_FallsToCWD verifies that when source is config
+// but no cliConfigPath is provided, dot-prefixed paths fall back to CWD.
+func TestResolveDotPrefixPath_NoConfigPath_FallsToCWD(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	cwdDir := filepath.Join(tmpDir, "workdir")
+	require.NoError(t, os.MkdirAll(cwdDir, 0o755))
+	t.Chdir(cwdDir)
+
+	// Config source with empty cliConfigPath — should fall back to CWD.
+	result, err := resolveAbsolutePath(".", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, cwdDir, result,
+		"dot from config with no cliConfigPath should fall back to CWD")
+
+	// Same for dot-slash-foo.
+	result, err = resolveAbsolutePath("./sub", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(cwdDir, "sub"), result,
+		"dot-slash from config with no cliConfigPath should fall back to CWD")
+}
+
+// TestResolveDotPrefixPath_DotDotSlash_Runtime verifies "../foo" from runtime resolves to CWD.
+func TestResolveDotPrefixPath_DotDotSlash_Runtime(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	cwdDir := filepath.Join(tmpDir, "a", "b")
+	require.NoError(t, os.MkdirAll(cwdDir, 0o755))
+	t.Chdir(cwdDir)
+
+	result, err := resolveAbsolutePath("../c", filepath.Join(tmpDir, "config"), "runtime")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tmpDir, "a", "c"), result,
+		"../c from runtime should resolve relative to CWD")
+}
+
+// TestResolveAbsolutePath_AbsolutePassThrough verifies absolute paths pass through unchanged.
+func TestResolveAbsolutePath_AbsolutePassThrough(t *testing.T) {
+	absPath := filepath.Join(string(filepath.Separator), "some", "absolute", "path")
+
+	result, err := resolveAbsolutePath(absPath, filepath.Join(string(filepath.Separator), "config"), "")
+	require.NoError(t, err)
+	assert.Equal(t, absPath, result, "absolute path should pass through unchanged")
+
+	result, err = resolveAbsolutePath(absPath, "", "runtime")
+	require.NoError(t, err)
+	assert.Equal(t, absPath, result, "absolute path should pass through regardless of source")
+}
+
+// TestTryResolveWithConfigPath_AllBranches covers tryResolveWithConfigPath branches.
+func TestTryResolveWithConfigPath_AllBranches(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	configDir := filepath.Join(tmpDir, "config")
+	require.NoError(t, os.MkdirAll(configDir, 0o755))
+
+	cwdDir := filepath.Join(tmpDir, "cwd")
+	require.NoError(t, os.MkdirAll(cwdDir, 0o755))
+	t.Chdir(cwdDir)
+
+	tests := []struct {
+		name       string
+		path       string
+		configPath string
+		expected   string
+	}{
+		{
+			name:       "empty path with config path returns config path",
+			path:       "",
+			configPath: configDir,
+			expected:   configDir,
+		},
+		{
+			name:       "relative path with config path joins them",
+			path:       "stacks",
+			configPath: configDir,
+			expected:   filepath.Join(configDir, "stacks"),
+		},
+		{
+			name:       "empty path and empty config path returns CWD",
+			path:       "",
+			configPath: "",
+			expected:   cwdDir,
+		},
+		{
+			name:       "relative path with empty config path resolves to CWD",
+			path:       "stacks",
+			configPath: "",
+			expected:   filepath.Join(cwdDir, "stacks"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tryResolveWithConfigPath(tt.path, tt.configPath)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestResolveAbsolutePath_BarePathNoGitRoot verifies that bare paths without git root
+// fall back to config dir, then CWD.
+func TestResolveAbsolutePath_BarePathNoGitRoot(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	configDir := filepath.Join(tmpDir, "config")
+	require.NoError(t, os.MkdirAll(configDir, 0o755))
+
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+
+	// Bare path with config dir and no git root → config dir join.
+	result, err := resolveAbsolutePath("stacks", configDir, "")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(configDir, "stacks"), result,
+		"bare path without git root should resolve via config dir")
+
+	// Bare path with no config dir and no git root → CWD join.
+	result, err = resolveAbsolutePath("stacks", "", "")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tmpDir, "stacks"), result,
+		"bare path without git root and config dir should resolve via CWD")
+}
+
+// TestInitCliConfig_BasePathSource_SetForStructField verifies that BasePathSource
+// is set to "runtime" when AtmosBasePath is provided via struct field.
+func TestInitCliConfig_BasePathSource_SetForStructField(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "atmos.yaml"),
+		[]byte("base_path: ./\nstacks:\n  base_path: stacks\n"),
+		0o644,
+	))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "stacks"), 0o755))
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath: tmpDir,
+	}
+
+	atmosConfig, err := InitCliConfig(configAndStacksInfo, false)
+	require.NoError(t, err)
+
+	assert.Equal(t, "runtime", atmosConfig.BasePathSource,
+		"BasePathSource should be 'runtime' when AtmosBasePath is set via struct field")
+}
+
+// TestInitCliConfig_BasePathSource_SetForEnvVar verifies that BasePathSource
+// is set to "runtime" when ATMOS_BASE_PATH env var is provided.
+func TestInitCliConfig_BasePathSource_SetForEnvVar(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(tmpDir, "atmos.yaml"),
+		[]byte("base_path: ./\nstacks:\n  base_path: stacks\n"),
+		0o644,
+	))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "stacks"), 0o755))
+	t.Chdir(tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	atmosConfig, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	assert.Equal(t, "runtime", atmosConfig.BasePathSource,
+		"BasePathSource should be 'runtime' when ATMOS_BASE_PATH env var is set")
+}
+
 // TestFindAllStackConfigsInPathsForStack_ErrorWrapping verifies that when GetGlobMatches
 // fails, the error is wrapped with the ErrFailedToFindImport sentinel.
 func TestFindAllStackConfigsInPathsForStack_ErrorWrapping(t *testing.T) {
