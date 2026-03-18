@@ -358,7 +358,7 @@ auth:
 
     Requires Google Chrome or Chromium. Falls back to the default browser if Chrome is not found.
 
-    Session data is stored under the XDG data directory (`~/.local/share/atmos/console/sessions/`) and is keyed by realm and identity name, so reopening the same identity reuses its browser session.
+    Session data is stored under the platform-specific XDG data directory (e.g., `~/.local/share/atmos/console/sessions/` on Linux, `~/Library/Application Support/atmos/console/sessions/` on macOS, `%APPDATA%\atmos\console\sessions\` on Windows) and is keyed by realm and identity name, so reopening the same identity reuses its browser session.
 
     **Type:** Boolean
 

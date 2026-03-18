@@ -2,13 +2,13 @@ package browser
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/spf13/viper"
 )
 
 // Opener opens URLs in a browser.
@@ -100,7 +100,7 @@ type defaultOpener struct {
 func (o *defaultOpener) Open(url string) error {
 	defer perf.Track(nil, "browser.defaultOpener.Open")()
 
-	if viper.GetString("go.test") == "1" {
+	if os.Getenv("GO_TEST") == "1" { //nolint:forbidigo // GO_TEST is test infrastructure, not application config.
 		log.Debug("Skipping browser launch in test environment")
 		return nil
 	}

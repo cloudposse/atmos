@@ -134,22 +134,27 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Resolve isolated session mode: flag > config > default (false).
-	isolated := resolveConsoleIsolated(cmd, atmosConfig)
-
-	// Build browser opener.
-	var opts []browser.Option
-	if isolated {
-		sessionDir, sessionErr := consoleSessionDir(atmosConfig.Auth.Realm, identityName)
-		if sessionErr != nil {
-			return fmt.Errorf("%w: failed to create isolated session directory: %w", errUtils.ErrAuthConsole, sessionErr)
-		}
-		opts = append(opts, browser.WithIsolatedSession(sessionDir))
-	}
-	opener := browser.New(opts...)
-
-	// Print formatted output and handle browser opening.
+	// Print formatted output.
 	printConsoleInfo(whoami, duration, false, "")
+
+	// Only build browser opener when we will actually open the browser.
+	var opener browser.Opener
+	if !consoleSkipOpen && !telemetry.IsCI() {
+		// Resolve isolated session mode: flag > config > default (false).
+		isolated := resolveConsoleIsolated(cmd, atmosConfig)
+
+		// Build browser opener.
+		var opts []browser.Option
+		if isolated {
+			sessionDir, sessionErr := consoleSessionDir(atmosConfig.Auth.Realm, identityName)
+			if sessionErr != nil {
+				return fmt.Errorf("%w: failed to create isolated session directory: %w", errUtils.ErrAuthConsole, sessionErr)
+			}
+			opts = append(opts, browser.WithIsolatedSession(sessionDir))
+		}
+		opener = browser.New(opts...)
+	}
+
 	handleBrowserOpen(consoleURL, opener)
 
 	return nil
