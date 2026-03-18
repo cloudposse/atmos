@@ -182,20 +182,21 @@ func Test_processArgsAndFlags2(t *testing.T) {
 	}
 }
 
+// Test_processArgsAndFlags_invalidFlag verifies that --init-pass-vars=invalid=true is now
+// handled correctly — with SplitN the value "invalid=true" is preserved intact.
 func Test_processArgsAndFlags_invalidFlag(t *testing.T) {
 	inputArgsAndFlags := []string{
 		"init",
 		"--init-pass-vars=invalid=true",
 	}
 
-	_, err := processArgsAndFlags(
+	got, err := processArgsAndFlags(
 		"terraform",
 		inputArgsAndFlags,
 	)
 
-	assert.Error(t, err)
-	assert.ErrorContains(t, err, "invalid flag")
-	assert.ErrorContains(t, err, "--init-pass-vars=invalid=true")
+	require.NoError(t, err)
+	assert.Equal(t, "invalid=true", got.InitPassVars)
 }
 
 func Test_processArgsAndFlags_errorPaths(t *testing.T) {
@@ -284,96 +285,15 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			inputArgsAndFlags: []string{"plan", "--logs-file"},
 			expectedError:     "--logs-file",
 		},
-		// Invalid flag formats with multiple equals signs.
-		{
-			name:              "terraform-command with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--terraform-command=plan=extra"},
-			expectedError:     "--terraform-command=plan=extra",
-		},
-		{
-			name:              "terraform-dir with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--terraform-dir=/path=extra"},
-			expectedError:     "--terraform-dir=/path=extra",
-		},
-		{
-			name:              "append-user-agent with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--append-user-agent=agent=extra"},
-			expectedError:     "--append-user-agent=agent=extra",
-		},
-		{
-			name:              "helmfile-command with multiple equals",
-			componentType:     "helmfile",
-			inputArgsAndFlags: []string{"sync", "--helmfile-command=sync=extra"},
-			expectedError:     "--helmfile-command=sync=extra",
-		},
-		{
-			name:              "helmfile-dir with multiple equals",
-			componentType:     "helmfile",
-			inputArgsAndFlags: []string{"sync", "--helmfile-dir=/path=extra"},
-			expectedError:     "--helmfile-dir=/path=extra",
-		},
-		{
-			name:              "config-dir with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--config-dir=/path=extra"},
-			expectedError:     "--config-dir=/path=extra",
-		},
-		{
-			name:              "base-path with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--base-path=/path=extra"},
-			expectedError:     "--base-path=/path=extra",
-		},
-		{
-			name:              "vendor-base-path with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--vendor-base-path=/path=extra"},
-			expectedError:     "--vendor-base-path=/path=extra",
-		},
-		{
-			name:              "deploy-run-init with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--deploy-run-init=true=extra"},
-			expectedError:     "--deploy-run-init=true=extra",
-		},
-		{
-			name:              "auto-generate-backend-file with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--auto-generate-backend-file=true=extra"},
-			expectedError:     "--auto-generate-backend-file=true=extra",
-		},
-		{
-			name:              "init-run-reconfigure with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--init-run-reconfigure=true=extra"},
-			expectedError:     "--init-run-reconfigure=true=extra",
-		},
-		{
-			name:              "logs-level with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--logs-level=Debug=extra"},
-			expectedError:     "--logs-level=Debug=extra",
-		},
-		{
-			name:              "logs-file with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--logs-file=/path=extra"},
-			expectedError:     "--logs-file=/path=extra",
-		},
+		// Invalid flag formats with multiple equals signs are now handled correctly:
+		// values containing '=' are parsed by SplitN and used as-is.
+		// Only missing-value errors remain in this error-path table.
+
 		{
 			name:              "init-pass-vars flag without value",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"init", "--init-pass-vars"},
 			expectedError:     "--init-pass-vars",
-		},
-		{
-			name:              "init-pass-vars with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"init", "--init-pass-vars=true=extra"},
-			expectedError:     "--init-pass-vars=true=extra",
 		},
 		{
 			name:              "skip-planfile flag without value",
@@ -382,22 +302,10 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			expectedError:     "--skip-planfile",
 		},
 		{
-			name:              "skip-planfile with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--skip-planfile=true=extra"},
-			expectedError:     "--skip-planfile=true=extra",
-		},
-		{
 			name:              "schemas-atmos-manifest flag without value",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan", "--schemas-atmos-manifest"},
 			expectedError:     "--schemas-atmos-manifest",
-		},
-		{
-			name:              "schemas-atmos-manifest with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--schemas-atmos-manifest=/path=extra"},
-			expectedError:     "--schemas-atmos-manifest=/path=extra",
 		},
 		{
 			name:              "redirect-stderr flag without value",
@@ -406,22 +314,10 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			expectedError:     "--redirect-stderr",
 		},
 		{
-			name:              "redirect-stderr with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--redirect-stderr=/path=extra"},
-			expectedError:     "--redirect-stderr=/path=extra",
-		},
-		{
 			name:              "planfile flag without value",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan", "--planfile"},
 			expectedError:     "--planfile",
-		},
-		{
-			name:              "planfile with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--planfile=/path=extra"},
-			expectedError:     "--planfile=/path=extra",
 		},
 		{
 			name:              "schemas-jsonschema-dir flag without value",
@@ -430,22 +326,10 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			expectedError:     "--schemas-jsonschema-dir",
 		},
 		{
-			name:              "schemas-jsonschema-dir with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--schemas-jsonschema-dir=/path=extra"},
-			expectedError:     "--schemas-jsonschema-dir=/path=extra",
-		},
-		{
 			name:              "schemas-opa-dir flag without value",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan", "--schemas-opa-dir"},
 			expectedError:     "--schemas-opa-dir",
-		},
-		{
-			name:              "schemas-opa-dir with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--schemas-opa-dir=/path=extra"},
-			expectedError:     "--schemas-opa-dir=/path=extra",
 		},
 		{
 			name:              "schemas-cue-dir flag without value",
@@ -454,22 +338,10 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			expectedError:     "--schemas-cue-dir",
 		},
 		{
-			name:              "schemas-cue-dir with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--schemas-cue-dir=/path=extra"},
-			expectedError:     "--schemas-cue-dir=/path=extra",
-		},
-		{
 			name:              "settings-list-merge-strategy flag without value",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy"},
 			expectedError:     "--settings-list-merge-strategy",
-		},
-		{
-			name:              "settings-list-merge-strategy with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy=append=extra"},
-			expectedError:     "--settings-list-merge-strategy=append=extra",
 		},
 		{
 			name:              "query flag without value",
@@ -478,22 +350,10 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			expectedError:     "--query",
 		},
 		{
-			name:              "query with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--query=.foo=bar"},
-			expectedError:     "--query=.foo=bar",
-		},
-		{
 			name:              "stacks-dir flag without value",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan", "--stacks-dir"},
 			expectedError:     "--stacks-dir",
-		},
-		{
-			name:              "stacks-dir with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--stacks-dir=/path=extra"},
-			expectedError:     "--stacks-dir=/path=extra",
 		},
 		{
 			name:              "workflows-dir flag without value",
@@ -501,24 +361,12 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			inputArgsAndFlags: []string{"plan", "--workflows-dir"},
 			expectedError:     "--workflows-dir",
 		},
-		{
-			name:              "workflows-dir with multiple equals",
-			componentType:     "terraform",
-			inputArgsAndFlags: []string{"plan", "--workflows-dir=/path=extra"},
-			expectedError:     "--workflows-dir=/path=extra",
-		},
 		// --cluster-name flag error cases for EKS/Helmfile integration.
 		{
 			name:              "cluster-name flag without value",
 			componentType:     "helmfile",
 			inputArgsAndFlags: []string{"sync", "--cluster-name"},
 			expectedError:     "--cluster-name",
-		},
-		{
-			name:              "cluster-name with multiple equals",
-			componentType:     "helmfile",
-			inputArgsAndFlags: []string{"sync", "--cluster-name=cluster=extra"},
-			expectedError:     "--cluster-name=cluster=extra",
 		},
 	}
 
@@ -2154,4 +2002,75 @@ func TestProcessSingleCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test_processArgsAndFlags_equalsInValues verifies that flag values containing '=' characters
+// are parsed correctly after the strings.SplitN fix.  Previously these would have returned
+// an error; now they succeed and preserve the full value including any embedded '=' signs.
+func Test_processArgsAndFlags_equalsInValues(t *testing.T) {
+tests := []struct {
+name              string
+componentType     string
+inputArgsAndFlags []string
+checkField        func(got schema.ArgsAndFlagsInfo) string
+wantValue         string
+}{
+{
+name:              "terraform-command with '=' in value",
+componentType:     "terraform",
+inputArgsAndFlags: []string{"plan", "--terraform-command=tf=alt"},
+checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.TerraformCommand },
+wantValue:         "tf=alt",
+},
+{
+name:              "query with JMESPath equality expression",
+componentType:     "terraform",
+inputArgsAndFlags: []string{"plan", "--query=.tags[?env==prod]"},
+checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.Query },
+wantValue:         ".tags[?env==prod]",
+},
+{
+name:              "append-user-agent with key=value pair",
+componentType:     "terraform",
+inputArgsAndFlags: []string{"plan", "--append-user-agent=App=MyApp/1.0"},
+checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.AppendUserAgent },
+wantValue:         "App=MyApp/1.0",
+},
+{
+name:              "redirect-stderr with path containing '='",
+componentType:     "terraform",
+inputArgsAndFlags: []string{"plan", "--redirect-stderr=/tmp/log=stderr"},
+checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.RedirectStdErr },
+wantValue:         "/tmp/log=stderr",
+},
+{
+name:              "planfile with path containing '='",
+componentType:     "terraform",
+inputArgsAndFlags: []string{"plan", "--planfile=/tmp/plan=file.tfplan"},
+checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.PlanFile },
+wantValue:         "/tmp/plan=file.tfplan",
+},
+{
+name:              "settings-list-merge-strategy with '=' in value",
+componentType:     "terraform",
+inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy=append=extra"},
+checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.SettingsListMergeStrategy },
+wantValue:         "append=extra",
+},
+{
+name:              "cluster-name with '=' in value (e.g., IAM role ARN)",
+componentType:     "helmfile",
+inputArgsAndFlags: []string{"sync", "--cluster-name=cluster=extra"},
+checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.ClusterName },
+wantValue:         "cluster=extra",
+},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
+require.NoError(t, err)
+assert.Equal(t, tt.wantValue, tt.checkField(got))
+})
+}
 }

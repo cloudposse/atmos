@@ -49,12 +49,13 @@ func TestParseFlagValue(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "equals-separated: multiple equals returns error",
-			flag:    "--foo",
-			arg:     "--foo=a=b",
-			args:    []string{"--foo=a=b"},
-			index:   0,
-			wantErr: true,
+			name:      "equals-separated: value containing '=' is handled correctly",
+			flag:      "--foo",
+			arg:       "--foo=a=b",
+			args:      []string{"--foo=a=b"},
+			index:     0,
+			wantValue: "a=b",
+			wantFound: true,
 		},
 		{
 			name:      "no match returns empty and false",
@@ -106,7 +107,6 @@ func TestParseIdentityFlag(t *testing.T) {
 		args             []string
 		index            int
 		expectedIdentity string
-		wantErr          bool
 	}{
 		{
 			name:             "exact flag without next arg uses SELECT",
@@ -144,11 +144,11 @@ func TestParseIdentityFlag(t *testing.T) {
 			expectedIdentity: cfg.IdentityFlagSelectValue,
 		},
 		{
-			name:    "equals form with multiple equals returns error",
-			arg:     cfg.IdentityFlag + "=a=b",
-			args:    []string{cfg.IdentityFlag + "=a=b"},
-			index:   0,
-			wantErr: true,
+			name:             "equals form with value containing '=' is handled correctly",
+			arg:              cfg.IdentityFlag + "=arn:aws:sts::123:assumed-role/MyRole/session",
+			args:             []string{cfg.IdentityFlag + "=arn:aws:sts::123:assumed-role/MyRole/session"},
+			index:            0,
+			expectedIdentity: "arn:aws:sts::123:assumed-role/MyRole/session",
 		},
 		{
 			name:             "non-matching arg does not modify identity",
@@ -162,12 +162,7 @@ func TestParseIdentityFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var info schema.ArgsAndFlagsInfo
-			err := parseIdentityFlag(&info, tt.arg, tt.args, tt.index)
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
+			parseIdentityFlag(&info, tt.arg, tt.args, tt.index)
 			assert.Equal(t, tt.expectedIdentity, info.Identity)
 		})
 	}
@@ -364,18 +359,12 @@ func TestProcessArgsAndFlags_AllStringFlagsDefs(t *testing.T) {
 			want:              schema.ArgsAndFlagsInfo{SubCommand: "plan", ComponentFromArg: "vpc", LogsFile: "/tmp/atmos.log"},
 		},
 		// SettingsListMergeStrategyFlag.
-		// Note: --settings-list-merge-strategy is NOT in commonFlags, so it is NOT stripped from
-		// AdditionalArgsAndFlags; it appears in both the parsed field and the pass-through args.
+		// Now that --settings-list-merge-strategy is in commonFlags it IS stripped from AdditionalArgsAndFlags.
 		{
 			name:              "settings-list-merge-strategy equals form",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan", "vpc", "--settings-list-merge-strategy=append"},
-			want: schema.ArgsAndFlagsInfo{
-				SubCommand:                "plan",
-				ComponentFromArg:          "vpc",
-				SettingsListMergeStrategy: "append",
-				AdditionalArgsAndFlags:    []string{"--settings-list-merge-strategy=append"},
-			},
+			want:              schema.ArgsAndFlagsInfo{SubCommand: "plan", ComponentFromArg: "vpc", SettingsListMergeStrategy: "append"},
 		},
 		// QueryFlag.
 		{
@@ -619,12 +608,13 @@ func TestProcessArgsAndFlags_FromPlan(t *testing.T) {
 	}
 }
 
-// TestProcessArgsAndFlags_IdentityError tests that --identity=a=b returns an error.
-func TestProcessArgsAndFlags_IdentityError(t *testing.T) {
-	// Multiple equals in --identity flag should be an error.
-	_, err := processArgsAndFlags("terraform", []string{"plan", "vpc", "--identity=a=b"})
-	assert.Error(t, err)
-	assert.ErrorContains(t, err, "--identity=a=b")
+// TestProcessArgsAndFlags_IdentityWithEqualsInValue tests that --identity=key=value is handled
+// correctly (with SplitN fix — values containing '=' no longer cause an error).
+func TestProcessArgsAndFlags_IdentityWithEqualsInValue(t *testing.T) {
+	// Previously this would have returned an error. Now it should succeed.
+	got, err := processArgsAndFlags("terraform", []string{"plan", "vpc", "--identity=user=admin"})
+	require.NoError(t, err)
+	assert.Equal(t, "user=admin", got.Identity)
 }
 
 // TestProcessArgsAndFlags_SingleCommandError tests that processSingleCommand error propagates.
@@ -636,12 +626,265 @@ func TestProcessArgsAndFlags_SingleCommandError(t *testing.T) {
 }
 
 // TestParseQuotedCompoundSubcommand_DefensiveCheck tests the defensive len(parts) != 2 guard.
-// While parseCompoundSubcommand only calls parseQuotedCompoundSubcommand when the argument
-// contains a space (ensuring SplitN always returns 2 parts), the defensive check protects
-// against future refactoring that could violate that contract.
+// parseCompoundSubcommand (the normal caller) only invokes parseQuotedCompoundSubcommand when
+// strings.Contains(arg, " ") is true, which guarantees SplitN yields 2 parts.  The defensive
+// guard exists to protect against potential future callers that bypass that contract — and this
+// test exercises it directly so that the guard line is covered and can never silently regress.
 func TestParseQuotedCompoundSubcommand_DefensiveCheck(t *testing.T) {
-	// Calling the function directly with a no-space string exercises the defensive guard.
-	// SplitN("plan", " ", 2) returns []string{"plan"} with len 1, triggering the nil return.
+	// Calling the function directly with a no-space string triggers the defensive guard.
+	// SplitN("plan", " ", 2) returns []string{"plan"} (len 1), so the guard fires and nil is returned.
 	result := parseQuotedCompoundSubcommand("plan")
 	assert.Nil(t, result, "parseQuotedCompoundSubcommand should return nil for a no-space string")
+}
+
+// TestParseFlagValue_EqualsInValue verifies that flag values containing '=' are parsed correctly
+// after the strings.SplitN fix. Previously, --query=.tags[?env==prod] would have errored.
+func TestParseFlagValue_EqualsInValue(t *testing.T) {
+	tests := []struct {
+		name      string
+		flag      string
+		arg       string
+		wantValue string
+	}{
+		{
+			name:      "JMESPath query with double equals",
+			flag:      "--query",
+			arg:       "--query=.tags[?env==prod]",
+			wantValue: ".tags[?env==prod]",
+		},
+		{
+			name:      "key=value pair as flag value",
+			flag:      "--append-user-agent",
+			arg:       "--append-user-agent=Env=Production",
+			wantValue: "Env=Production",
+		},
+		{
+			name:      "multiple equals signs in value",
+			flag:      "--redirect-stderr",
+			arg:       "--redirect-stderr=key=val=extra",
+			wantValue: "key=val=extra",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value, found, err := parseFlagValue(tt.flag, tt.arg, []string{tt.arg}, 0)
+			require.NoError(t, err)
+			assert.True(t, found)
+			assert.Equal(t, tt.wantValue, value)
+		})
+	}
+}
+
+// TestProcessArgsAndFlags_FlagStripping verifies that atmos-specific flags AND their values are
+// stripped from AdditionalArgsAndFlags (the pass-through args sent to Terraform/Helmfile).
+// This covers the M1-M3 gaps identified in the CodeRabbit audit.
+func TestProcessArgsAndFlags_FlagStripping(t *testing.T) {
+	tests := []struct {
+		name                    string
+		componentType           string
+		inputArgsAndFlags       []string
+		wantAdditionalArgsFlags []string
+	}{
+		{
+			name:                    "terraform-command space form strips flag and value",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--terraform-command", "tofu", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			name:                    "terraform-dir space form strips flag and value",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--terraform-dir", "/my/tf", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			name:                    "deploy-run-init space form strips flag and value",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--deploy-run-init", "false", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			name:                    "append-user-agent space form strips flag and value",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--append-user-agent", "atmos/1.0", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			name:                    "init-pass-vars space form strips flag and value",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--init-pass-vars", "true", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			name:                    "skip-planfile space form strips flag and value",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--skip-planfile", "true", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			// M2: from-plan with path - path should be stripped from pass-through args.
+			name:                    "--from-plan path.tfplan strips both flag and path from pass-through",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"apply", "vpc", "--from-plan", "plan.tfplan", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			// M3: identity with value - value should be stripped from pass-through args.
+			name:                    "--identity my-identity strips both flag and value from pass-through",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--identity", "my-identity", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			// settings-list-merge-strategy is now in commonFlags and should be stripped.
+			name:                    "--settings-list-merge-strategy is stripped from pass-through",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--settings-list-merge-strategy", "append", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+		},
+		{
+			// Non-atmos flags like --refresh=false must not be stripped.
+			name:                    "unknown non-atmos flag passes through unchanged",
+			componentType:           "terraform",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--refresh=false", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--refresh=false"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
+		})
+	}
+}
+
+// TestProcessArgsAndFlags_OptionalValueFlagStripping verifies the L2 fix: optional-value flags
+// (--from-plan, --identity) in space form must not cause the NEXT arg to be stripped when that
+// arg is actually a different flag (e.g., a Terraform flag like --refresh=false).
+func TestProcessArgsAndFlags_OptionalValueFlagStripping(t *testing.T) {
+	tests := []struct {
+		name                    string
+		inputArgsAndFlags       []string
+		wantAdditionalArgsFlags []string
+		wantUseTerraformPlan    bool
+		wantIdentity            string
+	}{
+		{
+			// --from-plan followed immediately by a Terraform flag: the Terraform flag must pass through.
+			name:                    "--from-plan followed by Terraform flag does not strip the Terraform flag",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--from-plan", "--refresh=false", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--refresh=false"},
+			wantUseTerraformPlan:    true,
+		},
+		{
+			// --identity without value followed by Terraform flag: Terraform flag must pass through.
+			name:                    "--identity without value followed by Terraform flag does not strip it",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--identity", "--terraform-command=tofu", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil, // --terraform-command=tofu is consumed by stringFlagDefs and stripped
+			wantIdentity:            cfg.IdentityFlagSelectValue,
+		},
+		{
+			// --from-plan followed by planfile path: planfile must be stripped (consumed as value).
+			name:                    "--from-plan followed by planfile path strips both",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--from-plan", "plan.tfplan", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+			wantUseTerraformPlan:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
+			if tt.wantUseTerraformPlan {
+				assert.True(t, got.UseTerraformPlan)
+			}
+			if tt.wantIdentity != "" {
+				assert.Equal(t, tt.wantIdentity, got.Identity)
+			}
+		})
+	}
+}
+
+// TestProcessArgsAndFlags_AllStringFlagsSpaceForm verifies that the missing M4 flags all correctly
+// parse in the space-separated form AND strip both the flag and value from AdditionalArgsAndFlags.
+func TestProcessArgsAndFlags_AllStringFlagsSpaceForm(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentType     string
+		inputArgsAndFlags []string
+		checkField        func(got schema.ArgsAndFlagsInfo) string
+		wantFieldValue    string
+	}{
+		{
+			name:              "terraform-command space form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--terraform-command", "tofu", "--stack", "my-stack"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.TerraformCommand },
+			wantFieldValue:    "tofu",
+		},
+		{
+			name:              "terraform-dir space form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--terraform-dir", "/components/tf", "--stack", "my-stack"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.TerraformDir },
+			wantFieldValue:    "/components/tf",
+		},
+		{
+			name:              "deploy-run-init space form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--deploy-run-init", "false", "--stack", "my-stack"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.DeployRunInit },
+			wantFieldValue:    "false",
+		},
+		{
+			name:              "append-user-agent space form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--append-user-agent", "atmos/1.0", "--stack", "my-stack"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.AppendUserAgent },
+			wantFieldValue:    "atmos/1.0",
+		},
+		{
+			name:              "init-pass-vars space form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--init-pass-vars", "true", "--stack", "my-stack"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.InitPassVars },
+			wantFieldValue:    "true",
+		},
+		{
+			name:              "skip-planfile space form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--skip-planfile", "true", "--stack", "my-stack"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.PlanSkipPlanfile },
+			wantFieldValue:    "true",
+		},
+		{
+			name:              "settings-list-merge-strategy space form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--settings-list-merge-strategy", "append", "--stack", "my-stack"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.SettingsListMergeStrategy },
+			wantFieldValue:    "append",
+		},
+		{
+			name:              "query space form",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "vpc", "--query", ".tags", "--stack", "my-stack"},
+			checkField:        func(got schema.ArgsAndFlagsInfo) string { return got.Query },
+			wantFieldValue:    ".tags",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantFieldValue, tt.checkField(got))
+			// Verify the flag and its value are NOT in AdditionalArgsAndFlags.
+			assert.Nil(t, got.AdditionalArgsAndFlags, "expected no pass-through args")
+		})
+	}
 }

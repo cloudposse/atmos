@@ -69,6 +69,7 @@ var commonFlags = []string{
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
 	cfg.QueryFlag,
+	cfg.SettingsListMergeStrategyFlag,
 	cfg.ProcessTemplatesFlag,
 	cfg.ProcessFunctionsFlag,
 	cfg.SkipFlag,
@@ -255,10 +256,14 @@ func parseCompoundSubcommand(args []string) *compoundSubcommandResult {
 }
 
 // parseQuotedCompoundSubcommand parses a quoted compound subcommand like "providers lock".
+// It is only called from parseCompoundSubcommand when strings.Contains(arg, " ") is true,
+// which guarantees SplitN returns exactly 2 parts.  The defensive guard below protects
+// against future refactoring that could call this function with a no-space string.
 func parseQuotedCompoundSubcommand(arg string) *compoundSubcommandResult {
 	parts := strings.SplitN(arg, " ", 2)
-	// Defensive guard: the caller ensures arg contains a space (and thus SplitN always yields 2
-	// elements), but this check protects against future refactoring that could violate that contract.
+	// Defensive guard: this function is only called when arg contains a space
+	// (see parseCompoundSubcommand), but this check protects against callers
+	// that may not enforce that invariant in the future.
 	if len(parts) != 2 {
 		return nil
 	}
@@ -424,6 +429,9 @@ var stringFlagDefs = []stringFlagDef{
 // Returns ("", false, nil) when arg does not match flag.
 // Returns (value, true, nil) on success.
 // Returns ("", false, err) when the flag matches but its value is missing or malformed.
+//
+// SplitN(arg, "=", 2) is used so that values containing "=" (e.g., --query=.tags[?env==prod])
+// are handled correctly — only the first "=" is treated as the separator.
 func parseFlagValue(flag, arg string, args []string, index int) (string, bool, error) {
 	if arg == flag {
 		if index+1 >= len(args) {
@@ -432,10 +440,8 @@ func parseFlagValue(flag, arg string, args []string, index int) (string, bool, e
 		return args[index+1], true, nil
 	}
 	if strings.HasPrefix(arg, flag+"=") {
-		parts := strings.Split(arg, "=")
-		if len(parts) != 2 {
-			return "", false, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-		}
+		// SplitN(..., 2) keeps any additional "=" in the value intact.
+		parts := strings.SplitN(arg, "=", 2)
 		return parts[1], true, nil
 	}
 	return "", false, nil
@@ -447,7 +453,10 @@ func parseFlagValue(flag, arg string, args []string, index int) (string, bool, e
 //   - --identity value   → use value.
 //   - --identity=value   → use value.
 //   - --identity=        → __SELECT__ (interactive selection).
-func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string, index int) error {
+//
+// SplitN(arg, "=", 2) is used so that identity values containing "=" (e.g., ARN-like
+// strings with key=value parameters) are handled correctly.
+func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string, index int) {
 	if arg == cfg.IdentityFlag {
 		// Has value: --identity <value> (next arg exists and is not another flag).
 		if len(args) > index+1 && !strings.HasPrefix(args[index+1], "-") {
@@ -456,13 +465,11 @@ func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string,
 			// No value: --identity (interactive selection).
 			info.Identity = cfg.IdentityFlagSelectValue
 		}
-		return nil
+		return
 	}
 	if strings.HasPrefix(arg, cfg.IdentityFlag+"=") {
-		parts := strings.Split(arg, "=")
-		if len(parts) != 2 {
-			return fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
-		}
+		// SplitN(..., 2) keeps any additional "=" in the value intact.
+		parts := strings.SplitN(arg, "=", 2)
 		if parts[1] == "" {
 			// Empty value: --identity= (interactive selection).
 			info.Identity = cfg.IdentityFlagSelectValue
@@ -470,7 +477,6 @@ func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string,
 			info.Identity = parts[1]
 		}
 	}
-	return nil
 }
 
 // parseFromPlanFlag handles --from-plan which has optional value semantics.
@@ -527,6 +533,9 @@ func processArgsAndFlags(
 
 	for i, arg := range inputArgsAndFlags {
 		// GlobalOptions: track its position for second-pass collection.
+		// Note: the old code used strings.HasPrefix(arg+"=", cfg.GlobalOptionsFlag), which had the
+		// same false-positive bug as the string flags; the corrected form checks arg starts with
+		// flag+"=" to avoid matching flags that share a common prefix.
 		if arg == cfg.GlobalOptionsFlag {
 			globalOptionsFlagIndex = i + 1
 		} else if strings.HasPrefix(arg, cfg.GlobalOptionsFlag+"=") {
@@ -546,9 +555,7 @@ func processArgsAndFlags(
 		}
 
 		// --identity has special optional/empty-value semantics.
-		if err := parseIdentityFlag(&info, arg, inputArgsAndFlags, i); err != nil {
-			return info, err
-		}
+		parseIdentityFlag(&info, arg, inputArgsAndFlags, i)
 
 		// --from-plan has optional value semantics (path may or may not follow).
 		parseFromPlanFlag(&info, arg, inputArgsAndFlags, i)
@@ -570,7 +577,18 @@ func processArgsAndFlags(
 		// Collect indices of atmos-specific flags to strip from pass-through args.
 		for _, f := range commonFlags {
 			if arg == f {
-				indexesToRemove = append(indexesToRemove, i, i+1)
+				indexesToRemove = append(indexesToRemove, i)
+				// For optional-value flags (--from-plan, --identity), only strip i+1 when
+				// the next arg was actually consumed as the value (i.e., it exists and does
+				// not start with '-').  Blindly stripping i+1 for these flags would silently
+				// drop an unrelated flag (e.g., --refresh=false) passed to the underlying tool.
+				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag {
+					if len(inputArgsAndFlags) > i+1 && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+						indexesToRemove = append(indexesToRemove, i+1)
+					}
+				} else {
+					indexesToRemove = append(indexesToRemove, i+1)
+				}
 			} else if strings.HasPrefix(arg, f+"=") {
 				indexesToRemove = append(indexesToRemove, i)
 			}
