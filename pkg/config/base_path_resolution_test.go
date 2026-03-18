@@ -378,9 +378,15 @@ func TestResolveDotPrefixPath_DotDotSlash_Runtime(t *testing.T) {
 
 // TestResolveAbsolutePath_AbsolutePassThrough verifies absolute paths pass through unchanged.
 func TestResolveAbsolutePath_AbsolutePassThrough(t *testing.T) {
-	absPath := filepath.Join(string(filepath.Separator), "some", "absolute", "path")
+	// Use a real absolute path from the OS to avoid Windows drive-letter issues.
+	tmpDir := t.TempDir()
+	tmpDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
 
-	result, err := resolveAbsolutePath(absPath, filepath.Join(string(filepath.Separator), "config"), "")
+	absPath := filepath.Join(tmpDir, "some", "absolute", "path")
+	configPath := filepath.Join(tmpDir, "config")
+
+	result, err := resolveAbsolutePath(absPath, configPath, "")
 	require.NoError(t, err)
 	assert.Equal(t, absPath, result, "absolute path should pass through unchanged")
 
