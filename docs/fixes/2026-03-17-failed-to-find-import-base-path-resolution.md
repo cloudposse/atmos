@@ -184,10 +184,12 @@ When a user runs `atmos terraform plan vpc -s dev` from a subdirectory (e.g.,
 
 ### Why Our Fixes Don't Break It
 
-**Fix 1 (struct field resolution)**: `resolveSimpleRelativeBasePath()` only runs on
-`configAndStacksInfo.AtmosBasePath` — the struct field set by `--base-path` flag or the
-`atmos_base_path` provider parameter. It does NOT affect `atmosConfig.BasePath` loaded from
-`atmos.yaml` or the default empty value. Normal Atmos CLI usage doesn't set `AtmosBasePath`.
+**Fix 1 (source-aware resolution)**: `resolveAbsolutePath()` now accepts a `source` parameter.
+When the base path comes from a runtime source (env var, CLI flag, provider parameter), the
+`BasePathSource` field is set to `"runtime"`. This only affects dot-prefixed paths (`"."`,
+`"./foo"`, `".."`), which resolve relative to CWD for runtime sources instead of config dir.
+Bare paths (`"stacks"`, `"foo/bar"`) go through the same git root search regardless of source.
+Normal Atmos CLI usage with `base_path` in atmos.yaml is unaffected.
 
 **Fix 2 (`os.Stat` fallback in `tryResolveWithGitRoot`)**: The added `os.Stat` check validates
 the git-root-joined path exists before returning it. For normal projects:
