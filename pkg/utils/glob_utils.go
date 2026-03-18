@@ -51,7 +51,9 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 	if matches == nil {
 		return nil, errUtils.Build(errUtils.ErrFailedToFindImport).
-			WithContext("paths", pattern).
+			WithHint("Verify that `base_path` and `stacks.base_path` in `atmos.yaml` are correct").
+			WithHintf("If using `ATMOS_BASE_PATH`, ensure the path is correct relative to the working directory").
+			WithContext("pattern", pattern).
 			Err()
 	}
 
