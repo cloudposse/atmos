@@ -62,41 +62,27 @@ func handleVersionSubcommand(atmosConfig schema.AtmosConfiguration, info schema.
 		info.RedirectStdErr)
 }
 
-// setupTerraformAuth merges global + component auth config, creates and authenticates
-// the AuthManager, stores the resolved identity back into info, and injects an auth
-// resolver into the Atmos store registry.
+// setupTerraformAuthCreator allows injection of a custom AuthManager creator for
+// testing.  In production it delegates to the real implementation.
+var setupTerraformAuthCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithAtmosConfig
+
+// setupTerraformAuth builds the merged auth config (global + component-specific via
+// getMergedAuthConfig), creates and authenticates the AuthManager, stores the resolved
+// identity back into info, and injects an auth resolver into the Atmos store registry.
+//
+// getMergedAuthConfig is the shared helper (utils_auth.go) that handles the
+// component config fetch, debug logging on fallback, and the ErrInvalidComponent
+// short-circuit. Using it here eliminates duplication and keeps both code paths in sync.
 func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
-	// Build merged auth config (global config + component-specific override if available).
-	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
-
-	log.Debug("Checking if should call ExecuteDescribeComponent",
-		"Stack", info.Stack, "ComponentFromArg", info.ComponentFromArg, "SubCommand", info.SubCommand)
-
-	if info.Stack != "" && info.ComponentFromArg != "" {
-		componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
-			Component:            info.ComponentFromArg,
-			Stack:                info.Stack,
-			ProcessTemplates:     false,
-			ProcessYamlFunctions: false, // avoid circular dependency with YAML functions that need auth
-			Skip:                 nil,
-			AuthManager:          nil, // no AuthManager yet – we are determining which identity to use
-		})
-		if err != nil {
-			// If the component doesn't exist, abort before attempting authentication.
-			if errors.Is(err, errUtils.ErrInvalidComponent) {
-				return nil, err
-			}
-			// For other errors (e.g. permission issues), fall through and use global auth config.
-		} else {
-			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, atmosConfig, cfg.AuthSectionName)
-			if err != nil {
-				return nil, err
-			}
-		}
+	// Get merged auth config (global + component-specific if stack/component are set).
+	// getMergedAuthConfig logs on debug when falling back to global config after an error.
+	mergedAuthConfig, err := getMergedAuthConfig(atmosConfig, info)
+	if err != nil {
+		return nil, err
 	}
 
 	// Create and authenticate the AuthManager.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+	authManager, err := setupTerraformAuthCreator(
 		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
@@ -419,7 +405,7 @@ func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	}
 
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		log.Debug("Using workdir path", "workdirPath", workdirPath)
+		log.Debug("Using workdir path for terraform command", "workdirPath", workdirPath)
 		return workdirPath, nil
 	}
 
