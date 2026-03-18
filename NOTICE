@@ -555,7 +555,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - google.golang.org/grpc
     License: Apache-2.0
-    URL: https://github.com/grpc/grpc-go/blob/v1.79.2/LICENSE
+    URL: https://github.com/grpc/grpc-go/blob/v1.79.3/LICENSE
 
   - gopkg.in/ini.v1
     License: Apache-2.0
