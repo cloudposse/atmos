@@ -33,11 +33,11 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	}
 	// Process the base path specified by the Terraform provider `atmos_base_path` parameter
 	// or CLI `--base-path` flag. This overrides all other base path configs.
-	// Convert to absolute path immediately (relative to CWD) to prevent resolveAbsolutePath
-	// from routing it through git root discovery — explicitly provided paths are always
-	// CWD-relative, not git-root-relative.
+	// Mark as runtime source so resolveAbsolutePath uses CWD for dot-prefixed paths
+	// instead of config-dir. Bare paths still go through git root search.
 	if configAndStacksInfo.AtmosBasePath != "" {
-		atmosConfig.BasePath = resolveSimpleRelativeBasePath(configAndStacksInfo.AtmosBasePath)
+		atmosConfig.BasePath = configAndStacksInfo.AtmosBasePath
+		atmosConfig.BasePathSource = "runtime"
 	}
 
 	// After unmarshalling, ensure AppendUserAgent is set if still empty
@@ -208,69 +208,23 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 	return atmosConfig, nil
 }
 
-// atmosConfigAbsolutePaths converts paths to absolute paths.
 // AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
-// This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
-// StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
-// It converts a path to absolute form, resolving relative paths according to the semantics below.
+// See docs/prd/base-path-resolution-semantics.md for the full convention.
 //
-// Resolution semantics (see docs/prd/base-path-resolution-semantics.md):
+// Value categories (see PRD "Core Convention: Empty vs Dot vs Bare"):
+//   - Empty ("") → git root → config dir → CWD (smart default)
+//   - Dot (".", "./foo", "..", "../foo") → source-dependent anchor:
+//     config-file source → config dir; runtime source → CWD
+//   - Bare ("foo", "foo/bar") → git root search, source-independent
+//   - Absolute ("/abs/path") → pass through
 //
-//  1. Absolute paths → return as-is
-//  2. Explicit relative paths → resolve relative to cliConfigPath (config-file-relative):
-//     - Exactly "." or ".."
-//     - Starts with "./" or "../" (Unix)
-//     - Starts with ".\" or "..\" (Windows)
-//  3. "" (empty) or simple paths like "foo" → try git root, fallback to cliConfigPath
+// The source parameter controls how dot-prefixed paths (".", "./foo", "..", "../foo") resolve:
+//   - "runtime" (env var, CLI flag, provider param): dot = CWD (shell convention)
+//   - "" or "config" (atmos.yaml): dot = config dir (config-file convention)
 //
-// Fallback order when primary resolution fails:
-//  1. Git repository root
-//  2. Config directory (cliConfigPath / dirname(atmos.yaml))
-//  3. CWD (last resort)
-//
-// Key semantic distinctions:
-//   - "." means dirname(atmos.yaml) (config-file-relative)
-//   - "" means git repo root with fallback to dirname(atmos.yaml) (smart default)
-//   - "./foo" means dirname(atmos.yaml)/foo (config-file-relative)
-//   - "foo" means git-root/foo with fallback to dirname(atmos.yaml)/foo (search path)
-//   - ".." or "../foo" means dirname(atmos.yaml)/../foo (config-file-relative navigation)
-//
-// This follows the convention of tsconfig.json, package.json, .eslintrc - paths in
-// resolveSimpleRelativeBasePath converts "simple relative" base paths to absolute (CWD-relative).
-// Simple relative paths are those that don't start with ".", "..", "./", or "../" and are not
-// absolute. These paths would otherwise be mis-routed through git root discovery by
-// resolveAbsolutePath. Paths starting with "." or ".." are intentionally config-file-relative
-// and are returned unchanged for resolveAbsolutePath to handle.
-func resolveSimpleRelativeBasePath(basePath string) string {
-	if basePath == "" || filepath.IsAbs(basePath) {
-		return basePath
-	}
-
-	sep := string(filepath.Separator)
-
-	isConfigRelative := basePath == "." ||
-		basePath == ".." ||
-		strings.HasPrefix(basePath, "./") ||
-		strings.HasPrefix(basePath, "."+sep) ||
-		strings.HasPrefix(basePath, "../") ||
-		strings.HasPrefix(basePath, ".."+sep)
-
-	if isConfigRelative {
-		return basePath
-	}
-
-	// Simple relative path — resolve to CWD.
-	absPath, err := filepath.Abs(basePath)
-	if err != nil {
-		return basePath
-	}
-
-	return absPath
-}
-
-// config files are relative to the config file location, not where you run from.
-// Use the !cwd YAML tag if you need paths relative to CWD.
-func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
+// Bare paths ("foo", "stacks") always go through git root search regardless of source.
+// See docs/prd/base-path-resolution-semantics.md for the full convention.
+func resolveAbsolutePath(path string, cliConfigPath string, source string) (string, error) {
 	// If already absolute, return as-is.
 	if filepath.IsAbs(path) {
 		return path, nil
@@ -288,9 +242,30 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 		strings.HasPrefix(path, "../") ||
 		strings.HasPrefix(path, ".."+sep)
 
-	// For explicit relative paths (".", "./...", "..", "../..."):
-	// Resolve relative to config directory (cliConfigPath).
-	if isExplicitRelative && cliConfigPath != "" {
+	// For dot-prefixed paths: resolve based on source.
+	if isExplicitRelative {
+		return resolveDotPrefixPath(path, cliConfigPath, source)
+	}
+
+	// For empty path or simple relative paths (like "stacks", "components/terraform"):
+	// Try git root first.
+	return tryResolveWithGitRoot(path, isExplicitRelative, cliConfigPath)
+}
+
+// resolveDotPrefixPath resolves dot-prefixed paths (".", "./foo", "..", "../foo").
+// The anchor depends on the source: runtime → CWD, config → config directory.
+func resolveDotPrefixPath(path, cliConfigPath, source string) (string, error) {
+	if source == "runtime" {
+		// Runtime source: dot means CWD (shell convention).
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return "", fmt.Errorf("resolving path %q relative to CWD: %w", path, err)
+		}
+		return absPath, nil
+	}
+
+	// Config source: dot means config directory (config-file convention).
+	if cliConfigPath != "" {
 		basePath := filepath.Join(cliConfigPath, path)
 		absPath, err := filepath.Abs(basePath)
 		if err != nil {
@@ -299,9 +274,12 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 		return absPath, nil
 	}
 
-	// For empty path or simple relative paths (like "stacks", "components/terraform"):
-	// Try git root first.
-	return tryResolveWithGitRoot(path, isExplicitRelative, cliConfigPath)
+	// No config path: fall back to CWD (last resort).
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolving path %q: %w", path, err)
+	}
+	return absPath, nil
 }
 
 // tryResolveWithGitRoot attempts to resolve a path using git root as the base.
@@ -431,7 +409,7 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// Relative paths are resolved relative to atmos.yaml location (atmosConfig.CliConfigPath).
 	var atmosBasePathAbs string
 	var err error
-	atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, atmosConfig.CliConfigPath)
+	atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, atmosConfig.CliConfigPath, atmosConfig.BasePathSource)
 	if err != nil {
 		return err
 	}

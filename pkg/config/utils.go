@@ -199,6 +199,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	if len(basePath) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_BASE_PATH", basePath)
 		atmosConfig.BasePath = basePath
+		atmosConfig.BasePathSource = "runtime"
 	}
 
 	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
@@ -573,6 +574,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
+		atmosConfig.BasePathSource = "runtime"
 		log.Debug(cmdLineArg, BasePathFlag, configAndStacksInfo.BasePath)
 	}
 	return nil

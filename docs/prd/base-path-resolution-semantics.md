@@ -4,70 +4,159 @@
 
 This PRD formalizes the resolution semantics for the `base_path` configuration option in `atmos.yaml`. It defines how different `base_path` values are resolved to absolute paths, ensuring predictable behavior regardless of where atmos is executed from.
 
-**Important:** Resolution semantics differ based on the **source** of the `base_path` value. Config-file values resolve relative to the config file location, while values provided by the user at runtime (environment variables, CLI flags, provider parameters) resolve relative to the current working directory.
+## Core Convention: Empty vs Dot vs Bare
+
+The entire resolution system rests on one principle: **the value you provide tells Atmos _how_ to resolve, and the source tells Atmos _where_ "here" is.**
+
+There are four categories of `base_path` value:
+
+| Category | Pattern | Meaning | Example |
+|----------|---------|---------|---------|
+| **Empty** | `""`, unset, `~`, `null` | "I have no opinion — use smart defaults" | `base_path: ""` |
+| **Dot** | `"."`, `"./"`, `"./foo"`, `".."`, `"../foo"` | "HERE" — an explicit anchor to a contextual location | `base_path: "."` |
+| **Bare** | `"foo"`, `"foo/bar"`, `".hidden"`, `".terraform/modules/x"` | "Find this name" — a search via git root → config dir | `base_path: "stacks"` |
+| **Absolute** | `"/abs/path"` | "This exact location" — no resolution needed | `base_path: "/opt/atmos"` |
+
+### `""` ≠ `"."`
+
+This distinction is fundamental and intentional:
+
+- **`""`** means "I didn't specify anything." Atmos applies its smart default: discover the git root, fall back to config dir. The user has **no opinion** about where the base path should be.
+- **`"."`** means "I explicitly said HERE." The user has an **opinion** — they want the base path anchored to a specific location. Where "here" is depends on context (see below).
+
+These are never interchangeable. An empty string is the absence of a signal. A dot is a signal.
+
+### `"./foo"` ≠ `"foo"`
+
+- **`"./foo"`** has a dot-slash prefix — it's an explicit anchor. "HERE, then foo." It resolves relative to context.
+- **`"foo"`** has no prefix — it's a name to search for. Atmos looks for `foo` at the git root first, then the config directory.
+
+### `".terraform/..."` ≠ `"./.terraform/..."`
+
+This catches people. `.terraform` starts with a dot, but it's a **directory name** (`.t...`), not the `./` prefix. It's a bare path — a name to search for. To make it CWD-relative, use `"./.terraform/..."` (dot-slash prefix).
+
+## Where "Here" Is: Source-Dependent Anchoring
+
+The dot-prefix (`"."`, `"./foo"`, `".."`, `"../foo"`) always means "here." But where "here" is depends on where the value came from:
+
+| Source | "Here" means | Convention |
+|--------|-------------|------------|
+| `atmos.yaml` (config file) | Directory containing `atmos.yaml` | Like `tsconfig.json`, `package.json`, `.eslintrc` |
+| `ATMOS_BASE_PATH` (env var) | CWD (current working directory) | Like every other shell tool |
+| `--base-path` (CLI flag) | CWD | Like every other CLI tool |
+| `atmos_base_path` (provider param) | CWD | Provider runs in a component directory |
+
+This isn't special Atmos logic. It's how dots work everywhere:
+- In a Makefile, `./scripts/build.sh` means relative to the Makefile.
+- In a shell, `./scripts/build.sh` means relative to CWD.
+- Same dot, different context, same intuition.
+
+**Bare paths and empty values are source-independent.** `ATMOS_BASE_PATH=stacks` and `base_path: stacks` in atmos.yaml go through the exact same git root search. The source only matters for dot-prefixed values.
+
+## Comprehensive Resolution Table
+
+**Setup:** `atmos.yaml` at `/repo/config/atmos.yaml`, git root is `/repo`, CWD is `/repo/components/terraform/vpc`
+
+| # | Config (`atmos.yaml`) | Env var (`ATMOS_BASE_PATH`) | Resolves to | Category | Why |
+|---|----------------------|----------------------------|-------------|----------|-----|
+| 1 | `base_path: ""` | *(not set)* | `/repo` | Empty | No opinion → git root discovery |
+| 2 | *(not set)* | `""` | `/repo` | Empty | Empty env var = not set → config/default |
+| 3 | `base_path: "."` | — | `/repo/config` | Dot | "Here" in a config file = config dir |
+| 4 | — | `ATMOS_BASE_PATH=.` | `/repo/components/terraform/vpc` | Dot | "Here" in a shell = CWD |
+| 5 | `base_path: "./stacks"` | — | `/repo/config/stacks` | Dot | Config dir + relative path |
+| 6 | — | `ATMOS_BASE_PATH=./stacks` | `/repo/components/terraform/vpc/stacks` | Dot | CWD + relative path |
+| 7 | `base_path: ".."` | — | `/repo` | Dot | Up from config dir |
+| 8 | — | `ATMOS_BASE_PATH=..` | `/repo/components/terraform` | Dot | Up from CWD |
+| 9 | `base_path: "../../.."` | — | *(3 levels up from `/repo/config`)* | Dot | Navigate up from config dir |
+| 10 | — | `ATMOS_BASE_PATH=../../..` | `/repo` | Dot | Navigate up from CWD (3 levels from `vpc`) |
+| 11 | `base_path: "stacks"` | — | `/repo/stacks` | Bare | Search: git root/stacks |
+| 12 | — | `ATMOS_BASE_PATH=stacks` | `/repo/stacks` | Bare | **Same search** — source-independent |
+| 13 | `base_path: "custom/path"` | — | `/repo/custom/path` | Bare | Search: git root/custom/path |
+| 14 | — | `ATMOS_BASE_PATH=custom/path` | `/repo/custom/path` | Bare | **Same search** — source-independent |
+| 15 | — | `ATMOS_BASE_PATH=./.terraform/modules/monorepo` | `/repo/components/terraform/vpc/.terraform/modules/monorepo` | Dot | Dot-slash anchors to CWD |
+| 16 | — | `ATMOS_BASE_PATH=.terraform/modules/monorepo` | `/repo/.terraform/modules/monorepo` | Bare | `.terraform` is a name, not `./` prefix → search |
+| 17 | `base_path: "/abs/path"` | — | `/abs/path` | Absolute | Absolute paths pass through |
+| 18 | — | `ATMOS_BASE_PATH=/abs/path` | `/abs/path` | Absolute | Same — absolute is absolute |
+
+### Verifying Consistency
+
+The table demonstrates three properties:
+
+1. **Empty is always the same** — Rows 1-2: `""` always means git root discovery, regardless of source.
+2. **Bare is always the same** — Rows 11-14: `"stacks"` always goes through git root search, regardless of source.
+3. **Dot adapts to context** — Rows 3-10, 15: `"."` means "here", where "here" depends on whether you're in a file or a shell.
+
+No row contradicts another. No value has surprise behavior based on its source. The only thing that changes is the anchor for dot-prefix, which matches universal convention.
 
 ## Motivation
 
-Issue #1858 revealed that the resolution behavior for empty `base_path` was undefined when using `ATMOS_CLI_CONFIG_PATH`. This PRD formalizes the correct semantics:
+Issue #1858 revealed that the resolution behavior for empty `base_path` was undefined when using `ATMOS_CLI_CONFIG_PATH`. Issue #2183 (Tyler Rankin / Spacelift) revealed that `ATMOS_BASE_PATH=.terraform/modules/monorepo` broke in v1.202.0 when git root discovery was extended to all simple relative paths.
 
-- Empty `base_path` should trigger git root discovery, not resolve to the config directory
-- Relative paths (`.`, `..`, `./foo`, `../foo`) should be config-file-relative, following the convention of other config files
-- Simple relative paths (`foo`) should search git root first, then config directory
-
-Issue #2183 and a related `terraform-provider-utils` regression revealed that the original PRD did not distinguish between base path sources. When `ATMOS_BASE_PATH` is set as an environment variable or `--base-path` is passed as a CLI flag, the user intends the path to resolve relative to CWD, not relative to git root or the config file. The PRD has been updated to formalize source-dependent resolution semantics.
+The original PRD did not distinguish between the four value categories or formalize the source-dependent anchoring for dot-prefix. This led to two conflicting fixes — one making env vars config-relative, the other making them CWD-relative — because the underlying convention was never stated.
 
 ## Requirements
 
 ### Functional Requirements
 
-#### FR1: Base Path Resolution (Config-File Source)
+#### FR1: Value Category Classification
 
-These semantics apply when `base_path` is set in `atmos.yaml`:
+Every `base_path` value is classified into exactly one category:
 
-| `base_path` value | Resolves to | Rationale |
-|-------------------|-------------|-----------|
-| `""`, `~`, `null`, or unset | Search: git root → dirname(atmos.yaml) | Smart default |
-| `"."` | dirname(atmos.yaml) | Config-file-relative |
-| `".."` | Parent of dirname(atmos.yaml) | Config-file-relative |
-| `"./foo"` | dirname(atmos.yaml)/foo | Config-file-relative |
-| `"../foo"` | Parent of dirname(atmos.yaml)/foo | Config-file-relative |
-| `"foo"` | Search: git root/foo → dirname(atmos.yaml)/foo | Search path |
-| `"/absolute/path"` | /absolute/path | Explicit absolute |
-| `!repo-root` | Git repository root | Explicit git root tag |
-| `!cwd` | Current working directory | Explicit CWD tag |
+| Category | Detection | Resolution strategy |
+|----------|-----------|-------------------|
+| Empty | `""`, unset, `~`, `null` | Git root → config dir → CWD |
+| Dot | Starts with `"./"`, `"../"`, equals `"."` or `".."` | Anchor-relative (source-dependent) |
+| Bare | Non-empty, non-absolute, no dot prefix | Git root search → config dir → CWD fallback |
+| Absolute | Starts with `/` (Unix) or drive letter (Windows) | Pass through |
 
-**Search order for empty and simple relative paths:**
-1. Git repo root (most common - standard repo structure)
-2. dirname(atmos.yaml) (fallback when not in git repo)
+Classification is independent of source. A value is Dot or Bare based on its content alone.
 
-#### FR2: Explicit Path Tags
+#### FR2: Empty Value Resolution
 
-- `!repo-root` - Resolves to git repository root, with optional default value
-- `!cwd` - Resolves to current working directory, with optional relative path
+Empty values trigger smart default resolution:
 
-#### FR3: Git Root Discovery
+1. Discover git root → use it as base path
+2. No git root → use dirname(atmos.yaml)
+3. No config file → use CWD
 
-Git root discovery applies:
-- When `base_path` is empty/unset
-- When `base_path` is a simple relative path (no `./` or `../` prefix) **from a config-file source**
-- Regardless of whether config is found via default discovery or `ATMOS_CLI_CONFIG_PATH`
+Empty env var (`ATMOS_BASE_PATH=""`) is treated as unset and does not override config-file values.
 
-Git root discovery does NOT apply:
-- When `base_path` starts with `.` or `./` (explicit config-relative)
-- When `base_path` starts with `../` (explicit config-relative navigation)
-- When `base_path` is absolute
-- When `ATMOS_GIT_ROOT_BASEPATH=false`
-- When `base_path` is a simple relative path from a **runtime source** (env var, CLI flag, provider parameter) — see FR6
+#### FR3: Dot-Prefix Resolution (Source-Dependent Anchoring)
 
-#### FR4: Environment Variable Interaction
+Dot-prefixed values resolve relative to an anchor. The anchor depends on the source:
 
-- `ATMOS_BASE_PATH` - Overrides `base_path` in config file (see FR6 for resolution semantics)
-- `ATMOS_CLI_CONFIG_PATH` - Specifies config file location
-- `ATMOS_GIT_ROOT_BASEPATH=false` - Disables git root discovery
+- **Config-file source** (atmos.yaml): anchor = dirname(atmos.yaml)
+- **Runtime source** (env var, CLI flag, provider param): anchor = CWD
 
-#### FR5: Config File Search Order
+Resolution: `filepath.Join(anchor, path)` → `filepath.Abs()`
 
-Atmos searches for `atmos.yaml` in the following order (highest to lowest priority):
+#### FR4: Bare Path Resolution (Source-Independent Search)
+
+Bare paths go through git root search regardless of source:
+
+1. If git root exists and `git_root/path` exists on disk → return `git_root/path`
+2. If `git_root/path` doesn't exist but `CWD/path` does → return `CWD/path` (with trace log)
+3. If neither exists → return `git_root/path` (for consistent error messages)
+4. If no git root → resolve relative to config dir, then CWD
+
+The `os.Stat` validation in step 1-2 prevents silent misresolution.
+
+#### FR5: Absolute Path Resolution
+
+Absolute paths are returned as-is. No search, no anchoring.
+
+#### FR6: Explicit Path Tags
+
+- `!repo-root` — Resolves to git repository root
+- `!cwd` — Resolves to current working directory (useful in atmos.yaml when you genuinely need CWD)
+
+#### FR7: Environment Variable Interaction
+
+- `ATMOS_BASE_PATH` — Overrides `base_path` in config file. Marked as runtime source.
+- `ATMOS_CLI_CONFIG_PATH` — Specifies config file location (does not affect base path source).
+- `ATMOS_GIT_ROOT_BASEPATH=false` — Disables git root discovery.
+
+#### FR8: Config File Search Order
 
 | Priority | Source | Description |
 |----------|--------|-------------|
@@ -79,72 +168,58 @@ Atmos searches for `atmos.yaml` in the following order (highest to lowest priori
 | 6 | Home directory | `~/.atmos/atmos.yaml` |
 | 7 | System directory | `/usr/local/etc/atmos/atmos.yaml` |
 
-**Note:** Viper deep-merges configurations, so settings from higher-priority sources override those from lower-priority sources.
+#### FR9: Base Path Source Priority
 
-#### FR6: Runtime Source Resolution (CLI Flag, Env Var, Provider Parameter)
-
-When `base_path` is provided at runtime — via `--base-path` CLI flag, `ATMOS_BASE_PATH` environment variable, or the `atmos_base_path` parameter in `terraform-provider-utils` — resolution semantics differ from config-file values:
-
-| `base_path` value | Resolves to | Rationale |
-|-------------------|-------------|-----------|
-| `""` (empty) | No override (config-file value used) | Empty means "not set" |
-| `"/absolute/path"` | /absolute/path | Explicit absolute |
-| `"."` | dirname(atmos.yaml) | Config-file-relative (preserves existing behavior) |
-| `"./foo"` | dirname(atmos.yaml)/foo | Config-file-relative (preserves existing behavior) |
-| `"../foo"` | Parent of dirname(atmos.yaml)/foo | Config-file-relative (preserves existing behavior) |
-| `"foo"` | CWD/foo | **CWD-relative** |
-| `"foo/bar"` | CWD/foo/bar | **CWD-relative** |
-
-**Key difference from FR1:** Simple relative paths (`"foo"`, `"foo/bar"`) resolve relative to CWD, **not** via git root search. This is because:
-
-1. **User intent**: When a user types `ATMOS_BASE_PATH=.terraform/modules/monorepo` in their shell or CI config, they mean "relative to where I am right now"
-2. **Shell convention**: Environment variables and CLI flags operate in the user's shell context, where relative paths are always CWD-relative
-3. **CI/CD compatibility**: CI workers (Spacelift, GitHub Actions) set env vars in component directories where CWD differs from git root
-
-**Priority order for base path sources (highest wins):**
-
-| Priority | Source | Resolution |
-|----------|--------|------------|
-| 1 | `configAndStacksInfo.AtmosBasePath` (struct field from `--base-path` or `atmos_base_path`) | FR6 (CWD-relative for simple paths) |
-| 2 | `ATMOS_BASE_PATH` environment variable (via Viper) | FR6 (CWD-relative for simple paths) |
-| 3 | `base_path` in `atmos.yaml` | FR1 (config-file-relative / git root search) |
-| 4 | Default (empty) | Git root → config dir → CWD |
+| Priority | Source | Marked as |
+|----------|--------|-----------|
+| 1 | `configAndStacksInfo.AtmosBasePath` (struct field from `--base-path` or `atmos_base_path`) | `runtime` |
+| 2 | `ATMOS_BASE_PATH` environment variable | `runtime` |
+| 3 | `base_path` in `atmos.yaml` | (default, config-file) |
+| 4 | Default (empty) | (default) |
 
 ### Non-Functional Requirements
 
 #### NFR1: Testability
 
-- `TEST_GIT_ROOT` environment variable for test isolation (mocks git root path)
+- `ATMOS_GIT_ROOT_BASEPATH=false` to disable git root discovery in tests
+- Tests must cover all four value categories for both config and runtime sources
 
 ---
 
 ## Design Rationale
 
-### Why `.` and `..` are config-file-relative
+### Why dot-prefix in config files is config-dir-relative
 
 This follows the convention of other configuration files:
-- `tsconfig.json` - paths relative to tsconfig location
-- `package.json` - paths relative to package.json location
-- `.eslintrc` - paths relative to config location
-- `Makefile` - includes relative to Makefile location
+- `tsconfig.json` — paths relative to tsconfig location
+- `package.json` — paths relative to package.json location
+- `.eslintrc` — paths relative to config location
+- `Makefile` — includes relative to Makefile location
 
 **Paths in configuration files are relative to where the config is defined, not where you run the command from.**
 
-This is the behavior introduced in v1.201.0 (PR #1774) and is intentional. The commit message states:
-> "This is the key fix: when ATMOS_BASE_PATH is relative (e.g., "../../.."), we need to resolve it relative to where atmos.yaml is, not relative to CWD."
+### Why dot-prefix in env vars/CLI flags is CWD-relative
 
-Pre-v1.201.0 used CWD-relative (via `filepath.Abs`) which was the bug being fixed.
+This follows the convention of every shell tool:
+- `cd ./subdir` — relative to CWD
+- `ls ../parent` — relative to CWD
+- `SOME_PATH=./local/dir some-tool` — relative to CWD
 
-**Note:** The v1.201.0 commit message specifically references `"../../.."` — a dot-relative path. This fix was correct for dot-relative paths. The regression occurred when v1.202.0 extended git root discovery to *all* simple relative paths regardless of source, which broke CWD-relative env var and CLI flag values.
+When a user types a path in their shell, they expect it to resolve from where they are.
 
-### Why empty `base_path` triggers git root discovery
+### Why bare paths are source-independent
 
-Empty/unset values conventionally mean "use sensible defaults":
-- Git commands work from anywhere in a repository
-- Most repos have `atmos.yaml` at root alongside `stacks/` and `components/`
-- Empty = "I don't want to specify, figure it out"
+A bare path like `"stacks"` is a name, not a relative reference. There's no dot-anchor, so there's nothing to be "relative to." Instead, it's a search: "find `stacks` starting from the git root."
 
-This enables the "run from anywhere" behavior that users expect.
+Making bare paths source-dependent would be confusing: `ATMOS_BASE_PATH=stacks` resolving to CWD/stacks while `base_path: stacks` resolves to git-root/stacks. Two different locations for the same value? That's the incongruence this PRD eliminates.
+
+### Why empty is different from dot
+
+Empty means "I didn't specify." It's the default. Atmos gets to be smart about it — discover the git root, find the project, do the right thing.
+
+Dot means "I specified HERE." The user made a choice. Atmos should respect that choice and resolve "here" based on context.
+
+If empty and dot were the same, then `ATMOS_BASE_PATH=` and `ATMOS_BASE_PATH=.` would be identical. But the first means "use defaults" and the second means "use my current directory." Very different intent.
 
 ### Why `!cwd` tag exists
 
@@ -156,189 +231,87 @@ base_path: !cwd
 base_path: !cwd ./relative/path
 ```
 
-This provides an explicit escape hatch for users who genuinely need paths relative to where atmos is executed from within a config file. Note that runtime sources (env vars, CLI flags) already resolve simple relative paths relative to CWD, so `!cwd` is primarily useful in `atmos.yaml`.
-
-### Why runtime sources use CWD-relative resolution
-
-Config-file values and runtime values have fundamentally different contexts:
-
-- **Config files** exist at a fixed location in the repository. Paths in them are authored relative to that location. The user who writes `base_path: stacks` in `atmos.yaml` at `/repo/atmos.yaml` means `/repo/stacks`.
-- **Runtime values** are provided in the user's shell context. The user who types `ATMOS_BASE_PATH=.terraform/modules/monorepo` means "relative to my current directory." They may be in `/repo/components/terraform/vpc/` and expect the path to resolve to `/repo/components/terraform/vpc/.terraform/modules/monorepo`.
-
-Applying config-file resolution (git root search) to runtime values breaks the principle of least surprise. When a user sets an env var with a relative path, every other tool resolves it relative to CWD. Atmos should too.
-
-**Dot-relative paths** (`"."`, `"./foo"`, `"../foo"`) from runtime sources still resolve config-file-relative. This preserves backward compatibility with `ATMOS_BASE_PATH="../../.."` (the v1.201.0 fix scenario) and is consistent: dot-prefixed paths always mean "relative to the config file."
+This provides an explicit escape hatch. Note that runtime sources (env vars, CLI flags) already get CWD-relative behavior for dot-prefixed paths, so `!cwd` is primarily useful in `atmos.yaml`.
 
 ---
 
 ## Specification
 
-### Detection Logic
+### Resolution Algorithm
 
 ```
-# Step 1: Determine the source and apply source-specific pre-processing
-if source is runtime (CLI flag, env var, provider parameter):
-    if path is a simple relative path (not empty, not absolute, no "." or ".." prefix):
-        return CWD / path   # CWD-relative for runtime sources
+function resolve(value, source, configDir):
 
-# Step 2: Standard config-file resolution
-if path == "" or path is unset:
-    return git_repo_root() or dirname(atmos.yaml)
+    # 1. Classify the value
+    category = classify(value)
 
-if path is absolute:
-    return path
+    # 2. Resolve based on category
+    switch category:
 
-if path == "." or path starts with "./" or path == ".." or path starts with "../":
-    return dirname(atmos.yaml) / path  # Config-file-relative
+        case EMPTY:
+            return gitRoot() ?? configDir ?? CWD
 
-# Simple relative path from config file (e.g., "foo", "foo/bar")
-# Try git root first, validate with os.Stat, fall back to CWD
-if exists(git_repo_root() / path):
-    return git_repo_root() / path
-if exists(CWD / path):
-    return CWD / path
-return git_repo_root() / path  # Default to git root for consistent error messages
+        case ABSOLUTE:
+            return value
+
+        case DOT:
+            if source == "runtime":
+                anchor = CWD
+            else:
+                anchor = configDir
+            return abs(join(anchor, value))
+
+        case BARE:
+            # Source-independent: always search git root first
+            root = gitRoot()
+            if root != "":
+                if exists(join(root, value)):
+                    return join(root, value)
+                if exists(abs(value)):          # CWD fallback
+                    return abs(value)
+                return join(root, value)        # default for error messages
+            # No git root: config dir fallback
+            if configDir != "":
+                return abs(join(configDir, value))
+            return abs(value)                   # last resort: CWD
 ```
 
-### Key Semantic Distinctions
+### Classification Function
 
-1. **`""` (empty) vs `"."`**:
-   - `""` = smart default (git root with fallback to config dir)
-   - `"."` = explicit config directory (where atmos.yaml lives)
+```
+function classify(value):
+    if value == "" or value is unset:
+        return EMPTY
+    if isAbsolute(value):
+        return ABSOLUTE
+    if value == "." or value == ".."
+       or startsWith(value, "./") or startsWith(value, "../")
+       or startsWith(value, ".\\") or startsWith(value, "..\\"):  # Windows
+        return DOT
+    return BARE
+```
 
-2. **`"./foo"` vs `"foo"` (in atmos.yaml)**:
-   - `"./foo"` = explicit config-dir-relative (config-dir/foo)
-   - `"foo"` = search path (git-root/foo → config-dir/foo)
+### Source Tracking
 
-3. **`"foo"` in atmos.yaml vs `ATMOS_BASE_PATH=foo`**:
-   - In atmos.yaml: search path (git-root/foo → config-dir/foo)
-   - As env var: CWD-relative (CWD/foo)
-
-4. **`!cwd` vs `"."`**:
-   - `!cwd` = current working directory (where command is run from)
-   - `"."` = config directory (where atmos.yaml is located)
+The `AtmosConfiguration` struct carries a `BasePathSource` field (`yaml:"-"`) that is set to `"runtime"` when the base path comes from an env var, CLI flag, or provider parameter. Config-file values leave it empty (default).
 
 ---
 
-## Test Cases
+## Issue Resolutions
 
-### Config-File Source (`base_path` in atmos.yaml)
+### Issue #1858
 
-```
-# Scenario: atmos.yaml at /repo/config/atmos.yaml, CWD is /repo/src, git root is /repo
+**Setup:** `ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos`, `base_path: ""`, stacks at repo root.
 
-base_path: ""           → /repo                    (git root)
-base_path: "."          → /repo/config             (config dir)
-base_path: ".."         → /repo                    (parent of config dir)
-base_path: "./foo"      → /repo/config/foo         (config-dir-relative)
-base_path: "../foo"     → /repo/foo                (parent of config dir)
-base_path: "foo"        → /repo/foo                (git root + foo, if exists)
-base_path: "foo/bar"    → /repo/foo/bar            (git root + foo/bar, if exists)
-base_path: "/abs/path"  → /abs/path                (absolute)
-base_path: !repo-root   → /repo                    (explicit git root)
-base_path: !cwd         → /repo/src                (explicit CWD)
+**Resolution:** Empty base_path → git root discovery → `/repo` → finds `stacks/`.
 
-# Scenario: Same setup but NOT in a git repo
+### Issue #2183 (Tyler Rankin / Spacelift)
 
-base_path: ""           → /repo/config             (fallback to config dir)
-base_path: "."          → /repo/config             (config dir)
-base_path: ".."         → /repo                    (parent of config dir)
-base_path: "./foo"      → /repo/config/foo         (config-dir-relative)
-base_path: "../foo"     → /repo/foo                (parent of config dir)
-base_path: "foo"        → /repo/config/foo         (fallback to config-dir + foo)
-base_path: "foo/bar"    → /repo/config/foo/bar     (fallback to config-dir + foo/bar)
-base_path: "/abs/path"  → /abs/path                (absolute)
-base_path: !cwd         → /repo/src                (explicit CWD)
-```
+**Setup:** `ATMOS_BASE_PATH=.terraform/modules/monorepo`, CWD is component directory.
 
-### Runtime Source (env var, CLI flag, provider parameter)
+**Resolution with this PRD:** `.terraform/modules/monorepo` is a **bare path** (no dot-slash prefix). It goes through git root search. `os.Stat` at `git_root/.terraform/modules/monorepo` fails. CWD fallback finds it at `CWD/.terraform/modules/monorepo`.
 
-```
-# Scenario: CWD is /repo/components/terraform/vpc, git root is /repo
-
-ATMOS_BASE_PATH=""                                → (no override, config-file value used)
-ATMOS_BASE_PATH="."                               → /repo/config             (config-dir-relative)
-ATMOS_BASE_PATH="./foo"                           → /repo/config/foo         (config-dir-relative)
-ATMOS_BASE_PATH="../foo"                          → /repo/config/../foo      (config-dir-relative)
-ATMOS_BASE_PATH=".terraform/modules/monorepo"     → /repo/components/terraform/vpc/.terraform/modules/monorepo (CWD-relative)
-ATMOS_BASE_PATH="stacks"                          → /repo/components/terraform/vpc/stacks (CWD-relative)
-ATMOS_BASE_PATH="/abs/path"                       → /abs/path                (absolute)
---base-path=".terraform/modules/monorepo"         → /repo/components/terraform/vpc/.terraform/modules/monorepo (CWD-relative)
---base-path="/abs/path"                           → /abs/path                (absolute)
-atmos_base_path=".terraform/modules/monorepo"     → /repo/components/terraform/vpc/.terraform/modules/monorepo (CWD-relative)
-```
-
----
-
-## Implementation
-
-### Two-Pronged Approach
-
-The implementation handles the two runtime source code paths separately:
-
-**Prong 1: Struct field (`configAndStacksInfo.AtmosBasePath`)**
-
-Set by `--base-path` CLI flag or `atmos_base_path` provider parameter. In `InitCliConfig`, before `AtmosConfigAbsolutePaths` runs, `resolveSimpleRelativeBasePath()` converts simple relative paths to absolute via `filepath.Abs()` (CWD-relative). The resulting absolute path passes through `resolveAbsolutePath()` unchanged.
-
-**Prong 2: Env var (`ATMOS_BASE_PATH`)**
-
-Read by Viper into `atmosConfig.BasePath`. The value reaches `resolveAbsolutePath()` → `tryResolveWithGitRoot()`. The `os.Stat` validation check tries the git-root-joined path first; if it doesn't exist, falls back to CWD-relative. This handles the case where `ATMOS_BASE_PATH=.terraform/modules/monorepo` is set from a component directory where the path exists relative to CWD but not at git root.
-
-### `resolveSimpleRelativeBasePath()` Function
-
-Classifies paths and converts simple relative paths to absolute:
-- Empty → return as-is (no override)
-- Absolute → return as-is
-- Dot-relative (`.`, `./foo`, `..`, `../foo`) → return as-is (for config-file-relative resolution)
-- Simple relative (`foo`, `foo/bar`) → `filepath.Abs()` (CWD-relative)
-
-### `tryResolveWithGitRoot()` `os.Stat` Fallback
-
-For simple relative paths from config-file source:
-1. Try `git_root / path` — if exists, return it
-2. Try `CWD / path` — if exists, return it (with trace log)
-3. Neither exists — return git root path (for consistent error messages)
-
-This also handles the env var case: if `ATMOS_BASE_PATH` sets a path that exists at CWD but not at git root, the fallback finds it.
-
----
-
-## Issue #1858 Resolution
-
-**User's setup:**
-- `ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos`
-- `base_path: ""` in their atmos.yaml
-- `stacks/` and `components/` at repo root
-
-**Before fix (broken):**
-- Empty `base_path` resolved to config directory (`/repo/rootfs/usr/local/etc/atmos/`)
-- Atmos looked for `stacks/` at `/repo/rootfs/usr/local/etc/atmos/stacks/`
-- Directory doesn't exist → error
-
-**After fix (working):**
-- Empty `base_path` triggers git root discovery
-- Resolves to `/repo` (git root)
-- `stacks/` found at `/repo/stacks/`
-
-## Issue #2183 Resolution
-
-**User's setup (Tyler Rankin / Spacelift):**
-- `ATMOS_BASE_PATH=.terraform/modules/monorepo` (environment variable on CI worker)
-- CWD is component directory: `/project/components/terraform/iam-delegated-roles/`
-- Git root is `/project/`
-
-**Before fix (broken, v1.202.0+):**
-- Viper reads `ATMOS_BASE_PATH` into `atmosConfig.BasePath`
-- `resolveAbsolutePath(".terraform/modules/monorepo")` routes through git root discovery
-- Resolves to `/project/.terraform/modules/monorepo` — **WRONG** (doesn't exist)
-- `GetGlobMatches` returns `ErrFailedToFindImport`
-- Error message provides no context about which path failed
-
-**After fix (working):**
-- `tryResolveWithGitRoot` tries `/project/.terraform/modules/monorepo` → doesn't exist (`os.Stat` fails)
-- Falls back to CWD-relative: `/project/components/terraform/iam-delegated-roles/.terraform/modules/monorepo` → exists
-- Stacks and components found at the correct location
-- Error messages now include actionable hints and context (pattern, stacks base path)
+**Recommended migration:** Use `ATMOS_BASE_PATH=./.terraform/modules/monorepo` (dot-slash prefix). This explicitly anchors to CWD, making intent clear and avoiding the search-then-fallback path.
 
 ---
 

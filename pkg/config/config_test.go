@@ -1114,7 +1114,7 @@ func TestResolveAbsolutePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolveAbsolutePath(tt.path, tt.cliConfigPath)
+			result, err := resolveAbsolutePath(tt.path, tt.cliConfigPath, "")
 			require.NoError(t, err)
 
 			if filepath.IsAbs(tt.path) {
@@ -1269,18 +1269,20 @@ func TestDotPathResolvesRelativeToConfigDir(t *testing.T) {
 	err = os.Unsetenv("ATMOS_BASE_PATH")
 	require.NoError(t, err)
 
-	t.Run("ATMOS_BASE_PATH=. should resolve to config dir (config-file-relative)", func(t *testing.T) {
-		// This test verifies that "." resolves relative to where atmos.yaml is located,
-		// NOT relative to CWD. This follows the convention of other config files.
-		//
-		// Users who need CWD-relative behavior should use the !cwd YAML tag:
-		// - base_path: !cwd
+	t.Run("ATMOS_BASE_PATH=. should resolve to CWD (shell convention)", func(t *testing.T) {
+		// This test verifies that "." from an env var (runtime source) resolves to CWD,
+		// NOT config dir. In shell context, "." means "here" = where the command runs.
+		// This follows the unified convention: dot-prefix anchors to context
+		// (config dir in yaml, CWD in shell).
 		changeWorkingDir(t, "../../tests/fixtures/scenarios/complete/components/terraform/top-level-component1")
+
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
 
 		// Point to the repo root where atmos.yaml is located.
 		configPath := "../../.."
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", configPath)
-		// Set base_path to "." - this should resolve to config dir (where atmos.yaml is).
+		// Set base_path to "." via env var — runtime source → CWD.
 		t.Setenv("ATMOS_BASE_PATH", ".")
 		// Disable git root discovery for this test.
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
@@ -1288,13 +1290,9 @@ func TestDotPathResolvesRelativeToConfigDir(t *testing.T) {
 		cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		require.NoError(t, err, "InitCliConfig should succeed")
 
-		// Get the absolute path of the config directory.
-		configDir, err := filepath.Abs(configPath)
-		require.NoError(t, err)
-
-		// BasePathAbsolute should be the config directory, not CWD.
-		assert.Equal(t, configDir, cfg.BasePathAbsolute,
-			"Base path with '.' should resolve to config directory (config-file-relative)")
+		// BasePathAbsolute should be CWD (shell convention for runtime source).
+		assert.Equal(t, cwd, cfg.BasePathAbsolute,
+			"ATMOS_BASE_PATH=. should resolve to CWD (shell convention), not config dir")
 	})
 
 	t.Run("base_path=. when CWD equals config dir resolves to config dir", func(t *testing.T) {
