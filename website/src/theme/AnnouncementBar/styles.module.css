@@ -1,0 +1,64 @@
+.announcementBar {
+  display: flex;
+  align-items: center;
+  min-height: var(--docusaurus-announcement-bar-height, auto);
+  border-bottom: 1px solid var(--ifm-color-emphasis-100);
+  padding: 6px 0;
+  transition: background-color 0.3s ease;
+}
+
+html[data-announcement-bar-initially-dismissed='true'] .announcementBar {
+  display: none;
+}
+
+.placeholder {
+  flex: 0 0 10px;
+}
+
+.closeButton {
+  flex: 0 0 30px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+  opacity: 0.8;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.closeButton:hover {
+  opacity: 1;
+}
+
+.contentWrapper {
+  flex: 1 1 auto;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.content {
+  padding: 5px 0;
+  font-size: 90%;
+}
+
+.content a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+@media print {
+  .announcementBar {
+    display: none;
+  }
+}
+
+@media (min-width: 997px) {
+  .placeholder,
+  .closeButton {
+    flex-basis: 50px;
+  }
+}

@@ -569,11 +569,8 @@ const config = {
                 }
             },
             announcementBar: {
-                id: 'refarch-announcement',
-                content:
-                  'Try Cloud Posse\'s <a href="https://docs.cloudposse.com">Reference Architecture for AWS, Datadog & GitHub Actions</a> using Atmos',
-                backgroundColor: 'var(--announcement-bar-background)',
-                textColor: 'var(--announcement-bar-text-color)',
+                id: 'multi-announcement-v1',
+                content: '&nbsp;',
                 isCloseable: true,
             },
             colorMode: {
