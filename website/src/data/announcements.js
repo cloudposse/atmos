@@ -56,28 +56,28 @@ export const announcements = [
   {
     id: 'atmos-codegen',
     content:
-      'Automatically generate Terraform or any configuration with <a href="/core-concepts/stacks/templates">Atmos code generation</a> \u2014 no more boilerplate',
+      'Automatically generate Terraform or any configuration with <a href="/templates">Atmos code generation</a> \u2014 no more boilerplate',
     backgroundColor: '#4f46e5',
     textColor: '#fff',
   },
   {
     id: 'atmos-component-provisioning',
     content:
-      'Deploy any Terraform root module from any source \u2014 no vendoring required. Learn about <a href="/core-concepts/components">Atmos component provisioning</a>',
+      'Deploy any Terraform root module from any source \u2014 no vendoring required. Learn about <a href="/components">Atmos component provisioning</a>',
     backgroundColor: '#0d9488',
     textColor: '#fff',
   },
   {
     id: 'atmos-locals',
     content:
-      'Use <a href="/core-concepts/stacks/locals">locals</a> to define computed values in your stack configurations \u2014 DRY up your YAML',
+      'Use <a href="/stacks/locals">locals</a> to define computed values in your stack configurations \u2014 DRY up your YAML',
     backgroundColor: '#7c3aed',
     textColor: '#fff',
   },
   {
     id: 'atmos-backends',
     content:
-      'Dynamically generate and manage Terraform <a href="/core-concepts/components/terraform/backends">backend configurations</a> across all your environments',
+      'Dynamically generate and manage Terraform <a href="/stacks/components/terraform/backend">backend configurations</a> across all your environments',
     backgroundColor: '#b45309',
     textColor: '#fff',
   },
