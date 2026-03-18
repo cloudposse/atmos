@@ -109,6 +109,21 @@ func TestIsolatedOpener_Open_Linux(t *testing.T) {
 	assert.Equal(t, "https://example.com", call.Args[1])
 }
 
+func TestDefaultOpener_Open_SkipsInTestEnv(t *testing.T) {
+	t.Setenv("GO_TEST", "1")
+
+	runner := &mockRunner{}
+	opener := &defaultOpener{runner: runner}
+
+	err := opener.Open("https://example.com")
+	require.NoError(t, err)
+
+	// No commands should have been executed — the GO_TEST guard returns early.
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	assert.Empty(t, runner.calls, "no command should run when GO_TEST=1")
+}
+
 func TestNew_DefaultOpener(t *testing.T) {
 	runner := &mockRunner{}
 	opener := New(WithCommandRunner(runner))
