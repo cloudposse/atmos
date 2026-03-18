@@ -481,6 +481,60 @@ func TestProcessArgsAndFlags_BooleanFlags(t *testing.T) {
 	}
 }
 
+// TestProcessArgsAndFlags_BooleanFlagsDoNotStripNextArg verifies that purely boolean flags
+// (--dry-run, --skip-init, --affected, --all, --process-templates, --process-functions,
+// --profiler-enabled, --heatmap) do NOT strip the following argument from AdditionalArgsAndFlags.
+//
+// Before the fix, the stripping loop's else-branch unconditionally stripped i+1 for ALL
+// commonFlags entries, silently dropping unrelated Terraform flags like --refresh=false
+// when they appeared immediately after an Atmos boolean flag.
+func TestProcessArgsAndFlags_BooleanFlagsDoNotStripNextArg(t *testing.T) {
+	tests := []struct {
+		name                    string
+		inputArgsAndFlags       []string
+		wantAdditionalArgsFlags []string
+	}{
+		{
+			name:                    "--dry-run does not strip adjacent Terraform flag",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--dry-run", "--refresh=false", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--refresh=false"},
+		},
+		{
+			name:                    "--skip-init does not strip adjacent Terraform flag",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--skip-init", "--parallelism=10", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--parallelism=10"},
+		},
+		{
+			name:                    "--affected does not strip adjacent Terraform flag",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--affected", "--refresh=false", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--refresh=false"},
+		},
+		{
+			name:                    "--all does not strip adjacent Terraform flag",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--all", "--parallelism=5", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--parallelism=5"},
+		},
+		{
+			name:                    "--process-templates does not strip adjacent Terraform flag",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--process-templates", "--refresh=false", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--refresh=false"},
+		},
+		{
+			name:                    "--process-functions does not strip adjacent Terraform flag",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--process-functions", "--parallelism=10", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--parallelism=10"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
+		})
+	}
+}
+
 // TestProcessArgsAndFlags_GlobalOptions tests global options flag handling including second-pass collection.
 func TestProcessArgsAndFlags_GlobalOptions(t *testing.T) {
 	tests := []struct {

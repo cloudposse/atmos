@@ -424,6 +424,39 @@ var stringFlagDefs = []stringFlagDef{
 	{cfg.PlanFileFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.PlanFile = v; info.UseTerraformPlan = true }},
 }
 
+// valueTakingCommonFlags is the subset of commonFlags whose space-separated form ("--flag value")
+// consumes the next argument as its value.  Boolean-only flags (e.g., --dry-run, --skip-init,
+// --affected, --all, --process-templates, --heatmap, --profiler-enabled) are NOT included because
+// they never consume i+1; blindly stripping i+1 for them would silently drop an unrelated
+// flag (e.g., --refresh=false) that the user intended to pass to the underlying tool.
+//
+// The set is derived from stringFlagDefs (all of which are value-taking) plus the remaining
+// value-taking entries in commonFlags that are handled outside stringFlagDefs.
+var valueTakingCommonFlags = func() map[string]bool {
+	set := make(map[string]bool, len(stringFlagDefs)+16)
+	for _, def := range stringFlagDefs {
+		set[def.flag] = true
+	}
+	// --stack / -s take a stack-name value.
+	set["--stack"] = true
+	set["-s"] = true
+	// --global-options takes a string value in space form.
+	set[cfg.GlobalOptionsFlag] = true
+	// --kubeconfig-path takes a path value.
+	set[cfg.KubeConfigConfigFlag] = true
+	// Profiler string flags.
+	set[cfg.ProfilerHostFlag] = true
+	set[cfg.ProfilerPortFlag] = true
+	set[cfg.ProfilerFileFlag] = true
+	set[cfg.ProfilerTypeFlag] = true
+	// --heatmap-mode and --profile take string values.
+	set[cfg.HeatmapModeFlag] = true
+	set[cfg.AtmosProfileFlag] = true
+	// --skip is a StringSlice flag that can be used in space form ("--skip funcname").
+	set[cfg.SkipFlag] = true
+	return set
+}()
+
 // parseFlagValue extracts the value for a CLI flag from the current argument.
 // It handles both space-separated ("--flag value") and equals-separated ("--flag=value") forms.
 // Returns ("", false, nil) when arg does not match flag.
@@ -578,17 +611,17 @@ func processArgsAndFlags(
 		for _, f := range commonFlags {
 			if arg == f {
 				indexesToRemove = append(indexesToRemove, i)
-				// For optional-value flags (--from-plan, --identity), only strip i+1 when
-				// the next arg was actually consumed as the value (i.e., it exists and does
-				// not start with '-').  Blindly stripping i+1 for these flags would silently
-				// drop an unrelated flag (e.g., --refresh=false) passed to the underlying tool.
+				// Optional-value flags (--from-plan, --identity): only strip i+1 when the next
+				// arg was actually consumed as the value (i.e., it exists and does not start with '-').
 				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag {
 					if len(inputArgsAndFlags) > i+1 && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
 						indexesToRemove = append(indexesToRemove, i+1)
 					}
-				} else {
+				} else if valueTakingCommonFlags[f] {
+					// Value-taking flags always strip i+1 (the value was consumed during parsing).
 					indexesToRemove = append(indexesToRemove, i+1)
 				}
+				// Boolean-only flags are not in valueTakingCommonFlags and do not strip i+1.
 			} else if strings.HasPrefix(arg, f+"=") {
 				indexesToRemove = append(indexesToRemove, i)
 			}
