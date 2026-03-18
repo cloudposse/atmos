@@ -257,10 +257,8 @@ func parseCompoundSubcommand(args []string) *compoundSubcommandResult {
 // parseQuotedCompoundSubcommand parses a quoted compound subcommand like "providers lock".
 func parseQuotedCompoundSubcommand(arg string) *compoundSubcommandResult {
 	parts := strings.SplitN(arg, " ", 2)
-	if len(parts) != 2 {
-		return nil
-	}
-
+	// parts is guaranteed to have exactly 2 elements because the caller verifies that
+	// arg contains a space before invoking this function.
 	first, second := parts[0], parts[1]
 
 	switch first {
@@ -378,6 +376,124 @@ func parseSeparateCompoundSubcommand(first, second string) *compoundSubcommandRe
 	return nil
 }
 
+// stringFlagDef associates a CLI flag with a field setter on ArgsAndFlagsInfo.
+// The table-driven approach in stringFlagDefs eliminates repetitive if/else chains.
+type stringFlagDef struct {
+	flag    string
+	setFunc func(*schema.ArgsAndFlagsInfo, string)
+}
+
+// stringFlagDefs maps string-valued CLI flags to their ArgsAndFlagsInfo setters.
+// parseFlagValue handles both "--flag value" and "--flag=value" forms for each entry.
+// Flags with special semantics (--identity, --from-plan) are handled separately.
+var stringFlagDefs = []stringFlagDef{
+	{cfg.TerraformCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformCommand = v }},
+	{cfg.TerraformDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformDir = v }},
+	{cfg.AppendUserAgentFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.AppendUserAgent = v }},
+	{cfg.HelmfileCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.HelmfileCommand = v }},
+	{cfg.HelmfileDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.HelmfileDir = v }},
+	{cfg.CliConfigDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.ConfigDir = v }},
+	{cfg.StackDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.StacksDir = v }},
+	{cfg.BasePathFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.BasePath = v }},
+	{cfg.VendorBasePathFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.VendorBasePath = v }},
+	{cfg.DeployRunInitFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.DeployRunInit = v }},
+	{cfg.AutoGenerateBackendFileFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.AutoGenerateBackendFile = v }},
+	{cfg.WorkflowDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.WorkflowsDir = v }},
+	{cfg.InitRunReconfigure, func(info *schema.ArgsAndFlagsInfo, v string) { info.InitRunReconfigure = v }},
+	{cfg.InitPassVars, func(info *schema.ArgsAndFlagsInfo, v string) { info.InitPassVars = v }},
+	{cfg.PlanSkipPlanfile, func(info *schema.ArgsAndFlagsInfo, v string) { info.PlanSkipPlanfile = v }},
+	{cfg.JsonSchemaDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.JsonSchemaDir = v }},
+	{cfg.OpaDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.OpaDir = v }},
+	{cfg.CueDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.CueDir = v }},
+	{cfg.AtmosManifestJsonSchemaFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.AtmosManifestJsonSchema = v }},
+	{cfg.RedirectStdErrFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.RedirectStdErr = v }},
+	{cfg.LogsLevelFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.LogsLevel = v }},
+	{cfg.LogsFileFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.LogsFile = v }},
+	{cfg.SettingsListMergeStrategyFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.SettingsListMergeStrategy = v }},
+	{cfg.QueryFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.Query = v }},
+	{cfg.ClusterNameFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.ClusterName = v }},
+	// --planfile sets two fields; UseTerraformPlan is always true when a planfile is given.
+	{cfg.PlanFileFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.PlanFile = v; info.UseTerraformPlan = true }},
+}
+
+// parseFlagValue extracts the value for a CLI flag from the current argument.
+// It handles both space-separated ("--flag value") and equals-separated ("--flag=value") forms.
+// Returns ("", false, nil) when arg does not match flag.
+// Returns (value, true, nil) on success.
+// Returns ("", false, err) when the flag matches but its value is missing or malformed.
+func parseFlagValue(flag, arg string, args []string, index int) (string, bool, error) {
+	if arg == flag {
+		if index+1 >= len(args) {
+			return "", false, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
+		}
+		return args[index+1], true, nil
+	}
+	if strings.HasPrefix(arg, flag+"=") {
+		parts := strings.Split(arg, "=")
+		if len(parts) != 2 {
+			return "", false, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
+		}
+		return parts[1], true, nil
+	}
+	return "", false, nil
+}
+
+// parseIdentityFlag handles --identity which supports optional and empty values.
+//
+//   - --identity         → __SELECT__ (interactive selection).
+//   - --identity value   → use value.
+//   - --identity=value   → use value.
+//   - --identity=        → __SELECT__ (interactive selection).
+func parseIdentityFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string, index int) error {
+	if arg == cfg.IdentityFlag {
+		// Has value: --identity <value> (next arg exists and is not another flag).
+		if len(args) > index+1 && !strings.HasPrefix(args[index+1], "-") {
+			info.Identity = args[index+1]
+		} else {
+			// No value: --identity (interactive selection).
+			info.Identity = cfg.IdentityFlagSelectValue
+		}
+		return nil
+	}
+	if strings.HasPrefix(arg, cfg.IdentityFlag+"=") {
+		parts := strings.Split(arg, "=")
+		if len(parts) != 2 {
+			return fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
+		}
+		if parts[1] == "" {
+			// Empty value: --identity= (interactive selection).
+			info.Identity = cfg.IdentityFlagSelectValue
+		} else {
+			info.Identity = parts[1]
+		}
+	}
+	return nil
+}
+
+// parseFromPlanFlag handles --from-plan which has optional value semantics.
+//
+//   - --from-plan           → UseTerraformPlan = true, PlanFile unchanged.
+//   - --from-plan <path>    → UseTerraformPlan = true, PlanFile = path.
+//   - --from-plan=<path>    → UseTerraformPlan = true, PlanFile = path.
+//   - --from-plan=          → UseTerraformPlan = true, PlanFile unchanged.
+func parseFromPlanFlag(info *schema.ArgsAndFlagsInfo, arg string, args []string, index int) {
+	if arg == cfg.FromPlanFlag {
+		info.UseTerraformPlan = true
+		// Check if next argument is the planfile path (not another flag).
+		if len(args) > index+1 && !strings.HasPrefix(args[index+1], "-") {
+			info.PlanFile = args[index+1]
+		}
+		return
+	}
+	if strings.HasPrefix(arg, cfg.FromPlanFlag+"=") {
+		info.UseTerraformPlan = true
+		planFilePath := strings.TrimPrefix(arg, cfg.FromPlanFlag+"=")
+		if planFilePath != "" {
+			info.PlanFile = planFilePath
+		}
+	}
+}
+
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
 //
 // Deprecated: use Cobra command flag parser instead.
@@ -407,417 +523,51 @@ func processArgsAndFlags(
 	var globalOptionsFlagIndex int
 
 	for i, arg := range inputArgsAndFlags {
+		// GlobalOptions: track its position for second-pass collection.
 		if arg == cfg.GlobalOptionsFlag {
 			globalOptionsFlagIndex = i + 1
-		} else if strings.HasPrefix(arg+"=", cfg.GlobalOptionsFlag) {
+		} else if strings.HasPrefix(arg, cfg.GlobalOptionsFlag+"=") {
 			globalOptionsFlagIndex = i
 		}
 
-		if arg == cfg.TerraformCommandFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
+		// Standard string-valued flags: table-driven to eliminate repetitive if/else chains.
+		for _, def := range stringFlagDefs {
+			val, found, err := parseFlagValue(def.flag, arg, inputArgsAndFlags, i)
+			if err != nil {
+				return info, err
 			}
-			info.TerraformCommand = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.TerraformCommandFlag) {
-			terraformCommandFlagParts := strings.Split(arg, "=")
-			if len(terraformCommandFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.TerraformCommand = terraformCommandFlagParts[1]
-		}
-
-		if arg == cfg.TerraformDirFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.TerraformDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.TerraformDirFlag) {
-			terraformDirFlagParts := strings.Split(arg, "=")
-			if len(terraformDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.TerraformDir = terraformDirFlagParts[1]
-		}
-
-		if arg == cfg.AppendUserAgentFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.AppendUserAgent = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.AppendUserAgentFlag) {
-			appendUserAgentFlagParts := strings.Split(arg, "=")
-			if len(appendUserAgentFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.AppendUserAgent = appendUserAgentFlagParts[1]
-		}
-
-		if arg == cfg.HelmfileCommandFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.HelmfileCommand = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.HelmfileCommandFlag) {
-			helmfileCommandFlagParts := strings.Split(arg, "=")
-			if len(helmfileCommandFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.HelmfileCommand = helmfileCommandFlagParts[1]
-		}
-
-		if arg == cfg.HelmfileDirFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.HelmfileDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.HelmfileDirFlag) {
-			helmfileDirFlagParts := strings.Split(arg, "=")
-			if len(helmfileDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.HelmfileDir = helmfileDirFlagParts[1]
-		}
-
-		if arg == cfg.CliConfigDirFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.ConfigDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.CliConfigDirFlag) {
-			configDirFlagParts := strings.Split(arg, "=")
-			if len(configDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.ConfigDir = configDirFlagParts[1]
-		}
-
-		if arg == cfg.StackDirFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.StacksDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.StackDirFlag) {
-			stacksDirFlagParts := strings.Split(arg, "=")
-			if len(stacksDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.StacksDir = stacksDirFlagParts[1]
-		}
-
-		if arg == cfg.BasePathFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.BasePath = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.BasePathFlag) {
-			stacksDirFlagParts := strings.Split(arg, "=")
-			if len(stacksDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.BasePath = stacksDirFlagParts[1]
-		}
-
-		if arg == cfg.VendorBasePathFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.VendorBasePath = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.VendorBasePathFlag) {
-			vendorBasePathFlagParts := strings.Split(arg, "=")
-			if len(vendorBasePathFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.VendorBasePath = vendorBasePathFlagParts[1]
-		}
-
-		if arg == cfg.DeployRunInitFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.DeployRunInit = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.DeployRunInitFlag) {
-			deployRunInitFlagParts := strings.Split(arg, "=")
-			if len(deployRunInitFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.DeployRunInit = deployRunInitFlagParts[1]
-		}
-
-		if arg == cfg.AutoGenerateBackendFileFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.AutoGenerateBackendFile = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.AutoGenerateBackendFileFlag) {
-			autoGenerateBackendFileFlagParts := strings.Split(arg, "=")
-			if len(autoGenerateBackendFileFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.AutoGenerateBackendFile = autoGenerateBackendFileFlagParts[1]
-		}
-
-		if arg == cfg.WorkflowDirFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.WorkflowsDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.WorkflowDirFlag) {
-			workflowDirFlagParts := strings.Split(arg, "=")
-			if len(workflowDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.WorkflowsDir = workflowDirFlagParts[1]
-		}
-
-		if arg == cfg.InitRunReconfigure {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.InitRunReconfigure = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.InitRunReconfigure) {
-			initRunReconfigureParts := strings.Split(arg, "=")
-			if len(initRunReconfigureParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.InitRunReconfigure = initRunReconfigureParts[1]
-		}
-
-		if arg == cfg.InitPassVars {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.InitPassVars = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.InitPassVars) {
-			initPassVarsParts := strings.Split(arg, "=")
-			if len(initPassVarsParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.InitPassVars = initPassVarsParts[1]
-		}
-
-		if arg == cfg.PlanSkipPlanfile {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.PlanSkipPlanfile = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.PlanSkipPlanfile) {
-			planSkipPlanfileParts := strings.Split(arg, "=")
-			if len(planSkipPlanfileParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.PlanSkipPlanfile = planSkipPlanfileParts[1]
-		}
-
-		if arg == cfg.JsonSchemaDirFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.JsonSchemaDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.JsonSchemaDirFlag) {
-			jsonschemaDirFlagParts := strings.Split(arg, "=")
-			if len(jsonschemaDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.JsonSchemaDir = jsonschemaDirFlagParts[1]
-		}
-
-		if arg == cfg.OpaDirFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.OpaDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.OpaDirFlag) {
-			opaDirFlagParts := strings.Split(arg, "=")
-			if len(opaDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.OpaDir = opaDirFlagParts[1]
-		}
-
-		if arg == cfg.CueDirFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.CueDir = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.CueDirFlag) {
-			cueDirFlagParts := strings.Split(arg, "=")
-			if len(cueDirFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.CueDir = cueDirFlagParts[1]
-		}
-
-		if arg == cfg.AtmosManifestJsonSchemaFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.AtmosManifestJsonSchema = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.AtmosManifestJsonSchemaFlag) {
-			atmosManifestJsonSchemaFlagParts := strings.Split(arg, "=")
-			if len(atmosManifestJsonSchemaFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.AtmosManifestJsonSchema = atmosManifestJsonSchemaFlagParts[1]
-		}
-
-		if arg == cfg.RedirectStdErrFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.RedirectStdErr = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.RedirectStdErrFlag) {
-			redirectStderrParts := strings.Split(arg, "=")
-			if len(redirectStderrParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.RedirectStdErr = redirectStderrParts[1]
-		}
-
-		if arg == cfg.PlanFileFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.PlanFile = inputArgsAndFlags[i+1]
-			info.UseTerraformPlan = true
-		} else if strings.HasPrefix(arg+"=", cfg.PlanFileFlag) {
-			planFileFlagParts := strings.Split(arg, "=")
-			if len(planFileFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.PlanFile = planFileFlagParts[1]
-			info.UseTerraformPlan = true
-		}
-
-		if arg == cfg.LogsLevelFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.LogsLevel = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.LogsLevelFlag) {
-			logsLevelFlagParts := strings.Split(arg, "=")
-			if len(logsLevelFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.LogsLevel = logsLevelFlagParts[1]
-		}
-
-		if arg == cfg.LogsFileFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.LogsFile = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.LogsFileFlag) {
-			logsFileFlagParts := strings.Split(arg, "=")
-			if len(logsFileFlagParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.LogsFile = logsFileFlagParts[1]
-		}
-
-		if arg == cfg.SettingsListMergeStrategyFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.SettingsListMergeStrategy = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.SettingsListMergeStrategyFlag) {
-			settingsListMergeStrategyParts := strings.Split(arg, "=")
-			if len(settingsListMergeStrategyParts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.SettingsListMergeStrategy = settingsListMergeStrategyParts[1]
-		}
-
-		if arg == cfg.QueryFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.Query = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.QueryFlag) {
-			parts := strings.Split(arg, "=")
-			if len(parts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.Query = parts[1]
-		}
-
-		if arg == cfg.IdentityFlag {
-			// Check if next arg exists and is not another flag.
-			if len(inputArgsAndFlags) > (i+1) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
-				// Has value: --identity <value>.
-				info.Identity = inputArgsAndFlags[i+1]
-			} else {
-				// No value: --identity (interactive selection).
-				info.Identity = cfg.IdentityFlagSelectValue
-			}
-		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
-			parts := strings.Split(arg, "=")
-			if len(parts) != 2 {
-				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
-			}
-			if parts[1] == "" {
-				// Empty value: --identity= (interactive selection).
-				info.Identity = cfg.IdentityFlagSelectValue
-			} else {
-				info.Identity = parts[1]
+			if found {
+				def.setFunc(&info, val)
+				break
 			}
 		}
 
-		// Handle --cluster-name for EKS cluster name override.
-		if arg == cfg.ClusterNameFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.ClusterName = inputArgsAndFlags[i+1]
-		} else if strings.HasPrefix(arg+"=", cfg.ClusterNameFlag) {
-			parts := strings.Split(arg, "=")
-			if len(parts) != 2 {
-				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
-			}
-			info.ClusterName = parts[1]
+		// --identity has special optional/empty-value semantics.
+		if err := parseIdentityFlag(&info, arg, inputArgsAndFlags, i); err != nil {
+			return info, err
 		}
 
-		// Handle --from-plan with optional planfile path.
-		// --from-plan (no value): uses deterministic location.
-		// --from-plan=<path>: uses specified planfile.
-		// --from-plan <path>: uses specified planfile (if next arg doesn't start with -).
-		if arg == cfg.FromPlanFlag {
-			info.UseTerraformPlan = true
-			// Check if next argument is the planfile path (not another flag).
-			if len(inputArgsAndFlags) > (i+1) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
-				info.PlanFile = inputArgsAndFlags[i+1]
-			}
-		} else if strings.HasPrefix(arg, cfg.FromPlanFlag+"=") {
-			info.UseTerraformPlan = true
-			planFilePath := strings.TrimPrefix(arg, cfg.FromPlanFlag+"=")
-			if planFilePath != "" {
-				info.PlanFile = planFilePath
-			}
-		}
+		// --from-plan has optional value semantics (path may or may not follow).
+		parseFromPlanFlag(&info, arg, inputArgsAndFlags, i)
 
-		if arg == cfg.DryRunFlag {
+		// Boolean flags.
+		switch arg {
+		case cfg.DryRunFlag:
 			info.DryRun = true
-		}
-
-		if arg == cfg.SkipInitFlag {
+		case cfg.SkipInitFlag:
 			info.SkipInit = true
-		}
-
-		if arg == cfg.HelpFlag1 || arg == cfg.HelpFlag2 {
+		case cfg.HelpFlag1, cfg.HelpFlag2:
 			info.NeedHelp = true
-		}
-
-		if arg == cfg.AffectedFlag {
+		case cfg.AffectedFlag:
 			info.Affected = true
-		}
-
-		if arg == cfg.AllFlag {
+		case cfg.AllFlag:
 			info.All = true
 		}
 
+		// Collect indices of atmos-specific flags to strip from pass-through args.
 		for _, f := range commonFlags {
 			if arg == f {
-				indexesToRemove = append(indexesToRemove, i)
-				indexesToRemove = append(indexesToRemove, i+1)
+				indexesToRemove = append(indexesToRemove, i, i+1)
 			} else if strings.HasPrefix(arg, f+"=") {
 				indexesToRemove = append(indexesToRemove, i)
 			}
