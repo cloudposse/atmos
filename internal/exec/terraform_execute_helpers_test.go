@@ -679,6 +679,134 @@ func TestBuildTerraformCommandArgs_AdditionalArgsAppended(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// buildPlanSubcommandArgs
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestBuildPlanSubcommandArgs_BasicPlan(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+
+	args, uploadFlag := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan")
+
+	assert.Contains(t, args, varFileFlag)
+	assert.Contains(t, args, "vars.json")
+	assert.Contains(t, args, outFlag)
+	assert.Contains(t, args, "plan.tfplan")
+	assert.False(t, uploadFlag)
+}
+
+func TestBuildPlanSubcommandArgs_SkipPlanfile(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Plan.SkipPlanfile = true
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+
+	args, _ := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan")
+
+	assert.NotContains(t, args, outFlag)
+}
+
+func TestBuildPlanSubcommandArgs_UploadStatusFlag(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "plan",
+		AdditionalArgsAndFlags: []string{"--upload-status"},
+	}
+
+	args, uploadFlag := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan")
+
+	assert.True(t, uploadFlag)
+	assert.Contains(t, args, detailedExitCodeFlag)
+	// Upload status flag should be removed from additional args.
+	assert.NotContains(t, info.AdditionalArgsAndFlags, "--upload-status")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// buildApplySubcommandArgs
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestBuildApplySubcommandArgs_WithoutPlan(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{UseTerraformPlan: false}
+
+	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json", "plan.tfplan")
+
+	assert.Contains(t, args, varFileFlag)
+	assert.Contains(t, args, "vars.json")
+}
+
+func TestBuildApplySubcommandArgs_WithPlan(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{UseTerraformPlan: true}
+
+	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json", "plan.tfplan")
+
+	assert.NotContains(t, args, varFileFlag)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// appendApplyPlanFileArg
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestAppendApplyPlanFileArg_Apply_WithDefaultPlanFile(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply", UseTerraformPlan: true}
+	args := appendApplyPlanFileArg(&info, []string{"apply"}, "auto.tfplan")
+	assert.Contains(t, args, "auto.tfplan")
+}
+
+func TestAppendApplyPlanFileArg_Apply_WithCustomPlanFile(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply", UseTerraformPlan: true, PlanFile: "custom.tfplan"}
+	args := appendApplyPlanFileArg(&info, []string{"apply"}, "auto.tfplan")
+	assert.Contains(t, args, "custom.tfplan")
+	assert.NotContains(t, args, "auto.tfplan")
+}
+
+func TestAppendApplyPlanFileArg_NonApply_NoChange(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan", UseTerraformPlan: true}
+	original := []string{"plan", varFileFlag, "vars.json"}
+	args := appendApplyPlanFileArg(&info, original, "auto.tfplan")
+	assert.Equal(t, original, args)
+}
+
+func TestAppendApplyPlanFileArg_ApplyWithoutPlanFile_NoChange(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{SubCommand: "apply", UseTerraformPlan: false}
+	original := []string{"apply", varFileFlag, "vars.json"}
+	args := appendApplyPlanFileArg(&info, original, "auto.tfplan")
+	assert.Equal(t, original, args)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// buildWorkspaceSubcommandArgs
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestBuildWorkspaceSubcommandArgs_List(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{SubCommand: "workspace", SubCommand2: "list"}
+	args := buildWorkspaceSubcommandArgs(&info, []string{"workspace"})
+	assert.Contains(t, args, "list")
+}
+
+func TestBuildWorkspaceSubcommandArgs_Show(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{SubCommand: "workspace", SubCommand2: "show"}
+	args := buildWorkspaceSubcommandArgs(&info, []string{"workspace"})
+	assert.Contains(t, args, "show")
+}
+
+func TestBuildWorkspaceSubcommandArgs_New(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:         "workspace",
+		SubCommand2:        "new",
+		TerraformWorkspace: "my-ws",
+	}
+	args := buildWorkspaceSubcommandArgs(&info, []string{"workspace"})
+	assert.Contains(t, args, "new")
+	assert.Contains(t, args, "my-ws")
+}
+
+func TestBuildWorkspaceSubcommandArgs_Bare(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{SubCommand: "workspace", SubCommand2: ""}
+	args := buildWorkspaceSubcommandArgs(&info, []string{"workspace"})
+	// No subcommand2 → no additional args appended.
+	assert.Equal(t, []string{"workspace"}, args)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // logTerraformContext
 // ──────────────────────────────────────────────────────────────────────────────
 
