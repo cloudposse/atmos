@@ -33,7 +33,7 @@ func FormatOutputsWithOptions(outputs map[string]any, format Format, opts Format
 	// Apply transformations in order: flatten first, then uppercase.
 	transformed := outputs
 	if opts.Flatten {
-		transformed = flattenMap(transformed, "", opts.GetFlattenSeparator())
+		transformed = FlattenMap(transformed, "", opts.GetFlattenSeparator())
 	}
 	transformed = transformKeys(transformed, opts)
 
@@ -86,12 +86,12 @@ func transformKeys(outputs map[string]any, opts FormatOptions) map[string]any {
 	return transformed
 }
 
-// flattenMap recursively flattens nested maps and arrays into a single-level map with compound keys.
+// FlattenMap recursively flattens nested maps and arrays into a single-level map with compound keys.
 // For example: {"config": {"host": "localhost", "port": 3000}} becomes
 // {"config_host": "localhost", "config_port": 3000} with separator "_".
 // Arrays are flattened with numeric indices: {"hosts": ["a", "b"]} becomes
 // {"hosts_0": "a", "hosts_1": "b"}.
-func flattenMap(m map[string]any, prefix, separator string) map[string]any {
+func FlattenMap(m map[string]any, prefix, separator string) map[string]any {
 	result := make(map[string]any)
 	flattenMapRecursive(m, prefix, separator, result)
 	return result

@@ -53,6 +53,10 @@ ai:
 
   # Default skill to use
   # Docs: https://atmos.tools/cli/configuration/ai/skills
+  # The --skill flag supports multiple skills:
+  #   atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks
+  #   atmos terraform plan vpc -s prod --ai --skill atmos-terraform --skill atmos-stacks
+  #   ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s prod --ai
   default_skill: "general"
 
   # Context settings - control what information is sent to the AI

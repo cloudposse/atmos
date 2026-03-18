@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -375,20 +377,23 @@ func TestProcessTerraformComponent(t *testing.T) {
 		}
 	}
 
+	// mockExecutor returns a mock executor that records whether it was called.
+	mockExecutor := func(called *bool, returnErr error) func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error {
+		return func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+			*called = true
+			return returnErr
+		}
+	}
+
 	t.Run("no metadata section", func(t *testing.T) {
 		// Section without metadata should return false, nil.
 		section := map[string]any{
 			"vars": map[string]any{"key": "value"},
 		}
 		called := false
-		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
-			called = true
-			return nil
-		})
-		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
 		assert.NoError(t, err)
 		assert.False(t, processed)
 		assert.False(t, called)
@@ -401,14 +406,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 			"vars":                  map[string]any{"key": "value"},
 		}
 		called := false
-		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
-			called = true
-			return nil
-		})
-		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
 		assert.NoError(t, err)
 		assert.False(t, processed)
 		assert.False(t, called)
@@ -417,14 +417,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 	t.Run("abstract", func(t *testing.T) {
 		section := newSection(map[string]any{"type": "abstract"})
 		called := false
-		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
-			called = true
-			return nil
-		})
-		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
 		assert.NoError(t, err)
 		assert.False(t, processed)
 		assert.False(t, called)
@@ -433,14 +428,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		section := newSection(map[string]any{"enabled": false})
 		called := false
-		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
-			called = true
-			return nil
-		})
-		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
 		assert.NoError(t, err)
 		assert.False(t, processed)
 		assert.False(t, called)
@@ -449,14 +439,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 	t.Run("query not satisfied", func(t *testing.T) {
 		section := newSection(map[string]any{"enabled": true})
 		called := false
-		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
-			called = true
-			return nil
-		})
-		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan", Query: ".vars.tags.team == \"foo\""}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
 		assert.NoError(t, err)
 		assert.False(t, processed)
 		assert.False(t, called)
@@ -465,17 +450,16 @@ func TestProcessTerraformComponent(t *testing.T) {
 	t.Run("execute", func(t *testing.T) {
 		section := newSection(map[string]any{"enabled": true})
 		called := false
-		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+		executor := func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 			called = true
 			// check fields set
 			assert.Equal(t, component, i.Component)
 			assert.Equal(t, stack, i.Stack)
 			return nil
-		})
-		defer patch.Reset()
+		}
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, executor)
 		assert.NoError(t, err)
 		assert.True(t, processed)
 		assert.True(t, called)
@@ -484,36 +468,21 @@ func TestProcessTerraformComponent(t *testing.T) {
 	t.Run("dry run", func(t *testing.T) {
 		section := newSection(map[string]any{"enabled": true})
 		called := false
-		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
-			called = true
-			return nil
-		})
-		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan", DryRun: true}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, nil))
 		assert.NoError(t, err)
 		assert.True(t, processed) // Returns true in dry-run mode.
-		assert.False(t, called)   // But doesn't call ExecuteTerraform.
+		assert.False(t, called)   // But doesn't call executeFn.
 	})
 
 	t.Run("execute returns error", func(t *testing.T) {
 		section := newSection(map[string]any{"enabled": true})
-		expectedErr := assert.AnError
+		expectedErr := errors.New("terraform error")
 		called := false
-		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
-			called = true
-			return expectedErr
-		})
-		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
-
-		// If gomonkey didn't work (common on macOS), skip the test.
-		if !called {
-			t.Skip("gomonkey function mocking failed (likely due to platform issues)")
-		}
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, mockExecutor(&called, expectedErr))
 
 		assert.Error(t, err)
 		assert.True(t, processed)
@@ -1106,6 +1075,12 @@ func BenchmarkNeedProcessTemplatesAndYamlFunctions(b *testing.B) {
 }
 
 func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
+	// gomonkey uses unsafe binary patching that causes a fatal SIGBUS on macOS ARM64
+	// (Apple Silicon) because code pages are read-only. Skip on that platform.
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
+	}
+
 	tests := []struct {
 		name               string
 		info               *schema.ConfigAndStacksInfo
@@ -1433,6 +1408,11 @@ func BenchmarkParseUploadStatusFlag(b *testing.B) {
 }
 
 func BenchmarkExecuteTerraformAffectedComponentInDepOrder(b *testing.B) {
+	// gomonkey uses unsafe binary patching that causes a fatal SIGBUS on macOS ARM64.
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		b.Skip("gomonkey binary patching is not supported on macOS ARM64")
+	}
+
 	info := &schema.ConfigAndStacksInfo{
 		SubCommand: "plan",
 		DryRun:     true, // Use dry run to avoid actual terraform execution.

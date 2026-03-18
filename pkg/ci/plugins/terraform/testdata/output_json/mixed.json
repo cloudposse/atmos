@@ -1,0 +1,30 @@
+{
+  "bucket_arn": {
+    "sensitive": false,
+    "type": "string",
+    "value": "arn:aws:s3:::prod-bucket"
+  },
+  "bucket_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "prod-bucket"
+  },
+  "api_key": {
+    "sensitive": true,
+    "type": "string",
+    "value": "secret-key-abc123"
+  },
+  "config": {
+    "sensitive": false,
+    "type": ["object", {"enabled": "bool", "count": "number"}],
+    "value": {
+      "enabled": true,
+      "count": 5
+    }
+  },
+  "instance_ids": {
+    "sensitive": false,
+    "type": ["list", "string"],
+    "value": ["i-123", "i-456"]
+  }
+}

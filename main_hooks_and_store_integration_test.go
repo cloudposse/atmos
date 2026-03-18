@@ -17,6 +17,10 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
 	t.Setenv("ATMOS_REDIS_URL", redisUrl)
 
+	// Disable CI auto-detection so deploy hooks don't try to download
+	// planfiles from GitHub Artifacts during tests.
+	os.Unsetenv("GITHUB_ACTIONS")
+
 	origDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("failed to get current working directory: %v", err)

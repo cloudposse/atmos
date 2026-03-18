@@ -94,11 +94,12 @@ func SetAuthContext(params *SetAuthContextParams) error {
 
 	// Populate Azure auth context as the single source of truth.
 	authContext.Azure = &schema.AzureAuthContext{
-		CredentialsFile: credentialsPath,
-		Profile:         params.IdentityName,
-		SubscriptionID:  azureCreds.SubscriptionID,
-		TenantID:        azureCreds.TenantID,
-		Location:        location,
+		CredentialsFile:  credentialsPath,
+		Profile:          params.IdentityName,
+		SubscriptionID:   azureCreds.SubscriptionID,
+		TenantID:         azureCreds.TenantID,
+		Location:         location,
+		CloudEnvironment: azureCreds.CloudEnvironment,
 		// OIDC-specific fields for Terraform ARM_USE_OIDC support.
 		UseOIDC:       azureCreds.IsServicePrincipal,
 		ClientID:      azureCreds.ClientID,
@@ -174,13 +175,14 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 	// Use shared PrepareEnvironment helper to get properly configured environment.
 	// Pass OIDC fields from auth context for Terraform ARM_USE_OIDC support.
 	environMap = PrepareEnvironment(PrepareEnvironmentConfig{
-		Environ:        environMap,
-		SubscriptionID: azureAuth.SubscriptionID,
-		TenantID:       azureAuth.TenantID,
-		Location:       azureAuth.Location,
-		UseOIDC:        azureAuth.UseOIDC,
-		ClientID:       azureAuth.ClientID,
-		TokenFilePath:  azureAuth.TokenFilePath,
+		Environ:          environMap,
+		SubscriptionID:   azureAuth.SubscriptionID,
+		TenantID:         azureAuth.TenantID,
+		Location:         azureAuth.Location,
+		CloudEnvironment: azureAuth.CloudEnvironment,
+		UseOIDC:          azureAuth.UseOIDC,
+		ClientID:         azureAuth.ClientID,
+		TokenFilePath:    azureAuth.TokenFilePath,
 	})
 
 	// Replace ComponentEnvSection with prepared environment.
@@ -196,7 +198,9 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 // UpdateAzureCLIFiles updates Azure CLI files (MSAL cache and azureProfile.json) so Terraform providers can use them.
 // This makes Atmos authentication work exactly like `az login`.
 // This should be called from PostAuthenticate to ensure CLI compatibility.
-func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID string) error {
+// The cloudEnvName selects the Azure cloud environment ("public", "usgovernment", "china").
+// If empty, defaults to "public".
+func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID, cloudEnvName string) error {
 	azureCreds, ok := creds.(*types.AzureCredentials)
 	if !ok {
 		return nil // Not Azure credentials, nothing to do.
@@ -209,16 +213,7 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 		return nil // Non-fatal.
 	}
 
-	username, err := extractUsernameFromToken(azureCreds.AccessToken)
-	if err != nil {
-		log.Debug("Failed to extract username from token, using fallback", "error", err)
-		// For service principal, use client ID as username.
-		if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" {
-			username = azureCreds.ClientID
-		} else {
-			username = "user@unknown" // Fallback username.
-		}
-	}
+	username := resolveUsername(azureCreds)
 
 	// Get home directory.
 	home, err := os.UserHomeDir()
@@ -227,34 +222,20 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 		return nil
 	}
 
-	// Extract Graph API token and expiration from credentials if available.
-	graphToken := azureCreds.GraphAPIToken
-	graphExpiration := azureCreds.GraphAPIExpiration
-
-	// Extract KeyVault token and expiration from credentials if available.
-	keyVaultToken := azureCreds.KeyVaultToken
-	keyVaultExpiration := azureCreds.KeyVaultExpiration
+	// Resolve cloud environment for correct endpoint scopes.
+	cloudEnv := GetCloudEnvironment(cloudEnvName)
 
 	// Update MSAL token cache with management, Graph API, and KeyVault tokens.
-	if err := updateMSALCache(&msalCacheUpdate{
-		Home:               home,
-		AccessToken:        azureCreds.AccessToken,
-		Expiration:         azureCreds.Expiration,
-		GraphToken:         graphToken,
-		GraphExpiration:    graphExpiration,
-		KeyVaultToken:      keyVaultToken,
-		KeyVaultExpiration: keyVaultExpiration,
-		UserOID:            userOID,
-		TenantID:           tenantID,
-		ClientID:           azureCreds.ClientID,
-		IsServicePrincipal: azureCreds.IsServicePrincipal,
-	}); err != nil {
-		log.Debug("Failed to update MSAL cache", "error", err)
-		// Continue to try azureProfile update.
-	}
+	updateMSALCacheFromCreds(home, azureCreds, userOID, tenantID, cloudEnv)
 
 	// Update azureProfile.json.
-	if err := updateAzureProfile(home, username, tenantID, subscriptionID, azureCreds.IsServicePrincipal); err != nil {
+	if err := updateAzureProfile(home, ProfileUpdateParams{
+		Username:            username,
+		TenantID:            tenantID,
+		SubscriptionID:      subscriptionID,
+		IsServicePrincipal:  azureCreds.IsServicePrincipal,
+		AzureProfileEnvName: cloudEnv.AzureProfileEnvName,
+	}); err != nil {
 		log.Debug("Failed to update Azure profile", "error", err)
 		// Non-fatal.
 	}
@@ -269,6 +250,30 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 	}
 
 	return nil
+}
+
+// updateMSALCacheFromCreds updates the MSAL token cache using Azure credentials and cloud environment.
+func updateMSALCacheFromCreds(home string, azureCreds *types.AzureCredentials, userOID, tenantID string, cloudEnv *CloudEnvironment) {
+	if err := updateMSALCache(&msalCacheUpdate{
+		Home:               home,
+		AccessToken:        azureCreds.AccessToken,
+		Expiration:         azureCreds.Expiration,
+		GraphToken:         azureCreds.GraphAPIToken,
+		GraphExpiration:    azureCreds.GraphAPIExpiration,
+		KeyVaultToken:      azureCreds.KeyVaultToken,
+		KeyVaultExpiration: azureCreds.KeyVaultExpiration,
+		UserOID:            userOID,
+		TenantID:           tenantID,
+		ClientID:           azureCreds.ClientID,
+		IsServicePrincipal: azureCreds.IsServicePrincipal,
+		LoginEndpoint:      cloudEnv.LoginEndpoint,
+		ManagementScope:    cloudEnv.ManagementScope,
+		GraphAPIScope:      cloudEnv.GraphAPIScope,
+		KeyVaultScope:      cloudEnv.KeyVaultScope,
+	}); err != nil {
+		log.Debug("Failed to update MSAL cache", "error", err)
+		// Continue to try azureProfile update.
+	}
 }
 
 // msalCacheUpdate holds parameters for updating MSAL cache.
@@ -291,6 +296,11 @@ type msalCacheUpdate struct {
 	// - AppMetadata entry is added
 	// Reference: https://github.com/AzureAD/microsoft-authentication-library-for-python
 	IsServicePrincipal bool
+	// Cloud environment endpoints for sovereign cloud support.
+	LoginEndpoint   string // Azure AD login endpoint (e.g., "login.microsoftonline.com").
+	ManagementScope string // Management API scope.
+	GraphAPIScope   string // Graph API scope.
+	KeyVaultScope   string // KeyVault API scope.
 }
 
 // updateMSALCache updates the Azure CLI MSAL token cache.
@@ -374,7 +384,7 @@ func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdat
 	// Create common MSAL identifiers for user auth.
 	ids := msalIdentifiers{
 		homeAccountID: fmt.Sprintf("%s.%s", params.UserOID, params.TenantID),
-		environment:   "login.microsoftonline.com",
+		environment:   params.LoginEndpoint,
 		clientID:      "04b07795-8ddb-461a-bbee-02f9e1bf7b46", // Azure CLI public client.
 		realm:         params.TenantID,
 	}
@@ -396,7 +406,7 @@ func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdat
 	addTokenToCache(sections.accessToken, &tokenCacheParams{
 		Token:         params.AccessToken,
 		Expiration:    params.Expiration,
-		Scope:         "https://management.azure.com/.default",
+		Scope:         params.ManagementScope,
 		HomeAccountID: ids.homeAccountID,
 		Environment:   ids.environment,
 		ClientID:      ids.clientID,
@@ -415,22 +425,20 @@ func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdat
 // - AppMetadata entry is added
 // Reference: https://github.com/AzureAD/microsoft-authentication-library-for-python/blob/dev/msal/token_cache.py
 func addServicePrincipalTokens(sections *msalCacheSections, params *msalCacheUpdate) {
-	environment := "login.microsoftonline.com"
-
 	// For service principal, home_account_id is empty.
 	// This results in cache keys starting with "-".
 	ids := msalIdentifiers{
 		homeAccountID: "", // Empty for service principal.
-		environment:   environment,
+		environment:   params.LoginEndpoint,
 		clientID:      params.ClientID,
 		realm:         params.TenantID,
 	}
 
 	// Add AppMetadata entry (required for service principal).
 	// Format: appmetadata-{environment}-{client_id} (lowercase).
-	appMetadataKey := fmt.Sprintf("appmetadata-%s-%s", strings.ToLower(environment), strings.ToLower(params.ClientID))
+	appMetadataKey := fmt.Sprintf("appmetadata-%s-%s", strings.ToLower(params.LoginEndpoint), strings.ToLower(params.ClientID))
 	sections.appMetadata[appMetadataKey] = map[string]interface{}{
-		FieldEnvironment: environment,
+		FieldEnvironment: params.LoginEndpoint,
 		"client_id":      params.ClientID,
 		"family_id":      "", // Empty for non-FOCI apps.
 	}
@@ -442,7 +450,7 @@ func addServicePrincipalTokens(sections *msalCacheSections, params *msalCacheUpd
 	addTokenToCache(sections.accessToken, &tokenCacheParams{
 		Token:         params.AccessToken,
 		Expiration:    params.Expiration,
-		Scope:         "https://management.azure.com/.default",
+		Scope:         params.ManagementScope,
 		HomeAccountID: ids.homeAccountID,
 		Environment:   ids.environment,
 		ClientID:      ids.clientID,
@@ -461,7 +469,7 @@ func addOptionalTokens(accessTokenSection map[string]interface{}, params *msalCa
 		addTokenToCache(accessTokenSection, &tokenCacheParams{
 			Token:         params.GraphToken,
 			Expiration:    params.GraphExpiration,
-			Scope:         "https://graph.microsoft.com/.default",
+			Scope:         params.GraphAPIScope,
 			HomeAccountID: ids.homeAccountID,
 			Environment:   ids.environment,
 			ClientID:      ids.clientID,
@@ -477,7 +485,7 @@ func addOptionalTokens(accessTokenSection map[string]interface{}, params *msalCa
 		addTokenToCache(accessTokenSection, &tokenCacheParams{
 			Token:         params.KeyVaultToken,
 			Expiration:    params.KeyVaultExpiration,
-			Scope:         "https://vault.azure.net/.default",
+			Scope:         params.KeyVaultScope,
 			HomeAccountID: ids.homeAccountID,
 			Environment:   ids.environment,
 			ClientID:      ids.clientID,
@@ -580,8 +588,17 @@ func addTokenToCache(accessTokenSection map[string]interface{}, params *tokenCac
 	log.Debug("Added "+params.APIName+" token to MSAL cache", "key", cacheKey)
 }
 
+// ProfileUpdateParams contains the parameters for updating an Azure profile subscription entry.
+type ProfileUpdateParams struct {
+	Username            string
+	TenantID            string
+	SubscriptionID      string
+	IsServicePrincipal  bool
+	AzureProfileEnvName string
+}
+
 // updateAzureProfile updates the azureProfile.json file with the current subscription.
-func updateAzureProfile(home, username, tenantID, subscriptionID string, isServicePrincipal bool) error {
+func updateAzureProfile(home string, params ProfileUpdateParams) error {
 	profilePath := filepath.Join(home, ".azure", "azureProfile.json")
 	azureDir := filepath.Dir(profilePath)
 	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
@@ -609,7 +626,7 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string, isServi
 	}
 
 	// Update subscriptions in profile.
-	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, username, tenantID, subscriptionID, isServicePrincipal)
+	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, params)
 
 	// Write updated profile.
 	updatedData, err := json.MarshalIndent(profile, "", "  ")
@@ -633,13 +650,13 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string, isServi
 		return fmt.Errorf("failed to write Azure profile: %w", err)
 	}
 
-	log.Debug("Updated Azure profile", "path", profilePath, "subscription", subscriptionID)
+	log.Debug("Updated Azure profile", "path", profilePath, "subscription", params.SubscriptionID)
 	return nil
 }
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
 // It sets the specified subscription as default and marks all others as not default.
-func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tenantID, subscriptionID string, isServicePrincipal bool) []interface{} {
+func UpdateSubscriptionsInProfile(profile map[string]interface{}, params ProfileUpdateParams) []interface{} {
 	// Get subscriptions array.
 	subscriptionsRaw, ok := profile["subscriptions"].([]interface{})
 	if !ok {
@@ -648,7 +665,7 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 
 	// Determine user type based on authentication method.
 	userType := "user"
-	if isServicePrincipal {
+	if params.IsServicePrincipal {
 		userType = "servicePrincipal"
 	}
 
@@ -661,16 +678,16 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 		}
 
 		subID, _ := sub["id"].(string)
-		if subID == subscriptionID {
+		if subID == params.SubscriptionID {
 			// Update existing subscription.
-			sub["tenantId"] = tenantID
+			sub["tenantId"] = params.TenantID
 			sub["isDefault"] = true
 			sub["state"] = "Enabled"
 			sub[FieldUser] = map[string]interface{}{
-				"name": username,
+				"name": params.Username,
 				"type": userType,
 			}
-			sub["environmentName"] = "AzureCloud"
+			sub["environmentName"] = params.AzureProfileEnvName
 			subscriptionsRaw[i] = sub
 			found = true
 		} else {
@@ -681,16 +698,16 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 	}
 
 	// Add new subscription if not found.
-	if !found && subscriptionID != "" {
+	if !found && params.SubscriptionID != "" {
 		newSub := map[string]interface{}{
-			"id":              subscriptionID,
-			"name":            subscriptionID,
-			"tenantId":        tenantID,
+			"id":              params.SubscriptionID,
+			"name":            params.SubscriptionID,
+			"tenantId":        params.TenantID,
 			"isDefault":       true,
 			"state":           "Enabled",
-			"environmentName": "AzureCloud",
+			"environmentName": params.AzureProfileEnvName,
 			FieldUser: map[string]interface{}{
-				"name": username,
+				"name": params.Username,
 				"type": userType,
 			},
 		}
@@ -820,6 +837,19 @@ func extractUsernameFromToken(token string) (string, error) {
 	}
 
 	return "", errUtils.ErrAzureUsernameClaimNotFound
+}
+
+// resolveUsername extracts username from credentials with service-principal-aware fallback.
+func resolveUsername(azureCreds *types.AzureCredentials) string {
+	username, err := extractUsernameFromToken(azureCreds.AccessToken)
+	if err != nil {
+		log.Debug("Failed to extract username from token, using fallback", "error", err)
+		if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" {
+			return azureCreds.ClientID
+		}
+		return "user@unknown"
+	}
+	return username
 }
 
 // extractUsernameOrFallback extracts username from token or returns fallback.
