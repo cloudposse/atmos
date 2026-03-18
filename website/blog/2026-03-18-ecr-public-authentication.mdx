@@ -1,0 +1,58 @@
+---
+slug: ecr-public-authentication
+title: "ECR Public Registry Authentication"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports authenticated pulls from `public.ecr.aws` via the new `aws/ecr-public` integration kind, eliminating Docker rate limits on public ECR images.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos already supported private ECR authentication via the `aws/ecr` integration kind. This release adds its public counterpart: `aws/ecr-public`.
+
+Unauthenticated pulls from `public.ecr.aws` are subject to rate limits that can break CI workflows, especially when pulling BuildKit, binfmt, or other commonly used images. Authenticated pulls have significantly higher (or no) rate limits.
+
+The new integration uses the `ecr-public:GetAuthorizationToken` API to obtain a bearer token, then writes credentials to your Docker config for `public.ecr.aws`. Auth is always pinned to `us-east-1`, which is the only region AWS supports for ECR Public authentication.
+
+## How to Use It
+
+Add an `aws/ecr-public` integration to your `atmos.yaml`:
+
+```yaml
+auth:
+  integrations:
+    ecr-public:
+      kind: aws/ecr-public
+      via:
+        identity: plat-dev/terraform
+      spec:
+        auto_provision: true
+```
+
+No `registry` block is needed since ECR Public is always `public.ecr.aws`.
+
+With `auto_provision: true`, logging in to the linked identity automatically authenticates to ECR Public:
+
+```bash
+$ atmos auth login plat-dev/terraform
+✓ Authenticated as arn:aws:sts::123456789012:assumed-role/DevRole/user
+✓ ECR Public login: public.ecr.aws (expires in 12h)
+```
+
+Or trigger it explicitly:
+
+```bash
+$ atmos auth ecr-login ecr-public
+✓ ECR Public login: public.ecr.aws (expires in 12h)
+```
+
+## Why This Matters
+
+Every Docker build that pulls from `public.ecr.aws` hits rate limits without authentication. This is especially painful in CI, where the `cloudposse/github-action-docker-build-push` action pulls BuildKit and binfmt images from public ECR on every run. Previously, users had to add manual `docker/login-action` steps to their workflows. Now it's a single config block.
+
+## Get Involved
+
+Have feedback or ideas? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or join the conversation in our [Slack community](https://slack.cloudposse.com).
