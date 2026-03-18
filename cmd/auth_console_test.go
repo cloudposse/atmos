@@ -165,7 +165,7 @@ func TestHandleBrowserOpen(t *testing.T) {
 
 			// This function doesn't return an error, just verify it doesn't panic.
 			assert.NotPanics(t, func() {
-				handleBrowserOpen(tt.consoleURL)
+				handleBrowserOpen(tt.consoleURL, nil)
 			})
 		})
 	}
