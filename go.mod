@@ -119,7 +119,7 @@ require (
 	golang.org/x/text v0.35.0
 	google.golang.org/api v0.272.0
 	google.golang.org/genai v1.50.0
-	google.golang.org/grpc v1.79.2
+	google.golang.org/grpc v1.79.3
 	gopkg.in/ini.v1 v1.67.1
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
