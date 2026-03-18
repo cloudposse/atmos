@@ -176,19 +176,19 @@ func TestParseIdentityFlag(t *testing.T) {
 // TestParseFromPlanFlag tests the parseFromPlanFlag helper function directly.
 func TestParseFromPlanFlag(t *testing.T) {
 	tests := []struct {
-		name            string
-		arg             string
-		args            []string
-		index           int
-		wantUsePlan     bool
-		wantPlanFile    string
+		name         string
+		arg          string
+		args         []string
+		index        int
+		wantUsePlan  bool
+		wantPlanFile string
 	}{
 		{
-			name:        "exact flag alone enables plan mode without path",
-			arg:         cfg.FromPlanFlag,
-			args:        []string{cfg.FromPlanFlag},
-			index:       0,
-			wantUsePlan: true,
+			name:         "exact flag alone enables plan mode without path",
+			arg:          cfg.FromPlanFlag,
+			args:         []string{cfg.FromPlanFlag},
+			index:        0,
+			wantUsePlan:  true,
 			wantPlanFile: "",
 		},
 		{
@@ -200,11 +200,11 @@ func TestParseFromPlanFlag(t *testing.T) {
 			wantPlanFile: "my-plan.tfplan",
 		},
 		{
-			name:        "exact flag followed by another flag uses no path",
-			arg:         cfg.FromPlanFlag,
-			args:        []string{cfg.FromPlanFlag, "--dry-run"},
-			index:       0,
-			wantUsePlan: true,
+			name:         "exact flag followed by another flag uses no path",
+			arg:          cfg.FromPlanFlag,
+			args:         []string{cfg.FromPlanFlag, "--dry-run"},
+			index:        0,
+			wantUsePlan:  true,
 			wantPlanFile: "",
 		},
 		{
@@ -216,19 +216,19 @@ func TestParseFromPlanFlag(t *testing.T) {
 			wantPlanFile: "my-plan.tfplan",
 		},
 		{
-			name:        "equals form with empty path enables plan mode without path",
-			arg:         cfg.FromPlanFlag + "=",
-			args:        []string{cfg.FromPlanFlag + "="},
-			index:       0,
-			wantUsePlan: true,
+			name:         "equals form with empty path enables plan mode without path",
+			arg:          cfg.FromPlanFlag + "=",
+			args:         []string{cfg.FromPlanFlag + "="},
+			index:        0,
+			wantUsePlan:  true,
 			wantPlanFile: "",
 		},
 		{
-			name:        "non-matching arg does not modify fields",
-			arg:         "--other-flag",
-			args:        []string{"--other-flag", "val"},
-			index:       0,
-			wantUsePlan: false,
+			name:         "non-matching arg does not modify fields",
+			arg:          "--other-flag",
+			args:         []string{"--other-flag", "val"},
+			index:        0,
+			wantUsePlan:  false,
 			wantPlanFile: "",
 		},
 	}
