@@ -568,11 +568,6 @@ const config = {
                     }
                 }
             },
-            announcementBar: {
-                id: 'multi-announcement-v1',
-                content: '&nbsp;',
-                isCloseable: true,
-            },
             colorMode: {
                 // "light" | "dark"
                 defaultMode: 'dark',

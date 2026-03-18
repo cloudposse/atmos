@@ -4,7 +4,6 @@ import {announcements, dismissCooldownMs} from '@site/src/data/announcements';
 
 const STORAGE_KEY = 'atmos.announcements.dismissed';
 const LAST_DISMISSED_KEY = 'atmos.announcements.lastDismissedAt';
-const DOCUSAURUS_DISMISS_KEY = 'docusaurus.announcement.dismiss';
 
 interface DismissState {
   ids: string[];
@@ -31,18 +30,6 @@ function writeState(ids: string[], lastDismissedAt: number): void {
     localStorage.setItem(LAST_DISMISSED_KEY, String(lastDismissedAt));
   } catch {
     // localStorage unavailable.
-  }
-}
-
-function syncDocusaurusDismiss(hidden: boolean): void {
-  try {
-    localStorage.setItem(DOCUSAURUS_DISMISS_KEY, String(hidden));
-    document.documentElement.setAttribute(
-      'data-announcement-bar-initially-dismissed',
-      String(hidden),
-    );
-  } catch {
-    // SSR or localStorage unavailable.
   }
 }
 
@@ -103,11 +90,6 @@ export function useMultiAnnouncement() {
   const allDismissed = nextAnnouncement === null;
   // Bar is hidden when cooling down OR when all announcements are dismissed.
   const isActive = !allDismissed && !coolingDown;
-
-  // Keep Docusaurus inline script mechanism in sync.
-  useEffect(() => {
-    syncDocusaurusDismiss(!isActive);
-  }, [isActive]);
 
   const dismiss = useCallback(() => {
     if (!nextAnnouncement) return;
