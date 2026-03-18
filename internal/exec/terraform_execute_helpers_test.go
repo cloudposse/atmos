@@ -3,8 +3,8 @@ package exec
 import (
 	"errors"
 	"fmt"
-	osexec "os/exec"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"testing"
 
@@ -121,9 +121,9 @@ func TestCheckComponentRestrictions_AbstractComponentOutput_AllowedCommands(t *t
 
 func TestCheckComponentRestrictions_LockedComponentApply(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:         "apply",
-		ComponentIsLocked:  true,
-		Component:          "my-locked-component",
+		SubCommand:        "apply",
+		ComponentIsLocked: true,
+		Component:         "my-locked-component",
 	}
 	err := checkComponentRestrictions(&info)
 	require.Error(t, err)
@@ -132,9 +132,9 @@ func TestCheckComponentRestrictions_LockedComponentApply(t *testing.T) {
 
 func TestCheckComponentRestrictions_LockedComponentDestroy(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:         "destroy",
-		ComponentIsLocked:  true,
-		Component:          "my-locked-component",
+		SubCommand:        "destroy",
+		ComponentIsLocked: true,
+		Component:         "my-locked-component",
 	}
 	err := checkComponentRestrictions(&info)
 	require.Error(t, err)
@@ -189,10 +189,10 @@ func TestCheckComponentRestrictions_WorkspaceWithS3Backend_Allowed(t *testing.T)
 
 func TestCheckComponentRestrictions_FolderPrefixInErrorMessage(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:          "plan",
-		ComponentIsAbstract: true,
+		SubCommand:            "plan",
+		ComponentIsAbstract:   true,
 		ComponentFolderPrefix: "infra/networking",
-		Component:           "vpc",
+		Component:             "vpc",
 	}
 	err := checkComponentRestrictions(&info)
 	require.Error(t, err)
@@ -321,7 +321,7 @@ func TestHandleDeploySubcommand_AddsAutoApproveForDeploy(t *testing.T) {
 func TestHandleDeploySubcommand_NoAutoApproveWhenPlanFileSet(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:      "deploy",
+		SubCommand:       "deploy",
 		UseTerraformPlan: true,
 	}
 	handleDeploySubcommand(&atmosConfig, &info)
@@ -357,7 +357,7 @@ func TestHandleDeploySubcommand_ApplyAutoApproveNotAddedWhenPlanFile(t *testing.
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.ApplyAutoApprove = true
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:      "apply",
+		SubCommand:       "apply",
 		UseTerraformPlan: true,
 	}
 	handleDeploySubcommand(&atmosConfig, &info)
@@ -573,7 +573,7 @@ func TestBuildTerraformCommandArgs_Refresh(t *testing.T) {
 func TestBuildTerraformCommandArgs_Apply_WithoutPlan(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:      "apply",
+		SubCommand:       "apply",
 		UseTerraformPlan: false,
 	}
 	componentPath := "/tmp/my-component"
@@ -588,7 +588,7 @@ func TestBuildTerraformCommandArgs_Apply_WithoutPlan(t *testing.T) {
 func TestBuildTerraformCommandArgs_Apply_WithPlanFileAutoDetected(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:      "apply",
+		SubCommand:       "apply",
 		UseTerraformPlan: true,
 	}
 	componentPath := "/tmp/my-component"
@@ -604,9 +604,9 @@ func TestBuildTerraformCommandArgs_Apply_WithPlanFileAutoDetected(t *testing.T) 
 func TestBuildTerraformCommandArgs_Apply_WithCustomPlanFile(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:      "apply",
+		SubCommand:       "apply",
 		UseTerraformPlan: true,
-		PlanFile:        "custom.tfplan",
+		PlanFile:         "custom.tfplan",
 	}
 	componentPath := "/tmp/my-component"
 
@@ -829,8 +829,8 @@ func TestLogTerraformContext_WithSubCommand2(t *testing.T) {
 
 func TestLogTerraformContext_WithInheritanceChain(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:               "plan",
-		ComponentFromArg:         "my-component",
+		SubCommand:                "plan",
+		ComponentFromArg:          "my-component",
 		ComponentInheritanceChain: []string{"base-component", "grandparent"},
 	}
 	assert.NotPanics(t, func() { logTerraformContext(&info, "/tmp/workdir") })
@@ -859,12 +859,12 @@ func TestCleanupTerraformFiles_ApplyRemovesVarFile(t *testing.T) {
 	atmosConfig.BasePath = tmpDir
 	atmosConfig.Components.Terraform.BasePath = "components/terraform"
 	info := schema.ConfigAndStacksInfo{
-		SubCommand:              "apply",
-		ComponentFromArg:        "test",
-		FinalComponent:          "test",
-		Stack:                   "test-stack",
-		TerraformWorkspace:      "test-stack",
-		ComponentFolderPrefix:   "",
+		SubCommand:            "apply",
+		ComponentFromArg:      "test",
+		FinalComponent:        "test",
+		Stack:                 "test-stack",
+		TerraformWorkspace:    "test-stack",
+		ComponentFolderPrefix: "",
 	}
 
 	// We cannot test the exact path without complex mocking, but we can verify
