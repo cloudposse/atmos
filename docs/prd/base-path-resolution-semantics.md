@@ -88,6 +88,65 @@ The table demonstrates three properties:
 
 No row contradicts another. No value has surprise behavior based on its source. The only thing that changes is the anchor for dot-prefix, which matches universal convention.
 
+### Simple Pseudocode
+
+```
+# Config-file source (base_path in atmos.yaml):
+if path == "" or path is unset:
+    return git_repo_root() or dirname(atmos.yaml) or CWD
+if path is absolute:
+    return path
+if path == "." or starts with "./" or ".." or "../":
+    return dirname(atmos.yaml) / path       # config-dir-relative
+else:  # bare path ("stacks", "foo/bar")
+    return git_repo_root() / path           # git-root search (os.Stat fallback to CWD)
+
+# Runtime source (ATMOS_BASE_PATH, --base-path) — only dot-prefix differs:
+if path == "." or starts with "./" or ".." or "../":
+    return CWD / path                       # CWD-relative (shell convention)
+# All other categories (empty, bare, absolute) resolve identically to above.
+```
+
+### Quick Reference
+
+```
+# Setup: atmos.yaml at /repo/config/atmos.yaml, git root is /repo,
+#         CWD is /repo/components/terraform/vpc
+
+# ── Config file (base_path in atmos.yaml) ──────────────────────────
+# Dot-prefixed paths anchor to config dir (dirname of atmos.yaml)
+base_path: ""           → /repo                    (empty → git root discovery)
+base_path: "."          → /repo/config             (dot → config dir)
+base_path: ".."         → /repo                    (parent of config dir)
+base_path: "./foo"      → /repo/config/foo         (config dir + foo)
+base_path: "../foo"     → /repo/foo                (parent of config dir + foo)
+base_path: "stacks"     → /repo/stacks             (bare → git root search)
+base_path: "foo/bar"    → /repo/foo/bar            (bare → git root search)
+base_path: "/abs/path"  → /abs/path                (absolute → pass through)
+base_path: !repo-root   → /repo                    (explicit git root tag)
+base_path: !cwd         → /repo/components/terraform/vpc  (explicit CWD tag)
+
+# ── Environment variable / CLI flag (runtime source) ───────────────
+# Dot-prefixed paths anchor to CWD (shell convention)
+ATMOS_BASE_PATH=""                              → /repo                    (empty → git root discovery)
+ATMOS_BASE_PATH=.                               → /repo/components/terraform/vpc  (dot → CWD)
+ATMOS_BASE_PATH=..                              → /repo/components/terraform      (parent of CWD)
+ATMOS_BASE_PATH=./foo                           → /repo/components/terraform/vpc/foo  (CWD + foo)
+ATMOS_BASE_PATH=../foo                          → /repo/components/terraform/foo  (parent of CWD + foo)
+ATMOS_BASE_PATH=stacks                          → /repo/stacks             (bare → git root search)
+ATMOS_BASE_PATH=./.terraform/modules/monorepo   → /repo/components/terraform/vpc/.terraform/modules/monorepo  (dot-slash → CWD)
+ATMOS_BASE_PATH=.terraform/modules/monorepo     → /repo/.terraform/modules/monorepo  (bare → git root search, os.Stat fallback to CWD)
+ATMOS_BASE_PATH=/abs/path                       → /abs/path                (absolute → pass through)
+
+# ── Same setup but NOT in a git repo ───────────────────────────────
+# Bare paths fall back to config dir instead of git root
+base_path: ""           → /repo/config             (empty → fallback to config dir)
+base_path: "."          → /repo/config             (dot → config dir, unchanged)
+base_path: "stacks"     → /repo/config/stacks      (bare → fallback to config dir)
+ATMOS_BASE_PATH=.       → /repo/components/terraform/vpc  (dot → CWD, unchanged)
+ATMOS_BASE_PATH=stacks  → /repo/config/stacks      (bare → fallback to config dir)
+```
+
 ## Motivation
 
 Issue #1858 revealed that the resolution behavior for empty `base_path` was undefined when using `ATMOS_CLI_CONFIG_PATH`. Issue #2183 (Tyler Rankin / Spacelift) revealed that `ATMOS_BASE_PATH=.terraform/modules/monorepo` broke in v1.202.0 when git root discovery was extended to all simple relative paths.
