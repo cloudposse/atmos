@@ -1,11 +1,20 @@
 package aws
 
 import (
+	"context"
+	"encoding/base64"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/ecrpublic"
+	ecrpublictypes "github.com/aws/aws-sdk-go-v2/service/ecrpublic/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 )
 
 func TestECRPublicConstants(t *testing.T) {
@@ -135,6 +144,196 @@ func TestIsECRPublicRegistry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := IsECRPublicRegistry(tt.url)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetPublicAuthorizationToken(t *testing.T) {
+	ctx := context.Background()
+	validExpiry := time.Now().Add(12 * time.Hour)
+	validToken := base64.StdEncoding.EncodeToString([]byte("AWS:test-password"))
+
+	tests := []struct {
+		name        string
+		setupMock   func(ctrl *gomock.Controller) *MockECRPublicClient
+		useMock     bool
+		creds       types.ICredentials
+		wantErr     bool
+		errContains string
+		errIs       error
+		checkResult func(t *testing.T, result *ECRPublicAuthResult)
+	}{
+		{
+			name:    "success with valid token and expiry",
+			useMock: true,
+			creds:   &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "secret", Region: "us-east-1"},
+			setupMock: func(ctrl *gomock.Controller) *MockECRPublicClient {
+				mock := NewMockECRPublicClient(ctrl)
+				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
+					&ecrpublic.GetAuthorizationTokenOutput{
+						AuthorizationData: &ecrpublictypes.AuthorizationData{
+							AuthorizationToken: &validToken,
+							ExpiresAt:          &validExpiry,
+						},
+					}, nil)
+				return mock
+			},
+			checkResult: func(t *testing.T, result *ECRPublicAuthResult) {
+				assert.Equal(t, "AWS", result.Username)
+				assert.Equal(t, "test-password", result.Password)
+				assert.Equal(t, validExpiry, result.ExpiresAt)
+			},
+		},
+		{
+			name:    "success with nil ExpiresAt",
+			useMock: true,
+			creds:   &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "secret", Region: "us-east-1"},
+			setupMock: func(ctrl *gomock.Controller) *MockECRPublicClient {
+				mock := NewMockECRPublicClient(ctrl)
+				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
+					&ecrpublic.GetAuthorizationTokenOutput{
+						AuthorizationData: &ecrpublictypes.AuthorizationData{
+							AuthorizationToken: &validToken,
+						},
+					}, nil)
+				return mock
+			},
+			checkResult: func(t *testing.T, result *ECRPublicAuthResult) {
+				assert.Equal(t, "AWS", result.Username)
+				assert.Equal(t, "test-password", result.Password)
+				assert.True(t, result.ExpiresAt.IsZero())
+			},
+		},
+		{
+			name:    "nil credentials returns error",
+			useMock: false,
+			creds:   nil,
+			wantErr: true,
+			errIs:   errUtils.ErrECRPublicAuthFailed,
+		},
+		{
+			name:    "non-AWS credentials returns error",
+			useMock: false,
+			// mockNonAWSCredentials is defined in ecr_extended_test.go (same package).
+			creds:   &mockNonAWSCredentials{},
+			wantErr: true,
+			errIs:   errUtils.ErrECRPublicAuthFailed,
+		},
+		{
+			name:    "API call error",
+			useMock: true,
+			creds:   &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "secret", Region: "us-east-1"},
+			setupMock: func(ctrl *gomock.Controller) *MockECRPublicClient {
+				mock := NewMockECRPublicClient(ctrl)
+				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
+					nil, fmt.Errorf("access denied"))
+				return mock
+			},
+			wantErr: true,
+			errIs:   errUtils.ErrECRPublicAuthFailed,
+		},
+		{
+			name:    "nil AuthorizationData",
+			useMock: true,
+			creds:   &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "secret", Region: "us-east-1"},
+			setupMock: func(ctrl *gomock.Controller) *MockECRPublicClient {
+				mock := NewMockECRPublicClient(ctrl)
+				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
+					&ecrpublic.GetAuthorizationTokenOutput{
+						AuthorizationData: nil,
+					}, nil)
+				return mock
+			},
+			wantErr:     true,
+			errIs:       errUtils.ErrECRPublicAuthFailed,
+			errContains: "no authorization data",
+		},
+		{
+			name:    "nil AuthorizationToken",
+			useMock: true,
+			creds:   &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "secret", Region: "us-east-1"},
+			setupMock: func(ctrl *gomock.Controller) *MockECRPublicClient {
+				mock := NewMockECRPublicClient(ctrl)
+				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
+					&ecrpublic.GetAuthorizationTokenOutput{
+						AuthorizationData: &ecrpublictypes.AuthorizationData{
+							AuthorizationToken: nil,
+						},
+					}, nil)
+				return mock
+			},
+			wantErr:     true,
+			errIs:       errUtils.ErrECRPublicAuthFailed,
+			errContains: "no authorization data",
+		},
+		{
+			name:    "invalid base64 token",
+			useMock: true,
+			creds:   &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "secret", Region: "us-east-1"},
+			setupMock: func(ctrl *gomock.Controller) *MockECRPublicClient {
+				mock := NewMockECRPublicClient(ctrl)
+				badToken := "not-valid-base64!!!"
+				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
+					&ecrpublic.GetAuthorizationTokenOutput{
+						AuthorizationData: &ecrpublictypes.AuthorizationData{
+							AuthorizationToken: &badToken,
+						},
+					}, nil)
+				return mock
+			},
+			wantErr:     true,
+			errIs:       errUtils.ErrECRPublicAuthFailed,
+			errContains: "decode",
+		},
+		{
+			name:    "token without colon separator",
+			useMock: true,
+			creds:   &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "secret", Region: "us-east-1"},
+			setupMock: func(ctrl *gomock.Controller) *MockECRPublicClient {
+				mock := NewMockECRPublicClient(ctrl)
+				noColonToken := base64.StdEncoding.EncodeToString([]byte("justpassword"))
+				mock.EXPECT().GetAuthorizationToken(gomock.Any(), gomock.Any()).Return(
+					&ecrpublic.GetAuthorizationTokenOutput{
+						AuthorizationData: &ecrpublictypes.AuthorizationData{
+							AuthorizationToken: &noColonToken,
+						},
+					}, nil)
+				return mock
+			},
+			wantErr:     true,
+			errIs:       errUtils.ErrECRPublicAuthFailed,
+			errContains: "invalid token format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var opts []ECRPublicAuthOption
+			if tt.useMock && tt.setupMock != nil {
+				ctrl := gomock.NewController(t)
+				mockClient := tt.setupMock(ctrl)
+				opts = append(opts, WithECRPublicClient(mockClient))
+			}
+
+			result, err := GetPublicAuthorizationToken(ctx, tt.creds, opts...)
+
+			if !tt.wantErr {
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				if tt.checkResult != nil {
+					tt.checkResult(t, result)
+				}
+				return
+			}
+
+			require.Error(t, err)
+			assert.Nil(t, result)
+			if tt.errIs != nil {
+				assert.ErrorIs(t, err, tt.errIs)
+			}
+			if tt.errContains != "" {
+				assert.Contains(t, err.Error(), tt.errContains)
+			}
 		})
 	}
 }

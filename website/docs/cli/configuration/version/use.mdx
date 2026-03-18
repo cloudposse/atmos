@@ -88,13 +88,11 @@ Version sources are evaluated in this order (highest to lowest priority):
 
 | Priority | Source | Example |
 |----------|--------|---------|
-| 1 | `--use-version` flag | `atmos --use-version 1.201.0 terraform plan` |
-| 2 | `ATMOS_VERSION_USE` env var | `ATMOS_VERSION_USE=1.201.0 atmos terraform plan` |
-| 3 | `ATMOS_VERSION` env var | `ATMOS_VERSION=1.201.0 atmos terraform plan` |
-| 4 | `version.use` in `atmos.yaml` | `version: use: "1.199.0"` |
+| 1 | `--use-version` flag / `ATMOS_USE_VERSION` / `ATMOS_VERSION_USE` | `atmos --use-version 1.201.0 terraform plan` |
+| 2 | `ATMOS_VERSION` env var | `ATMOS_VERSION=1.201.0 atmos terraform plan` |
+| 3 | `version.use` in `atmos.yaml` | `version: use: "1.199.0"` |
 
-The `--use-version` flag and `ATMOS_USE_VERSION` env var both set `ATMOS_VERSION_USE` internally,
-so they share the same priority level.
+`--use-version` and `ATMOS_USE_VERSION` both resolve through `ATMOS_VERSION_USE`, so they are treated as the same top-priority source.
 
 ## Environment Variables
 

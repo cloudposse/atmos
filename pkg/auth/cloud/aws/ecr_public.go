@@ -31,6 +31,13 @@ var ECRPublicSupportedRegions = map[string]bool{
 	"us-west-2": true,
 }
 
+// ECRPublicClient abstracts the AWS ECR Public API for testability.
+//
+//go:generate go run go.uber.org/mock/mockgen@latest -source=ecr_public.go -destination=mock_ecr_public_client_test.go -package=aws
+type ECRPublicClient interface {
+	GetAuthorizationToken(ctx context.Context, params *ecrpublic.GetAuthorizationTokenInput, optFns ...func(*ecrpublic.Options)) (*ecrpublic.GetAuthorizationTokenOutput, error)
+}
+
 // ECRPublicAuthResult contains ECR Public authorization token information.
 type ECRPublicAuthResult struct {
 	Username  string    // Always "AWS".
@@ -38,19 +45,42 @@ type ECRPublicAuthResult struct {
 	ExpiresAt time.Time // Token expiration time.
 }
 
+// ecrPublicAuthConfig holds optional overrides for GetPublicAuthorizationToken.
+type ecrPublicAuthConfig struct {
+	client ECRPublicClient
+}
+
+// ECRPublicAuthOption configures GetPublicAuthorizationToken behavior.
+type ECRPublicAuthOption func(*ecrPublicAuthConfig)
+
+// WithECRPublicClient injects a custom ECR Public client (for testing).
+func WithECRPublicClient(client ECRPublicClient) ECRPublicAuthOption {
+	return func(c *ecrPublicAuthConfig) {
+		c.client = client
+	}
+}
+
 // GetPublicAuthorizationToken retrieves ECR Public credentials using AWS credentials.
 // The auth call is always made to us-east-1, which is the only region that supports it.
-func GetPublicAuthorizationToken(ctx context.Context, creds types.ICredentials) (*ECRPublicAuthResult, error) {
+func GetPublicAuthorizationToken(ctx context.Context, creds types.ICredentials, opts ...ECRPublicAuthOption) (*ECRPublicAuthResult, error) {
 	defer perf.Track(nil, "aws.GetPublicAuthorizationToken")()
 
-	// Build AWS config from credentials, forcing us-east-1 for auth.
-	cfg, err := buildAWSConfigFromCreds(ctx, creds, ECRPublicAuthRegion)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to build AWS config: %w", errUtils.ErrECRPublicAuthFailed, err)
+	cfg := &ecrPublicAuthConfig{}
+	for _, opt := range opts {
+		opt(cfg)
 	}
 
-	// Create ECR Public client.
-	client := ecrpublic.NewFromConfig(cfg)
+	client := cfg.client
+	if client == nil {
+		// Build AWS config from credentials, forcing us-east-1 for auth.
+		awsCfg, err := buildAWSConfigFromCreds(ctx, creds, ECRPublicAuthRegion)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to build AWS config: %w", errUtils.ErrECRPublicAuthFailed, err)
+		}
+
+		// Create ECR Public client.
+		client = ecrpublic.NewFromConfig(awsCfg)
+	}
 
 	// Get authorization token.
 	result, err := client.GetAuthorizationToken(ctx, &ecrpublic.GetAuthorizationTokenInput{})

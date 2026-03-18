@@ -19,10 +19,17 @@ func init() {
 	integrations.Register(integrations.KindAWSECRPublic, NewECRPublicIntegration)
 }
 
+// dockerAuthWriter abstracts Docker credential writing for testability.
+type dockerAuthWriter interface {
+	WriteAuth(registry, username, password string) error
+}
+
 // ECRPublicIntegration implements the aws/ecr-public integration type.
 type ECRPublicIntegration struct {
-	name     string
-	identity string
+	name         string
+	identity     string
+	getAuthToken func(ctx context.Context, creds types.ICredentials) (*awsCloud.ECRPublicAuthResult, error)
+	dockerWriter dockerAuthWriter
 }
 
 // NewECRPublicIntegration creates an ECR Public integration from config.
@@ -61,22 +68,34 @@ func (e *ECRPublicIntegration) Kind() string {
 func (e *ECRPublicIntegration) Execute(ctx context.Context, creds types.ICredentials) error {
 	defer perf.Track(nil, "aws.ECRPublicIntegration.Execute")()
 
-	// Create Docker config manager.
-	dockerConfig, err := docker.NewConfigManager()
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
+	// Use injected docker writer or create real one.
+	writer := e.dockerWriter
+	if writer == nil {
+		dockerConfig, err := docker.NewConfigManager()
+		if err != nil {
+			return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
+		}
+		writer = dockerConfig
 	}
 
 	log.Debug("Logging in to ECR Public registry", "registry", awsCloud.ECRPublicRegistryURL)
 
+	// Use injected auth function or real one.
+	getToken := e.getAuthToken
+	if getToken == nil {
+		getToken = func(ctx context.Context, creds types.ICredentials) (*awsCloud.ECRPublicAuthResult, error) {
+			return awsCloud.GetPublicAuthorizationToken(ctx, creds)
+		}
+	}
+
 	// Get authorization token from ECR Public (always uses us-east-1).
-	result, err := awsCloud.GetPublicAuthorizationToken(ctx, creds)
+	result, err := getToken(ctx, creds)
 	if err != nil {
 		return fmt.Errorf("%w: failed to get ECR Public token: %w", errUtils.ErrECRPublicAuthFailed, err)
 	}
 
 	// Write credentials to Docker config.
-	if err := dockerConfig.WriteAuth(awsCloud.ECRPublicRegistryURL, result.Username, result.Password); err != nil {
+	if err := writer.WriteAuth(awsCloud.ECRPublicRegistryURL, result.Username, result.Password); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
 	}
 
