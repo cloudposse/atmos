@@ -777,13 +777,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 			if uerr := uploadStatus(&info, exitCode, client, gitRepo); uerr != nil {
 				return uerr
 			}
-			// Treat 0 and 2 as success for plan uploads, but preserve exit code.
-			if exitCode == 0 {
+			// Exit code 0 (no changes) and 2 (changes detected) are both
+			// success for plan with --upload-status. The detailed exit code
+			// was only needed to inform the upload; the caller should see success.
+			if exitCode == 0 || exitCode == 2 {
 				return nil
-			}
-			if exitCode == 2 {
-				// Exit code 2 is success for terraform plan but we must preserve it
-				return errUtils.ExitCodeError{Code: 2}
 			}
 		}
 		// For other commands or failure, return the original error.
