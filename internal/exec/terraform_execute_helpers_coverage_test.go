@@ -718,8 +718,8 @@ func TestExecuteCommandPipeline_TTYError(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:           "apply",
-		SkipInit:             true,           // skip init pre-step (no terraform binary available)
-		ComponentBackendType: "http",         // skip workspace setup (HTTP backend has no workspace)
+		SkipInit:             true,   // skip init pre-step (no terraform binary available)
+		ComponentBackendType: "http", // skip workspace setup (HTTP backend has no workspace)
 		// No -auto-approve and no TTY → should fail at checkTTYRequirement.
 	}
 	execCtx := &componentExecContext{
