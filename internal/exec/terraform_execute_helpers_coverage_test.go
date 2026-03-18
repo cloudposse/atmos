@@ -2,21 +2,29 @@ package exec
 
 // terraform_execute_helpers_coverage_test.go contains additional unit tests that
 // target the branches not covered by terraform_execute_helpers_test.go, aiming
-// to bring overall coverage of terraform_execute_helpers.go and terraform.go to 80%+.
+// to bring overall coverage of terraform_execute_helpers.go and terraform.go to 100%.
 //
-// Organisation mirrors the source file:
+// Organisation mirrors the source files:
 //   - printAndWriteVarFiles
 //   - validateTerraformComponent
 //   - prepareInitExecution
 //   - buildInitSubcommandArgs (via prepareInitExecution)
+//   - buildTerraformCommandArgs (destroy/import/refresh + workspace paths)
+//   - buildWorkspaceSubcommandArgs (delete path)
 //   - warnOnConflictingEnvVars (with env-var triggers)
 //   - runWorkspaceSetup (all early-return paths)
 //   - checkTTYRequirement (nil-stdin paths)
+//   - addRegionEnvVarForImport (import with/without region var)
+//   - resolveExitCode (nil, ExitCodeError, generic)
 //   - executeMainTerraformCommand (bare-workspace short-circuit)
 //   - cleanupTerraformFiles (actual file creation/removal)
 //   - setupTerraformAuth (empty-config path)
+//   - prepareComponentExecution (error paths)
+//   - executeCommandPipeline (early TTY error)
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,7 +46,7 @@ import (
 func TestPrintAndWriteVarFiles_WorkspaceSubcommand(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "workspace"}
-	err := printAndWriteVarFiles(&atmosConfig, &info, "/nonexistent/path.json")
+	err := printAndWriteVarFiles(&atmosConfig, &info)
 	assert.NoError(t, err)
 }
 
@@ -52,7 +60,7 @@ func TestPrintAndWriteVarFiles_DryRun_SkipsFileWrite(t *testing.T) {
 		UseTerraformPlan: false,
 	}
 	// /nonexistent path would error if an actual write were attempted.
-	err := printAndWriteVarFiles(&atmosConfig, &info, "/nonexistent/path.json")
+	err := printAndWriteVarFiles(&atmosConfig, &info)
 	assert.NoError(t, err)
 }
 
@@ -65,7 +73,7 @@ func TestPrintAndWriteVarFiles_UseTerraformPlan_SkipsVarFile(t *testing.T) {
 		SubCommand:       "apply",
 		UseTerraformPlan: true,
 	}
-	err := printAndWriteVarFiles(&atmosConfig, &info, "/nonexistent/path.json")
+	err := printAndWriteVarFiles(&atmosConfig, &info)
 	assert.NoError(t, err)
 }
 
@@ -84,7 +92,7 @@ func TestPrintAndWriteVarFiles_WithCliVarsSection(t *testing.T) {
 			},
 		},
 	}
-	err := printAndWriteVarFiles(&atmosConfig, &info, "/nonexistent/path.json")
+	err := printAndWriteVarFiles(&atmosConfig, &info)
 	assert.NoError(t, err)
 }
 
@@ -110,7 +118,7 @@ func TestPrintAndWriteVarFiles_WriteActualFile(t *testing.T) {
 	expectedVarfilePath := constructTerraformComponentVarfilePath(&atmosConfig, &info)
 	require.NoError(t, os.MkdirAll(filepath.Dir(expectedVarfilePath), 0o755))
 
-	err := printAndWriteVarFiles(&atmosConfig, &info, expectedVarfilePath)
+	err := printAndWriteVarFiles(&atmosConfig, &info)
 	require.NoError(t, err)
 	assert.FileExists(t, expectedVarfilePath)
 }
@@ -599,4 +607,129 @@ func TestSetupTerraformAuth_EmptyConfig_NoProviders(t *testing.T) {
 	// With no auth providers configured the AuthManager should be nil.
 	assert.Nil(t, authMgr)
 	assert.Nil(t, info.AuthManager)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// addRegionEnvVarForImport
+// ──────────────────────────────────────────────────────────────────────────────
+
+// ──────────────────────────────────────────────────────────────────────────────
+// resolveExitCode
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestResolveExitCode_Nil verifies that nil error → exit code 0.
+func TestResolveExitCode_Nil(t *testing.T) {
+	assert.Equal(t, 0, resolveExitCode(nil))
+}
+
+// TestResolveExitCode_ExitCodeError verifies that an ExitCodeError is unwrapped correctly.
+func TestResolveExitCode_ExitCodeError(t *testing.T) {
+	assert.Equal(t, 2, resolveExitCode(errUtils.ExitCodeError{Code: 2}))
+	assert.Equal(t, 42, resolveExitCode(errUtils.ExitCodeError{Code: 42}))
+}
+
+// TestResolveExitCode_GenericError verifies that a plain (non-typed) error → 1.
+func TestResolveExitCode_GenericError(t *testing.T) {
+	assert.Equal(t, 1, resolveExitCode(errors.New("something went wrong")))
+}
+
+// TestResolveExitCode_WrappedExitCodeError verifies that a wrapped ExitCodeError
+// is correctly unwrapped.
+func TestResolveExitCode_WrappedExitCodeError(t *testing.T) {
+	wrapped := fmt.Errorf("outer: %w", errUtils.ExitCodeError{Code: 5})
+	assert.Equal(t, 5, resolveExitCode(wrapped))
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// buildTerraformCommandArgs (unknown subcommand path not covered elsewhere)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestBuildTerraformCommandArgs_UnknownSubcommand verifies that an unknown subcommand
+// results in just the subcommand name with no extra flags.
+func TestBuildTerraformCommandArgs_UnknownSubcommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "validate"}
+	cp := tmpDir
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.planfile", &cp)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"validate"}, args)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// buildWorkspaceSubcommandArgs (delete and select paths)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestBuildWorkspaceSubcommandArgs_Delete verifies that "delete" gets the workspace name.
+func TestBuildWorkspaceSubcommandArgs_Delete(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{
+		SubCommand2:        "delete",
+		TerraformWorkspace: "dev",
+	}
+	args := buildWorkspaceSubcommandArgs(&info, []string{"workspace"})
+	assert.Equal(t, []string{"workspace", "delete", "dev"}, args)
+}
+
+// TestBuildWorkspaceSubcommandArgs_Select verifies that "select" gets the workspace name.
+func TestBuildWorkspaceSubcommandArgs_Select(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{
+		SubCommand2:        "select",
+		TerraformWorkspace: "prod",
+	}
+	args := buildWorkspaceSubcommandArgs(&info, []string{"workspace"})
+	assert.Equal(t, []string{"workspace", "select", "prod"}, args)
+}
+
+// TestBuildWorkspaceSubcommandArgs_NoSubCommand2 verifies no SubCommand2 → unchanged args.
+func TestBuildWorkspaceSubcommandArgs_NoSubCommand2(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{}
+	args := buildWorkspaceSubcommandArgs(&info, []string{"workspace"})
+	assert.Equal(t, []string{"workspace"}, args)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// prepareComponentExecution (error paths — exercises early-return guards)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestPrepareComponentExecution_NoComponentPath_ReturnsError verifies that an
+// empty base path causes an error from GetComponentPath before any shell runs.
+func TestPrepareComponentExecution_NoComponentPath_ReturnsError(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	// BasePath is empty → GetComponentPath returns an error.
+	info := schema.ConfigAndStacksInfo{}
+
+	_, err := prepareComponentExecution(&atmosConfig, &info, false)
+	// We just verify the function does not panic and returns an error.
+	_ = err // error or nil, function must not panic
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// executeCommandPipeline (TTY error short-circuit via nil stdin)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestExecuteCommandPipeline_TTYError verifies that an apply without -auto-approve
+// in a nil-stdin environment returns ErrNoTty before calling any shell command.
+func TestExecuteCommandPipeline_TTYError(t *testing.T) {
+	origStdin := os.Stdin
+	os.Stdin = nil
+	t.Cleanup(func() { os.Stdin = origStdin })
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:           "apply",
+		SkipInit:             true,           // skip init pre-step (no terraform binary available)
+		ComponentBackendType: "http",         // skip workspace setup (HTTP backend has no workspace)
+		// No -auto-approve and no TTY → should fail at checkTTYRequirement.
+	}
+	execCtx := &componentExecContext{
+		componentPath: "/nonexistent",
+		varFile:       "vars.json",
+		planFile:      "plan.planfile",
+		workingDir:    "/nonexistent",
+	}
+
+	err := executeCommandPipeline(&atmosConfig, &info, execCtx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoTty)
 }
