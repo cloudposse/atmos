@@ -9,6 +9,7 @@ type AuthConfig struct {
 	Realm        string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
 	Logs         Logs                   `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Keyring      KeyringConfig          `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
+	Console      *AuthConsoleConfig     `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
 	Providers    map[string]Provider    `yaml:"providers" json:"providers" mapstructure:"providers"`
 	Identities   map[string]Identity    `yaml:"identities" json:"identities" mapstructure:"identities"`
 	Integrations map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
@@ -52,6 +53,11 @@ type SessionConfig struct {
 // ConsoleConfig defines web console access configuration for providers.
 type ConsoleConfig struct {
 	SessionDuration string `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration"` // Duration string (e.g., "12h"). Max: 12h for AWS.
+}
+
+// AuthConsoleConfig defines global console behavior settings under auth.console.
+type AuthConsoleConfig struct {
+	Isolated *bool `yaml:"isolated,omitempty" json:"isolated,omitempty" mapstructure:"isolated"` // Enable isolated browser sessions per identity.
 }
 
 // Identity defines an authentication identity configuration.

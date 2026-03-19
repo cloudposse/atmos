@@ -378,8 +378,8 @@ func TestProcessTerraformComponent(t *testing.T) {
 	}
 
 	// mockExecutor returns a mock executor that records whether it was called.
-	mockExecutor := func(called *bool, returnErr error) func(schema.ConfigAndStacksInfo) error {
-		return func(i schema.ConfigAndStacksInfo) error {
+	mockExecutor := func(called *bool, returnErr error) func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error {
+		return func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 			*called = true
 			return returnErr
 		}
@@ -450,7 +450,7 @@ func TestProcessTerraformComponent(t *testing.T) {
 	t.Run("execute", func(t *testing.T) {
 		section := newSection(map[string]any{"enabled": true})
 		called := false
-		executor := func(i schema.ConfigAndStacksInfo) error {
+		executor := func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 			called = true
 			// check fields set
 			assert.Equal(t, component, i.Component)

@@ -198,6 +198,61 @@ func TestPrepareEnvironment(t *testing.T) {
 	}
 }
 
+func TestPrepareEnvironment_SovereignCloud(t *testing.T) {
+	tests := []struct {
+		name             string
+		cloudEnvironment string
+		expectedContains map[string]string
+		expectedMissing  []string
+	}{
+		{
+			name:             "US government sets ARM_ENVIRONMENT",
+			cloudEnvironment: "usgovernment",
+			expectedContains: map[string]string{
+				"ARM_ENVIRONMENT":   "usgovernment",
+				"AZURE_ENVIRONMENT": "usgovernment",
+			},
+		},
+		{
+			name:             "China sets ARM_ENVIRONMENT",
+			cloudEnvironment: "china",
+			expectedContains: map[string]string{
+				"ARM_ENVIRONMENT":   "china",
+				"AZURE_ENVIRONMENT": "china",
+			},
+		},
+		{
+			name:             "public does not set ARM_ENVIRONMENT",
+			cloudEnvironment: "public",
+			expectedMissing:  []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
+		},
+		{
+			name:             "empty does not set ARM_ENVIRONMENT",
+			cloudEnvironment: "",
+			expectedMissing:  []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PrepareEnvironment(PrepareEnvironmentConfig{
+				Environ:          map[string]string{},
+				SubscriptionID:   "sub-123",
+				TenantID:         "tenant-456",
+				CloudEnvironment: tt.cloudEnvironment,
+			})
+
+			for key, expectedValue := range tt.expectedContains {
+				assert.Equal(t, expectedValue, result[key], "Expected %s=%s", key, expectedValue)
+			}
+			for _, key := range tt.expectedMissing {
+				_, exists := result[key]
+				assert.False(t, exists, "Expected %s to be missing", key)
+			}
+		})
+	}
+}
+
 func TestPrepareEnvironment_DoesNotMutateInput(t *testing.T) {
 	original := map[string]string{
 		"HOME":              "/home/user",
