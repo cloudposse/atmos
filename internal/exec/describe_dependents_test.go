@@ -15,6 +15,235 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Tests for getComponentDependencies helper function.
+
+func TestGetComponentDependencies(t *testing.T) {
+	t.Run("prefers dependencies.components over settings.depends_on", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc"},
+					map[string]any{"component": "rds", "stack": "tenant1-ue1-prod"},
+				},
+			},
+			"settings": map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{"component": "old-vpc"},
+				},
+			},
+		}
+
+		deps, settingsSection, source := getComponentDependencies(componentMap)
+
+		assert.Len(t, deps, 2)
+		assert.Equal(t, "vpc", deps[0].Component)
+		assert.Equal(t, "rds", deps[1].Component)
+		assert.Equal(t, "tenant1-ue1-prod", deps[1].Stack)
+		assert.NotNil(t, settingsSection)
+		assert.Equal(t, dependencySourceDependenciesComponents, source)
+	})
+
+	t.Run("falls back to settings.depends_on when dependencies.components is empty", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"tools": map[string]any{
+					"terraform": "1.9.8",
+				},
+			},
+			"settings": map[string]any{
+				"depends_on": map[any]any{
+					1: map[string]any{"component": "vpc"},
+					2: map[string]any{"component": "subnet", "environment": "ue2"},
+				},
+			},
+		}
+
+		deps, settingsSection, source := getComponentDependencies(componentMap)
+
+		assert.Len(t, deps, 2)
+		// Note: map iteration order is not guaranteed, so we check for presence.
+		componentNames := make(map[string]bool)
+		for _, dep := range deps {
+			componentNames[dep.Component] = true
+		}
+		assert.True(t, componentNames["vpc"])
+		assert.True(t, componentNames["subnet"])
+		assert.NotNil(t, settingsSection)
+		assert.Equal(t, dependencySourceSettingsDependsOn, source)
+	})
+
+	t.Run("returns nil when no dependencies defined", func(t *testing.T) {
+		componentMap := map[string]any{
+			"vars": map[string]any{
+				"name": "my-component",
+			},
+			"settings": map[string]any{
+				"spacelift": map[string]any{
+					"workspace_enabled": true,
+				},
+			},
+		}
+
+		deps, settingsSection, source := getComponentDependencies(componentMap)
+
+		assert.Nil(t, deps)
+		assert.NotNil(t, settingsSection)
+		assert.Equal(t, dependencySourceNone, source)
+	})
+
+	t.Run("returns nil deps but settings when settings has no depends_on", func(t *testing.T) {
+		componentMap := map[string]any{
+			"settings": map[string]any{
+				"atlantis": map[string]any{
+					"enabled": true,
+				},
+			},
+		}
+
+		deps, settingsSection, source := getComponentDependencies(componentMap)
+
+		assert.Nil(t, deps)
+		assert.NotNil(t, settingsSection)
+		assert.Equal(t, dependencySourceNone, source)
+	})
+
+	t.Run("handles empty component map", func(t *testing.T) {
+		componentMap := map[string]any{}
+
+		deps, settingsSection, source := getComponentDependencies(componentMap)
+
+		assert.Nil(t, deps)
+		assert.Nil(t, settingsSection)
+		assert.Equal(t, dependencySourceNone, source)
+	})
+
+	t.Run("handles dependencies.components with stack field", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{
+						"component": "shared-vpc",
+						"stack":     "acme-ue1-network",
+					},
+				},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+
+		assert.Len(t, deps, 1)
+		assert.Equal(t, "shared-vpc", deps[0].Component)
+		assert.Equal(t, "acme-ue1-network", deps[0].Stack)
+		assert.Equal(t, dependencySourceDependenciesComponents, source)
+	})
+
+	t.Run("handles file and folder dependencies in dependencies.components", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc"},
+					map[string]any{"kind": "file", "path": "configs/settings.json"},
+					map[string]any{"kind": "folder", "path": "src/lambda"},
+				},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+		assert.Equal(t, dependencySourceDependenciesComponents, source)
+
+		assert.Len(t, deps, 3)
+		assert.Equal(t, "vpc", deps[0].Component)
+		assert.Equal(t, "file", deps[1].Kind)
+		assert.Equal(t, "configs/settings.json", deps[1].Path)
+		assert.Equal(t, "folder", deps[2].Kind)
+		assert.Equal(t, "src/lambda", deps[2].Path)
+	})
+
+	t.Run("handles cross-type kind in dependencies.components", func(t *testing.T) {
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc", "kind": "terraform"},
+					map[string]any{"component": "chart", "kind": "helmfile"},
+				},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+		assert.Equal(t, dependencySourceDependenciesComponents, source)
+
+		assert.Len(t, deps, 2)
+		assert.Equal(t, "vpc", deps[0].Component)
+		assert.Equal(t, "terraform", deps[0].Kind)
+		assert.Equal(t, "chart", deps[1].Component)
+		assert.Equal(t, "helmfile", deps[1].Kind)
+	})
+}
+
+func TestGetComponentDependenciesListMergeBehavior(t *testing.T) {
+	// This test documents the expected merge behavior.
+	// The actual merging happens in the stack processor, but we test that
+	// our function correctly extracts the merged list.
+
+	t.Run("dependencies.components is a flat list after merge", func(t *testing.T) {
+		// After stack inheritance merging, the final component section should
+		// have a flat list of all dependencies from parent and child stacks.
+		// This test verifies that getComponentDependencies correctly extracts
+		// this merged list.
+		componentMap := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					// These would have been merged from parent stack.
+					map[string]any{"component": "account-settings"},
+					map[string]any{"component": "iam-baseline"},
+					// These would have been added by child stack.
+					map[string]any{"component": "vpc"},
+					map[string]any{"component": "rds", "stack": "tenant1-ue1-prod"},
+				},
+			},
+		}
+
+		deps, _, source := getComponentDependencies(componentMap)
+
+		assert.Len(t, deps, 4)
+		// Verify all components are present in order.
+		assert.Equal(t, "account-settings", deps[0].Component)
+		assert.Equal(t, "iam-baseline", deps[1].Component)
+		assert.Equal(t, "vpc", deps[2].Component)
+		assert.Equal(t, "rds", deps[3].Component)
+		assert.Equal(t, dependencySourceDependenciesComponents, source)
+	})
+}
+
+func TestDependenciesSchemaComponents(t *testing.T) {
+	// Test that the Dependencies struct correctly holds component dependencies.
+	t.Run("Dependencies struct holds component list", func(t *testing.T) {
+		deps := schema.Dependencies{
+			Tools: map[string]string{
+				"terraform": "1.9.8",
+			},
+			Components: []schema.ComponentDependency{
+				{Component: "vpc"},
+				{Component: "rds", Stack: "tenant1-ue1-prod"},
+				{Component: "tgw/hub", Stack: "acme-ue1-network"},
+				{Kind: "file", Path: "configs/settings.json"},
+				{Kind: "folder", Path: "src/lambda"},
+			},
+		}
+
+		assert.Len(t, deps.Components, 5)
+		assert.Equal(t, "vpc", deps.Components[0].Component)
+		assert.Equal(t, "rds", deps.Components[1].Component)
+		assert.Equal(t, "tenant1-ue1-prod", deps.Components[1].Stack)
+		assert.Equal(t, "tgw/hub", deps.Components[2].Component)
+		assert.Equal(t, "acme-ue1-network", deps.Components[2].Stack)
+		assert.True(t, deps.Components[3].IsFileDependency())
+		assert.Equal(t, "configs/settings.json", deps.Components[3].Path)
+		assert.True(t, deps.Components[4].IsFolderDependency())
+		assert.Equal(t, "src/lambda", deps.Components[4].Path)
+	})
+}
+
 func TestNewDescribeDependentsExec(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -768,4 +997,221 @@ func TestSortDependentsByStackSlugRecursive_TieStabilityAtNestedLevel(t *testing
 	require.Len(t, deps[0].Dependents, 2)
 	require.Equal(t, "first", deps[0].Dependents[0].ComponentPath)
 	require.Equal(t, "second", deps[0].Dependents[1].ComponentPath)
+}
+
+// TestDescribeDependents_DependenciesComponentsFormat tests that the new
+// dependencies.components format works correctly.
+// It verifies that:
+// 1. Direct dependencies in dependencies.components are correctly read.
+// 2. The describe dependents command correctly identifies dependents.
+// 3. Component dependencies from child stacks are processed (currently replace, not append).
+func TestDescribeDependents_DependenciesComponentsFormat(t *testing.T) {
+	// Working directory isolation.
+	workDir := "../../tests/fixtures/scenarios/dependencies-components-inheritance"
+	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	// Init Atmos config.
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
+	require.NoError(t, err, "InitCliConfig failed")
+
+	// Build OS-specific expected paths.
+	terraformComponentPath := filepath.Join("..", "..", "components", "terraform", "mock")
+	helmfileComponentPath := filepath.Join("..", "..", "components", "helmfile", "mock")
+
+	// Test cases for describe dependents with dependencies.components format.
+	cases := []struct {
+		name      string
+		component string
+		stack     string
+		expected  []schema.Dependent
+	}{
+		{
+			name:      "vpc has dependents including cross-type helmfile and templated stack",
+			component: "vpc",
+			stack:     "dev",
+			expected: []schema.Dependent{
+				{
+					Component:     "eks",
+					ComponentType: "terraform",
+					ComponentPath: terraformComponentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-eks",
+					Stage:         "dev",
+				},
+				{
+					Component:     "nginx",
+					ComponentType: "helmfile",
+					ComponentPath: helmfileComponentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-nginx",
+					Stage:         "dev",
+				},
+				{
+					Component:     "rds",
+					ComponentType: "terraform",
+					ComponentPath: terraformComponentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-rds",
+					Stage:         "dev",
+				},
+				{
+					Component:     "subnet",
+					ComponentType: "terraform",
+					ComponentPath: terraformComponentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-subnet",
+					Stage:         "dev",
+				},
+			},
+		},
+		{
+			name:      "subnet has dependent rds",
+			component: "subnet",
+			stack:     "dev",
+			expected: []schema.Dependent{
+				{
+					Component:     "rds",
+					ComponentType: "terraform",
+					ComponentPath: terraformComponentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-rds",
+					Stage:         "dev",
+				},
+			},
+		},
+		{
+			name:      "rds has no dependents",
+			component: "rds",
+			stack:     "dev",
+			expected:  []schema.Dependent{},
+		},
+		// NOTE: The following test cases document the CURRENT behavior (replace merge).
+		// When list_merge_strategy: append is implemented for dependencies.components,
+		// VPC would also depend on account-settings and iam-baseline from base.yaml.
+		// Currently, child dependencies REPLACE parent dependencies for lists.
+		{
+			name:      "account-settings has no dependents (child replaced parent deps)",
+			component: "account-settings",
+			stack:     "dev",
+			// With replace merge: VPC's deps from base.yaml are replaced by dev.yaml deps.
+			// account-settings is not in dev.yaml's VPC dependencies, so no dependents.
+			expected: []schema.Dependent{},
+		},
+		{
+			name:      "iam-baseline has no dependents (child replaced parent deps)",
+			component: "iam-baseline",
+			stack:     "dev",
+			// Same as above: iam-baseline is not in dev.yaml's VPC dependencies.
+			expected: []schema.Dependent{},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc // capture
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+				Component:            tc.component,
+				Stack:                tc.stack,
+				IncludeSettings:      false,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				OnlyInStack:          "",
+			})
+			require.NoError(t, err)
+
+			// Order-agnostic equality on struct slices.
+			assert.ElementsMatch(t, tc.expected, res)
+		})
+	}
+}
+
+// TestDescribeDependents_DependenciesComponentsInheritance_WithAppendMerge tests that
+// when list_merge_strategy: append is configured in atmos.yaml, dependencies.components
+// uses append merge during stack processing.
+// This is the EXPECTED behavior documented in the plan.
+func TestDescribeDependents_DependenciesComponentsInheritance_WithAppendMerge(t *testing.T) {
+	// Working directory isolation.
+	workDir := "../../tests/fixtures/scenarios/dependencies-components-inheritance-append"
+	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	// Init Atmos config.
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
+	require.NoError(t, err, "InitCliConfig failed")
+
+	// Verify that the list merge strategy is set to append in the config.
+	require.Equal(t, "append", atmosConfig.Settings.ListMergeStrategy,
+		"This test requires list_merge_strategy: append in atmos.yaml")
+
+	// Build an OS-specific expected path once.
+	componentPath := filepath.Join("..", "..", "components", "terraform", "mock")
+
+	// With append merge, VPC should have dependencies from both base.yaml and dev.yaml.
+	// This means account-settings and iam-baseline should have VPC as a dependent.
+	cases := []struct {
+		name      string
+		component string
+		stack     string
+		expected  []schema.Dependent
+	}{
+		{
+			name:      "account-settings has dependent vpc (inherited with append merge)",
+			component: "account-settings",
+			stack:     "dev",
+			expected: []schema.Dependent{
+				{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					ComponentPath: componentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-vpc",
+					Stage:         "dev",
+				},
+			},
+		},
+		{
+			name:      "iam-baseline has dependent vpc (inherited with append merge)",
+			component: "iam-baseline",
+			stack:     "dev",
+			expected: []schema.Dependent{
+				{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					ComponentPath: componentPath,
+					Stack:         "dev",
+					StackSlug:     "dev-vpc",
+					Stage:         "dev",
+				},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc // capture
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+				Component:            tc.component,
+				Stack:                tc.stack,
+				IncludeSettings:      false,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				OnlyInStack:          "",
+			})
+			require.NoError(t, err)
+
+			// Order-agnostic equality on struct slices.
+			assert.ElementsMatch(t, tc.expected, res)
+		})
+	}
 }

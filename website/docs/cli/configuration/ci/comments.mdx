@@ -1,0 +1,73 @@
+---
+title: CI PR Comments
+sidebar_label: comments
+sidebar_class_name: command
+description: Configure PR/MR comments with plan summaries
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `ci.comments` section configures automatic comments on pull requests (GitHub) or merge requests
+(GitLab) with plan summaries, similar to tools like tfcmt and atlantis.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  comments:
+    enabled: true
+    behavior: upsert
+```
+</File>
+
+<dl>
+  <dt>`ci.comments.enabled`</dt>
+  <dd>
+    Post or update comments on PRs (GitHub) or MRs (GitLab) with plan summaries.
+
+    **Requires:** `pull-requests: write` permission (GitHub) or API token with MR notes scope (GitLab)
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.comments.behavior`</dt>
+  <dd>
+    How to handle comments:
+
+    - `create` — Always create a new comment
+    - `update` — Update existing comment or fail if none exists
+    - `upsert` — Update existing comment or create new one (recommended)
+
+    Comments are identified by an HTML marker for the component/stack combination, so each
+    component gets its own comment that is updated on subsequent runs.
+
+    **Default:** `upsert`
+  </dd>
+</dl>
+
+## GitHub Actions Permissions
+
+PR comments require the `pull-requests: write` permission:
+
+```yaml
+permissions:
+  pull-requests: write
+```
+
+## Custom Templates
+
+Override the default comment templates with your own Markdown. See [Templates](/cli/configuration/ci/templates)
+for configuration and template variables.
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Full configuration reference
+- [Templates](/cli/configuration/ci/templates) - Custom template configuration
+- [Native CI Overview](/ci) - Feature overview

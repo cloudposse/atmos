@@ -7,6 +7,7 @@ id: deploy
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to deploy Terraform changes for an Atmos component in a stack with auto-approval. This combines plan and apply operations in a single command.
@@ -184,6 +185,21 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
         atmos terraform deploy <component> -s <stack> --skip=terraform.output,include
         ```
     </dd>
+
+    <dt>`--ci` <em>(optional)</em></dt>
+    <dd>
+        Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.
+
+        In CI mode, deploy also downloads stored planfiles and verifies them against fresh plans before applying, ensuring no infrastructure drift has occurred since the plan was reviewed.
+
+        CI mode is auto-detected when `CI=true` or `GITHUB_ACTIONS=true` environment variables are set.
+
+        **Environment variables:** `ATMOS_CI`, `CI`
+
+        ```shell
+        atmos terraform deploy <component> -s <stack> --ci
+        ```
+    </dd>
 </dl>
 
 ## Native Terraform Flags
@@ -284,8 +300,33 @@ atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
     <dd>Clone the target reference instead of checking it out locally.</dd>
 </dl>
 
+## CI Integration
+
+<Experimental/>
+
+When running in CI mode (`--ci` flag or auto-detected), the `deploy` command provides a complete CI-native apply workflow:
+
+1. **Before deploy** — Downloads stored planfiles from configured storage (S3, GitHub Artifacts, or local)
+2. **Verification** — Generates a fresh plan and compares it against the stored plan to detect drift
+3. **Apply** — Applies the verified plan if it matches, or fails with a drift error
+4. **After deploy** — Writes job summaries, CI output variables, and updates status checks
+
+```shell
+# In GitHub Actions (auto-detected)
+atmos terraform deploy vpc -s dev
+
+# Explicit CI mode
+atmos terraform deploy vpc -s dev --ci
+```
+
+:::info
+See [CI Configuration](/cli/configuration/ci) for full configuration options and [Planfile Storage](/cli/commands/terraform/planfile) for storage backend setup.
+:::
+
 ## Related Commands
 
 - [terraform plan](/cli/commands/terraform/plan) - Generate an execution plan
 - [terraform apply](/cli/commands/terraform/apply) - Apply changes with confirmation
 - [terraform destroy](/cli/commands/terraform/destroy) - Destroy infrastructure
+- [terraform planfile](/cli/commands/terraform/planfile) - Manage stored planfiles
+- [Native CI](/ci) - CI/CD integration overview
