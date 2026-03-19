@@ -575,21 +575,41 @@ func TestProcessArgsAndFlags_NeedHelp(t *testing.T) {
 		wantNeedHelp      bool
 	}{
 		{
+			// --help at the front: it is stripped but does NOT consume "plan" (boolean flag).
+			// So additionalArgsAndFlags = ["plan", "vpc"]; SubCommand = "plan" (the tf subcommand).
 			name:              "--help with remaining args uses first remaining arg as SubCommand",
 			inputArgsAndFlags: []string{"--help", "plan", "vpc"},
-			wantSubCommand:    "vpc",
+			wantSubCommand:    "plan",
 			wantNeedHelp:      true,
 		},
 		{
-			name:              "--help alone leaves SubCommand empty",
+			// --help followed by a single arg: boolean flag does not consume it.
+			// additionalArgsAndFlags = ["plan"]; SubCommand = "plan".
+			name:              "--help with single remaining arg uses it as SubCommand",
 			inputArgsAndFlags: []string{"--help", "plan"},
-			wantSubCommand:    "",
+			wantSubCommand:    "plan",
 			wantNeedHelp:      true,
 		},
 		{
+			// --help alone: single-arg early-return fires; SubCommand = "--help", NeedHelp = false.
+			// This is intentional — Cobra processes "--help" as a flag, not a subcommand.
+			name:              "--help alone triggers single-arg early return",
+			inputArgsAndFlags: []string{"--help"},
+			wantSubCommand:    "--help",
+			wantNeedHelp:      false,
+		},
+		{
+			// Typical usage: plan vpc --help; SubCommand = "plan" (first remaining after --help stripped).
+			name:              "--help at end: SubCommand set to terraform subcommand",
+			inputArgsAndFlags: []string{"plan", "vpc", "--help"},
+			wantSubCommand:    "plan",
+			wantNeedHelp:      true,
+		},
+		{
+			// -h at the front: same semantics as --help.
 			name:              "-h with remaining arg uses first remaining arg as SubCommand",
 			inputArgsAndFlags: []string{"-h", "plan", "vpc"},
-			wantSubCommand:    "vpc",
+			wantSubCommand:    "plan",
 			wantNeedHelp:      true,
 		},
 	}
@@ -598,7 +618,7 @@ func TestProcessArgsAndFlags_NeedHelp(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
 			require.NoError(t, err)
-			assert.True(t, got.NeedHelp)
+			assert.Equal(t, tt.wantNeedHelp, got.NeedHelp)
 			assert.Equal(t, tt.wantSubCommand, got.SubCommand)
 		})
 	}

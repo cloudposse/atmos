@@ -593,7 +593,12 @@ func processArgsAndFlags(
 		// --from-plan has optional value semantics (path may or may not follow).
 		parseFromPlanFlag(&info, arg, inputArgsAndFlags, i)
 
-		// Boolean flags.
+		// Boolean flags — set fields on ArgsAndFlagsInfo when recognized.
+		// Note: cfg.ProcessTemplatesFlag and cfg.ProcessFunctionsFlag are intentionally absent here.
+		// Those flags are consumed exclusively by Cobra (via viper.GetBool) in the cmd/terraform/*
+		// layer and assigned to configAndStacksInfo via cmd/terraform/utils.go.  They are listed in
+		// commonFlags solely so they get stripped from pass-through args that reach the underlying
+		// tool (terraform/tofu/helmfile).  No ArgsAndFlagsInfo field exists for them.
 		switch arg {
 		case cfg.DryRunFlag:
 			info.DryRun = true
