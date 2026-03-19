@@ -37,18 +37,27 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 		}, nil
 	}
 
-	// ProcessYamlFunctions must be false here. GetHooks runs in PreRunE before
-	// auth credentials are provisioned (AuthManager is nil). YAML functions like
-	// !terraform.state need AWS credentials to read S3 state — processing them
-	// here would fail. The hooks section itself is static config (event names,
-	// commands, store names) and does not use YAML functions.
+	// ProcessYamlFunctions is enabled here so that safe functions like !template
+	// are evaluated when hydrating hooks. Functions that require external credentials
+	// (e.g. !terraform.state needs AWS credentials, !aws.account_id needs AWS API access)
+	// are added to the Skip list so they are left unevaluated rather than failing with
+	// an auth error. GetHooks runs in PreRunE before auth credentials are provisioned
+	// (AuthManager is nil), so any function that calls cloud APIs must be skipped.
 	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		Component:            info.ComponentFromArg,
 		Stack:                info.Stack,
 		ProcessTemplates:     true,
-		ProcessYamlFunctions: false,
-		Skip:                 []string{},
-		AuthManager:          nil,
+		ProcessYamlFunctions: true,
+		Skip: []string{
+			"terraform.state",
+			"terraform.output",
+			"aws.account_id",
+			"aws.caller_identity_arn",
+			"aws.caller_identity_user_id",
+			"aws.region",
+			"aws.organization_id",
+		},
+		AuthManager: nil,
 	})
 	if err != nil {
 		return &Hooks{}, err
