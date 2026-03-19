@@ -123,8 +123,9 @@ func LintStacks(
 		allStackFiles = nil
 	}
 
-	// Merge lint config defaults.
-	lintConfig := mergedLintConfig(atmosConfig.Lint.Stacks)
+	// Merge lint config defaults, passing the full atmos config so sensitive_key_patterns
+	// from settings.terminal.mask can serve as the single source of truth.
+	lintConfig := mergedLintConfig(atmosConfig.Lint.Stacks, atmosConfig.Settings.Terminal.Mask.SensitiveKeyPatterns)
 
 	ctx := lint.LintContext{
 		StacksMap:       stacksMap,
@@ -193,7 +194,9 @@ func stackYAMLFiles(root string) ([]string, error) {
 }
 
 // mergedLintConfig returns a LintStacksConfig with defaults applied for missing fields.
-func mergedLintConfig(cfg schema.LintStacksConfig) schema.LintStacksConfig {
+// maskKeyPatterns are glob patterns from settings.terminal.mask.sensitive_key_patterns —
+// the single source of truth for sensitive key names used by both masking and lint L-08.
+func mergedLintConfig(cfg schema.LintStacksConfig, maskKeyPatterns []string) schema.LintStacksConfig {
 	if cfg.MaxImportDepth <= 0 {
 		cfg.MaxImportDepth = 3
 	}
@@ -201,9 +204,15 @@ func mergedLintConfig(cfg schema.LintStacksConfig) schema.LintStacksConfig {
 		cfg.DRYThresholdPct = 80
 	}
 	if len(cfg.SensitiveVarPatterns) == 0 {
-		cfg.SensitiveVarPatterns = []string{
-			"*password*", "*secret*", "*token*", "*key*",
-			"*arn*", "*account_id*", "*role*",
+		// Prefer patterns from settings.terminal.mask.sensitive_key_patterns so there is a
+		// single source of truth. Fall back to built-in defaults when neither is configured.
+		if len(maskKeyPatterns) > 0 {
+			cfg.SensitiveVarPatterns = maskKeyPatterns
+		} else {
+			cfg.SensitiveVarPatterns = []string{
+				"*password*", "*secret*", "*token*", "*key*",
+				"*arn*", "*account_id*", "*role*",
+			}
 		}
 	}
 	if cfg.Rules == nil {

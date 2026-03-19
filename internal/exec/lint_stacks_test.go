@@ -21,10 +21,14 @@ func TestMergedLintConfig(t *testing.T) {
 
 	t.Run("applies defaults to empty config", func(t *testing.T) {
 		t.Parallel()
-		cfg := mergedLintConfig(schema.LintStacksConfig{})
+		cfg := mergedLintConfig(schema.LintStacksConfig{}, nil)
 		assert.Equal(t, 3, cfg.MaxImportDepth)
 		assert.Equal(t, 80, cfg.DRYThresholdPct)
 		assert.NotEmpty(t, cfg.SensitiveVarPatterns)
+		// Verify the built-in defaults are applied when both lint patterns and mask key patterns are empty.
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*password*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*secret*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*token*")
 		assert.NotEmpty(t, cfg.Rules)
 		assert.Equal(t, "warning", cfg.Rules["L-01"])
 		assert.Equal(t, "error", cfg.Rules["L-04"])
@@ -34,7 +38,7 @@ func TestMergedLintConfig(t *testing.T) {
 
 	t.Run("does not override MaxImportDepth when set", func(t *testing.T) {
 		t.Parallel()
-		cfg := mergedLintConfig(schema.LintStacksConfig{MaxImportDepth: 10})
+		cfg := mergedLintConfig(schema.LintStacksConfig{MaxImportDepth: 10}, nil)
 		assert.Equal(t, 10, cfg.MaxImportDepth)
 		// Other fields should still get defaults.
 		assert.Equal(t, 80, cfg.DRYThresholdPct)
@@ -42,21 +46,21 @@ func TestMergedLintConfig(t *testing.T) {
 
 	t.Run("does not override DRYThresholdPct when set", func(t *testing.T) {
 		t.Parallel()
-		cfg := mergedLintConfig(schema.LintStacksConfig{DRYThresholdPct: 90})
+		cfg := mergedLintConfig(schema.LintStacksConfig{DRYThresholdPct: 90}, nil)
 		assert.Equal(t, 90, cfg.DRYThresholdPct)
 	})
 
 	t.Run("does not override SensitiveVarPatterns when set", func(t *testing.T) {
 		t.Parallel()
 		patterns := []string{"*custom*", "*internal*"}
-		cfg := mergedLintConfig(schema.LintStacksConfig{SensitiveVarPatterns: patterns})
+		cfg := mergedLintConfig(schema.LintStacksConfig{SensitiveVarPatterns: patterns}, nil)
 		assert.Equal(t, patterns, cfg.SensitiveVarPatterns)
 	})
 
 	t.Run("does not override Rules when set", func(t *testing.T) {
 		t.Parallel()
 		customRules := map[string]string{"L-01": "error", "L-09": "warning"}
-		cfg := mergedLintConfig(schema.LintStacksConfig{Rules: customRules})
+		cfg := mergedLintConfig(schema.LintStacksConfig{Rules: customRules}, nil)
 		assert.Equal(t, customRules, cfg.Rules)
 		// MaxImportDepth should still get its default.
 		assert.Equal(t, 3, cfg.MaxImportDepth)
@@ -70,11 +74,26 @@ func TestMergedLintConfig(t *testing.T) {
 			SensitiveVarPatterns: []string{"*token*"},
 			Rules:                map[string]string{"L-01": "info"},
 		}
-		cfg := mergedLintConfig(input)
+		cfg := mergedLintConfig(input, nil)
 		assert.Equal(t, 5, cfg.MaxImportDepth)
 		assert.Equal(t, 75, cfg.DRYThresholdPct)
 		assert.Equal(t, []string{"*token*"}, cfg.SensitiveVarPatterns)
 		assert.Equal(t, "info", cfg.Rules["L-01"])
+	})
+
+	t.Run("uses maskKeyPatterns as defaults when SensitiveVarPatterns is empty", func(t *testing.T) {
+		t.Parallel()
+		maskPatterns := []string{"*api_key*", "*credentials*"}
+		cfg := mergedLintConfig(schema.LintStacksConfig{}, maskPatterns)
+		assert.Equal(t, maskPatterns, cfg.SensitiveVarPatterns)
+	})
+
+	t.Run("SensitiveVarPatterns takes precedence over maskKeyPatterns", func(t *testing.T) {
+		t.Parallel()
+		lintPatterns := []string{"*token*"}
+		maskPatterns := []string{"*api_key*", "*credentials*"}
+		cfg := mergedLintConfig(schema.LintStacksConfig{SensitiveVarPatterns: lintPatterns}, maskPatterns)
+		assert.Equal(t, lintPatterns, cfg.SensitiveVarPatterns)
 	})
 }
 

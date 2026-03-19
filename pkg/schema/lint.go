@@ -8,7 +8,8 @@ type LintStacksConfig struct {
 	// DRYThresholdPct is the percentage threshold for L-06 DRY extraction suggestions. Default: 80.
 	DRYThresholdPct int `yaml:"dry_threshold_pct,omitempty" json:"dry_threshold_pct,omitempty" mapstructure:"dry_threshold_pct"`
 	// SensitiveVarPatterns is a list of glob patterns for sensitive variable names (L-08).
-	// Merged with built-in defaults.
+	// When empty, patterns from settings.terminal.mask.sensitive_key_patterns are used instead,
+	// providing a single source of truth. Falls back to built-in defaults if neither is set.
 	SensitiveVarPatterns []string `yaml:"sensitive_var_patterns,omitempty" json:"sensitive_var_patterns,omitempty" mapstructure:"sensitive_var_patterns"`
 	// Rules maps rule IDs to their configured severity level (e.g. "L-03": "error").
 	// Used to override default severities.
