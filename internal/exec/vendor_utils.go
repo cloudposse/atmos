@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -327,7 +328,7 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 
 		// Warn if the source is an archived GitHub repository.
 		if pType == pkgTypeRemote {
-			warnIfArchivedGitHubRepo(uri, params.sources[indexSource].Component)
+			warnIfArchivedGitHubRepo(context.Background(), uri, params.sources[indexSource].Component)
 		}
 
 		// Process each target within the source.

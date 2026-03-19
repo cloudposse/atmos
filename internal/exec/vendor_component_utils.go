@@ -197,7 +197,7 @@ func ExecuteComponentVendorInternal(
 
 	// Warn if the source is an archived GitHub repository.
 	if pType == pkgTypeRemote {
-		warnIfArchivedGitHubRepo(uri, component)
+		warnIfArchivedGitHubRepo(context.Background(), uri, component)
 	}
 
 	componentPkg := pkgComponentVendor{

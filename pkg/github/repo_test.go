@@ -1,9 +1,15 @@
 package github
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
+	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseGitHubOwnerRepo(t *testing.T) {
@@ -151,6 +157,38 @@ func TestParseGitHubOwnerRepo(t *testing.T) {
 			uri:    "bitbucket.org/owner/repo",
 			wantOK: false,
 		},
+
+		// github:// scheme.
+		{
+			name:      "github:// scheme bare",
+			uri:       "github://cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "github:// scheme with subdir and ref",
+			uri:       "github://cloudposse/terraform-null-label/modules/vpc@v1.0.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "git:: force prefix with github:// scheme",
+			uri:       "git::github://cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+
+		// Port-qualified hostname.
+		{
+			name:      "https github URL with explicit port 443",
+			uri:       "https://github.com:443/cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -160,6 +198,77 @@ func TestParseGitHubOwnerRepo(t *testing.T) {
 			if tt.wantOK {
 				assert.Equal(t, tt.wantOwner, owner)
 				assert.Equal(t, tt.wantRepo, repo)
+			}
+		})
+	}
+}
+
+func TestIsRepoArchived(t *testing.T) {
+	tests := []struct {
+		name           string
+		responseBody   string
+		responseStatus int
+		wantArchived   bool
+		wantErr        bool
+	}{
+		{
+			name:           "archived repo",
+			responseStatus: 200,
+			responseBody:   `{"archived": true}`,
+			wantArchived:   true,
+		},
+		{
+			name:           "active repo",
+			responseStatus: 200,
+			responseBody:   `{"archived": false}`,
+			wantArchived:   false,
+		},
+		{
+			name:           "repo not found (404)",
+			responseStatus: 404,
+			responseBody:   `{"message": "Not Found"}`,
+			wantErr:        true,
+		},
+		{
+			name:           "unauthorized (401)",
+			responseStatus: 401,
+			responseBody:   `{"message": "Requires authentication"}`,
+			wantErr:        true,
+		},
+		{
+			name:           "forbidden (403)",
+			responseStatus: 403,
+			responseBody:   `{"message": "Forbidden"}`,
+			wantErr:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset cache between sub-tests so each gets a fresh API call.
+			archivedRepoCache.Delete("owner/repo")
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("/repos/owner/repo", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.responseStatus)
+				_, _ = w.Write([]byte(tt.responseBody))
+			})
+			ts := httptest.NewServer(mux)
+			defer ts.Close()
+
+			// Build a GitHub client pointing at the test server.
+			client := github.NewClient(nil)
+			u, err := url.Parse(ts.URL + "/")
+			require.NoError(t, err)
+			client.BaseURL = u
+
+			archived, err := isRepoArchivedWithClient(context.Background(), client.Repositories, "owner", "repo")
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantArchived, archived)
 			}
 		})
 	}

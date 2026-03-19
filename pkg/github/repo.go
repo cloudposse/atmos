@@ -5,9 +5,21 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
+
+	ghpkg "github.com/google/go-github/v59/github"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// archivedCheckTimeout is the maximum time to wait for a GitHub archived-status check.
+// Kept short because the check is best-effort and should never block vendoring for long.
+const archivedCheckTimeout = 5 * time.Second
+
+// archivedRepoCache caches (owner/repo → archived) results so that multiple vendor
+// sources pointing at the same repository only issue one API call per run.
+var archivedRepoCache sync.Map
 
 // scpGitHubURLPattern matches SCP-style GitHub URLs (e.g., git@github.com:owner/repo.git).
 // Capture groups: (1) host, (2) owner, (3) repo.
@@ -19,6 +31,7 @@ var scpGitHubURLPattern = regexp.MustCompile(`^(?:[\w.-]+@)?([\w.-]+\.[\w.-]+):(
 //   - https://github.com/owner/repo.git//path?ref=v1
 //   - git::https://github.com/owner/repo
 //   - git@github.com:owner/repo.git//path
+//   - github://owner/repo
 //
 // Returns owner, repo, and true when successfully parsed; empty strings and false otherwise.
 func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
@@ -31,6 +44,20 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 	// Strip go-getter force scheme prefix (e.g., "git::").
 	if idx := strings.Index(uri, "::"); idx >= 0 {
 		uri = uri[idx+2:]
+	}
+
+	// Handle github:// scheme (e.g., github://owner/repo or github://owner/repo/subdir@ref).
+	if strings.HasPrefix(uri, "github://") {
+		remainder := strings.TrimPrefix(uri, "github://")
+		// Strip @ref suffix.
+		if atIdx := strings.Index(remainder, "@"); atIdx >= 0 {
+			remainder = remainder[:atIdx]
+		}
+		parts := strings.SplitN(strings.Trim(remainder, "/"), "/", 3)
+		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1], true
+		}
+		return "", "", false
 	}
 
 	// Handle SCP-style Git URLs (e.g., git@github.com:owner/repo.git).
@@ -70,7 +97,13 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 		return "", "", false
 	}
 
-	host := strings.ToLower(parsed.Host)
+	// Normalize the host: strip any port (e.g., github.com:443 → github.com) and
+	// lower-case before comparing.
+	rawHost := parsed.Host
+	if colonIdx := strings.LastIndex(rawHost, ":"); colonIdx >= 0 {
+		rawHost = rawHost[:colonIdx]
+	}
+	host := strings.ToLower(rawHost)
 	if host != "github.com" {
 		return "", "", false
 	}
@@ -95,19 +128,49 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 }
 
 // IsRepoArchived reports whether a GitHub repository is archived.
+// It accepts a parent context so callers can propagate cancellation (e.g., Ctrl+C).
+// The check uses a short internal timeout (archivedCheckTimeout) to avoid blocking
+// vendoring in air-gapped or slow-network environments. Results are cached for the
+// duration of the process so repeated calls for the same repository are free.
+//
 // It returns an error when the API call fails; callers that treat the check as
 // best-effort should silently ignore the error and continue rather than
 // blocking the operation.
-func IsRepoArchived(owner, repo string) (bool, error) {
+func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 	defer perf.Track(nil, "github.IsRepoArchived")()
 
-	ctx := context.Background()
-	client := newGitHubClient(ctx)
+	// Use a short timeout so this best-effort check never hangs vendoring.
+	checkCtx, cancel := context.WithTimeout(ctx, archivedCheckTimeout)
+	defer cancel()
 
-	repository, resp, err := client.Repositories.Get(ctx, owner, repo)
+	client := newGitHubClient(checkCtx)
+	return isRepoArchivedWithClient(checkCtx, client.Repositories, owner, repo)
+}
+
+// isRepoArchivedWithClient is the internal implementation of IsRepoArchived.
+// It is separated so tests can inject a mock client without going through the
+// full client-creation path.
+func isRepoArchivedWithClient(ctx context.Context, client githubRepositoriesClient, owner, repo string) (bool, error) {
+	cacheKey := owner + "/" + repo
+
+	// Return cached result if available.
+	if v, ok := archivedRepoCache.Load(cacheKey); ok {
+		return v.(bool), nil
+	}
+
+	repository, resp, err := client.Get(ctx, owner, repo)
 	if err != nil {
 		return false, handleGitHubAPIError(err, resp)
 	}
 
-	return repository.GetArchived(), nil
+	archived := repository.GetArchived()
+	archivedRepoCache.Store(cacheKey, archived)
+
+	return archived, nil
+}
+
+// githubRepositoriesClient is a minimal interface around the GitHub Repositories
+// service so that tests can inject a mock.
+type githubRepositoriesClient interface {
+	Get(ctx context.Context, owner, repo string) (*ghpkg.Repository, *ghpkg.Response, error)
 }
