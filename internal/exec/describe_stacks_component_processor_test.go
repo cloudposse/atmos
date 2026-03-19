@@ -131,20 +131,22 @@ func TestResolveStackName_ManifestName(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{}
 
-	name, err := resolveStackName(ac, "stacks/prod.yaml", "my-manifest-name", info, nil)
+	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "my-manifest-name", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "my-manifest-name", name)
+	assert.Equal(t, schema.Context{}, ctx) // no context populated for manifest-name path
 }
 
 func TestResolveStackName_NoNaming(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{}
 
-	name, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "stacks/prod.yaml", name)
+	assert.Equal(t, schema.Context{}, ctx)
 }
 
 func TestResolveStackName_Pattern(t *testing.T) {
@@ -162,10 +164,14 @@ func TestResolveStackName_Pattern(t *testing.T) {
 		"stage":       "prod",
 	}
 
-	name, err := resolveStackName(ac, "stacks/corp-us-east-1-prod.yaml", "", info, vars)
+	name, ctx, err := resolveStackName(ac, "stacks/corp-us-east-1-prod.yaml", "", info, vars)
 
 	require.NoError(t, err)
 	assert.Equal(t, "corp-us-east-1-prod", name)
+	// Context should be populated from vars when name_pattern is used.
+	assert.Equal(t, "corp", ctx.Tenant)
+	assert.Equal(t, "us-east-1", ctx.Environment)
+	assert.Equal(t, "prod", ctx.Stage)
 }
 
 func TestResolveStackName_NameTemplate(t *testing.T) {
@@ -179,10 +185,11 @@ func TestResolveStackName_NameTemplate(t *testing.T) {
 		ComponentSection: map[string]any{},
 	}
 
-	name, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "hardcoded-stack-name", name)
+	assert.Equal(t, schema.Context{}, ctx) // no context populated for name_template path
 }
 
 func TestResolveStackName_NameTemplateError(t *testing.T) {
@@ -196,7 +203,7 @@ func TestResolveStackName_NameTemplateError(t *testing.T) {
 		ComponentSection: map[string]any{},
 	}
 
-	_, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	_, _, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.Error(t, err)
 }
@@ -216,10 +223,12 @@ func TestResolveStackName_PatternValidationFallback(t *testing.T) {
 		// missing environment and stage → pattern fails
 	}
 
-	name, err := resolveStackName(ac, "stacks/corp.yaml", "", info, vars)
+	name, ctx, err := resolveStackName(ac, "stacks/corp.yaml", "", info, vars)
 
 	require.NoError(t, err)
 	assert.Equal(t, "stacks/corp.yaml", name)
+	// Context is still populated even on fallback (from cfg.GetContextFromVars).
+	assert.Equal(t, "corp", ctx.Tenant)
 }
 
 // ---------------------------------------------------------------------------
@@ -795,10 +804,12 @@ func newMinimalProcessor() *describeStacksProcessor {
 	)
 }
 
-func TestProcessStackFile_NonMapInput(t *testing.T) {
-	// When stackSection is not a map, processStackFile should return nil.
+func TestProcessStackFile_EmptyMap(t *testing.T) {
+	// When stackMap has no components section, processStackFile should return nil without error.
+	// (The old "not-a-map" test is superseded: the signature now takes map[string]any so
+	// the compiler enforces type safety at the call site.)
 	p := newMinimalProcessor()
-	err := p.processStackFile("test.yaml", "not-a-map")
+	err := p.processStackFile("test.yaml", map[string]any{})
 	require.NoError(t, err)
 }
 
@@ -880,7 +891,8 @@ func TestProcessComponentTypeSection_ComponentSectionNotMap(t *testing.T) {
 }
 
 func TestProcessComponentEntry_ComponentFilterExcluded(t *testing.T) {
-	// When p.components filters out this component, processComponentEntry returns nil.
+	// When p.components filters out this component, processComponentEntry returns nil
+	// and must NOT create any entry in finalStacksMap (no ghost entries).
 	p := newDescribeStacksProcessor(
 		&schema.AtmosConfiguration{},
 		"",
@@ -903,15 +915,10 @@ func TestProcessComponentEntry_ComponentFilterExcluded(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	// "vpc" was filtered out, so nothing should appear in finalStacksMap.
-	if entry, ok := p.finalStacksMap["test.yaml"]; ok {
-		entryMap := entry.(map[string]any)
-		if comps, ok := entryMap[cfg.ComponentsSectionName].(map[string]any); ok {
-			if tf, ok := comps[cfg.TerraformSectionName].(map[string]any); ok {
-				assert.NotContains(t, tf, "vpc", "vpc should have been filtered out")
-			}
-		}
-	}
+	// No entries should be created when the component is filtered out.
+	assert.Empty(t, p.finalStacksMap, "finalStacksMap must be empty when all components are filtered")
+	// Verify that componentSection itself was not mutated (no atmos_* keys added).
+	assert.NotContains(t, componentSection, "atmos_component", "componentSection must not be mutated for filtered components")
 }
 
 func TestProcessComponentEntry_EmptyStackName(t *testing.T) {
@@ -1366,4 +1373,137 @@ func TestProcessComponentSectionTemplates_TemplatesDisabledSuccess(t *testing.T)
 	vars, ok := result["vars"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "us-east-1", vars["region"])
+}
+
+// ---------------------------------------------------------------------------
+// Regression fixes – Action Items 1, 2, 3, 4, 5 (CodeRabbit audit)
+// ---------------------------------------------------------------------------
+
+// TestApplyTerraformMetadataInheritance_WorkspaceCleanupNoInherits verifies that
+// the workspace pattern/template cleanup runs even when the component has NO
+// inherit list (Action Items 1 + 5 regression fix).
+//
+// Old monolith: cleanup ran outside the inheritList guard.
+// New code: cleanup must also run when inheritList is absent.
+func TestApplyTerraformMetadataInheritance_WorkspaceCleanupNoInherits(t *testing.T) {
+	ac := &schema.AtmosConfiguration{}
+
+	// Component has an explicit workspace but NO inherit list.
+	metadata := map[string]any{
+		"terraform_workspace":         "explicit-ws",
+		"terraform_workspace_pattern": "{stage}-{component}",
+		"terraform_workspace_template": "{{ .stage }}-{{ .component }}",
+	}
+
+	result, err := applyTerraformMetadataInheritance(ac, map[string]any{}, "vpc", "stack.yaml", metadata)
+
+	require.NoError(t, err)
+	assert.Equal(t, "explicit-ws", result["terraform_workspace"])
+	assert.NotContains(t, result, "terraform_workspace_pattern",
+		"pattern must be removed when explicit workspace is present, even without inherit list")
+	assert.NotContains(t, result, "terraform_workspace_template",
+		"template must be removed when explicit workspace is present, even without inherit list")
+}
+
+// TestApplyTerraformMetadataInheritance_WorkspaceCleanupBaseNoMetadata verifies that
+// the workspace pattern/template cleanup runs even when the base component has no
+// metadata section (Action Item 5 regression fix).
+//
+// Old monolith: cleanup ran after the inheritance block regardless of base metadata.
+// New code: cleanup must also run when base has no metadata (merge is skipped but cleanup must not be).
+func TestApplyTerraformMetadataInheritance_WorkspaceCleanupBaseNoMetadata(t *testing.T) {
+	ac := &schema.AtmosConfiguration{}
+
+	// Base component exists but has no metadata section.
+	allComponents := map[string]any{
+		"base": map[string]any{
+			"vars": map[string]any{"region": "us-east-1"},
+			// no "metadata" key
+		},
+	}
+
+	// Component inherits from base but sets its own explicit workspace.
+	metadata := map[string]any{
+		cfg.InheritsSectionName:        []any{"base"},
+		"terraform_workspace":          "explicit-ws",
+		"terraform_workspace_pattern":  "{stage}",
+		"terraform_workspace_template": "{{ .stage }}",
+	}
+
+	result, err := applyTerraformMetadataInheritance(ac, allComponents, "vpc", "stack.yaml", metadata)
+
+	require.NoError(t, err)
+	assert.Equal(t, "explicit-ws", result["terraform_workspace"])
+	assert.NotContains(t, result, "terraform_workspace_pattern",
+		"pattern must be removed when explicit workspace is present and base has no metadata")
+	assert.NotContains(t, result, "terraform_workspace_template",
+		"template must be removed when explicit workspace is present and base has no metadata")
+}
+
+// TestProcessComponentEntry_NoGhostEntryWhenFiltered verifies that processComponentEntry
+// does NOT create any entry in finalStacksMap for a component that is filtered out
+// by the component list (Action Item 3 + 4 regression fix).
+//
+// Old behaviour: entries were created only for included components.
+// Regressed behaviour: a ghost entry under stackName was created even for filtered components.
+// Fixed behaviour: no entry created when component is filtered.
+func TestProcessComponentEntry_NoGhostEntryWhenFiltered(t *testing.T) {
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{},
+		"",
+		[]string{"other-component"}, // "vpc" is not included
+		nil, nil, false, false, false, nil, nil,
+	)
+
+	componentSection := map[string]any{
+		cfg.ComponentSectionName: "vpc",
+		"vars":                   map[string]any{},
+	}
+	allTypeComponents := map[string]any{"vpc": componentSection}
+
+	err := p.processComponentEntry(
+		"stacks/prod.yaml", "prod", cfg.TerraformSectionName,
+		"vpc", componentSection, allTypeComponents,
+		processComponentTypeOpts{},
+	)
+
+	require.NoError(t, err)
+	assert.Empty(t, p.finalStacksMap,
+		"finalStacksMap must have no ghost entries when the component is filtered out")
+}
+
+// TestProcessStackFile_NoGhostEntryUnderFilename verifies that processStackFile does NOT
+// pre-create a ghost entry under the raw filename when the resolved stack name differs
+// (Action Item 3 regression fix: ghost entries with includeEmptyStacks=true).
+func TestProcessStackFile_NoGhostEntryUnderFilename(t *testing.T) {
+	// Processor with includeEmptyStacks=true so filterEmptyFinalStacks is a no-op.
+	p := newDescribeStacksProcessor(
+		&schema.AtmosConfiguration{},
+		"",
+		nil, nil, nil,
+		false, false,
+		true, // includeEmptyStacks=true
+		nil, nil,
+	)
+
+	// Stack with a manifest-level "name" that differs from the filename.
+	stackMap := map[string]any{
+		"name": "prod",
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: map[string]any{
+				"vpc": map[string]any{"vars": map[string]any{}},
+			},
+		},
+	}
+
+	err := p.processStackFile("stacks/prod.yaml", stackMap)
+	require.NoError(t, err)
+
+	// The result should only contain the resolved name "prod", NOT the raw filename.
+	_, hasFilenameEntry := p.finalStacksMap["stacks/prod.yaml"]
+	_, hasResolvedEntry := p.finalStacksMap["prod"]
+	assert.False(t, hasFilenameEntry,
+		"ghost entry under raw filename must not exist when stack name resolves differently")
+	assert.True(t, hasResolvedEntry,
+		"real entry under resolved stack name must exist")
 }

@@ -84,25 +84,13 @@ func newDescribeStacksProcessor(
 }
 
 // processStackFile processes one stack file, iterating over all requested component types.
-func (p *describeStacksProcessor) processStackFile(stackFileName string, stackSection any) error {
+func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMap map[string]any) error {
 	defer perf.Track(p.atmosConfig, "exec.describeStacksProcessor.processStackFile")()
-
-	stackMap, ok := stackSection.(map[string]any)
-	if !ok {
-		return nil
-	}
 
 	// Delete the stack-wide imports section (not needed in output).
 	delete(stackMap, "imports")
 
-	stackManifestName := getStackManifestName(stackSection)
-
-	// Create an initial entry under the file name so that it appears in the map even if all
-	// components are later filtered.  Empty entries are pruned at the end of ExecuteDescribeStacks.
-	if !u.MapKeyExists(p.finalStacksMap, stackFileName) {
-		p.finalStacksMap[stackFileName] = make(map[string]any)
-		p.finalStacksMap[stackFileName].(map[string]any)[cfg.ComponentsSectionName] = make(map[string]any)
-	}
+	stackManifestName := getStackManifestName(stackMap)
 
 	componentsSection, ok := stackMap[cfg.ComponentsSectionName].(map[string]any)
 	if !ok {
@@ -208,11 +196,14 @@ func (p *describeStacksProcessor) processComponentEntry(
 		info.ComponentSection[cfg.ComponentSectionName] = componentName
 	}
 
-	// Resolve the logical stack name.
-	stackName, err := resolveStackName(p.atmosConfig, stackFileName, stackManifestName, info, secs.vars)
+	// Resolve the logical stack name.  When the name_pattern path is taken, resolveStackName
+	// also returns the populated Context so that BuildTerraformWorkspace and template functions
+	// that read info.Context see non-zero values (matching the original monolith's behaviour).
+	stackName, resolvedContext, err := resolveStackName(p.atmosConfig, stackFileName, stackManifestName, info, secs.vars)
 	if err != nil {
 		return err
 	}
+	info.Context = resolvedContext
 
 	// Filter: skip this component if it does not belong to the requested stack.
 	if shouldFilterByStack(p.filterByStack, stackFileName, stackName) {
@@ -223,7 +214,17 @@ func (p *describeStacksProcessor) processComponentEntry(
 		stackName = stackFileName
 	}
 
-	// Ensure the stack-level entry exists.
+	// Filter: skip this component if it does not match the requested component list.
+	// This check is performed before any mutations to componentSection so that
+	// the live stacksMap data is not modified for filtered-out components.
+	componentIncluded := len(p.components) == 0 ||
+		u.SliceContainsString(p.components, componentName) ||
+		u.SliceContainsString(derivedComponents, componentName)
+	if !componentIncluded {
+		return nil
+	}
+
+	// Ensure the stack-level entry exists (only for included components).
 	if !u.MapKeyExists(p.finalStacksMap, stackName) {
 		p.finalStacksMap[stackName] = make(map[string]any)
 	}
@@ -231,14 +232,6 @@ func (p *describeStacksProcessor) processComponentEntry(
 	info.Stack = stackName
 	setAtmosComponentMetadata(componentSection, componentName, stackName, stackFileName)
 	setAtmosComponentMetadata(info.ComponentSection, componentName, stackName, stackFileName)
-
-	// Filter: skip this component if it does not match the requested component list.
-	componentIncluded := len(p.components) == 0 ||
-		u.SliceContainsString(p.components, componentName) ||
-		u.SliceContainsString(derivedComponents, componentName)
-	if !componentIncluded {
-		return nil
-	}
 
 	ensureComponentEntryInMap(p.finalStacksMap, stackName, typeName, componentName)
 
@@ -388,23 +381,26 @@ func buildConfigAndStacksInfo(
 
 // resolveStackName determines the final logical stack name to use when writing to the result map.
 // Precedence: manifest name > name_template > name_pattern > filename.
+// It also returns the schema.Context populated when a name_pattern is used; callers should
+// set info.Context from the returned value so that BuildTerraformWorkspace and template
+// functions have access to the correct context fields.
 func resolveStackName(
 	atmosConfig *schema.AtmosConfiguration,
 	stackFileName, stackManifestName string,
 	info schema.ConfigAndStacksInfo,
 	varsSection map[string]any,
-) (string, error) {
+) (string, schema.Context, error) {
 	switch {
 	case stackManifestName != "":
-		return stackManifestName, nil
+		return stackManifestName, schema.Context{}, nil
 
 	case atmosConfig.Stacks.NameTemplate != "":
 		name, err := ProcessTmpl(atmosConfig, "describe-stacks-name-template",
 			atmosConfig.Stacks.NameTemplate, info.ComponentSection, false)
 		if err != nil {
-			return "", err
+			return "", schema.Context{}, err
 		}
-		return name, nil
+		return name, schema.Context{}, nil
 
 	case GetStackNamePattern(atmosConfig) != "":
 		context := cfg.GetContextFromVars(varsSection)
@@ -413,12 +409,12 @@ func resolveStackName(
 			// Fall back to filename when pattern validation fails.
 			log.Debug("Pattern validation failed, using filename as stack name",
 				logFieldStack, stackFileName, "error", err)
-			return stackFileName, nil
+			return stackFileName, context, nil
 		}
-		return name, nil
+		return name, context, nil
 
 	default:
-		return stackFileName, nil
+		return stackFileName, schema.Context{}, nil
 	}
 }
 
@@ -568,6 +564,10 @@ func processComponentSectionYAMLFunctions(
 // applyTerraformMetadataInheritance resolves metadata from inherited base components
 // and merges it into the component's own metadata.  This is terraform-specific behaviour
 // triggered when atmos.yaml has stacks.inherit.metadata enabled.
+//
+// The workspace pattern/template cleanup always runs (regardless of whether an inherit
+// list is present) so that any component with an explicit terraform_workspace consistently
+// has pattern/template removed — matching the original behaviour of the old monolithic code.
 func applyTerraformMetadataInheritance(
 	atmosConfig *schema.AtmosConfiguration,
 	allTerraformComponents map[string]any,
@@ -575,60 +575,60 @@ func applyTerraformMetadataInheritance(
 	metadataSection map[string]any,
 ) (map[string]any, error) {
 	inheritList, hasInherits := metadataSection[cfg.InheritsSectionName].([]any)
-	if !hasInherits || len(inheritList) == 0 {
-		return metadataSection, nil
-	}
 
-	baseComponentConfig := &schema.BaseComponentConfig{
-		BaseComponentVars:      make(map[string]any),
-		BaseComponentSettings:  make(map[string]any),
-		BaseComponentEnv:       make(map[string]any),
-		BaseComponentAuth:      make(map[string]any),
-		BaseComponentMetadata:  make(map[string]any),
-		BaseComponentProviders: make(map[string]any),
-		BaseComponentHooks:     make(map[string]any),
-	}
-	baseComponents := []string{}
-
-	for _, inheritValue := range inheritList {
-		inheritFrom, ok := inheritValue.(string)
-		if !ok {
-			continue
+	if hasInherits && len(inheritList) > 0 {
+		baseComponentConfig := &schema.BaseComponentConfig{
+			BaseComponentVars:      make(map[string]any),
+			BaseComponentSettings:  make(map[string]any),
+			BaseComponentEnv:       make(map[string]any),
+			BaseComponentAuth:      make(map[string]any),
+			BaseComponentMetadata:  make(map[string]any),
+			BaseComponentProviders: make(map[string]any),
+			BaseComponentHooks:     make(map[string]any),
 		}
-		if err := ProcessBaseComponentConfig(
-			atmosConfig,
-			baseComponentConfig,
-			allTerraformComponents,
-			componentName,
-			stackFileName,
-			inheritFrom,
-			"",
-			false,
-			&baseComponents,
-		); err != nil {
-			return nil, err
+		baseComponents := []string{}
+
+		for _, inheritValue := range inheritList {
+			inheritFrom, ok := inheritValue.(string)
+			if !ok {
+				continue
+			}
+			if err := ProcessBaseComponentConfig(
+				atmosConfig,
+				baseComponentConfig,
+				allTerraformComponents,
+				componentName,
+				stackFileName,
+				inheritFrom,
+				"",
+				false,
+				&baseComponents,
+			); err != nil {
+				return nil, err
+			}
+		}
+
+		if len(baseComponentConfig.BaseComponentMetadata) > 0 {
+			merged, err := m.Merge(atmosConfig, []map[string]any{
+				baseComponentConfig.BaseComponentMetadata, // base (lower priority)
+				metadataSection,                           // component (higher priority)
+			})
+			if err != nil {
+				return nil, err
+			}
+			metadataSection = merged
 		}
 	}
 
-	if len(baseComponentConfig.BaseComponentMetadata) == 0 {
-		return metadataSection, nil
+	// Always remove pattern/template when the component has an explicit terraform_workspace,
+	// regardless of whether an inherit list is present.  This matches the original behaviour:
+	// the cleanup ran unconditionally (outside the inheritList guard) in the old monolith.
+	if _, hasExplicitWorkspace := metadataSection["terraform_workspace"].(string); hasExplicitWorkspace {
+		delete(metadataSection, "terraform_workspace_pattern")
+		delete(metadataSection, "terraform_workspace_template")
 	}
 
-	merged, err := m.Merge(atmosConfig, []map[string]any{
-		baseComponentConfig.BaseComponentMetadata, // base (lower priority)
-		metadataSection, // component (higher priority)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// If component has an explicit terraform_workspace, remove pattern/template so it takes precedence.
-	if _, hasExplicitWorkspace := merged["terraform_workspace"].(string); hasExplicitWorkspace {
-		delete(merged, "terraform_workspace_pattern")
-		delete(merged, "terraform_workspace_template")
-	}
-
-	return merged, nil
+	return metadataSection, nil
 }
 
 // hasStackExplicitComponents reports whether a stack section contains any component

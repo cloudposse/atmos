@@ -163,12 +163,12 @@ func ExecuteDescribeStacks(
 		}
 		processedStacks[stackFileName] = true
 
-		if err := processor.processStackFile(stackFileName, stackSection); err != nil {
+		if err := processor.processStackFile(stackFileName, stackMap); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := filterEmptyFinalStacks(processor.finalStacksMap, includeEmptyStacks); err != nil {
+	if err := filterEmptyFinalStacks(processor.finalStacksMap, processor.includeEmptyStacks); err != nil {
 		return nil, err
 	}
 
