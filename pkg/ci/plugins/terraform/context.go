@@ -89,10 +89,20 @@ func (c *TerraformTemplateContext) Target() string {
 func (c *TerraformTemplateContext) HasChanges() bool {
 	defer perf.Track(nil, "terraform.TerraformTemplateContext.HasChanges")()
 
-	return c.Resources.Create > 0 ||
+	// Check resource changes first.
+	if c.Resources.Create > 0 ||
 		c.Resources.Change > 0 ||
 		c.Resources.Replace > 0 ||
-		c.Resources.Destroy > 0
+		c.Resources.Destroy > 0 {
+		return true
+	}
+
+	// Fall back to the parser result which also detects output-only changes.
+	if c.TemplateContext != nil && c.TemplateContext.Result != nil {
+		return c.TemplateContext.Result.HasChanges
+	}
+
+	return false
 }
 
 // TotalChanges returns the total number of resource changes.
