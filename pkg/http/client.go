@@ -69,11 +69,18 @@ func WithGitHubToken(token string) ClientOption {
 }
 
 // WithTransport sets a custom HTTP transport.
+// If a GitHubAuthenticatedTransport has already been applied (e.g., via WithGitHubToken),
+// the provided transport is set as its Base rather than replacing the auth wrapper.
+// This preserves GitHub authentication regardless of option order.
 func WithTransport(transport http.RoundTripper) ClientOption {
 	defer perf.Track(nil, "http.WithTransport")()
 
 	return func(c *DefaultClient) {
-		c.client.Transport = transport
+		if authTransport, ok := c.client.Transport.(*GitHubAuthenticatedTransport); ok {
+			authTransport.Base = transport
+		} else {
+			c.client.Transport = transport
+		}
 	}
 }
 

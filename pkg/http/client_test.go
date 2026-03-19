@@ -518,6 +518,9 @@ func TestGitHubAuthenticatedTransport_NilBase(t *testing.T) {
 // TestGetGitHubTokenFromEnv_ViperPrecedence verifies that the viper value takes
 // precedence over environment variables.
 func TestGetGitHubTokenFromEnv_ViperPrecedence(t *testing.T) {
+	// Reset global viper state after this test to avoid leaking the explicit Set value.
+	t.Cleanup(viper.Reset)
+
 	t.Setenv("ATMOS_GITHUB_TOKEN", "env-token")
 	t.Setenv("GITHUB_TOKEN", "fallback-token")
 
@@ -526,10 +529,69 @@ func TestGetGitHubTokenFromEnv_ViperPrecedence(t *testing.T) {
 
 	// Override viper to simulate --github-token flag.
 	v.Set("github-token", "viper-token")
-	t.Cleanup(func() {
-		v.Set("github-token", "")
-	})
 
 	got := GetGitHubTokenFromEnv()
 	assert.Equal(t, "viper-token", got)
+}
+
+// TestWithTransport_AfterWithGitHubToken verifies that WithTransport applied after
+// WithGitHubToken does NOT drop the auth wrapper; the provided transport becomes the
+// inner base of the GitHubAuthenticatedTransport.
+func TestWithTransport_AfterWithGitHubToken(t *testing.T) {
+	var capturedReq *http.Request
+	mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		capturedReq = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("ok")),
+		}, nil
+	})
+
+	// WithGitHubToken first, then WithTransport.
+	client := NewDefaultClient(
+		WithGitHubToken("secret-token"),
+		WithTransport(mockTransport),
+	)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Auth header must still be present even though WithTransport was applied last.
+	require.NotNil(t, capturedReq, "mock transport should have been reached")
+	assert.Equal(t, "Bearer secret-token", capturedReq.Header.Get("Authorization"),
+		"Authorization header must survive WithTransport applied after WithGitHubToken")
+}
+
+// TestWithGitHubToken_AfterWithTransport verifies that WithGitHubToken applied after
+// WithTransport wraps the custom transport inside the auth layer.
+func TestWithGitHubToken_AfterWithTransport(t *testing.T) {
+	var capturedReq *http.Request
+	mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		capturedReq = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("ok")),
+		}, nil
+	})
+
+	// WithTransport first, then WithGitHubToken wraps it.
+	client := NewDefaultClient(
+		WithTransport(mockTransport),
+		WithGitHubToken("secret-token"),
+	)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.NotNil(t, capturedReq, "mock transport should have been reached")
+	assert.Equal(t, "Bearer secret-token", capturedReq.Header.Get("Authorization"),
+		"Authorization header must be set when WithGitHubToken is applied after WithTransport")
 }
