@@ -1,33 +1,36 @@
 ---
 slug: instance-status-upload
-title: "Push Instance Status from CLI to Atmos Pro"
+title: "Real-Time Instance Status from Atmos CLI to Atmos Pro"
 authors: [atmos]
 tags: [feature]
 ---
 
-Atmos now sends raw terraform execution data directly to Atmos Pro after plan and apply commands, eliminating "Unknown" status on the dashboard. The CLI also gains configurable CI exit code mapping so `terraform plan` with `--detailed-exitcode` no longer breaks CI workflows.
+The Atmos CLI now pushes instance status directly to Atmos Pro the moment a plan or apply completes. Your dashboard reflects the real state of every component within seconds — no polling, no waiting for webhooks, no stale data.
 
 <!--truncate-->
 
-## What Changed
+## Live Infrastructure Status
 
-### Raw Status Upload
+[Atmos Pro](https://atmos.tools/pro) gives teams a real-time view of every infrastructure component across all environments. With this release, the status pipeline gets significantly faster: the CLI reports results to Atmos Pro immediately after each terraform operation completes.
 
-Previously, the CLI interpreted terraform exit codes locally and sent pre-computed status strings to Atmos Pro. This coupling meant status logic changes required a CLI release, and error exit codes were silently dropped.
+When you run `atmos terraform plan` or `atmos terraform deploy` with `--upload-status`, the CLI sends the raw execution result to Atmos Pro. The dashboard updates within seconds, showing whether each component is in sync, has drift, or encountered an error — across every stack, every environment, at a glance.
 
-Now the CLI acts as a dumb pipe: it sends the raw `command` and `exit_code` to Atmos Pro, which interprets them server-side. This means:
+## How It Works
 
-- **All exit codes are reported** including errors (previously only 0 and 2 were sent)
-- **Status logic lives server-side** and can evolve without CLI updates
-- **Both plan and apply** upload status when `--upload-status` is passed
+The CLI sends the raw command and exit code to Atmos Pro, which interprets the result server-side. This means Atmos Pro can refine how it classifies status without requiring a CLI update. The CLI stays simple — it just reports what happened.
 
-### CI Exit Code Mapping
+```bash
+# Plan with status reporting
+atmos terraform plan mycomponent -s prod-use1 --upload-status
 
-When `--upload-status` is used with `terraform plan`, Atmos adds `--detailed-exitcode` so it can distinguish "no changes" (exit 0) from "changes detected" (exit 2). In CI environments with `set -e`, exit code 2 fails the workflow step.
+# Apply with status reporting
+atmos terraform deploy mycomponent -s prod-use1 --upload-status
+```
 
-Rather than silently swallowing exit codes, Atmos now supports explicit exit code mapping under `components.terraform.ci`:
+In CI workflows, add `--upload-status` to your plan and apply steps. Combined with the new CI exit code mapping, your workflows stay green while Atmos Pro captures the full picture:
 
 ```yaml
+# atmos.yaml
 ci:
   enabled: true
 
@@ -35,20 +38,18 @@ components:
   terraform:
     ci:
       exit_codes:
-        0: true    # no changes → success
-        1: false   # error → preserve failure
-        2: true    # changes detected → success
+        0: true    # no changes → CI success
+        1: false   # error → CI failure
+        2: true    # changes detected → CI success
 ```
 
-When `ci.enabled` is true and an exit code maps to `true`, Atmos exits 0. The mapping is independent of status upload and applies to all terraform subcommands.
+## Why This Matters
 
-## How to Use It
+Infrastructure teams managing hundreds of components need to know the state of their deployments at all times. Before this change, status updates depended on webhook processing and background reconciliation — introducing delays and gaps. Now the CLI closes that loop directly:
 
-Add `--upload-status` to your plan and apply commands in CI workflows:
+- **Instant feedback** — dashboard updates seconds after plan or apply finishes
+- **Complete coverage** — both plan and apply report status, including errors
+- **Zero configuration drift** — Atmos Pro always reflects the latest execution result
+- **CI-native** — works seamlessly in GitHub Actions, GitLab CI, or any CI system
 
-```bash
-atmos terraform plan mycomponent -s mystack --upload-status
-atmos terraform deploy mycomponent -s mystack --upload-status
-```
-
-Configure CI exit code mapping in your `atmos.yaml` to prevent plan exit code 2 from failing your workflow steps.
+If you're managing infrastructure at scale, [Atmos Pro](https://atmos.tools/pro) turns your CLI output into a shared, real-time operational view for the entire team.
