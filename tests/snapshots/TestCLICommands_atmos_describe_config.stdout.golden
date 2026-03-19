@@ -22,7 +22,8 @@
       "planfiles": {
         "default": ""
       },
-      "plugin_cache": true
+      "plugin_cache": true,
+      "ci": {}
     },
     "helmfile": {
       "base_path": "",
@@ -170,6 +171,7 @@
     "pro": {
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",
+      "token": "ap_live_3ZZgE56cKC2cRGB2diVEgT2b",
       "github_oidc": {}
     },
     "telemetry": {
