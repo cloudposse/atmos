@@ -14,11 +14,10 @@ package exec
 //   - warnOnConflictingEnvVars (with env-var triggers)
 //   - runWorkspaceSetup (all early-return paths)
 //   - checkTTYRequirement (nil-stdin paths)
-//   - addRegionEnvVarForImport (import with/without region var)
 //   - resolveExitCode (nil, ExitCodeError, generic)
 //   - executeMainTerraformCommand (bare-workspace short-circuit)
 //   - cleanupTerraformFiles (actual file creation/removal)
-//   - setupTerraformAuth (empty-config, ErrInvalidComponent, auth-creator error, identity storage, nil-manager)
+//   - setupTerraformAuth (empty-config, ErrInvalidComponent, merged-config-error, auth-creator error, identity storage, nil-manager)
 //   - prepareComponentExecution (error paths)
 //   - executeCommandPipeline (early TTY error)
 
@@ -701,9 +700,24 @@ func TestSetupTerraformAuth_NilManager_NoAuthBridge(t *testing.T) {
 	})
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// addRegionEnvVarForImport
-// ──────────────────────────────────────────────────────────────────────────────
+// TestSetupTerraformAuth_MergedConfigError_WrapsWithInvalidAuthConfig verifies that
+// when getMergedAuthConfig fails with an error that is NOT ErrInvalidComponent,
+// the error is wrapped with ErrInvalidAuthConfig (matching createAndAuthenticateAuthManagerWithDeps).
+func TestSetupTerraformAuth_MergedConfigError_WrapsWithInvalidAuthConfig(t *testing.T) {
+	orig := defaultMergedAuthConfigGetter
+	t.Cleanup(func() { defaultMergedAuthConfigGetter = orig })
+	defaultMergedAuthConfigGetter = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+		return nil, errors.New("config merge failure")
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "mycomp"}
+
+	_, err := setupTerraformAuth(&atmosConfig, &info)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "expected ErrInvalidAuthConfig, got: %v", err)
+	assert.False(t, errors.Is(err, errUtils.ErrInvalidComponent))
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // resolveExitCode
@@ -792,8 +806,8 @@ func TestPrepareComponentExecution_NoComponentPath_ReturnsError(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{}
 
 	_, err := prepareComponentExecution(&atmosConfig, &info, false)
-	// We just verify the function does not panic and returns an error.
-	_ = err // error or nil, function must not panic
+	// An empty BasePath causes checkTerraformConfig to return an error.
+	require.Error(t, err)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

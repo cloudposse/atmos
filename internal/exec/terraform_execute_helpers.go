@@ -69,6 +69,16 @@ func handleVersionSubcommand(atmosConfig schema.AtmosConfiguration, info schema.
 //
 // The defaultAuthManagerCreator injectable var (utils_auth.go) is used so tests can
 // substitute a fake creator without needing a separate var in this file.
+// The defaultMergedAuthConfigGetter injectable var below allows tests to exercise the
+// ErrInvalidAuthConfig wrap branch without requiring a real stack or component.
+
+// defaultMergedAuthConfigGetter is the injectable function for getMergedAuthConfig.
+// Overriding it in tests allows exercising error branches that are otherwise only
+// reachable via MergeComponentAuthFromConfig failures (hard to trigger in unit tests).
+var defaultMergedAuthConfigGetter = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+	return getMergedAuthConfig(atmosConfig, info)
+}
+
 func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	// Log the identity-selection decision point for easy debugging.
 	log.Debug("Resolving auth config for terraform command",
@@ -76,7 +86,7 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 
 	// Get merged auth config (global + component-specific if stack/component are set).
 	// getMergedAuthConfig logs on debug when falling back to global config after an error.
-	mergedAuthConfig, err := getMergedAuthConfig(atmosConfig, info)
+	mergedAuthConfig, err := defaultMergedAuthConfigGetter(atmosConfig, info)
 	if err != nil {
 		// Propagate ErrInvalidComponent directly — prevents an auth prompt for a nonexistent component.
 		if errors.Is(err, errUtils.ErrInvalidComponent) {
