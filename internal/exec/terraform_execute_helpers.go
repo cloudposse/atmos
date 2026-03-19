@@ -75,6 +75,13 @@ func handleVersionSubcommand(atmosConfig schema.AtmosConfiguration, info schema.
 // defaultMergedAuthConfigGetter is the injectable function for getMergedAuthConfig.
 // Overriding it in tests allows exercising error branches that are otherwise only
 // reachable via MergeComponentAuthFromConfig failures (hard to trigger in unit tests).
+//
+// Note: overriding this var also bypasses the defaultComponentConfigFetcher layer
+// (utils_auth.go), which is one level deeper. The two vars target different injection
+// points: defaultComponentConfigFetcher injects at the component-fetch level (used for
+// ErrInvalidComponent), whereas defaultMergedAuthConfigGetter injects at the whole getter
+// level (used for ErrInvalidAuthConfig). Do not override both simultaneously — the deeper
+// var is shadowed and its effect would be masked.
 var defaultMergedAuthConfigGetter = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
 	return getMergedAuthConfig(atmosConfig, info)
 }
