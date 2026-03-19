@@ -684,6 +684,7 @@ var (
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
 	ErrUserAborted                  = errors.New("user aborted")
 
 	// AWS SSO specific errors.
