@@ -1,9 +1,10 @@
 ---
 title: Configure Dependencies
-sidebar_label: dependencies
+sidebar_position: 1
+sidebar_label: Overview
 sidebar_class_name: command
-description: Use the dependencies section to declare tool version requirements.
-id: dependencies
+description: Use the dependencies section to declare tool version requirements and component dependencies.
+id: index
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -216,9 +217,34 @@ components:
 
 ## Component Dependencies
 
-:::tip Looking for Component Dependencies?
-The `dependencies` section currently supports **tool dependencies only**. For component execution order and cross-component dependencies, use [`settings.depends_on`](/stacks/settings/depends_on). We plan to consolidate these features in a future release.
-:::
+The `dependencies` section also supports component dependencies for commands and integrations that honor dependency metadata. In those flows, this helps components run in the correct sequence.
+
+For detailed documentation on component dependencies including:
+- Cross-stack dependencies
+- File and folder dependencies
+- Integration with `atmos describe affected`
+- Merge behavior
+
+See the dedicated [Component Dependencies](/stacks/dependencies/components) page.
+
+### Quick Example
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        name: vpc
+
+    subnet:
+      dependencies:
+        components:
+          - component: vpc     # subnet depends on vpc
+      vars:
+        vpc_id: !terraform.output vpc.vpc_id
+```
+</File>
 
 ## Best Practices
 
@@ -230,6 +256,7 @@ The `dependencies` section currently supports **tool dependencies only**. For co
 
 ## Related Documentation
 
+- [Component Dependencies](/stacks/dependencies/components) - Detailed component dependency configuration
 - [Toolchain Management](/cli/commands/toolchain/usage) - Installing and managing CLI tools
 - [Toolchain Configuration](/cli/configuration/toolchain/) - Configuring toolchain behavior
 - [Component Dependencies](/stacks/settings/depends_on) - Configure dependencies between components

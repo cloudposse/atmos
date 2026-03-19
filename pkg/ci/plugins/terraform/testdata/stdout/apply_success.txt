@@ -1,0 +1,16 @@
+aws_security_group.allow_http: Creating...
+aws_security_group.allow_http: Creation complete after 3s [id=sg-12345678]
+aws_instance.web: Creating...
+aws_instance.web: Still creating... [10s elapsed]
+aws_instance.web: Still creating... [20s elapsed]
+aws_instance.web: Still creating... [30s elapsed]
+aws_instance.web: Creation complete after 35s [id=i-12345678]
+aws_eip.web: Creating...
+aws_eip.web: Creation complete after 2s [id=eipalloc-12345678]
+
+Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+instance_id = "i-12345678"
+public_ip = "54.123.45.67"
