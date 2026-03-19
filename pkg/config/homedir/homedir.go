@@ -3,6 +3,7 @@ package homedir
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
@@ -93,7 +94,11 @@ func Expand(path string) (string, error) {
 		return "", err
 	}
 
-	return filepath.Join(dir, path[1:]), nil
+	// Strip any leading path separator from path[1:] so that filepath.Join
+	// correctly anchors the result under dir on all platforms. On Windows a
+	// leading slash makes the path drive-relative, which would discard dir.
+	rest := strings.TrimLeft(path[1:], `/\`)
+	return filepath.Join(dir, rest), nil
 }
 
 // Reset clears the cache, forcing the next call to Dir to re-detect
@@ -113,13 +118,16 @@ func dirUnix() (string, error) {
 		return home, nil
 	}
 
-	// Try OS-specific methods
+	// Try user.Current() on all platforms first — it is the most reliable
+	// and avoids spawning subprocesses. The darwin-specific dscl lookup is
+	// kept as a fallback for environments where user.Current() fails.
+	if home, err := getUnixHomeDir(); err == nil && home != "" {
+		return home, nil
+	}
+
+	// Darwin-specific dscl fallback (only reached when user.Current() fails).
 	if runtime.GOOS == "darwin" {
 		if home, err := darwinHomeDirFunc(); err == nil && home != "" {
-			return home, nil
-		}
-	} else {
-		if home, err := getUnixHomeDir(); err == nil && home != "" {
 			return home, nil
 		}
 	}
@@ -139,36 +147,60 @@ func getHomeFromEnv() string {
 func dirWindows() (string, error) {
 	// First prefer the HOME environmental variable
 	if home := os.Getenv("HOME"); home != "" {
-		return home, nil
+		return filepath.Clean(home), nil
 	}
 
 	// Prefer standard environment variable USERPROFILE
 	if home := os.Getenv("USERPROFILE"); home != "" {
-		return home, nil
+		return filepath.Clean(home), nil
 	}
 
-	drive := os.Getenv("HOMEDRIVE")
-	path := os.Getenv("HOMEPATH")
-	home := drive + path
+	drive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
+	path := strings.TrimSpace(os.Getenv("HOMEPATH"))
 	if drive == "" || path == "" {
 		return "", ErrHomeDrivePathBlank
 	}
 
-	return home, nil
+	return filepath.Clean(drive + path), nil
 }
 
 func getDarwinHomeDir() (string, error) {
-	var stdout bytes.Buffer
-	cmd := exec.Command("sh", "-c", `dscl -q . -read /Users/"$(whoami)" NFSHomeDirectory | sed 's/^[^ ]*: //'`)
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		return "", err
+	// Obtain the current username without a shell to avoid quoting and
+	// injection risks.
+	var whoOut bytes.Buffer
+	whoCmd := exec.Command("id", "-un")
+	whoCmd.Stdout = &whoOut
+	if err := whoCmd.Run(); err != nil {
+		return "", fmt.Errorf("getDarwinHomeDir: id: %w", err)
 	}
-	result := strings.TrimSpace(stdout.String())
-	if result == "" {
+	username := strings.TrimSpace(whoOut.String())
+	if username == "" {
 		return "", ErrBlankOutput
 	}
-	return result, nil
+	// Guard against path traversal: dscl path is /Users/<username>, so the
+	// username must not contain path separators or null bytes.
+	if strings.ContainsAny(username, "/\\\x00") {
+		return "", fmt.Errorf("getDarwinHomeDir: invalid characters in username %q", username)
+	}
+
+	// Query the directory service without a shell pipeline or sed.
+	var out bytes.Buffer
+	dsCmd := exec.Command("dscl", "-q", ".", "-read", "/Users/"+username, "NFSHomeDirectory")
+	dsCmd.Stdout = &out
+	if err := dsCmd.Run(); err != nil {
+		return "", fmt.Errorf("getDarwinHomeDir: dscl: %w", err)
+	}
+
+	// dscl output format: "NFSHomeDirectory: /Users/username"
+	for _, line := range strings.Split(out.String(), "\n") {
+		if after, ok := strings.CutPrefix(line, "NFSHomeDirectory:"); ok {
+			home := filepath.Clean(strings.TrimSpace(after))
+			if home != "" && home != "." {
+				return home, nil
+			}
+		}
+	}
+	return "", ErrBlankOutput
 }
 
 func getUnixHomeDir() (string, error) {
@@ -177,7 +209,7 @@ func getUnixHomeDir() (string, error) {
 	// database entries, which can contain sensitive fields.
 	u, err := currentUserFunc()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getUnixHomeDir: %w", err)
 	}
 	return u.HomeDir, nil
 }

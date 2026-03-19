@@ -160,7 +160,7 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("HOMEPATH", "")
 		dir, err := dirWindows()
 		require.NoError(t, err)
-		assert.Equal(t, "/my/home", dir)
+		assert.Equal(t, filepath.FromSlash("/my/home"), dir)
 	})
 
 	t.Run("USERPROFILE wins when HOME is empty", func(t *testing.T) {
@@ -170,7 +170,7 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("HOMEPATH", "")
 		dir, err := dirWindows()
 		require.NoError(t, err)
-		assert.Equal(t, "/user/profile", dir)
+		assert.Equal(t, filepath.FromSlash("/user/profile"), dir)
 	})
 
 	t.Run("HOMEDRIVE+HOMEPATH used when HOME and USERPROFILE are empty", func(t *testing.T) {
@@ -180,7 +180,17 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("HOMEPATH", `\Users\testuser`)
 		dir, err := dirWindows()
 		require.NoError(t, err)
-		assert.Equal(t, `C:\Users\testuser`, dir)
+		assert.Equal(t, filepath.Clean(`C:\Users\testuser`), dir)
+	})
+
+	t.Run("HOMEDRIVE+HOMEPATH trimmed of surrounding whitespace", func(t *testing.T) {
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("HOMEDRIVE", "  C:  ")
+		t.Setenv("HOMEPATH", `  \Users\testuser  `)
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Clean(`C:\Users\testuser`), dir)
 	})
 
 	t.Run("error when all env vars are empty", func(t *testing.T) {
@@ -397,22 +407,32 @@ func TestGetUnixHomeDir_Error(t *testing.T) {
 	currentUserFunc = func() (*user.User, error) { return nil, want }
 
 	_, err := getUnixHomeDir()
-	// getUnixHomeDir returns the error directly without wrapping, so use Equal.
-	assert.Equal(t, want, err, "getUnixHomeDir should propagate the error from currentUserFunc.")
+	// getUnixHomeDir wraps the error from currentUserFunc with context.
+	assert.ErrorIs(t, err, want, "getUnixHomeDir should propagate the error from currentUserFunc.")
 }
 
 // TestDirUnix_ShellFallback covers the getHomeFromShell() fallback path in
 // dirUnix when getUnixHomeDir returns an error (HOME is also unset).
+// On darwin, darwinHomeDirFunc is also stubbed to ensure the shell path is
+// reached rather than the dscl path.
 func TestDirUnix_ShellFallback(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("dirUnix is not used on Windows.")
 	}
 
-	orig := currentUserFunc
-	defer func() { currentUserFunc = orig }()
+	origUser := currentUserFunc
+	origDarwin := darwinHomeDirFunc
+	defer func() {
+		currentUserFunc = origUser
+		darwinHomeDirFunc = origDarwin
+	}()
 
 	currentUserFunc = func() (*user.User, error) {
 		return nil, errors.New("mock user.Current failure")
+	}
+	// On darwin, stub darwinHomeDirFunc so the test reaches the shell fallback.
+	darwinHomeDirFunc = func() (string, error) {
+		return "", errors.New("mock dscl failure")
 	}
 
 	t.Setenv("HOME", "") // ensure env-var path is skipped
