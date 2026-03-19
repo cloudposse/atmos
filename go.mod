@@ -125,9 +125,8 @@ require (
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.47.0
 	k8s.io/client-go v0.35.2
-	modernc.org/sqlite v1.46.1
+	modernc.org/sqlite v1.47.0
 	mvdan.cc/sh/v3 v3.13.0
 )
 
