@@ -272,7 +272,7 @@ func processTerraformComponent(
 	stackName, componentName string,
 	componentSection map[string]any,
 	logFunc func(msg any, keyvals ...any),
-	executeFn func(schema.ConfigAndStacksInfo) error,
+	executeFn func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error,
 ) (bool, error) {
 	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if !ok {

@@ -56,6 +56,9 @@ auth:
     type: system                   # system, file, or memory
     spec: {}                       # Type-specific configuration
 
+  console:
+    isolated_sessions: false       # Enable isolated browser sessions per identity
+
   providers:
     <provider-name>:               # Named provider configurations
       kind: <provider-kind>
@@ -124,6 +127,9 @@ auth:
 
   keyring:
     type: system
+
+  console:
+    isolated_sessions: true        # Open each identity in its own browser session
 
   providers:
     company-sso:

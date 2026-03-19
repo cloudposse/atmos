@@ -521,14 +521,14 @@ These environment variables configure Atmos behavior and can override settings i
     Atmos Pro API endpoint.
   </dd>
 
-  <dt>`ATMOS_PRO_TOKEN`</dt>
-  <dd>
-    Atmos Pro authentication token.
-  </dd>
-
   <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
   <dd>
-    Atmos Pro workspace identifier.
+    Atmos Pro workspace identifier. Not a secret.
+  </dd>
+
+  <dt>`ATMOS_PRO_TOKEN`</dt>
+  <dd>
+    Bearer token obtained via OIDC token exchange (advanced). See [Pro authentication](/cli/configuration/settings/pro#authentication).
   </dd>
 
   <dt>`ATMOS_UPLOAD_STATUS`</dt>

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -132,7 +133,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 				tt.component,
 				tt.stack,
 				tt.baseComponent,
-				"/dummy/path",
+				filepath.Join("dummy", "path"),
 				true,
 				&baseComponents,
 			)
@@ -173,6 +174,484 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			assert.ElementsMatch(t, expectedComponents, baseComponents)
 		})
 	}
+}
+
+// TestProcessBaseComponentConfig_CycleDetection verifies that circular component
+// inheritance is detected and reported instead of causing a stack overflow.
+func TestProcessBaseComponentConfig_CycleDetection(t *testing.T) {
+	tests := []struct {
+		name             string
+		allComponentsMap map[string]any
+		component        string
+		baseComponent    string
+		expectedError    string
+	}{
+		{
+			name: "direct-cycle-via-component-key",
+			allComponentsMap: map[string]any{
+				"comp-a": map[string]any{
+					"component": "comp-b",
+					"vars":      map[string]any{"key": "a"},
+				},
+				"comp-b": map[string]any{
+					"component": "comp-a",
+					"vars":      map[string]any{"key": "b"},
+				},
+			},
+			component:     "my-component",
+			baseComponent: "comp-a",
+			expectedError: "circular component inheritance detected",
+		},
+		{
+			name: "cycle-via-inherits",
+			allComponentsMap: map[string]any{
+				"comp-a": map[string]any{
+					"metadata": map[string]any{
+						"inherits": []any{"comp-b"},
+					},
+					"vars": map[string]any{"key": "a"},
+				},
+				"comp-b": map[string]any{
+					"metadata": map[string]any{
+						"inherits": []any{"comp-a"},
+					},
+					"vars": map[string]any{"key": "b"},
+				},
+			},
+			component:     "my-component",
+			baseComponent: "comp-a",
+			expectedError: "circular component inheritance detected",
+		},
+		{
+			name: "three-component-cycle",
+			// A -> B -> C -> A creates a true 3-way cycle that the simple
+			// component == baseComponent guard cannot catch.
+			allComponentsMap: map[string]any{
+				"comp-a": map[string]any{
+					"component": "comp-b",
+					"vars":      map[string]any{"key": "a"},
+				},
+				"comp-b": map[string]any{
+					"component": "comp-c",
+					"vars":      map[string]any{"key": "b"},
+				},
+				"comp-c": map[string]any{
+					"component": "comp-a",
+					"vars":      map[string]any{"key": "c"},
+				},
+			},
+			component:     "my-component",
+			baseComponent: "comp-a",
+			expectedError: "circular component inheritance detected",
+		},
+		{
+			name: "no-cycle-valid-chain",
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"vars": map[string]any{"key": "base"},
+				},
+				"mid": map[string]any{
+					"component": "base",
+					"vars":      map[string]any{"key": "mid"},
+				},
+			},
+			component:     "child",
+			baseComponent: "mid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ClearBaseComponentConfigCache()
+
+			atmosConfig := &schema.AtmosConfiguration{}
+			baseComponentConfig := &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			}
+			baseComponents := []string{}
+
+			err := ProcessBaseComponentConfig(
+				atmosConfig,
+				baseComponentConfig,
+				tt.allComponentsMap,
+				tt.component,
+				"test-stack",
+				tt.baseComponent,
+				filepath.Join("dummy", "path"),
+				false,
+				&baseComponents,
+			)
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestProcessBaseComponentConfig_AbstractComponentSkip verifies that abstract components
+// skip component chain resolution to prevent circular references.
+func TestProcessBaseComponentConfig_AbstractComponentSkip(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	// This simulates the user's pattern: abstract component with metadata.component
+	// pointing to the same Terraform directory as the real component.
+	// In raw (unprocessed) data, abstract components have metadata.component but no
+	// top-level "component" key. After processing, mergeComponentConfigurations
+	// promotes metadata.component to a top-level key. The abstract check prevents
+	// following this promoted key.
+	allComponentsMap := map[string]any{
+		"iam-delegated-roles-defaults": map[string]any{
+			"component": "iam-delegated-roles", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "iam-delegated-roles",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"namespace": "acme",
+			},
+		},
+		"iam-delegated-roles": map[string]any{
+			"component": "iam-delegated-roles",
+			"metadata": map[string]any{
+				"component": "iam-delegated-roles",
+				"type":      "real",
+				"inherits":  []any{"iam-delegated-roles-defaults"},
+			},
+			"vars": map[string]any{
+				"extra_var": "value1",
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// This call should NOT stack overflow or return a cycle error.
+	// The abstract component's top-level "component" key is skipped.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"iam-delegated-roles",
+		"test-stack",
+		"iam-delegated-roles-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+
+	require.NoError(t, err, "Should not error when abstract component has metadata.component")
+	assert.Equal(t, map[string]any{"namespace": "acme"}, baseComponentConfig.BaseComponentVars)
+	assert.Contains(t, baseComponents, "iam-delegated-roles-defaults")
+}
+
+// TestProcessBaseComponentConfig_DeepChainNoFalsePositive verifies that deep inheritance
+// chains (3+ levels) work correctly without triggering false cycle detection.
+func TestProcessBaseComponentConfig_DeepChainNoFalsePositive(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"level0": map[string]any{
+			"vars": map[string]any{"from": "level0"},
+		},
+		"level1": map[string]any{
+			"component": "level0",
+			"vars":      map[string]any{"from": "level1"},
+		},
+		"level2": map[string]any{
+			"component": "level1",
+			"vars":      map[string]any{"from": "level2"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"child",
+		"test-stack",
+		"level2",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+
+	require.NoError(t, err, "Deep chain should not trigger false cycle detection")
+	// Vars should be merged from all levels.
+	assert.Equal(t, "level2", baseComponentConfig.BaseComponentVars["from"])
+	assert.ElementsMatch(t, []string{"level2", "level1", "level0"}, baseComponents)
+}
+
+// TestProcessBaseComponentConfig_DiamondInheritance verifies that a diamond inheritance pattern
+// (shared ancestor reached via sibling branches) does not trigger a false cycle detection error.
+//
+//	   base
+//	  /    \
+//	left   right
+//	  \    /
+//	   child (inherits: [left, right])
+func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"base": map[string]any{
+			"vars": map[string]any{"from_base": "base-value"},
+		},
+		"left": map[string]any{
+			"metadata": map[string]any{
+				"inherits": []any{"base"},
+			},
+			"vars": map[string]any{"from_left": "left-value"},
+		},
+		"right": map[string]any{
+			"metadata": map[string]any{
+				"inherits": []any{"base"},
+			},
+			"vars": map[string]any{"from_right": "right-value"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+
+	// Process "left" first.
+	baseComponents := []string{}
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"child",
+		"test-stack",
+		"left",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	require.NoError(t, err, "Left branch of diamond should not error")
+
+	// Process "right" — this reaches "base" again via a sibling branch.
+	// Without defer delete in the visited set, this would falsely trigger cycle detection.
+	ClearBaseComponentConfigCache()
+	baseComponentConfig2 := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents2 := []string{}
+	err = ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig2,
+		allComponentsMap,
+		"child",
+		"test-stack",
+		"right",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents2,
+	)
+	require.NoError(t, err, "Right branch of diamond should not error")
+	assert.Equal(t, "base-value", baseComponentConfig2.BaseComponentVars["from_base"],
+		"Base vars should be inherited through right branch")
+}
+
+// TestProcessBaseComponentConfig_AbstractMetadataComponentInherited verifies that metadata.component
+// on an abstract component is properly inherited by real components through metadata inheritance.
+// This is the scenario Erik described: metadata.component on abstract components should "do something"
+// — it should populate the default component for the inheriting real component.
+func TestProcessBaseComponentConfig_AbstractMetadataComponentInherited(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	// Simulate processed data where an abstract component defines metadata.component
+	// and a real component inherits from it.
+	// The abstract component's metadata.component should be inherited as metadata,
+	// even though its top-level "component" key is skipped for chain resolution.
+	allComponentsMap := map[string]any{
+		"eks/service/defaults": map[string]any{
+			"component": "eks-service", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "eks-service",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"namespace": "acme",
+				"enabled":   true,
+			},
+			"backend_type": "s3",
+			"backend": map[string]any{
+				"s3": map[string]any{
+					"workspace_key_prefix": "eks-service",
+				},
+			},
+		},
+		"eks/service/app1": map[string]any{
+			"component": "eks-service",
+			"metadata": map[string]any{
+				"component": "eks-service",
+				"type":      "real",
+				"inherits":  []any{"eks/service/defaults"},
+			},
+			"vars": map[string]any{
+				"name": "app1",
+			},
+		},
+	}
+
+	// Enable metadata inheritance (default behavior).
+	metadataEnabled := true
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			Inherit: schema.StacksInherit{
+				Metadata: &metadataEnabled,
+			},
+		},
+	}
+
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:                      map[string]any{},
+		BaseComponentSettings:                  map[string]any{},
+		BaseComponentEnv:                       map[string]any{},
+		BaseComponentAuth:                      map[string]any{},
+		BaseComponentMetadata:                  map[string]any{},
+		BaseComponentProviders:                 map[string]any{},
+		BaseComponentHooks:                     map[string]any{},
+		BaseComponentDependencies:              map[string]any{},
+		BaseComponentLocals:                    map[string]any{},
+		BaseComponentBackendSection:            map[string]any{},
+		BaseComponentRemoteStateBackendSection: map[string]any{},
+		BaseComponentGenerate:                  map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// Process: eks/service/app1 inherits from eks/service/defaults.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"eks/service/app1",
+		"test-stack",
+		"eks/service/defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+
+	require.NoError(t, err, "Should not error when abstract component has metadata.component")
+
+	// Key assertion: metadata.component is inherited from the abstract base component.
+	// This is what Erik described — abstract components' metadata.component should populate
+	// the default component for the inheriting real component.
+	assert.Equal(t, "eks-service", baseComponentConfig.BaseComponentMetadata["component"],
+		"metadata.component should be inherited from abstract base component")
+
+	// Verify vars are inherited.
+	assert.Equal(t, "acme", baseComponentConfig.BaseComponentVars["namespace"],
+		"vars should be inherited from abstract base component")
+	assert.Equal(t, true, baseComponentConfig.BaseComponentVars["enabled"],
+		"vars should be inherited from abstract base component")
+
+	// Verify backend is inherited.
+	assert.Equal(t, "s3", baseComponentConfig.BaseComponentBackendType,
+		"backend_type should be inherited from abstract base component")
+
+	// Verify metadata.type is NOT inherited (it's excluded from metadata inheritance).
+	_, hasType := baseComponentConfig.BaseComponentMetadata["type"]
+	assert.False(t, hasType, "metadata.type should NOT be inherited from base component")
+
+	// Verify the base component was tracked.
+	assert.Contains(t, baseComponents, "eks/service/defaults")
+}
+
+// TestProcessBaseComponentConfig_AbstractMetadataComponentNotInherited_WhenDisabled verifies that
+// metadata.component is NOT inherited when metadata inheritance is disabled.
+func TestProcessBaseComponentConfig_AbstractMetadataComponentNotInherited_WhenDisabled(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"eks/service/defaults": map[string]any{
+			"component": "eks-service",
+			"metadata": map[string]any{
+				"component": "eks-service",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"namespace": "acme",
+			},
+		},
+		"eks/service/app1": map[string]any{
+			"component": "eks-service",
+			"metadata": map[string]any{
+				"component": "eks-service",
+				"type":      "real",
+				"inherits":  []any{"eks/service/defaults"},
+			},
+			"vars": map[string]any{
+				"name": "app1",
+			},
+		},
+	}
+
+	// Disable metadata inheritance.
+	metadataDisabled := false
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			Inherit: schema.StacksInherit{
+				Metadata: &metadataDisabled,
+			},
+		},
+	}
+
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+		BaseComponentMetadata: map[string]any{},
+	}
+	baseComponents := []string{}
+
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"eks/service/app1",
+		"test-stack",
+		"eks/service/defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+
+	require.NoError(t, err)
+
+	// When metadata inheritance is disabled, metadata.component should NOT be inherited.
+	_, hasComponent := baseComponentConfig.BaseComponentMetadata["component"]
+	assert.False(t, hasComponent, "metadata.component should NOT be inherited when metadata inheritance is disabled")
+
+	// Vars should still be inherited (that's regular inheritance, not metadata inheritance).
+	assert.Equal(t, "acme", baseComponentConfig.BaseComponentVars["namespace"],
+		"vars should still be inherited even with metadata inheritance disabled")
 }
 
 func TestProcessYAMLConfigFile(t *testing.T) {
@@ -2604,4 +3083,318 @@ func TestAtmosProTemplateRegression(t *testing.T) {
 	require.True(t, ok, "component input should be a string")
 	assert.Equal(t, "{{ .atmos_component }}", componentInput,
 		"Template {{ .atmos_component }} should be preserved during import, not processed")
+}
+
+// TestComputeStackFileName tests that computeStackFileName correctly strips the
+// stacks base path and file extension to produce a relative stack file name.
+func TestComputeStackFileName(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		filePath string
+		expected string
+	}{
+		{
+			name: "simple deploy path with name_pattern",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name: "nested org path",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "orgs", "acme", "plat", "dev", "us-east-1.yaml"),
+			expected: filepath.Join("orgs", "acme", "plat", "dev", "us-east-1"),
+		},
+		{
+			name: "yml extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "prod.yml"),
+			expected: filepath.Join("deploy", "prod"),
+		},
+		{
+			name: "yaml.tmpl extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml.tmpl"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name: "yml.tmpl extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yml.tmpl"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name: "no known extension returns path as-is",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.json"),
+			expected: filepath.Join("deploy", "dev.json"),
+		},
+		{
+			name: "file with no extension",
+			config: &schema.AtmosConfiguration{
+				BasePath: "project",
+				Stacks:   schema.Stacks{BasePath: "stacks"},
+			},
+			filePath: filepath.Join("project", "stacks", "deploy", "dev"),
+			expected: filepath.Join("deploy", "dev"),
+		},
+		{
+			name:     "nil config returns empty",
+			config:   nil,
+			filePath: filepath.Join("project", "stacks", "deploy", "dev.yaml"),
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.config == nil {
+				result := computeStackFileName(tt.config, tt.filePath)
+				assert.Empty(t, result)
+				return
+			}
+			result := computeStackFileName(tt.config, tt.filePath)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestDeriveStackNameForLocals tests that deriveStackNameForLocals correctly
+// derives the stack name from file path and raw config for locals processing.
+func TestDeriveStackNameForLocals(t *testing.T) {
+	t.Run("derives stack name from name_pattern and vars", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{
+			BasePath: "project",
+			Stacks: schema.Stacks{
+				BasePath:    "stacks",
+				NamePattern: "{stage}",
+			},
+		}
+		rawConfig := map[string]any{
+			"vars": map[string]any{
+				"stage": "dev",
+			},
+		}
+		result := deriveStackNameForLocals(config, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
+		assert.Equal(t, "dev", result)
+	})
+
+	t.Run("nil config returns empty", func(t *testing.T) {
+		rawConfig := map[string]any{
+			"vars": map[string]any{"stage": "dev"},
+		}
+		result := deriveStackNameForLocals(nil, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
+		assert.Empty(t, result)
+	})
+
+	t.Run("no vars uses filename as stack name", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{
+			BasePath: "project",
+			Stacks: schema.Stacks{
+				BasePath: "stacks",
+			},
+		}
+		rawConfig := map[string]any{}
+		result := deriveStackNameForLocals(config, rawConfig, filepath.Join("project", "stacks", "deploy", "dev.yaml"))
+		// Without name_pattern or name_template, falls back to file name.
+		assert.Equal(t, filepath.Join("deploy", "dev"), result)
+	})
+}
+
+// TestExtractLocalsFromRawYAML_StackNameDerived tests that extractLocalsFromRawYAML
+// derives the stack name from the file path and passes it to ProcessStackLocals,
+// rather than passing an empty string. This is the fix for GitHub issue #2080.
+func TestExtractLocalsFromRawYAML_StackNameDerived(t *testing.T) {
+	// This test verifies that locals with Go template conditionals using !env work correctly.
+	// Issue 1 from the fix doc: Go template conditionals were broken in v1.200.0 but work now.
+	t.Setenv("PR_NUMBER", "42")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  pr_number: !env PR_NUMBER
+  datastream_name: '{{ if .locals.pr_number }}datastreampr{{ .locals.pr_number }}{{ else }}datastream{{ end }}'
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "42", result.locals["pr_number"])
+	assert.Equal(t, "datastreampr42", result.locals["datastream_name"])
+}
+
+// TestExtractLocalsFromRawYAML_GoTemplateConditionalEmpty tests Go template conditionals
+// when the environment variable is empty (the else branch should be taken).
+func TestExtractLocalsFromRawYAML_GoTemplateConditionalEmpty(t *testing.T) {
+	// When PR_NUMBER is empty, the else branch should produce "datastream".
+	t.Setenv("PR_NUMBER_EMPTY_TEST", "")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  pr_number: !env PR_NUMBER_EMPTY_TEST
+  datastream_name: '{{ if .locals.pr_number }}datastreampr{{ .locals.pr_number }}{{ else }}datastream{{ end }}'
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "", result.locals["pr_number"])
+	assert.Equal(t, "datastream", result.locals["datastream_name"])
+}
+
+// TestExtractLocalsFromRawYAML_TerraformStateInLocals tests that !terraform.state
+// in locals correctly receives the derived stack name instead of empty string.
+// This is the core test for the GitHub issue #2080 fix.
+func TestExtractLocalsFromRawYAML_TerraformStateInLocals(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	// Create a temp directory structure that simulates a real Atmos project.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	stackFile := filepath.Join(stacksDir, "dev.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{stage}",
+		},
+	}
+
+	// The mock expects to be called with stack="dev" (derived from file path + name_pattern + vars).
+	// Before the fix, stack would be "" causing the "stack is required" error.
+	mockStateGetterObj.EXPECT().
+		GetState(
+			atmosConfig,
+			gomock.Any(),
+			"dev",        // stack - derived from name_pattern {stage} + vars.stage=dev
+			"vpc",        // component
+			".vpc_id",    // output
+			false,        // skipCache
+			gomock.Any(), // authContext
+			gomock.Any(), // authManager
+		).
+		Return("vpc-12345", nil)
+
+	yamlContent := `
+vars:
+  stage: dev
+
+locals:
+  vpc_id: !terraform.state vpc .vpc_id
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "vpc-12345", result.locals["vpc_id"])
+}
+
+// TestExtractLocalsFromRawYAML_TerraformStateComposedLocals tests that !terraform.state
+// results can be used in composed locals via Go templates.
+func TestExtractLocalsFromRawYAML_TerraformStateComposedLocals(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	stackFile := filepath.Join(stacksDir, "prod.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Stacks: schema.Stacks{
+			BasePath:    "stacks",
+			NamePattern: "{stage}",
+		},
+	}
+
+	// Mock two separate !terraform.state calls.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "prod", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-prod-99", nil)
+
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "prod", "vpc", ".private_subnet_ids", false, gomock.Any(), gomock.Any()).
+		Return("subnet-a,subnet-b", nil)
+
+	yamlContent := `
+vars:
+  stage: prod
+
+locals:
+  vpc_id: !terraform.state vpc .vpc_id
+  subnet_ids: !terraform.state vpc .private_subnet_ids
+  vpc_info: "vpc={{ .locals.vpc_id }}, subnets={{ .locals.subnet_ids }}"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, stackFile)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "vpc-prod-99", result.locals["vpc_id"])
+	assert.Equal(t, "subnet-a,subnet-b", result.locals["subnet_ids"])
+	assert.Equal(t, "vpc=vpc-prod-99, subnets=subnet-a,subnet-b", result.locals["vpc_info"])
+}
+
+// TestExtractLocalsFromRawYAML_TerraformState3ArgForm tests that !terraform.state
+// with 3 args (explicit stack) still works correctly.
+func TestExtractLocalsFromRawYAML_TerraformState3ArgForm(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetterObj := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetterObj
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// 3-arg form uses the explicit stack "shared", not the derived stack.
+	mockStateGetterObj.EXPECT().
+		GetState(atmosConfig, gomock.Any(), "shared", "vpc", ".vpc_id", false, gomock.Any(), gomock.Any()).
+		Return("vpc-shared-01", nil)
+
+	yamlContent := `
+locals:
+  vpc_id: !terraform.state vpc shared .vpc_id
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "vpc-shared-01", result.locals["vpc_id"])
 }
