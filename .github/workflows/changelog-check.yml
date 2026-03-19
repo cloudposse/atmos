@@ -1,7 +1,7 @@
 name: Release Documentation Check
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
 
 jobs:
   check-release-docs:
@@ -20,6 +20,14 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
+          # Skip checks for draft PRs entirely
+          IS_DRAFT=$(gh pr view "$PR_NUMBER" --json isDraft --jq '.isDraft')
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "requires_docs=false" >> $GITHUB_OUTPUT
+            echo "✅ PR is a draft - release documentation check skipped"
+            exit 0
+          fi
+
           LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
 
           # Only require changelog for PRs targeting main branch

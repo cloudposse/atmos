@@ -188,6 +188,13 @@ func buildGlobalAuthSection(atmosConfig *schema.AtmosConfiguration) map[string]a
 	if atmosConfig.Auth.Keyring.Type != "" {
 		globalAuthSection["keyring"] = atmosConfig.Auth.Keyring
 	}
+	// Only include realm when explicitly configured (env var or atmos.yaml).
+	// Auto-computed realms (from config-path hash or default) are path-dependent
+	// and should not appear in component describe output.
+	if atmosConfig.Auth.Realm != "" &&
+		(atmosConfig.Auth.RealmSource == "env" || atmosConfig.Auth.RealmSource == "config") {
+		globalAuthSection["realm"] = atmosConfig.Auth.Realm
+	}
 
 	return globalAuthSection
 }

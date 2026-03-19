@@ -440,7 +440,7 @@ func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 		if err != nil {
 			return nil, err
 		}
-		targetPath := filepath.Join(filepath.ToSlash(params.VendorConfigFilePath), filepath.ToSlash(target))
+		targetPath := filepath.Join(params.VendorConfigFilePath, target)
 		pkgName := params.Source.Component
 		if pkgName == "" {
 			pkgName = effectiveURI

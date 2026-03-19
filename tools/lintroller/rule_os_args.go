@@ -49,6 +49,7 @@ func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 		strings.HasSuffix(normalized, "cmd/terraform/terraform_test.go") ||
 		strings.HasSuffix(normalized, "cmd/root_helpers_test.go") ||
 		strings.HasSuffix(normalized, "cmd/root_test.go") ||
+		strings.HasSuffix(normalized, "cmd/root_ai_test.go") ||
 		strings.HasSuffix(normalized, "errors/error_funcs_test.go") ||
 		strings.HasSuffix(normalized, "pkg/config/config_test.go") ||
 		strings.HasSuffix(normalized, "pkg/config/load_flags_test.go") {

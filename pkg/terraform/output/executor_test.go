@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // Helper function to create minimal valid sections.
@@ -1202,4 +1204,295 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 				"%s: expected workdir to end with %q, got %q", tt.description, normalizedExpected, normalizedCaptured)
 		})
 	}
+}
+
+// TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace verifies that when skipInit=true,
+// GetAllOutputs skips CleanWorkspace, terraform init, and workspace operations, only running
+// terraform output. This is critical for CI PostRunE context where the component was just
+// applied and auth credentials may not be available for re-initialization.
+func TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache.
+	stackSlug := "skipinit-stack-skipinit-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	sections := validSections()
+
+	// DescribeComponent should be called with ProcessYamlFunctions=false when skipInit=true and authManager=nil.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.False(t, params.ProcessYamlFunctions,
+				"ProcessYamlFunctions should be false when skipInit=true and authManager=nil")
+			return sections, nil
+		},
+	)
+
+	// Quiet mode sets stdout/stderr.
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+
+	// Init and workspace operations should NOT be called.
+	// (If they were called, the test would fail with "unexpected call".)
+
+	// Only terraform output should be called.
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-skipinit"`)},
+	}, nil)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "skipinit-component", "skipinit-stack", true, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-skipinit", outputs["vpc_id"])
+}
+
+// TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace verifies that when
+// skipInit=false, GetAllOutputs runs the full init/workspace sequence as normal.
+func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache.
+	stackSlug := "noskip-stack-noskip-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	sections := validSections()
+
+	// DescribeComponent should be called with ProcessYamlFunctions=true when skipInit=false.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.True(t, params.ProcessYamlFunctions,
+				"ProcessYamlFunctions should be true when skipInit=false")
+			return sections, nil
+		},
+	)
+
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+
+	// Init and workspace operations SHOULD be called.
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-noskip"`)},
+	}, nil)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "noskip-component", "noskip-stack", false, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-noskip", outputs["vpc_id"])
+}
+
+// TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions verifies that
+// when skipInit=true but authManager is provided, YAML functions are still processed.
+func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache.
+	stackSlug := "skipauth-stack-skipauth-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	sections := validSections()
+
+	// Use a non-nil authManager (string is fine since it won't be type-asserted in this path).
+	fakeAuthManager := "fake-auth-manager"
+
+	// DescribeComponent should be called with ProcessYamlFunctions=true when authManager is non-nil.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.True(t, params.ProcessYamlFunctions,
+				"ProcessYamlFunctions should be true when authManager is provided, even with skipInit=true")
+			assert.Equal(t, fakeAuthManager, params.AuthManager,
+				"AuthManager should be passed through")
+			return sections, nil
+		},
+	)
+
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+
+	// Init should NOT be called (skipInit=true).
+	// Only terraform output should be called.
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-auth"`)},
+	}, nil)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "skipauth-component", "skipauth-stack", true, fakeAuthManager)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-auth", outputs["vpc_id"])
+}
+
+// TestExecutor_Execute_SkipInit_DirectCall verifies SkipInit behavior at the execute() level.
+func TestExecutor_Execute_SkipInit_DirectCall(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Setup expectations — no Init or Workspace calls expected.
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"result": {Value: []byte(`"skip_init_direct"`)},
+	}, nil)
+
+	ctx := context.Background()
+	outputs, err := exec.execute(ctx, atmosConfig, "comp", "stack", sections, nil, &OutputOptions{QuietMode: true, SkipInit: true})
+	require.NoError(t, err)
+	assert.Equal(t, "skip_init_direct", outputs["result"])
+}
+
+// TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable verifies that the executor
+// resolves toolchain-installed executables to absolute paths before passing them to the
+// runner factory. This ensures that template functions like atmos.Component() and YAML
+// functions like !terraform.output can find toolchain-installed binaries (e.g., tofu).
+//
+// This is a regression test for the issue where `atmos describe stacks` with `atmos.Component()`
+// template functions fails with: exec: "tofu": executable file not found in $PATH
+// even though tofu was installed via `atmos toolchain install`.
+func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) {
+	// Restore package-global toolchain config after test to avoid leaking
+	// t.TempDir() paths into subsequent tests.
+	origToolchainConfig := toolchain.GetAtmosConfig()
+	t.Cleanup(func() {
+		toolchain.SetAtmosConfig(origToolchainConfig)
+	})
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	// Track what executable path is passed to the runner factory.
+	var capturedExecutable string
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		capturedExecutable = executable
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Create a temp dir structure simulating a toolchain install.
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Create a fake toolchain binary at the expected toolchain install path.
+	toolchainDir := filepath.Join(tempDir, "toolchain")
+	binaryDir := filepath.Join(toolchainDir, "bin", "opentofu", "opentofu", "1.8.0")
+	require.NoError(t, os.MkdirAll(binaryDir, 0o755))
+	binaryName := "tofu"
+	if runtime.GOOS == "windows" {
+		binaryName = "tofu.exe"
+	}
+	fakeBinary := filepath.Join(binaryDir, binaryName)
+	require.NoError(t, os.WriteFile(fakeBinary, []byte("#!/bin/sh\n"), 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath:                "components/terraform",
+				AutoGenerateBackendFile: false,
+				InitRunReconfigure:      false,
+			},
+		},
+		Toolchain: schema.Toolchain{
+			InstallPath: toolchainDir,
+		},
+		Logs: schema.Logs{
+			Level: "info",
+		},
+	}
+
+	// Sections with bare "tofu" executable and toolchain dependencies.
+	sections := map[string]any{
+		cfg.CommandSectionName:   "tofu",
+		cfg.WorkspaceSectionName: "test-workspace",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+		cfg.BackendTypeSectionName: "s3",
+		cfg.BackendSectionName: map[string]any{
+			"bucket": "test-bucket",
+			"key":    "test-key",
+		},
+		"dependencies": map[string]any{
+			"tools": map[string]any{
+				"opentofu": "1.8.0",
+			},
+		},
+	}
+
+	// Setup mock expectations for the full execution path.
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-123"`)},
+	}, nil)
+
+	outputs, err := exec.ExecuteWithSections(atmosConfig, "vpc", "dev-ue1", sections, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-123", outputs["vpc_id"])
+
+	// Verify the executable was resolved to the absolute toolchain path,
+	// not passed as the bare "tofu" name.
+	assert.True(t, filepath.IsAbs(capturedExecutable),
+		"expected executable to be resolved to an absolute path, got %q", capturedExecutable)
+	assert.Equal(t, fakeBinary, capturedExecutable,
+		"expected executable to be resolved to the toolchain binary path")
 }

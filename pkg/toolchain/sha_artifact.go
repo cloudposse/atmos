@@ -217,11 +217,10 @@ func buildSHANotFoundError(shortSHA, commitURL string) error {
 // buildNoWorkflowForSHAError builds a user-friendly error for no workflow run.
 func buildNoWorkflowForSHAError(shortSHA, commitURL string) error {
 	return errUtils.Build(errUtils.ErrToolNotFound).
-		WithExplanationf("No successful CI run found for commit %s", shortSHA).
-		WithHint("Possible reasons:").
-		WithHint("  - CI workflow hasn't completed yet").
-		WithHint("  - CI tests are failing").
-		WithHint("  - Commit is from a fork").
+		WithExplanationf("No completed CI run found for commit %s", shortSHA).
+		WithHint("CI workflow may not have completed yet").
+		WithHint("CI build may be failing for this commit").
+		WithHint("Artifacts from fork commits are not accessible").
 		WithHintf("Check commit: %s", commitURL).
 		WithExitCode(1).
 		Err()
@@ -231,9 +230,8 @@ func buildNoWorkflowForSHAError(shortSHA, commitURL string) error {
 func buildNoArtifactForSHAError(shortSHA, commitURL string) error {
 	return errUtils.Build(errUtils.ErrToolNotFound).
 		WithExplanationf("Build artifact not found for commit %s", shortSHA).
-		WithHint("Possible reasons:").
-		WithHint("  - Artifacts expired (90-day retention)").
-		WithHint("  - Build job was skipped").
+		WithHint("Artifacts may have expired (90-day retention)").
+		WithHint("Build job may have been skipped").
 		WithHintf("Check commit: %s", commitURL).
 		WithExitCode(1).
 		Err()
@@ -245,9 +243,8 @@ func buildPlatformNotSupportedError() error {
 	return errUtils.Build(errUtils.ErrToolPlatformNotSupported).
 		WithExplanationf("No artifact available for %s/%s", runtime.GOOS, runtime.GOARCH).
 		WithHintf("Artifacts currently only support: %s", strings.Join(platforms, ", ")).
-		WithHint("For unsupported platforms, try:").
-		WithHint("  - Download the release version: atmos --use-version <version>").
-		WithHint("  - Build from source: go install github.com/cloudposse/atmos@<branch>").
+		WithHint("Use a release version instead: atmos --use-version <version>").
+		WithHint("Or build from source: go install github.com/cloudposse/atmos@<branch>").
 		WithExitCode(1).
 		Err()
 }

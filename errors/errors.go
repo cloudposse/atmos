@@ -106,6 +106,9 @@ var (
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
+	// ErrPlanVerificationFailed is returned when a stored planfile differs from the current state during --verify-plan.
+	ErrPlanVerificationFailed = errors.New("plan verification failed: stored plan differs from current state")
+
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
@@ -434,6 +437,7 @@ var (
 	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
 	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
 	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
+	ErrCircularComponentInheritance     = ErrStackCircularInheritance
 
 	// Terraform-specific subsection errors.
 	ErrInvalidTerraformCommand            = errors.New("invalid terraform command")
@@ -680,6 +684,7 @@ var (
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
 	ErrUserAborted                  = errors.New("user aborted")
 
 	// AWS SSO specific errors.
@@ -860,6 +865,44 @@ var (
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
+	// CI-related errors.
+	ErrCIDisabled              = errors.New("CI integration is disabled")
+	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
+	ErrCIProviderNotFound      = errors.New("CI provider not found")
+	ErrCIOperationNotSupported = errors.New("operation not supported by CI provider")
+	ErrCICheckRunCreateFailed  = errors.New("failed to create check run")
+	ErrCICheckRunUpdateFailed  = errors.New("failed to update check run")
+	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
+	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
+	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
+
+	// Planfile storage errors.
+	ErrPlanfileNotFound           = errors.New("planfile not found")
+	ErrPlanfileUploadFailed       = errors.New("failed to upload planfile")
+	ErrPlanfileDownloadFailed     = errors.New("failed to download planfile")
+	ErrPlanfileDeleteFailed       = errors.New("failed to delete planfile")
+	ErrPlanfileListFailed         = errors.New("failed to list planfiles")
+	ErrPlanfileStoreNotFound      = errors.New("planfile store not found")
+	ErrPlanfileKeyInvalid         = errors.New("planfile key generation failed: stack, component, and SHA are required")
+	ErrPlanfileStatFailed         = errors.New("failed to check planfile status")
+	ErrPlanfileMetadataFailed     = errors.New("failed to load planfile metadata")
+	ErrPlanfileMetadataInvalid    = errors.New("planfile metadata validation failed: stack, component, and SHA are required")
+	ErrArtifactMetadataInvalid    = errors.New("artifact metadata validation failed: stack, component, and SHA are required")
+	ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
+	ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
+	ErrAWSConfigLoadFailed        = errors.New("failed to load AWS configuration")
+
+	// Artifact storage errors.
+	ErrArtifactNotFound         = errors.New("artifact not found")
+	ErrArtifactUploadFailed     = errors.New("failed to upload artifact")
+	ErrArtifactDownloadFailed   = errors.New("failed to download artifact")
+	ErrArtifactDeleteFailed     = errors.New("failed to delete artifact")
+	ErrArtifactListFailed       = errors.New("failed to list artifacts")
+	ErrArtifactStoreNotFound    = errors.New("artifact store not found")
+	ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
+	ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
+	ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
 	// AI-related errors.
 	ErrAINotEnabled                 = errors.New("AI features are not enabled")
 	ErrAIDisabledInConfiguration    = errors.New("AI features are disabled in configuration")
@@ -903,6 +946,8 @@ var (
 	ErrAISkillNameEmpty             = errors.New("AI skill name cannot be empty")
 	ErrAISkillNotFound              = errors.New("AI skill not found")
 	ErrAISkillAlreadyRegistered     = errors.New("AI skill already registered")
+	ErrAISkillRequiresAIFlag        = errors.New("--skill flag requires --ai")
+	ErrAISkillLoadFailed            = errors.New("failed to load AI skills")
 	ErrAIPromptRequired             = errors.New("prompt is required")
 	ErrAIExecutionFailed            = errors.New("AI execution failed")
 	ErrAISendMessage                = errors.New("failed to send message to AI provider")
