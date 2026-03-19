@@ -5,6 +5,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -163,6 +164,17 @@ func TestDirWindows(t *testing.T) {
 		assert.Equal(t, filepath.FromSlash("/my/home"), dir)
 	})
 
+	t.Run("whitespace-only HOME falls through to USERPROFILE", func(t *testing.T) {
+		t.Setenv("HOME", "   ")
+		t.Setenv("USERPROFILE", "/user/profile")
+		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("HOMEPATH", "")
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		// Whitespace HOME must be ignored; USERPROFILE should be used instead.
+		assert.Equal(t, filepath.FromSlash("/user/profile"), dir)
+	})
+
 	t.Run("USERPROFILE wins when HOME is empty", func(t *testing.T) {
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "/user/profile")
@@ -171,6 +183,17 @@ func TestDirWindows(t *testing.T) {
 		dir, err := dirWindows()
 		require.NoError(t, err)
 		assert.Equal(t, filepath.FromSlash("/user/profile"), dir)
+	})
+
+	t.Run("whitespace-only USERPROFILE falls through to HOMEDRIVE+HOMEPATH", func(t *testing.T) {
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "   ")
+		t.Setenv("HOMEDRIVE", "C:")
+		t.Setenv("HOMEPATH", `\Users\testuser`)
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		// Whitespace USERPROFILE must be ignored; HOMEDRIVE+HOMEPATH should be used.
+		assert.Equal(t, filepath.Clean(`C:\Users\testuser`), dir)
 	})
 
 	t.Run("HOMEDRIVE+HOMEPATH used when HOME and USERPROFILE are empty", func(t *testing.T) {
@@ -533,5 +556,114 @@ func TestExpand(t *testing.T) {
 		t.Errorf("No error is expected, got: %v", err)
 	} else if actual != expected {
 		t.Errorf("Expected: %v; actual: %v", expected, actual)
+	}
+}
+
+// TestExpand_TrailingSlash verifies that Expand("~/") returns the home
+// directory without a trailing separator — the same result as Expand("~").
+func TestExpand_TrailingSlash(t *testing.T) {
+	Reset()
+	defer Reset()
+
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	DisableCache = true
+	defer func() { DisableCache = false }()
+
+	result, err := Expand("~/")
+	require.NoError(t, err)
+	// filepath.Join strips the trailing slash, so "~/" and "~" should be equal.
+	assert.Equal(t, tmpDir, result, "Expand(\"~/\") should equal the home directory.")
+}
+
+// TestGetUnixHomeDir_EmptyHomeDir verifies that getUnixHomeDir returns
+// ErrBlankOutput when user.Current() succeeds but HomeDir is empty.
+// This can happen in certain NFS/LDAP configurations.
+func TestGetUnixHomeDir_EmptyHomeDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("getUnixHomeDir is not used on Windows.")
+	}
+
+	orig := currentUserFunc
+	defer func() { currentUserFunc = orig }()
+
+	currentUserFunc = func() (*user.User, error) {
+		return &user.User{HomeDir: ""}, nil
+	}
+
+	_, err := getUnixHomeDir()
+	assert.ErrorIs(t, err, ErrBlankOutput, "getUnixHomeDir should return ErrBlankOutput when HomeDir is empty.")
+}
+
+// TestDirUnix_EmptyHomeDirFallback verifies that dirUnix falls through to the
+// shell fallback when user.Current() returns an empty HomeDir (not an error).
+func TestDirUnix_EmptyHomeDirFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("dirUnix is not used on Windows.")
+	}
+
+	origUser := currentUserFunc
+	origDarwin := darwinHomeDirFunc
+	defer func() {
+		currentUserFunc = origUser
+		darwinHomeDirFunc = origDarwin
+	}()
+
+	// Simulate user.Current() returning empty HomeDir (not an error).
+	currentUserFunc = func() (*user.User, error) {
+		return &user.User{HomeDir: ""}, nil
+	}
+	// On darwin, stub darwinHomeDirFunc so the test reaches the shell fallback.
+	darwinHomeDirFunc = func() (string, error) {
+		return "", errors.New("mock dscl failure")
+	}
+
+	t.Setenv("HOME", "") // ensure env-var path is skipped
+
+	home, err := dirUnix()
+	require.NoError(t, err, "dirUnix should fall back to shell when HomeDir is empty.")
+	assert.NotEmpty(t, home, "shell fallback should return a non-empty home directory.")
+}
+
+// TestGetDarwinHomeDir_DsclUnavailable verifies that getDarwinHomeDir returns
+// an error on non-darwin systems where dscl is not available. On Linux, id -un
+// succeeds but dscl is absent, exercising the error path.
+func TestGetDarwinHomeDir_DsclUnavailable(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("dscl is available on darwin; skipping non-darwin error test.")
+	}
+
+	_, err := getDarwinHomeDir()
+	// dscl doesn't exist on Linux; the function must return an error.
+	assert.Error(t, err, "getDarwinHomeDir should return an error when dscl is not available.")
+	assert.Contains(t, err.Error(), "getDarwinHomeDir:", "error should contain function context.")
+}
+
+// TestDir_DoubleCheckLocking verifies that Dir() returns a consistent result
+// when called concurrently, exercising the double-check locking after write-lock
+// acquisition.
+func TestDir_DoubleCheckLocking(t *testing.T) {
+	Reset()
+	defer Reset()
+
+	const goroutines = 20
+	results := make([]string, goroutines)
+	errs := make([]error, goroutines)
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errs[idx] = Dir()
+		}(i)
+	}
+	wg.Wait()
+
+	first := results[0]
+	require.NotEmpty(t, first, "Dir() should return a non-empty home directory.")
+	for i, r := range results {
+		require.NoError(t, errs[i])
+		assert.Equal(t, first, r, "All concurrent Dir() calls should return the same home directory.")
 	}
 }

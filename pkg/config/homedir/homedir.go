@@ -57,6 +57,12 @@ func Dir() (string, error) {
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
 
+	// Re-check after acquiring the write lock: another goroutine may have
+	// already populated the cache between our read-unlock and write-lock.
+	if !DisableCache && homedirCache != "" {
+		return homedirCache, nil
+	}
+
 	var result string
 	var err error
 	if runtime.GOOS == "windows" {
@@ -146,12 +152,12 @@ func getHomeFromEnv() string {
 
 func dirWindows() (string, error) {
 	// First prefer the HOME environmental variable
-	if home := os.Getenv("HOME"); home != "" {
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
 		return filepath.Clean(home), nil
 	}
 
 	// Prefer standard environment variable USERPROFILE
-	if home := os.Getenv("USERPROFILE"); home != "" {
+	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
 		return filepath.Clean(home), nil
 	}
 
@@ -210,6 +216,9 @@ func getUnixHomeDir() (string, error) {
 	u, err := currentUserFunc()
 	if err != nil {
 		return "", fmt.Errorf("getUnixHomeDir: %w", err)
+	}
+	if u.HomeDir == "" {
+		return "", fmt.Errorf("getUnixHomeDir: %w", ErrBlankOutput)
 	}
 	return u.HomeDir, nil
 }
