@@ -117,9 +117,10 @@ func isTerraformCurrentWorkspace(componentPath, workspace string) bool {
 	envFile := filepath.Join(filepath.Clean(tfDataDir), "environment")
 	data, err := os.ReadFile(envFile)
 	if err != nil {
-		// Terraform does not create the environment file for the default workspace.
-		// Absence of the file therefore means the default workspace is active.
-		if workspace == "default" {
+		// Only treat a missing file as "default workspace active".
+		// Other errors (permission denied, I/O error) are not equivalent
+		// to the workspace being "default" and must return false.
+		if errors.Is(err, os.ErrNotExist) && workspace == "default" {
 			return true
 		}
 		return false

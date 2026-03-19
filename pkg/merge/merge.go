@@ -22,7 +22,7 @@ const (
 // and uses reflection-based normalization for rare complex types (typed slices/maps).
 // Preserves numeric types (unlike JSON which converts all numbers to float64) and is faster than
 // generic reflection-based copying. The data is already in Go map format with custom tags already processed,
-// so we only need structural copying to work around mergo's pointer mutation bug.
+// so structural copying is needed to ensure accumulated merge results are independent of their inputs.
 // Uses properly-sized allocations to reduce GC pressure during high-volume operations (118k+ calls per run).
 func DeepCopyMap(m map[string]any) (map[string]any, error) {
 	defer perf.Track(nil, "merge.DeepCopyMap")()

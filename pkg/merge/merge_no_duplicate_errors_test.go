@@ -27,9 +27,9 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 		stderrChan <- buf.String()
 	}()
 
-	// Create a scenario that would trigger an error in mergo
-	// Note: With current mergo behavior, type mismatches don't always error,
-	// but we're testing that IF an error occurs, it's not printed directly
+	// Create a scenario that would trigger a validation error (invalid strategy).
+	// We verify that if an error occurs, it's not printed directly to stderr
+	// but returned to the caller.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "invalid-strategy", // This will cause an error
@@ -56,7 +56,7 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 	assert.Empty(t, stderrOutput, "No output should be printed to stderr directly from merge.go")
 }
 
-// TestMergeErrorsAreWrappedNotPrinted ensures that when mergo returns an error,
+// TestMergeErrorsAreWrappedNotPrinted ensures that when deepMergeNative returns an error,
 // we wrap it and return it rather than printing it..
 func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 	// This test verifies that our code properly wraps errors

@@ -30,6 +30,9 @@ func safeAdd(a, b int) int {
 //   - dst is []any but src is not a slice: return type mismatch error (WithTypeCheck).
 //   - Otherwise: src value overrides dst value (deep-copied to isolate src from dst).
 func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) error {
+	if dst == nil {
+		return fmt.Errorf("deepMergeNative: dst must not be nil")
+	}
 	for k, srcVal := range src {
 		dstVal, exists := dst[k]
 		if !exists {
@@ -119,11 +122,15 @@ func toAnySlice(v any) ([]any, bool) {
 	return nil, false
 }
 
-// appendSlices returns a new slice containing all elements of dst followed by
-// deep copies of all elements of src.
+// appendSlices returns a new slice containing deep copies of all elements of dst
+// followed by deep copies of all elements of src.
+// Both dst and src elements are deep-copied to prevent the result from aliasing
+// the accumulator's elements across multiple merge passes.
 func appendSlices(dst, src []any) []any {
-	result := make([]any, len(dst), safeAdd(len(dst), len(src)))
-	copy(result, dst)
+	result := make([]any, 0, safeAdd(len(dst), len(src)))
+	for _, v := range dst {
+		result = append(result, deepCopyValue(v))
+	}
 	for _, v := range src {
 		result = append(result, deepCopyValue(v))
 	}
@@ -145,11 +152,15 @@ func mergeSlicesNative(dst, src []any) ([]any, error) {
 		srcMap, srcIsMap := src[i].(map[string]any)
 		if !srcIsMap {
 			// Non-map src element: dst[i] is preserved (mergo keeps dst for scalars).
+			// Deep-copy to prevent the result from aliasing the accumulator's element.
+			result[i] = deepCopyValue(dst[i])
 			continue
 		}
 		dstMap, dstIsMap := dst[i].(map[string]any)
 		if !dstIsMap {
 			// Type mismatch: dst element is preserved.
+			// Deep-copy to prevent aliasing.
+			result[i] = deepCopyValue(dst[i])
 			continue
 		}
 		// Both are maps: deep-merge into a new container so neither src nor dst is aliased.
