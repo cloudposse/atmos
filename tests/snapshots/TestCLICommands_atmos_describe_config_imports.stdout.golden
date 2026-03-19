@@ -81,7 +81,6 @@ settings:
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
-    token: ap_live_3ZZgE56cKC2cRGB2diVEgT2b
   telemetry:
     enabled: true
     endpoint: https://us.i.posthog.com

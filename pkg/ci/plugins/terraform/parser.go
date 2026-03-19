@@ -78,9 +78,14 @@ func ParsePlanJSON(jsonData []byte) (*plugin.OutputResult, error) {
 	processResourceChanges(plan.ResourceChanges, data)
 	processOutputChanges(plan.OutputChanges, data)
 
-	result.HasChanges = hasResourceChanges(data.ResourceCounts) || len(plan.OutputChanges) > 0
+	hasResources := hasResourceChanges(data.ResourceCounts)
+	result.HasChanges = hasResources || len(plan.OutputChanges) > 0
 	if result.HasChanges {
-		data.ChangedResult = buildChangeSummary(data.ResourceCounts)
+		if hasResources {
+			data.ChangedResult = buildChangeSummary(data.ResourceCounts)
+		} else {
+			data.ChangedResult = "Changes to Outputs"
+		}
 	}
 
 	return result, nil
