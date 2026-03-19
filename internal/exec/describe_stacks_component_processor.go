@@ -568,6 +568,9 @@ func processComponentSectionYAMLFunctions(
 // The workspace pattern/template cleanup always runs (regardless of whether an inherit
 // list is present) so that any component with an explicit terraform_workspace consistently
 // has pattern/template removed — matching the original behaviour of the old monolithic code.
+// This prevents workspace derivation conflicts: without cleanup, both an explicit workspace
+// AND a pattern/template would coexist and BuildTerraformWorkspace would use the pattern
+// (checked first) instead of the explicit value.
 func applyTerraformMetadataInheritance(
 	atmosConfig *schema.AtmosConfiguration,
 	allTerraformComponents map[string]any,
