@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"fmt"
-	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"testing"
