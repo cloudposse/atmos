@@ -990,6 +990,68 @@ func TestEvaluateYqExpression_FallbackStringKeywords(t *testing.T) {
 	}
 }
 
+// TestEvaluateYqExpression_MutationThenRead tests mutation-then-read expressions
+// of the form `.v = "true" | .v`, where a key is set to a string keyword value
+// and then immediately read back.  The result must preserve the Go string type.
+// Callers in the Terraform executor build update expressions of this form and rely
+// on the string type being preserved to avoid type coercion in generated .tfvars.
+func TestEvaluateYqExpression_MutationThenRead(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name     string
+		data     any
+		yq       string
+		expected any
+	}{
+		{
+			name:     `set string "true" then read`,
+			data:     map[string]any{},
+			yq:       `.v = "true" | .v`,
+			expected: "true",
+		},
+		{
+			name:     `set string "false" then read`,
+			data:     map[string]any{},
+			yq:       `.v = "false" | .v`,
+			expected: "false",
+		},
+		{
+			name:     `set string "null" then read`,
+			data:     map[string]any{},
+			yq:       `.v = "null" | .v`,
+			expected: "null",
+		},
+		{
+			name:     `set string "42" then read`,
+			data:     map[string]any{},
+			yq:       `.v = "42" | .v`,
+			expected: "42",
+		},
+		{
+			name:     `set string "yes" then read`,
+			data:     map[string]any{},
+			yq:       `.v = "yes" | .v`,
+			expected: "yes",
+		},
+		{
+			name:     `overwrite existing bool true with string "true"`,
+			data:     map[string]any{"v": true},
+			yq:       `.v = "true" | .v`,
+			expected: "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := EvaluateYqExpression(atmosConfig, tt.data, tt.yq)
+			require.NoError(t, err)
+			assert.Equalf(t, tt.expected, result,
+				"type mismatch: got %T(%v), want %T(%v)", result, result, tt.expected, tt.expected)
+		})
+	}
+}
+
 // TestEvaluateYqExpression_StringTypePreservation_Nested verifies type preservation
 // for string values that look like YAML keywords when they appear inside nested structures.
 func TestEvaluateYqExpression_StringTypePreservation_Nested(t *testing.T) {

@@ -113,14 +113,26 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	}
 
 	processYAMLNode(&node)
-	resultBytes, err := yaml.Marshal(&node)
-	if err != nil {
-		return nil, fmt.Errorf("EvaluateYqExpression: failed to marshal processed node: %w", err)
+
+	// Thread the caller's atmosConfig through processCustomTags so that custom
+	// Atmos YAML tags embedded in the yq output are resolved with the correct
+	// configuration rather than a zero-value config.  When atmosConfig is nil
+	// (e.g., in unit tests), fall back to an empty config to satisfy the non-nil
+	// contract of processCustomTags.
+	cfg := atmosConfig
+	if cfg == nil {
+		cfg = &schema.AtmosConfiguration{}
 	}
 
-	res, err := UnmarshalYAML[any](string(resultBytes))
-	if err != nil {
-		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert YAML to Go type: %w", err)
+	if err := processCustomTags(cfg, &node, ""); err != nil {
+		return nil, fmt.Errorf("EvaluateYqExpression: failed to process custom tags: %w", err)
+	}
+
+	// Decode directly from the processed yaml.Node, avoiding an unnecessary
+	// intermediate marshal/unmarshal round-trip.
+	var res any
+	if err := node.Decode(&res); err != nil {
+		return nil, fmt.Errorf("EvaluateYqExpression: failed to decode YAML node: %w", err)
 	}
 
 	return res, nil
@@ -168,8 +180,10 @@ func isScalarString(s string) bool {
 }
 
 // isYAMLNullValue checks if a YAML node represents a null value.
+// A node is null when it carries the !!null tag, or when its value is empty and
+// the tag is not !!str (an explicit empty string is a valid non-null value).
 func isYAMLNullValue(node *yaml.Node) bool {
-	return node.Kind == yaml.ScalarNode && (node.Value == "" || node.Tag == "!!null")
+	return node.Kind == yaml.ScalarNode && (node.Tag == "!!null" || (node.Value == "" && node.Tag != "!!str"))
 }
 
 // keyMatchesOriginalWithColon checks if the key plus trailing colon(s) matches the original string.
