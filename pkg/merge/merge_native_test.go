@@ -181,6 +181,68 @@ func TestDeepMergeNative_SliceDeepCopy_ExtraSrcElementsIgnored(t *testing.T) {
 	assert.Equal(t, []any{1}, dst["list"])
 }
 
+// TestDeepMergeNative_SliceDeepCopyPrecedenceOverAppend verifies that sliceDeepCopy takes
+// priority when both appendSlice=true AND sliceDeepCopy=true are passed, matching old mergo
+// behaviour where WithSliceDeepCopy was checked before WithAppendSlice.
+func TestDeepMergeNative_SliceDeepCopyPrecedenceOverAppend(t *testing.T) {
+	dst := map[string]any{
+		"items": []any{map[string]any{"id": 1, "name": "base"}},
+	}
+	src := map[string]any{
+		"items": []any{map[string]any{"id": 2, "extra": "new"}, map[string]any{"id": 3}},
+	}
+	// Both flags set: sliceDeepCopy must win → element-wise merge, not append.
+	require.NoError(t, deepMergeNative(dst, src, true, true))
+	items := dst["items"].([]any)
+	// sliceDeepCopy: result length = dst length (1), not dst+src length (3).
+	assert.Len(t, items, 1, "sliceDeepCopy must not append when both flags are true")
+	item := items[0].(map[string]any)
+	assert.Equal(t, 2, item["id"])
+	assert.Equal(t, "base", item["name"])
+	assert.Equal(t, "new", item["extra"])
+}
+
+// TestMergeSlicesNative_TailElementsDeepCopied verifies that elements beyond len(src) in the
+// result are deep copies of the corresponding dst elements, not aliases.
+// Without deep-copying the tail, a subsequent merge pass could mutate shared inner maps.
+func TestMergeSlicesNative_TailElementsDeepCopied(t *testing.T) {
+	innerMap := map[string]any{"x": 1}
+	dst := []any{map[string]any{"a": 1}, innerMap}
+	src := []any{map[string]any{"b": 2}} // only one element; [1] is in the tail
+
+	result, err := mergeSlicesNative(dst, src)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+
+	// Mutate the result's tail element; original innerMap must not change.
+	tailMap, ok := result[1].(map[string]any)
+	require.True(t, ok)
+	tailMap["x"] = 99
+
+	assert.Equal(t, 1, innerMap["x"], "tail element must be a deep copy, not an alias")
+}
+
+// TestMergeSlicesNative_DstMapValuesDeepCopied verifies that dstMap values are deep-copied
+// before recursing so that deepMergeNative cannot mutate the original accumulator maps.
+func TestMergeSlicesNative_DstMapValuesDeepCopied(t *testing.T) {
+	sharedNested := map[string]any{"x": 1}
+	dst := []any{map[string]any{"nested": sharedNested}}
+	src := []any{map[string]any{"nested": map[string]any{"y": 2}}}
+
+	result, err := mergeSlicesNative(dst, src)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	resultItem := result[0].(map[string]any)
+	resultNested := resultItem["nested"].(map[string]any)
+	assert.Equal(t, 1, resultNested["x"])
+	assert.Equal(t, 2, resultNested["y"])
+
+	// The original sharedNested must not have been mutated.
+	assert.Equal(t, 1, sharedNested["x"])
+	assert.NotContains(t, sharedNested, "y", "original dst map values must not be mutated")
+}
+
 func TestDeepMergeNative_TypedSliceInSrcNormalized(t *testing.T) {
 	// src may contain typed slices (e.g. []string) which must be normalised.
 	dst := map[string]any{}

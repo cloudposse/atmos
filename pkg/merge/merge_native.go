@@ -68,18 +68,21 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		}
 
 		// Slice strategies when both sides are slices.
-		if appendSlice || sliceDeepCopy {
+		// sliceDeepCopy takes precedence over appendSlice, matching the old mergo behaviour where
+		// WithSliceDeepCopy was checked before WithAppendSlice.
+		if sliceDeepCopy || appendSlice {
 			if dstSlice, dstIsSlice := dstVal.([]any); dstIsSlice {
 				if srcSlice, ok := toAnySlice(srcVal); ok {
-					if appendSlice {
-						dst[k] = appendSlices(dstSlice, srcSlice)
-					} else {
+					if sliceDeepCopy {
 						// sliceDeepCopy: element-wise merge.
 						var err error
 						dst[k], err = mergeSlicesNative(dstSlice, srcSlice)
 						if err != nil {
 							return err
 						}
+					} else {
+						// appendSlice: append src elements to dst.
+						dst[k] = appendSlices(dstSlice, srcSlice)
 					}
 					continue
 				}
@@ -149,16 +152,26 @@ func mergeSlicesNative(dst, src []any) ([]any, error) {
 			// Type mismatch: dst element is preserved.
 			continue
 		}
-		// Both are maps: deep-merge into a new container so src is not aliased.
+		// Both are maps: deep-merge into a new container so neither src nor dst is aliased.
 		// Use combined length as capacity hint to avoid reallocations when src adds new keys.
+		// Deep-copy dstMap values so that deepMergeNative cannot mutate shared inner maps
+		// (which would corrupt the accumulator in multi-input merges).
 		merged := make(map[string]any, safeAdd(len(dstMap), len(srcMap)))
 		for k, v := range dstMap {
-			merged[k] = v
+			merged[k] = deepCopyValue(v)
 		}
 		if err := deepMergeNative(merged, srcMap, false, false); err != nil {
 			return nil, err
 		}
 		result[i] = merged
 	}
+
+	// Deep-copy tail elements (positions beyond src length) to fully isolate the result
+	// from the accumulator.  Without this, result[i] and the accumulator's slice element
+	// alias the same map, so a later merge pass could mutate data visible to callers.
+	for i := len(src); i < len(dst); i++ {
+		result[i] = deepCopyValue(dst[i])
+	}
+
 	return result, nil
 }

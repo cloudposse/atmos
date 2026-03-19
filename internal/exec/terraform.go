@@ -704,7 +704,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 						var newExitCodeErr errUtils.ExitCodeError
 						if errors.As(err, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
 							isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace) {
-							log.Debug("Workspace is already the active workspace; proceeding",
+							log.Warn("Workspace is already active but its state directory is missing; proceeding — subsequent terraform commands may report missing state",
 								"workspace", info.TerraformWorkspace)
 						} else {
 							return err

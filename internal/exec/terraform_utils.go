@@ -102,6 +102,10 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 // partial cleanup on Windows).  In that scenario `terraform workspace new <name>` returns exit
 // code 1 even though we are already in the right workspace, so we should not treat the failure
 // as a fatal error.
+//
+// TF_DATA_DIR is resolved relative to componentPath (not the atmos process CWD) because
+// Terraform itself is invoked with componentPath as its working directory, so the two
+// paths are always consistent.
 func isTerraformCurrentWorkspace(componentPath, workspace string) bool {
 	tfDataDir := os.Getenv("TF_DATA_DIR")
 	if tfDataDir == "" {
@@ -113,9 +117,19 @@ func isTerraformCurrentWorkspace(componentPath, workspace string) bool {
 	envFile := filepath.Join(filepath.Clean(tfDataDir), "environment")
 	data, err := os.ReadFile(envFile)
 	if err != nil {
+		// Terraform does not create the environment file for the default workspace.
+		// Absence of the file therefore means the default workspace is active.
+		if workspace == "default" {
+			return true
+		}
 		return false
 	}
-	return strings.TrimSpace(string(data)) == workspace
+	// An empty file also indicates the default workspace.
+	recorded := strings.TrimSpace(string(data))
+	if recorded == "" {
+		return workspace == "default"
+	}
+	return recorded == workspace
 }
 
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {

@@ -1829,4 +1829,35 @@ func TestIsTerraformCurrentWorkspace(t *testing.T) {
 		t.Setenv("TF_DATA_DIR", customDir)
 		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod"))
 	})
+
+	// Default workspace: Terraform never writes the environment file for "default".
+	// Absence of the file (or an empty file) must be treated as the default workspace.
+	t.Run("returns true for default workspace when environment file is absent", func(t *testing.T) {
+		dir := t.TempDir()
+		// No .terraform directory or environment file — default workspace is implied.
+		assert.True(t, isTerraformCurrentWorkspace(dir, "default"))
+	})
+
+	t.Run("returns false for non-default workspace when environment file is absent", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
+
+	t.Run("returns true for default workspace when environment file is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte(""), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "default"))
+	})
+
+	t.Run("returns false for non-default workspace when environment file is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte(""), 0o644))
+
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
 }
