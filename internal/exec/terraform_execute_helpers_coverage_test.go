@@ -299,7 +299,6 @@ func TestWarnOnConflictingEnvVars_MultipleConflicts(t *testing.T) {
 	assert.NotPanics(t, warnOnConflictingEnvVars)
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // cleanupTerraformFiles (actual file creation/removal)
 // ──────────────────────────────────────────────────────────────────────────────
@@ -434,4 +433,3 @@ func TestCleanupTerraformFiles_MissingFiles_NoError(t *testing.T) {
 	}
 	assert.NotPanics(t, func() { cleanupTerraformFiles(&atmosConfig, &info) })
 }
-
