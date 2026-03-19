@@ -36,9 +36,6 @@ var (
 	// NoChangesRe matches "No changes. Your infrastructure matches the configuration.".
 	noChangesRe = regexp.MustCompile(`No changes\.|Your infrastructure matches the configuration`)
 
-	// Matches "Changes to Outputs:" for output-only plan changes (no resource changes).
-	outputChangesRe = regexp.MustCompile(`Changes to Outputs:`)
-
 	// Matches resource action lines in terraform plan output:
 	//   # resource_type.name will be created
 	//   # resource_type.name will be updated in-place
@@ -78,14 +75,9 @@ func ParsePlanJSON(jsonData []byte) (*plugin.OutputResult, error) {
 	processResourceChanges(plan.ResourceChanges, data)
 	processOutputChanges(plan.OutputChanges, data)
 
-	hasResources := hasResourceChanges(data.ResourceCounts)
-	result.HasChanges = hasResources || len(plan.OutputChanges) > 0
+	result.HasChanges = hasResourceChanges(data.ResourceCounts)
 	if result.HasChanges {
-		if hasResources {
-			data.ChangedResult = buildChangeSummary(data.ResourceCounts)
-		} else {
-			data.ChangedResult = "Changes to Outputs"
-		}
+		data.ChangedResult = buildChangeSummary(data.ResourceCounts)
 	}
 
 	return result, nil
@@ -366,13 +358,6 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 		if result.HasChanges {
 			data.ChangedResult = buildChangeSummary(data.ResourceCounts)
 		}
-	}
-
-	// Detect output-only changes (no resource changes but outputs differ).
-	// Terraform prints "Changes to Outputs:" without a "Plan:" summary line.
-	if !result.HasChanges && outputChangesRe.MatchString(output) {
-		result.HasChanges = true
-		data.ChangedResult = "Changes to Outputs"
 	}
 
 	// Extract full warning blocks for CI summary display.
