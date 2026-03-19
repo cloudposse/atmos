@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,15 +12,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestEvaluateYqExpression_InvalidYAML tests the error case when yaml.Unmarshal fails.
-func TestEvaluateYqExpression_InvalidYAML(t *testing.T) {
-	// Create a test with invalid YAML that will cause yaml.Unmarshal to fail.
-	// Create a test function that will try to unmarshal invalid YAML.
-	var node yaml.Node
-	err := yaml.Unmarshal([]byte("invalid: yaml: :"), &node)
+// errMarshalType is a helper type used in tests to trigger a ConvertToYAML failure.
+// It implements yaml.Marshaler and always returns an error from MarshalYAML.
+type errMarshalType struct{}
 
-	// Verify that we get an error from yaml.Unmarshal.
-	assert.Error(t, err, "Invalid YAML should cause an error")
+func (et errMarshalType) MarshalYAML() (any, error) {
+	return nil, errors.New("intentional marshal error for testing")
+}
+
+// TestEvaluateYqExpression_InvalidYAML tests the error path when the input
+// data cannot be serialized to YAML.  errMarshalType.MarshalYAML returns an
+// error, causing ConvertToYAML (and therefore EvaluateYqExpression) to fail.
+func TestEvaluateYqExpression_InvalidYAML(t *testing.T) {
+	_, err := EvaluateYqExpression(nil, errMarshalType{}, ".")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to convert data to YAML")
 }
 
 // TestIsScalarString tests the isScalarString helper function.
@@ -869,6 +876,59 @@ func TestEvaluateYqExpression_StringTypePreservation(t *testing.T) {
 			yq:       ".v",
 			expected: nil,
 		},
+		// --- YAML 1.1 legacy boolean aliases (yaml.v3 uses YAML 1.2, so these are strings) ---
+		{
+			name:     "string 'yes' preserved as string",
+			data:     map[string]any{"v": "yes"},
+			yq:       ".v",
+			expected: "yes", // yaml.v3 (YAML 1.2) does not treat "yes" as bool
+		},
+		{
+			name:     "string 'no' preserved as string",
+			data:     map[string]any{"v": "no"},
+			yq:       ".v",
+			expected: "no",
+		},
+		{
+			name:     "string 'on' preserved as string",
+			data:     map[string]any{"v": "on"},
+			yq:       ".v",
+			expected: "on",
+		},
+		{
+			name:     "string 'off' preserved as string",
+			data:     map[string]any{"v": "off"},
+			yq:       ".v",
+			expected: "off",
+		},
+		// --- YAML timestamp lookalike ---
+		{
+			name:     "date string preserved as string",
+			data:     map[string]any{"v": "2024-01-01"},
+			yq:       ".v",
+			expected: "2024-01-01", // must be string, not time.Time
+		},
+		// --- octal lookalike ---
+		{
+			name:     "octal-look-alike string preserved as string",
+			data:     map[string]any{"v": "0755"},
+			yq:       ".v",
+			expected: "0755", // must be string, not int
+		},
+		// --- scientific notation lookalike ---
+		{
+			name:     "scientific notation string preserved as string",
+			data:     map[string]any{"v": "1e10"},
+			yq:       ".v",
+			expected: "1e10", // must be string, not float64
+		},
+		// --- YAML null alias ---
+		{
+			name:     "tilde null alias preserved as string",
+			data:     map[string]any{"v": "~"},
+			yq:       ".v",
+			expected: "~", // must be string, not nil
+		},
 	}
 
 	for _, tt := range tests {
@@ -876,7 +936,56 @@ func TestEvaluateYqExpression_StringTypePreservation(t *testing.T) {
 			result, err := EvaluateYqExpression(atmosConfig, tt.data, tt.yq)
 			require.NoError(t, err)
 			assert.Equalf(t, tt.expected, result,
-				"type mismatch: got %T(%v), want %T(%v)", result, result, tt.expected, tt.expected)
+				"type mismatch: got %T, want %T", result, tt.expected)
+		})
+	}
+}
+
+// TestEvaluateYqExpression_FallbackStringKeywords verifies that when a yq fallback
+// expression (using the //) operator supplies a string-keyword default (e.g., "true",
+// "false", "null"), the returned value is a string — not a coerced bool or nil.
+func TestEvaluateYqExpression_FallbackStringKeywords(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name     string
+		yq       string
+		expected any
+	}{
+		{
+			name:     `fallback "true" is string`,
+			yq:       `.missing // "true"`,
+			expected: "true",
+		},
+		{
+			name:     `fallback "false" is string`,
+			yq:       `.missing // "false"`,
+			expected: "false",
+		},
+		{
+			name:     `fallback "null" is string`,
+			yq:       `.missing // "null"`,
+			expected: "null",
+		},
+		{
+			name:     `fallback "42" is string`,
+			yq:       `.missing // "42"`,
+			expected: "42",
+		},
+		{
+			name:     `fallback "yes" is string`,
+			yq:       `.missing // "yes"`,
+			expected: "yes",
+		},
+	}
+
+	data := map[string]any{} // empty map so .missing is always null
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := EvaluateYqExpression(atmosConfig, data, tt.yq)
+			require.NoError(t, err)
+			assert.Equalf(t, tt.expected, result,
+				"type mismatch: got %T, want %T", result, tt.expected)
 		})
 	}
 }
@@ -921,5 +1030,63 @@ func TestEvaluateYqExpression_StringTypePreservation_Nested(t *testing.T) {
 		require.NoError(t, err)
 		assert.IsType(t, "", result, "expected string, got %T", result)
 		assert.Equal(t, "2041:0000:140F::875B::", result)
+	})
+}
+
+// TestEvaluateYqExpressionWithType_CoercionBehavior documents that
+// EvaluateYqExpressionWithType intentionally uses UnwrapScalar=true, which means
+// YAML scalar keywords are coerced to their native Go types when decoding into a
+// typed struct.  This is the opposite of EvaluateYqExpression (which preserves
+// Go string types).  The difference is intentional: typed callers (e.g.,
+// describe_config.go decoding schema.AtmosConfiguration) rely on YAML type
+// coercion to populate bool/int fields correctly.
+func TestEvaluateYqExpressionWithType_CoercionBehavior(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// With a typed struct, bool fields receive native bool values even when the
+	// YAML source contained a quoted "true" string — the struct field type drives
+	// the decode, not the YAML quoting.
+	type typedConfig struct {
+		Enabled bool   `yaml:"enabled"`
+		Count   int    `yaml:"count"`
+		Name    string `yaml:"name"`
+	}
+
+	data := typedConfig{
+		Enabled: true,
+		Count:   42,
+		Name:    "test",
+	}
+
+	t.Run("round-trip typed struct preserves types", func(t *testing.T) {
+		result, err := EvaluateYqExpressionWithType(atmosConfig, data, ".")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, true, result.Enabled)
+		assert.Equal(t, 42, result.Count)
+		assert.Equal(t, "test", result.Name)
+	})
+
+	// This test documents the intentional divergence between EvaluateYqExpression
+	// (UnwrapScalar=false, preserves string type) and EvaluateYqExpressionWithType
+	// (UnwrapScalar=true, coerces to native Go type per the target type).
+	t.Run("string keyword coerced to bool by typed decoder", func(t *testing.T) {
+		mapData := map[string]any{"enabled": "true"} // string "true", not bool
+
+		// EvaluateYqExpression (UnwrapScalar=false) preserves the string.
+		untypedResult, err := EvaluateYqExpression(atmosConfig, mapData, ".enabled")
+		require.NoError(t, err)
+		assert.Equal(t, "true", untypedResult, "EvaluateYqExpression must preserve string type")
+
+		// EvaluateYqExpressionWithType[any] (UnwrapScalar=true) coerces:
+		// yq emits the bare token `true` (unquoted) which the YAML decoder
+		// then interprets as bool, not string.  This documents the intentional
+		// divergence — typed callers that supply a concrete T (e.g.,
+		// schema.AtmosConfiguration) benefit from this coercion because the
+		// struct decoder maps the bare token to the correct field type.
+		typedResult, err := EvaluateYqExpressionWithType[any](atmosConfig, mapData, ".enabled")
+		require.NoError(t, err)
+		require.NotNil(t, typedResult)
+		assert.Equal(t, true, *typedResult, "EvaluateYqExpressionWithType must coerce string 'true' to bool")
 	})
 }

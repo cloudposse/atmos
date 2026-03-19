@@ -90,7 +90,13 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	// necessary when UnwrapScalar=true caused the YAML parser to misinterpret scalar
 	// strings (e.g., ARNs or IPv6 addresses ending with "::").  With UnwrapScalar=false
 	// yq now emits properly quoted scalars so these cases are handled by the standard
-	// YAML round-trip below.  The checks are kept as a defensive fallback.
+	// YAML round-trip below.
+	//
+	// Important: with PrintDocSeparators=true the output always starts with "---\n",
+	// making trimmedResult a multi-line string for all non-empty results.  Both
+	// isScalarString and isMisinterpretedScalar return false for multi-line input, so
+	// these branches are structurally unreachable under the current configuration.
+	// They are kept as a defensive fallback in case the output format changes.
 	if isScalarString(trimmedResult) {
 		return trimmedResult, nil
 	}
@@ -125,9 +131,14 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 // parser would misinterpret (e.g., "#comment" stripped as a comment, or
 // "arn:...::password::" misread as a YAML map).
 //
-// With UnwrapScalar=false yq now emits properly-quoted scalars, so this
-// function is rarely triggered. It is kept as a defensive fallback for any
-// edge cases not covered by the standard YAML round-trip.
+// Note: with the current configuration (PrintDocSeparators=true,
+// UnwrapScalar=false), yq always emits a document-separator line ("---\n")
+// before the value, so trimmedResult always contains "\n" for non-empty
+// output. Because every isScalarString branch either requires the absence of
+// "\n" (the colon-suffix and "#"-prefix paths) or explicitly rejects
+// multi-line input, this function returns false for all normal yq output
+// under the current settings. It is retained as a defensive fallback in case
+// the yq output format changes or a future caller uses different preferences.
 func isScalarString(s string) bool {
 	// Handle strings starting with # (comments would be stripped by YAML parser).
 	if strings.HasPrefix(s, "#") && !strings.Contains(s, "\n") {
@@ -171,6 +182,11 @@ func keyMatchesOriginalWithColon(key, original string) bool {
 // isMisinterpretedScalar checks if the YAML parser has misinterpreted a scalar string as a map.
 // This happens when a string ends with colons (e.g., "value:" or "value::") which YAML
 // interprets as a map key with a null value.
+//
+// Note: with UnwrapScalar=false, yq quotes colon-suffixed strings (e.g., "arn:...::") so they
+// are parsed as ScalarNodes by yaml.Unmarshal, not MappingNodes.  As a result, this function
+// returns false for all normal yq output under the current configuration.  It is retained as
+// a defensive fallback for unexpected edge cases.
 func isMisinterpretedScalar(node *yaml.Node, originalResult string) bool {
 	// Navigate to document content if this is a document node.
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
@@ -218,6 +234,12 @@ func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration,
 		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to convert data to YAML: %w", err)
 	}
 
+	// UnwrapScalar=true is intentional here: the result is decoded into a strongly-typed
+	// Go struct T (e.g., schema.AtmosConfiguration).  For struct decoding, YAML type
+	// coercion is desirable — the yaml.v3 decoder correctly maps bare `true`/`false` to
+	// bool fields, bare integers to int fields, and so on.  Preserving quotes (as done in
+	// EvaluateYqExpression) is only necessary when the return type is `any`, where the
+	// decoder must infer the Go type from the YAML tag.
 	pref := yqlib.YamlPreferences{
 		Indent:                      2,
 		ColorsEnabled:               false,
