@@ -24,11 +24,18 @@ func TestMapCIExitCode(t *testing.T) {
 			expected: 2,
 		},
 		{
-			name:     "CI enabled but no exit_codes map preserves exit code",
+			name:     "CI enabled but no exit_codes map uses defaults (exit 2 → success)",
 			ci:       schema.CIConfig{Enabled: true},
 			tf:       schema.TerraformCI{},
 			exitCode: 2,
-			expected: 2,
+			expected: 0,
+		},
+		{
+			name:     "CI enabled but no exit_codes map uses defaults (exit 1 → failure)",
+			ci:       schema.CIConfig{Enabled: true},
+			tf:       schema.TerraformCI{},
+			exitCode: 1,
+			expected: 1,
 		},
 		{
 			name:     "CI enabled with code mapped true returns 0",
