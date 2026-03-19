@@ -151,7 +151,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 80,
+      progress: 81,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.', category: 'featured', priority: 'high' },
@@ -179,6 +179,7 @@ export const roadmapConfig = {
         { label: 'Native Okta Authentication (Device Code Flow)', status: 'planned', quarter: 'q1-2026', prd: 'okta-auth-identity', description: 'Native Okta authentication using OAuth 2.0 Device Authorization Grant. Enables Okta as a central IdP for AWS, Azure, and GCP federation, plus direct Okta API access for Terraform.', benefits: 'Use Okta as your single identity hub. Authenticate once with Okta and federate to any cloud. No browser automation or SAML complexity.' },
         { label: 'Support for `atmos auth` with GitHub Apps', status: 'planned', quarter: 'q1-2026', pr: 1683, description: 'GitHub App authentication for fine-grained repository access and elevated rate limits.', benefits: 'Higher API rate limits and granular permissions for automation that interacts with GitHub.' },
         { label: 'Identity selection for stores', status: 'shipped', quarter: 'q1-2026', pr: 2099, changelog: 'store-identity-support', description: 'Stores can authenticate using atmos auth identities instead of default credential chains.', benefits: 'Use the same identity system for stores as for Terraform. No separate credential management for secrets access.' },
+        { label: 'Isolated browser sessions for multi-account console access', status: 'shipped', quarter: 'q1-2026', pr: 2229, changelog: 'auth-console-isolated-sessions', prd: 'auth-console-isolated-sessions', description: 'Open multiple cloud provider consoles simultaneously in isolated Chrome browser contexts, one per identity, without logout conflicts.', benefits: 'Work in multiple AWS accounts at the same time. No more logging out to switch between consoles.' },
       ],
       issues: [],
       prs: [
@@ -187,6 +188,7 @@ export const roadmapConfig = {
         { number: 1884, title: 'Add EKS kubeconfig authentication integration PRD' },
         { number: 1887, title: 'Browser-based authentication for aws/user' },
         { number: 1683, title: 'Update auth docs and implement GitHub providers' },
+        { number: 2229, title: 'Isolated browser sessions for multi-account console access' },
       ],
     },
     {
