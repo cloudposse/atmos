@@ -4,6 +4,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
@@ -149,7 +150,7 @@ func RestoreCIEnvVars(envVars map[string]string) {
 //
 // Returns a new slice with all CI provider environment variables removed.
 func FilterCIEnvVars(env []string) []string {
-	ciVars := buildCIEnvVarSet()
+	ciVars := getCIEnvVarSet()
 	filtered := make([]string, 0, len(env))
 	for _, e := range env {
 		key := e
@@ -161,6 +162,21 @@ func FilterCIEnvVars(env []string) []string {
 		}
 	}
 	return filtered
+}
+
+// ciEnvVarSetOnce guards one-time initialisation of ciEnvVarSetCache.
+var ciEnvVarSetOnce sync.Once
+
+// ciEnvVarSetCache holds the lazily-initialised set of CI env-var names.
+var ciEnvVarSetCache map[string]struct{}
+
+// getCIEnvVarSet returns the cached set of all known CI environment variable names.
+// The set is built exactly once and reused across all FilterCIEnvVars calls.
+func getCIEnvVarSet() map[string]struct{} {
+	ciEnvVarSetOnce.Do(func() {
+		ciEnvVarSetCache = buildCIEnvVarSet()
+	})
+	return ciEnvVarSetCache
 }
 
 // buildCIEnvVarSet returns a set of all known CI environment variable names.

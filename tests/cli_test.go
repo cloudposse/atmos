@@ -1138,13 +1138,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			continue
 		}
 
-		// Remove from inherited environment
-		for i, env := range envVars {
-			if strings.HasPrefix(env, atmosVar+"=") {
-				envVars = append(envVars[:i], envVars[i+1:]...)
-				break
+		// Remove all occurrences from the inherited environment (duplicates can arise
+		// when the AtmosRunner env and os.Environ() both carry the same variable).
+		filtered := envVars[:0]
+		for _, env := range envVars {
+			if !strings.HasPrefix(env, atmosVar+"=") {
+				filtered = append(filtered, env)
 			}
 		}
+		envVars = filtered
 	}
 
 	// Clear GitHub username variables for consistent snapshots.
@@ -1157,12 +1159,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			if _, exists := tc.Env[varName]; exists {
 				continue
 			}
-			for i, env := range envVars {
-				if strings.HasPrefix(env, varName+"=") {
-					envVars = append(envVars[:i], envVars[i+1:]...)
-					break
+			// Remove all occurrences (duplicates can arise when os.Environ() and the
+			// AtmosRunner env both carry the same variable name).
+			filtered := envVars[:0]
+			for _, env := range envVars {
+				if !strings.HasPrefix(env, varName+"=") {
+					filtered = append(filtered, env)
 				}
 			}
+			envVars = filtered
 		}
 	}
 
