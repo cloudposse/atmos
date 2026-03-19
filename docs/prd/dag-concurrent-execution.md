@@ -470,6 +470,7 @@ func (s *Scheduler) Run(ctx context.Context) *AggregateResult {
 
     var mu sync.Mutex
     completed := 0
+    skipped := 0
     total := s.graph.Size()
 
     // Scheduler loop — select on ctx.Done() to avoid deadlock on fail-fast
@@ -496,8 +497,13 @@ func (s *Scheduler) Run(ctx context.Context) *AggregateResult {
                             }
                         }
                     }
+                } else if !s.failFast {
+                    // keep-going: mark all transitive dependents as skipped
+                    // so the scheduler terminates instead of hanging
+                    newlySkipped := markBlockedDescendants(node.ID, inDegree, s.graph, result)
+                    skipped += newlySkipped
                 }
-                if completed == total {
+                if completed+skipped == total {
                     close(done)
                 }
                 mu.Unlock()
