@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -16,6 +19,7 @@ import (
 	azureAuth "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/browser"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -23,7 +27,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
@@ -39,6 +43,7 @@ var (
 	consoleIssuer      string
 	consolePrintOnly   bool
 	consoleSkipOpen    bool
+	consoleIsolated    bool
 )
 
 //go:embed markdown/atmos_auth_console_usage.md
@@ -64,7 +69,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
 	// Initialize auth manager.
-	authManager, err := initializeAuthManager()
+	authManager, atmosConfig, err := initializeAuthManager()
 	if err != nil {
 		return err
 	}
@@ -129,19 +134,38 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Print formatted output and handle browser opening.
+	// Print formatted output.
 	printConsoleInfo(whoami, duration, false, "")
-	handleBrowserOpen(consoleURL)
+
+	// Only build browser opener when we will actually open the browser.
+	var opener browser.Opener
+	if !consoleSkipOpen && !telemetry.IsCI() {
+		// Resolve isolated session mode: flag > config > default (false).
+		isolated := resolveConsoleIsolated(cmd, atmosConfig)
+
+		// Build browser opener.
+		var opts []browser.Option
+		if isolated {
+			sessionDir, sessionErr := consoleSessionDir(atmosConfig.Auth.Realm, identityName)
+			if sessionErr != nil {
+				return fmt.Errorf("%w: failed to create isolated session directory: %w", errUtils.ErrAuthConsole, sessionErr)
+			}
+			opts = append(opts, browser.WithIsolatedSession(sessionDir))
+		}
+		opener = browser.New(opts...)
+	}
+
+	handleBrowserOpen(consoleURL, opener)
 
 	return nil
 }
 
 // handleBrowserOpen handles opening the console URL in the browser or displaying it.
-func handleBrowserOpen(consoleURL string) {
+func handleBrowserOpen(consoleURL string, opener browser.Opener) {
 	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 	if !consoleSkipOpen && !telemetry.IsCI() {
 		fmt.Fprintf(maskedStderr, "\n")
-		if err := u.OpenUrl(consoleURL); err != nil {
+		if err := opener.Open(consoleURL); err != nil {
 			// Show URL on error so user can manually open it.
 			printConsoleURL(consoleURL)
 			warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange)).Bold(true)
@@ -225,20 +249,21 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 }
 
 // initializeAuthManager loads config and creates the auth manager.
-func initializeAuthManager() (types.AuthManager, error) {
+// Returns the auth manager and the full atmos config (needed for realm and console settings).
+func initializeAuthManager() (types.AuthManager, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "cmd.initializeAuthManager")()
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
+		return nil, nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
+		return nil, nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	return authManager, nil
+	return authManager, &atmosConfig, nil
 }
 
 // resolveIdentityName gets identity from flag or uses default.
@@ -324,6 +349,34 @@ func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, p
 	return duration, nil
 }
 
+// consoleSessionDir returns an XDG data directory for an isolated browser session.
+// The directory is deterministic based on realm+identity, so the same identity
+// reuses its browser profile across invocations.
+func consoleSessionDir(realm, identityName string) (string, error) {
+	h := sha256.Sum256([]byte(realm + "/" + identityName))
+	dirName := hex.EncodeToString(h[:8])
+	return xdg.GetXDGDataDir(filepath.Join("console", "sessions", dirName), xdg.DefaultCacheDirPerm)
+}
+
+// resolveConsoleIsolated resolves whether to use isolated browser sessions.
+// Flag takes precedence over auth.console.isolated config.
+func resolveConsoleIsolated(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) bool {
+	defer perf.Track(nil, "cmd.resolveConsoleIsolated")()
+
+	// Flag explicitly set by user takes precedence.
+	if cmd.Flags().Changed("isolated") {
+		return consoleIsolated
+	}
+
+	// Check auth.console config.
+	if atmosConfig.Auth.Console != nil && atmosConfig.Auth.Console.Isolated != nil {
+		return *atmosConfig.Auth.Console.Isolated
+	}
+
+	// Default: no isolation (backward-compatible).
+	return false
+}
+
 func init() {
 	authConsoleCmd.Flags().StringVar(&consoleDestination, "destination", "",
 		"Console page to navigate to. Supports full URLs or shorthand aliases like 's3', 'ec2', 'lambda', etc.")
@@ -335,6 +388,8 @@ func init() {
 		"Print the console URL to stdout without opening browser")
 	authConsoleCmd.Flags().BoolVar(&consoleSkipOpen, "no-open", false,
 		"Generate URL but don't open browser automatically")
+	authConsoleCmd.Flags().BoolVar(&consoleIsolated, "isolated", false,
+		"Open console in an isolated browser session (requires Chrome/Chromium). Enables multiple simultaneous console sessions.")
 
 	// Register autocomplete for destination flag (AWS service aliases).
 	if err := authConsoleCmd.RegisterFlagCompletionFunc("destination", destinationFlagCompletion); err != nil {
