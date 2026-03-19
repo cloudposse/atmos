@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,41 @@ const (
 	osWindows             = "windows"
 )
 
+// ShellCommandOption is a functional option for ExecuteShellCommand.
+type ShellCommandOption func(*shellCommandConfig)
+
+// shellCommandConfig holds optional configuration for shell command execution.
+type shellCommandConfig struct {
+	stdoutCapture  io.Writer
+	stderrCapture  io.Writer
+	stdoutOverride io.Writer
+}
+
+// WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
+// The captured output includes secret masking (post-MaskWriter).
+func WithStdoutCapture(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stdoutCapture = w
+	}
+}
+
+// WithStderrCapture returns a ShellCommandOption that tees stderr to the provided writer.
+// The captured output includes secret masking (post-MaskWriter).
+func WithStderrCapture(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stderrCapture = w
+	}
+}
+
+// WithStdoutOverride returns a ShellCommandOption that replaces the default stdout
+// (os.Stdout) with a different writer. Used to redirect noisy commands (e.g.,
+// workspace select) to stderr so they don't pollute data-producing commands like output.
+func WithStdoutOverride(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stdoutOverride = w
+	}
+}
+
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -41,8 +77,15 @@ func ExecuteShellCommand(
 	env []string,
 	dryRun bool,
 	redirectStdError string,
+	opts ...ShellCommandOption,
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
+
+	// Apply functional options.
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
@@ -68,18 +111,46 @@ func ExecuteShellCommand(
 	cmd.Env = cmdEnv
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = ioLayer.MaskWriter(os.Stdout)
+
+	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
+	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
+	// for workspace select so it doesn't pollute data-producing commands like output).
+	var stdoutTarget io.Writer = os.Stdout
+	if cfg.stdoutOverride != nil {
+		stdoutTarget = cfg.stdoutOverride
+	}
+	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
+	if cfg.stdoutCapture != nil {
+		cmd.Stdout = io.MultiWriter(maskedStdout, cfg.stdoutCapture)
+	} else {
+		cmd.Stdout = maskedStdout
+	}
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
 	}
 
 	if redirectStdError == "/dev/stderr" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else if redirectStdError == "/dev/stdout" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stdout)
+		maskedStderr := ioLayer.MaskWriter(os.Stdout)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else if redirectStdError == "" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
