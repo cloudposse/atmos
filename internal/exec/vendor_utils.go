@@ -584,9 +584,3 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
 	return vendor.ShouldExcludeFile(excludedPaths, trimmedSrc)
 }
-
-// shouldIncludeFile checks if the file matches any of the included patterns.
-// Delegates to pkg/vendor for the shared implementation.
-func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
-	return vendor.ShouldIncludeFile(includedPaths, trimmedSrc)
-}

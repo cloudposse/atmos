@@ -150,12 +150,6 @@ func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool
 	return vendor.ShouldExcludeFile(excludePaths, trimmedSrc)
 }
 
-// checkComponentIncludes checks if the file matches any of the included patterns.
-// Delegates to pkg/vendor for the shared implementation.
-func checkComponentIncludes(includePaths []string, src, trimmedSrc string) (bool, error) {
-	return vendor.ShouldIncludeFile(includePaths, trimmedSrc)
-}
-
 func ExecuteComponentVendorInternal(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorComponentSpec *schema.VendorComponentSpec,
