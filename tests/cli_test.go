@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath" // For resolving absolute paths
@@ -62,6 +63,12 @@ var logger *log.AtmosLogger
 // They are cleared from the subprocess environment (unless the test explicitly sets them)
 // to produce consistent golden snapshots across local and CI environments.
 var gitHubUsernameVars = []string{"ATMOS_GITHUB_USERNAME", "GITHUB_ACTOR", "GITHUB_USERNAME"}
+
+// ghaOutputEnvVars lists GitHub Actions environment variables whose values are
+// relative file paths written by the subprocess (e.g. GITHUB_OUTPUT, GITHUB_STEP_SUMMARY).
+// These files are registered for cleanup after each test to prevent stale data
+// from a failed run from corrupting the next run.
+var ghaOutputEnvVars = []string{"GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY"}
 
 type Expectation struct {
 	Stdout                   []MatchPattern            `yaml:"stdout"`                     // Expected stdout output (non-TTY mode)
@@ -1073,6 +1080,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		cmd.Dir = absoluteWorkdir
 	}
 
+	// Register cleanup for relative GITHUB_OUTPUT / GITHUB_STEP_SUMMARY files.
+	// These are written to absoluteWorkdir by the subprocess and must be removed
+	// after the test completes so that a subsequent run does not read a stale file
+	// written by a previous (possibly failed) run.  Absolute paths are left alone.
+	for _, envKey := range ghaOutputEnvVars {
+		if relPath, ok := tc.Env[envKey]; ok && !filepath.IsAbs(relPath) && absoluteWorkdir != "" {
+			absPath := filepath.Join(absoluteWorkdir, relPath)
+			t.Cleanup(func() { _ = os.Remove(absPath) })
+		}
+	}
+
 	// Preserve GOCOVERDIR if it's already set by atmosRunner
 	existingEnv := cmd.Env
 	if existingEnv == nil {
@@ -1992,17 +2010,35 @@ func mergeIntoCoverDir(src, dst string) {
 			}
 		}
 
-		data, readErr := os.ReadFile(srcPath)
-		if readErr != nil {
+		if err := copyFile(srcPath, dstPath); err != nil {
 			continue
 		}
-		_ = os.WriteFile(dstPath, data, 0o644) //nolint:gosec
 	}
 }
 
-// findGitRepo finds the Git repository root.
+// copyFile copies a single file using streaming I/O to avoid loading the
+// entire file into memory (coverage counter files can be several MB each).
+// src and dst are always paths within t.TempDir() or the shared coverDir, never
+// user-supplied input, so the G304/G306 gosec warnings are safe to suppress here.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src) //nolint:gosec // src is always a controlled temp path
+	if err != nil {
+		return err
+	}
+	defer in.Close() //nolint:errcheck
+
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec // dst is always a controlled temp path
+	if err != nil {
+		return err
+	}
+	defer out.Close() //nolint:errcheck
+
+	_, err = io.Copy(out, in)
+	return err
+}
+
+// findGitRepoRoot finds the Git repository root.
 func findGitRepoRoot(path string) (string, error) {
-	// Open the Git repository starting from the given path
 	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
 		return "", fmt.Errorf("failed to find git repository: %w", err)

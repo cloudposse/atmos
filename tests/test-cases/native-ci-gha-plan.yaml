@@ -121,6 +121,8 @@ tests:
           - 'Invalid function argument'
           - 'Failed because failure mode is enabled'
         "github-output-failure.txt":
+          # has_changes=true because foobar-fail has count=1 (enabled:true) so
+          # terraform detects 1 resource to add before failing on the file() call in locals.
           - "has_changes=true"
           - "has_errors=true"
           - "exit_code=1"

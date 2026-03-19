@@ -172,6 +172,7 @@ var ciEnvVarSetCache map[string]struct{}
 
 // getCIEnvVarSet returns the cached set of all known CI environment variable names.
 // The set is built exactly once and reused across all FilterCIEnvVars calls.
+// The returned map must not be modified — treat it as read-only.
 func getCIEnvVarSet() map[string]struct{} {
 	ciEnvVarSetOnce.Do(func() {
 		ciEnvVarSetCache = buildCIEnvVarSet()

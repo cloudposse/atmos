@@ -1,4 +1,10 @@
 tests:
+  # NOTE: These tests use a named sandbox ("exec-command") so all three share the
+  # same copied fixture directory.  `clean: true` runs `git clean` on the ORIGINAL
+  # fixture directory (fixtures/scenarios/exitCode), NOT on the named sandbox tempdir.
+  # This means terraform state accumulated in the sandbox is NOT reset between tests.
+  # That is intentional — the tests are run sequentially (parallel: false) and are
+  # designed to build on each other's state.  Do not add parallel: true here.
   - name: atmos exit code should be same as command exit code (2)
     enabled: true
     parallel: false
