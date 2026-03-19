@@ -9,6 +9,7 @@ import (
 	"time"
 
 	ghpkg "github.com/google/go-github/v59/github"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -21,9 +22,15 @@ const archivedCheckTimeout = 5 * time.Second
 // sources pointing at the same repository only issue one API call per run.
 var archivedRepoCache sync.Map
 
+// archivedRepoSFGroup deduplicates concurrent in-flight checks for the same repo so
+// that parallel vendor pulls never race to issue multiple API calls for the same key.
+var archivedRepoSFGroup singleflight.Group
+
 // scpGitHubURLPattern matches SCP-style GitHub URLs (e.g., git@github.com:owner/repo.git).
 // Capture groups: (1) host, (2) owner, (3) repo.
-var scpGitHubURLPattern = regexp.MustCompile(`^(?:[\w.-]+@)?([\w.-]+\.[\w.-]+):([\w.-]+)/([\w.-]+?)(?:\.git)?(?://.*)?$`)
+// Character class [A-Za-z0-9_.+-] is used instead of \w to restrict to ASCII word characters,
+// since GitHub owner/repo names are restricted to [A-Za-z0-9_.-].
+var scpGitHubURLPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.+-]+@)?([A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?://.*)?$`)
 
 // ParseGitHubOwnerRepo extracts the GitHub owner and repository name from a URI.
 // It handles various URI formats used in vendor configuration:
@@ -52,6 +59,10 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 		// Strip @ref suffix.
 		if atIdx := strings.Index(remainder, "@"); atIdx >= 0 {
 			remainder = remainder[:atIdx]
+		}
+		// Strip #fragment suffix.
+		if hashIdx := strings.Index(remainder, "#"); hashIdx >= 0 {
+			remainder = remainder[:hashIdx]
 		}
 		parts := strings.SplitN(strings.Trim(remainder, "/"), "/", 3)
 		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
