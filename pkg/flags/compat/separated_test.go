@@ -78,19 +78,35 @@ func TestResetSeparated(t *testing.T) {
 func TestSeparated_Concurrent(t *testing.T) {
 	t.Cleanup(func() { ResetSeparated() })
 
+	// Phase 1: Parallel Set + Get only — no Reset during reads.
+	// Verify that defensive copies from GetSeparated are independent.
 	const goroutines = 50
+	SetSeparated([]string{"-var", "key=value"})
+
+	copies := make([][]string, goroutines)
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
+		i := i
 		go func() {
 			defer wg.Done()
-			SetSeparated([]string{"-var", "key=value"})
-			_ = GetSeparated()
-			ResetSeparated()
+			copies[i] = GetSeparated()
 		}()
 	}
-
 	wg.Wait()
-	// No race conditions or panics.
+
+	// All copies must equal the originally set value.
+	for i, c := range copies {
+		assert.Equal(t, []string{"-var", "key=value"}, c, "goroutine %d got unexpected result", i)
+	}
+
+	// Mutating one copy must not affect others (defensive copy guarantee).
+	if len(copies) >= 2 {
+		copies[0][0] = "mutated"
+		assert.Equal(t, "-var", copies[1][0], "defensive copies must be independent")
+	}
+
+	// Phase 2: Reset — run serially after all reads are complete.
+	ResetSeparated()
+	assert.Nil(t, GetSeparated())
 }

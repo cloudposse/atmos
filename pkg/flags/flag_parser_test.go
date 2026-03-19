@@ -548,10 +548,25 @@ func TestFlagParser_Reset(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "dev", v.GetString("stack"))
 
-	// Reset should not panic.
+	// Verify the flag is marked as Changed after the first parse.
+	flag := cmd.Flags().Lookup("stack")
+	require.NotNil(t, flag)
+	assert.True(t, flag.Changed, "flag should be Changed after first parse")
+	assert.Equal(t, "dev", flag.Value.String())
+
+	// Reset should not panic and must clear the Changed state and restore defaults.
 	assert.NotPanics(t, func() {
 		parser.Reset()
 	})
+
+	// After Reset, the flag's Changed state must be cleared and value back to default.
+	assert.False(t, flag.Changed, "flag Changed state must be false after Reset")
+	assert.Equal(t, "", flag.Value.String(), "flag value must be reset to default after Reset")
+
+	// A second parse with no flags should not see the value from the first parse.
+	result, err := parser.Parse([]string{})
+	require.NoError(t, err)
+	assert.Equal(t, "", GetString(result.Flags, "stack"), "second parse must not inherit value from first parse")
 }
 
 // TestParsedConfig_GetArgsForTool verifies that GetArgsForTool combines positional
