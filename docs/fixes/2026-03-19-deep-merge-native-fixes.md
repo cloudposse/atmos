@@ -1,7 +1,7 @@
 # Deep-Merge Native & Terraform Workspace Fixes
 
-**Date:** 2026-03-19  
-**PR:** #2201 (perf: replace mergo with native deep merge)  
+**Date:** 2026-03-19
+**PR:** #2201 (perf: replace mergo with native deep merge)
 **Reviewer findings:** CodeRabbit audit + GitHub Advanced Security alerts
 
 ---
@@ -17,7 +17,7 @@ old mergo code checked `WithSliceDeepCopy` first (`if sliceDeepCopy … else if 
 When a caller passes both flags as `true`, the old code applied element-wise merging (deep-copy),
 the new code appended — an undocumented behavioral change.
 
-**Fix:** Reordered the condition: `if sliceDeepCopy { … } else { /* appendSlice */ }`.  
+**Fix:** Reordered the condition: `if sliceDeepCopy { … } else { /* appendSlice */ }`.
 Note: the public `Merge()` and `MergeWithContext()` APIs are strategy-enum-guarded and never
 set both flags simultaneously. The fix matters only for direct callers of the internal
 `deepMergeNative` or `MergeWithOptions`.
