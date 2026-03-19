@@ -14,9 +14,16 @@ function readState(): DismissState {
   try {
     const rawIds = localStorage.getItem(STORAGE_KEY);
     const rawTime = localStorage.getItem(LAST_DISMISSED_KEY);
+    const parsedIds: unknown = rawIds ? JSON.parse(rawIds) : [];
+    const ids = Array.isArray(parsedIds)
+      ? parsedIds.filter((id): id is string => typeof id === 'string')
+      : [];
+    const parsedTime = rawTime ? Number(rawTime) : null;
+    const lastDismissedAt =
+      parsedTime !== null && Number.isFinite(parsedTime) ? parsedTime : null;
     return {
-      ids: rawIds ? JSON.parse(rawIds) ?? [] : [],
-      lastDismissedAt: rawTime ? Number(rawTime) : null,
+      ids,
+      lastDismissedAt,
     };
   } catch {
     // localStorage unavailable or corrupted.
