@@ -479,6 +479,17 @@ type Terraform struct {
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
 	// Source holds global source configuration defaults for JIT-vendored components.
 	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	// CI holds terraform-specific CI configuration (e.g., exit code mapping).
+	// Only active when the global ci.enabled is true.
+	CI TerraformCI `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+}
+
+// TerraformCI holds CI-specific configuration for terraform components.
+type TerraformCI struct {
+	// ExitCodes maps terraform exit codes to success/failure for CI runners.
+	// When a code maps to true, Atmos exits 0 (success). When false or unmapped,
+	// the original exit code is preserved. Only active when global ci.enabled is true.
+	ExitCodes map[int]bool `yaml:"exit_codes,omitempty" json:"exit_codes,omitempty" mapstructure:"exit_codes"`
 }
 
 type TerraformInit struct {

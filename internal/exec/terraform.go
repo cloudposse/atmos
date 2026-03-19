@@ -777,14 +777,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 			if uerr := uploadStatus(&info, exitCode, client, gitRepo); uerr != nil {
 				return uerr
 			}
-			// Exit code 0 (no changes) and 2 (changes detected) are both
-			// success for plan with --upload-status. The detailed exit code
-			// was only needed to inform the upload; the caller should see success.
-			if exitCode == 0 || exitCode == 2 {
-				return nil
-			}
 		}
-		// For other commands or failure, return the original error.
+
+		// Apply CI exit code mapping: remap terraform exit codes for CI runners.
+		// This is independent of upload — it only affects what the caller sees.
+		if mappedCode := mapCIExitCode(&atmosConfig, exitCode); mappedCode == 0 {
+			return nil
+		}
+
+		// Preserve the original error/exit code.
 		if err != nil {
 			return err
 		}
