@@ -1,0 +1,54 @@
+---
+slug: instance-status-upload
+title: "Push Instance Status from CLI to Atmos Pro"
+authors: [atmos]
+tags: [feature]
+---
+
+Atmos now sends raw terraform execution data directly to Atmos Pro after plan and apply commands, eliminating "Unknown" status on the dashboard. The CLI also gains configurable CI exit code mapping so `terraform plan` with `--detailed-exitcode` no longer breaks CI workflows.
+
+<!--truncate-->
+
+## What Changed
+
+### Raw Status Upload
+
+Previously, the CLI interpreted terraform exit codes locally and sent pre-computed status strings to Atmos Pro. This coupling meant status logic changes required a CLI release, and error exit codes were silently dropped.
+
+Now the CLI acts as a dumb pipe: it sends the raw `command` and `exit_code` to Atmos Pro, which interprets them server-side. This means:
+
+- **All exit codes are reported** including errors (previously only 0 and 2 were sent)
+- **Status logic lives server-side** and can evolve without CLI updates
+- **Both plan and apply** upload status when `--upload-status` is passed
+
+### CI Exit Code Mapping
+
+When `--upload-status` is used with `terraform plan`, Atmos adds `--detailed-exitcode` so it can distinguish "no changes" (exit 0) from "changes detected" (exit 2). In CI environments with `set -e`, exit code 2 fails the workflow step.
+
+Rather than silently swallowing exit codes, Atmos now supports explicit exit code mapping under `components.terraform.ci`:
+
+```yaml
+ci:
+  enabled: true
+
+components:
+  terraform:
+    ci:
+      exit_codes:
+        0: true    # no changes → success
+        1: false   # error → preserve failure
+        2: true    # changes detected → success
+```
+
+When `ci.enabled` is true and an exit code maps to `true`, Atmos exits 0. The mapping is independent of status upload and applies to all terraform subcommands.
+
+## How to Use It
+
+Add `--upload-status` to your plan and apply commands in CI workflows:
+
+```bash
+atmos terraform plan mycomponent -s mystack --upload-status
+atmos terraform deploy mycomponent -s mystack --upload-status
+```
+
+Configure CI exit code mapping in your `atmos.yaml` to prevent plan exit code 2 from failing your workflow steps.
