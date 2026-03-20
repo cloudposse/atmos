@@ -488,8 +488,10 @@ func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
 func TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle(t *testing.T) {
 	ClearBaseComponentConfigCache()
 
-	// Simulate processed data with two abstract/real component pairs.
-	// The real components inherit from their respective abstract defaults.
+	// Simulate processed data with two abstract/real component pairs that have
+	// cross-dependencies. The real components inherit from their respective abstract
+	// defaults, and eks also inherits from iam-delegated-roles-defaults to exercise
+	// coupled dependency traversal paths.
 	// Both abstract components have metadata.component promoted to top-level.
 	allComponentsMap := map[string]any{
 		"iam-delegated-roles-defaults": map[string]any{
@@ -528,7 +530,7 @@ func TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle(t *testing.T
 			"metadata": map[string]any{
 				"component": "eks",
 				"type":      "real",
-				"inherits":  []any{"eks-defaults"},
+				"inherits":  []any{"eks-defaults", "iam-delegated-roles-defaults"}, // Cross-dependency.
 			},
 			"vars": map[string]any{
 				"node_count": 3,

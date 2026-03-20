@@ -385,6 +385,7 @@ func tryResolveWithConfigPath(path, cliConfigPath, source string) (string, error
 }
 
 // tryCWDRelative attempts to resolve a path relative to CWD and returns it if it exists on disk.
+// Permission/access errors are logged (matching tryResolveWithGitRoot behavior) rather than silently ignored.
 func tryCWDRelative(path string) (string, bool) {
 	cwdJoined, err := absPathOrError(path, fmt.Sprintf(cwdResolutionErrFmt, path))
 	if err != nil {
@@ -393,6 +394,8 @@ func tryCWDRelative(path string) (string, bool) {
 	if _, statErr := os.Stat(cwdJoined); statErr == nil {
 		log.Trace("Path resolved relative to CWD", "path", path, "resolved", cwdJoined)
 		return cwdJoined, true
+	} else if !os.IsNotExist(statErr) {
+		log.Trace("Permission or access error checking CWD path", "path", cwdJoined, "error", statErr)
 	}
 	return "", false
 }

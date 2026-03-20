@@ -396,5 +396,5 @@ by the current fix.
 - Atmos PR #2215: base path resolution fix (v1.210.1)
 - Atmos PR #2214: stack overflow fix for `metadata.component` (v1.210.0)
 - `tryResolveWithGitRoot` — `pkg/config/config.go` (has `os.Stat` fallback)
-- `tryResolveWithConfigPath` — `pkg/config/config.go` (missing `os.Stat` fallback)
+- `tryResolveWithConfigPath` — `pkg/config/config.go` (previously missing `os.Stat` fallback before this fix)
 - `getGitRootOrEmpty` — `pkg/config/config.go` (returns `""` when no `.git` found)
