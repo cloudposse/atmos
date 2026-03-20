@@ -141,6 +141,50 @@ func TestDeepMergeNative_SliceAppendDoesNotAliasElements(t *testing.T) {
 	assert.Equal(t, 1, nested["v"], "appendSlices must deep-copy src elements")
 }
 
+// TestAppendSlices_DstElementsDeepCopied verifies that appendSlices deep-copies dst elements
+// so that the result slice does not alias the accumulator's original elements.
+func TestAppendSlices_DstElementsDeepCopied(t *testing.T) {
+	dstMap := map[string]any{"x": 1}
+	dst := []any{dstMap}
+	src := []any{map[string]any{"y": 2}}
+
+	result := appendSlices(dst, src)
+	require.Len(t, result, 2)
+
+	// Mutate result[0]; original dstMap must not change.
+	resultMap, ok := result[0].(map[string]any)
+	require.True(t, ok)
+	resultMap["x"] = 99
+	assert.Equal(t, 1, dstMap["x"], "appendSlices must deep-copy dst elements")
+}
+
+// TestDeepMergeNative_NilDstReturnsError verifies that passing nil as dst is caught early
+// instead of panicking on the first map assignment.
+func TestDeepMergeNative_NilDstReturnsError(t *testing.T) {
+	err := deepMergeNative(nil, map[string]any{"k": "v"}, false, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dst must not be nil")
+}
+
+// TestMergeSlicesNative_OverlapPreservedDstDeepCopied verifies that preserved overlap
+// positions (non-map src element or dst/src type mismatch) are deep-copied so that the
+// result slice does not alias the accumulator's elements.
+func TestMergeSlicesNative_OverlapPreservedDstDeepCopied(t *testing.T) {
+	dstMap := map[string]any{"x": 1}
+	// Scalar src at position 0 → dst element is preserved but must be deep-copied.
+	dst := []any{dstMap}
+	src := []any{"scalar-src"}
+
+	result, err := mergeSlicesNative(dst, src)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	resultMap, ok := result[0].(map[string]any)
+	require.True(t, ok)
+	resultMap["x"] = 99
+	assert.Equal(t, 1, dstMap["x"], "overlap preserved dst element must be deep-copied, not aliased")
+}
+
 func TestDeepMergeNative_SliceDeepCopy_ScalarsKeepDst(t *testing.T) {
 	// sliceDeepCopy: for scalar elements, dst is preserved (matches mergo).
 	dst := map[string]any{"tags": []any{"base-1", "base-2"}}
