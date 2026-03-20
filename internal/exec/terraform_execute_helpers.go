@@ -44,13 +44,13 @@ func resolveTerraformCommand(atmosConfig *schema.AtmosConfiguration, info *schem
 // handleVersionSubcommand executes the `terraform version` command and returns the result.
 // It resolves the toolchain binary and delegates directly to the shell, bypassing
 // full stack processing.
-func handleVersionSubcommand(atmosConfig schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) error {
-	tenv, err := dependencies.ForComponent(&atmosConfig, "terraform", nil, nil)
+func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	tenv, err := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
 	if err != nil {
 		return err
 	}
 	return ExecuteShellCommand(
-		atmosConfig,
+		*atmosConfig,
 		tenv.Resolve(info.Command),
 		[]string{info.SubCommand},
 		"",
@@ -82,9 +82,7 @@ func handleVersionSubcommand(atmosConfig schema.AtmosConfiguration, info schema.
 // ErrInvalidComponent), whereas defaultMergedAuthConfigGetter injects at the whole getter
 // level (used for ErrInvalidAuthConfig). Do not override both simultaneously — the deeper
 // var is shadowed and its effect would be masked.
-var defaultMergedAuthConfigGetter = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
-	return getMergedAuthConfig(atmosConfig, info)
-}
+var defaultMergedAuthConfigGetter = getMergedAuthConfig
 
 func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	// Log the identity-selection decision point for easy debugging.
@@ -140,41 +138,11 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 		return "", fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
-	// Auto-generate source files before path validation when configured.
-	// This allows entire components to be generated from stack configuration.
-	if atmosConfig.Components.Terraform.AutoGenerateFiles && !info.DryRun { //nolint:nestif
-		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
-		if generateSection != nil {
-			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
-				return "", errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
-			}
-			if genErr := GenerateFilesForComponent(atmosConfig, info, componentPath); genErr != nil {
-				return "", errors.Join(errUtils.ErrFileOperation, genErr)
-			}
-		}
+	if err = autoGenerateComponentFiles(atmosConfig, info, componentPath); err != nil {
+		return "", err
 	}
 
-	componentPathExists, err := u.IsDirectory(componentPath)
-
-	// JIT source provisioning: vendor the component from a remote source when configured.
-	// Source provisioning takes precedence over local component files.
-	if provSource.HasSource(info.ComponentSection) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		if autoErr := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); autoErr != nil {
-			return "", fmt.Errorf("failed to auto-provision component source: %w", autoErr)
-		}
-
-		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
-			// Source provisioner also set a workdir path → use that path.
-			componentPath = workdirPath
-			componentPathExists = true
-			err = nil
-		} else {
-			// Re-check existence after provisioning.
-			componentPathExists, err = u.IsDirectory(componentPath)
-		}
-	}
+	componentPath, componentPathExists, err := provisionComponentSource(atmosConfig, info, componentPath)
 
 	if err != nil || !componentPathExists {
 		basePath, _ := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
@@ -190,6 +158,51 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 	return componentPath, nil
 }
 
+// autoGenerateComponentFiles creates the component directory and generates source files
+// when AutoGenerateFiles is enabled and a generate section is present.
+func autoGenerateComponentFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) error {
+	if !atmosConfig.Components.Terraform.AutoGenerateFiles || info.DryRun {
+		return nil
+	}
+	generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
+	if generateSection == nil {
+		return nil
+	}
+	if mkdirErr := os.MkdirAll(componentPath, dirPermissions); mkdirErr != nil {
+		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
+	}
+	return GenerateFilesForComponent(atmosConfig, info, componentPath)
+}
+
+// provisionComponentSource performs JIT source provisioning when configured, then
+// checks whether the component directory exists. Returns the (possibly updated)
+// component path, existence flag, and any error.
+func provisionComponentSource(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	componentPath string,
+) (string, bool, error) {
+	exists, err := u.IsDirectory(componentPath)
+
+	if !provSource.HasSource(info.ComponentSection) {
+		return componentPath, exists, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if autoErr := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); autoErr != nil {
+		return "", false, fmt.Errorf("failed to auto-provision component source: %w", autoErr)
+	}
+
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+		return workdirPath, true, nil
+	}
+
+	// Re-check existence after provisioning.
+	exists, err = u.IsDirectory(componentPath)
+	return componentPath, exists, err
+}
+
 // checkComponentRestrictions returns an error when the requested subcommand is not
 // permitted for the component due to its metadata (abstract, locked) or the configured
 // backend type (HTTP backend does not support workspaces).
@@ -197,7 +210,7 @@ func checkComponentRestrictions(info *schema.ConfigAndStacksInfo) error {
 	// Abstract components cannot be provisioned.
 	if info.ComponentIsAbstract {
 		switch info.SubCommand {
-		case "plan", "apply", "deploy", "workspace":
+		case "plan", subcommandApply, subcommandDeploy, subcommandWorkspace:
 			return fmt.Errorf(
 				"%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
 				errUtils.ErrAbstractComponentCantBeProvisioned,
@@ -209,7 +222,7 @@ func checkComponentRestrictions(info *schema.ConfigAndStacksInfo) error {
 	// Locked components may not be mutated.
 	if info.ComponentIsLocked {
 		switch info.SubCommand {
-		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
+		case subcommandApply, "deploy", "destroy", "import", "state", "taint", "untaint":
 			return fmt.Errorf(
 				"%w: component '%s' cannot be modified (metadata.locked: true)",
 				errUtils.ErrLockedComponentCantBeProvisioned,
@@ -219,7 +232,7 @@ func checkComponentRestrictions(info *schema.ConfigAndStacksInfo) error {
 	}
 
 	// HTTP backend does not support workspace commands.
-	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
+	if info.SubCommand == subcommandWorkspace && info.ComponentBackendType == "http" {
 		return errUtils.ErrHTTPBackendWorkspaces
 	}
 
@@ -230,10 +243,20 @@ func checkComponentRestrictions(info *schema.ConfigAndStacksInfo) error {
 // plan file, writes them to the varfile on disk (path derived from atmosConfig+info).
 // Workspace subcommands do not use varfiles and are skipped entirely.
 func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	if info.SubCommand == "workspace" {
+	if info.SubCommand == subcommandWorkspace {
 		return nil
 	}
 
+	if err := logAndWriteComponentVars(atmosConfig, info); err != nil {
+		return err
+	}
+
+	return logCliVarsOverrides(atmosConfig, info)
+}
+
+// logAndWriteComponentVars logs component variables and writes the varfile to disk
+// when not using a pre-existing plan.
+func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	log.Debug("Variables for the component in the stack", logFieldComponent, info.ComponentFromArg, "stack", info.Stack)
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, info.ComponentVarsSection); err != nil {
@@ -245,21 +268,26 @@ func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
 		log.Debug("Writing the variables", "file", varFilePath)
 		if !info.DryRun {
-			if err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644); err != nil {
+			if err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, filePermissions); err != nil {
 				return err
 			}
 		}
 	}
+	return nil
+}
 
-	if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
-		log.Debug("CLI variables (will override the variables defined in the stack manifests):")
-		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-			if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars); err != nil {
-				return err
-			}
+// logCliVarsOverrides logs CLI variable overrides when present at debug/trace level.
+func logCliVarsOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any)
+	if !ok || len(cliVars) == 0 {
+		return nil
+	}
+	log.Debug("CLI variables (will override the variables defined in the stack manifests):")
+	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+		if err := u.PrintAsYAMLToFileDescriptor(atmosConfig, cliVars); err != nil {
+			return err
 		}
 	}
-
 	return nil
 }
 
@@ -380,10 +408,10 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 // itself (init runs as the main command), deploy with DeployRunInit=false is configured,
 // or the caller passed the --skip-init flag.
 func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
-	if info.SubCommand == "init" {
+	if info.SubCommand == subcommandInit {
 		return false
 	}
-	if info.SubCommand == "deploy" && !atmosConfig.Components.Terraform.DeployRunInit {
+	if info.SubCommand == subcommandDeploy && !atmosConfig.Components.Terraform.DeployRunInit {
 		return false
 	}
 	if info.SkipInit {
@@ -397,14 +425,14 @@ func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema
 // It adds -reconfigure when the component uses the workspace subcommand or when
 // InitRunReconfigure is enabled, and appends the varfile flag when PassVars is set.
 func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, varFile string) []string {
-	if info.SubCommand == "workspace" || atmosConfig.Components.Terraform.InitRunReconfigure {
+	if info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure {
 		if atmosConfig.Components.Terraform.Init.PassVars {
-			return []string{"init", "-reconfigure", varFileFlag, varFile}
+			return []string{subcommandInit, "-reconfigure", varFileFlag, varFile}
 		}
-		return []string{"init", "-reconfigure"}
+		return []string{subcommandInit, "-reconfigure"}
 	}
 	if atmosConfig.Components.Terraform.Init.PassVars {
-		return []string{"init", varFileFlag, varFile}
+		return []string{subcommandInit, varFileFlag, varFile}
 	}
 	return []string{"init"}
 }
@@ -472,14 +500,14 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 // added when appropriate.  When ApplyAutoApprove is set in atmos.yaml, it is also
 // applied to plain `apply` subcommands.
 func handleDeploySubcommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
-	if info.SubCommand == "deploy" {
-		info.SubCommand = "apply"
+	if info.SubCommand == subcommandDeploy {
+		info.SubCommand = subcommandApply
 		if !info.UseTerraformPlan && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
 
-	if info.SubCommand == "apply" && atmosConfig.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
+	if info.SubCommand == subcommandApply && atmosConfig.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
 		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}

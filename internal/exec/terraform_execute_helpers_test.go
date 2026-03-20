@@ -195,7 +195,7 @@ func TestCheckComponentRestrictions_FolderPrefixInErrorMessage(t *testing.T) {
 	}
 	err := checkComponentRestrictions(&info)
 	require.Error(t, err)
-	expectedPath := filepath.Join("infra/networking", "vpc")
+	expectedPath := filepath.Join("infra", "networking", "vpc")
 	assert.Contains(t, err.Error(), expectedPath)
 }
 

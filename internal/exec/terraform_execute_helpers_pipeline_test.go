@@ -2,15 +2,12 @@ package exec
 
 // terraform_execute_helpers_pipeline_test.go contains unit tests for command-pipeline
 // and argument-building helpers extracted from ExecuteTerraform:
-//   - resolveExitCode (nil, ExitCodeError, generic, wrapped)
 //   - buildTerraformCommandArgs (unknown subcommand path)
 //   - buildWorkspaceSubcommandArgs (delete and select paths)
 //   - prepareComponentExecution (early-return error guards)
 //   - executeCommandPipeline (TTY error short-circuit via nil stdin)
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"testing"
 
@@ -21,32 +18,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// ──────────────────────────────────────────────────────────────────────────────
-// resolveExitCode
-// ──────────────────────────────────────────────────────────────────────────────
-
-// TestResolveExitCode_Nil verifies that nil error → exit code 0.
-func TestResolveExitCode_Nil(t *testing.T) {
-	assert.Equal(t, 0, resolveExitCode(nil))
-}
-
-// TestResolveExitCode_ExitCodeError verifies that an ExitCodeError is unwrapped correctly.
-func TestResolveExitCode_ExitCodeError(t *testing.T) {
-	assert.Equal(t, 2, resolveExitCode(errUtils.ExitCodeError{Code: 2}))
-	assert.Equal(t, 42, resolveExitCode(errUtils.ExitCodeError{Code: 42}))
-}
-
-// TestResolveExitCode_GenericError verifies that a plain (non-typed) error → 1.
-func TestResolveExitCode_GenericError(t *testing.T) {
-	assert.Equal(t, 1, resolveExitCode(errors.New("something went wrong")))
-}
-
-// TestResolveExitCode_WrappedExitCodeError verifies that a wrapped ExitCodeError
-// is correctly unwrapped.
-func TestResolveExitCode_WrappedExitCodeError(t *testing.T) {
-	wrapped := fmt.Errorf("outer: %w", errUtils.ExitCodeError{Code: 5})
-	assert.Equal(t, 5, resolveExitCode(wrapped))
-}
+// resolveExitCode tests live in terraform_execute_helpers_test.go (superset
+// including os/exec.ExitError). Duplicates were removed to avoid confusion.
 
 // ──────────────────────────────────────────────────────────────────────────────
 // buildTerraformCommandArgs (unknown subcommand path not covered elsewhere)

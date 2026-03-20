@@ -44,7 +44,7 @@ func buildPlanSubcommandArgs(
 func buildApplySubcommandArgs(
 	info *schema.ConfigAndStacksInfo,
 	allArgsAndFlags []string,
-	varFile, planFile string,
+	varFile string,
 ) []string {
 	if !info.UseTerraformPlan {
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
@@ -57,7 +57,7 @@ func buildApplySubcommandArgs(
 // for `terraform apply` when a pre-built plan is being consumed.
 // The positional argument must come after all flags.
 func appendApplyPlanFileArg(info *schema.ConfigAndStacksInfo, allArgsAndFlags []string, planFile string) []string {
-	if info.SubCommand != "apply" || !info.UseTerraformPlan {
+	if info.SubCommand != subcommandApply || !info.UseTerraformPlan {
 		return allArgsAndFlags
 	}
 	if info.PlanFile != "" {
@@ -134,16 +134,16 @@ func buildTerraformCommandArgs(
 	case "destroy", "import", "refresh":
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
-	case "apply":
-		allArgsAndFlags = buildApplySubcommandArgs(info, allArgsAndFlags, varFile, planFile)
+	case subcommandApply:
+		allArgsAndFlags = buildApplySubcommandArgs(info, allArgsAndFlags, varFile)
 
-	case "init":
+	case subcommandInit:
 		allArgsAndFlags, err = buildInitSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, componentPath)
 		if err != nil {
 			return nil, false, err
 		}
 
-	case "workspace":
+	case subcommandWorkspace:
 		allArgsAndFlags = buildWorkspaceSubcommandArgs(info, allArgsAndFlags)
 	}
 

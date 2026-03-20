@@ -22,6 +22,11 @@ const (
 	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
 	beforeTerraformInitEvent = "before.terraform.init"
 
+	subcommandApply     = "apply"
+	subcommandDeploy    = "deploy"
+	subcommandInit      = "init"
+	subcommandWorkspace = "workspace"
+
 	autoApproveFlag           = "-auto-approve"
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
@@ -30,6 +35,7 @@ const (
 	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
+	dirPermissions            = 0o755
 )
 
 // resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
@@ -74,7 +80,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 
 	// Short-circuit for `terraform version` – no stack processing required.
 	if info.SubCommand == "version" {
-		return handleVersionSubcommand(atmosConfig, info)
+		return handleVersionSubcommand(&atmosConfig, &info)
 	}
 
 	// Set up authentication (merge global + component auth, create AuthManager, inject bridge).

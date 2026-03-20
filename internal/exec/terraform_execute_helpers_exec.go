@@ -67,29 +67,7 @@ func prepareComponentExecution(
 	planFile := constructTerraformComponentPlanfileName(info)
 	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
 
-	if err = printAndWriteVarFiles(atmosConfig, info); err != nil {
-		return nil, err
-	}
-
-	if err = validateTerraformComponent(atmosConfig, info); err != nil {
-		return nil, err
-	}
-
-	if err = auth.TerraformPreHook(atmosConfig, info); err != nil {
-		log.Error("Error executing 'atmos auth terraform pre-hook'",
-			logFieldComponent, info.ComponentFromArg, "error", err)
-		// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
-		// Authentication setup failures must not silently produce unauthenticated terraform commands.
-		return nil, err
-	}
-
-	if err = generateConfigFiles(atmosConfig, info, workingDir); err != nil {
-		return nil, err
-	}
-
-	warnOnConflictingEnvVars()
-
-	if err = assembleComponentEnvVars(atmosConfig, info, tenv); err != nil {
+	if err = runPreExecutionSteps(atmosConfig, info, workingDir, tenv); err != nil {
 		return nil, err
 	}
 
@@ -100,6 +78,40 @@ func prepareComponentExecution(
 		workingDir:    workingDir,
 		tenv:          tenv,
 	}, nil
+}
+
+// runPreExecutionSteps performs validation, auth pre-hook, config file generation,
+// env var warnings, and env var assembly. Extracted from prepareComponentExecution
+// to keep cyclomatic complexity within bounds.
+func runPreExecutionSteps(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	workingDir string,
+	tenv *dependencies.ToolchainEnvironment,
+) error {
+	if err := printAndWriteVarFiles(atmosConfig, info); err != nil {
+		return err
+	}
+
+	if err := validateTerraformComponent(atmosConfig, info); err != nil {
+		return err
+	}
+
+	if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
+		log.Error("Error executing 'atmos auth terraform pre-hook'",
+			logFieldComponent, info.ComponentFromArg, "error", err)
+		// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
+		// Authentication setup failures must not silently produce unauthenticated terraform commands.
+		return err
+	}
+
+	if err := generateConfigFiles(atmosConfig, info, workingDir); err != nil {
+		return err
+	}
+
+	warnOnConflictingEnvVars()
+
+	return assembleComponentEnvVars(atmosConfig, info, tenv)
 }
 
 // executeCommandPipeline runs the full terraform command pipeline after the component
@@ -148,18 +160,22 @@ func executeCommandPipeline(
 	return nil
 }
 
-// runWorkspaceSetup selects (or creates) the Terraform workspace before the main command
-// runs.  It is a no-op when: the subcommand is init, the caller is already operating on
-// a named workspace (SubCommand2 != ""), the HTTP backend is in use, or the caller has
-// set TF_WORKSPACE themselves.
-func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) error {
-	if info.SubCommand == "init" || (info.SubCommand == "workspace" && info.SubCommand2 != "") {
-		return nil
+// shouldSkipWorkspaceSetup returns true when workspace setup should be skipped.
+func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
+	if info.SubCommand == subcommandInit || (info.SubCommand == subcommandWorkspace && info.SubCommand2 != "") {
+		return true
 	}
 	if info.ComponentBackendType == "http" {
-		return nil
+		return true
 	}
-	if os.Getenv("TF_WORKSPACE") != "" {
+	//nolint:forbidigo // TF_WORKSPACE is a Terraform convention, not an Atmos config var.
+	return os.Getenv("TF_WORKSPACE") != ""
+}
+
+// runWorkspaceSetup selects (or creates) the Terraform workspace before the main command
+// runs.  It is a no-op when shouldSkipWorkspaceSetup returns true.
+func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) error {
+	if shouldSkipWorkspaceSetup(info) {
 		return nil
 	}
 
@@ -213,7 +229,7 @@ func checkTTYRequirement(info *schema.ConfigAndStacksInfo) error {
 	if os.Stdin != nil {
 		return nil
 	}
-	if info.SubCommand == "apply" && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+	if info.SubCommand == subcommandApply && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		return fmt.Errorf(
 			"%w: 'terraform apply' requires a user interaction, but no TTY is attached. "+
 				"Use 'terraform apply -auto-approve' or 'terraform deploy' instead",
@@ -255,7 +271,7 @@ func resolveExitCode(err error) int {
 // It handles exit-code extraction, plan-status upload (for --upload-status), and
 // appropriate error propagation.  A no-op when info.SubCommand is "workspace" with
 // no sub-subcommand (workspace listing was already handled by runWorkspaceSetup).
-func executeMainTerraformCommand(
+func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variadic is not a true argument.
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	allArgsAndFlags []string,
@@ -264,7 +280,7 @@ func executeMainTerraformCommand(
 	opts ...ShellCommandOption,
 ) error {
 	// Bare `workspace` (no sub-subcommand) was fully handled by runWorkspaceSetup.
-	if info.SubCommand == "workspace" && info.SubCommand2 == "" {
+	if info.SubCommand == subcommandWorkspace && info.SubCommand2 == "" {
 		return nil
 	}
 
@@ -282,24 +298,36 @@ func executeMainTerraformCommand(
 	exitCode := resolveExitCode(err)
 
 	if uploadStatusFlag && shouldUploadStatus(info) {
-		client, cerr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
-		if cerr != nil {
-			return cerr
-		}
-		gitRepo := &git.DefaultGitRepo{}
-		if uerr := uploadStatus(info, exitCode, client, gitRepo); uerr != nil {
-			return uerr
-		}
-		// Exit codes 0 and 2 are both "success" for plan uploads.
-		if exitCode == 0 {
-			return nil
-		}
-		if exitCode == 2 {
-			return errUtils.ExitCodeError{Code: 2}
-		}
+		return handlePlanStatusUpload(atmosConfig, info, exitCode, err)
 	}
 
 	return err
+}
+
+// handlePlanStatusUpload uploads the plan status to Atmos Pro and normalizes
+// exit codes: 0 and 2 are both "success" for plan uploads.
+func handlePlanStatusUpload(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	exitCode int,
+	originalErr error,
+) error {
+	client, cerr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
+	if cerr != nil {
+		return cerr
+	}
+	gitRepo := &git.DefaultGitRepo{}
+	if uerr := uploadStatus(info, exitCode, client, gitRepo); uerr != nil {
+		return uerr
+	}
+	// Exit codes 0 and 2 are both "success" for plan uploads.
+	if exitCode == 0 {
+		return nil
+	}
+	if exitCode == 2 {
+		return errUtils.ExitCodeError{Code: 2}
+	}
+	return originalErr
 }
 
 // cleanupTerraformFiles removes ephemeral plan and varfiles that Atmos generates.
@@ -313,7 +341,7 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 		}
 	}
 
-	if info.SubCommand == "apply" {
+	if info.SubCommand == subcommandApply {
 		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
 		if err := os.Remove(varFilePath); err != nil && !os.IsNotExist(err) {
 			log.Trace("Failed to remove var file during cleanup", "error", err, "file", varFilePath)

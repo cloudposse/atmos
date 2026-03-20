@@ -13,8 +13,6 @@ package exec
 //   - assembleComponentEnvVars
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -285,7 +283,7 @@ func TestBuildPlanSubcommandArgs_UploadStatusFlag(t *testing.T) {
 func TestBuildApplySubcommandArgs_WithoutPlan(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{UseTerraformPlan: false}
 
-	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json", "plan.tfplan")
+	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
 
 	assert.Contains(t, args, varFileFlag)
 	assert.Contains(t, args, "vars.json")
@@ -294,7 +292,7 @@ func TestBuildApplySubcommandArgs_WithoutPlan(t *testing.T) {
 func TestBuildApplySubcommandArgs_WithPlan(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{UseTerraformPlan: true}
 
-	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json", "plan.tfplan")
+	args := buildApplySubcommandArgs(&info, []string{"apply"}, "vars.json")
 
 	assert.NotContains(t, args, varFileFlag)
 }
@@ -407,14 +405,13 @@ func TestWarnOnConflictingEnvVars_NoConflictsNoError(t *testing.T) {
 // cleanupTerraformFiles
 // ──────────────────────────────────────────────────────────────────────────────
 
+// TestCleanupTerraformFiles_ApplyRemovesVarFile verifies that "apply" cleans up
+// the varfile. Real file-removal assertions are in _coverage_test.go
+// (TestCleanupTerraformFiles_ApplyRemovesVarfileForReal). This test verifies
+// the function handles a mismatched path layout without panicking.
 func TestCleanupTerraformFiles_ApplyRemovesVarFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	// Create fake files to simulate what Atmos generates.
-	varFile := filepath.Join(tmpDir, "test.terraform.tfvars.json")
-	require.NoError(t, writeTestFile(varFile, `{"key":"value"}`))
-
 	atmosConfig := schema.AtmosConfiguration{}
-	atmosConfig.BasePath = tmpDir
+	atmosConfig.BasePath = t.TempDir()
 	atmosConfig.Components.Terraform.BasePath = "components/terraform"
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:            "apply",
@@ -425,8 +422,8 @@ func TestCleanupTerraformFiles_ApplyRemovesVarFile(t *testing.T) {
 		ComponentFolderPrefix: "",
 	}
 
-	// We cannot test the exact path without complex mocking, but we can verify
-	// the function does not panic and handles missing files gracefully.
+	// The constructed path won't match the tmpDir layout, so no file is removed.
+	// We verify the function handles missing files gracefully (no panic, no error).
 	assert.NotPanics(t, func() {
 		cleanupTerraformFiles(&atmosConfig, &info)
 	})
@@ -540,13 +537,4 @@ func envListToMap(envList []string) map[string]string {
 		m[key] = val
 	}
 	return m
-}
-
-// writeTestFile is a helper to create a file with content for tests.
-func writeTestFile(path, content string) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(content), 0o644)
 }
