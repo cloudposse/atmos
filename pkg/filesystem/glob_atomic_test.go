@@ -117,10 +117,8 @@ func TestGetGlobMatches_EmptyResultsCache(t *testing.T) {
 
 // TestPathMatch_CacheHit verifies that the PathMatch cache is used on repeated calls.
 func TestPathMatch_CacheHit(t *testing.T) {
-	// Clear the path match cache.
-	pathMatchCacheMu.Lock()
-	pathMatchCache = make(map[pathMatchKey]bool)
-	pathMatchCacheMu.Unlock()
+	// Clear the path match cache using the exported test helper.
+	ResetPathMatchCache()
 
 	pattern := "stacks/**/*.yaml"
 	name := "stacks/dev/vpc.yaml"
@@ -140,9 +138,7 @@ func TestPathMatch_CacheHit(t *testing.T) {
 // TestPathMatch_CacheHit_NoMatch verifies that cache entries for non-matching patterns
 // are also cached and returned correctly.
 func TestPathMatch_CacheHit_NoMatch(t *testing.T) {
-	pathMatchCacheMu.Lock()
-	pathMatchCache = make(map[pathMatchKey]bool)
-	pathMatchCacheMu.Unlock()
+	ResetPathMatchCache()
 
 	pattern := "*.go"
 	name := "file.yaml"
@@ -161,9 +157,7 @@ func TestPathMatch_CacheHit_NoMatch(t *testing.T) {
 
 // TestPathMatch_InvalidPattern verifies that an invalid glob pattern returns an error.
 func TestPathMatch_InvalidPattern(t *testing.T) {
-	pathMatchCacheMu.Lock()
-	pathMatchCache = make(map[pathMatchKey]bool)
-	pathMatchCacheMu.Unlock()
+	ResetPathMatchCache()
 
 	// An invalid pattern with unclosed bracket.
 	_, err := PathMatch("[invalid", "file.yaml")
@@ -218,4 +212,24 @@ func TestOSFileSystem_WriteFileAtomic(t *testing.T) {
 	got, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 	assert.Equal(t, content, got)
+}
+
+// TestOSFileSystem_WriteFileAtomic_Overwrite verifies that OSFileSystem.WriteFileAtomic
+// correctly overwrites an existing file atomically.
+func TestOSFileSystem_WriteFileAtomic_Overwrite(t *testing.T) {
+	fs := NewOSFileSystem()
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "os-atomic-overwrite.txt")
+
+	// Write initial content.
+	require.NoError(t, os.WriteFile(filePath, []byte("initial content"), 0o644))
+
+	// Overwrite with atomic write.
+	newContent := []byte("overwritten content via OSFileSystem")
+	err := fs.WriteFileAtomic(filePath, newContent, 0o644)
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, newContent, got)
 }

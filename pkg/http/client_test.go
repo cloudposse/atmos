@@ -518,22 +518,18 @@ func TestGitHubAuthenticatedTransport_NilBase(t *testing.T) {
 // TestGetGitHubTokenFromEnv_ViperPrecedence verifies that the viper value takes
 // precedence over environment variables.
 func TestGetGitHubTokenFromEnv_ViperPrecedence(t *testing.T) {
-	// Save and restore only the specific key this test modifies.
-	// viper.Reset() would destroy AutomaticEnv() and all bound env-var mappings set by
-	// other tests/packages, potentially causing flaky failures when tests run in sequence.
-	prev := viper.GetString("github-token")
-	t.Cleanup(func() { viper.Set("github-token", prev) })
-
 	t.Setenv("ATMOS_GITHUB_TOKEN", "env-token")
 	t.Setenv("GITHUB_TOKEN", "fallback-token")
 
-	v := viper.GetViper()
+	// Use an isolated viper instance to avoid mutating the global singleton.
+	// This prevents BindEnv from leaking env-var mappings into subsequent tests.
+	v := viper.New()
 	_ = v.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
 
 	// Override viper to simulate --github-token flag.
 	v.Set("github-token", "viper-token")
 
-	got := GetGitHubTokenFromEnv()
+	got := GetGitHubTokenFromEnv(v)
 	assert.Equal(t, "viper-token", got)
 }
 

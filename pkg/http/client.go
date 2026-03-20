@@ -72,6 +72,11 @@ func WithGitHubToken(token string) ClientOption {
 // If a GitHubAuthenticatedTransport has already been applied (e.g., via WithGitHubToken),
 // the provided transport is set as its Base rather than replacing the auth wrapper.
 // This preserves GitHub authentication regardless of option order.
+//
+// Triple-composition note: when a second WithTransport call follows WithGitHubToken, the
+// earlier base transport (from the first WithTransport) is silently replaced by the new one.
+// Example: WithTransport(t1), WithGitHubToken("x"), WithTransport(t2)
+// Result:  GitHubAuthenticatedTransport{Base: t2, Token: "x"}; t1 is discarded.
 func WithTransport(transport http.RoundTripper) ClientOption {
 	defer perf.Track(nil, "http.WithTransport")()
 
@@ -146,11 +151,20 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 //
 // The viper binding is configured in cmd/toolchain/toolchain.go for toolchain commands.
 // For non-toolchain commands, we fall back to direct environment variable lookup.
-func GetGitHubTokenFromEnv() string {
+//
+// An optional *viper.Viper instance may be passed; when provided it is used instead of
+// the global viper singleton. This is primarily useful in tests to avoid mutating
+// shared global state.
+func GetGitHubTokenFromEnv(v ...*viper.Viper) string {
 	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
 
+	viperInst := viper.GetViper()
+	if len(v) > 0 {
+		viperInst = v[0]
+	}
+
 	// First try viper (for toolchain commands with --github-token flag).
-	if token := viper.GetString("github-token"); token != "" {
+	if token := viperInst.GetString("github-token"); token != "" {
 		return token
 	}
 

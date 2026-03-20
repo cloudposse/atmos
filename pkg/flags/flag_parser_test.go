@@ -562,6 +562,8 @@ func TestFlagParser_Reset(t *testing.T) {
 	// After Reset, the flag's Changed state must be cleared and value back to default.
 	assert.False(t, flag.Changed, "flag Changed state must be false after Reset")
 	assert.Equal(t, "", flag.Value.String(), "flag value must be reset to default after Reset")
+	// Resetting the pflag clears the viper value bound via BindPFlags.
+	assert.Equal(t, "", v.GetString("stack"), "viper value must also be cleared after Reset")
 
 	// A second parse with no flags should not see the value from the first parse.
 	result, err := parser.Parse([]string{})
