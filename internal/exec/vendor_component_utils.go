@@ -144,7 +144,6 @@ func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorC
 	return vendor.CreateSkipFunc(tempDir, vendorComponentSpec.Source.IncludedPaths, vendorComponentSpec.Source.ExcludedPaths)
 }
 
-
 func ExecuteComponentVendorInternal(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorComponentSpec *schema.VendorComponentSpec,

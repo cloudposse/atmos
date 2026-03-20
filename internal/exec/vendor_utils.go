@@ -578,5 +578,3 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return vendor.CreateSkipFunc(tempDir, s.IncludedPaths, s.ExcludedPaths)
 }
-
-
