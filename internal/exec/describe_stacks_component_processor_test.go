@@ -1472,9 +1472,10 @@ func TestProcessComponentEntry_NoGhostEntryWhenFiltered(t *testing.T) {
 		"finalStacksMap must have no ghost entries when the component is filtered out")
 }
 
-// TestProcessStackFile_NoGhostEntryUnderFilename verifies that processStackFile does NOT
-// pre-create a ghost entry under the raw filename when the resolved stack name differs
-// (Action Item 3 regression fix: ghost entries with includeEmptyStacks=true).
+// TestProcessStackFile_NoGhostEntryUnderFilename verifies that processStackFile uses the
+// manifest name (not the raw filename) as the initial entry key when includeEmptyStacks=true.
+// When a stack has an explicit name field, the pre-created entry goes under that name,
+// not under the raw filename — so no ghost entry appears under "stacks/prod.yaml".
 func TestProcessStackFile_NoGhostEntryUnderFilename(t *testing.T) {
 	// Processor with includeEmptyStacks=true so filterEmptyFinalStacks is a no-op.
 	p := newDescribeStacksProcessor(

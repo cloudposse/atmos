@@ -92,6 +92,24 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 
 	stackManifestName := getStackManifestName(stackMap)
 
+	// When includeEmptyStacks is true, pre-create an entry in the result map so that
+	// stacks without components (e.g., import-only stacks) are still present in the output.
+	// This restores the original monolithic behavior where finalStacksMap[stackFileName] was
+	// always initialised for every processed stack file before component iteration began.
+	// The key used mirrors the original code: manifest name when set, raw file name otherwise.
+	// filterEmptyFinalStacks removes these empty entries when includeEmptyStacks is false.
+	if p.includeEmptyStacks {
+		initialName := stackFileName
+		if stackManifestName != "" {
+			initialName = stackManifestName
+		}
+		if !u.MapKeyExists(p.finalStacksMap, initialName) {
+			entry := make(map[string]any)
+			entry[cfg.ComponentsSectionName] = make(map[string]any)
+			p.finalStacksMap[initialName] = entry
+		}
+	}
+
 	componentsSection, ok := stackMap[cfg.ComponentsSectionName].(map[string]any)
 	if !ok {
 		return nil
