@@ -12,7 +12,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/config"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -173,7 +172,7 @@ func TestExecuteDescribeStacks_Packer(t *testing.T) {
 	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	stacksMap, err := ExecuteDescribeStacks(
@@ -221,7 +220,7 @@ func TestExecuteDescribeStacks_Ansible(t *testing.T) {
 	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
 	stacksMap, err := ExecuteDescribeStacks(
@@ -439,7 +438,7 @@ func TestExecuteDescribeStacks_IncludeEmptyStacks(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	require.NoError(t, err)
 
 	// With includeEmptyStacks=true all stacks should be returned even if they have no components.
@@ -474,7 +473,7 @@ func TestExecuteDescribeStacks_FindStacksMapError(t *testing.T) {
 	t.Chdir(tmpDir)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
 	// ignoreMissingFiles=false forces FindStacksMap to propagate the parse error.
@@ -502,7 +501,7 @@ func TestExecuteDescribeStacks_SkipEmptyStacks(t *testing.T) {
 	t.Chdir(tmpDir)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
 	// includeEmptyStacks=false: the stack with no components/imports is skipped.
@@ -535,7 +534,7 @@ func TestExecuteDescribeStacks_ProcessStackFileError(t *testing.T) {
 	t.Chdir(tmpDir)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
 	_, err = ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
@@ -573,4 +572,29 @@ func TestExecuteDescribeStacks_NonMapStackEntry(t *testing.T) {
 	result, err := ExecuteDescribeStacks(ac, "", nil, nil, nil, false, false, false, false, nil, nil)
 	require.NoError(t, err)
 	assert.Empty(t, result, "non-map stack entries must be skipped silently")
+}
+
+// TestEnsureComponentEntryInMap_InvalidStackEntryType verifies that ensureComponentEntryInMap
+// handles a non-map stack entry gracefully (ok guard) instead of panicking.
+func TestEnsureComponentEntryInMap_InvalidStackEntryType(t *testing.T) {
+	finalStacksMap := map[string]any{
+		"my-stack": "not-a-map", // invalid type.
+	}
+	// Must not panic — the ok guard should return early.
+	assert.NotPanics(t, func() {
+		ensureComponentEntryInMap(finalStacksMap, "my-stack", "terraform", "vpc")
+	})
+}
+
+// TestEnsureComponentEntryInMap_InvalidComponentsType verifies that ensureComponentEntryInMap
+// handles a non-map components section gracefully.
+func TestEnsureComponentEntryInMap_InvalidComponentsType(t *testing.T) {
+	finalStacksMap := map[string]any{
+		"my-stack": map[string]any{
+			"components": "not-a-map", // invalid type.
+		},
+	}
+	assert.NotPanics(t, func() {
+		ensureComponentEntryInMap(finalStacksMap, "my-stack", "terraform", "vpc")
+	})
 }

@@ -563,12 +563,26 @@ func TestStackHasNonEmptyComponents_WithEnv(t *testing.T) {
 	assert.True(t, stackHasNonEmptyComponents(comps))
 }
 
-func TestStackHasNonEmptyComponents_NoRelevantSections(t *testing.T) {
+// TestStackHasNonEmptyComponents_NonStandardSections verifies that components with
+// non-standard sections (backend, providers, hooks, etc.) are recognized as non-empty.
+// Previously, only 5 whitelisted sections were checked; now any non-empty content counts.
+func TestStackHasNonEmptyComponents_NonStandardSections(t *testing.T) {
 	comps := map[string]any{
 		"terraform": map[string]any{
 			"vpc": map[string]any{
-				"some_other_key": "value",
+				"backend": map[string]any{"bucket": "my-bucket"},
 			},
+		},
+	}
+	assert.True(t, stackHasNonEmptyComponents(comps))
+}
+
+// TestStackHasNonEmptyComponents_EmptyComponentContent verifies that components
+// with an empty content map are treated as empty.
+func TestStackHasNonEmptyComponents_EmptyComponentContent(t *testing.T) {
+	comps := map[string]any{
+		"terraform": map[string]any{
+			"vpc": map[string]any{},
 		},
 	}
 	assert.False(t, stackHasNonEmptyComponents(comps))
@@ -616,9 +630,7 @@ func TestFilterEmptyFinalStacks_RemovesEmpty(t *testing.T) {
 		"dev": map[string]any{
 			cfg.ComponentsSectionName: map[string]any{
 				"terraform": map[string]any{
-					"vpc": map[string]any{
-						"some_key": "but no relevant sections",
-					},
+					"vpc": map[string]any{}, // empty component content.
 				},
 			},
 		},
@@ -1250,8 +1262,8 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 			},
 		},
 		"", nil, nil, nil,
-		true,  // processTemplates = true
-		false, // processYamlFunctions
+		true,  // processTemplates.
+		false, // processYamlFunctions.
 		false, nil, nil,
 	)
 
@@ -1304,8 +1316,8 @@ func TestProcessComponentEntry_ProcessYAMLFunctionsError(t *testing.T) {
 	p := newDescribeStacksProcessor(
 		&schema.AtmosConfiguration{},
 		"", nil, nil, nil,
-		false, // processTemplates
-		true,  // processYamlFunctions = true
+		false, // processTemplates.
+		true,  // processYamlFunctions.
 		false, nil, nil,
 	)
 
@@ -1514,7 +1526,7 @@ func TestProcessStackFile_NoGhostEntryUnderFilename(t *testing.T) {
 		"",
 		nil, nil, nil,
 		false, false,
-		true, // includeEmptyStacks=true
+		true, // includeEmptyStacks.
 		nil, nil,
 	)
 

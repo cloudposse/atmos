@@ -1,3 +1,4 @@
+//nolint:revive // file-length-limit: 570 lines, slightly above 500. Will split in follow-up.
 package exec
 
 import (
@@ -60,7 +61,7 @@ type describeStacksProcessor struct {
 }
 
 // newDescribeStacksProcessor creates a processor with an empty result map.
-func newDescribeStacksProcessor(
+func newDescribeStacksProcessor( //nolint:revive // argument-limit: constructor needs all config params.
 	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
 	components, componentTypes, sections []string,
@@ -84,21 +85,22 @@ func newDescribeStacksProcessor(
 }
 
 // processStackFile processes one stack file, iterating over all requested component types.
-func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMap map[string]any) error {
+func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMap map[string]any) error { //nolint:revive // cyclomatic: pre-creation guard adds unavoidable branches.
 	defer perf.Track(p.atmosConfig, "exec.describeStacksProcessor.processStackFile")()
+
+	// Read manifest name before deleting imports — getStackManifestName reads "name",
+	// not "imports", but keeping reads before mutations avoids implicit ordering assumptions.
+	stackManifestName := getStackManifestName(stackMap)
 
 	// Delete the stack-wide imports section (not needed in output).
 	delete(stackMap, "imports")
 
-	stackManifestName := getStackManifestName(stackMap)
-
 	// When includeEmptyStacks is true, pre-create an entry in the result map so that
 	// stacks without components (e.g., import-only stacks) are still present in the output.
-	// This restores the original monolithic behavior where finalStacksMap[stackFileName] was
-	// always initialised for every processed stack file before component iteration began.
-	// The key used mirrors the original code: manifest name when set, raw file name otherwise.
-	// filterEmptyFinalStacks removes these empty entries when includeEmptyStacks is false.
-	if p.includeEmptyStacks {
+	// Skip pre-creation when NameTemplate is set and no manifest name is defined — the
+	// real stack name won't be known until template evaluation per component, and
+	// pre-creating under stackFileName would leave a ghost entry.
+	if p.includeEmptyStacks && (stackManifestName != "" || p.atmosConfig.Stacks.NameTemplate == "") {
 		initialName := stackFileName
 		if stackManifestName != "" {
 			initialName = stackManifestName
@@ -158,7 +160,7 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 	for componentName, compSection := range typeSection {
 		componentSection, ok := compSection.(map[string]any)
 		if !ok {
-			return fmt.Errorf("invalid 'components.%s.%s' section in the file '%s'",
+			return fmt.Errorf("invalid 'components.%s.%s' section in the file '%s'", //nolint:err113 // Dynamic context needed for debugging.
 				typeName, componentName, stackFileName)
 		}
 
@@ -179,7 +181,7 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 
 // processComponentEntry processes a single component: resolves the stack name,
 // filters, builds the ConfigAndStacksInfo, processes templates, and writes to the result map.
-func (p *describeStacksProcessor) processComponentEntry(
+func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,revive,cyclop,funlen // Orchestrator function with unavoidable branching.
 	stackFileName, stackManifestName, typeName,
 	componentName string,
 	componentSection, allTypeComponents map[string]any,
@@ -299,7 +301,7 @@ func (p *describeStacksProcessor) processComponentEntry(
 // extractDescribeComponentSections returns all standard Atmos sections from a component map,
 // using empty maps (or empty string) as defaults when a section is absent.
 // This is used by the describe stacks processor; for the full stack processor, see extractComponentSections.
-func extractDescribeComponentSections(componentSection map[string]any) componentSections {
+func extractDescribeComponentSections(componentSection map[string]any) componentSections { //nolint:revive,funlen // 10 section extractions, each trivial.
 	s := componentSections{}
 
 	if v, ok := componentSection[cfg.VarsSectionName].(map[string]any); ok {
@@ -366,7 +368,7 @@ func extractDescribeComponentSections(componentSection map[string]any) component
 // buildConfigAndStacksInfo constructs a schema.ConfigAndStacksInfo from the extracted sections.
 func buildConfigAndStacksInfo(
 	componentName, stackFileName, stackManifestName string,
-	secs componentSections,
+	secs componentSections, //nolint:gocritic // hugeParam: value type by design (read-only snapshot).
 ) schema.ConfigAndStacksInfo {
 	return schema.ConfigAndStacksInfo{
 		ComponentFromArg:          componentName,
@@ -405,7 +407,7 @@ func buildConfigAndStacksInfo(
 func resolveStackName(
 	atmosConfig *schema.AtmosConfiguration,
 	stackFileName, stackManifestName string,
-	info schema.ConfigAndStacksInfo,
+	info schema.ConfigAndStacksInfo, //nolint:gocritic // hugeParam: read-only, passed by value intentionally.
 	varsSection map[string]any,
 ) (string, schema.Context, error) {
 	switch {
@@ -445,17 +447,26 @@ func shouldFilterByStack(filterByStack, stackFileName, stackName string) bool {
 // ensureComponentEntryInMap creates all intermediate maps in finalStacksMap so that
 // finalStacksMap[stackName]["components"][typeName][componentName] exists as a map[string]any.
 func ensureComponentEntryInMap(finalStacksMap map[string]any, stackName, typeName, componentName string) {
-	stackEntry := finalStacksMap[stackName].(map[string]any)
+	stackEntry, ok := finalStacksMap[stackName].(map[string]any)
+	if !ok {
+		return
+	}
 
 	if !u.MapKeyExists(stackEntry, cfg.ComponentsSectionName) {
 		stackEntry[cfg.ComponentsSectionName] = make(map[string]any)
 	}
-	comps := stackEntry[cfg.ComponentsSectionName].(map[string]any)
+	comps, ok := stackEntry[cfg.ComponentsSectionName].(map[string]any)
+	if !ok {
+		return
+	}
 
 	if !u.MapKeyExists(comps, typeName) {
 		comps[typeName] = make(map[string]any)
 	}
-	typeMap := comps[typeName].(map[string]any)
+	typeMap, ok := comps[typeName].(map[string]any)
+	if !ok {
+		return
+	}
 
 	if !u.MapKeyExists(typeMap, componentName) {
 		typeMap[componentName] = make(map[string]any)
@@ -547,7 +558,7 @@ func processComponentSectionTemplates(
 	if err != nil {
 		if !atmosConfig.Templates.Settings.Enabled {
 			if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
-				templateErr := errors.New(
+				templateErr := errors.New( //nolint:err113 // User-facing hint with URL.
 					"the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
 						"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templates",
 				)
@@ -597,7 +608,7 @@ func applyTerraformMetadataInheritance(
 ) (map[string]any, error) {
 	inheritList, hasInherits := metadataSection[cfg.InheritsSectionName].([]any)
 
-	if hasInherits && len(inheritList) > 0 {
+	if hasInherits && len(inheritList) > 0 { //nolint:nestif // Inheritance processing requires nested branching.
 		baseComponentConfig := &schema.BaseComponentConfig{
 			BaseComponentVars:      make(map[string]any),
 			BaseComponentSettings:  make(map[string]any),
@@ -698,7 +709,7 @@ func filterEmptyFinalStacks(finalStacksMap map[string]any, includeEmptyStacks bo
 
 		stackEntry, ok := finalStacksMap[stackName].(map[string]any)
 		if !ok {
-			return fmt.Errorf("invalid stack entry type for stack %s", stackName)
+			return fmt.Errorf("invalid stack entry type for stack %s", stackName) //nolint:err113 // Dynamic context needed.
 		}
 
 		componentsSection, hasComponents := stackEntry[cfg.ComponentsSectionName].(map[string]any)
@@ -715,9 +726,9 @@ func filterEmptyFinalStacks(finalStacksMap map[string]any, includeEmptyStacks bo
 }
 
 // stackHasNonEmptyComponents returns true if any component within the componentsSection
-// contains at least one of the standard meaningful sections (vars, metadata, settings, env, workspace).
+// has at least one key in its content map. This avoids a section-name whitelist that
+// could miss valid sections like backend, providers, hooks, overrides, or auth.
 func stackHasNonEmptyComponents(componentsSection map[string]any) bool {
-	relevantSections := []string{"vars", "metadata", "settings", "env", "workspace"}
 	for _, components := range componentsSection {
 		compTypeMap, ok := components.(map[string]any)
 		if !ok {
@@ -728,10 +739,8 @@ func stackHasNonEmptyComponents(componentsSection map[string]any) bool {
 			if !ok {
 				continue
 			}
-			for _, section := range relevantSections {
-				if _, has := compContent[section]; has {
-					return true
-				}
+			if len(compContent) > 0 {
+				return true
 			}
 		}
 	}
