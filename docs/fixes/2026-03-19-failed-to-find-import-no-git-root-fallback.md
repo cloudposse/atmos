@@ -149,50 +149,24 @@ takes the `tryResolveWithConfigPath` path and the fix is bypassed entirely.
 
 ---
 
-## Fix
+## Fix (Implemented — Option B)
 
-### Option A: Add `os.Stat` + CWD Fallback to `tryResolveWithConfigPath`
+### Approach: Pass `source` to `tryResolveWithGitRoot` and `tryResolveWithConfigPath`
 
-Mirror the same pattern from `tryResolveWithGitRoot`:
+Both functions are now source-aware. Runtime paths prefer CWD; config paths prefer config dir.
+Both have `os.Stat` validation with CWD fallback.
+
+### Changes to `resolveAbsolutePath`
+
+Pass `source` through to `tryResolveWithGitRoot`:
 
 ```go
-func tryResolveWithConfigPath(path string, cliConfigPath string) (string, error) {
-    if cliConfigPath != "" {
-        if path == "" {
-            return absPathOrError(cliConfigPath, ...)
-        }
-
-        // Try config-dir-relative path first.
-        configJoined := filepath.Join(cliConfigPath, path)
-        configAbs, err := filepath.Abs(configJoined)
-        if err == nil {
-            if _, statErr := os.Stat(configAbs); statErr == nil {
-                return configAbs, nil
-            }
-        }
-
-        // Config-dir path doesn't exist — try CWD-relative.
-        cwdJoined, err := absPathOrError(path, ...)
-        if err == nil {
-            if _, statErr := os.Stat(cwdJoined); statErr == nil {
-                return cwdJoined, nil
-            }
-        }
-
-        // Neither exists — return config-dir path for consistent error messages.
-        return absPathOrError(configJoined, ...)
-    }
-
-    return absPathOrError(path, ...)
-}
+return tryResolveWithGitRoot(path, cliConfigPath, source)
 ```
 
-**Pros:** Minimal change, mirrors existing pattern, handles the no-git-root case.
-**Cons:** Still does not pass `source` to differentiate runtime vs config paths.
+### Changes to `tryResolveWithGitRoot`
 
-### Option B: Pass `source` to `tryResolveWithGitRoot` and `tryResolveWithConfigPath`
-
-Make both functions source-aware so runtime paths prefer CWD:
+Accept and forward `source` to `tryResolveWithConfigPath`:
 
 ```go
 func tryResolveWithGitRoot(path, cliConfigPath, source string) (string, error) {
@@ -200,12 +174,18 @@ func tryResolveWithGitRoot(path, cliConfigPath, source string) (string, error) {
     if gitRoot == "" {
         return tryResolveWithConfigPath(path, cliConfigPath, source)
     }
-    // ... existing os.Stat logic ...
+    // ... existing os.Stat + CWD fallback logic (unchanged) ...
 }
+```
 
+### Changes to `tryResolveWithConfigPath`
+
+Accept `source` and add `os.Stat` validation with source-aware resolution order:
+
+```go
 func tryResolveWithConfigPath(path, cliConfigPath, source string) (string, error) {
-    // For runtime sources, try CWD first (user expectation).
-    if source == "runtime" {
+    // For runtime sources, try CWD first (user expectation on CI).
+    if source == "runtime" && path != "" {
         cwdJoined, err := absPathOrError(path, ...)
         if err == nil {
             if _, statErr := os.Stat(cwdJoined); statErr == nil {
@@ -214,55 +194,56 @@ func tryResolveWithConfigPath(path, cliConfigPath, source string) (string, error
         }
     }
 
-    // Then try config-dir-relative.
+    // Try config-dir-relative.
     if cliConfigPath != "" {
-        // ... with os.Stat validation ...
-    }
+        if path == "" {
+            return absPathOrError(cliConfigPath, ...)
+        }
 
-    return absPathOrError(path, ...)
-}
-```
+        configJoined, err := absPathOrError(filepath.Join(cliConfigPath, path), ...)
+        if _, statErr := os.Stat(configJoined); statErr == nil {
+            return configJoined, nil
+        }
 
-**Pros:** Correct semantic behavior — runtime paths prefer CWD, config paths prefer config dir.
-**Cons:** Larger change, requires signature changes.
-
-### Option C: In `resolveAbsolutePath`, Route Runtime Bare Paths Through CWD First
-
-Before calling `tryResolveWithGitRoot`, check if the path exists at CWD for runtime sources:
-
-```go
-func resolveAbsolutePath(path string, cliConfigPath string, source string) (string, error) {
-    if filepath.IsAbs(path) {
-        return path, nil
-    }
-
-    if isExplicitRelative {
-        return resolveDotPrefixPath(path, cliConfigPath, source)
-    }
-
-    // For runtime bare paths, try CWD first before git root / config dir.
-    if source == "runtime" && path != "" {
-        cwdJoined, err := filepath.Abs(path)
-        if err == nil {
+        // Config-dir path doesn't exist — try CWD (if not already tried for runtime).
+        if source != "runtime" {
+            cwdJoined, _ := absPathOrError(path, ...)
             if _, statErr := os.Stat(cwdJoined); statErr == nil {
                 return cwdJoined, nil
             }
         }
+
+        // Neither exists — return config-dir path for consistent error messages.
+        return configJoined, nil
     }
 
-    return tryResolveWithGitRoot(path, cliConfigPath)
+    // No config path: resolve relative to CWD.
+    return absPathOrError(path, ...)
 }
 ```
 
-**Pros:** Simplest fix. Runtime source paths check CWD before any other resolution.
-**Cons:** Changes resolution order for runtime bare paths (CWD > git root instead of git root > CWD).
+### Resolution Order Summary
 
-### Recommended: Option A or B
+| Source    | Git Root Available                        | Git Root Unavailable                      |
+|-----------|-------------------------------------------|-------------------------------------------|
+| `runtime` | git root → CWD (existing)                | **CWD → config dir** (new)                |
+| config    | git root → CWD (existing)                | **config dir → CWD** (new)                |
 
-Option A is the smallest change that fixes the bug. Option B is more correct semantically.
-Both are safe because `os.Stat` validation is strictly additive — if the config-dir path
-exists, it is returned (unchanged behavior). The CWD fallback only activates when the
-config-dir path doesn't exist.
+### Why This Is Safe
+
+- `os.Stat` validation is strictly additive — if the first-priority path exists, behavior is
+  identical to before
+- CWD fallback only activates when the first-priority path doesn't exist
+- Empty paths return immediately without hitting `os.Stat` logic
+- Config-source paths still prefer config dir (unchanged for normal Atmos CLI usage)
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `pkg/config/config.go` | `tryResolveWithGitRoot` and `tryResolveWithConfigPath` accept `source` parameter; `tryResolveWithConfigPath` adds `os.Stat` + CWD fallback with source-aware ordering |
+| `pkg/config/base_path_resolution_test.go` | 5 new tests reproducing the CI scenario; updated existing call sites for new signature |
+| `pkg/config/config_test.go` | Updated existing call sites for new signature |
 
 ---
 
@@ -289,19 +270,47 @@ config-dir path doesn't exist.
 ### How to Verify the Fix
 
 1. Same setup as above
-2. After fix, the `os.Stat` fallback in `tryResolveWithConfigPath` should:
-   - Try `/workspace/.terraform/modules/monorepo` → does not exist
-   - Fall back to CWD-relative: `/workspace/components/terraform/vpc/.terraform/modules/monorepo` → exists
+2. After fix, `tryResolveWithConfigPath` with `source="runtime"` should:
+   - Try CWD-relative first: `/workspace/components/terraform/vpc/.terraform/modules/monorepo` → exists → returned
 3. Stacks resolve correctly
 
-### Additional Test Cases Needed
+### Test Cases (Implemented)
 
-| Test                                                    | What It Verifies                                                |
-|---------------------------------------------------------|-----------------------------------------------------------------|
-| `TestTryResolveWithConfigPath_CWDFallback`              | Config-dir path doesn't exist, CWD path does → returns CWD path |
-| `TestTryResolveWithConfigPath_ConfigDirExists`          | Config-dir path exists → returns it (unchanged behavior)        |
-| `TestTryResolveWithConfigPath_NeitherExists`            | Neither exists → returns config-dir path (consistent errors)    |
-| `TestResolveAbsolutePath_BarePathNoGitRoot_CWDFallback` | End-to-end: no git root, bare path, CWD path exists → resolved  |
+| Test                                                           | What It Verifies                                                                       | Status |
+|----------------------------------------------------------------|----------------------------------------------------------------------------------------|--------|
+| `TestTryResolveWithConfigPath_CWDFallback_BarePathExistsAtCWD` | Runtime source: config-dir path doesn't exist, CWD path does → returns CWD path        | PASS   |
+| `TestTryResolveWithConfigPath_ConfigDirPathExists`             | Config-dir path exists → returns it (unchanged behavior)                               | PASS   |
+| `TestTryResolveWithConfigPath_NeitherExists`                   | Neither exists → returns config-dir path (consistent errors)                           | PASS   |
+| `TestResolveAbsolutePath_BarePathNoGitRoot_CWDFallback`        | End-to-end: no git root, bare runtime path, CWD path exists → resolved                 | PASS   |
+| `TestInitCliConfig_BareBasePath_NoGitRoot_CWDFallback`         | Full integration: `ATMOS_BASE_PATH` env var, no `.git`, CI layout → correct resolution | PASS   |
+
+### Test Results
+
+All 47 base path resolution tests pass (42 existing + 5 new), zero regressions:
+
+```text
+--- PASS: TestTryResolveWithConfigPath_CWDFallback_BarePathExistsAtCWD (0.00s)
+--- PASS: TestTryResolveWithConfigPath_ConfigDirPathExists (0.00s)
+--- PASS: TestTryResolveWithConfigPath_NeitherExists (0.00s)
+--- PASS: TestResolveAbsolutePath_BarePathNoGitRoot_CWDFallback (0.00s)
+--- PASS: TestInitCliConfig_BareBasePath_NoGitRoot_CWDFallback (0.00s)
+```
+
+Before the fix, the 3 core bug reproduction tests failed:
+
+```text
+--- FAIL: TestTryResolveWithConfigPath_CWDFallback_BarePathExistsAtCWD
+    expected: .../workspace/components/terraform/iam-delegated-roles/.terraform/modules/monorepo
+    actual:   .../workspace/.terraform/modules/monorepo
+
+--- FAIL: TestResolveAbsolutePath_BarePathNoGitRoot_CWDFallback
+    expected: .../workspace/components/terraform/vpc/.terraform/modules/monorepo
+    actual:   .../workspace/.terraform/modules/monorepo
+
+--- FAIL: TestInitCliConfig_BareBasePath_NoGitRoot_CWDFallback
+    expected: .../workspace/components/terraform/iam-delegated-roles/.terraform/modules/monorepo
+    actual:   .../workspace/.terraform/modules/monorepo
+```
 
 ---
 
@@ -341,8 +350,26 @@ Two fixes were implemented:
 
 The user reported that v1.210.0 did not fully resolve the stack overflow for their specific
 configuration. Their workaround was to remove `metadata.component` from abstract component
-definitions. The user's configuration may involve additional complexity (e.g., components using
-`!terraform.state` in inherited definitions) not covered by the current test cases.
+definitions.
+
+### Verification of Cycle Detection
+
+Additional tests were written to verify the cycle detection works for various patterns:
+
+| Test                                                                   | Pattern                                                       | Result                |
+|------------------------------------------------------------------------|---------------------------------------------------------------|-----------------------|
+| `TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle`       | Two abstract/real pairs (iam-delegated-roles + eks)           | PASS                  |
+| `TestProcessBaseComponentConfig_AbstractWithInheritsCycle`             | Abstract inherits from its own real counterpart               | PASS (cycle detected) |
+| `TestProcessBaseComponentConfig_RealComponentSelfReferenceViaAbstract` | Real → abstract → inherits real (cross-cycle)                 | PASS (cycle detected) |
+| `TestProcessBaseComponentConfig_DeferDeleteCycleReentry`               | Non-abstract shared-base creating chain back through abstract | PASS (cycle detected) |
+
+The cycle detection and `isAbstract` skip are working correctly for all reproducible patterns.
+The user's persistent stack overflow likely involves a configuration pattern we cannot reproduce
+without their actual stacks (e.g., multi-file import chains, complex cross-component
+dependencies, or interaction with `!terraform.state` YAML functions in inherited definitions).
+
+**Recommendation:** Request the user's stacks to identify the exact cycle pattern not covered
+by the current fix.
 
 ---
 

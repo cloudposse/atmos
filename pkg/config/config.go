@@ -15,6 +15,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+const (
+	// BasePathSourceRuntime indicates the base path came from a runtime source
+	// (env var ATMOS_BASE_PATH, CLI flag --base-path, or provider param atmos_base_path).
+	basePathSourceRuntime = "runtime"
+
+	// CwdResolutionErrFmt is the error format for CWD-relative path resolution failures.
+	cwdResolutionErrFmt = "Cannot resolve path %q relative to CWD"
+)
+
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
@@ -37,7 +46,7 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	// instead of config-dir. Bare paths still go through git root search.
 	if configAndStacksInfo.AtmosBasePath != "" {
 		atmosConfig.BasePath = configAndStacksInfo.AtmosBasePath
-		atmosConfig.BasePathSource = "runtime"
+		atmosConfig.BasePathSource = basePathSourceRuntime
 	}
 
 	// After unmarshalling, ensure AppendUserAgent is set if still empty
@@ -248,8 +257,8 @@ func resolveAbsolutePath(path string, cliConfigPath string, source string) (stri
 	}
 
 	// For empty path or simple relative paths (like "stacks", "components/terraform"):
-	// Try git root first.
-	return tryResolveWithGitRoot(path, cliConfigPath)
+	// Try git root first, passing source so fallback paths are source-aware.
+	return tryResolveWithGitRoot(path, cliConfigPath, source)
 }
 
 // absPathOrError resolves a path to absolute form, wrapping any error with ErrPathResolution.
@@ -267,9 +276,9 @@ func absPathOrError(path, context string) (string, error) {
 // resolveDotPrefixPath resolves dot-prefixed paths (".", "./foo", "..", "../foo").
 // The anchor depends on the source: runtime → CWD, config → config directory.
 func resolveDotPrefixPath(path, cliConfigPath, source string) (string, error) {
-	if source == "runtime" {
+	if source == basePathSourceRuntime {
 		// Runtime source: dot means CWD (shell convention).
-		return absPathOrError(path, fmt.Sprintf("Cannot resolve path %q relative to CWD", path))
+		return absPathOrError(path, fmt.Sprintf(cwdResolutionErrFmt, path))
 	}
 
 	// Config source: dot means config directory (config-file convention).
@@ -283,13 +292,13 @@ func resolveDotPrefixPath(path, cliConfigPath, source string) (string, error) {
 }
 
 // tryResolveWithGitRoot attempts to resolve a path using git root as the base.
-// If git root is unavailable, falls back to cliConfigPath, then CWD.
-// This function only handles empty and bare paths — dot-prefixed paths are
-// routed to resolveDotPrefixPath() before reaching here.
-func tryResolveWithGitRoot(path string, cliConfigPath string) (string, error) {
+// If git root is unavailable, falls back to tryResolveWithConfigPath (which is
+// source-aware). This function only handles empty and bare paths — dot-prefixed
+// paths are routed to resolveDotPrefixPath() before reaching here.
+func tryResolveWithGitRoot(path string, cliConfigPath string, source string) (string, error) {
 	gitRoot := getGitRootOrEmpty()
 	if gitRoot == "" {
-		return tryResolveWithConfigPath(path, cliConfigPath)
+		return tryResolveWithConfigPath(path, cliConfigPath, source)
 	}
 
 	// Git root available - resolve relative to it.
@@ -312,7 +321,7 @@ func tryResolveWithGitRoot(path string, cliConfigPath string) (string, error) {
 	}
 
 	// Git root path doesn't exist — try CWD-relative.
-	cwdJoined, err := absPathOrError(path, fmt.Sprintf("Cannot resolve path %q relative to CWD", path))
+	cwdJoined, err := absPathOrError(path, fmt.Sprintf(cwdResolutionErrFmt, path))
 	if err != nil {
 		return "", err
 	}
@@ -333,19 +342,59 @@ func tryResolveWithGitRoot(path string, cliConfigPath string) (string, error) {
 }
 
 // tryResolveWithConfigPath resolves a path using cliConfigPath as the base,
-// falling back to CWD if cliConfigPath is unavailable.
-func tryResolveWithConfigPath(path string, cliConfigPath string) (string, error) {
-	// Fallback: resolve relative to atmos.yaml dir (cliConfigPath).
+// with os.Stat validation and CWD fallback. For runtime sources, CWD is tried
+// first (user expectation on CI). For config sources, config dir is tried first.
+func tryResolveWithConfigPath(path, cliConfigPath, source string) (string, error) {
+	// For runtime sources, try CWD first — the user set a relative path in a shell
+	// context (env var, CLI flag, provider param), so they expect CWD-relative.
+	if source == basePathSourceRuntime && path != "" {
+		if resolved, ok := tryCWDRelative(path); ok {
+			return resolved, nil
+		}
+	}
+
+	// Try config-dir-relative (atmos.yaml dir).
 	if cliConfigPath != "" {
 		if path == "" {
 			return absPathOrError(cliConfigPath, fmt.Sprintf("Cannot resolve config path %q", cliConfigPath))
 		}
-		return absPathOrError(filepath.Join(cliConfigPath, path),
+
+		configJoined, err := absPathOrError(filepath.Join(cliConfigPath, path),
 			fmt.Sprintf("Cannot resolve path %q relative to config %q", path, cliConfigPath))
+		if err != nil {
+			return "", err
+		}
+
+		if _, statErr := os.Stat(configJoined); statErr == nil {
+			return configJoined, nil
+		}
+
+		// Config-dir path doesn't exist — try CWD-relative (if not already tried for runtime).
+		if source != basePathSourceRuntime {
+			if resolved, ok := tryCWDRelative(path); ok {
+				return resolved, nil
+			}
+		}
+
+		// Neither exists — return config-dir path for consistent error messages.
+		return configJoined, nil
 	}
 
-	// Last resort (3rd fallback): resolve relative to CWD.
+	// No config path: resolve relative to CWD.
 	return absPathOrError(path, fmt.Sprintf("Cannot resolve path %q", path))
+}
+
+// tryCWDRelative attempts to resolve a path relative to CWD and returns it if it exists on disk.
+func tryCWDRelative(path string) (string, bool) {
+	cwdJoined, err := absPathOrError(path, fmt.Sprintf(cwdResolutionErrFmt, path))
+	if err != nil {
+		return "", false
+	}
+	if _, statErr := os.Stat(cwdJoined); statErr == nil {
+		log.Trace("Path resolved relative to CWD", "path", path, "resolved", cwdJoined)
+		return cwdJoined, true
+	}
+	return "", false
 }
 
 // getGitRootOrEmpty returns the git repository root path, or empty string if not in a git repo.
