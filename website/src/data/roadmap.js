@@ -141,6 +141,18 @@ export const roadmapConfig = {
       pr: 1891,
       prd: 'native-ci-integration',
     },
+    {
+      id: 'instance-status-upload',
+      icon: 'RiUploadCloudLine',
+      title: 'Push Instance Status to Atmos Pro',
+      tagline: 'Raw exit codes, server-side interpretation',
+      description: 'CLI sends raw command and exit code to Atmos Pro after plan and apply. Includes configurable CI exit code mapping so detailed-exitcode does not break workflows.',
+      benefits: 'Instance status updates in real-time without waiting for webhooks. Status logic evolves server-side without CLI releases.',
+      status: 'shipped',
+      quarter: 'q1-2026',
+      pr: 2216,
+      changelog: 'instance-status-upload',
+    },
   ],
 
   initiatives: [
