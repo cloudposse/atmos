@@ -69,12 +69,17 @@ export function useMultiAnnouncement() {
     return false;
   });
 
+  // Start hidden during SSR to prevent flash-of-content when bar should be
+  // suppressed.  Flips to true after client hydration reads localStorage.
+  const [hydrated, setHydrated] = useState<boolean>(isBrowser);
+
   // Hydrate on mount (covers SSR -> client transition).
   useEffect(() => {
     const state = readState();
     setDismissedIds(new Set(state.ids));
     setLastDismissedAt(state.lastDismissedAt);
     setCoolingDown(isCoolingDown(state.lastDismissedAt));
+    setHydrated(true);
   }, []);
 
   // Set a timer to end the cooldown period once it expires.
@@ -95,8 +100,8 @@ export function useMultiAnnouncement() {
   );
 
   const allDismissed = nextAnnouncement === null;
-  // Bar is hidden when cooling down OR when all announcements are dismissed.
-  const isActive = !allDismissed && !coolingDown;
+  // Bar is hidden until hydrated, when cooling down, or when all dismissed.
+  const isActive = hydrated && !allDismissed && !coolingDown;
 
   const dismiss = useCallback(() => {
     if (!nextAnnouncement) return;
