@@ -1429,31 +1429,45 @@ func TestStandardFlagParser_Registry(t *testing.T) {
 }
 
 // TestRegisterCompletionRecursive verifies that registerCompletionRecursive propagates
-// completion functions to all descendant commands.
+// completion functions to all descendant commands that have the named flag.
 func TestRegisterCompletionRecursive(t *testing.T) {
 	completionFn := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"dev", "staging", "prod"}, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	// Build a command tree:
-	// root (has --stack flag)
-	//   └── child1 (has --stack persistent flag)
-	//       └── grandchild (has --stack persistent flag)
+	// Build a command tree where child1 and grandchild each own the --stack flag
+	// (persistent flags from root are NOT visible via child.Flags().Lookup, so each
+	// descendant that should receive the completion must register the flag itself).
+	//
+	// root
+	//   └── child1 (owns --stack as a persistent flag)
+	//       └── grandchild (owns --stack as a local flag)
 	root := &cobra.Command{Use: "root"}
-	root.PersistentFlags().String("stack", "", "Stack name")
 
 	child1 := &cobra.Command{Use: "child1"}
+	child1.PersistentFlags().String("stack", "", "Stack name")
 	root.AddCommand(child1)
 
 	grandchild := &cobra.Command{Use: "grandchild"}
+	grandchild.Flags().String("stack", "", "Stack name")
 	child1.AddCommand(grandchild)
 
 	// Call registerCompletionRecursive starting from root.
 	registerCompletionRecursive(root, "stack", completionFn)
 
-	// Verify child1 has the completion function registered.
-	// (Can't directly check, but verify no panic).
-	// The function should have registered on commands that have the flag.
+	// Verify child1 has the completion function registered and it returns expected values.
+	gotFn, found := child1.GetFlagCompletionFunc("stack")
+	require.True(t, found, "child1 should have the completion function registered")
+	results, directive := gotFn(child1, nil, "")
+	assert.Equal(t, []string{"dev", "staging", "prod"}, results)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	// Verify grandchild also has the completion function registered.
+	gotFn2, found2 := grandchild.GetFlagCompletionFunc("stack")
+	require.True(t, found2, "grandchild should have the completion function registered")
+	results2, directive2 := gotFn2(grandchild, nil, "")
+	assert.Equal(t, []string{"dev", "staging", "prod"}, results2)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive2)
 }
 
 // TestStandardParser_Registry verifies that StandardParser.Registry() delegates correctly.

@@ -79,7 +79,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		matches = []string{}
 	}
 
-	var fullMatches []string
+	fullMatches := make([]string, 0, len(matches))
 	for _, match := range matches {
 		fullMatches = append(fullMatches, filepath.Join(base, match))
 	}

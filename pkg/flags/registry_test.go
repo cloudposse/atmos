@@ -298,6 +298,11 @@ func TestFlagRegistry_SetCompletionFunc_BoolFlagIgnored(t *testing.T) {
 	flag := registry.Get("verbose")
 	assert.NotNil(t, flag)
 	assert.Equal(t, "verbose", flag.GetName())
+
+	// Verify the flag type was not changed - it must still be a *BoolFlag.
+	// BoolFlag has no CompletionFunc field, confirming the call was definitively a no-op.
+	_, ok := flag.(*BoolFlag)
+	assert.True(t, ok, "flag should still be *BoolFlag after calling SetCompletionFunc on it")
 }
 
 func TestFlagRegistry_BindToViper(t *testing.T) {
@@ -315,11 +320,10 @@ func TestFlagRegistry_BindToViper(t *testing.T) {
 	err := registry.BindToViper(v)
 	require.NoError(t, err)
 
-	// Verify env vars are bound by setting the env and checking viper reads it.
+	// Verify the binding actually works: viper reads ATMOS_STACK via the bound flag name.
 	t.Setenv("ATMOS_STACK", "test-stack")
-	v.AutomaticEnv()
-	// Note: viper reads env vars when accessing, not when binding.
-	// The binding just connects name → env var mapping.
+	got := v.GetString("stack")
+	assert.Equal(t, "test-stack", got, "viper should read ATMOS_STACK via bound flag name 'stack'")
 }
 
 func TestFlagRegistry_BindToViper_NoEnvVars(t *testing.T) {

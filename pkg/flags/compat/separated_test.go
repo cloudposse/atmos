@@ -87,11 +87,11 @@ func TestSeparated_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 	for i := range goroutines {
-		i := i
-		go func() {
+		// In Go 1.22+, loop variables are per-iteration; i := i is a no-op shadow.
+		go func(idx int) {
 			defer wg.Done()
-			copies[i] = GetSeparated()
-		}()
+			copies[idx] = GetSeparated()
+		}(i)
 	}
 	wg.Wait()
 
@@ -101,7 +101,8 @@ func TestSeparated_Concurrent(t *testing.T) {
 	}
 
 	// Mutating one copy must not affect others (defensive copy guarantee).
-	if len(copies) >= 2 {
+	// Guard both index accesses to prevent a panic if any goroutine returned nil.
+	if len(copies) >= 2 && len(copies[0]) > 0 && len(copies[1]) > 0 {
 		copies[0][0] = "mutated"
 		assert.Equal(t, "-var", copies[1][0], "defensive copies must be independent")
 	}

@@ -518,8 +518,11 @@ func TestGitHubAuthenticatedTransport_NilBase(t *testing.T) {
 // TestGetGitHubTokenFromEnv_ViperPrecedence verifies that the viper value takes
 // precedence over environment variables.
 func TestGetGitHubTokenFromEnv_ViperPrecedence(t *testing.T) {
-	// Reset global viper state after this test to avoid leaking the explicit Set value.
-	t.Cleanup(viper.Reset)
+	// Save and restore only the specific key this test modifies.
+	// viper.Reset() would destroy AutomaticEnv() and all bound env-var mappings set by
+	// other tests/packages, potentially causing flaky failures when tests run in sequence.
+	prev := viper.GetString("github-token")
+	t.Cleanup(func() { viper.Set("github-token", prev) })
 
 	t.Setenv("ATMOS_GITHUB_TOKEN", "env-token")
 	t.Setenv("GITHUB_TOKEN", "fallback-token")
@@ -553,6 +556,13 @@ func TestWithTransport_AfterWithGitHubToken(t *testing.T) {
 		WithTransport(mockTransport),
 	)
 
+	// Verify the transport chain structure: outer is GitHubAuthenticatedTransport,
+	// inner (Base) is the mock roundTripperFunc.
+	authTransport, ok := client.client.Transport.(*GitHubAuthenticatedTransport)
+	require.True(t, ok, "client transport should be *GitHubAuthenticatedTransport")
+	assert.IsType(t, roundTripperFunc(nil), authTransport.Base, "Base should be a roundTripperFunc (the mockTransport)")
+	assert.Equal(t, "secret-token", authTransport.GitHubToken)
+
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
 	require.NoError(t, err)
 
@@ -584,6 +594,13 @@ func TestWithGitHubToken_AfterWithTransport(t *testing.T) {
 		WithGitHubToken("secret-token"),
 	)
 
+	// Verify the transport chain structure: outer is GitHubAuthenticatedTransport,
+	// inner (Base) is the mock roundTripperFunc.
+	authTransport, ok := client.client.Transport.(*GitHubAuthenticatedTransport)
+	require.True(t, ok, "client transport should be *GitHubAuthenticatedTransport")
+	assert.IsType(t, roundTripperFunc(nil), authTransport.Base, "Base should be a roundTripperFunc (the mockTransport)")
+	assert.Equal(t, "secret-token", authTransport.GitHubToken)
+
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
 	require.NoError(t, err)
 
@@ -594,4 +611,52 @@ func TestWithGitHubToken_AfterWithTransport(t *testing.T) {
 	require.NotNil(t, capturedReq, "mock transport should have been reached")
 	assert.Equal(t, "Bearer secret-token", capturedReq.Header.Get("Authorization"),
 		"Authorization header must be set when WithGitHubToken is applied after WithTransport")
+}
+
+// TestWithTransport_TripleComposition verifies that the last WithTransport call replaces
+// the Base of any existing GitHubAuthenticatedTransport, not the auth wrapper itself.
+// Applied as: WithTransport(t1) → WithGitHubToken("x") → WithTransport(t2)
+// Result: GitHubAuthenticatedTransport{Base: t2, Token: "x"} (t1 is discarded by the second WithTransport).
+func TestWithTransport_TripleComposition(t *testing.T) {
+	var t1Reached, t2Reached bool
+
+	transport1 := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		t1Reached = true
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("t1"))}, nil
+	})
+
+	var capturedReq *http.Request
+	transport2 := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		t2Reached = true
+		capturedReq = req
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("t2"))}, nil
+	})
+
+	// WithTransport(t1), WithGitHubToken wraps t1, then WithTransport(t2) replaces Base with t2.
+	client := NewDefaultClient(
+		WithTransport(transport1),
+		WithGitHubToken("triple-token"),
+		WithTransport(transport2),
+	)
+
+	// The auth wrapper must still be present (not replaced by the second WithTransport).
+	authTransport, ok := client.client.Transport.(*GitHubAuthenticatedTransport)
+	require.True(t, ok, "client transport must still be *GitHubAuthenticatedTransport")
+	assert.Equal(t, "triple-token", authTransport.GitHubToken)
+	// The second WithTransport replaces Base with transport2 (a roundTripperFunc).
+	assert.IsType(t, roundTripperFunc(nil), authTransport.Base, "Base should be transport2 (roundTripperFunc) after second WithTransport")
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Only transport2 must be reached; transport1 was replaced.
+	assert.True(t, t2Reached, "transport2 should have been reached")
+	assert.False(t, t1Reached, "transport1 should NOT be reached (replaced by transport2)")
+	require.NotNil(t, capturedReq)
+	assert.Equal(t, "Bearer triple-token", capturedReq.Header.Get("Authorization"),
+		"Authorization header must be present after triple composition")
 }

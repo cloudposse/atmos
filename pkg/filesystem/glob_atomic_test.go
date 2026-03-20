@@ -3,20 +3,22 @@
 package filesystem
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestGetGlobMatches_CacheHit verifies that GetGlobMatches returns cached results
 // on a second call with the same pattern, without re-reading the filesystem.
 func TestGetGlobMatches_CacheHit(t *testing.T) {
-	// Use a fresh sync map state by clearing it.
-	getGlobMatchesSyncMap = sync.Map{}
+	// Use a fresh cache state by clearing it.
+	ResetGlobMatchesCache()
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.yaml"), []byte(""), 0o644))
@@ -41,7 +43,7 @@ func TestGetGlobMatches_CacheHit(t *testing.T) {
 // TestGetGlobMatches_CacheIsolation verifies that cached results are cloned, so
 // mutating the returned slice does not corrupt subsequent calls.
 func TestGetGlobMatches_CacheIsolation(t *testing.T) {
-	getGlobMatchesSyncMap = sync.Map{}
+	ResetGlobMatchesCache()
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "c.yaml"), []byte(""), 0o644))
@@ -67,19 +69,20 @@ func TestGetGlobMatches_CacheIsolation(t *testing.T) {
 // TestGetGlobMatches_NonExistentBaseDir verifies that GetGlobMatches returns an
 // appropriate error when the base directory does not exist.
 func TestGetGlobMatches_NonExistentBaseDir(t *testing.T) {
-	getGlobMatchesSyncMap = sync.Map{}
+	ResetGlobMatchesCache()
 
 	// Build a path guaranteed to not exist by using a non-existent sub-directory
 	// of a fresh t.TempDir() (which will be cleaned up, but we never create the subdir).
 	pattern := filepath.Join(t.TempDir(), "nonexistent", "*.yaml")
 	_, err := GetGlobMatches(pattern)
 	require.Error(t, err, "expected error for non-existent base directory")
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToFindImport), "expected ErrFailedToFindImport, got: %v", err)
 }
 
 // TestGetGlobMatches_EmptyResults verifies that a pattern matching no files returns
 // an empty slice (not an error).
 func TestGetGlobMatches_EmptyResults(t *testing.T) {
-	getGlobMatchesSyncMap = sync.Map{}
+	ResetGlobMatchesCache()
 
 	tmpDir := t.TempDir()
 	// No files created in tmpDir.
@@ -93,7 +96,7 @@ func TestGetGlobMatches_EmptyResults(t *testing.T) {
 // TestGetGlobMatches_EmptyResultsCache verifies that empty results are cached and
 // retrieved without hitting the filesystem again.
 func TestGetGlobMatches_EmptyResultsCache(t *testing.T) {
-	getGlobMatchesSyncMap = sync.Map{}
+	ResetGlobMatchesCache()
 
 	tmpDir := t.TempDir()
 
@@ -107,8 +110,9 @@ func TestGetGlobMatches_EmptyResultsCache(t *testing.T) {
 	second, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
 
-	// Both should have the same empty result.
-	assert.Equal(t, len(first), len(second))
+	// Both should be strictly equal — same type (non-nil empty slice), same content.
+	// This catches a nil vs []string{} inconsistency between the first and cached call.
+	assert.Equal(t, first, second)
 }
 
 // TestPathMatch_CacheHit verifies that the PathMatch cache is used on repeated calls.
