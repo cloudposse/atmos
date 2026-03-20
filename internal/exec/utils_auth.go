@@ -140,7 +140,7 @@ func storeAutoDetectedIdentity(authManager auth.AuthManager, info *schema.Config
 	chain := authManager.GetChain()
 	if len(chain) > 0 {
 		info.Identity = chain[len(chain)-1]
-		log.Debug("Stored authenticated identity", "identity", info.Identity)
+		log.Debug("Stored authenticated identity for hooks", "identity", info.Identity)
 	} else {
 		log.Debug("Auth chain empty, identity not updated")
 	}
