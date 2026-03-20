@@ -38,20 +38,32 @@ var darwinHomeDirFunc = getDarwinHomeDir
 // shellHomeDirCmd is the shell command used by getHomeFromShell to determine
 // the home directory. It can be replaced in tests to simulate failure or
 // empty-output conditions.
-var shellHomeDirCmd = "cd && pwd"
+//
+// The default uses `eval "echo ~$(id -un)"` which expands the tilde for the
+// current user via the password database, without relying on $HOME. This is
+// important because getHomeFromShell is called only when $HOME is unset or
+// empty and user.Current() has also failed — using `cd && pwd` in that
+// scenario would return the current working directory instead of the home
+// directory.
+var shellHomeDirCmd = `eval "echo ~$(id -un)"`
 
 // Dir returns the home directory for the executing user.
 //
 // This uses an OS-specific method for discovering the home directory.
 // An error is returned if a home directory cannot be detected.
+//
+// Thread safety: Dir is safe for concurrent use. The DisableCache variable is
+// read under cacheLock to avoid data races. However, writing DisableCache from
+// multiple goroutines concurrently is still unsafe — it must be set before any
+// concurrent calls to Dir.
 func Dir() (string, error) {
-	if !DisableCache {
-		cacheLock.RLock()
-		cached := homedirCache
-		cacheLock.RUnlock()
-		if cached != "" {
-			return cached, nil
-		}
+	cacheLock.RLock()
+	disableCache := DisableCache
+	cached := homedirCache
+	cacheLock.RUnlock()
+
+	if !disableCache && cached != "" {
+		return cached, nil
 	}
 
 	cacheLock.Lock()
@@ -59,7 +71,9 @@ func Dir() (string, error) {
 
 	// Re-check after acquiring the write lock: another goroutine may have
 	// already populated the cache between our read-unlock and write-lock.
-	if !DisableCache && homedirCache != "" {
+	// Re-read DisableCache under the write lock for a consistent view.
+	disableCache = DisableCache
+	if !disableCache && homedirCache != "" {
 		return homedirCache, nil
 	}
 
@@ -75,7 +89,12 @@ func Dir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	homedirCache = result
+	// Only write to the cache when caching is enabled. If DisableCache is true,
+	// skip the write to prevent a stale entry from poisoning the cache for
+	// future callers that have caching enabled.
+	if !disableCache {
+		homedirCache = result
+	}
 	return result, nil
 }
 
@@ -147,7 +166,9 @@ func getHomeFromEnv() string {
 	if runtime.GOOS == "plan9" {
 		homeEnv = "home" // On Plan 9, env vars are lowercase
 	}
-	return os.Getenv(homeEnv)
+	// TrimSpace for consistency with dirWindows(), which also trims env vars.
+	// A whitespace-only value is treated the same as an empty value.
+	return strings.TrimSpace(os.Getenv(homeEnv))
 }
 
 func dirWindows() (string, error) {
@@ -171,21 +192,29 @@ func dirWindows() (string, error) {
 }
 
 func getDarwinHomeDir() (string, error) {
-	// Obtain the current username without a shell to avoid quoting and
-	// injection risks.
-	var whoOut bytes.Buffer
-	whoCmd := exec.Command("id", "-un")
-	whoCmd.Stdout = &whoOut
-	if err := whoCmd.Run(); err != nil {
-		return "", fmt.Errorf("getDarwinHomeDir: id: %w", err)
+	// Prefer user.Current().Username to avoid spawning an extra subprocess.
+	// user.Current() is called earlier in the chain (getUnixHomeDir) and may
+	// have failed to populate HomeDir, but Username is often still available.
+	var username string
+	if u, err := currentUserFunc(); err == nil && u.Username != "" {
+		username = u.Username
+	} else {
+		// Fall back to id -un when user.Current() fails or returns an empty username.
+		var whoOut bytes.Buffer
+		whoCmd := exec.Command("id", "-un")
+		whoCmd.Stdout = &whoOut
+		if err := whoCmd.Run(); err != nil {
+			return "", fmt.Errorf("getDarwinHomeDir: id: %w", err)
+		}
+		username = strings.TrimSpace(whoOut.String())
+		if username == "" {
+			return "", ErrBlankOutput
+		}
 	}
-	username := strings.TrimSpace(whoOut.String())
-	if username == "" {
-		return "", ErrBlankOutput
-	}
+
 	// Guard against path traversal: dscl path is /Users/<username>, so the
-	// username must not contain path separators or null bytes.
-	if strings.ContainsAny(username, "/\\\x00") {
+	// username must not contain path separators, null bytes, or newlines.
+	if strings.ContainsAny(username, "/\\\x00\n\r") {
 		return "", fmt.Errorf("getDarwinHomeDir: invalid characters in username %q", username)
 	}
 

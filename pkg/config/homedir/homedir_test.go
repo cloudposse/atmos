@@ -238,6 +238,16 @@ func TestGetHomeFromEnv(t *testing.T) {
 		t.Setenv("HOME", "")
 		assert.Equal(t, "", getHomeFromEnv())
 	})
+
+	t.Run("trims leading and trailing whitespace", func(t *testing.T) {
+		t.Setenv("HOME", "  /from/env  ")
+		assert.Equal(t, "/from/env", getHomeFromEnv(), "whitespace should be stripped from HOME.")
+	})
+
+	t.Run("returns empty string for whitespace-only HOME", func(t *testing.T) {
+		t.Setenv("HOME", "   ")
+		assert.Equal(t, "", getHomeFromEnv(), "whitespace-only HOME should be treated as empty.")
+	})
 }
 
 // TestDirUnix_FallbackToUnixHomeDir tests that dirUnix falls through to
@@ -623,6 +633,66 @@ func TestDirUnix_EmptyHomeDirFallback(t *testing.T) {
 	home, err := dirUnix()
 	require.NoError(t, err, "dirUnix should fall back to shell when HomeDir is empty.")
 	assert.NotEmpty(t, home, "shell fallback should return a non-empty home directory.")
+}
+
+// TestDir_DisableCacheNoPoisoning verifies that a Dir() call with DisableCache=true
+// does NOT write to the cache, so a subsequent call with DisableCache=false returns
+// the value from the live OS lookup rather than the value from the previous call.
+func TestDir_DisableCacheNoPoisoning(t *testing.T) {
+	Reset()
+	defer Reset()
+
+	// First call: caching disabled, HOME points to a temp dir.
+	tmpDir1 := t.TempDir()
+	t.Setenv("HOME", tmpDir1)
+	DisableCache = true
+	defer func() { DisableCache = false }()
+
+	dir1, err := Dir()
+	require.NoError(t, err)
+	assert.Equal(t, tmpDir1, dir1, "With DisableCache=true, Dir() should return the current HOME.")
+
+	// Second call: caching enabled, HOME changed.
+	// If the first call poisoned the cache, Dir() would return tmpDir1 here.
+	tmpDir2 := t.TempDir()
+	t.Setenv("HOME", tmpDir2)
+	DisableCache = false
+
+	dir2, err := Dir()
+	require.NoError(t, err)
+	assert.Equal(t, tmpDir2, dir2, "After DisableCache=false call, Dir() must NOT return the poisoned cache value.")
+}
+
+// TestGetDarwinHomeDir_UsernameFromCurrentUser verifies that getDarwinHomeDir
+// uses user.Current().Username instead of spawning id -un when user.Current()
+// succeeds. On non-darwin systems, dscl will fail after the username lookup,
+// but we can verify the username resolution path does not call id -un.
+func TestGetDarwinHomeDir_UsernameFromCurrentUser(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("This test exercises the non-darwin dscl-unavailable path.")
+	}
+
+	// Verify that when user.Current() returns a valid Username, getDarwinHomeDir
+	// uses it (the id -un subprocess is not needed). On Linux, dscl is still
+	// unavailable, so the function ultimately errors — but the error should say
+	// "dscl", not "id", proving user.Current() was used for the username.
+	orig := currentUserFunc
+	defer func() { currentUserFunc = orig }()
+
+	u, err := user.Current()
+	require.NoError(t, err)
+
+	// Use a stub that returns a known username but fails on HomeDir (simulating
+	// the scenario where user.Current succeeds for username but not HomeDir).
+	currentUserFunc = func() (*user.User, error) {
+		return &user.User{Username: u.Username, HomeDir: ""}, nil
+	}
+
+	_, err = getDarwinHomeDir()
+	// dscl is unavailable on Linux; error must reference "dscl", not "id".
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dscl", "error should come from dscl, not id -un, when Username is available.")
+	assert.NotContains(t, err.Error(), "id", "id -un should not be called when user.Current().Username is populated.")
 }
 
 // TestGetDarwinHomeDir_DsclUnavailable verifies that getDarwinHomeDir returns
