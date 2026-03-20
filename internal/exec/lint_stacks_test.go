@@ -66,10 +66,10 @@ func TestMergedLintConfig(t *testing.T) {
 		customRules := map[string]string{"L-01": "error", "L-09": "warning"}
 		cfg := mergedLintConfig(schema.LintStacksConfig{Rules: customRules}, nil)
 		// User overrides are applied; unspecified rules get their defaults.
-		assert.Equal(t, "error", cfg.Rules["L-01"])    // user override
-		assert.Equal(t, "warning", cfg.Rules["L-09"])  // user override
-		assert.Equal(t, "error", cfg.Rules["L-04"])    // default retained
-		assert.Equal(t, "warning", cfg.Rules["L-10"])  // default retained
+		assert.Equal(t, "error", cfg.Rules["L-01"])   // user override
+		assert.Equal(t, "warning", cfg.Rules["L-09"]) // user override
+		assert.Equal(t, "error", cfg.Rules["L-04"])   // default retained
+		assert.Equal(t, "warning", cfg.Rules["L-10"]) // default retained
 		// MaxImportDepth should still get its default.
 		assert.Equal(t, 3, cfg.MaxImportDepth)
 	})

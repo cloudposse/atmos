@@ -95,7 +95,7 @@ func (r *l06DRYRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 			for value, count := range valueCounts {
 				pct := count * 100 / total
 				if pct >= thresholdPct {
-				// Strip the "type:" prefix added for deduplication before displaying.
+					// Strip the "type:" prefix added for deduplication before displaying.
 					// Use SplitN to handle values that contain colons (e.g., URLs, timestamps).
 					displayVal := value
 					if parts := strings.SplitN(value, ":", 2); len(parts) == 2 {
