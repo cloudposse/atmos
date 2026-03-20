@@ -243,13 +243,12 @@ func TestBuildPlanSubcommandArgs_BasicPlan(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	args, uploadFlag := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan")
+	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
 
 	assert.Contains(t, args, varFileFlag)
 	assert.Contains(t, args, "vars.json")
 	assert.Contains(t, args, outFlag)
 	assert.Contains(t, args, "plan.tfplan")
-	assert.False(t, uploadFlag)
 }
 
 func TestBuildPlanSubcommandArgs_SkipPlanfile(t *testing.T) {
@@ -257,7 +256,7 @@ func TestBuildPlanSubcommandArgs_SkipPlanfile(t *testing.T) {
 	atmosConfig.Components.Terraform.Plan.SkipPlanfile = true
 	info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
 
-	args, _ := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan")
+	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", false)
 
 	assert.NotContains(t, args, outFlag)
 }
@@ -269,9 +268,8 @@ func TestBuildPlanSubcommandArgs_UploadStatusFlag(t *testing.T) {
 		AdditionalArgsAndFlags: []string{"--upload-status"},
 	}
 
-	args, uploadFlag := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan")
+	args := buildPlanSubcommandArgs(&atmosConfig, &info, []string{"plan"}, "vars.json", "plan.tfplan", true)
 
-	assert.True(t, uploadFlag)
 	assert.Contains(t, args, detailedExitCodeFlag)
 	// Upload status flag should be removed from additional args.
 	assert.NotContains(t, info.AdditionalArgsAndFlags, "--upload-status")

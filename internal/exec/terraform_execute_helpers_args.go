@@ -14,13 +14,14 @@ import (
 
 // buildPlanSubcommandArgs extends allArgsAndFlags for the `terraform plan` subcommand.
 // It adds the varfile, optionally the planfile, and handles the upload-status flag.
-// Returns the updated args and the uploadStatus flag.
-func buildPlanSubcommandArgs(
+// The uploadStatusFlag is resolved by the caller (buildTerraformCommandArgs) and passed in.
+func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFlag avoids computing it twice.
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	allArgsAndFlags []string,
 	varFile, planFile string,
-) ([]string, bool) {
+	uploadStatusFlag bool,
+) []string {
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	if !u.SliceContainsString(info.AdditionalArgsAndFlags, outFlag) &&
@@ -29,14 +30,14 @@ func buildPlanSubcommandArgs(
 		allArgsAndFlags = append(allArgsAndFlags, outFlag, planFile)
 	}
 
-	uploadStatusFlag := parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
+	// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by Atmos.
 	info.AdditionalArgsAndFlags = u.SliceRemoveFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
 	if uploadStatusFlag && !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 		allArgsAndFlags = append(allArgsAndFlags, detailedExitCodeFlag)
 	}
 
-	return allArgsAndFlags, uploadStatusFlag
+	return allArgsAndFlags
 }
 
 // buildApplySubcommandArgs extends allArgsAndFlags for the `terraform apply` subcommand.
@@ -127,9 +128,17 @@ func buildTerraformCommandArgs(
 ) (allArgsAndFlags []string, uploadStatusFlag bool, err error) {
 	allArgsAndFlags = strings.Fields(info.SubCommand)
 
+	// Resolve upload-status flag: prefer the structured field set by Cobra/Viper,
+	// fall back to parsing AdditionalArgsAndFlags for backward compatibility
+	// (e.g., when invoked via legacy code paths that bypass Cobra).
+	uploadStatusFlag = info.UploadStatus
+	if !uploadStatusFlag {
+		uploadStatusFlag = parseUploadStatusFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
+	}
+
 	switch info.SubCommand {
 	case "plan":
-		allArgsAndFlags, uploadStatusFlag = buildPlanSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, planFile)
+		allArgsAndFlags = buildPlanSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, planFile, uploadStatusFlag)
 
 	case "destroy", "import", "refresh":
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)

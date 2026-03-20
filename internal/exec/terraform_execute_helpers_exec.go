@@ -301,37 +301,34 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 
 	exitCode := resolveExitCode(err)
 
+	// Upload status only when explicitly requested via --upload-status flag.
 	if uploadStatusFlag && shouldUploadStatus(info) {
-		return handlePlanStatusUpload(atmosConfig, info, exitCode, err)
+		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode); uploadErr != nil {
+			return uploadErr
+		}
+	}
+
+	// Apply CI exit code mapping: remap terraform exit codes for CI runners.
+	// This is independent of upload — it only affects what the caller sees.
+	if mappedCode := mapCIExitCode(atmosConfig, exitCode); mappedCode == 0 {
+		return nil
 	}
 
 	return err
 }
 
-// handlePlanStatusUpload uploads the plan status to Atmos Pro and normalizes
-// exit codes: 0 and 2 are both "success" for plan uploads.
-func handlePlanStatusUpload(
+// uploadCommandStatus uploads the command status to Atmos Pro.
+func uploadCommandStatus(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	exitCode int,
-	originalErr error,
 ) error {
 	client, cerr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
 	if cerr != nil {
 		return cerr
 	}
 	gitRepo := &git.DefaultGitRepo{}
-	if uerr := uploadStatus(info, exitCode, client, gitRepo); uerr != nil {
-		return uerr
-	}
-	// Exit codes 0 and 2 are both "success" for plan uploads.
-	if exitCode == 0 {
-		return nil
-	}
-	if exitCode == 2 {
-		return errUtils.ExitCodeError{Code: 2}
-	}
-	return originalErr
+	return uploadStatus(info, exitCode, client, gitRepo)
 }
 
 // cleanupTerraformFiles removes ephemeral plan and varfiles that Atmos generates.
