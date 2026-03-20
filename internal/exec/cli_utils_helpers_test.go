@@ -700,7 +700,7 @@ func TestProcessArgsAndFlags_SingleCommandError(t *testing.T) {
 }
 
 // TestParseQuotedCompoundSubcommand_DefensiveCheck tests the defensive len(parts) != 2 guard.
-// parseCompoundSubcommand (the normal caller) only invokes parseQuotedCompoundSubcommand when
+// ParseCompoundSubcommand (the normal caller) only invokes parseQuotedCompoundSubcommand when
 // strings.Contains(arg, " ") is true, which guarantees SplitN yields 2 parts.  The defensive
 // guard exists to protect against potential future callers that bypass that contract — and this
 // test exercises it directly so that the guard line is covered and can never silently regress.
@@ -959,6 +959,181 @@ func TestProcessArgsAndFlags_AllStringFlagsSpaceForm(t *testing.T) {
 			assert.Equal(t, tt.wantFieldValue, tt.checkField(got))
 			// Verify the flag and its value are NOT in AdditionalArgsAndFlags.
 			assert.Nil(t, got.AdditionalArgsAndFlags, "expected no pass-through args")
+		})
+	}
+}
+
+// TestFlagListConsistency validates that the three parallel flag lists (commonFlags,
+// stringFlagDefs, valueTakingCommonFlags) are in sync. A flag missing from one list
+// causes silent misbehavior: parsed but not stripped, or stripped incorrectly.
+func TestFlagListConsistency(t *testing.T) {
+	// Build a set from commonFlags for fast lookup.
+	commonFlagsSet := make(map[string]bool, len(commonFlags))
+	for _, f := range commonFlags {
+		commonFlagsSet[f] = true
+	}
+
+	t.Run("every stringFlagDefs entry is in commonFlags", func(t *testing.T) {
+		for _, def := range stringFlagDefs {
+			assert.True(t, commonFlagsSet[def.flag],
+				"stringFlagDefs flag %q is missing from commonFlags — it will be parsed but not stripped", def.flag)
+		}
+	})
+
+	t.Run("every stringFlagDefs entry is in valueTakingCommonFlags", func(t *testing.T) {
+		for _, def := range stringFlagDefs {
+			assert.True(t, valueTakingCommonFlags[def.flag],
+				"stringFlagDefs flag %q is missing from valueTakingCommonFlags — stripping will not remove its value", def.flag)
+		}
+	})
+
+	t.Run("every valueTakingCommonFlags entry is in commonFlags", func(t *testing.T) {
+		for f := range valueTakingCommonFlags {
+			assert.True(t, commonFlagsSet[f],
+				"valueTakingCommonFlags entry %q is missing from commonFlags — it will never be stripped", f)
+		}
+	})
+}
+
+// TestProcessArgsAndFlags_PrefixCollisionSafety verifies that flags sharing a common prefix
+// do not interfere with each other during parsing or stripping.
+//
+// Real prefix collisions in the current flag set:
+//
+//	--heatmap     is a prefix of --heatmap-mode
+//	--profile     is a prefix of --profiler-enabled, --profiler-host, --profiler-port, --profiler-file, --profiler-type
+//	--skip        is a prefix of --skip-init, --skip-planfile
+//
+// The HasPrefix(arg, f+"=") pattern prevents false matches because the "=" after the flag
+// name acts as a delimiter. These tests prove that safety.
+func TestProcessArgsAndFlags_PrefixCollisionSafety(t *testing.T) {
+	tests := []struct {
+		name                    string
+		inputArgsAndFlags       []string
+		wantAdditionalArgsFlags []string
+		checkFn                 func(t *testing.T, got schema.ArgsAndFlagsInfo)
+	}{
+		{
+			// --skip-planfile=true must NOT be stripped by the --skip entry in commonFlags.
+			name:                    "--skip-planfile=true is not eaten by --skip",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--skip-planfile=true", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil, // --skip-planfile is in commonFlags and stripped on its own.
+			checkFn: func(t *testing.T, got schema.ArgsAndFlagsInfo) {
+				t.Helper()
+				assert.Equal(t, "true", got.PlanSkipPlanfile,
+					"--skip-planfile=true should set PlanSkipPlanfile, not be consumed by --skip")
+			},
+		},
+		{
+			// --skip-init must NOT be stripped by the --skip entry.
+			name:                    "--skip-init is not eaten by --skip",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--skip-init", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+			checkFn: func(t *testing.T, got schema.ArgsAndFlagsInfo) {
+				t.Helper()
+				assert.True(t, got.SkipInit, "--skip-init should set SkipInit=true")
+			},
+		},
+		{
+			// --heatmap-mode=advanced must NOT be stripped by the --heatmap entry.
+			// --heatmap-mode is in commonFlags and valueTakingCommonFlags, so it IS stripped on its own.
+			name:                    "--heatmap-mode=advanced is not eaten by --heatmap",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--heatmap-mode=advanced", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil, // Stripped by its own commonFlags entry.
+			checkFn:                 nil,
+		},
+		{
+			// --profiler-host=localhost must NOT be stripped by the --profile entry.
+			name:                    "--profiler-host=localhost is not eaten by --profile",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--profiler-host=localhost", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+			checkFn:                 nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
+			if tt.checkFn != nil {
+				tt.checkFn(t, got)
+			}
+		})
+	}
+}
+
+// TestProcessArgsAndFlags_BooleanFlagEqualsFormStripping verifies that boolean flags in
+// equals form (e.g., --process-templates=false) are stripped from pass-through args
+// without affecting adjacent args.
+func TestProcessArgsAndFlags_BooleanFlagEqualsFormStripping(t *testing.T) {
+	tests := []struct {
+		name                    string
+		inputArgsAndFlags       []string
+		wantAdditionalArgsFlags []string
+	}{
+		{
+			name:                    "--process-templates=false is stripped and does not affect next arg",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--process-templates=false", "--refresh=false", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--refresh=false"},
+		},
+		{
+			name:                    "--process-functions=false is stripped and does not affect next arg",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--process-functions=false", "--parallelism=10", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--parallelism=10"},
+		},
+		{
+			name:                    "--heatmap=true is stripped and does not affect next arg",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--heatmap=true", "--refresh=false", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--refresh=false"},
+		},
+		{
+			name:                    "--profiler-enabled=true is stripped and does not affect next arg",
+			inputArgsAndFlags:       []string{"plan", "vpc", "--profiler-enabled=true", "--parallelism=5", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: []string{"--parallelism=5"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags("terraform", tt.inputArgsAndFlags)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags)
+		})
+	}
+}
+
+// TestProcessArgsAndFlags_GlobalOptionsStripping verifies that --global-options and its
+// value are stripped from AdditionalArgsAndFlags (pass-through args) in both space and
+// equals forms.
+func TestProcessArgsAndFlags_GlobalOptionsStripping(t *testing.T) {
+	tests := []struct {
+		name                    string
+		inputArgsAndFlags       []string
+		wantAdditionalArgsFlags []string
+		wantGlobalOptions       []string
+	}{
+		{
+			name:                    "space form strips both flag and value from pass-through",
+			inputArgsAndFlags:       []string{"sync", "nginx", "--global-options", "--log-level=debug --no-color", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+			wantGlobalOptions:       []string{"--log-level=debug", "--no-color"},
+		},
+		{
+			name:                    "equals form strips flag from pass-through",
+			inputArgsAndFlags:       []string{"sync", "nginx", "--global-options=--log-level=debug --no-color", "--stack", "my-stack"},
+			wantAdditionalArgsFlags: nil,
+			wantGlobalOptions:       []string{"--log-level=debug", "--no-color"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags("helmfile", tt.inputArgsAndFlags)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantAdditionalArgsFlags, got.AdditionalArgsAndFlags,
+				"--global-options and its value should be stripped from pass-through args")
+			assert.Equal(t, tt.wantGlobalOptions, got.GlobalOptions)
 		})
 	}
 }

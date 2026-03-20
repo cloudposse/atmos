@@ -392,7 +392,7 @@ type stringFlagDef struct {
 }
 
 // stringFlagDefs maps string-valued CLI flags to their ArgsAndFlagsInfo setters.
-// parseFlagValue handles both "--flag value" and "--flag=value" forms for each entry.
+// ParseFlagValue handles both "--flag value" and "--flag=value" forms for each entry.
 // Flags with special semantics (--identity, --from-plan) are handled separately.
 var stringFlagDefs = []stringFlagDef{
 	{cfg.TerraformCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformCommand = v }},
@@ -619,12 +619,15 @@ func processArgsAndFlags(
 				// Optional-value flags (--from-plan, --identity): only strip i+1 when the next
 				// arg was actually consumed as the value (i.e., it exists and does not start with '-').
 				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag {
-					if len(inputArgsAndFlags) > i+1 && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+					if i+1 < len(inputArgsAndFlags) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
 						indexesToRemove = append(indexesToRemove, i+1)
 					}
 				} else if valueTakingCommonFlags[f] {
-					// Value-taking flags always strip i+1 (the value was consumed during parsing).
-					indexesToRemove = append(indexesToRemove, i+1)
+					// Value-taking flags strip i+1 (the value was consumed during parsing).
+					// Bounds-check i+1 to match the pattern used by optional-value flags above.
+					if len(inputArgsAndFlags) > i+1 {
+						indexesToRemove = append(indexesToRemove, i+1)
+					}
 				}
 				// Boolean-only flags are not in valueTakingCommonFlags and do not strip i+1.
 			} else if strings.HasPrefix(arg, f+"=") {
