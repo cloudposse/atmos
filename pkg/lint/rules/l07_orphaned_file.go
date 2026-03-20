@@ -2,7 +2,6 @@ package rules
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/lint"
@@ -25,35 +24,37 @@ func (r *l07OrphanedFileRule) Severity() lint.Severity { return lint.SeverityWar
 func (r *l07OrphanedFileRule) AutoFixable() bool       { return false }
 
 func (r *l07OrphanedFileRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
-	// Build the set of all files referenced in any import chain.
+	// Build the set of all referenced files, normalized to paths relative to
+	// StacksBasePath so that absolute import-graph keys and relative import values
+	// can be compared uniformly.
 	referenced := make(map[string]bool)
 
-	// The import graph keys are the files that appear as importers;
-	// the values are the files they import.
+	// The import graph keys are the files that appear as importers (absolute paths);
+	// the values are the files they import (relative logical names, possibly without extension).
 	for importer, imports := range ctx.ImportGraph {
-		referenced[normalizeForComparison(importer)] = true
+		referenced[relNorm(importer, ctx.StacksBasePath)] = true
 		for _, imp := range imports {
-			referenced[normalizeForComparison(imp)] = true
+			referenced[relNorm(imp, ctx.StacksBasePath)] = true
 		}
 	}
 
-	// Also mark all files in StacksMap as referenced (they are the root files).
+	// Also mark all files in StacksMap and RawStackConfigs as referenced (root files).
 	for key := range ctx.StacksMap {
-		referenced[normalizeForComparison(key)] = true
+		referenced[relNorm(key, ctx.StacksBasePath)] = true
 	}
 	for key := range ctx.RawStackConfigs {
-		referenced[normalizeForComparison(key)] = true
+		referenced[relNorm(key, ctx.StacksBasePath)] = true
 	}
 
 	var findings []lint.LintFinding
 	for _, file := range ctx.AllStackFiles {
-		norm := normalizeForComparison(file)
+		norm := relNorm(file, ctx.StacksBasePath)
 		if !referenced[norm] {
 			// Trim the base path for a shorter display path.
 			displayPath := file
 			if ctx.StacksBasePath != "" {
 				if rel, err := filepath.Rel(ctx.StacksBasePath, file); err == nil {
-					displayPath = rel
+					displayPath = filepath.ToSlash(rel)
 				}
 			}
 			findings = append(findings, lint.LintFinding{
@@ -69,12 +70,25 @@ func (r *l07OrphanedFileRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 	return findings, nil
 }
 
-// normalizeForComparison strips common path variations for robust comparison.
-func normalizeForComparison(path string) string {
-	// Remove trailing path separator (handles both '/' on Unix and '\' on Windows).
-	if len(path) > 0 && os.IsPathSeparator(path[len(path)-1]) {
-		path = path[:len(path)-1]
+// relNorm converts path to a normalized form relative to basePath for consistent
+// cross-platform comparison. Absolute paths are first made relative to basePath;
+// relative paths are used as-is. YAML extensions are stripped so that import
+// values (which often omit extensions) match physical file names.
+// When basePath is empty, absolute paths remain absolute after normalization.
+func relNorm(path, basePath string) string {
+	if filepath.IsAbs(path) && basePath != "" {
+		if rel, err := filepath.Rel(basePath, path); err == nil {
+			path = rel
+		}
 	}
+	return normalizeForComparison(filepath.ToSlash(path))
+}
+
+// normalizeForComparison strips common path variations for robust comparison.
+// It removes YAML extensions so that import keys (which often omit extensions)
+// match physical file names. Uses forward slashes for OS-agnostic comparison.
+// Trailing slashes are removed by filepath.Clean.
+func normalizeForComparison(path string) string {
 	// Remove common YAML extensions for comparison since import keys may omit them.
 	base := path
 	for _, ext := range []string{".yaml", ".yml"} {
@@ -83,5 +97,6 @@ func normalizeForComparison(path string) string {
 			break
 		}
 	}
-	return filepath.Clean(base)
+	// Clean with forward slashes for OS-agnostic comparison.
+	return filepath.ToSlash(filepath.Clean(base))
 }

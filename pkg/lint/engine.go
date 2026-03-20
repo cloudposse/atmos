@@ -75,10 +75,3 @@ func (e *Engine) Run(ctx LintContext, ruleIDs []string, minSeverity Severity) (*
 
 	return result, nil
 }
-
-// DefaultRules returns the full set of default lint rules.
-// NOTE: This is intentionally empty in the base package to avoid circular imports.
-// Callers should use pkg/lint/rules.All() to get the default rules.
-func DefaultRules() []LintRule {
-	return nil
-}

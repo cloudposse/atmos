@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/lint"
@@ -69,7 +70,10 @@ func (r *l06DRYRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 				}
 
 				for varKey, varVal := range vars {
-					valStr := fmt.Sprintf("%v", varVal)
+					// Include the type in the map key to avoid false matches between
+					// different-typed values that have the same Sprintf representation
+					// (e.g., bool true vs string "true").
+					valStr := fmt.Sprintf("%T:%v", varVal, varVal)
 					if stats[compName][varKey] == nil {
 						stats[compName][varKey] = make(map[string]int)
 					}
@@ -91,12 +95,18 @@ func (r *l06DRYRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 			for value, count := range valueCounts {
 				pct := count * 100 / total
 				if pct >= thresholdPct {
+				// Strip the "type:" prefix added for deduplication before displaying.
+					// Use SplitN to handle values that contain colons (e.g., URLs, timestamps).
+					displayVal := value
+					if parts := strings.SplitN(value, ":", 2); len(parts) == 2 {
+						displayVal = parts[1]
+					}
 					findings = append(findings, lint.LintFinding{
 						RuleID:    r.ID(),
 						Severity:  r.Severity(),
 						Component: compName,
-						Message:   fmt.Sprintf("Component '%s' var '%s' has value '%s' in %d%% of stacks (%d/%d) — consider extracting to a catalog base component", compName, varKey, value, pct, count, total),
-						FixHint:   fmt.Sprintf("Extract var '%s: %s' to a shared catalog component that '%s' inherits from", varKey, value, compName),
+						Message:   fmt.Sprintf("Component '%s' var '%s' has value '%s' in %d%% of stacks (%d/%d) — consider extracting to a catalog base component", compName, varKey, displayVal, pct, count, total),
+						FixHint:   fmt.Sprintf("Extract var '%s: %s' to a shared catalog component that '%s' inherits from", varKey, displayVal, compName),
 					})
 				}
 			}

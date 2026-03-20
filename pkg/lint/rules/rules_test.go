@@ -773,6 +773,24 @@ func TestL07OrphanedFile(t *testing.T) {
 			expectFindings: false,
 		},
 		{
+			name:          "absolute import graph key matches absolute allStackFile with basePath",
+			allStackFiles: []string{"/stacks/catalog/base.yaml"},
+			importGraph: map[string][]string{
+				"/stacks/deploy/prod.yaml": {"catalog/base"},
+			},
+			basePath:       "/stacks",
+			expectFindings: false,
+		},
+		{
+			name:          "relative import value without extension matches absolute file",
+			allStackFiles: []string{"/stacks/catalog/networking.yaml"},
+			importGraph: map[string][]string{
+				"/stacks/deploy/prod.yaml": {"catalog/networking"},
+			},
+			basePath:       "/stacks",
+			expectFindings: false,
+		},
+		{
 			name:           "orphaned with no basePath - uses full path",
 			allStackFiles:  []string{"/stacks/catalog/unused.yaml"},
 			importGraph:    map[string][]string{},
@@ -1214,14 +1232,6 @@ func TestSeverityLevel(t *testing.T) {
 	assert.Equal(t, -1, unknown.Level())
 }
 
-func TestDefaultRulesIsNil(t *testing.T) {
-	t.Parallel()
-
-	// DefaultRules intentionally returns nil to avoid circular imports.
-	defaultRules := lint.DefaultRules()
-	assert.Nil(t, defaultRules)
-}
-
 // TestAllRulesAutoFixable verifies AutoFixable() is called on every rule,
 // ensuring those trivial methods are covered and only L-02 returns true.
 func TestAllRulesAutoFixable(t *testing.T) {
@@ -1419,10 +1429,23 @@ func TestNormalizeForComparison(t *testing.T) {
 	assert.Equal(t, "stacks/catalog/vpc", rules.ExportedNormalizeForComparison("stacks/catalog/vpc.yaml"))
 	// .yml extension stripped.
 	assert.Equal(t, "stacks/catalog/ecs", rules.ExportedNormalizeForComparison("stacks/catalog/ecs.yml"))
-	// Trailing slash removed.
+	// Trailing slash removed (filepath.Clean handles this).
 	assert.Equal(t, "stacks/catalog", rules.ExportedNormalizeForComparison("stacks/catalog/"))
 	// No extension remains unchanged.
 	assert.Equal(t, "stacks/catalog/rds", rules.ExportedNormalizeForComparison("stacks/catalog/rds"))
+}
+
+func TestRelNorm(t *testing.T) {
+	t.Parallel()
+
+	// Absolute path made relative to basePath, extension stripped.
+	assert.Equal(t, "catalog/vpc", rules.ExportedRelNorm("/stacks/catalog/vpc.yaml", "/stacks"))
+	// Relative path used as-is after extension strip.
+	assert.Equal(t, "catalog/vpc", rules.ExportedRelNorm("catalog/vpc.yaml", "/stacks"))
+	// No basePath — absolute path kept, extension stripped.
+	assert.Equal(t, "/stacks/catalog/vpc", rules.ExportedRelNorm("/stacks/catalog/vpc.yaml", ""))
+	// Relative path without extension unchanged.
+	assert.Equal(t, "catalog/base", rules.ExportedRelNorm("catalog/base", "/stacks"))
 }
 
 func TestStackNameToFile(t *testing.T) {

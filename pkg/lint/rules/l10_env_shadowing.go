@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"reflect"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/lint"
@@ -62,7 +63,7 @@ func (r *l10EnvShadowingRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 					if !inStack {
 						continue
 					}
-					if fmt.Sprintf("%v", stackVal) != fmt.Sprintf("%v", compVal) {
+					if !reflect.DeepEqual(stackVal, compVal) {
 						findings = append(findings, lint.LintFinding{
 							RuleID:    r.ID(),
 							Severity:  r.Severity(),

@@ -50,23 +50,31 @@ func TestMergedLintConfig(t *testing.T) {
 		assert.Equal(t, 90, cfg.DRYThresholdPct)
 	})
 
-	t.Run("does not override SensitiveVarPatterns when set", func(t *testing.T) {
+	t.Run("merges user SensitiveVarPatterns with defaults", func(t *testing.T) {
 		t.Parallel()
 		patterns := []string{"*custom*", "*internal*"}
 		cfg := mergedLintConfig(schema.LintStacksConfig{SensitiveVarPatterns: patterns}, nil)
-		assert.Equal(t, patterns, cfg.SensitiveVarPatterns)
+		// User patterns come first, built-in defaults are appended.
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*custom*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*internal*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*password*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*secret*")
 	})
 
-	t.Run("does not override Rules when set", func(t *testing.T) {
+	t.Run("merges user Rules with defaults for unspecified rules", func(t *testing.T) {
 		t.Parallel()
 		customRules := map[string]string{"L-01": "error", "L-09": "warning"}
 		cfg := mergedLintConfig(schema.LintStacksConfig{Rules: customRules}, nil)
-		assert.Equal(t, customRules, cfg.Rules)
+		// User overrides are applied; unspecified rules get their defaults.
+		assert.Equal(t, "error", cfg.Rules["L-01"])    // user override
+		assert.Equal(t, "warning", cfg.Rules["L-09"])  // user override
+		assert.Equal(t, "error", cfg.Rules["L-04"])    // default retained
+		assert.Equal(t, "warning", cfg.Rules["L-10"])  // default retained
 		// MaxImportDepth should still get its default.
 		assert.Equal(t, 3, cfg.MaxImportDepth)
 	})
 
-	t.Run("no defaults applied when all fields are set", func(t *testing.T) {
+	t.Run("merges all fields when all are set", func(t *testing.T) {
 		t.Parallel()
 		input := schema.LintStacksConfig{
 			MaxImportDepth:       5,
@@ -77,8 +85,12 @@ func TestMergedLintConfig(t *testing.T) {
 		cfg := mergedLintConfig(input, nil)
 		assert.Equal(t, 5, cfg.MaxImportDepth)
 		assert.Equal(t, 75, cfg.DRYThresholdPct)
-		assert.Equal(t, []string{"*token*"}, cfg.SensitiveVarPatterns)
+		// User pattern present and defaults merged in.
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*token*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*password*")
+		// User rule override applied, default rules present for others.
 		assert.Equal(t, "info", cfg.Rules["L-01"])
+		assert.Equal(t, "error", cfg.Rules["L-04"])
 	})
 
 	t.Run("uses maskKeyPatterns as defaults when SensitiveVarPatterns is empty", func(t *testing.T) {
@@ -88,12 +100,15 @@ func TestMergedLintConfig(t *testing.T) {
 		assert.Equal(t, maskPatterns, cfg.SensitiveVarPatterns)
 	})
 
-	t.Run("SensitiveVarPatterns takes precedence over maskKeyPatterns", func(t *testing.T) {
+	t.Run("merges SensitiveVarPatterns with maskKeyPatterns when both are set", func(t *testing.T) {
 		t.Parallel()
 		lintPatterns := []string{"*token*"}
 		maskPatterns := []string{"*api_key*", "*credentials*"}
 		cfg := mergedLintConfig(schema.LintStacksConfig{SensitiveVarPatterns: lintPatterns}, maskPatterns)
-		assert.Equal(t, lintPatterns, cfg.SensitiveVarPatterns)
+		// User lint patterns come first; mask patterns are appended.
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*token*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*api_key*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*credentials*")
 	})
 }
 

@@ -20,13 +20,6 @@ func (r *errRuleForTest) Severity() Severity                       { return Seve
 func (r *errRuleForTest) AutoFixable() bool                        { return false }
 func (r *errRuleForTest) Run(_ LintContext) ([]LintFinding, error) { return nil, r.runErr }
 
-// TestDefaultRules verifies that DefaultRules returns nil (rules come from pkg/lint/rules.All).
-func TestDefaultRules(t *testing.T) {
-	t.Parallel()
-	result := DefaultRules()
-	assert.Nil(t, result, "DefaultRules should return nil; callers must use pkg/lint/rules.All()")
-}
-
 // TestEngineRunErrorPath verifies that Engine.Run propagates errors returned by a rule.
 func TestEngineRunErrorPath(t *testing.T) {
 	t.Parallel()

@@ -11,5 +11,8 @@ var ExportedConcernGroup = concernGroup
 // ExportedNormalizeForComparison exposes the private normalizeForComparison function for testing.
 var ExportedNormalizeForComparison = normalizeForComparison
 
+// ExportedRelNorm exposes the private relNorm function for testing.
+var ExportedRelNorm = relNorm
+
 // ExportedStackNameToFile exposes the private stackNameToFile function for testing.
 var ExportedStackNameToFile = stackNameToFile

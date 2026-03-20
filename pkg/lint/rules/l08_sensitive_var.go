@@ -2,7 +2,7 @@ package rules
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -61,11 +61,13 @@ func (r *l08SensitiveVarRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 	return findings, nil
 }
 
-// matchesSensitivePattern returns true if the var name matches any sensitive pattern.
+// matchesSensitivePattern returns true if the var name matches any sensitive glob pattern.
+// Uses path.Match (not filepath.Match) so that pattern matching is OS-agnostic — variable
+// names are not file-system paths and must not be interpreted with the OS path separator.
 func matchesSensitivePattern(varName string, patterns []string) bool {
 	lower := strings.ToLower(varName)
 	for _, pattern := range patterns {
-		matched, err := filepath.Match(strings.ToLower(pattern), lower)
+		matched, err := path.Match(strings.ToLower(pattern), lower)
 		if err == nil && matched {
 			return true
 		}

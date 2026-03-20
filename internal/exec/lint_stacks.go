@@ -203,31 +203,68 @@ func mergedLintConfig(cfg schema.LintStacksConfig, maskKeyPatterns []string) sch
 	if cfg.DRYThresholdPct <= 0 {
 		cfg.DRYThresholdPct = 80
 	}
-	if len(cfg.SensitiveVarPatterns) == 0 {
-		// Prefer patterns from settings.terminal.mask.sensitive_key_patterns so there is a
-		// single source of truth. Fall back to built-in defaults when neither is configured.
-		if len(maskKeyPatterns) > 0 {
-			cfg.SensitiveVarPatterns = maskKeyPatterns
-		} else {
-			cfg.SensitiveVarPatterns = []string{
-				"*password*", "*secret*", "*token*", "*key*",
-				"*arn*", "*account_id*", "*role*",
+
+	// Build the effective sensitive var patterns by merging user-configured patterns
+	// with defaults. This ensures common sensitive names are always covered even when
+	// users add custom patterns. The single source of truth for base patterns is
+	// settings.terminal.mask.sensitive_key_patterns when set, with built-in defaults
+	// as the final fallback.
+	defaults := []string{
+		"*password*", "*secret*", "*token*", "*key*",
+		"*arn*", "*account_id*", "*role*",
+	}
+	basePatterns := defaults
+	if len(maskKeyPatterns) > 0 {
+		basePatterns = maskKeyPatterns
+	}
+	if len(cfg.SensitiveVarPatterns) > 0 {
+		// Merge user-specified patterns with base patterns, deduplicating.
+		// The capacity hint is the upper bound; actual size may be smaller after deduplication.
+		seen := make(map[string]bool, len(cfg.SensitiveVarPatterns)+len(basePatterns))
+		merged := make([]string, 0, len(cfg.SensitiveVarPatterns)+len(basePatterns))
+		for _, p := range cfg.SensitiveVarPatterns {
+			if !seen[p] {
+				merged = append(merged, p)
+				seen[p] = true
 			}
 		}
-	}
-	if cfg.Rules == nil {
-		cfg.Rules = map[string]string{
-			"L-01": "warning",
-			"L-02": "warning",
-			"L-03": "warning",
-			"L-04": "error",
-			"L-05": "info",
-			"L-06": "info",
-			"L-07": "warning",
-			"L-08": "warning",
-			"L-09": "error",
-			"L-10": "warning",
+		for _, p := range basePatterns {
+			if !seen[p] {
+				merged = append(merged, p)
+				seen[p] = true
+			}
 		}
+		cfg.SensitiveVarPatterns = merged
+	} else {
+		cfg.SensitiveVarPatterns = basePatterns
+	}
+
+	// Build effective rules by starting with defaults and applying user overrides on top,
+	// so that rules not specified by the user still have their default severity.
+	defaultRules := map[string]string{
+		"L-01": "warning",
+		"L-02": "warning",
+		"L-03": "warning",
+		"L-04": "error",
+		"L-05": "info",
+		"L-06": "info",
+		"L-07": "warning",
+		"L-08": "warning",
+		"L-09": "error",
+		"L-10": "warning",
+	}
+	if len(cfg.Rules) > 0 {
+		// Merge: start with defaults, then apply user overrides.
+		mergedRules := make(map[string]string, len(defaultRules))
+		for k, v := range defaultRules {
+			mergedRules[k] = v
+		}
+		for k, v := range cfg.Rules {
+			mergedRules[k] = v
+		}
+		cfg.Rules = mergedRules
+	} else {
+		cfg.Rules = defaultRules
 	}
 	return cfg
 }
