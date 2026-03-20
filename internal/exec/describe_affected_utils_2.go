@@ -542,6 +542,13 @@ func addDependentsToAffected(
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
 
+		// Skip deleted components — they don't exist in HEAD and can't have dependents.
+		// Attempting to resolve them would cause "invalid component" errors.
+		if a.Deleted {
+			a.Dependents = []schema.Dependent{}
+			continue
+		}
+
 		// Skip if `onlyInStack` is specified and the affected component is not in the specified stack.
 		if onlyInStack != "" && a.Stack != onlyInStack {
 			continue

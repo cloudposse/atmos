@@ -1529,3 +1529,58 @@ func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
 	// Should find only the monitoring component deleted.
 	assert.Equal(t, 1, deletedCount, "with stack filter ue1-staging, should find only 1 deleted component")
 }
+
+// TestDescribeAffectedDeletedComponentWithDependents tests that deleted components
+// don't crash when IncludeDependents is enabled. Deleted components don't exist in
+// HEAD, so attempting to resolve their dependents causes "invalid component" errors.
+// The fix skips dependent resolution for deleted components.
+func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedDeletedDetectionTest(t, "stacks-with-deleted-component")
+
+	// Run describe affected to get the affected list (including deleted components).
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,  // processTemplates
+		false, // processYamlFunctions
+		nil,
+		false,
+	)
+	require.NoError(t, err)
+
+	// Verify we have deleted components in the list.
+	var deletedCount int
+	for _, a := range affected {
+		if a.Deleted {
+			deletedCount++
+		}
+	}
+	require.Greater(t, deletedCount, 0, "should have at least one deleted component before testing dependents")
+
+	// This is the critical test: addDependentsToAffected should NOT crash
+	// when the affected list contains deleted components.
+	// Before the fix, this would fail with "invalid component" error because
+	// it tried to resolve deleted components against HEAD where they don't exist.
+	err = addDependentsToAffected(
+		&atmosConfig,
+		&affected,
+		true,
+		true,
+		false,
+		nil,
+		"",
+	)
+	require.NoError(t, err, "addDependentsToAffected should not crash on deleted components")
+
+	// Verify deleted components have empty dependents (they can't have dependents in HEAD).
+	for _, a := range affected {
+		if a.Deleted {
+			assert.Empty(t, a.Dependents, "deleted component %s in %s should have empty dependents", a.Component, a.Stack)
+		}
+	}
+
+	t.Logf("Successfully processed %d deleted components with dependents enabled", deletedCount)
+}
