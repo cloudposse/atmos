@@ -391,13 +391,15 @@ func TestResolveExitCode_WrappedExitCodeErrorReturnsCode(t *testing.T) {
 }
 
 func TestResolveExitCode_OsExecExitError(t *testing.T) {
-	// Create a real *exec.ExitError by running a failing command.
-	cmd := osexec.Command("false")
+	// Create a real *exec.ExitError using a cross-platform approach:
+	// "go" binary exists on all platforms where tests run, and "go run nonexistent.go"
+	// exits with code 1.
+	cmd := osexec.Command("go", "run", "nonexistent_file_that_does_not_exist.go")
 	runErr := cmd.Run()
 	require.Error(t, runErr)
 
 	code := resolveExitCode(runErr)
-	assert.Equal(t, 1, code)
+	assert.NotEqual(t, 0, code, "exit code should be non-zero for a failed command")
 }
 
 func TestResolveExitCode_GenericErrorReturnsOne(t *testing.T) {

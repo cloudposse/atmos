@@ -324,43 +324,10 @@ func TestBuildInitSubcommandArgs_WorkdirPathUpdatesComponentPath(t *testing.T) {
 	assert.Equal(t, customWorkdir, componentPath)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// warnOnConflictingEnvVars (coverage of the warning branch)
-// ──────────────────────────────────────────────────────────────────────────────
-
-// TestWarnOnConflictingEnvVars_TFCLIArgs verifies the function handles an exact
-// match on TF_CLI_ARGS without panicking.
-func TestWarnOnConflictingEnvVars_TFCLIArgs(t *testing.T) {
-	t.Setenv("TF_CLI_ARGS", "-compact-warnings")
-	assert.NotPanics(t, warnOnConflictingEnvVars)
-}
-
-// TestWarnOnConflictingEnvVars_TFWorkspace verifies the exact match on TF_WORKSPACE.
-func TestWarnOnConflictingEnvVars_TFWorkspace(t *testing.T) {
-	t.Setenv("TF_WORKSPACE", "my-workspace")
-	assert.NotPanics(t, warnOnConflictingEnvVars)
-}
-
-// TestWarnOnConflictingEnvVars_TFVarPrefix verifies the prefix match on TF_VAR_.
-func TestWarnOnConflictingEnvVars_TFVarPrefix(t *testing.T) {
-	t.Setenv("TF_VAR_region", "us-east-1")
-	assert.NotPanics(t, warnOnConflictingEnvVars)
-}
-
-// TestWarnOnConflictingEnvVars_TFCLIArgsPrefix verifies the prefix match on TF_CLI_ARGS_.
-func TestWarnOnConflictingEnvVars_TFCLIArgsPrefix(t *testing.T) {
-	t.Setenv("TF_CLI_ARGS_plan", "-compact-warnings")
-	assert.NotPanics(t, warnOnConflictingEnvVars)
-}
-
-// TestWarnOnConflictingEnvVars_MultipleConflicts verifies the function handles
-// multiple conflicting env vars at once.
-func TestWarnOnConflictingEnvVars_MultipleConflicts(t *testing.T) {
-	t.Setenv("TF_CLI_ARGS", "-lock=false")
-	t.Setenv("TF_WORKSPACE", "my-ws")
-	t.Setenv("TF_VAR_env", "prod")
-	assert.NotPanics(t, warnOnConflictingEnvVars)
-}
+// warnOnConflictingEnvVars is a logging-only function with no return value or
+// side effects beyond log.Warn. NotPanics-only tests were removed per CLAUDE.md:
+// "avoid tautological tests; no coverage theater." The function's log output
+// cannot be intercepted without log-hook infrastructure.
 
 // ──────────────────────────────────────────────────────────────────────────────
 // cleanupTerraformFiles (actual file creation/removal)

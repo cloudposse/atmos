@@ -143,8 +143,11 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 	}
 
 	componentPath, componentPathExists, err := provisionComponentSource(atmosConfig, info, componentPath)
+	if err != nil {
+		return "", err
+	}
 
-	if err != nil || !componentPathExists {
+	if !componentPathExists {
 		basePath, _ := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
 		return "", fmt.Errorf(
 			"%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
@@ -194,7 +197,7 @@ func provisionComponentSource(
 		return "", false, fmt.Errorf("failed to auto-provision component source: %w", autoErr)
 	}
 
-	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 		return workdirPath, true, nil
 	}
 
