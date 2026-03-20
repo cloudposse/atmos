@@ -1390,8 +1390,8 @@ func TestApplyTerraformMetadataInheritance_WorkspaceCleanupNoInherits(t *testing
 
 	// Component has an explicit workspace but NO inherit list.
 	metadata := map[string]any{
-		"terraform_workspace":         "explicit-ws",
-		"terraform_workspace_pattern": "{stage}-{component}",
+		"terraform_workspace":          "explicit-ws",
+		"terraform_workspace_pattern":  "{stage}-{component}",
 		"terraform_workspace_template": "{{ .stage }}-{{ .component }}",
 	}
 
