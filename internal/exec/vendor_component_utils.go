@@ -144,11 +144,6 @@ func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorC
 	return vendor.CreateSkipFunc(tempDir, vendorComponentSpec.Source.IncludedPaths, vendorComponentSpec.Source.ExcludedPaths)
 }
 
-// checkComponentExcludes checks if the file matches any of the excluded patterns.
-// Delegates to pkg/vendor for the shared implementation.
-func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool, error) {
-	return vendor.ShouldExcludeFile(excludePaths, trimmedSrc)
-}
 
 func ExecuteComponentVendorInternal(
 	atmosConfig *schema.AtmosConfiguration,

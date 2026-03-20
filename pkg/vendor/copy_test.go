@@ -345,6 +345,8 @@ func TestShouldExcludeFile(t *testing.T) {
 		{name: "invalid pattern", patterns: []string{"[invalid"}, path: "main.tf", skip: false, hasErr: true},
 		// Mixed valid+invalid: the invalid pattern is encountered first and returns an error.
 		{name: "mixed valid and invalid patterns - error on first", patterns: []string{"[invalid", "*.md"}, path: "README.md", skip: false, hasErr: true},
+		// Invalid pattern in second position: first pattern matches, so short-circuit returns before reaching invalid pattern.
+		{name: "mixed valid and invalid patterns - valid matches before invalid", patterns: []string{"*.md", "[invalid"}, path: "README.md", skip: true, hasErr: false},
 	}
 
 	for _, tt := range tests {
@@ -380,6 +382,8 @@ func TestShouldIncludeFile(t *testing.T) {
 		{name: "empty patterns", patterns: []string{}, path: "main.tf", skip: true},
 		// Mixed valid+invalid: the invalid pattern is encountered first and returns an error.
 		{name: "mixed valid and invalid patterns - error on first", patterns: []string{"[invalid", "*.tf"}, path: "main.tf", skip: false, hasErr: true},
+		// Invalid pattern in second position: first pattern matches (returns early), so error is never reached.
+		{name: "mixed valid and invalid patterns - valid matches before invalid", patterns: []string{"*.tf", "[invalid"}, path: "main.tf", skip: false, hasErr: false},
 	}
 
 	for _, tt := range tests {
