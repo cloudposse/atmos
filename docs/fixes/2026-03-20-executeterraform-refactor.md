@@ -143,9 +143,10 @@ PATH ordering test requires a real toolchain install (deferred).
 
 ### Item 8: printAndWriteVarFiles debug-print branches
 
-**Status:** Documented. These branches call `u.PrintAsYAMLToFileDescriptor` which writes
-to the process file descriptors — not capturable in unit tests without redirecting
-os.Stdout. Risk is low: the function is a thin wrapper over YAML serialization.
+**Status:** Fixed. Added 3 tests exercising LogLevelDebug and LogLevelTrace branches:
+- `TestPrintAndWriteVarFiles_DebugLogLevel_Success` — ComponentVarsSection at debug level.
+- `TestPrintAndWriteVarFiles_DebugLogLevel_CliVarsSection` — CLI vars override at debug level.
+- `TestPrintAndWriteVarFiles_TraceLogLevel` — trace level path.
 
 ### Item 9: buildTerraformCommandArgs init branch untested
 
@@ -199,6 +200,12 @@ sections vs backend/provider overrides). Pre-existing behavior, not a regression
 - Add `TestAssembleComponentEnvVars_NonNilTenv` (item 7).
 - Add `TestBuildTerraformCommandArgs_Init` (item 9).
 - Add docs for logTerraformContext tests explaining logging-only functions (item 4).
+
+### `internal/exec/terraform_execute_helpers_coverage_test.go`
+
+- Add `TestPrintAndWriteVarFiles_DebugLogLevel_Success` (item 8).
+- Add `TestPrintAndWriteVarFiles_DebugLogLevel_CliVarsSection` (item 8).
+- Add `TestPrintAndWriteVarFiles_TraceLogLevel` (item 8).
 
 ### `internal/exec/terraform_execute_helpers_test.go`
 

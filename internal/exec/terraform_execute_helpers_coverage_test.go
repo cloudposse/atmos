@@ -23,6 +23,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -82,6 +83,68 @@ func TestPrintAndWriteVarFiles_WithCliVarsSection(t *testing.T) {
 	}
 	err := printAndWriteVarFiles(&atmosConfig, &info)
 	assert.NoError(t, err)
+}
+
+// TestPrintAndWriteVarFiles_DebugLogLevel_Success verifies the LogLevelDebug branch
+// triggers PrintAsYAMLToFileDescriptor without error for valid data.
+func TestPrintAndWriteVarFiles_DebugLogLevel_Success(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Logs.Level = u.LogLevelDebug
+
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		DryRun:           true,
+		UseTerraformPlan: true, // Skip varfile write.
+		ComponentVarsSection: map[string]any{
+			"region": "us-east-1",
+			"name":   "test",
+		},
+	}
+
+	err := printAndWriteVarFiles(&atmosConfig, &info)
+	require.NoError(t, err)
+}
+
+// TestPrintAndWriteVarFiles_DebugLogLevel_CliVarsSection exercises the second
+// LogLevelDebug branch inside logCliVarsOverrides.
+func TestPrintAndWriteVarFiles_DebugLogLevel_CliVarsSection(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Logs.Level = u.LogLevelDebug
+
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		DryRun:           true,
+		UseTerraformPlan: true,
+		ComponentVarsSection: map[string]any{
+			"region": "us-east-1",
+		},
+		ComponentSection: map[string]any{
+			cfg.TerraformCliVarsSectionName: map[string]any{
+				"override_var": "override_val",
+			},
+		},
+	}
+
+	err := printAndWriteVarFiles(&atmosConfig, &info)
+	require.NoError(t, err)
+}
+
+// TestPrintAndWriteVarFiles_TraceLogLevel exercises the LogLevelTrace path.
+func TestPrintAndWriteVarFiles_TraceLogLevel(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Logs.Level = u.LogLevelTrace
+
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		DryRun:           true,
+		UseTerraformPlan: true,
+		ComponentVarsSection: map[string]any{
+			"env": "prod",
+		},
+	}
+
+	err := printAndWriteVarFiles(&atmosConfig, &info)
+	require.NoError(t, err)
 }
 
 // TestPrintAndWriteVarFiles_WriteActualFile verifies that with DryRun=false the
