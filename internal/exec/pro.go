@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 
@@ -239,6 +240,8 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 	dto := dtos.InstanceStatusUploadRequest{
 		AtmosProRunID: atmosProRunID,
 		AtmosVersion:  pkgversion.Version,
+		AtmosOS:       runtime.GOOS,
+		AtmosArch:     runtime.GOARCH,
 		GitSHA:        gitSHA,
 		RepoURL:       repoInfo.RepoUrl,
 		RepoName:      repoInfo.RepoName,

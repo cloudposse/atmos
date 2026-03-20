@@ -18,6 +18,8 @@ type InstancesUploadRequest struct {
 type InstanceStatusUploadRequest struct {
 	AtmosProRunID string `json:"atmos_pro_run_id"`
 	AtmosVersion  string `json:"atmos_version"`
+	AtmosOS       string `json:"atmos_os"`
+	AtmosArch     string `json:"atmos_arch"`
 	GitSHA        string `json:"git_sha"`
 	RepoURL       string `json:"repo_url"`
 	RepoName      string `json:"repo_name"`
