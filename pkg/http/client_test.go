@@ -560,7 +560,8 @@ func TestWithTransport_AfterWithGitHubToken(t *testing.T) {
 	// inner (Base) is the mock roundTripperFunc.
 	authTransport, ok := client.client.Transport.(*GitHubAuthenticatedTransport)
 	require.True(t, ok, "client transport should be *GitHubAuthenticatedTransport")
-	assert.IsType(t, roundTripperFunc(nil), authTransport.Base, "Base should be a roundTripperFunc (the mockTransport)")
+	_, baseIsRoundTripper := authTransport.Base.(roundTripperFunc)
+	assert.True(t, baseIsRoundTripper, "Base should be a roundTripperFunc (the mockTransport)")
 	assert.Equal(t, "secret-token", authTransport.GitHubToken)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
@@ -570,10 +571,9 @@ func TestWithTransport_AfterWithGitHubToken(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Auth header must still be present even though WithTransport was applied last.
 	require.NotNil(t, capturedReq, "mock transport should have been reached")
 	assert.Equal(t, "Bearer secret-token", capturedReq.Header.Get("Authorization"),
-		"Authorization header must survive WithTransport applied after WithGitHubToken")
+		"Authorization header must be set when WithGitHubToken is applied after WithTransport")
 }
 
 // TestWithGitHubToken_AfterWithTransport verifies that WithGitHubToken applied after
@@ -598,7 +598,8 @@ func TestWithGitHubToken_AfterWithTransport(t *testing.T) {
 	// inner (Base) is the mock roundTripperFunc.
 	authTransport, ok := client.client.Transport.(*GitHubAuthenticatedTransport)
 	require.True(t, ok, "client transport should be *GitHubAuthenticatedTransport")
-	assert.IsType(t, roundTripperFunc(nil), authTransport.Base, "Base should be a roundTripperFunc (the mockTransport)")
+	_, baseIsRoundTripper := authTransport.Base.(roundTripperFunc)
+	assert.True(t, baseIsRoundTripper, "Base should be a roundTripperFunc (the mockTransport)")
 	assert.Equal(t, "secret-token", authTransport.GitHubToken)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
@@ -644,7 +645,8 @@ func TestWithTransport_TripleComposition(t *testing.T) {
 	require.True(t, ok, "client transport must still be *GitHubAuthenticatedTransport")
 	assert.Equal(t, "triple-token", authTransport.GitHubToken)
 	// The second WithTransport replaces Base with transport2 (a roundTripperFunc).
-	assert.IsType(t, roundTripperFunc(nil), authTransport.Base, "Base should be transport2 (roundTripperFunc) after second WithTransport")
+	_, baseIsRoundTripper := authTransport.Base.(roundTripperFunc)
+	assert.True(t, baseIsRoundTripper, "Base should be transport2 (roundTripperFunc) after second WithTransport")
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
 	require.NoError(t, err)

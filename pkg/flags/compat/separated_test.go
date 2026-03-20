@@ -101,8 +101,9 @@ func TestSeparated_Concurrent(t *testing.T) {
 	}
 
 	// Mutating one copy must not affect others (defensive copy guarantee).
-	// Guard both index accesses to prevent a panic if any goroutine returned nil.
-	if len(copies) >= 2 && len(copies[0]) > 0 && len(copies[1]) > 0 {
+	// Guard both index accesses: nil indicates a goroutine returned nil (shouldn't happen,
+	// but guards against a potential future panic if GetSeparated changes semantics).
+	if len(copies) >= 2 && copies[0] != nil && copies[1] != nil {
 		copies[0][0] = "mutated"
 		assert.Equal(t, "-var", copies[1][0], "defensive copies must be independent")
 	}
