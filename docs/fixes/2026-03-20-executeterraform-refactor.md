@@ -126,8 +126,10 @@ are the best we can do without over-engineering. Comment added explaining this.
 
 ### Item 5: storeAutoDetectedIdentity no-op branch untested
 
-**Status:** Already covered. `utils_auth_test.go` has a table-driven
-`TestStoreAutoDetectedIdentity` suite with an "existing identity is preserved" case.
+**Status:** Fixed. Added `TestStoreAutoDetectedIdentity_ExistingIdentity_NotOverwritten`
+to `_auth_test.go` with explicit `GetChain().Times(0)` assertion. The existing table-driven
+test in `utils_auth_test.go` also covers this via gomock strict mode, but the explicit
+`Times(0)` makes the contract self-documenting.
 
 ### Item 6: Redundant warnOnConflictingEnvVars test
 

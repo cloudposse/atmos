@@ -150,3 +150,18 @@ func TestSetupTerraformAuth_MergedConfigError_WrapsWithInvalidAuthConfig(t *test
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "expected ErrInvalidAuthConfig, got: %v", err)
 	assert.False(t, errors.Is(err, errUtils.ErrInvalidComponent))
 }
+
+// TestStoreAutoDetectedIdentity_ExistingIdentity_NotOverwritten verifies that when
+// info.Identity is already set, storeAutoDetectedIdentity returns early without
+// calling GetChain() — preventing user-supplied identities from being overwritten.
+func TestStoreAutoDetectedIdentity_ExistingIdentity_NotOverwritten(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockMgr := mockTypes.NewMockAuthManager(ctrl)
+	// GetChain must NOT be called. If it is, the mock controller fails the test.
+	mockMgr.EXPECT().GetChain().Times(0)
+
+	info := schema.ConfigAndStacksInfo{Identity: "user-supplied-role"}
+	storeAutoDetectedIdentity(mockMgr, &info)
+
+	assert.Equal(t, "user-supplied-role", info.Identity, "pre-set identity must not be overwritten")
+}

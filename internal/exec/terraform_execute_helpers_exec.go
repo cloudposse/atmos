@@ -105,6 +105,10 @@ func runPreExecutionSteps(
 		return err
 	}
 
+	// Generate backend and provider-override files. When AutoGenerateFiles=true,
+	// GenerateFilesForComponent was already called inside resolveAndProvisionComponentPath
+	// for generate: section files. This call handles the distinct backend/provider-override
+	// responsibility.
 	if err := generateConfigFiles(atmosConfig, info, workingDir); err != nil {
 		return err
 	}
