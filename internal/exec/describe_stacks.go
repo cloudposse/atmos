@@ -144,8 +144,6 @@ func ExecuteDescribeStacks(
 		authManager,
 	)
 
-	processedStacks := make(map[string]bool)
-
 	for stackFileName, stackSection := range stacksMap {
 		stackMap, ok := stackSection.(map[string]any)
 		if !ok {
@@ -156,12 +154,6 @@ func ExecuteDescribeStacks(
 		if !includeEmptyStacks && !hasStackExplicitComponents(stackMap) && !hasStackImports(stackMap) {
 			continue
 		}
-
-		// Deduplicate: process each stack file only once.
-		if processedStacks[stackFileName] {
-			continue
-		}
-		processedStacks[stackFileName] = true
 
 		if err := processor.processStackFile(stackFileName, stackMap); err != nil {
 			return nil, err

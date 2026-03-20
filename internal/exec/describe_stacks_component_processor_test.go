@@ -1207,6 +1207,37 @@ func TestProcessComponentSectionTemplates_ProcessTmplError(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestProcessComponentSectionTemplates_UnmarshalYAMLError(t *testing.T) {
+	// When templates are enabled, ProcessTmplWithDatasources succeeds, but the rendered
+	// template output produces invalid YAML that u.UnmarshalYAML fails to parse
+	// (lines 546-547, 556).
+	//
+	// Mechanism: the map key `{{ "\n- list_item" }}` (backtick string, so \n is literal
+	// backslash-n) is serialised by yaml.v3 as `'{{ "\n- list_item" }}'`.
+	// When the Go template engine (Enabled=true) processes this, it evaluates the string
+	// literal `"\n- list_item"` where \n IS a Go escape sequence → a real newline.
+	// The rendered YAML becomes `'<newline>- list_item': value` which yaml.v3 rejects
+	// with "mapping values are not allowed in this context".
+	ac := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+
+	componentSection := map[string]any{
+		// Backtick string: \n is TWO characters (backslash + n), not a newline.
+		// In Go template string literal syntax, "\n" IS a newline, so the template
+		// outputs a newline character that breaks the surrounding YAML single-quoted key.
+		`{{ "\n- list_item" }}`: "value",
+	}
+
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	require.Error(t, err)
+}
+
 func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 	// When processTemplates=true and the component section has an invalid Go template,
 	// processComponentSectionTemplates returns an error which processComponentEntry propagates (lines 264-266).

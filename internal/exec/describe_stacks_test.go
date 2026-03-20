@@ -541,3 +541,36 @@ func TestExecuteDescribeStacks_ProcessStackFileError(t *testing.T) {
 	_, err = ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	require.Error(t, err)
 }
+
+// TestExecuteDescribeStacks_NonMapStackEntry exercises the type-guard at lines 150-153 in
+// ExecuteDescribeStacks: "stackMap, ok := stackSection.(map[string]any); if !ok { continue }".
+// Since FindStacksMap always returns map[string]any values in normal operation, we inject a
+// non-map value directly into the FindStacksMap cache to trigger the defensive skip.
+func TestExecuteDescribeStacks_NonMapStackEntry(t *testing.T) {
+ac := &schema.AtmosConfiguration{}
+
+// Compute the exact cache key that FindStacksMap will look up for this atmosConfig.
+cacheKey := getFindStacksMapCacheKey(ac, false)
+
+// Pre-populate the cache with a stacksMap containing a non-map value ("string" instead of map).
+// This simulates the defensive scenario the type-guard is protecting against.
+findStacksMapCacheMu.Lock()
+findStacksMapCache[cacheKey] = &findStacksMapCacheEntry{
+stacksMap: map[string]any{
+"non-map-stack": "this is a string, not a map[string]any",
+},
+}
+findStacksMapCacheMu.Unlock()
+
+t.Cleanup(func() {
+findStacksMapCacheMu.Lock()
+delete(findStacksMapCache, cacheKey)
+findStacksMapCacheMu.Unlock()
+})
+
+// ExecuteDescribeStacks will read the cached stacksMap, hit the type-guard at line 150,
+// skip the non-map entry, and return an empty result with no error.
+result, err := ExecuteDescribeStacks(ac, "", nil, nil, nil, false, false, false, false, nil, nil)
+require.NoError(t, err)
+assert.Empty(t, result, "non-map stack entries must be skipped silently")
+}
