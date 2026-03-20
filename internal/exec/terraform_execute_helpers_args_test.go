@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -366,8 +367,12 @@ func TestBuildWorkspaceSubcommandArgs_Bare(t *testing.T) {
 // logTerraformContext
 // ──────────────────────────────────────────────────────────────────────────────
 
+// logTerraformContext is a logging-only function. These tests verify it handles
+// all input shapes without panicking. The function formats a command string from
+// SubCommand+SubCommand2 and constructs an inheritance string — both are fed to
+// log.Debug which is not easily capturable in unit tests.
+
 func TestLogTerraformContext_NoSubCommand2(t *testing.T) {
-	// Just verifies the function doesn't panic.
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:  "plan",
 		SubCommand2: "",
@@ -396,48 +401,17 @@ func TestLogTerraformContext_WithInheritanceChain(t *testing.T) {
 // warnOnConflictingEnvVars
 // ──────────────────────────────────────────────────────────────────────────────
 
-func TestWarnOnConflictingEnvVars_NoConflictsNoError(t *testing.T) {
-	// Simply ensure the function doesn't panic when called.
-	assert.NotPanics(t, warnOnConflictingEnvVars)
-}
+// warnOnConflictingEnvVars no-conflict path is implicitly covered by the
+// 5 t.Setenv tests in _coverage_test.go. Standalone no-op test removed.
 
-// ──────────────────────────────────────────────────────────────────────────────
-// cleanupTerraformFiles
-// ──────────────────────────────────────────────────────────────────────────────
-
-// TestCleanupTerraformFiles_ApplyRemovesVarFile verifies that "apply" cleans up
-// the varfile. Real file-removal assertions are in _coverage_test.go
-// (TestCleanupTerraformFiles_ApplyRemovesVarfileForReal). This test verifies
-// the function handles a mismatched path layout without panicking.
-func TestCleanupTerraformFiles_ApplyRemovesVarFile(t *testing.T) {
-	atmosConfig := schema.AtmosConfiguration{}
-	atmosConfig.BasePath = t.TempDir()
-	atmosConfig.Components.Terraform.BasePath = "components/terraform"
-	info := schema.ConfigAndStacksInfo{
-		SubCommand:            "apply",
-		ComponentFromArg:      "test",
-		FinalComponent:        "test",
-		Stack:                 "test-stack",
-		TerraformWorkspace:    "test-stack",
-		ComponentFolderPrefix: "",
-	}
-
-	// The constructed path won't match the tmpDir layout, so no file is removed.
-	// We verify the function handles missing files gracefully (no panic, no error).
-	assert.NotPanics(t, func() {
-		cleanupTerraformFiles(&atmosConfig, &info)
-	})
-}
-
-func TestCleanupTerraformFiles_PlanSubcommandSkipsCleanup(t *testing.T) {
-	atmosConfig := schema.AtmosConfiguration{}
-	info := schema.ConfigAndStacksInfo{
-		SubCommand: "plan",
-	}
-	assert.NotPanics(t, func() {
-		cleanupTerraformFiles(&atmosConfig, &info)
-	})
-}
+// cleanupTerraformFiles tests with real file assertions live in _coverage_test.go:
+//   - TestCleanupTerraformFiles_ApplyRemovesVarfileForReal
+//   - TestCleanupTerraformFiles_NonPlanShow_RemovesPlanfile
+//   - TestCleanupTerraformFiles_ShowSubcommand_KeepsPlanfile
+//   - TestCleanupTerraformFiles_PlanSubcommand_KeepsPlanfile
+//   - TestCleanupTerraformFiles_ApplyWithCustomPlanFile_SkipsPlanfileRemoval
+//   - TestCleanupTerraformFiles_MissingFiles_NoError
+// NotPanics-only duplicates removed.
 
 // ──────────────────────────────────────────────────────────────────────────────
 // assembleComponentEnvVars
@@ -517,6 +491,61 @@ func TestAssembleComponentEnvVars_AppendUserAgentFromOSEnvOverridesConfig(t *tes
 // ──────────────────────────────────────────────────────────────────────────────
 // helpers
 // ──────────────────────────────────────────────────────────────────────────────
+
+// storeAutoDetectedIdentity tests (including preset identity guard) live in
+// utils_auth_test.go — TestStoreAutoDetectedIdentity table-driven suite.
+
+// ──────────────────────────────────────────────────────────────────────────────
+// assembleComponentEnvVars with non-nil tenv
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestAssembleComponentEnvVars_NonNilTenv verifies that the tenv != nil branch
+// runs without error. ToolchainEnvironment's fields are unexported, so we can only
+// construct a zero-value instance (EnvVars returns nil). This test exercises the
+// branch dispatch, not the PATH ordering (which requires a real toolchain install).
+func TestAssembleComponentEnvVars_NonNilTenv(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+
+	info := schema.ConfigAndStacksInfo{}
+
+	// Zero-value ToolchainEnvironment: path is empty, so EnvVars() returns nil.
+	// The tenv != nil branch still runs, exercising the code path.
+	tenv := &dependencies.ToolchainEnvironment{}
+
+	err := assembleComponentEnvVars(&atmosConfig, &info, tenv)
+	require.NoError(t, err)
+	// Standard vars should still be present.
+	envMap := envListToMap(info.ComponentEnvList)
+	assert.Equal(t, "true", envMap["TF_IN_AUTOMATION"])
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// buildTerraformCommandArgs — init branch
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestBuildTerraformCommandArgs_Init verifies the case "init" dispatch through
+// buildTerraformCommandArgs. Since buildInitSubcommandArgs calls prepareInitExecution
+// which requires a component path, we use a temp dir as the component path.
+func TestBuildTerraformCommandArgs_Init(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.InitRunReconfigure = true
+	atmosConfig.Components.Terraform.Init.PassVars = true
+
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "init",
+	}
+	cp := tmpDir
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.planfile", &cp)
+	require.NoError(t, err)
+	assert.Contains(t, args, "init")
+	assert.Contains(t, args, "-reconfigure")
+	assert.Contains(t, args, "-var-file")
+	assert.Contains(t, args, "vars.json")
+}
 
 // envListToMap converts a []string of "KEY=VALUE" pairs to a map for easy lookup.
 func envListToMap(envList []string) map[string]string {

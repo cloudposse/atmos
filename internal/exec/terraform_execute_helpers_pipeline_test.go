@@ -62,12 +62,8 @@ func TestBuildWorkspaceSubcommandArgs_Select(t *testing.T) {
 	assert.Equal(t, []string{"workspace", "select", "prod"}, args)
 }
 
-// TestBuildWorkspaceSubcommandArgs_NoSubCommand2 verifies no SubCommand2 → unchanged args.
-func TestBuildWorkspaceSubcommandArgs_NoSubCommand2(t *testing.T) {
-	info := schema.ConfigAndStacksInfo{}
-	args := buildWorkspaceSubcommandArgs(&info, []string{"workspace"})
-	assert.Equal(t, []string{"workspace"}, args)
-}
+// TestBuildWorkspaceSubcommandArgs_NoSubCommand2 is tested by
+// TestBuildWorkspaceSubcommandArgs_Bare in _args_test.go. Duplicate removed.
 
 // ──────────────────────────────────────────────────────────────────────────────
 // prepareComponentExecution (error paths — exercises early-return guards)

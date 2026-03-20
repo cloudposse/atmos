@@ -312,6 +312,12 @@ func validateTerraformComponent(atmosConfig *schema.AtmosConfiguration, info *sc
 
 // generateConfigFiles writes the backend configuration, generated files, and
 // provider overrides for the component into the working directory.
+//
+// NOTE: GenerateFilesForComponent is also called by autoGenerateComponentFiles
+// (inside resolveAndProvisionComponentPath) when AutoGenerateFiles=true. That call
+// handles the generate: section from stack config, while this call handles the
+// standard backend/provider override files. The two calls serve different purposes
+// and both are needed. This is pre-existing behavior from the original terraform.go.
 func generateConfigFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	if err := generateBackendConfig(atmosConfig, info, workingDir); err != nil {
 		return err

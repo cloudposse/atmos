@@ -101,19 +101,108 @@ already handles Windows conversion for `/dev/null`.
 
 ---
 
+## Audit Pass 7 — CodeRabbit Review Items
+
+### Item 1: Duplicate resolveExitCode tests (Pass 6 #1)
+
+**Status:** Fixed. Removed 4 duplicate tests from `_pipeline_test.go`.
+
+### Item 2: Duplicate TestBuildWorkspaceSubcommandArgs_NoSubCommand2 (Pass 6 #2)
+
+**Status:** Fixed. Removed from `_pipeline_test.go`; canonical test is
+`TestBuildWorkspaceSubcommandArgs_Bare` in `_args_test.go`.
+
+### Item 3: Tautological cleanup tests (Pass 6 #3)
+
+**Status:** Fixed. Removed `TestCleanupTerraformFiles_ApplyRemovesVarFile` and
+`TestCleanupTerraformFiles_PlanSubcommandSkipsCleanup` from `_args_test.go`. Real
+file-assertion tests exist in `_coverage_test.go`.
+
+### Item 4: logTerraformContext coverage theater
+
+**Status:** Kept with documentation. The function is logging-only — it calls `log.Debug`
+which is not capturable in unit tests without injecting a logger. The NotPanics tests
+are the best we can do without over-engineering. Comment added explaining this.
+
+### Item 5: storeAutoDetectedIdentity no-op branch untested
+
+**Status:** Already covered. `utils_auth_test.go` has a table-driven
+`TestStoreAutoDetectedIdentity` suite with an "existing identity is preserved" case.
+
+### Item 6: Redundant warnOnConflictingEnvVars test
+
+**Status:** Fixed. Removed `TestWarnOnConflictingEnvVars_NoConflictsNoError` from
+`_args_test.go`. The 5 `t.Setenv` tests in `_coverage_test.go` implicitly cover the
+clean-environment path.
+
+### Item 7: assembleComponentEnvVars with tenv != nil untested
+
+**Status:** Fixed. Added `TestAssembleComponentEnvVars_NonNilTenv` that passes a
+zero-value `*dependencies.ToolchainEnvironment`. The `tenv != nil` branch runs. Full
+PATH ordering test requires a real toolchain install (deferred).
+
+### Item 8: printAndWriteVarFiles debug-print branches
+
+**Status:** Documented. These branches call `u.PrintAsYAMLToFileDescriptor` which writes
+to the process file descriptors — not capturable in unit tests without redirecting
+os.Stdout. Risk is low: the function is a thin wrapper over YAML serialization.
+
+### Item 9: buildTerraformCommandArgs init branch untested
+
+**Status:** Fixed. Added `TestBuildTerraformCommandArgs_Init` that tests the `case "init"`
+dispatch including `-reconfigure` and `-var-file` flags.
+
+### Item 10: GenerateFilesForComponent double-invocation
+
+**Status:** Documented. Added comment to `generateConfigFiles` explaining that
+`autoGenerateComponentFiles` and `generateConfigFiles` serve different purposes (generate
+sections vs backend/provider overrides). Pre-existing behavior, not a regression.
+
+---
+
 ## Changes Made
+
+### `internal/exec/terraform.go`
+
+- Add `subcommandApply`, `subcommandDeploy`, `subcommandInit`, `subcommandWorkspace`,
+  `dirPermissions` constants.
+
+### `internal/exec/terraform_execute_helpers.go`
+
+- Fix `hugeParam`: `handleVersionSubcommand` takes pointer params.
+- Fix `unlambda`: `defaultMergedAuthConfigGetter` uses direct function ref.
+- Fix `add-constant`: replace string literals with named constants.
+- Fix `cyclomatic`/`funlen`: extract `autoGenerateComponentFiles`,
+  `provisionComponentSource`, `logAndWriteComponentVars`, `logCliVarsOverrides`.
+- Add comment to `generateConfigFiles` re: double-invocation (item 10).
+
+### `internal/exec/terraform_execute_helpers_args.go`
+
+- Fix `unparam`: remove unused `planFile` from `buildApplySubcommandArgs`.
+- Replace `"apply"`, `"init"`, `"workspace"` with constants.
+
+### `internal/exec/terraform_execute_helpers_exec.go`
+
+- Fix `forbidigo`: nolint for `TF_WORKSPACE`.
+- Fix `nestif`: extract `handlePlanStatusUpload`.
+- Fix `argument-limit`: nolint for variadic opts.
+- Fix `cyclomatic`: extract `shouldSkipWorkspaceSetup`, `runPreExecutionSteps`.
 
 ### `internal/exec/terraform_execute_helpers_pipeline_test.go`
 
-- Removed 4 duplicate `resolveExitCode` tests (superset in `_test.go`).
-- Removed unused `errors` and `fmt` imports.
-- Updated file header comment to reflect remaining test functions.
+- Remove duplicate `resolveExitCode` tests and `TestBuildWorkspaceSubcommandArgs_NoSubCommand2`.
+- Clean up unused imports.
 
 ### `internal/exec/terraform_execute_helpers_args_test.go`
 
-- Clarified `TestCleanupTerraformFiles_ApplyRemovesVarFile` comment to explain what the test
-  actually covers (graceful handling of missing files, not actual removal).
-- Removed the unused file creation that was never verified.
+- Remove tautological cleanup tests and redundant `warnOnConflictingEnvVars` test.
+- Add `TestAssembleComponentEnvVars_NonNilTenv` (item 7).
+- Add `TestBuildTerraformCommandArgs_Init` (item 9).
+- Add docs for logTerraformContext tests explaining logging-only functions (item 4).
+
+### `internal/exec/terraform_execute_helpers_test.go`
+
+- Fix `filepathJoin`: split `"infra/networking"` into separate path segments.
 
 ---
 
