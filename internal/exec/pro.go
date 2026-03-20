@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -237,6 +238,7 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, client pro.Atm
 	// Create the DTO
 	dto := dtos.InstanceStatusUploadRequest{
 		AtmosProRunID: atmosProRunID,
+		AtmosVersion:  pkgversion.Version,
 		GitSHA:        gitSHA,
 		RepoURL:       repoInfo.RepoUrl,
 		RepoName:      repoInfo.RepoName,
