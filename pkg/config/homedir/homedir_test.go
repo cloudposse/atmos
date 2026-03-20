@@ -25,42 +25,28 @@ func BenchmarkDir(b *testing.B) {
 }
 
 func TestDir(t *testing.T) {
-	Reset() // Clear cache from any previous tests
+	Reset() // Clear cache from any previous tests.
 	defer Reset()
 
 	u, err := user.Current()
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
+	require.NoError(t, err)
 
 	dir, err := Dir()
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
-
-	if u.HomeDir != dir {
-		t.Fatalf("%#v != %#v", u.HomeDir, dir)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, u.HomeDir, dir)
 
 	DisableCache = true
 	defer func() { DisableCache = false }()
 	t.Setenv("HOME", "")
 	dir, err = Dir()
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
-
-	if u.HomeDir != dir {
-		t.Fatalf("%#v != %#v", u.HomeDir, dir)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, u.HomeDir, dir)
 }
 
 func TestReset_ClearsCache(t *testing.T) {
 	// First call to populate cache.
 	dir1, err := Dir()
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
+	require.NoError(t, err)
 
 	// Set a different HOME and reset cache.
 	tmpDir := t.TempDir()
@@ -69,17 +55,9 @@ func TestReset_ClearsCache(t *testing.T) {
 
 	// Dir() should now return the new HOME from env var.
 	dir2, err := Dir()
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
-
-	if dir1 == dir2 {
-		t.Fatalf("Reset() did not clear cache: both calls returned %q", dir1)
-	}
-
-	if dir2 != tmpDir {
-		t.Fatalf("After Reset(), expected Dir() to return %q, got %q", tmpDir, dir2)
-	}
+	require.NoError(t, err)
+	assert.NotEqual(t, dir1, dir2, "Reset() did not clear cache: both calls returned %q", dir1)
+	assert.Equal(t, tmpDir, dir2, "After Reset(), expected Dir() to return %q, got %q", tmpDir, dir2)
 }
 
 func TestReset_WorksAcrossMultipleTests(t *testing.T) {
@@ -501,13 +479,11 @@ func TestDarwinHomeDirFunc(t *testing.T) {
 }
 
 func TestExpand(t *testing.T) {
-	Reset() // Clear cache from any previous tests
+	Reset() // Clear cache from any previous tests.
 	defer Reset()
 
 	u, err := user.Current()
-	if err != nil {
-		t.Fatalf("err: %s", err)
-	}
+	require.NoError(t, err)
 
 	cases := []struct {
 		Input  string
@@ -551,9 +527,7 @@ func TestExpand(t *testing.T) {
 			t.Fatalf("Input: %#v\n\nErr: %s", tc.Input, err)
 		}
 
-		if actual != tc.Output {
-			t.Fatalf("Input: %#v\n\nOutput: %#v", tc.Input, actual)
-		}
+		assert.Equal(t, tc.Output, actual, "Input: %#v", tc.Input)
 	}
 
 	DisableCache = true
@@ -561,12 +535,8 @@ func TestExpand(t *testing.T) {
 	t.Setenv("HOME", "/custom/path/")
 	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", "bar")
 	actual, err := Expand("~/foo/bar")
-
-	if err != nil {
-		t.Errorf("No error is expected, got: %v", err)
-	} else if actual != expected {
-		t.Errorf("Expected: %v; actual: %v", expected, actual)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, expected, actual)
 }
 
 // TestExpand_TrailingSlash verifies that Expand("~/") returns the home

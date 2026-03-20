@@ -138,14 +138,21 @@ func Reset() {
 }
 
 func dirUnix() (string, error) {
-	// Try to get the home directory from the environment variable first
+	// Try to get the home directory from the environment variable first.
+	// Apply filepath.Clean for consistency with dirWindows() which also
+	// normalises all returned paths.
 	if home := getHomeFromEnv(); home != "" {
-		return home, nil
+		return filepath.Clean(home), nil
 	}
 
 	// Try user.Current() on all platforms first — it is the most reliable
 	// and avoids spawning subprocesses. The darwin-specific dscl lookup is
 	// kept as a fallback for environments where user.Current() fails.
+	//
+	// Note: in CGO=0 builds (e.g., Alpine/musl), user.Current() uses a
+	// pure-Go implementation that reads only /etc/passwd. Users whose UID is
+	// managed by NSS/LDAP/SSSD and not listed in /etc/passwd will not be found
+	// here; the shell fallback below is the last resort for those environments.
 	if home, err := getUnixHomeDir(); err == nil && home != "" {
 		return home, nil
 	}
@@ -195,9 +202,12 @@ func getDarwinHomeDir() (string, error) {
 	// Prefer user.Current().Username to avoid spawning an extra subprocess.
 	// user.Current() is called earlier in the chain (getUnixHomeDir) and may
 	// have failed to populate HomeDir, but Username is often still available.
+	// Cache the result to avoid calling currentUserFunc() twice (once here
+	// and once in getUnixHomeDir which runs before getDarwinHomeDir).
 	var username string
-	if u, err := currentUserFunc(); err == nil && u.Username != "" {
-		username = u.Username
+	cachedUser, userErr := currentUserFunc()
+	if userErr == nil && cachedUser.Username != "" {
+		username = cachedUser.Username
 	} else {
 		// Fall back to id -un when user.Current() fails or returns an empty username.
 		var whoOut bytes.Buffer
@@ -257,11 +267,18 @@ func getHomeFromShell() (string, error) {
 	cmd := exec.Command("sh", "-c", shellHomeDirCmd)
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
-		return "", err
+		return "", fmt.Errorf("getHomeFromShell: %w", err)
 	}
 
 	result := strings.TrimSpace(stdout.String())
 	if result == "" {
+		return "", ErrBlankOutput
+	}
+	// Guard against unexpanded tilde (e.g., "~username") which occurs when the
+	// user is not in the password database (distroless/scratch containers). A
+	// tilde-prefixed string is not a valid absolute path and must not be returned
+	// as a home directory.
+	if strings.HasPrefix(result, "~") {
 		return "", ErrBlankOutput
 	}
 	return result, nil
