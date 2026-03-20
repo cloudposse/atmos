@@ -158,26 +158,66 @@ func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 	return isRepoArchivedWithClient(checkCtx, client.Repositories, owner, repo)
 }
 
+// SeedArchivedRepoCache pre-populates the archived-repo cache for the given owner/repo
+// pair. This is primarily intended for tests to exercise callers of IsRepoArchived
+// (e.g., warnIfArchivedGitHubRepo) without making real GitHub API calls.
+func SeedArchivedRepoCache(owner, repo string, archived bool) {
+	archivedRepoCache.Store(owner+"/"+repo, archived)
+}
+
+// ResetArchivedRepoCache clears the in-memory archived-repo cache and resets the
+// singleflight group. It is intended for use in tests to prevent cache entries from
+// one sub-test leaking into subsequent sub-tests.
+func ResetArchivedRepoCache() {
+	archivedRepoCache.Range(func(k, _ any) bool {
+		archivedRepoCache.Delete(k)
+		return true
+	})
+	// Reset the singleflight group so in-flight calls don't return stale results
+	// after a cache reset. Tests must not have concurrent calls in progress when
+	// calling this function.
+	archivedRepoSFGroup = singleflight.Group{}
+}
+
 // isRepoArchivedWithClient is the internal implementation of IsRepoArchived.
 // It is separated so tests can inject a mock client without going through the
 // full client-creation path.
+//
+// Concurrent callers for the same key are coalesced via archivedRepoSFGroup so that
+// only one API call is ever in-flight at a time for a given owner/repo pair, even
+// under parallel vendor pulls.
 func isRepoArchivedWithClient(ctx context.Context, client githubRepositoriesClient, owner, repo string) (bool, error) {
 	cacheKey := owner + "/" + repo
 
-	// Return cached result if available.
+	// Return cached result if available (fast path, no singleflight overhead).
 	if v, ok := archivedRepoCache.Load(cacheKey); ok {
 		return v.(bool), nil
 	}
 
-	repository, resp, err := client.Get(ctx, owner, repo)
+	// Deduplicate concurrent callers: only the first goroutine issues the API call;
+	// all others wait and share the result.
+	result, err, _ := archivedRepoSFGroup.Do(cacheKey, func() (interface{}, error) {
+		// Re-check cache inside singleflight in case a previous call populated it.
+		if v, ok := archivedRepoCache.Load(cacheKey); ok {
+			return v.(bool), nil
+		}
+
+		repository, resp, apiErr := client.Get(ctx, owner, repo)
+		if apiErr != nil {
+			return false, handleGitHubAPIError(apiErr, resp)
+		}
+
+		archived := repository.GetArchived()
+		archivedRepoCache.Store(cacheKey, archived)
+
+		return archived, nil
+	})
+
 	if err != nil {
-		return false, handleGitHubAPIError(err, resp)
+		return false, err
 	}
 
-	archived := repository.GetArchived()
-	archivedRepoCache.Store(cacheKey, archived)
-
-	return archived, nil
+	return result.(bool), nil
 }
 
 // githubRepositoriesClient is a minimal interface around the GitHub Repositories

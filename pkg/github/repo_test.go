@@ -181,6 +181,23 @@ func TestParseGitHubOwnerRepo(t *testing.T) {
 			wantOK:    true,
 		},
 
+		// github:// scheme with fragment — must strip #fragment.
+		{
+			name:      "github:// scheme with fragment",
+			uri:       "github://cloudposse/repo#main",
+			wantOwner: "cloudposse",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
+		// Uppercase scheme/host — url.Parse lowercases the host.
+		{
+			name:      "uppercase scheme and host",
+			uri:       "HTTPS://GITHUB.COM/owner/repo",
+			wantOwner: "owner",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
+
 		// Port-qualified hostname.
 		{
 			name:      "https github URL with explicit port 443",
@@ -246,7 +263,7 @@ func TestIsRepoArchived(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset cache between sub-tests so each gets a fresh API call.
-			archivedRepoCache.Delete("owner/repo")
+			ResetArchivedRepoCache()
 
 			mux := http.NewServeMux()
 			mux.HandleFunc("/repos/owner/repo", func(w http.ResponseWriter, r *http.Request) {
