@@ -397,6 +397,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		return err
 	}
 
+	// Generate required_providers (terraform_override.tf.json) for version pinning (DEV-3124).
+	err = generateRequiredProviders(&atmosConfig, &info, workingDir)
+	if err != nil {
+		return err
+	}
+
 	// Check for specific Terraform environment variables that might conflict with Atmos
 	warnOnExactVars := []string{
 		"TF_CLI_ARGS",
