@@ -20,7 +20,7 @@ Atmos provides native ECR authentication through the **integrations** system. In
 
 ## Quick Start
 
-### Basic ECR Integration
+### Basic ECR Integration (Private)
 
 The simplest ECR setup links an integration to an existing AWS identity:
 
@@ -62,6 +62,35 @@ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 docker push 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:v1.0.0
 ```
 
+### ECR Public Integration
+
+For authenticated pulls from `public.ecr.aws` (eliminates rate limits on public images):
+
+```yaml
+auth:
+  integrations:
+    ecr-public:
+      kind: aws/ecr-public
+      via:
+        identity: dev-admin
+      spec:
+        auto_provision: true
+```
+
+No `registry` block is needed — ECR Public is always `public.ecr.aws` and authentication is always performed in `us-east-1`.
+
+```bash
+# Login triggers ECR Public automatically
+atmos auth login dev-admin
+
+# Pulls from public.ecr.aws are now authenticated (no rate limits)
+docker pull public.ecr.aws/docker/library/alpine:latest
+```
+
+:::tip
+Unauthenticated pulls from `public.ecr.aws` are rate-limited. Adding an `aws/ecr-public` integration is especially useful in CI, where builds pulling BuildKit, binfmt, or other public images can hit these limits.
+:::
+
 ## Understanding Integrations
 
 ### Why Integrations vs Identities?
@@ -79,7 +108,9 @@ Integrations are things that **use** an identity to materialize client-side cred
 
 ### Integration Configuration
 
-Each ECR integration requires:
+Atmos supports two ECR integration kinds:
+
+**Private ECR** (`aws/ecr`) — requires registry configuration:
 
 ```yaml
 integrations:
@@ -92,6 +123,18 @@ integrations:
       registry:
         account_id: "123456789012"
         region: us-east-2
+```
+
+**ECR Public** (`aws/ecr-public`) — no registry configuration needed:
+
+```yaml
+integrations:
+  ecr-public:
+    kind: aws/ecr-public
+    via:
+      identity: my-identity
+    spec:
+      auto_provision: true
 ```
 
 ## Common Patterns
@@ -329,17 +372,19 @@ jobs:
 
       - name: Authenticate and Login to ECR
         run: |
-          # Option A: Identity login (triggers auto-provisioned integrations)
+          # Identity login triggers all auto-provisioned integrations
+          # (both aws/ecr and aws/ecr-public)
           atmos auth login ci-deployer
-
-          # Option B: Explicit integration
-          # atmos auth ecr-login ci/ecr
 
       - name: Build and Push
         run: |
           docker build -t 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:${{ github.sha }} .
           docker push 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:${{ github.sha }}
 ```
+
+:::tip
+Add an `aws/ecr-public` integration with `auto_provision: true` to your CI identity. This authenticates to `public.ecr.aws` automatically, preventing rate-limit failures when pulling BuildKit, binfmt, or other public images during Docker builds.
+:::
 
 ### GitLab CI
 
@@ -360,7 +405,9 @@ build:
 
 ## IAM Permissions
 
-The identity used for ECR login needs the `ecr:GetAuthorizationToken` permission:
+### Private ECR (`aws/ecr`)
+
+The identity used for private ECR login needs the `ecr:GetAuthorizationToken` permission:
 
 ```json
 {
@@ -387,6 +434,30 @@ The identity used for ECR login needs the `ecr:GetAuthorizationToken` permission
   ]
 }
 ```
+
+### ECR Public (`aws/ecr-public`)
+
+The identity used for ECR Public login needs `ecr-public:GetAuthorizationToken` and `sts:GetServiceBearerToken`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr-public:GetAuthorizationToken",
+        "sts:GetServiceBearerToken"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+:::note
+ECR Public authentication is always performed in `us-east-1`, regardless of where your workloads run. ECR Public is only available in `us-east-1` and `us-west-2`.
+:::
 
 ## Credential Storage
 
@@ -444,9 +515,9 @@ echo $DOCKER_CONFIG
 ### Registry Not Found
 
 Verify the registry URL format:
-- Must be `{account_id}.dkr.ecr.{region}.amazonaws.com`
-- ECR Public (`public.ecr.aws`) is not supported
-- China/GovCloud regions are not supported
+- Private ECR: `{account_id}.dkr.ecr.{region}.amazonaws.com`
+- ECR Public: use `kind: aws/ecr-public` integration instead of `--registry`
+- China/GovCloud regions are not supported for either kind
 
 ## Next Steps
 

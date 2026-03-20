@@ -9,8 +9,9 @@ import (
 
 // Integration kind constants.
 const (
-	KindAWSECR = "aws/ecr"
-	KindAWSEKS = "aws/eks" // Future.
+	KindAWSECR       = "aws/ecr"
+	KindAWSECRPublic = "aws/ecr-public"
+	KindAWSEKS       = "aws/eks" // Future.
 )
 
 // Integration represents a client-only credential materialization.

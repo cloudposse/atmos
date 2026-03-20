@@ -861,6 +861,10 @@ var (
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
 
+	// ECR Public authentication errors.
+	ErrECRPublicAuthFailed    = errors.New("ECR Public authentication failed")
+	ErrECRPublicInvalidRegion = errors.New("invalid ECR Public region: only us-east-1 and us-west-2 are supported")
+
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")

@@ -145,6 +145,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecr/v1.56.1/service/ecr/LICENSE.txt
 
+  - github.com/aws/aws-sdk-go-v2/service/ecrpublic
+    License: Apache-2.0
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecrpublic/v1.38.12/service/ecrpublic/LICENSE.txt
+
   - github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/accept-encoding/v1.13.7/service/internal/accept-encoding/LICENSE.txt
