@@ -7,7 +7,6 @@ import Link from '@docusaurus/Link';
 import Markdown from 'react-markdown';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder } from '@fortawesome/free-solid-svg-icons';
-import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
 
@@ -43,10 +42,6 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           <h1 className={styles.indexTitle}>{title}</h1>
           <p className={styles.indexDescription}>{description}</p>
         </header>
-
-        {optionsData.disclaimer && (
-          <GistDisclaimer text={optionsData.disclaimer} />
-        )}
 
         <div className={styles.filterBar}>
           <button

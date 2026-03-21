@@ -404,7 +404,7 @@ const config = {
                 sourceDir: '../gists',
                 routeBasePath: '/gists',
                 title: 'Gists',
-                description: 'Community-contributed recipes showing creative ways to combine Atmos features',
+                description: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
                 githubRepo: 'cloudposse/atmos',
                 githubBranch: 'main',
                 githubPath: 'gists',
