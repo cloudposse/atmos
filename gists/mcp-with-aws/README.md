@@ -26,18 +26,15 @@ The result: every MCP server gets proper AWS auth automatically.
 
 ## How It Works
 
-```
-Claude Code → .mcp.json → atmos mcp aws start pricing
-                                    ↓
-                          resolve package name
-                          (pricing → awslabs.aws-pricing-mcp-server)
-                                    ↓
-                          atmos auth exec -i core-root/terraform
-                                    ↓
-                          AWS SSO authentication
-                                    ↓
-                          uvx --python 3.13 awslabs.aws-pricing-mcp-server@latest
-                          (runs with authenticated AWS credentials)
+```mermaid
+flowchart TD
+    A["Claude Code"] -->|reads| B[".mcp.json"]
+    B -->|runs| C["atmos mcp aws start pricing"]
+    C --> D["Resolve package name<br/><code>pricing → awslabs.aws-pricing-mcp-server</code>"]
+    D --> E["atmos auth exec -i core-root/terraform"]
+    E --> F["AWS SSO Authentication"]
+    F --> G["uvx --python 3.13<br/>awslabs.aws-pricing-mcp-server@latest"]
+    G --> H["MCP server running<br/>with authenticated AWS credentials"]
 ```
 
 1. Claude Code reads `.mcp.json` and starts each configured server
