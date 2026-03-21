@@ -397,6 +397,20 @@ const config = {
                 githubPath: 'examples',
             },
         ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'gists',
+                sourceDir: '../gists',
+                routeBasePath: '/gists',
+                title: 'Gists',
+                description: 'Community-contributed recipes showing creative ways to combine Atmos features',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'gists',
+                disclaimer: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
+            },
+        ],
     ],
 
     presets: [
@@ -498,6 +512,11 @@ const config = {
                         to: '/examples',
                         position: 'left',
                         label: 'Examples'
+                    },
+                    {
+                        to: '/gists',
+                        position: 'left',
+                        label: 'Gists'
                     },
                     {
                         label: 'Community',

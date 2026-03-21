@@ -9,6 +9,7 @@ import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
 import { findExampleByName, getExampleNameFromPath } from './utils';
+import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
 
@@ -54,6 +55,10 @@ export default function DirectoryPage({
         />
         <main className={styles.mainContent}>
           <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} />
+
+          {optionsData.disclaimer && (
+            <GistDisclaimer text={optionsData.disclaimer} />
+          )}
 
           {/* Show README if present */}
           {dirData.readme && (

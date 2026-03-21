@@ -1,0 +1,97 @@
+mcp:
+  enabled: true
+
+commands:
+  - name: mcp
+    description: Manage MCP servers
+    commands:
+      - name: aws
+        description: Manage AWS MCP servers
+        commands:
+          - name: install
+            description: Install one or all AWS MCP server packages
+            arguments:
+              - name: server
+                description: "Server name (e.g. pricing, terraform) or 'all'"
+            steps:
+              - |
+                SERVER="{{ .Arguments.server }}"
+
+                # Resolve package name from short name
+                resolve_package() {
+                  local name="$1"
+                  AWS_PREFIXED="pricing serverless iac documentation support network"
+                  if echo "$AWS_PREFIXED" | grep -qw "$name"; then
+                    echo "awslabs.aws-${name}-mcp-server"
+                  else
+                    echo "awslabs.${name}-mcp-server"
+                  fi
+                }
+
+                if [ "$SERVER" = "all" ]; then
+                  ALL_SERVERS=(
+                    billing-cost-management
+                    cost-explorer
+                    pricing
+                    terraform
+                    cfn
+                    cdk
+                    iac
+                    ecs
+                    eks
+                    serverless
+                    cloudwatch
+                    cloudtrail
+                    iam
+                    well-architected-security
+                    network
+                    dynamodb
+                    s3-tables
+                    documentation
+                    support
+                    lambda-tool
+                    stepfunctions-tool
+                  )
+                  for s in "${ALL_SERVERS[@]}"; do
+                    atmos mcp aws install "$s"
+                  done
+                  echo ""
+                  echo "Done. All AWS MCP server packages are installed."
+                else
+                  PACKAGE=$(resolve_package "$SERVER")
+                  echo "Installing $PACKAGE..."
+                  uv tool install "$PACKAGE" --force -q --python 3.13
+                fi
+          - name: start
+            description: Start an AWS MCP server with authenticated credentials
+            arguments:
+              - name: server
+                description: "Short server name (e.g. pricing, terraform, cloudwatch)"
+            steps:
+              - |
+                SERVER="{{ .Arguments.server }}"
+                AWS_PREFIXED="pricing serverless iac documentation support network"
+                if echo "$AWS_PREFIXED" | grep -qw "$SERVER"; then
+                  PACKAGE="awslabs.aws-${SERVER}-mcp-server"
+                else
+                  PACKAGE="awslabs.${SERVER}-mcp-server"
+                fi
+                exec env ATMOS_PROFILE=managers atmos auth exec -i core-root/terraform -- \
+                  uvx --python 3.13 "$PACKAGE@latest"
+          - name: test
+            description: Test that AWS MCP servers can authenticate
+            arguments:
+              - name: server
+                description: "Server name or 'all'"
+            steps:
+              - |
+                echo "Testing auth..."
+                ATMOS_PROFILE=managers atmos auth exec -i core-root/terraform -- \
+                  aws sts get-caller-identity 2>&1
+                if [ $? -ne 0 ]; then
+                  echo ""
+                  echo "Auth failed. Run: atmos auth login --identity core-root/terraform"
+                  exit 1
+                fi
+                echo ""
+                echo "Auth OK. AWS MCP servers are ready."
