@@ -411,75 +411,26 @@ func TestAddSectionsToComponentEntry_IncludesEmptyMapsWhenIncludeEmptyTrue(t *te
 // hasStackExplicitComponents
 // ---------------------------------------------------------------------------
 
-func TestHasStackExplicitComponents_WithTerraform(t *testing.T) {
-	stack := map[string]any{
-		cfg.ComponentsSectionName: map[string]any{
-			cfg.TerraformSectionName: map[string]any{
-				"vpc": map[string]any{},
-			},
-		},
+func TestHasStackExplicitComponents(t *testing.T) {
+	tests := []struct {
+		name  string
+		stack map[string]any
+		want  bool
+	}{
+		{"with terraform", map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.TerraformSectionName: map[string]any{"vpc": map[string]any{}}}}, true},
+		{"empty terraform", map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.TerraformSectionName: map[string]any{}}}, false},
+		{"with helmfile", map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.HelmfileSectionName: map[string]any{"chart": map[string]any{}}}}, true},
+		{"with packer", map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.PackerSectionName: map[string]any{"ami": map[string]any{}}}}, true},
+		{"with ansible", map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.AnsibleSectionName: map[string]any{"playbook": map[string]any{}}}}, true},
+		{"no components", map[string]any{}, false},
+		{"nil components", map[string]any{cfg.ComponentsSectionName: nil}, false},
+		{"wrong type", map[string]any{cfg.ComponentsSectionName: "not-a-map"}, false},
 	}
-	assert.True(t, hasStackExplicitComponents(stack))
-}
-
-func TestHasStackExplicitComponents_EmptyTerraform(t *testing.T) {
-	stack := map[string]any{
-		cfg.ComponentsSectionName: map[string]any{
-			cfg.TerraformSectionName: map[string]any{},
-		},
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, hasStackExplicitComponents(tc.stack))
+		})
 	}
-	assert.False(t, hasStackExplicitComponents(stack))
-}
-
-func TestHasStackExplicitComponents_Helmfile(t *testing.T) {
-	stack := map[string]any{
-		cfg.ComponentsSectionName: map[string]any{
-			cfg.HelmfileSectionName: map[string]any{
-				"chart": map[string]any{},
-			},
-		},
-	}
-	assert.True(t, hasStackExplicitComponents(stack))
-}
-
-func TestHasStackExplicitComponents_Packer(t *testing.T) {
-	stack := map[string]any{
-		cfg.ComponentsSectionName: map[string]any{
-			cfg.PackerSectionName: map[string]any{
-				"ami": map[string]any{},
-			},
-		},
-	}
-	assert.True(t, hasStackExplicitComponents(stack))
-}
-
-func TestHasStackExplicitComponents_Ansible(t *testing.T) {
-	stack := map[string]any{
-		cfg.ComponentsSectionName: map[string]any{
-			cfg.AnsibleSectionName: map[string]any{
-				"playbook": map[string]any{},
-			},
-		},
-	}
-	assert.True(t, hasStackExplicitComponents(stack))
-}
-
-func TestHasStackExplicitComponents_NoComponents(t *testing.T) {
-	assert.False(t, hasStackExplicitComponents(map[string]any{}))
-}
-
-func TestHasStackExplicitComponents_NilComponents(t *testing.T) {
-	stack := map[string]any{
-		cfg.ComponentsSectionName: nil,
-	}
-	assert.False(t, hasStackExplicitComponents(stack))
-}
-
-func TestHasStackExplicitComponents_WrongType(t *testing.T) {
-	stack := map[string]any{
-		cfg.ComponentsSectionName: "not-a-map",
-	}
-	assert.False(t, hasStackExplicitComponents(stack))
 }
 
 // ---------------------------------------------------------------------------
