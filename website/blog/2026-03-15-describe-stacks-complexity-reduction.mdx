@@ -45,8 +45,8 @@ We extracted the shared logic into a new `describe_stacks_component_processor.go
 - Practically untestable at a unit level
 
 **After:**
-- `ExecuteDescribeStacks`: cyclomatic complexity **10**, cognitive complexity **12**
-- Max complexity across all new functions: cyclomatic **20**, cognitive **22**
+- `ExecuteDescribeStacks` orchestrator: cyclomatic complexity **10**
+- Max complexity across all extracted functions: cyclomatic **20**, cognitive **22** (`processComponentEntry`)
 - All pure helper functions covered at **~96%** by unit tests (remaining uncovered lines are unreachable defensive type-assertion guards)
 
 ## How to Use It
