@@ -965,10 +965,12 @@ func TestProcessComponentTypeSection_DefaultsComponentKey(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	// The component key should have been set to "vpc" in the section map.
+
+	// The original typeSection must NOT be mutated (clone protects the cache).
 	vpcSection, ok := typeSection["vpc"].(map[string]any)
 	require.True(t, ok, "vpc section should be map[string]any")
-	assert.Equal(t, "vpc", vpcSection[cfg.ComponentSectionName])
+	_, hasComponent := vpcSection[cfg.ComponentSectionName]
+	assert.False(t, hasComponent, "original map must not be mutated — component key should not be set on the input")
 }
 
 func TestProcessComponentTypeSection_ProcessComponentEntryError(t *testing.T) {

@@ -167,10 +167,17 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 	defer perf.Track(p.atmosConfig, "exec.describeStacksProcessor.processComponentTypeSection")()
 
 	for componentName, compSection := range typeSection {
-		componentSection, ok := compSection.(map[string]any)
+		origSection, ok := compSection.(map[string]any)
 		if !ok {
 			return fmt.Errorf("invalid 'components.%s.%s' section in the file '%s'", //nolint:err113 // Dynamic context needed for debugging.
 				typeName, componentName, stackFileName)
+		}
+
+		// Shallow-clone the component section so mutations (setting defaults,
+		// metadata inheritance) don't modify the shared FindStacksMap cache.
+		componentSection := make(map[string]any, len(origSection))
+		for k, v := range origSection {
+			componentSection[k] = v
 		}
 
 		// Ensure the `component` key is set (defaults to the component name).
