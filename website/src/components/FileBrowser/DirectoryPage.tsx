@@ -41,8 +41,9 @@ export default function DirectoryPage({
     );
   }
 
+  const sectionName = optionsData.title || 'Examples';
   const pageTitle = dirData.path === exampleName
-    ? `${exampleName} - Examples`
+    ? `${exampleName} - ${sectionName}`
     : `${dirData.name} - ${exampleName}`;
 
   return (
@@ -54,7 +55,7 @@ export default function DirectoryPage({
           currentPath={dirData.path}
         />
         <main className={styles.mainContent}>
-          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} />
+          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
 
           {optionsData.disclaimer && (
             <GistDisclaimer text={optionsData.disclaimer} />

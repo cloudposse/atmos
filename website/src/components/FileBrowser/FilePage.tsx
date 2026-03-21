@@ -51,7 +51,7 @@ export default function FilePage({
           currentPath={fileData.path}
         />
         <main className={styles.mainContent}>
-          <BreadcrumbNav path={fileData.path} routeBasePath={routeBasePath} />
+          <BreadcrumbNav path={fileData.path} routeBasePath={routeBasePath} rootLabel={(optionsData.title || 'Examples').toLowerCase()} />
 
           {optionsData.disclaimer && (
             <GistDisclaimer text={optionsData.disclaimer} />
