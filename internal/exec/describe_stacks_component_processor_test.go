@@ -267,9 +267,12 @@ func TestEnsureComponentEntryInMap_CreatesAllLevels(t *testing.T) {
 
 	ensureComponentEntryInMap(finalMap, "prod", "terraform", "vpc")
 
-	prodEntry := finalMap["prod"].(map[string]any)
-	comps := prodEntry[cfg.ComponentsSectionName].(map[string]any)
-	tf := comps["terraform"].(map[string]any)
+	prodEntry, ok := finalMap["prod"].(map[string]any)
+	require.True(t, ok, "prod entry should be map[string]any")
+	comps, ok := prodEntry[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should be map[string]any")
+	tf, ok := comps["terraform"].(map[string]any)
+	require.True(t, ok, "terraform section should be map[string]any")
 	assert.NotNil(t, tf["vpc"])
 }
 
@@ -289,8 +292,14 @@ func TestEnsureComponentEntryInMap_IdempotentForExistingEntry(t *testing.T) {
 	ensureComponentEntryInMap(finalMap, "prod", "terraform", "vpc")
 
 	// Existing content should be preserved.
-	comps := finalMap["prod"].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)
-	vpc := comps["terraform"].(map[string]any)["vpc"].(map[string]any)
+	prodEntry, ok := finalMap["prod"].(map[string]any)
+	require.True(t, ok)
+	comps, ok := prodEntry[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok)
+	tf, ok := comps["terraform"].(map[string]any)
+	require.True(t, ok)
+	vpc, ok := tf["vpc"].(map[string]any)
+	require.True(t, ok)
 	assert.Equal(t, map[string]any{"existing": true}, vpc["vars"])
 }
 
@@ -957,7 +966,8 @@ func TestProcessComponentTypeSection_DefaultsComponentKey(t *testing.T) {
 
 	require.NoError(t, err)
 	// The component key should have been set to "vpc" in the section map.
-	vpcSection := typeSection["vpc"].(map[string]any)
+	vpcSection, ok := typeSection["vpc"].(map[string]any)
+	require.True(t, ok, "vpc section should be map[string]any")
 	assert.Equal(t, "vpc", vpcSection[cfg.ComponentSectionName])
 }
 
