@@ -673,10 +673,10 @@ func TestGetComponentDestMap_MissingComponentName(t *testing.T) {
 // processStackFile — name_template ghost entry prevention
 // ---------------------------------------------------------------------------
 
-// TestProcessStackFile_NameTemplate_NoGhostEntry verifies that when NameTemplate is set
+// TestProcessStackFile_NoGhostEntry_NameTemplate verifies that when NameTemplate is set
 // and no manifest name is defined, processStackFile does NOT pre-create an entry under
 // the raw file name. This prevents ghost entries when includeEmptyStacks=true.
-func TestProcessStackFile_NameTemplate_NoGhostEntry(t *testing.T) {
+func TestProcessStackFile_NoGhostEntry_NameTemplate(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Stacks.NameTemplate = "{{ .vars.tenant }}-{{ .vars.stage }}"
 
@@ -688,7 +688,6 @@ func TestProcessStackFile_NameTemplate_NoGhostEntry(t *testing.T) {
 		nil, nil,
 	)
 
-	// Stack file with no "name" field and no components — simulates an import-only stack.
 	stackMap := map[string]any{}
 	err := p.processStackFile("stacks/prod.yaml", stackMap)
 	require.NoError(t, err)
@@ -697,4 +696,48 @@ func TestProcessStackFile_NameTemplate_NoGhostEntry(t *testing.T) {
 	// the real stack name can only be resolved per-component (which there are none of).
 	_, exists := p.finalStacksMap["stacks/prod.yaml"]
 	assert.False(t, exists, "ghost entry under stackFileName must not exist when NameTemplate is set")
+}
+
+// TestProcessStackFile_NoGhostEntry_NamePattern verifies that when NamePattern is set,
+// processStackFile does NOT pre-create an entry under the raw file name.
+func TestProcessStackFile_NoGhostEntry_NamePattern(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Stacks.NamePattern = "{tenant}-{environment}-{stage}"
+
+	p := newDescribeStacksProcessor(
+		atmosConfig,
+		"", nil, nil, nil,
+		false, false,
+		true, // includeEmptyStacks.
+		nil, nil,
+	)
+
+	stackMap := map[string]any{}
+	err := p.processStackFile("stacks/prod.yaml", stackMap)
+	require.NoError(t, err)
+
+	_, exists := p.finalStacksMap["stacks/prod.yaml"]
+	assert.False(t, exists, "ghost entry under stackFileName must not exist when NamePattern is set")
+}
+
+// TestProcessStackFile_NoGhostEntry_FilterByStack verifies that when filterByStack
+// is active and the stack doesn't match, processStackFile returns early without
+// creating an entry.
+func TestProcessStackFile_NoGhostEntry_FilterByStack(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	p := newDescribeStacksProcessor(
+		atmosConfig,
+		"other-stack", nil, nil, nil,
+		false, false,
+		true, // includeEmptyStacks.
+		nil, nil,
+	)
+
+	stackMap := map[string]any{}
+	err := p.processStackFile("stacks/prod.yaml", stackMap)
+	require.NoError(t, err)
+
+	_, exists := p.finalStacksMap["stacks/prod.yaml"]
+	assert.False(t, exists, "non-matching stack should not create an entry when filterByStack is active")
 }

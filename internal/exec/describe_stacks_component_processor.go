@@ -97,13 +97,22 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 
 	// When includeEmptyStacks is true, pre-create an entry in the result map so that
 	// stacks without components (e.g., import-only stacks) are still present in the output.
-	// Skip pre-creation when NameTemplate is set and no manifest name is defined — the
-	// real stack name won't be known until template evaluation per component, and
-	// pre-creating under stackFileName would leave a ghost entry.
-	if p.includeEmptyStacks && (stackManifestName != "" || p.atmosConfig.Stacks.NameTemplate == "") {
+	// Only pre-create when the stack name can be resolved without per-component context:
+	// - manifest name is set (explicit name: field), OR
+	// - neither NameTemplate nor NamePattern is configured (raw file name is the final name).
+	// When NameTemplate or NamePattern is active, the real name is resolved per-component
+	// and pre-creating under stackFileName would leave a ghost entry.
+	canResolveNameEarly := stackManifestName != "" ||
+		(p.atmosConfig.Stacks.NameTemplate == "" && GetStackNamePattern(p.atmosConfig) == "")
+
+	if p.includeEmptyStacks && canResolveNameEarly {
 		initialName := stackFileName
 		if stackManifestName != "" {
 			initialName = stackManifestName
+		}
+		// Skip pre-creation if filterByStack is active and this stack doesn't match.
+		if shouldFilterByStack(p.filterByStack, stackFileName, initialName) {
+			return nil
 		}
 		if !u.MapKeyExists(p.finalStacksMap, initialName) {
 			entry := make(map[string]any)
