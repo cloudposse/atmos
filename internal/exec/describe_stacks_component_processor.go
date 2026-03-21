@@ -276,6 +276,9 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		if err != nil {
 			return err
 		}
+		// Sync info.ComponentSection so YAML functions see rendered values
+		// instead of raw template strings like "{{ .vars.region }}".
+		info.ComponentSection = componentSection
 	}
 
 	// Process YAML functions.
@@ -288,7 +291,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 
 	// Write the (optionally filtered) sections into the result map.
 	includeEmpty := resolveIncludeEmpty(p.atmosConfig, opts.checkIncludeEmpty)
-	destMap := p.finalStacksMap[stackName].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[typeName].(map[string]any)[componentName].(map[string]any)
+	destMap, ok := getComponentDestMap(p.finalStacksMap, stackName, typeName, componentName)
+	if !ok {
+		return fmt.Errorf("internal error: component entry not found for %s/%s/%s", stackName, typeName, componentName) //nolint:err113 // Dynamic context for debugging.
+	}
 	addSectionsToComponentEntry(destMap, componentSection, p.sections, includeEmpty)
 
 	return nil
@@ -471,6 +477,25 @@ func ensureComponentEntryInMap(finalStacksMap map[string]any, stackName, typeNam
 	if !u.MapKeyExists(typeMap, componentName) {
 		typeMap[componentName] = make(map[string]any)
 	}
+}
+
+// getComponentDestMap safely traverses finalStacksMap to the component-level map.
+// Returns (nil, false) if any level is missing or has an unexpected type.
+func getComponentDestMap(finalStacksMap map[string]any, stackName, typeName, componentName string) (map[string]any, bool) {
+	stackEntry, ok := finalStacksMap[stackName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	comps, ok := stackEntry[cfg.ComponentsSectionName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	typeMap, ok := comps[typeName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	destMap, ok := typeMap[componentName].(map[string]any)
+	return destMap, ok
 }
 
 // setAtmosComponentMetadata adds the five standard Atmos metadata keys to a section map.

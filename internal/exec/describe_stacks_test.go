@@ -598,3 +598,90 @@ func TestEnsureComponentEntryInMap_InvalidComponentsType(t *testing.T) {
 		ensureComponentEntryInMap(finalStacksMap, "my-stack", "terraform", "vpc")
 	})
 }
+
+// ---------------------------------------------------------------------------
+// getComponentDestMap
+// ---------------------------------------------------------------------------
+
+// TestGetComponentDestMap_ValidPath verifies the happy path traversal.
+func TestGetComponentDestMap_ValidPath(t *testing.T) {
+	compMap := map[string]any{"region": "us-east-1"}
+	finalMap := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": compMap,
+				},
+			},
+		},
+	}
+	dest, ok := getComponentDestMap(finalMap, "dev", "terraform", "vpc")
+	require.True(t, ok)
+	assert.Equal(t, "us-east-1", dest["region"])
+}
+
+// TestGetComponentDestMap_MissingStack returns false when stack is absent.
+func TestGetComponentDestMap_MissingStack(t *testing.T) {
+	finalMap := map[string]any{}
+	_, ok := getComponentDestMap(finalMap, "dev", "terraform", "vpc")
+	assert.False(t, ok)
+}
+
+// TestGetComponentDestMap_InvalidStackType returns false when stack entry is not a map.
+func TestGetComponentDestMap_InvalidStackType(t *testing.T) {
+	finalMap := map[string]any{"dev": "not-a-map"}
+	_, ok := getComponentDestMap(finalMap, "dev", "terraform", "vpc")
+	assert.False(t, ok)
+}
+
+// TestGetComponentDestMap_MissingComponentsSection returns false.
+func TestGetComponentDestMap_MissingComponentsSection(t *testing.T) {
+	finalMap := map[string]any{
+		"dev": map[string]any{},
+	}
+	_, ok := getComponentDestMap(finalMap, "dev", "terraform", "vpc")
+	assert.False(t, ok)
+}
+
+// TestGetComponentDestMap_MissingComponentName returns false.
+func TestGetComponentDestMap_MissingComponentName(t *testing.T) {
+	finalMap := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{},
+			},
+		},
+	}
+	_, ok := getComponentDestMap(finalMap, "dev", "terraform", "vpc")
+	assert.False(t, ok)
+}
+
+// ---------------------------------------------------------------------------
+// processStackFile — name_template ghost entry prevention
+// ---------------------------------------------------------------------------
+
+// TestProcessStackFile_NameTemplate_NoGhostEntry verifies that when NameTemplate is set
+// and no manifest name is defined, processStackFile does NOT pre-create an entry under
+// the raw file name. This prevents ghost entries when includeEmptyStacks=true.
+func TestProcessStackFile_NameTemplate_NoGhostEntry(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Stacks.NameTemplate = "{{ .vars.tenant }}-{{ .vars.stage }}"
+
+	p := newDescribeStacksProcessor(
+		atmosConfig,
+		"", nil, nil, nil,
+		false, false,
+		true, // includeEmptyStacks.
+		nil, nil,
+	)
+
+	// Stack file with no "name" field and no components — simulates an import-only stack.
+	stackMap := map[string]any{}
+	err := p.processStackFile("stacks/prod.yaml", stackMap)
+	require.NoError(t, err)
+
+	// No entry should exist under "stacks/prod.yaml" because NameTemplate is set and
+	// the real stack name can only be resolved per-component (which there are none of).
+	_, exists := p.finalStacksMap["stacks/prod.yaml"]
+	assert.False(t, exists, "ghost entry under stackFileName must not exist when NameTemplate is set")
+}

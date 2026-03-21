@@ -74,7 +74,23 @@ if len(compContent) > 0 {
 }
 ```
 
-### Finding 3 (Medium): delete(stackMap, "imports") mutates live stacksMap
+### Finding 3 (High): Unguarded 4-level type assertion chain at line 291
+
+`processComponentEntry` had a single-line chain of 4 unguarded type assertions to reach the
+component destination map:
+
+```go
+destMap := p.finalStacksMap[stackName].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[typeName].(map[string]any)[componentName].(map[string]any)
+```
+
+While `ensureComponentEntryInMap` pre-creates all levels 35 lines above, any future code path
+bypassing that call would get a panic instead of a returned error.
+
+**Fix:** Extracted `getComponentDestMap` helper with `ok` guards at every level, returning
+`(nil, false)` on type mismatch. The caller now returns a descriptive error instead of
+panicking.
+
+### Finding 3b (Medium): delete(stackMap, "imports") mutates live stacksMap
 
 `processStackFile` receives `stackMap` as a `map[string]any` reference from the `stacksMap`
 returned by `FindStacksMap`. The `delete(stackMap, "imports")` permanently removes the key
@@ -96,11 +112,12 @@ component because the template may reference per-component `vars` (e.g.,
 ### Finding 5 (Medium): info.ComponentSection stale after template processing
 
 After `processComponentSectionTemplates`, the local `componentSection` is updated but
-`info.ComponentSection` still holds the pre-template version.
+`info.ComponentSection` still holds the pre-template version. YAML functions that read
+`info.ComponentSection` (e.g., `!terraform.output`, `!terraform.state`) would see
+un-rendered template strings like `"{{ .vars.region }}"` instead of rendered values.
 
-**Status:** Valid but currently harmless. The rendered `componentSection` is passed to
-downstream functions as a parameter. `info.ComponentSection` staleness would only matter
-if downstream code reads from it after template processing, which it currently doesn't.
+**Fix:** Added `info.ComponentSection = componentSection` after template processing to sync
+the rendered values before YAML function processing.
 
 ### Finding 6 (Medium): Unguarded type assertion in ensureComponentEntryInMap
 
@@ -137,8 +154,8 @@ Not a bug.
 No test existed that combined `NameTemplate` with `includeEmptyStacks=true` to verify ghost
 entries under `stackFileName` were absent.
 
-**Status:** Addressed by fixing the underlying bug (#1). The fix prevents ghost entries from
-being created in the first place.
+**Fix:** Added `TestProcessStackFile_NameTemplate_NoGhostEntry` that verifies no entry
+exists under `stackFileName` when `NameTemplate` is set with `includeEmptyStacks=true`.
 
 ### Finding 10 (Low): filterEmptyFinalStacks mutates map before returning error
 
@@ -169,6 +186,10 @@ component types, inheritance chains, and template rendering. Deferred to a follo
 
 ### `internal/exec/describe_stacks_component_processor.go`
 
+- Fix unguarded type assertion chain (#3): extract `getComponentDestMap` helper with `ok`
+  guards at every level — returns error instead of panicking.
+- Fix info.ComponentSection staleness (#5): sync `info.ComponentSection = componentSection`
+  after template processing so YAML functions see rendered values.
 - Fix ghost entry (#1): skip pre-creation when `NameTemplate` is set and manifest name is
   empty — prevents orphaned entries under `stackFileName`.
 - Fix `stackHasNonEmptyComponents` (#2): replace 5-section whitelist with
@@ -201,6 +222,13 @@ component types, inheritance chains, and template rendering. Deferred to a follo
   `finalStacksMap[stackName]` is not a `map[string]any`.
 - Add `TestEnsureComponentEntryInMap_InvalidComponentsType` — verifies no panic when
   `components` section is not a `map[string]any`.
+- Add `TestGetComponentDestMap_ValidPath` — happy path traversal.
+- Add `TestGetComponentDestMap_MissingStack` — returns false when stack absent.
+- Add `TestGetComponentDestMap_InvalidStackType` — returns false for non-map stack.
+- Add `TestGetComponentDestMap_MissingComponentsSection` — returns false for missing section.
+- Add `TestGetComponentDestMap_MissingComponentName` — returns false for missing component.
+- Add `TestProcessStackFile_NameTemplate_NoGhostEntry` — verifies no ghost entry under
+  `stackFileName` when `NameTemplate` is set with `includeEmptyStacks=true` (#10).
 - Fix `staticcheck/ST1019` — remove duplicate `config` import, unify to `cfg` alias.
 
 ---
