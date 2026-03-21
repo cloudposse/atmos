@@ -361,6 +361,7 @@ func TestBuildComponentInfo_WithFolderPrefix(t *testing.T) {
 	result := buildComponentInfo(ac, cs, cfg.TerraformSectionName)
 
 	assert.Equal(t, cfg.TerraformSectionName, result["component_type"])
+	// buildComponentInfo normalizes paths to forward slashes via filepath.ToSlash.
 	assert.Equal(t, "components/terraform/networking/vpc", result[cfg.ComponentPathSectionName])
 }
 
@@ -378,6 +379,7 @@ func TestBuildComponentInfo_NoPrefixInMetadata(t *testing.T) {
 
 	result := buildComponentInfo(ac, cs, cfg.TerraformSectionName)
 
+	// buildComponentInfo normalizes paths to forward slashes via filepath.ToSlash.
 	assert.Equal(t, "components/terraform/vpc", result[cfg.ComponentPathSectionName])
 }
 
