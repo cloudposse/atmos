@@ -19,22 +19,24 @@ Gists are shared as-is by community contributors. Unlike maintained [examples](/
 | **Scope** | Single feature demonstration | Combining multiple features |
 | **Style** | Minimal config files | Rich README + config files |
 
-## First Gist: AWS MCP Servers with Atmos
+## First Gist: FinOps with AWS MCP Servers
 
-Our inaugural gist is a masterclass in combining [Custom Commands](/cli/configuration/commands), [Auth](/stacks/auth), and [Toolchain](/cli/configuration/toolchain) to make running AWS MCP servers seamless.
+Our inaugural gist is a masterclass in combining [Custom Commands](/cli/configuration/commands), [Auth](/stacks/auth), and [Toolchain](/cli/configuration/toolchain) to give AI assistants direct access to AWS cost data.
 
-The key insight: `atmos auth exec` wraps MCP server processes with authenticated AWS credentials, so you get 21 AWS MCP servers configured with a single pattern — no manual `aws sso login` or credential juggling.
+Ask Claude questions like "What did we spend on EC2 last month?" and get real answers from your actual AWS account — all authenticated automatically through Atmos.
 
 ```bash
 # Install all AWS MCP server packages
 atmos mcp aws install all
 
-# Start a server with automatic AWS auth
-atmos mcp aws start pricing
+# Start a cost server with automatic AWS auth
+atmos mcp aws start cost-explorer
 
 # Test that auth is working
 atmos mcp aws test all
 ```
+
+The gist configures 21 AWS MCP servers including Billing, Cost Explorer, Pricing, CloudWatch, IAM, and more — all using a single authentication pattern powered by `atmos auth exec`.
 
 [Browse the gist](/gists/mcp-with-aws)
 

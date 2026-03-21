@@ -1,21 +1,23 @@
-# AWS MCP Servers with Atmos
+# FinOps with AWS MCP Servers
 
-Run 21 AWS MCP servers with automatic authentication using a single pattern. No manual credential management — `atmos auth exec` handles everything.
+Give your AI coding assistant direct access to AWS cost data, billing, and pricing information — all authenticated automatically through Atmos. Ask Claude questions like "What did we spend on EC2 last month?" and get real answers from your actual AWS account.
 
 ## The Problem
 
-AWS publishes [MCP servers](https://github.com/awslabs/mcp) for services like Cost Explorer, CloudWatch, IAM, ECS, and more. Each server needs authenticated AWS credentials to function. Setting this up manually for 20+ servers is tedious and error-prone — you end up juggling SSO sessions, environment variables, and credential files.
+FinOps teams need visibility into AWS costs, but the tools are scattered across consoles and APIs. Meanwhile, AI coding assistants like Claude Code can't access your AWS cost data because they need authenticated credentials — and setting that up for [AWS MCP servers](https://github.com/awslabs/mcp) manually is tedious.
+
+You end up juggling SSO sessions, environment variables, and credential files across 20+ MCP servers. It shouldn't be this hard.
 
 ## The Solution
 
-Use Atmos to wrap everything:
+Use Atmos to wire everything together so AI assistants can query your AWS cost data directly:
 
 - **Custom Commands** define `atmos mcp aws install/start/test` subcommands
-- **Auth** wraps each MCP server process with `atmos auth exec`, injecting authenticated credentials
+- **Auth** wraps each MCP server process with `atmos auth exec`, injecting authenticated credentials automatically
 - **Toolchain** ensures `uv` (the Python package manager) is available for installing MCP packages
 - **`.mcp.json`** tells Claude Code to start each server via `atmos mcp aws start <name>`
 
-The result: every MCP server gets proper AWS auth automatically.
+The result: Claude Code gets authenticated access to AWS Billing, Cost Explorer, Pricing, and 18 other AWS services — all through a single pattern.
 
 ## Features Used
 
@@ -28,20 +30,22 @@ The result: every MCP server gets proper AWS auth automatically.
 
 ```mermaid
 flowchart TD
-    A["Claude Code"] -->|reads| B[".mcp.json"]
-    B -->|runs| C["atmos mcp aws start pricing"]
-    C --> D["Resolve package name<br/><code>pricing → awslabs.aws-pricing-mcp-server</code>"]
-    D --> E["atmos auth exec -i core-root/terraform"]
-    E --> F["AWS SSO Authentication"]
-    F --> G["uvx --python 3.13<br/>awslabs.aws-pricing-mcp-server@latest"]
+    A["You ask Claude:<br/>'What did we spend on EC2 last month?'"] -->|Claude invokes| B["aws-cost-explorer MCP server"]
+    B -->|configured in| C[".mcp.json"]
+    C -->|runs| D["atmos mcp aws start cost-explorer"]
+    D --> E["Resolve package name<br/>cost-explorer → awslabs.cost-explorer-mcp-server"]
+    E --> F["atmos auth exec -i core-root/terraform"]
+    F --> G["AWS SSO Authentication"]
     G --> H["MCP server running<br/>with authenticated AWS credentials"]
+    H -->|returns cost data| A
 ```
 
-1. Claude Code reads `.mcp.json` and starts each configured server
-2. Each server entry calls `atmos mcp aws start <server-name>`
-3. The custom command resolves the short name to the full Python package name
-4. `atmos auth exec -i core-root/terraform` handles AWS SSO authentication
-5. The MCP server process inherits the authenticated AWS credentials via `exec`
+1. You ask Claude a question about AWS costs, infrastructure, or pricing
+2. Claude invokes the relevant MCP server (e.g., `aws-cost-explorer`, `aws-pricing`)
+3. The `.mcp.json` config runs `atmos mcp aws start <server-name>`
+4. The custom command resolves the short name to the full Python package name
+5. `atmos auth exec -i core-root/terraform` handles AWS SSO authentication
+6. The MCP server process inherits the authenticated credentials and returns real data
 
 ## Getting Started
 
@@ -97,13 +101,20 @@ atmos mcp aws test all
 
 ## Available Servers
 
-This gist includes 21 AWS MCP servers:
+This gist includes 21 AWS MCP servers. The FinOps-relevant ones are highlighted:
+
+### FinOps & Cost Management
+
+| Server | Package | What You Can Ask |
+|--------|---------|-----------------|
+| billing-cost-management | awslabs.billing-cost-management-mcp-server | Billing summaries, payment history |
+| cost-explorer | awslabs.cost-explorer-mcp-server | Spend breakdowns, cost trends, forecasts |
+| pricing | awslabs.aws-pricing-mcp-server | On-demand vs reserved pricing, cost comparisons |
+
+### Infrastructure & Operations
 
 | Server | Package |
 |--------|---------|
-| billing-cost-management | awslabs.billing-cost-management-mcp-server |
-| cost-explorer | awslabs.cost-explorer-mcp-server |
-| pricing | awslabs.aws-pricing-mcp-server |
 | terraform | awslabs.terraform-mcp-server |
 | cfn | awslabs.cfn-mcp-server |
 | cdk | awslabs.cdk-mcp-server |
@@ -111,17 +122,27 @@ This gist includes 21 AWS MCP servers:
 | ecs | awslabs.ecs-mcp-server |
 | eks | awslabs.eks-mcp-server |
 | serverless | awslabs.aws-serverless-mcp-server |
+| lambda-tool | awslabs.lambda-tool-mcp-server |
+| stepfunctions-tool | awslabs.stepfunctions-tool-mcp-server |
+
+### Observability & Security
+
+| Server | Package |
+|--------|---------|
 | cloudwatch | awslabs.cloudwatch-mcp-server |
 | cloudtrail | awslabs.cloudtrail-mcp-server |
 | iam | awslabs.iam-mcp-server |
 | well-architected-security | awslabs.well-architected-security-mcp-server |
 | network | awslabs.aws-network-mcp-server |
+
+### Data & Support
+
+| Server | Package |
+|--------|---------|
 | dynamodb | awslabs.dynamodb-mcp-server |
 | s3-tables | awslabs.s3-tables-mcp-server |
 | documentation | awslabs.aws-documentation-mcp-server |
 | support | awslabs.aws-support-mcp-server |
-| lambda-tool | awslabs.lambda-tool-mcp-server |
-| stepfunctions-tool | awslabs.stepfunctions-tool-mcp-server |
 
 ## Customization
 
@@ -155,4 +176,4 @@ Update `AWS_REGION` in `.mcp.json` for each server entry:
 
 `atmos auth exec` is the glue that makes this work. It wraps any command with authenticated credentials using `exec`, which replaces the current process — so the MCP server inherits the credentials directly. No temp files, no environment variable juggling, no credential expiration headaches.
 
-Combined with Custom Commands for the install/start/test workflow and Toolchain for dependency management, you get a complete, self-contained solution for running AWS MCP servers.
+Combined with Custom Commands for the install/start/test workflow and Toolchain for dependency management, you get a complete, self-contained solution for AI-powered FinOps. Your team can ask natural language questions about AWS costs and get answers from real account data — without leaving their editor.
