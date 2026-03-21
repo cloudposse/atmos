@@ -34,6 +34,9 @@ type TerraformRunOptions struct {
 	Components []string
 	All        bool
 	Affected   bool
+
+	// Status upload flag.
+	UploadStatus bool
 }
 
 // ParseTerraformRunOptions parses shared terraform flags from Viper.
@@ -57,5 +60,6 @@ func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
 		Components:              v.GetStringSlice("components"),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
+		UploadStatus:            v.GetBool("upload-status"),
 	}
 }
