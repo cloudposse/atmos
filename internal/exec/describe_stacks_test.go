@@ -441,16 +441,29 @@ func TestExecuteDescribeStacks_IncludeEmptyStacks(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	require.NoError(t, err)
 
-	// With includeEmptyStacks=true all stacks should be returned even if they have no components.
-	stacksMap, err := ExecuteDescribeStacks(
+	// Call with includeEmptyStacks=false to get the baseline.
+	withoutEmpty, err := ExecuteDescribeStacks(
 		&atmosConfig,
 		"", nil, nil, nil, false, false, false,
-		true, // includeEmptyStacks
+		false, // includeEmptyStacks=false.
 		nil, nil,
 	)
-
 	require.NoError(t, err)
-	require.NotNil(t, stacksMap)
+
+	// Call with includeEmptyStacks=true — should return at least as many stacks.
+	withEmpty, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"", nil, nil, nil, false, false, false,
+		true, // includeEmptyStacks=true.
+		nil, nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, withEmpty)
+
+	// The includeEmptyStacks=true result must have >= the stacks from the false result.
+	// If the fixture has any import-only or component-less stacks, the count will be strictly greater.
+	assert.GreaterOrEqual(t, len(withEmpty), len(withoutEmpty),
+		"includeEmptyStacks=true should return at least as many stacks as false")
 }
 
 // TestExecuteDescribeStacks_FindStacksMapError exercises the FindStacksMap error branch
