@@ -437,6 +437,109 @@ func TestProcessCustomYamlTagsWithAuthContext(t *testing.T) {
 	assert.Equal(t, "test_value", result2["test_key"])
 }
 
+// TestProcessNodesWithError verifies error handling in processNodesWithContext.
+func TestProcessNodesWithError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Input with an invalid YAML function tag that should return an error.
+	// Using !store.get with invalid parameters will trigger an error.
+	input := map[string]any{
+		"simple_key": "simple_value",
+		"error_key":  "!store.get", // Empty after tag - triggers error.
+	}
+
+	// Process - should return error from the invalid YAML function.
+	_, err := processNodes(atmosConfig, input, "test-stack", nil, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Atmos YAML function")
+}
+
+// TestProcessNodesWithNestedError verifies error handling in nested structures.
+func TestProcessNodesWithNestedError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Input with a nested invalid YAML function tag.
+	input := map[string]any{
+		"top_level": "valid_value",
+		"nested": map[string]any{
+			"level2": map[string]any{
+				"error_key": "!store.get", // Invalid - triggers error.
+			},
+		},
+	}
+
+	// Process - should return error from the nested invalid YAML function.
+	_, err := processNodes(atmosConfig, input, "test-stack", nil, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Atmos YAML function")
+}
+
+// TestProcessNodesWithArrayError verifies error handling in arrays.
+func TestProcessNodesWithArrayError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Input with an invalid YAML function tag in an array.
+	input := map[string]any{
+		"list": []any{
+			"valid_item",
+			"!store.get", // Invalid - triggers error.
+			"another_valid_item",
+		},
+	}
+
+	// Process - should return error from the invalid YAML function.
+	_, err := processNodes(atmosConfig, input, "test-stack", nil, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid Atmos YAML function")
+}
+
+// TestMatchesPrefix tests the matchesPrefix helper function.
+func TestMatchesPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		prefix   string
+		skip     []string
+		expected bool
+	}{
+		{
+			name:     "matches prefix, not skipped",
+			input:    "!template value",
+			prefix:   "!template",
+			skip:     nil,
+			expected: true,
+		},
+		{
+			name:     "matches prefix, but skipped",
+			input:    "!template value",
+			prefix:   "!template",
+			skip:     []string{"template"},
+			expected: false,
+		},
+		{
+			name:     "does not match prefix",
+			input:    "!other value",
+			prefix:   "!template",
+			skip:     nil,
+			expected: false,
+		},
+		{
+			name:     "empty input",
+			input:    "",
+			prefix:   "!template",
+			skip:     nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchesPrefix(tt.input, tt.prefix, tt.skip)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // TestProcessCustomYamlTagsStackInfoThreading is a more focused unit test
 // that verifies stackInfo parameter is actually used, not just accepted.
 func TestProcessCustomYamlTagsStackInfoThreading(t *testing.T) {
