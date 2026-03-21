@@ -43,6 +43,29 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 			return err
 		}
 
+		flags := cmd.Flags()
+
+		// If --integration is specified, use Go SDK path via auth manager.
+		integration, _ := flags.GetString("integration")
+		if integration != "" {
+			return executeEKSUpdateKubeconfigViaIntegration(integration)
+		}
+
+		// If --name is provided without component/stack and without profile/role-arn,
+		// use Go SDK direct path (requires identity).
+		name, _ := flags.GetString("name")
+		stack, _ := flags.GetString("stack")
+		profile, _ := flags.GetString("profile")
+		roleArn, _ := flags.GetString("role-arn")
+		identity, _ := flags.GetString("identity")
+		if name != "" && stack == "" && profile == "" && roleArn == "" && identity != "" {
+			region, _ := flags.GetString("region")
+			kubeconfig, _ := flags.GetString("kubeconfig")
+			alias, _ := flags.GetString("alias")
+			return executeEKSUpdateKubeconfigDirect(name, region, kubeconfig, alias, identity)
+		}
+
+		// Legacy path: delegate to internal/exec for AWS CLI-based update.
 		return e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
 	},
 }
