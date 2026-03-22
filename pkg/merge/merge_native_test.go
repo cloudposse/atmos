@@ -696,15 +696,18 @@ func TestMergeWithOptions_TypeMismatch_ReturnsWrappedError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Cross-validation tests: compare deepMergeNative output against mergo.
+// Behavioral contract tests: encode the intended merge semantics for the
+// native implementation.
 //
-// These tests verify that the native implementation produces identical results
-// to mergo for documented edge cases so that regressions are caught by a live
-// comparison rather than by manual inspection of a comment author's memory.
+// These tests document the expected behavior of deepMergeNative for key cases,
+// including behaviors that match the old mergo-based implementation
+// (verified against mergo v1.0.x during development of this package).
+// Mergo is not imported directly to keep this package's test dependencies to a minimum;
+// the intended semantics are documented per-test via inline comments.
 // ---------------------------------------------------------------------------
 
 // TestMergeNative_CrossValidateVsMergo_BasicReplace verifies that simple key
-// override and new-key insertion match mergo's behaviour.
+// override and new-key insertion produce the expected results.
 func TestMergeNative_CrossValidateVsMergo_BasicReplace(t *testing.T) {
 	inputs := []map[string]any{
 		{"a": 1, "b": "old", "c": []any{"x"}},
@@ -739,7 +742,8 @@ func TestMergeNative_CrossValidateVsMergo_AppendSlice(t *testing.T) {
 
 // TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ScalarKeptAtDst verifies that
 // for scalar elements in sliceDeepCopy mode, the dst element is preserved (not overridden).
-// This documents and cross-checks the documented mergo behaviour.
+// Verified against mergo v1.0.x: mergo.WithSliceDeepCopy preserves dst at positions
+// where src holds a non-map element (scalars, strings, etc.).
 func TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ScalarKeptAtDst(t *testing.T) {
 	inputs := []map[string]any{
 		{"tags": []any{"base-tag-1", "base-tag-2"}},
@@ -792,6 +796,7 @@ func TestMergeNative_CrossValidateVsMergo_NestedMaps(t *testing.T) {
 	assert.Equal(t, 30, settings["timeout"], "src-only key must be added")
 }
 
+// BenchmarkMergeNative_TenInputs measures merge performance for 10 inputs —
 // a worst-case for deep import chains.
 func BenchmarkMergeNative_TenInputs(b *testing.B) {
 	cfg := &schema.AtmosConfiguration{

@@ -95,6 +95,7 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 			maxOccurrences = 3
 		}
 		contextTokens := []string{
+			"File being processed:", // must also be bounded — doubling fileCount would defeat the threshold check
 			"**Likely cause:**",
 			"**Debug hint:**",
 			"Import chain:", // must not be duplicated within a single error block

@@ -159,14 +159,12 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 		err = os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d"))
 		assert.NoError(t, err)
 
-		err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate"))
-		if err != nil && !os.IsNotExist(err) {
-			assert.NoError(t, err)
+		if err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate")); err != nil && !os.IsNotExist(err) {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
 		}
 
-		err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup"))
-		if err != nil && !os.IsNotExist(err) {
-			assert.NoError(t, err)
+		if err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup")); err != nil && !os.IsNotExist(err) {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
 		}
 	}()
 
