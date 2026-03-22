@@ -97,25 +97,20 @@ func TestLintCmd_HasStacksSubcommand(t *testing.T) {
 // TestLintStacksCmd_EnvBindings verifies that ATMOS_LINT_RULE and related env vars
 // are registered for binding via the StandardFlagParser (High #5 — env var binding test).
 func TestLintStacksCmd_EnvBindings(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-// Verify the lintStacksParser is initialized and all expected env vars are
-// registered. The parser stores this mapping via WithEnvVars(...) options.
-// We verify correctness by confirming the expected flags exist on the command
-// (which is registered by BindToViper/RegisterFlags) and then checking that
-// Viper can read the env vars when set.
-require := func(condition bool, msg string) {
-if !condition {
-t.Fatal(msg)
-}
-}
+	// Verify the lintStacksParser is initialized and all expected env vars are
+	// registered. The parser stores this mapping via WithEnvVars(...) options.
+	// We verify correctness by confirming the expected flags exist on the command
+	// (which is registered by BindToViper/RegisterFlags) and then checking that
+	// the parser is not nil.
 
-// All four flags must be registered.
-require(lintStacksCmd.Flags().Lookup("rule") != nil, "--rule flag must be registered")
-require(lintStacksCmd.Flags().Lookup("format") != nil, "--format flag must be registered")
-require(lintStacksCmd.Flags().Lookup("severity") != nil, "--severity flag must be registered")
-require(lintStacksCmd.Flags().Lookup("stack") != nil, "--stack flag must be registered")
+	// All four flags must be registered.
+	assert.NotNil(t, lintStacksCmd.Flags().Lookup("rule"), "--rule flag must be registered")
+	assert.NotNil(t, lintStacksCmd.Flags().Lookup("format"), "--format flag must be registered")
+	assert.NotNil(t, lintStacksCmd.Flags().Lookup("severity"), "--severity flag must be registered")
+	assert.NotNil(t, lintStacksCmd.Flags().Lookup("stack"), "--stack flag must be registered")
 
-// The lintStacksParser must not be nil (it is set in init()).
-require(lintStacksParser != nil, "lintStacksParser must not be nil")
+	// The lintStacksParser must not be nil (it is set in init()).
+	assert.NotNil(t, lintStacksParser, "lintStacksParser must not be nil")
 }

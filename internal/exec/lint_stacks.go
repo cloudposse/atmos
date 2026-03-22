@@ -138,7 +138,7 @@ func LintStacks(
 		// producing noise rather than actionable findings for the targeted stack.
 		if len(filteredRaw) == 0 {
 			return nil, fmt.Errorf(
-				"stack %q not found under %s; run without --stack or verify the stack name",
+				"stack %q not found under %s; verify the stack name matches a YAML file stem in that directory, or run without --stack to lint all stacks",
 				stackFilter, atmosConfig.StacksBaseAbsolutePath,
 			)
 		}
@@ -310,27 +310,27 @@ func expandGlobImports(imports []string, basePath string) []string {
 // basePath is joined and extension candidates are probed in order (.yaml, .yml, bare).
 // If no file exists at any candidate, the basePath-joined import is returned as a
 // best-effort fallback so callers still see the intended target.
-func resolveNonGlobImport(imp, basePath string) string {
-	if filepath.IsAbs(imp) {
-		return imp
+func resolveNonGlobImport(importPath, basePath string) string {
+	if filepath.IsAbs(importPath) {
+		return importPath
 	}
 	if basePath == "" {
-		return imp
+		return importPath
 	}
-	ext := strings.ToLower(filepath.Ext(imp))
+	ext := strings.ToLower(filepath.Ext(importPath))
 	// If the import already carries a YAML extension, just join and return.
 	if ext == ".yaml" || ext == ".yml" {
-		return filepath.Join(basePath, imp)
+		return filepath.Join(basePath, importPath)
 	}
 	// Try extension candidates in order: .yaml first, then .yml, then bare.
 	for _, suffix := range []string{".yaml", ".yml", ""} {
-		candidate := filepath.Join(basePath, imp+suffix)
+		candidate := filepath.Join(basePath, importPath+suffix)
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}
 	}
 	// No file found — return the bare joined path as a best-effort fallback.
-	return filepath.Join(basePath, imp)
+	return filepath.Join(basePath, importPath)
 }
 
 // stackYAMLFiles returns all non-template YAML files under root as absolute paths,
