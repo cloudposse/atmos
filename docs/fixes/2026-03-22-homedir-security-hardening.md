@@ -1,8 +1,8 @@
 # Security Hardening: `pkg/config/homedir` Shell-Injection and PII Fixes
 
-**Author:** RB (nitrocode), CEO of Infralicious  
-**Date:** 2026-03-22  
-**PR:** https://github.com/cloudposse/atmos/pull/2163  
+**Author:** RB (nitrocode), CEO of Infralicious
+**Date:** 2026-03-22
+**PR:** https://github.com/cloudposse/atmos/pull/2163
 **Severity:** High (Code Scanning Alert — shell injection / PII leak)
 
 ---
