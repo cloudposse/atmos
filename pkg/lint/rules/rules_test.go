@@ -1425,9 +1425,9 @@ func TestGetNestedMap(t *testing.T) {
 	t.Run("happy path single key", func(t *testing.T) {
 		t.Parallel()
 		m := map[string]any{
-			"components": map[string]any{"terraform": map[string]any{}},
+			cfg.ComponentsSectionName: map[string]any{cfg.TerraformSectionName: map[string]any{}},
 		}
-		result, ok := rules.ExportedGetNestedMap(m, "components")
+		result, ok := rules.ExportedGetNestedMap(m, cfg.ComponentsSectionName)
 		require.True(t, ok)
 		assert.NotNil(t, result)
 	})
@@ -1436,11 +1436,11 @@ func TestGetNestedMap(t *testing.T) {
 		t.Parallel()
 		inner := map[string]any{"vpc": "config"}
 		m := map[string]any{
-			"components": map[string]any{
-				"terraform": inner,
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: inner,
 			},
 		}
-		result, ok := rules.ExportedGetNestedMap(m, "components", "terraform")
+		result, ok := rules.ExportedGetNestedMap(m, cfg.ComponentsSectionName, cfg.TerraformSectionName)
 		require.True(t, ok)
 		assert.Equal(t, inner, result)
 	})
@@ -1456,9 +1456,9 @@ func TestGetNestedMap(t *testing.T) {
 	t.Run("non-map value at intermediate key returns false", func(t *testing.T) {
 		t.Parallel()
 		m := map[string]any{
-			"components": "not-a-map",
+			cfg.ComponentsSectionName: "not-a-map",
 		}
-		result, ok := rules.ExportedGetNestedMap(m, "components", "terraform")
+		result, ok := rules.ExportedGetNestedMap(m, cfg.ComponentsSectionName, cfg.TerraformSectionName)
 		assert.False(t, ok)
 		assert.Nil(t, result)
 	})
