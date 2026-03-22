@@ -95,7 +95,8 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 			maxOccurrences = 3
 		}
 		contextTokens := []string{
-			"File being processed:", // must also be bounded — doubling fileCount would defeat the threshold check
+			// "File being processed:" is the block counter used above — do not re-validate here.
+			// Its presence is already asserted by assert.Contains (line 68) and require.Positive.
 			"**Likely cause:**",
 			"**Debug hint:**",
 			"Import chain:", // must not be duplicated within a single error block

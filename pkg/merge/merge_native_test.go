@@ -328,6 +328,19 @@ func TestDeepMergeNative_NestedListOfMapOfList_AppendStrategy(t *testing.T) {
 	workers := dst["workers"].([]any)
 	// appendSlice appends src workers to dst workers → length 2.
 	require.Len(t, workers, 2, "appendSlice must append the src worker entry to dst workers")
+
+	// Verify dst worker (index 0) retains its name and both original subnets.
+	dstWorker, ok := workers[0].(map[string]any)
+	require.True(t, ok, "workers[0] must be a map")
+	assert.Equal(t, "group-a", dstWorker["name"])
+	assert.Equal(t, []any{"10.0.1.0/24", "10.0.2.0/24"}, dstWorker["subnets"],
+		"dst worker subnets must be preserved intact under appendSlice")
+
+	// Verify src worker (index 1) retains its subnets.
+	srcWorker, ok := workers[1].(map[string]any)
+	require.True(t, ok, "workers[1] must be a map")
+	assert.Equal(t, []any{"10.0.3.0/24"}, srcWorker["subnets"],
+		"src worker subnets must be appended as-is")
 }
 
 // TestMergeSlicesNative_TailElementsDeepCopied verifies that elements beyond len(src) in the
@@ -377,6 +390,18 @@ func TestDeepMergeNative_TypedSliceInSrcNormalized(t *testing.T) {
 	src := map[string]any{"strs": []string{"a", "b"}}
 	require.NoError(t, deepMergeNative(dst, src, false, false))
 	assert.Equal(t, []any{"a", "b"}, dst["strs"])
+}
+
+// TestDeepMergeNative_TypedSrcSliceReplacesExistingAnySliceDst verifies that a typed
+// src slice (e.g. []string) correctly replaces an existing []any dst value.
+// This exercises the existing-key path through the type-check normalization block,
+// which differs from the new-key path tested by TestDeepMergeNative_TypedSliceInSrcNormalized.
+func TestDeepMergeNative_TypedSrcSliceReplacesExistingAnySliceDst(t *testing.T) {
+	dst := map[string]any{"list": []any{"a", "b"}}
+	src := map[string]any{"list": []string{"c"}} // typed slice src, existing []any key
+	require.NoError(t, deepMergeNative(dst, src, false, false))
+	assert.Equal(t, []any{"c"}, dst["list"],
+		"typed src slice must replace existing []any dst slice after normalization")
 }
 
 func TestDeepMergeNative_DeepNesting(t *testing.T) {
@@ -755,8 +780,8 @@ func TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ScalarKeptAtDst(t *testi
 
 	tags, ok := nativeResult["tags"].([]any)
 	require.True(t, ok)
-	// dst length is 2; only the overlapping position [0] is considered.
-	// Scalar src at [0]: dst[0] is kept ("base-tag-1").
+	// Position [0]: scalar src[0] → dst[0]="base-tag-1" is preserved (not overridden by scalar src).
+	// Position [1]: tail element (beyond src length) → deep-copied from dst[1]="base-tag-2".
 	assert.Equal(t, []any{"base-tag-1", "base-tag-2"}, tags,
 		"sliceDeepCopy with scalar elements must preserve all dst elements")
 }

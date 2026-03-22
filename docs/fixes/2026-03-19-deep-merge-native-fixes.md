@@ -65,9 +65,10 @@ would bubble up the error instead of proceeding.
 
 **Fix:**
 ```go
+data, err := os.ReadFile(envFile)
 if err != nil {
-    // No file → default workspace is active.
-    if workspace == "default" {
+    // File missing (ENOENT) → default workspace is active; permission errors propagate.
+    if errors.Is(err, os.ErrNotExist) && workspace == "default" {
         return true
     }
     return false
@@ -83,7 +84,7 @@ return recorded == workspace
 
 ### 4. Workspace recovery log level too low
 
-**File:** `internal/exec/terraform.go`
+**File:** `internal/exec/terraform_execute_helpers_exec.go`
 
 **Problem:** When both `workspace select` and `workspace new` fail with exit code 1 but the
 environment file already names the target workspace (corrupted state), atmos silently
@@ -130,13 +131,16 @@ A follow-up task should migrate those to eliminate the mergo dependency entirely
 **Problem:** `len(dst)+len(src)` in `appendSlices` and `mergeSlicesNative` could overflow
 `int` if both slices are very large (e.g., `math.MaxInt/2 + 1` each).
 
-**Fix (already applied in a prior commit):** Introduced `safeAdd(a, b int) int` which
-clamps to `math.MaxInt` on overflow, then replaced direct additions.
+**Fix (already applied in a prior commit):** Introduced `safeCap(a, b int) int` which
+clamps the result to `1<<24` (16 M entries) — a practical upper bound that prevents
+oversized `make()` calls without triggering OOM panics, then replaced direct additions.
 
 ```go
-func safeAdd(a, b int) int {
-    if b > math.MaxInt-a {
-        return math.MaxInt
+const maxCapHint = 1 << 24 // 16 M entries — practical upper bound to prevent OOM
+
+func safeCap(a, b int) int {
+    if a > maxCapHint-b {
+        return maxCapHint
     }
     return a + b
 }
@@ -152,4 +156,4 @@ func safeAdd(a, b int) int {
 | `pkg/merge/merge_native_test.go` | Tests for precedence, tail isolation, dstMap isolation |
 | `internal/exec/terraform_utils.go` | Default-workspace handling; docstring clarification |
 | `internal/exec/terraform_utils_test.go` | Tests for default workspace variants |
-| `internal/exec/terraform.go` | Debug → Warn for workspace recovery |
+| `internal/exec/terraform_execute_helpers_exec.go` | Debug → Warn for workspace recovery |

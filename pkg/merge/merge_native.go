@@ -103,10 +103,14 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		// not a slice, refuse the override to prevent silent data corruption.
 		if _, dstIsSlice := dstVal.([]any); dstIsSlice {
 			if _, srcIsSlice := srcVal.([]any); !srcIsSlice {
-				// Attempt normalization: maybe srcVal is a typed slice.
-				if _, normalizedIsSlice := deepCopyValue(srcVal).([]any); !normalizedIsSlice {
+				// Attempt normalization once: maybe srcVal is a typed slice (e.g. []string).
+				normalized := deepCopyValue(srcVal)
+				if _, normalizedIsSlice := normalized.([]any); !normalizedIsSlice {
 					return fmt.Errorf("cannot override two slices with different type")
 				}
+				// Normalized typed slice → use the result we already computed.
+				dst[k] = normalized
+				continue
 			}
 		}
 

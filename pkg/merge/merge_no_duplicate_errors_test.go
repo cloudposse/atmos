@@ -57,28 +57,18 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 }
 
 // TestMergeErrorsAreWrappedNotPrinted ensures that when deepMergeNative returns an error,
-// we wrap it and return it rather than printing it..
+// we wrap it and return it rather than printing it.
 func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
-	// This test verifies that our code properly wraps errors
-	// without printing them directly
-
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
 		},
 	}
 
-	// Create maps with compatible value types (no type mismatch).
-	map1 := map[string]any{
-		"config": map[string]any{
-			"value": "original",
-		},
-	}
-	map2 := map[string]any{
-		"config": map[string]any{
-			"value": "override", // Same type: string → string, replace strategy just overwrites
-		},
-	}
+	// Use type-mismatched inputs to force deepMergeNative to return an error:
+	// dst has a []any slice, src provides a scalar string for the same key.
+	map1 := map[string]any{"subnets": []any{"10.0.1.0/24"}}
+	map2 := map[string]any{"subnets": "not-a-slice"} // triggers "cannot override two slices with different type"
 
 	// Capture any direct prints to stderr
 	oldStderr := os.Stderr
@@ -92,19 +82,18 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 		stderrChan <- buf.String()
 	}()
 
-	// Perform the merge
-	result, err := Merge(atmosConfig, []map[string]any{map1, map2})
+	// Perform the merge — must error
+	_, err := Merge(atmosConfig, []map[string]any{map1, map2})
 
 	// Close and restore stderr
 	w.Close()
 	os.Stderr = oldStderr
 	stderrOutput := <-stderrChan
 
-	// With replace strategy, this should succeed (no error)
-	assert.Nil(t, err)
-	assert.NotNil(t, result)
+	// The error must be returned, not swallowed
+	assert.Error(t, err, "type-mismatch must return an error")
 
-	// Verify nothing was printed to stderr
+	// The error must be returned to caller, not printed to stderr
 	assert.Empty(t, stderrOutput, "Merge should not print to stderr")
 }
 
