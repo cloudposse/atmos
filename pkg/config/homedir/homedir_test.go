@@ -1280,6 +1280,9 @@ func TestGetDarwinHomeDir_UsernameFromCurrentUser(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("This test exercises the non-darwin dscl-unavailable path.")
 	}
+	if runtime.GOOS == "windows" {
+		t.Skip("getDarwinHomeDir uses Unix commands (id, dscl); not applicable on Windows.")
+	}
 
 	u, err := user.Current()
 	require.NoError(t, err)
