@@ -447,6 +447,14 @@ func TestShellHomeDir_NonAbsoluteResultRejected(t *testing.T) {
 		"shellHomeDir must return ErrBlankOutput when sh returns a non-absolute path.")
 }
 
+// TestDirWindows tests the Windows-specific home directory detection logic.
+// The subtests fall into two categories:
+//   - Cross-platform selection tests: verify which env var wins (HOME vs
+//     USERPROFILE vs HOMEDRIVE+HOMEPATH). These run on all platforms because
+//     the precedence logic is OS-independent.
+//   - Windows-only path semantic tests: verify separator conversion, quote
+//     stripping, and drive-letter requirements. These are skipped on non-Windows
+//     because filepath.FromSlash and backslash semantics differ by OS.
 func TestDirWindows(t *testing.T) {
 	t.Run("HOME env var wins", func(t *testing.T) {
 		t.Setenv("HOME", "/my/home")
@@ -846,6 +854,9 @@ func TestShellGetUsernameFunc_StderrContext(t *testing.T) {
 	// The error should mention NSS/LDAP context, not be a bare sentinel.
 	assert.Contains(t, err.Error(), "NSS lookup failed",
 		"id stderr should be included in the error for diagnostics.")
+	// Verify the new shorter format without "stderr" in the key name.
+	assert.Contains(t, err.Error(), "id:",
+		"error should include the id command prefix.")
 }
 
 // TestDir_Cache verifies that Dir() caches its result and returns it on
@@ -1411,4 +1422,108 @@ func TestDir_DoubleCheckLocking(t *testing.T) {
 		require.NoError(t, errs[i])
 		assert.Equal(t, first, r, "All concurrent Dir() calls should return the same home directory.")
 	}
+}
+
+// TestSetDisableCache verifies that SetDisableCache provides a thread-safe way
+// to toggle the DisableCache flag, equivalent to direct assignment but safe
+// under concurrent Dir calls.
+func TestSetDisableCache(t *testing.T) {
+	Reset()
+	defer func() {
+		SetDisableCache(false)
+		Reset()
+	}()
+
+	t.Run("disable via SetDisableCache", func(t *testing.T) {
+		tmpHome := t.TempDir()
+		SetDisableCache(true)
+		t.Setenv("HOME", tmpHome)
+
+		dir, err := Dir()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Clean(tmpHome), dir,
+			"with DisableCache set via SetDisableCache, HOME change must be reflected.")
+	})
+
+	t.Run("re-enable caching via SetDisableCache", func(t *testing.T) {
+		Reset()
+		SetDisableCache(false)
+
+		dir1, err1 := Dir()
+		require.NoError(t, err1)
+		require.NotEmpty(t, dir1)
+
+		// Change HOME and verify Dir() returns the cached value (not the new HOME).
+		t.Setenv("HOME", t.TempDir())
+		dir2, err2 := Dir()
+		require.NoError(t, err2)
+		assert.Equal(t, dir1, dir2,
+			"with caching re-enabled, Dir() should return cached result.")
+	})
+
+	t.Run("SetDisableCache is race-safe", func(t *testing.T) {
+		// This subtest only verifies that concurrent calls do not panic or
+		// trigger the race detector; it does not assert specific values.
+		var wg sync.WaitGroup
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func(v bool) {
+				defer wg.Done()
+				SetDisableCache(v)
+			}(i%2 == 0)
+		}
+		wg.Wait()
+		// Restore to a known state.
+		SetDisableCache(false)
+		Reset()
+	})
+}
+
+// TestInitExternalCmdTimeout exercises applyEnvTimeout() which backs init().
+// init() runs once before tests start, so we call applyEnvTimeout() directly
+// to cover all three branches: (1) env not set, (2) valid duration, (3)
+// invalid/zero duration.
+func TestInitExternalCmdTimeout(t *testing.T) {
+	orig := externalCmdTimeout
+	defer func() { externalCmdTimeout = orig }()
+
+	t.Run("valid duration updates timeout", func(t *testing.T) {
+		externalCmdTimeout = orig
+		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "2s")
+		applyEnvTimeout()
+		assert.Equal(t, 2*time.Second, externalCmdTimeout,
+			"valid ATMOS_HOMEDIR_CMD_TIMEOUT must update externalCmdTimeout.")
+	})
+
+	t.Run("invalid duration keeps default", func(t *testing.T) {
+		externalCmdTimeout = orig
+		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "not-a-duration")
+		applyEnvTimeout()
+		assert.Equal(t, orig, externalCmdTimeout,
+			"invalid ATMOS_HOMEDIR_CMD_TIMEOUT must be ignored.")
+	})
+
+	t.Run("zero duration keeps default", func(t *testing.T) {
+		externalCmdTimeout = orig
+		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "0s")
+		applyEnvTimeout()
+		assert.Equal(t, orig, externalCmdTimeout,
+			"zero ATMOS_HOMEDIR_CMD_TIMEOUT must be ignored.")
+	})
+
+	t.Run("empty env var keeps default", func(t *testing.T) {
+		externalCmdTimeout = orig
+		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "")
+		applyEnvTimeout()
+		assert.Equal(t, orig, externalCmdTimeout,
+			"empty ATMOS_HOMEDIR_CMD_TIMEOUT must be ignored.")
+	})
+
+	t.Run("500ms parsed correctly", func(t *testing.T) {
+		externalCmdTimeout = orig
+		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "500ms")
+		applyEnvTimeout()
+		assert.Equal(t, 500*time.Millisecond, externalCmdTimeout,
+			"500ms must be correctly parsed.")
+	})
 }

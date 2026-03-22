@@ -29,8 +29,20 @@ import (
 )
 
 // DisableCache will disable caching of the home directory. Caching is enabled
-// by default.
+// by default. For concurrent programs, prefer SetDisableCache which acquires
+// the internal lock; direct assignment is safe only before any Dir calls.
 var DisableCache bool
+
+// SetDisableCache sets the DisableCache flag in a thread-safe manner by
+// acquiring the internal cache lock before writing. It is safe to call from
+// any goroutine, including concurrent callers of Dir or Expand. For best
+// results, call it before any parallel Dir calls are in flight so that all
+// callers observe the same setting.
+func SetDisableCache(v bool) {
+	cacheLock.Lock()
+	DisableCache = v
+	cacheLock.Unlock()
+}
 
 var (
 	homedirCache           string
@@ -66,9 +78,16 @@ var (
 )
 
 func init() {
-	// Allow operators and tests to tune externalCmdTimeout via env var.
-	// Any value parseable by time.ParseDuration is accepted; invalid values
-	// are silently ignored and the default (5s) is retained.
+	applyEnvTimeout()
+}
+
+// applyEnvTimeout reads ATMOS_HOMEDIR_CMD_TIMEOUT and, if it is a valid
+// positive duration, updates externalCmdTimeout. It is separated from init()
+// so that tests can call it directly after setting the env var, covering all
+// three branches (unset, invalid, valid).
+// Any value parseable by time.ParseDuration is accepted; invalid values
+// are silently ignored and the default (5s) is retained.
+func applyEnvTimeout() {
 	if v := os.Getenv("ATMOS_HOMEDIR_CMD_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			externalCmdTimeout = d
@@ -445,10 +464,10 @@ var shellGetUsernameFunc = func() (string, error) {
 	// so no redaction needed). These messages typically describe NSS/LDAP errors
 	// and do not include PII.
 	if msg := strings.TrimSpace(idErr.String()); msg != "" {
-		return "", fmt.Errorf("%w (id stderr: %s)", ErrIDUnavailable, msg)
+		return "", fmt.Errorf("%w (id: %s)", ErrIDUnavailable, msg)
 	}
 	if msg := strings.TrimSpace(whoErr.String()); msg != "" {
-		return "", fmt.Errorf("%w (whoami stderr: %s)", ErrIDUnavailable, msg)
+		return "", fmt.Errorf("%w (whoami: %s)", ErrIDUnavailable, msg)
 	}
 	return "", ErrIDUnavailable
 }

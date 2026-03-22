@@ -18,7 +18,31 @@ cgo. This library does that, enabling cross-compilation.
 This is Atmos's vendored fork of the deprecated `github.com/mitchellh/go-homedir` package.
 It includes important enhancements for test compatibility:
 
-### Environment Variable Support
+## Home Directory Precedence
+
+### Unix / Linux / macOS
+
+| Priority | Source | Notes |
+|---|---|---|
+| 1 | `$HOME` env var | Checked first; whitespace-only values are skipped. Wrapping single/double quotes are stripped (e.g., `HOME="/home/user"` works). |
+| 2 | `os/user.Current().HomeDir` | Pure-Go `/etc/passwd` reader in CGO=0 builds; may not find NSS/LDAP-only users. |
+| 3 | `dscl` (macOS only) | Reads `NFSHomeDirectory` from the macOS Directory Service. |
+| 4 | Shell tilde expansion | `sh -c 'printf "%s\n" ~username'` — works in distroless/Alpine with only `sh` present. |
+
+### Windows
+
+| Priority | Source | Notes |
+|---|---|---|
+| 1 | `%HOME%` | Wrapping quotes are stripped; forward slashes are converted to backslashes. **POSIX-style paths** (e.g., `/cygwin/home/user`) become **drive-relative** (`\cygwin\home\user`) because no drive letter is prepended — use a fully qualified drive path such as `C:\cygwin\home\user` for an absolute result. |
+| 2 | `%USERPROFILE%` | Same quoting and slash conversion as `HOME`. |
+| 3 | `%HOMEDRIVE%` + `%HOMEPATH%` | `HOMEPATH` is required to start with `\`. If it is missing, `\` is prepended automatically (e.g., `Users\foo` → `C:\Users\foo`). |
+
+> **Windows note:** If `HOME` or `USERPROFILE` contain a POSIX-style path without a drive letter
+> (e.g., `/home/user` from Cygwin, Git Bash, or WSL1), the result will be **drive-relative**
+> (`\home\user`) rather than absolute. To guarantee an absolute path, set `HOME` to a
+> Windows drive-absolute value such as `C:\Users\username`.
+
+## Environment Variable Support
 
 Unlike the original package, this fork **prioritizes environment variables** when detecting
 the home directory. This makes it compatible with `t.Setenv()` in Go tests:
@@ -33,45 +57,60 @@ func dirUnix() (string, error) {
 }
 ```
 
-On Unix-like systems (Linux, macOS), the library checks `$HOME` first before trying
-OS-specific detection methods like `dscl` (macOS) or `getent passwd` (Linux).
+## Cache Management
 
-On Windows, it checks `$HOME`, then `$USERPROFILE`, then `$HOMEDRIVE/$HOMEPATH`.
+The library caches the home directory on the first call to `Dir()` for performance.
+Without disabling caching, the cached value won't reflect environment changes.
 
-### Testing with t.Setenv()
+### Disabling the cache (recommended for tests)
 
-To use `t.Setenv("HOME", ...)` in tests, you must disable caching:
+Use the thread-safe `SetDisableCache()` function:
 
 ```go
 func TestSomethingWithCustomHome(t *testing.T) {
-    homedir.DisableCache = true
-    defer func() { homedir.DisableCache = false }()
+    homedir.SetDisableCache(true)
+    defer homedir.SetDisableCache(false)
 
-    tmpHome := t.TempDir()
-    t.Setenv("HOME", tmpHome)
+    t.Setenv("HOME", t.TempDir())
 
-    // Now homedir.Dir() will return tmpHome
     dir, err := homedir.Dir()
-    // dir == tmpHome
+    // dir == the value set by t.Setenv
 }
 ```
 
-Why disable caching? The library caches the home directory on first call for performance.
-Without `DisableCache = true`, the cached value won't reflect environment changes made by
-`t.Setenv()`.
+Or assign the unexported `DisableCache` directly **before** any concurrent `Dir` calls
+(safe at package init / `TestMain` level, but not during concurrent access):
 
-### Cache Management
+```go
+homedir.DisableCache = true   // safe only if no goroutines are calling Dir yet
+```
 
-The library provides two ways to handle caching:
+> **Thread safety:** `SetDisableCache` acquires the internal cache lock and is safe from
+> any goroutine. Direct assignment to `DisableCache` is **not** protected by a lock and
+> must only be done before any parallel `Dir` calls begin.
 
-1. **Disable caching (recommended for tests)**:
-   ```go
-   homedir.DisableCache = true
-   ```
+### Reset cache
 
-2. **Reset cache (alternative approach)**:
-   ```go
-   homedir.Reset()  // Forces next Dir() call to re-detect
-   ```
+```go
+homedir.Reset()  // Forces the next Dir() call to re-detect the home directory
+```
+
+## Timeout Tuning
+
+All external subprocess calls (`id`, `dscl`, `sh`) use a shared timeout
+(default: **5 seconds**). Override it via the `ATMOS_HOMEDIR_CMD_TIMEOUT` environment
+variable — any value accepted by [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration)
+is valid. Zero or invalid values are silently ignored and the default is retained.
+
+```sh
+# Tighter timeout for fast NSS backends
+export ATMOS_HOMEDIR_CMD_TIMEOUT=2s
+
+# Generous timeout for slow LDAP backends
+export ATMOS_HOMEDIR_CMD_TIMEOUT=15s
+
+# Sub-second timeout in containers where id should be instant
+export ATMOS_HOMEDIR_CMD_TIMEOUT=250ms
+```
 
 See `pkg/config/homedir/homedir_test.go` for working examples.
