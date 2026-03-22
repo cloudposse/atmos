@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -740,11 +741,14 @@ func TestMergeWithOptions_TypeMismatch_ReturnsWrappedError(t *testing.T) {
 // Behavioral contract tests: encode the intended merge semantics for the
 // native implementation.
 //
-// These tests document the expected behavior of deepMergeNative for key cases,
-// including behaviors that match the old mergo-based implementation
-// (verified against mergo v1.0.x during development of this package).
-// Mergo is not imported directly to keep this package's test dependencies to a minimum;
-// the intended semantics are documented per-test via inline comments.
+// These tests document the **defined contract** for deepMergeNative — the
+// authoritative expected behavior for this implementation.  Where behavior
+// matches the old mergo-based implementation, that alignment is noted but the
+// native implementation owns the contract independently.
+// For live cross-validation against mergo, use the opt-in build-tagged tests:
+//
+//	go test -tags compare_mergo ./pkg/merge/... -run TestCompareMergo -v
+//
 // ---------------------------------------------------------------------------
 
 // TestMergeNative_CrossValidateVsMergo_BasicReplace verifies that simple key
@@ -783,8 +787,9 @@ func TestMergeNative_CrossValidateVsMergo_AppendSlice(t *testing.T) {
 
 // TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ScalarKeptAtDst verifies that
 // for scalar elements in sliceDeepCopy mode, the dst element is preserved (not overridden).
-// Verified against mergo v1.0.x: mergo.WithSliceDeepCopy preserves dst at positions
-// where src holds a non-map element (scalars, strings, etc.).
+// Defined contract: when src holds a non-map element at a position, the dst element is
+// preserved.  This also matches mergo.WithSliceDeepCopy behavior (confirmed via
+// TestCompareMergo in merge_compare_mergo_test.go — run with -tags compare_mergo).
 func TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ScalarKeptAtDst(t *testing.T) {
 	inputs := []map[string]any{
 		{"tags": []any{"base-tag-1", "base-tag-2"}},
@@ -874,4 +879,100 @@ func BenchmarkMergeNative_TenInputs(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = Merge(cfg, inputs)
 	}
+}
+
+// BenchmarkMerge_ProductionScale simulates a realistic large-stack merge:
+// 10 inheritance layers, 24 top-level sections, nested maps, and mixed lists.
+// This supplements BenchmarkMergeNative_TenInputs which uses only 3 top-level keys.
+// Production Atmos stacks typically have 10–30 sections and 5–15 inheritance levels.
+//
+// Run with: go test -bench=BenchmarkMerge_ProductionScale -benchmem ./pkg/merge/...
+func BenchmarkMerge_ProductionScale(b *testing.B) {
+cfg := &schema.AtmosConfiguration{
+Settings: schema.AtmosSettings{ListMergeStrategy: ListMergeStrategyReplace},
+}
+
+// Build 10 inputs, each with 24 top-level sections and nested content.
+var inputs []map[string]any
+for layer := 0; layer < 10; layer++ {
+input := map[string]any{
+"vars": map[string]any{
+"region":      "us-east-1",
+"env":         fmt.Sprintf("layer-%d", layer),
+"account_id":  "123456789012",
+"max_retries": layer + 3,
+"tags": map[string]any{
+"Environment": "production",
+"Layer":       layer,
+"Owner":       "platform-team",
+},
+},
+"settings": map[string]any{
+"spacelift": map[string]any{
+"workspace_enabled": true,
+"runner_image":      "cloudposse/geodesic:latest",
+},
+"depends_on": []any{fmt.Sprintf("dep-%d", layer)},
+},
+"env": map[string]any{
+"AWS_DEFAULT_REGION": "us-east-1",
+"TF_LOG":             "INFO",
+"LAYER":              fmt.Sprintf("%d", layer),
+},
+"providers": map[string]any{
+"aws": map[string]any{
+"region":  "us-east-1",
+"profile": "production",
+},
+},
+"backend": map[string]any{
+"s3": map[string]any{
+"bucket":         "my-terraform-state",
+"key":            fmt.Sprintf("layer-%d/terraform.tfstate", layer),
+"region":         "us-east-1",
+"encrypt":        true,
+"dynamodb_table": "terraform-state-lock",
+},
+},
+"remote_state_backend": map[string]any{
+"s3": map[string]any{
+"bucket":  "my-terraform-state",
+"region":  "us-east-1",
+"encrypt": true,
+},
+},
+"metadata": map[string]any{
+"type":      "real",
+"component": fmt.Sprintf("vpc-%d", layer),
+"tenant":    "platform",
+"stage":     "prod",
+},
+"overrides": map[string]any{
+"tags": map[string]any{
+"CreatedBy": "terraform",
+},
+},
+"import":           []any{"catalog/globals", fmt.Sprintf("catalog/vpc-%d", layer)},
+"terraform":        map[string]any{"workspace": fmt.Sprintf("prod-%d", layer)},
+"component":        "vpc",
+"namespace":        "platform",
+"tenant":           "core",
+"environment":      "prod",
+"stage":            "main",
+"region":           "us-east-1",
+"availability_zones": []any{"us-east-1a", "us-east-1b", "us-east-1c"},
+"cidr_block":       "10.0.0.0/16",
+"enable_dns":       true,
+"enable_nat":       true,
+"single_nat":       false,
+"outputs":          map[string]any{"vpc_id": fmt.Sprintf("vpc-layer-%d", layer)},
+"interfaces":       []any{fmt.Sprintf("iface-%d-a", layer), fmt.Sprintf("iface-%d-b", layer)},
+}
+inputs = append(inputs, input)
+}
+
+b.ResetTimer()
+for i := 0; i < b.N; i++ {
+_, _ = Merge(cfg, inputs)
+}
 }

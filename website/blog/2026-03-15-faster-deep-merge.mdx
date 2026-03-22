@@ -39,8 +39,22 @@ leaves)** incremental copies for a typical N-input merge.
 ## Benchmark Results
 
 ```
-Before  BenchmarkMerge-4   682 k iter / 5062 ns/op
-After   BenchmarkMerge-4  2514 k iter / 1427 ns/op   ← 3.5× faster
+# Micro-benchmark (5 inputs, 3 top-level keys)
+Before  BenchmarkMerge-4             682 k iter /  5062 ns/op   ← original mergo
+After   BenchmarkMerge-4            2514 k iter /  1427 ns/op   ← 3.5× faster
+
+# Production-scale (10 inputs, 24 top-level sections, nested maps+lists)
+After   BenchmarkMerge_ProductionScale-4   27K iter / 44000 ns/op / 10952 B/op / 189 allocs/op
+```
+
+The 3.5× improvement is from the 5-input micro-benchmark.  The production-scale benchmark
+(10 inheritance layers, 24 top-level sections including nested maps, tags, providers, backend,
+lists, and scalars) shows ~44 µs per full stack merge on a typical CI/CD server — well under
+any practical latency budget even for large configurations with many stacks.
+
+Run the production benchmark locally:
+```bash
+go test -run=^$ -bench=BenchmarkMerge_ProductionScale -benchmem ./pkg/merge/...
 ```
 
 The improvement scales with the number of inputs and the depth of the configuration tree —
@@ -52,13 +66,17 @@ The new implementation preserves the same merge semantics as the mergo-based cod
 common cases, including all three list merge strategies (`replace`, `append`, `merge`) and the
 `WithSliceDeepCopy` / `WithAppendSlice` behaviours.
 
-### Edge case: `sliceDeepCopy` result length
+Cross-validation tests (opt-in via `go test -tags compare_mergo ./pkg/merge/...`) verify
+the native implementation matches mergo for the core cases.  Where behavior intentionally
+differs, the tests document it as a **defined contract** (see below).
+
+### Edge case: `sliceDeepCopy` result length (defined contract)
 
 When `sliceDeepCopy` is active and the source list is **longer** than the destination list,
 extra source elements beyond `len(dst)` are silently dropped (the result length equals
-`len(dst)`). This matches the observed mergo behaviour and is intentional — element-wise
-deep-copy merges only the positions that already exist in the destination. See
-[`docs/fixes/2026-03-19-deep-merge-native-fixes.md`](https://github.com/cloudposse/atmos/blob/main/docs/fixes/2026-03-19-deep-merge-native-fixes.md)
+`len(dst)`).  This is the **defined contract** for this implementation — it was also the
+observed mergo behavior, but the native implementation owns this contract independently.
+See [`docs/fixes/2026-03-19-deep-merge-native-fixes.md`](https://github.com/cloudposse/atmos/blob/main/docs/fixes/2026-03-19-deep-merge-native-fixes.md)
 for full edge-case documentation.
 
 ### Partial mergo replacement

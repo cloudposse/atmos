@@ -196,3 +196,42 @@ func TestRunWorkspaceSetup_RecoveryPath(t *testing.T) {
 	wsErr := runWorkspaceSetup(&atmosConfig, &info, tmpDir)
 	assert.NoError(t, wsErr, "runWorkspaceSetup must succeed when environment file confirms active workspace")
 }
+
+// TestRunWorkspaceSetup_NoRecoveryOnMismatchedEnv verifies the negative recovery case:
+// when both "workspace select" and "workspace new" fail with exit code 1, and the
+// .terraform/environment file names a DIFFERENT workspace than requested, the recovery
+// guard must NOT trigger — runWorkspaceSetup must return a non-nil error.
+//
+// This prevents regressions where recovery triggers too eagerly (e.g., in "staging" but
+// requesting "dev" → should fail, not silently continue with the wrong workspace).
+func TestRunWorkspaceSetup_NoRecoveryOnMismatchedEnv(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	tmpDir := t.TempDir()
+
+	// Write "staging" to the environment file but request workspace "dev".
+	// isTerraformCurrentWorkspace("dev") must return false → no recovery.
+	terraformDir := filepath.Join(tmpDir, ".terraform")
+	require.NoError(t, os.MkdirAll(terraformDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(terraformDir, "environment"),
+		[]byte("staging"), // mismatched workspace
+		0o600,
+	))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:         "plan",
+		TerraformWorkspace: "dev", // requested workspace differs from active workspace
+		Command:            exePath,
+		ComponentEnvList:   []string{"_ATMOS_TEST_EXIT_ONE=1"},
+	}
+
+	// Both workspace select and new return exit 1, but environment file says "staging"
+	// (not "dev") → isTerraformCurrentWorkspace returns false → must return error.
+	wsErr := runWorkspaceSetup(&atmosConfig, &info, tmpDir)
+	require.Error(t, wsErr, "runWorkspaceSetup must fail when environment file names a different workspace")
+	var exitErr errUtils.ExitCodeError
+	require.True(t, errors.As(wsErr, &exitErr), "error must be an ExitCodeError, got: %T (%v)", wsErr, wsErr)
+}

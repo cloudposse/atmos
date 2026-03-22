@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -232,6 +233,11 @@ func TestSkipFunc_EdgeCases(t *testing.T) {
 }
 
 func TestProcessCustomYamlTags(t *testing.T) {
+	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
+		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state integration test)")
+		}
+	}
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)

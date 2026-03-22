@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,6 +40,9 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 // correctly with ExecuteTerraform. This test must remain in internal/exec because it
 // depends on ExecuteTerraform and other internal/exec functions.
 func TestCLITerraformClean(t *testing.T) {
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("skipping: terraform binary not found in PATH (required for clean integration test)")
+	}
 	// Use t.Setenv for automatic cleanup and better test isolation.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")

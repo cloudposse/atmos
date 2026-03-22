@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -24,6 +25,11 @@ import (
 //
 // See: https://github.com/cloudposse/atmos/issues/1920
 func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
+	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
+		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state workspaces-disabled integration test)")
+		}
+	}
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	if err != nil {
 		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
@@ -135,6 +141,11 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 // TestWorkspacesDisabledStateLocation verifies that when workspaces are disabled,
 // the terraform state is stored at the correct location (terraform.tfstate, not terraform.tfstate.d/default/terraform.tfstate).
 func TestWorkspacesDisabledStateLocation(t *testing.T) {
+	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
+		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for workspaces-disabled state location test)")
+		}
+	}
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	require.NoError(t, err)
 

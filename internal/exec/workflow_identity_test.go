@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -136,6 +137,9 @@ func TestWorkflowWithIdentity_InvalidIdentity(t *testing.T) {
 func TestWorkflowWithIdentity_AtmosCommand(t *testing.T) {
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode: spawns actual atmos subprocess")
+	}
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
 	}
 
 	// Set up test fixture with auth configuration.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -556,6 +557,9 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
+	if _, err := exec.LookPath("terraform"); err != nil {
+		t.Skip("skipping: terraform binary not found in PATH (required for deployment status integration test)")
+	}
 	workDir := "../../tests/fixtures/scenarios/atmos-pro"
 	t.Chdir(workDir)
 

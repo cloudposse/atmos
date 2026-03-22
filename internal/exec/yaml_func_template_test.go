@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -393,6 +394,9 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template with atmos.Component() integration
 	t.Run("atmos.Component integration", func(t *testing.T) {
+		if _, err := exec.LookPath("tofu"); err != nil {
+			t.Skip("skipping: 'tofu' binary not found in PATH (required for atmos.Component integration test)")
+		}
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-with-atmos-component",
 			Stack:                stack,
@@ -430,6 +434,9 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template in lists
 	t.Run("template in lists", func(t *testing.T) {
+		if _, err := exec.LookPath("tofu"); err != nil {
+			t.Skip("skipping: 'tofu' binary not found in PATH (required for atmos.Component integration test)")
+		}
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-in-lists",
 			Stack:                stack,
@@ -454,6 +461,9 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template in maps
 	t.Run("template in maps", func(t *testing.T) {
+		if _, err := exec.LookPath("tofu"); err != nil {
+			t.Skip("skipping: 'tofu' binary not found in PATH (required for atmos.Component integration test)")
+		}
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-in-maps",
 			Stack:                stack,
