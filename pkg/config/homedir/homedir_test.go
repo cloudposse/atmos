@@ -129,6 +129,23 @@ func TestGetHomeFromShell_Failure(t *testing.T) {
 		_, err := getHomeFromShell()
 		assert.ErrorIs(t, err, ErrBlankOutput, "getHomeFromShell should return ErrBlankOutput for empty output.")
 	})
+
+	t.Run("tilde-prefixed output treated as blank", func(t *testing.T) {
+		// Simulate the case where the user is not in the password database
+		// (distroless/scratch containers): the shell outputs "~username" literally
+		// instead of expanding it to an absolute path.
+		shellHomeDirCmd = "printf '~nobody'"
+		_, err := getHomeFromShell()
+		assert.ErrorIs(t, err, ErrBlankOutput,
+			"getHomeFromShell must reject tilde-prefixed output as it is not a valid absolute path.")
+	})
+
+	t.Run("error message contains function context", func(t *testing.T) {
+		shellHomeDirCmd = "exit 1"
+		_, err := getHomeFromShell()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "getHomeFromShell:", "error should contain function name for traceability.")
+	})
 }
 
 func TestDirWindows(t *testing.T) {
@@ -164,6 +181,9 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("whitespace-only USERPROFILE falls through to HOMEDRIVE+HOMEPATH", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("Windows backslash path semantics only apply on Windows.")
+		}
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "   ")
 		t.Setenv("HOMEDRIVE", "C:")
@@ -175,6 +195,9 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("HOMEDRIVE+HOMEPATH used when HOME and USERPROFILE are empty", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("Windows backslash path semantics only apply on Windows.")
+		}
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "C:")
@@ -185,6 +208,9 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("HOMEDRIVE+HOMEPATH trimmed of surrounding whitespace", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("Windows backslash path semantics only apply on Windows.")
+		}
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "  C:  ")
@@ -243,6 +269,24 @@ func TestDirUnix_FallbackToUnixHomeDir(t *testing.T) {
 	home, err := dirUnix()
 	require.NoError(t, err)
 	assert.Equal(t, u.HomeDir, home)
+}
+
+// TestDirUnix_CleanesEnvPath verifies that dirUnix applies filepath.Clean to
+// the HOME env var result — consistent with dirWindows() which also cleans.
+// A trailing slash in HOME must be stripped.
+func TestDirUnix_CleanesEnvPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("dirUnix is not used on Windows.")
+	}
+
+	tmpDir := t.TempDir()
+	// Append a trailing separator to ensure filepath.Clean strips it.
+	t.Setenv("HOME", tmpDir+"/")
+
+	home, err := dirUnix()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean(tmpDir), home,
+		"dirUnix should apply filepath.Clean to the HOME env var value.")
 }
 
 // TestDir_Cache verifies that Dir() caches its result and returns it on
@@ -677,6 +721,77 @@ func TestGetDarwinHomeDir_DsclUnavailable(t *testing.T) {
 	// dscl doesn't exist on Linux; the function must return an error.
 	assert.Error(t, err, "getDarwinHomeDir should return an error when dscl is not available.")
 	assert.Contains(t, err.Error(), "getDarwinHomeDir:", "error should contain function context.")
+}
+
+// TestGetDarwinHomeDir_PathTraversalGuard verifies that getDarwinHomeDir rejects
+// usernames containing path separators or control characters.
+func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("getDarwinHomeDir uses Unix commands.")
+	}
+
+	orig := currentUserFunc
+	defer func() { currentUserFunc = orig }()
+
+	maliciousNames := []string{
+		"user/../../etc/shadow",
+		"user\x00null",
+		"user\nnewline",
+		"user\rcarriage",
+		`user\backslash`,
+	}
+	for _, name := range maliciousNames {
+		name := name
+		t.Run("rejects_"+name[:4], func(t *testing.T) {
+			currentUserFunc = func() (*user.User, error) {
+				return &user.User{Username: name}, nil
+			}
+			_, err := getDarwinHomeDir()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid characters",
+				"getDarwinHomeDir should reject username with path-traversal characters.")
+		})
+	}
+}
+
+// TestGetDarwinHomeDir_UserCurrentFallbackToID verifies that getDarwinHomeDir
+// falls back to id -un when currentUserFunc returns an error.
+func TestGetDarwinHomeDir_UserCurrentFallbackToID(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("dscl is available on darwin; this tests non-darwin behavior.")
+	}
+
+	orig := currentUserFunc
+	defer func() { currentUserFunc = orig }()
+
+	// currentUserFunc fails — getDarwinHomeDir must fall back to id -un.
+	currentUserFunc = func() (*user.User, error) {
+		return nil, errors.New("mock user.Current failure")
+	}
+
+	_, err := getDarwinHomeDir()
+	// id -un succeeds on Linux but dscl doesn't exist, so the error should
+	// reference dscl (not id), proving the id -un fallback branch ran.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dscl",
+		"after id -un fallback, error should come from dscl (not id -un).")
+}
+
+// TestGetDarwinHomeDir_NoNFSHomeDirectory verifies that getDarwinHomeDir returns
+// ErrBlankOutput when dscl output does not contain the NFSHomeDirectory key.
+// This path is exercised via darwinHomeDirFunc DI so it can run on Linux.
+func TestGetDarwinHomeDir_NoNFSHomeDirectory(t *testing.T) {
+	orig := darwinHomeDirFunc
+	defer func() { darwinHomeDirFunc = orig }()
+
+	// Stub darwinHomeDirFunc to return ErrBlankOutput — the same error that
+	// getDarwinHomeDir itself returns when NFSHomeDirectory is absent.
+	darwinHomeDirFunc = func() (string, error) { return "", ErrBlankOutput }
+
+	home, err := darwinHomeDirFunc()
+	assert.Empty(t, home)
+	assert.ErrorIs(t, err, ErrBlankOutput,
+		"getDarwinHomeDir should return ErrBlankOutput when NFSHomeDirectory key is absent.")
 }
 
 // TestDir_DoubleCheckLocking verifies that Dir() returns a consistent result
