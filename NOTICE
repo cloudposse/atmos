@@ -145,6 +145,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecr/v1.56.1/service/ecr/LICENSE.txt
 
+  - github.com/aws/aws-sdk-go-v2/service/eks
+    License: Apache-2.0
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/eks/v1.80.2/service/eks/LICENSE.txt
+
   - github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding
     License: Apache-2.0
     URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/accept-encoding/v1.13.7/service/internal/accept-encoding/LICENSE.txt
@@ -565,17 +569,41 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/go-yaml/yaml/blob/v2.4.0/LICENSE
 
-  - k8s.io/client-go/util/jsonpath
+  - k8s.io/apimachinery/pkg
+    License: Apache-2.0
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.35.2/LICENSE
+
+  - k8s.io/client-go
     License: Apache-2.0
     URL: https://github.com/kubernetes/client-go/blob/v0.35.2/LICENSE
 
-  - k8s.io/utils/strings/slices
+  - k8s.io/klog/v2
+    License: Apache-2.0
+    URL: https://github.com/kubernetes/klog/blob/v2.130.1/LICENSE
+
+  - k8s.io/kube-openapi/pkg/util
+    License: Apache-2.0
+    URL: https://github.com/kubernetes/kube-openapi/blob/589584f1c912/LICENSE
+
+  - k8s.io/utils
     License: Apache-2.0
     URL: https://github.com/kubernetes/utils/blob/b8788abfbbc2/LICENSE
 
   - oras.land/oras-go/v2
     License: Apache-2.0
     URL: https://github.com/oras-project/oras-go/blob/v2.6.0/LICENSE
+
+  - sigs.k8s.io/json
+    License: Apache-2.0
+    URL: https://github.com/kubernetes-sigs/json/blob/2d320260d730/LICENSE
+
+  - sigs.k8s.io/randfill
+    License: Apache-2.0
+    URL: https://github.com/kubernetes-sigs/randfill/blob/v1.0.0/LICENSE
+
+  - sigs.k8s.io/structured-merge-diff/v6/value
+    License: Apache-2.0
+    URL: https://github.com/kubernetes-sigs/structured-merge-diff/blob/v6.3.0/LICENSE
 
   - sigs.k8s.io/yaml
     License: Apache-2.0
@@ -850,6 +878,10 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.11/LICENSE
 
+  - gopkg.in/inf.v0
+    License: BSD-3-Clause
+    URL: https://github.com/go-inf/inf/blob/v0.9.1/LICENSE
+
   - gopkg.in/op/go-logging.v1
     License: BSD-3-Clause
     URL: https://github.com/op/go-logging/blob/b2cb9fa56473/LICENSE
@@ -862,9 +894,17 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: Unknown
 
+  - k8s.io/apimachinery/third_party/forked/golang/reflect
+    License: BSD-3-Clause
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.35.2/third_party/forked/golang/LICENSE
+
   - k8s.io/client-go/third_party/forked/golang/template
     License: BSD-3-Clause
     URL: https://github.com/kubernetes/client-go/blob/v0.35.2/third_party/forked/golang/LICENSE
+
+  - k8s.io/utils/internal/third_party/forked/golang/net
+    License: BSD-3-Clause
+    URL: https://github.com/kubernetes/utils/blob/b8788abfbbc2/internal/third_party/forked/golang/LICENSE
 
   - modernc.org/memory
     License: BSD-3-Clause
@@ -1300,6 +1340,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/forPelevin/gomoji/blob/v1.4.1/LICENSE
 
+  - github.com/fxamacker/cbor/v2
+    License: MIT
+    URL: https://github.com/fxamacker/cbor/blob/v2.9.0/LICENSE
+
   - github.com/gabriel-vasile/mimetype
     License: MIT
     URL: https://github.com/gabriel-vasile/mimetype/blob/v1.4.13/LICENSE
@@ -1695,6 +1739,10 @@ MIT LICENSED DEPENDENCIES
   - github.com/wlynxg/chardet
     License: MIT
     URL: https://github.com/wlynxg/chardet/blob/v1.0.4/LICENSE
+
+  - github.com/x448/float16
+    License: MIT
+    URL: https://github.com/x448/float16/blob/v0.8.4/LICENSE
 
   - github.com/xo/terminfo
     License: MIT
