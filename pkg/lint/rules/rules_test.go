@@ -2377,18 +2377,17 @@ func TestL01DeadVarEmptyGlobalVars(t *testing.T) {
 	assert.Empty(t, findings)
 }
 
-
 // findRuleByID looks up a lint rule by its ID from the full rule set.
 // It fails the test immediately if the rule is not found.
 func findRuleByID(t *testing.T, ruleID string) lint.LintRule {
-t.Helper()
-for _, r := range rules.All() {
-if r.ID() == ruleID {
-return r
-}
-}
-t.Fatalf("rule %q not found in rules.All()", ruleID)
-return nil
+	t.Helper()
+	for _, r := range rules.All() {
+		if r.ID() == ruleID {
+			return r
+		}
+	}
+	t.Fatalf("rule %q not found in rules.All()", ruleID)
+	return nil
 }
 
 // TestL09DFSPathAliasing verifies that cycle path strings are not corrupted when a
@@ -2396,102 +2395,102 @@ return nil
 // capacity. Before the fix, append(path, node) for sibling iterations shared the same
 // backing array, causing the second sibling to overwrite the first sibling's path entries.
 func TestL09DFSPathAliasing(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-l09 := findRuleByID(t, "L-09")
+	l09 := findRuleByID(t, "L-09")
 
-// Graph: comp-diamond inherits from both comp-left and comp-right.
-// comp-left inherits comp-base. comp-right inherits comp-base.
-// No cycle — this is a valid diamond inheritance. The fix must not corrupt
-// the path tracking for either branch.
-diamondStacksMap := map[string]any{
-"stack1": componentsMap("terraform", map[string]any{
-"comp-base": map[string]any{
-"metadata": map[string]any{"type": "abstract"},
-},
-"comp-left": map[string]any{
-"metadata": map[string]any{
-"inherits": []any{"comp-base"},
-},
-},
-"comp-right": map[string]any{
-"metadata": map[string]any{
-"inherits": []any{"comp-base"},
-},
-},
-"comp-diamond": map[string]any{
-"metadata": map[string]any{
-"inherits": []any{"comp-left", "comp-right"},
-},
-},
-}),
-}
-ctx := makeContext(diamondStacksMap)
-findings, err := l09.Run(ctx)
-require.NoError(t, err)
-assert.Empty(t, findings, "diamond inheritance should not be reported as a cycle")
+	// Graph: comp-diamond inherits from both comp-left and comp-right.
+	// comp-left inherits comp-base. comp-right inherits comp-base.
+	// No cycle — this is a valid diamond inheritance. The fix must not corrupt
+	// the path tracking for either branch.
+	diamondStacksMap := map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-base": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+			},
+			"comp-left": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-base"},
+				},
+			},
+			"comp-right": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-base"},
+				},
+			},
+			"comp-diamond": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-left", "comp-right"},
+				},
+			},
+		}),
+	}
+	ctx := makeContext(diamondStacksMap)
+	findings, err := l09.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "diamond inheritance should not be reported as a cycle")
 
-// Graph with a cycle through a branching node:
-// comp-a inherits comp-b and comp-c.
-// comp-c inherits comp-a (creates cycle: a->c->a).
-// comp-b has no cycle.
-// The cycle path reported must include comp-c, not a corrupted path.
-cycleWithBranchStacksMap := map[string]any{
-"stack1": componentsMap("terraform", map[string]any{
-"comp-b": map[string]any{
-"metadata": map[string]any{"type": "abstract"},
-},
-"comp-c": map[string]any{
-"metadata": map[string]any{
-"inherits": []any{"comp-a"},
-},
-},
-"comp-a": map[string]any{
-"metadata": map[string]any{
-"inherits": []any{"comp-b", "comp-c"},
-},
-},
-}),
-}
-ctx2 := makeContext(cycleWithBranchStacksMap)
-findings2, err := l09.Run(ctx2)
-require.NoError(t, err)
-require.NotEmpty(t, findings2, "cycle through comp-c should be detected")
-// The cycle message must mention comp-a and comp-c.
-found := false
-for _, f := range findings2 {
-if strings.Contains(f.Message, "comp-a") && strings.Contains(f.Message, "comp-c") {
-found = true
-break
-}
-}
-assert.True(t, found, "cycle message must correctly include comp-a and comp-c, not a corrupted path")
+	// Graph with a cycle through a branching node:
+	// comp-a inherits comp-b and comp-c.
+	// comp-c inherits comp-a (creates cycle: a->c->a).
+	// comp-b has no cycle.
+	// The cycle path reported must include comp-c, not a corrupted path.
+	cycleWithBranchStacksMap := map[string]any{
+		"stack1": componentsMap("terraform", map[string]any{
+			"comp-b": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+			},
+			"comp-c": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-a"},
+				},
+			},
+			"comp-a": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"comp-b", "comp-c"},
+				},
+			},
+		}),
+	}
+	ctx2 := makeContext(cycleWithBranchStacksMap)
+	findings2, err := l09.Run(ctx2)
+	require.NoError(t, err)
+	require.NotEmpty(t, findings2, "cycle through comp-c should be detected")
+	// The cycle message must mention comp-a and comp-c.
+	found := false
+	for _, f := range findings2 {
+		if strings.Contains(f.Message, "comp-a") && strings.Contains(f.Message, "comp-c") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "cycle message must correctly include comp-a and comp-c, not a corrupted path")
 }
 
 // TestL08EmptyPatternsNoFindings verifies that L-08 returns no findings when the
 // SensitiveVarPatterns list is empty, making the defensive guard contract explicit.
 func TestL08EmptyPatternsNoFindings(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-l08 := findRuleByID(t, "L-08")
+	l08 := findRuleByID(t, "L-08")
 
-// A stack with an obviously sensitive-looking global var, but empty patterns.
-stacksMap := map[string]any{
-"stack1": map[string]any{
-"vars": map[string]any{
-"my_secret_password": "hunter2",
-},
-},
-}
-ctx := lint.LintContext{
-StacksMap:       stacksMap,
-RawStackConfigs: make(map[string]map[string]any),
-ImportGraph:     make(map[string][]string),
-LintConfig: schema.LintStacksConfig{
-SensitiveVarPatterns: []string{}, // explicitly empty — must produce no findings
-},
-}
-findings, err := l08.Run(ctx)
-require.NoError(t, err)
-assert.Empty(t, findings, "empty patterns must produce no findings")
+	// A stack with an obviously sensitive-looking global var, but empty patterns.
+	stacksMap := map[string]any{
+		"stack1": map[string]any{
+			"vars": map[string]any{
+				"my_secret_password": "hunter2",
+			},
+		},
+	}
+	ctx := lint.LintContext{
+		StacksMap:       stacksMap,
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph:     make(map[string][]string),
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: []string{}, // explicitly empty — must produce no findings
+		},
+	}
+	findings, err := l08.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "empty patterns must produce no findings")
 }
