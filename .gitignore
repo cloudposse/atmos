@@ -3,7 +3,6 @@
 *.tfstate
 *.tfstate.*
 **/*.tf.json
-**/planfile
 **/*.planfile
 **/*.kubeconfig
 **/terraform.tfvars.json
@@ -17,6 +16,10 @@
 **/nohup.out
 **/kubeconfig.yaml
 **/*.planfile.json
+.atmos/planfiles
+.atmos/planfiles/**
+
+**/.atmos
 
 # Atmos binary (only in root directory)
 /atmos
@@ -100,6 +103,7 @@ TEST_QUALITY_*.md
 /lintroller
 /.lintroller
 tools/lintroller/.lintroller
+.golangci/lintroller/lintroller
 /custom-gcl
 tools/gomodcheck/.gomodcheck
 
@@ -107,6 +111,7 @@ tools/gomodcheck/.gomodcheck
 .claude-flow/
 .hive-mind/
 .claude/plans/
+.claude/settings.local.json
 
 performance-optimization/
 node_modules
@@ -143,3 +148,4 @@ TESTABILITY_CHANGES_SUMMARY.md
 reply_to_*.sh
 *.ansi
 .claude-plan.md
+.claude/plans/

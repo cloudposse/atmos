@@ -19,7 +19,9 @@ func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 	}
 
 	config := &schema.AuthConfig{
-		Logs: globalAuth.Logs,
+		Realm:       globalAuth.Realm,
+		RealmSource: globalAuth.RealmSource,
+		Logs:        globalAuth.Logs,
 		Keyring: schema.KeyringConfig{
 			Type: globalAuth.Keyring.Type,
 		},

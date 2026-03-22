@@ -53,6 +53,7 @@ type ConfigMetadata struct {
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
@@ -100,6 +101,7 @@ type AtmosConfiguration struct {
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	CI   CIConfig           `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
 	// AI settings.
 	AI AISettings `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
 	// AWS settings.
@@ -424,6 +426,10 @@ type TemplatesSettings struct {
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
 	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	// IgnoreMissingTemplateValues is the global default for ignoring missing template values.
+	// When true, template processing will not fail if a template variable is missing.
+	// This can be overridden per-import using the import's own ignore_missing_template_values setting.
+	IgnoreMissingTemplateValues bool `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 }
 
 type TemplatesSettingsSprig struct {
@@ -459,12 +465,13 @@ type Terraform struct {
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
 	// Generated files are defined in the component's generate section.
-	AutoGenerateFiles bool          `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
-	WorkspacesEnabled *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
-	Command           string        `yaml:"command" json:"command" mapstructure:"command"`
-	Shell             ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
-	Init              TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
-	Plan              TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	AutoGenerateFiles bool            `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	WorkspacesEnabled *bool           `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
+	Command           string          `yaml:"command" json:"command" mapstructure:"command"`
+	Shell             ShellConfig     `yaml:"shell" json:"shell" mapstructure:"shell"`
+	Init              TerraformInit   `yaml:"init" json:"init" mapstructure:"init"`
+	Plan              TerraformPlan   `yaml:"plan" json:"plan" mapstructure:"plan"`
+	Planfiles         PlanfilesConfig `yaml:"planfiles,omitempty" json:"planfiles,omitempty" mapstructure:"planfiles"`
 	// PluginCache enables automatic Terraform provider plugin caching.
 	// When true, Atmos sets TF_PLUGIN_CACHE_DIR to XDG cache or PluginCacheDir.
 	// Default: true.
@@ -474,6 +481,17 @@ type Terraform struct {
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
 	// Source holds global source configuration defaults for JIT-vendored components.
 	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	// CI holds terraform-specific CI configuration (e.g., exit code mapping).
+	// Only active when the global ci.enabled is true.
+	CI TerraformCI `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+}
+
+// TerraformCI holds CI-specific configuration for terraform components.
+type TerraformCI struct {
+	// ExitCodes maps terraform exit codes to success/failure for CI runners.
+	// When a code maps to true, Atmos exits 0 (success). When false or unmapped,
+	// the original exit code is preserved. Only active when global ci.enabled is true.
+	ExitCodes map[int]bool `yaml:"exit_codes,omitempty" json:"exit_codes,omitempty" mapstructure:"exit_codes"`
 }
 
 type TerraformInit struct {
@@ -484,8 +502,106 @@ type TerraformPlan struct {
 	SkipPlanfile bool `yaml:"skip_planfile" json:"skip_planfile" mapstructure:"skip_planfile"`
 }
 
+// PlanfilesConfig contains configuration for planfile storage backends.
+type PlanfilesConfig struct {
+	Default    string                       `yaml:"default" json:"default" mapstructure:"default"`
+	Priority   []string                     `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
+	KeyPattern string                       `yaml:"key_pattern,omitempty" json:"key_pattern,omitempty" mapstructure:"key_pattern"`
+	Stores     map[string]PlanfileStoreSpec `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+}
+
+// PlanfileStoreSpec defines a planfile storage backend.
+type PlanfileStoreSpec struct {
+	Type    string         `yaml:"type" json:"type" mapstructure:"type"`
+	Options map[string]any `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`
+}
+
 type ShellConfig struct {
 	Prompt string `yaml:"prompt" json:"prompt" mapstructure:"prompt"`
+}
+
+// CIConfig contains CI/CD integration configuration.
+// Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
+type CIConfig struct {
+	Enabled   bool              `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Output    CIOutputConfig    `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Summary   CISummaryConfig   `yaml:"summary,omitempty" json:"summary,omitempty" mapstructure:"summary"`
+	Checks    CIChecksConfig    `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
+	Comments  CICommentsConfig  `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
+	Templates CITemplatesConfig `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+}
+
+// CIOutputConfig configures CI output variables for downstream jobs.
+// GitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts.
+type CIOutputConfig struct {
+	// Enabled controls whether output variables are written.
+	// When nil (not set), defaults to true (enabled).
+	// When explicitly set to false, output is disabled.
+	Enabled   *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Variables []string `yaml:"variables,omitempty" json:"variables,omitempty" mapstructure:"variables"`
+}
+
+// CISummaryConfig configures CI job summary output.
+// GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts.
+type CISummaryConfig struct {
+	// Enabled controls whether job summaries are written.
+	// When nil (not set), defaults to true (enabled).
+	// When explicitly set to false, summaries are disabled.
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+}
+
+// CIChecksConfig configures CI commit status checks.
+// GitHub: Commit Status API, GitLab: Commit Status API.
+type CIChecksConfig struct {
+	// Enabled controls whether commit status checks are created.
+	// When nil (not set), defaults to false (disabled) as checks require extra permissions.
+	// When explicitly set to true, checks are enabled.
+	Enabled       *bool                  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	ContextPrefix string                 `yaml:"context_prefix,omitempty" json:"context_prefix,omitempty" mapstructure:"context_prefix"`
+	Statuses      CIChecksStatusesConfig `yaml:"statuses,omitempty" json:"statuses,omitempty" mapstructure:"statuses"`
+}
+
+// CIChecksStatusesConfig configures which per-operation commit statuses are created.
+// All fields default to true when nil (not set).
+type CIChecksStatusesConfig struct {
+	// Component controls the component-level status (e.g., atmos/plan/stack/component).
+	Component *bool `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"`
+
+	// Add controls the per-operation add status (e.g., atmos/plan/stack/component/add).
+	// Only created when resources to add > 0.
+	Add *bool `yaml:"add,omitempty" json:"add,omitempty" mapstructure:"add"`
+
+	// Change controls the per-operation change status (e.g., atmos/plan/stack/component/change).
+	// Only created when resources to change > 0.
+	Change *bool `yaml:"change,omitempty" json:"change,omitempty" mapstructure:"change"`
+
+	// Destroy controls the per-operation destroy status (e.g., atmos/plan/stack/component/destroy).
+	// Only created when resources to destroy > 0.
+	Destroy *bool `yaml:"destroy,omitempty" json:"destroy,omitempty" mapstructure:"destroy"`
+}
+
+// CICommentsConfig configures PR/MR comment integration.
+// GitHub: PR comments, GitLab: MR notes.
+type CICommentsConfig struct {
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
+	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+}
+
+// CITemplatesConfig configures CI summary templates per component type.
+type CITemplatesConfig struct {
+	// BasePath is the base directory for custom templates.
+	// Relative paths are resolved from atmos.yaml location.
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+
+	// Terraform contains template overrides for terraform commands.
+	// Keys are command names (e.g., "plan", "apply"), values are template file paths.
+	Terraform map[string]string `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
+
+	// Helmfile contains template overrides for helmfile commands.
+	// Keys are command names (e.g., "diff", "apply"), values are template file paths.
+	Helmfile map[string]string `yaml:"helmfile,omitempty" json:"helmfile,omitempty" mapstructure:"helmfile"`
 }
 
 type Helmfile struct {
@@ -705,6 +821,7 @@ type ArgsAndFlagsInfo struct {
 	PlanFile                  string
 	DryRun                    bool
 	SkipInit                  bool
+	UploadStatus              bool
 	NeedHelp                  bool
 	JsonSchemaDir             string
 	OpaDir                    string
@@ -796,6 +913,10 @@ type AzureAuthContext struct {
 	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
 	// Optional - if not set, AZURE_FEDERATED_TOKEN_FILE env var will be used.
 	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
+
+	// CloudEnvironment is the Azure cloud environment name ("public", "usgovernment", "china").
+	// Used to set ARM_ENVIRONMENT for Terraform and other Azure tooling in sovereign clouds.
+	CloudEnvironment string `json:"cloud_environment,omitempty" yaml:"cloud_environment,omitempty"`
 }
 
 // GCPAuthContext holds GCP-specific authentication context.
@@ -887,8 +1008,11 @@ type ConfigAndStacksInfo struct {
 	AutoGenerateBackendFile   string
 	UseTerraformPlan          bool
 	PlanFile                  string
+	StoredPlanFile            string
+	VerifyPlan                bool
 	DryRun                    bool
 	SkipInit                  bool
+	UploadStatus              bool
 	ComponentInheritanceChain []string
 	ComponentImportsSection   []string
 	NeedHelp                  bool
