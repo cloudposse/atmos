@@ -140,11 +140,11 @@ func TestExecuteShellCommand_PropagatesEnvToSubprocess(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	execErr := ExecuteShellCommand(
 		atmosConfig, exePath,
-		[]string{"-test.run=^$"}, // no test matches → exits 0 normally WITHOUT the env var
-		"", // dir: current
+		[]string{"-test.run=^$"},           // no test matches → exits 0 normally WITHOUT the env var
+		"",                                 // dir: current
 		[]string{"_ATMOS_TEST_EXIT_ONE=1"}, // env — should make it exit 1
-		false, // dryRun
-		"",    // redirectStdErr
+		false,                              // dryRun
+		"",                                 // redirectStdErr
 	)
 	// The subprocess must have exited 1 (TestMain intercepts _ATMOS_TEST_EXIT_ONE).
 	require.Error(t, execErr, "subprocess should have exited 1 when _ATMOS_TEST_EXIT_ONE=1 is propagated")

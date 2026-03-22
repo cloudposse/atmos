@@ -107,6 +107,3 @@ func TestCompareMergo_DefinedContractDivergences(t *testing.T) {
 		t.Logf("Defined contract: sliceDeepCopy drops extra src elements beyond dst len=%d", len(list))
 	})
 }
-
-
-

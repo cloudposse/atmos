@@ -888,91 +888,91 @@ func BenchmarkMergeNative_TenInputs(b *testing.B) {
 //
 // Run with: go test -bench=BenchmarkMerge_ProductionScale -benchmem ./pkg/merge/...
 func BenchmarkMerge_ProductionScale(b *testing.B) {
-cfg := &schema.AtmosConfiguration{
-Settings: schema.AtmosSettings{ListMergeStrategy: ListMergeStrategyReplace},
-}
+	cfg := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{ListMergeStrategy: ListMergeStrategyReplace},
+	}
 
-// Build 10 inputs, each with 24 top-level sections and nested content.
-var inputs []map[string]any
-for layer := 0; layer < 10; layer++ {
-input := map[string]any{
-"vars": map[string]any{
-"region":      "us-east-1",
-"env":         fmt.Sprintf("layer-%d", layer),
-"account_id":  "123456789012",
-"max_retries": layer + 3,
-"tags": map[string]any{
-"Environment": "production",
-"Layer":       layer,
-"Owner":       "platform-team",
-},
-},
-"settings": map[string]any{
-"spacelift": map[string]any{
-"workspace_enabled": true,
-"runner_image":      "cloudposse/geodesic:latest",
-},
-"depends_on": []any{fmt.Sprintf("dep-%d", layer)},
-},
-"env": map[string]any{
-"AWS_DEFAULT_REGION": "us-east-1",
-"TF_LOG":             "INFO",
-"LAYER":              fmt.Sprintf("%d", layer),
-},
-"providers": map[string]any{
-"aws": map[string]any{
-"region":  "us-east-1",
-"profile": "production",
-},
-},
-"backend": map[string]any{
-"s3": map[string]any{
-"bucket":         "my-terraform-state",
-"key":            fmt.Sprintf("layer-%d/terraform.tfstate", layer),
-"region":         "us-east-1",
-"encrypt":        true,
-"dynamodb_table": "terraform-state-lock",
-},
-},
-"remote_state_backend": map[string]any{
-"s3": map[string]any{
-"bucket":  "my-terraform-state",
-"region":  "us-east-1",
-"encrypt": true,
-},
-},
-"metadata": map[string]any{
-"type":      "real",
-"component": fmt.Sprintf("vpc-%d", layer),
-"tenant":    "platform",
-"stage":     "prod",
-},
-"overrides": map[string]any{
-"tags": map[string]any{
-"CreatedBy": "terraform",
-},
-},
-"import":           []any{"catalog/globals", fmt.Sprintf("catalog/vpc-%d", layer)},
-"terraform":        map[string]any{"workspace": fmt.Sprintf("prod-%d", layer)},
-"component":        "vpc",
-"namespace":        "platform",
-"tenant":           "core",
-"environment":      "prod",
-"stage":            "main",
-"region":           "us-east-1",
-"availability_zones": []any{"us-east-1a", "us-east-1b", "us-east-1c"},
-"cidr_block":       "10.0.0.0/16",
-"enable_dns":       true,
-"enable_nat":       true,
-"single_nat":       false,
-"outputs":          map[string]any{"vpc_id": fmt.Sprintf("vpc-layer-%d", layer)},
-"interfaces":       []any{fmt.Sprintf("iface-%d-a", layer), fmt.Sprintf("iface-%d-b", layer)},
-}
-inputs = append(inputs, input)
-}
+	// Build 10 inputs, each with 24 top-level sections and nested content.
+	var inputs []map[string]any
+	for layer := 0; layer < 10; layer++ {
+		input := map[string]any{
+			"vars": map[string]any{
+				"region":      "us-east-1",
+				"env":         fmt.Sprintf("layer-%d", layer),
+				"account_id":  "123456789012",
+				"max_retries": layer + 3,
+				"tags": map[string]any{
+					"Environment": "production",
+					"Layer":       layer,
+					"Owner":       "platform-team",
+				},
+			},
+			"settings": map[string]any{
+				"spacelift": map[string]any{
+					"workspace_enabled": true,
+					"runner_image":      "cloudposse/geodesic:latest",
+				},
+				"depends_on": []any{fmt.Sprintf("dep-%d", layer)},
+			},
+			"env": map[string]any{
+				"AWS_DEFAULT_REGION": "us-east-1",
+				"TF_LOG":             "INFO",
+				"LAYER":              fmt.Sprintf("%d", layer),
+			},
+			"providers": map[string]any{
+				"aws": map[string]any{
+					"region":  "us-east-1",
+					"profile": "production",
+				},
+			},
+			"backend": map[string]any{
+				"s3": map[string]any{
+					"bucket":         "my-terraform-state",
+					"key":            fmt.Sprintf("layer-%d/terraform.tfstate", layer),
+					"region":         "us-east-1",
+					"encrypt":        true,
+					"dynamodb_table": "terraform-state-lock",
+				},
+			},
+			"remote_state_backend": map[string]any{
+				"s3": map[string]any{
+					"bucket":  "my-terraform-state",
+					"region":  "us-east-1",
+					"encrypt": true,
+				},
+			},
+			"metadata": map[string]any{
+				"type":      "real",
+				"component": fmt.Sprintf("vpc-%d", layer),
+				"tenant":    "platform",
+				"stage":     "prod",
+			},
+			"overrides": map[string]any{
+				"tags": map[string]any{
+					"CreatedBy": "terraform",
+				},
+			},
+			"import":             []any{"catalog/globals", fmt.Sprintf("catalog/vpc-%d", layer)},
+			"terraform":          map[string]any{"workspace": fmt.Sprintf("prod-%d", layer)},
+			"component":          "vpc",
+			"namespace":          "platform",
+			"tenant":             "core",
+			"environment":        "prod",
+			"stage":              "main",
+			"region":             "us-east-1",
+			"availability_zones": []any{"us-east-1a", "us-east-1b", "us-east-1c"},
+			"cidr_block":         "10.0.0.0/16",
+			"enable_dns":         true,
+			"enable_nat":         true,
+			"single_nat":         false,
+			"outputs":            map[string]any{"vpc_id": fmt.Sprintf("vpc-layer-%d", layer)},
+			"interfaces":         []any{fmt.Sprintf("iface-%d-a", layer), fmt.Sprintf("iface-%d-b", layer)},
+		}
+		inputs = append(inputs, input)
+	}
 
-b.ResetTimer()
-for i := 0; i < b.N; i++ {
-_, _ = Merge(cfg, inputs)
-}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = Merge(cfg, inputs)
+	}
 }
