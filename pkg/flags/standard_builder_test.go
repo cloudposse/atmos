@@ -2,7 +2,6 @@ package flags
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -764,7 +763,7 @@ func TestStandardOptionsBuilder_WithSha(t *testing.T) {
 }
 
 func TestStandardOptionsBuilder_WithRepoPath(t *testing.T) {
-	repoPath := filepath.Join(os.TempDir(), "test-repo")
+	repoPath := filepath.Join(t.TempDir(), "test-repo")
 	builder := NewStandardOptionsBuilder().WithRepoPath(repoPath)
 	parser := builder.Build()
 	require.NotNil(t, parser)
@@ -778,7 +777,7 @@ func TestStandardOptionsBuilder_WithRepoPath(t *testing.T) {
 }
 
 func TestStandardOptionsBuilder_WithSSHKey(t *testing.T) {
-	builder := NewStandardOptionsBuilder().WithSSHKey(filepath.Join(os.TempDir(), ".ssh", "id_rsa"))
+	builder := NewStandardOptionsBuilder().WithSSHKey(filepath.Join(t.TempDir(), ".ssh", "id_rsa"))
 	parser := builder.Build()
 	require.NotNil(t, parser)
 

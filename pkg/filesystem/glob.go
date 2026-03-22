@@ -31,6 +31,9 @@ var (
 
 // GetGlobMatches tries to read and return the Glob matches content from the sync map if it exists in the map,
 // otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files.
+//
+// Contract: the returned slice is always non-nil (never nil). An empty result is returned as []string{}, not nil.
+// This guarantee holds for both cache hits and misses, allowing callers to safely use len(result) without a nil check.
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "filesystem.GetGlobMatches")()
 

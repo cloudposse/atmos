@@ -1030,7 +1030,9 @@ func TestCompatibilityFlagTranslator_UnknownBehavior(t *testing.T) {
 			flagMap: map[string]CompatibilityFlag{
 				"-custom": {Behavior: unknownBehavior, Target: "--custom"},
 			},
-			// default branch: pass the flag arg to atmos, ignore the value.
+			// default branch: pass the flag arg to atmos args, consumed=0 so the next
+			// token ("value") is NOT consumed here — it is processed independently in
+			// the next loop iteration and becomes a positional/atmos arg.
 			expectedAtmosArgs: []string{"-custom", "value"},
 			expectedSeparated: []string{},
 		},

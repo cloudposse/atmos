@@ -92,13 +92,13 @@ func TestGetGitHubTokenFromEnv(t *testing.T) {
 			t.Setenv("ATMOS_GITHUB_TOKEN", tt.atmosToken)
 			t.Setenv("GITHUB_TOKEN", tt.githubToken)
 
-			// Since GetGitHubTokenFromEnv() now uses global viper, we need to
-			// manually bind the environment variables for this test.
-			// In production, this is done by GlobalOptionsBuilder.
-			v := viper.GetViper()
+			// Use an isolated viper instance to avoid mutating the global singleton.
+			// This prevents BindEnv from leaking env-var mappings into subsequent tests.
+			// In production, GlobalOptionsBuilder binds these on the global viper instance.
+			v := viper.New()
 			_ = v.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
 
-			got := GetGitHubTokenFromEnv()
+			got := GetGitHubTokenFromEnv(v)
 			assert.Equal(t, tt.want, got)
 		})
 	}
