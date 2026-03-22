@@ -1,24 +1,24 @@
 package tests
 
 import (
-"bytes"
-"context"
-"encoding/base64"
-"fmt"
-"os"
-"os/exec"
-"path/filepath"
-"runtime"
-"sort"
-"strings"
-"testing"
-"time"
+	"bytes"
+	"context"
+	"encoding/base64"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"testing"
+	"time"
 
-"github.com/otiai10/copy"
+	"github.com/otiai10/copy"
 
-log "github.com/cloudposse/atmos/pkg/logger"
-"github.com/cloudposse/atmos/pkg/telemetry"
-"github.com/cloudposse/atmos/tests/testhelpers"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func runCLICommandTest(t *testing.T, tc TestCase) {

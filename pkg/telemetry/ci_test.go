@@ -399,4 +399,20 @@ func TestFilterCIEnvVars(t *testing.T) {
 
 		assert.Equal(t, original, input)
 	})
+
+	t.Run("does not strip GOCOVERDIR", func(t *testing.T) {
+		t.Parallel()
+
+		// GOCOVERDIR must never be filtered: removing it would silently disable
+		// coverage collection for all parallel test subprocesses.
+		input := []string{"GOCOVERDIR=/tmp/cov", "CI=true", "HOME=/home/user"}
+		result := FilterCIEnvVars(input)
+
+		assert.Contains(t, result, "GOCOVERDIR=/tmp/cov")
+		assert.Contains(t, result, "HOME=/home/user")
+		// CI is a known CI var and must be stripped.
+		for _, entry := range result {
+			assert.NotContains(t, entry, "CI=")
+		}
+	})
 }
