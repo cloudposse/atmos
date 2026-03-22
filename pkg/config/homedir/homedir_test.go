@@ -182,7 +182,7 @@ func TestShellHomeDir(t *testing.T) {
 	t.Run("username starting with hyphen rejected (prevents ~- tilde-special)", func(t *testing.T) {
 		// In bash/dash, ~- expands to $OLDPWD. A username starting with "-"
 		// would cause `printf '%s\n' ~-username` to potentially expand to
-		// $OLDPWD. The whitelist must reject these to prevent silent wrong results.
+		// $OLDPWD. The username validation must reject these to prevent silent wrong results.
 		leadingSpecial := []string{"-user", "-", "--", "+user", "+"}
 		for _, name := range leadingSpecial {
 			orig := shellGetUsernameFunc
@@ -196,20 +196,24 @@ func TestShellHomeDir(t *testing.T) {
 	})
 
 	t.Run("non-absolute shell output returns ErrBlankOutput", func(t *testing.T) {
-		// The shell fallback must always return an absolute path. A relative
-		// result would silently produce wrong paths for callers.
+		if runtime.GOOS == "windows" {
+			t.Skip("shell expansion is not used on Windows.")
+		}
+		// Create a mock sh that echoes a relative path to exercise the IsAbs
+		// guard inside shellHomeDir directly (not via the shellHomeDirFunc hook).
+		binDir := t.TempDir()
+		shScript := filepath.Join(binDir, "sh")
+		err := os.WriteFile(shScript, []byte("#!/bin/sh\necho relative/path\n"), 0o755)
+		require.NoError(t, err, "failed to create mock sh script")
+
 		orig := shellGetUsernameFunc
-		origFunc := shellHomeDirFunc
-		defer func() {
-			shellGetUsernameFunc = orig
-			shellHomeDirFunc = origFunc
-		}()
-		// Simulate a case where the shell returns a relative path by injecting
-		// the sentinel directly via the top-level shellHomeDirFunc hook.
-		shellHomeDirFunc = func() (string, error) { return "", ErrBlankOutput }
-		_, err := getHomeFromShell()
+		defer func() { shellGetUsernameFunc = orig }()
+		shellGetUsernameFunc = func() (string, error) { return "validuser", nil }
+		t.Setenv("PATH", binDir)
+
+		_, err = shellHomeDir()
 		assert.ErrorIs(t, err, ErrBlankOutput,
-			"non-absolute shell output must be propagated as ErrBlankOutput.")
+			"shellHomeDir must reject non-absolute shell output via filepath.IsAbs guard.")
 	})
 
 	t.Run("tilde-prefixed shell output returns ErrBlankOutput", func(t *testing.T) {
@@ -356,7 +360,7 @@ func TestShellGetUsernameFunc_IDNotFound_WhoamiFallback(t *testing.T) {
 
 	// Create a temp dir with a mock whoami that prints "mockuser".
 	binDir := t.TempDir()
-	whoamiScript := binDir + "/whoami"
+	whoamiScript := filepath.Join(binDir, "whoami")
 	err := os.WriteFile(whoamiScript, []byte("#!/bin/sh\necho mockuser\n"), 0o755)
 	require.NoError(t, err, "failed to create mock whoami script")
 
@@ -383,7 +387,7 @@ func TestShellHomeDir_NonAbsoluteResultRejected(t *testing.T) {
 	// Create a temp dir with a mock 'sh' that prints a relative path regardless
 	// of the command given, to exercise the IsAbs guard.
 	binDir := t.TempDir()
-	shScript := binDir + "/sh"
+	shScript := filepath.Join(binDir, "sh")
 	err := os.WriteFile(shScript, []byte("#!/bin/sh\necho relative/path\n"), 0o755)
 	require.NoError(t, err, "failed to create mock sh script")
 
