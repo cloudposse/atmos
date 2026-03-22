@@ -80,9 +80,10 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 //
 // When baseDir is empty (tests without a workdir), the original slice is
 // returned unmodified. Relative paths in those tests are resolved against the
-// test binary's starting directory (recorded in startingDir by TestMain),
-// which is the tests/ directory. This is correct because t.Chdir is never
-// used (it is incompatible with t.Parallel), so the process CWD stays fixed.
+// test binary's starting directory (recorded in the package-level startingDir
+// variable set by TestMain in cli_test.go), which is the tests/ directory.
+// This is correct because t.Chdir is never used (it is incompatible with
+// t.Parallel), so the process CWD stays fixed.
 func resolveFilePaths(files []string, baseDir string) []string {
 	if baseDir == "" || len(files) == 0 {
 		return files
