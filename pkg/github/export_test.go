@@ -8,6 +8,11 @@ import "time"
 // for concurrent access, but they mutate shared state — do not add t.Parallel() to tests
 // that call SetArchivedCheckTimeoutForTest, as parallel sub-tests with different timeout
 // values would interfere with each other.
+//
+// IMPORTANT: ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT is read once in init() and stored
+// atomically. Calling os.Setenv("ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT", ...) in a test
+// has NO EFFECT because init() has already run. Use SetArchivedCheckTimeoutForTest
+// to override the timeout in tests.
 func ArchivedCheckTimeoutForTest() time.Duration {
 	return getArchivedCheckTimeout()
 }

@@ -40,6 +40,59 @@ func TestNewAtmosLogger(t *testing.T) {
 			assert.NotNil(t, logger.charm)
 		})
 	})
+
+	// Test that GetOutput returns os.Stderr when no writer is provided.
+	t.Run("default writer is os.Stderr", func(t *testing.T) {
+		baseLogger := log.New(os.Stderr)
+		logger := NewAtmosLogger(baseLogger)
+		assert.Equal(t, os.Stderr, logger.GetOutput(), "GetOutput should return os.Stderr by default")
+	})
+
+	// Test that a custom writer passed at construction is returned by GetOutput.
+	t.Run("custom writer passed at construction", func(t *testing.T) {
+		var buf bytes.Buffer
+		baseLogger := log.New(&buf)
+		logger := NewAtmosLogger(baseLogger, &buf)
+		assert.Equal(t, &buf, logger.GetOutput(), "GetOutput should return the writer passed to NewAtmosLogger")
+	})
+
+	// Test that WithPrefix propagates the writer from the parent logger.
+	t.Run("WithPrefix propagates writer", func(t *testing.T) {
+		var buf bytes.Buffer
+		baseLogger := log.New(&buf)
+		parent := NewAtmosLogger(baseLogger, &buf)
+		child := parent.WithPrefix("myprefix")
+		assert.Equal(t, &buf, child.GetOutput(), "WithPrefix child should propagate parent's writer")
+	})
+
+	// Test that With propagates the writer from the parent logger.
+	t.Run("With propagates writer", func(t *testing.T) {
+		var buf bytes.Buffer
+		baseLogger := log.New(&buf)
+		parent := NewAtmosLogger(baseLogger, &buf)
+		child := parent.With("key", "value")
+		assert.Equal(t, &buf, child.GetOutput(), "With child should propagate parent's writer")
+	})
+
+	// Test that SetOutput is consistent: GetOutput returns the new writer immediately,
+	// with no window where the tracked writer is updated but charm's writer is not.
+	t.Run("SetOutput is consistent under concurrent reads", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := New()
+		// Run many concurrent readers to ensure no torn reads.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for range 100 {
+				_ = logger.GetOutput()
+			}
+		}()
+		for range 100 {
+			logger.SetOutput(&buf)
+			logger.SetOutput(os.Stderr)
+		}
+		<-done
+	})
 }
 
 func TestAtmosLogger_AllLogMethods(t *testing.T) {

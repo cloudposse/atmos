@@ -42,5 +42,5 @@ func SetDefault(logger *AtmosLogger) {
 
 // New creates a new AtmosLogger with default settings.
 func New() *AtmosLogger {
-	return NewAtmosLogger(charm.New(os.Stderr))
+	return NewAtmosLogger(charm.New(os.Stderr), os.Stderr)
 }

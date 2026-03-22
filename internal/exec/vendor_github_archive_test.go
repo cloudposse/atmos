@@ -3,9 +3,14 @@ package exec
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
+	ghpkg "github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	gh "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -14,6 +19,11 @@ import (
 // captureLog redirects the default logger output to a buffer for the duration
 // of the test at the requested level, and fully restores the original writer
 // and log level on cleanup so other tests in the same binary are unaffected.
+//
+// NOTE: This function operates on the *current* default logger (via log.Default()).
+// If log.SetDefault() is called between captureLog and the t.Cleanup restore, the
+// restore will apply to the logger that was default at call time, not the new default.
+// To avoid this, tests that call captureLog must not call log.SetDefault().
 func captureLog(t *testing.T, level log.Level) *bytes.Buffer {
 	t.Helper()
 
@@ -182,4 +192,55 @@ func TestWarnIfArchivedGitHubRepo_Deduplication(t *testing.T) {
 	// The second call (comp-b) must emit a trace-level suppression note.
 	assert.Contains(t, output, "Archived-repo warning already emitted", "expected dedup trace log for comp-b")
 	assert.Contains(t, output, "comp-b", "expected suppressed component name in dedup trace log")
+}
+
+// TestWarnIfArchivedGitHubRepo_FullHTTPPath exercises the complete code path:
+//
+//	warnIfArchivedGitHubRepo → gh.IsRepoArchived → isRepoArchivedWithClient → HTTP GET → archived=true → warn
+//
+// No cache pre-seeding is used; the archived status is determined by the real HTTP
+// response from the injected mock server. This test is the only one in this file that
+// exercises the HTTP transport layer without a pre-seeded cache.
+func TestWarnIfArchivedGitHubRepo_FullHTTPPath(t *testing.T) {
+	const (
+		owner = "full-path-owner"
+		repo  = "full-path-repo"
+	)
+
+	t.Cleanup(resetWarnedRepos)
+	t.Cleanup(gh.ResetArchivedRepoCache)
+
+	// Start a mock GitHub API server that returns {"archived": true} for the repo.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/"+owner+"/"+repo, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"archived": true, "full_name": "` + owner + `/` + repo + `"}`))
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	// Inject a GitHub client that points at the mock server instead of api.github.com.
+	cleanup := gh.SetNewGitHubClientHookForTest(func(ctx context.Context) *ghpkg.Client {
+		client := ghpkg.NewClient(nil)
+		u, err := url.Parse(ts.URL + "/")
+		require.NoError(t, err)
+		client.BaseURL = u
+		return client
+	})
+	defer cleanup()
+
+	buf := captureLog(t, log.TraceLevel)
+
+	// Use the URI format that ParseGitHubOwnerRepo will successfully parse.
+	uri := "github.com/" + owner + "/" + repo
+	warnIfArchivedGitHubRepo(context.Background(), uri, "my-component")
+
+	output := buf.String()
+	assert.Contains(t, output, "GitHub repository is archived",
+		"expected archived warning when HTTP server returns archived=true")
+	assert.Contains(t, output, owner+"/"+repo,
+		"expected repo name in log output")
+	assert.Contains(t, output, "my-component",
+		"expected component name in log output")
 }

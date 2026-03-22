@@ -1020,7 +1020,7 @@ components:
 		// Capture log output
 		var logBuf bytes.Buffer
 		originalLogger := log.Default()
-		testLogger := log.NewAtmosLogger(charm.New(&logBuf))
+		testLogger := log.NewAtmosLogger(charm.New(&logBuf), &logBuf)
 		testLogger.SetLevel(log.WarnLevel)
 		log.SetDefault(testLogger)
 		defer log.SetDefault(originalLogger)
@@ -1100,7 +1100,7 @@ components:
 		// Capture log output
 		var logBuf bytes.Buffer
 		originalLogger := log.Default()
-		testLogger := log.NewAtmosLogger(charm.New(&logBuf))
+		testLogger := log.NewAtmosLogger(charm.New(&logBuf), &logBuf)
 		testLogger.SetLevel(log.WarnLevel)
 		log.SetDefault(testLogger)
 		defer log.SetDefault(originalLogger)

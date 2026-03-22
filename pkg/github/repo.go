@@ -47,6 +47,19 @@ var archivedRepoCache sync.Map
 // that parallel vendor pulls never race to issue multiple API calls for the same key.
 var archivedRepoSFGroup singleflight.Group
 
+// newGitHubClientHookMu guards newGitHubClientHook to prevent data races when tests
+// call SetNewGitHubClientHookForTest while IsRepoArchived reads the hook.
+var newGitHubClientHookMu sync.RWMutex
+
+// newGitHubClientHook can be set in tests to replace newGitHubClient with a custom
+// client creator (e.g., one that points at an httptest.NewServer). When nil (the
+// default), newGitHubClient is used. This is a test-only hook; production code must
+// never assign this variable. Access only via newGitHubClientHookMu.
+//
+// NOTE: test utility — see SeedArchivedRepoCache for the rationale on why this is
+// exported from the production package.
+var newGitHubClientHook func(ctx context.Context) *ghpkg.Client
+
 // scpGitHubURLPattern matches SCP-style GitHub URLs (e.g., git@github.com:owner/repo.git).
 // Capture groups: (1) host, (2) owner, (3) repo.
 // In each character class the '-' is placed last (immediately before ']') so that it is
@@ -54,10 +67,14 @@ var archivedRepoSFGroup singleflight.Group
 var scpGitHubURLPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.+-]+@)?([A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?://.*)?$`)
 
 func init() {
-	// Initialise with the default. The atomic is used instead of a plain var so that
+	// Initialize with the default. The atomic is used instead of a plain var so that
 	// SetArchivedCheckTimeoutForTest can safely modify it concurrently with IsRepoArchived.
 	setArchivedCheckTimeout(defaultArchivedCheckTimeout)
 
+	// NOTE: ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT is read here, once, at package init time.
+	// Calling os.Setenv("ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT", ...) in a test AFTER the
+	// package has been loaded has NO EFFECT on the timeout. Tests that need a different
+	// timeout must use SetArchivedCheckTimeoutForTest (via export_test.go) instead.
 	if v := os.Getenv("ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
@@ -212,8 +229,38 @@ func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 	checkCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	client := newGitHubClient(checkCtx)
+	// Use the injected client creator if one has been set (tests only); otherwise
+	// fall back to the real GitHub client factory.
+	newGitHubClientHookMu.RLock()
+	creator := newGitHubClientHook
+	newGitHubClientHookMu.RUnlock()
+	if creator == nil {
+		creator = newGitHubClient
+	}
+	client := creator(checkCtx)
 	return isRepoArchivedWithClient(checkCtx, client.Repositories, owner, repo)
+}
+
+// SetNewGitHubClientHookForTest sets a custom GitHub client creator for tests and
+// returns a cleanup function that restores the original (nil) hook. Use this to
+// inject an httptest.NewServer-backed client without making real network calls.
+//
+// NOTE: test utility — exported from the production package because it is needed from
+// tests in multiple packages; see SeedArchivedRepoCache for the full rationale.
+//
+// Thread-safe: uses a sync.RWMutex so it is safe to call concurrently with
+// IsRepoArchived. Do not use in sub-tests that run in parallel with each other —
+// the last writer wins and all parallel sub-tests share the same hook value.
+func SetNewGitHubClientHookForTest(fn func(ctx context.Context) *ghpkg.Client) func() {
+	newGitHubClientHookMu.Lock()
+	prev := newGitHubClientHook
+	newGitHubClientHook = fn
+	newGitHubClientHookMu.Unlock()
+	return func() {
+		newGitHubClientHookMu.Lock()
+		newGitHubClientHook = prev
+		newGitHubClientHookMu.Unlock()
+	}
 }
 
 // SeedArchivedRepoCache pre-populates the archived-repo cache for the given owner/repo
@@ -223,6 +270,11 @@ func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 // NOTE: This is a test utility. It is exported because it is needed from tests in
 // multiple packages (e.g., internal/exec), which Go's export_test.go mechanism cannot
 // satisfy across package boundaries. Do not rely on this function in production code.
+//
+// CONCURRENCY: Must only be called before any IsRepoArchived calls are in progress
+// for the seeded key. If isRepoArchivedWithClient is actively in-flight for owner/repo
+// when this function is called, the singleflight result will overwrite the seeded cache
+// entry on completion, negating the seed.
 func SeedArchivedRepoCache(owner, repo string, archived bool) {
 	archivedRepoCache.Store(owner+"/"+repo, archived)
 }
