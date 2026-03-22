@@ -55,10 +55,22 @@ var (
 	usernameRe = regexp.MustCompile(`^[A-Za-z0-9._][A-Za-z0-9._-]*$`)
 
 	// externalCmdTimeout is the maximum time allowed for external subprocess
-	// calls (id, dscl, sh). A conservative timeout prevents Dir()/Expand()
+	// calls (id, dscl, sh). A conservative default prevents Dir()/Expand()
 	// from hanging indefinitely on slow NSS/LDAP/directory backends.
+	// Override via ATMOS_HOMEDIR_CMD_TIMEOUT (e.g., "10s", "500ms").
 	externalCmdTimeout = 5 * time.Second
 )
+
+func init() {
+	// Allow operators and tests to tune externalCmdTimeout via env var.
+	// Any value parseable by time.ParseDuration is accepted; invalid values
+	// are silently ignored and the default (5s) is retained.
+	if v := os.Getenv("ATMOS_HOMEDIR_CMD_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			externalCmdTimeout = d
+		}
+	}
+}
 
 // currentUserFunc is the function used to look up the current OS user.
 // It is a variable so that tests can replace it with a stub to simulate
@@ -225,6 +237,9 @@ func getHomeFromEnv() string {
 
 func dirWindows() (string, error) {
 	// First prefer the HOME environmental variable.
+	// Strip wrapping quotes first: some tools (Cygwin setup, legacy scripts)
+	// may write HOME="C:\Users\me" with literal quote characters. Strip them
+	// before the separator conversion so filepath.IsAbs remains correct.
 	// Apply filepath.FromSlash before filepath.Clean so that forward-slash
 	// paths set by Cygwin, Git Bash, or WSL1 (e.g., "/home/user") are
 	// converted to native Windows separators. Note: POSIX-style absolute
@@ -233,12 +248,12 @@ func dirWindows() (string, error) {
 	// absolute path should set HOME to a drive-absolute value (e.g.,
 	// "C:\Users\user").
 	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
-		return cleanWindowsPath(home), nil
+		return cleanWindowsPath(strings.Trim(home, `"'`)), nil
 	}
 
 	// Prefer standard environment variable USERPROFILE
 	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
-		return cleanWindowsPath(home), nil
+		return cleanWindowsPath(strings.Trim(home, `"'`)), nil
 	}
 
 	drive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
@@ -355,9 +370,10 @@ func getHomeFromShell() (string, error) {
 }
 
 // shellGetUsernameFunc is the function used by shellHomeDir to obtain the
-// current username via id -un. If id is not found in $PATH, it falls back
-// to the USER environment variable and then to whoami, so that minimal
-// containers without id can still look up the home directory.
+// current username via id -un. On any id failure (not found, non-zero exit,
+// or empty output), it falls back to the USER environment variable and then
+// to whoami, so that minimal containers and transient NSS/LDAP hiccups where
+// id exists but exits non-zero can still resolve the home directory.
 // It can be replaced in tests to simulate failure conditions.
 var shellGetUsernameFunc = func() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), externalCmdTimeout)
@@ -366,32 +382,29 @@ var shellGetUsernameFunc = func() (string, error) {
 	idCmd := exec.CommandContext(ctx, "id", "-un")
 	idCmd.Stdout = &idOut
 	idCmd.Stderr = &idErr
-	if err := idCmd.Run(); err != nil {
-		// If id is missing entirely, try $USER then whoami before giving up.
-		if errors.Is(err, exec.ErrNotFound) {
-			if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
-				return u, nil
-			}
-			whoamiCtx, whoamiCancel := context.WithTimeout(context.Background(), externalCmdTimeout)
-			defer whoamiCancel()
-			var whoOut, whoErr bytes.Buffer
-			whoamiCmd := exec.CommandContext(whoamiCtx, "whoami")
-			whoamiCmd.Stdout = &whoOut
-			whoamiCmd.Stderr = &whoErr
-			if werr := whoamiCmd.Run(); werr == nil {
-				if name := strings.TrimSpace(whoOut.String()); name != "" {
-					return name, nil
-				}
-			}
-			return "", ErrIDUnavailable
+	idOK := idCmd.Run() == nil
+	if idOK {
+		if name := strings.TrimSpace(idOut.String()); name != "" {
+			return name, nil
 		}
-		msg := strings.TrimSpace(idErr.String())
-		if msg != "" {
-			return "", fmt.Errorf("getHomeFromShell: id: %w (stderr: %s)", err, msg)
-		}
-		return "", fmt.Errorf("getHomeFromShell: id: %w", err)
 	}
-	return strings.TrimSpace(idOut.String()), nil
+	// id failed or returned empty output. Try $USER then whoami before giving up.
+	// This handles: id not installed (ErrNotFound), NSS/LDAP errors (exit 1),
+	// and any other transient failure where the binary exists but misbehaves.
+	if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
+		return u, nil
+	}
+	whoamiCtx, whoamiCancel := context.WithTimeout(context.Background(), externalCmdTimeout)
+	defer whoamiCancel()
+	var whoOut bytes.Buffer
+	whoamiCmd := exec.CommandContext(whoamiCtx, "whoami")
+	whoamiCmd.Stdout = &whoOut
+	if werr := whoamiCmd.Run(); werr == nil {
+		if name := strings.TrimSpace(whoOut.String()); name != "" {
+			return name, nil
+		}
+	}
+	return "", ErrIDUnavailable
 }
 
 // shellHomeDir is the production implementation of the shell home-directory

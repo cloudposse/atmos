@@ -189,6 +189,14 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - **NEVER use dynamic errors directly** - triggers linting warnings
 - **See `docs/errors.md`** for complete developer guide
 
+### External Command Invocation (MANDATORY)
+When spawning subprocesses (e.g., `exec.CommandContext`):
+- **Always use a timeout** via `context.WithTimeout`; allow override via an env var (e.g., `ATMOS_<PACKAGE>_CMD_TIMEOUT`) so operators can tune for slow NSS/LDAP backends.
+- **Fall back gracefully on any failure** — not just `exec.ErrNotFound`. A binary can be present but exit non-zero due to transient NSS/LDAP errors; retry with a less privileged path (`$USER` env var, `whoami`) before returning an error.
+- **Validate all user-controlled inputs** with a strict whitelist (regex) before interpolating into shell commands. Never allow leading `-` or `+` in usernames (tilde-special expansions); reject all shell metacharacters.
+- **Require absolute paths** from all subprocess results; reject tilde-prefixed or relative outputs as `ErrBlankOutput`.
+- **Never include PII** (e.g., raw usernames) in returned error messages; use sentinel errors with generic text.
+
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests
 - Use interfaces + dependency injection for testability
