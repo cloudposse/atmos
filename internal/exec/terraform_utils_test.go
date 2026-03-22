@@ -1864,4 +1864,24 @@ func TestIsTerraformCurrentWorkspace(t *testing.T) {
 
 		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod"))
 	})
+
+	t.Run("TF_DATA_DIR absolute path is used directly without joining componentPath", func(t *testing.T) {
+		// When TF_DATA_DIR is set to an absolute path, isTerraformCurrentWorkspace must read
+		// the environment file from that absolute path rather than joining componentPath.
+		// This documents the invariant for the filepath.IsAbs guard in the implementation.
+		absDataDir := t.TempDir()
+		t.Setenv("TF_DATA_DIR", absDataDir)
+
+		workspace := "staging"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(absDataDir, "environment"),
+			[]byte(workspace),
+			0o600,
+		))
+
+		// componentPath is a different directory — the environment file is under absDataDir, not here.
+		componentPath := t.TempDir()
+		assert.True(t, isTerraformCurrentWorkspace(componentPath, workspace),
+			"absolute TF_DATA_DIR must resolve the environment file without joining componentPath")
+	})
 }

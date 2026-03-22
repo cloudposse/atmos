@@ -207,6 +207,12 @@ ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, 
 - No coverage theater
 - Remove always-skipped tests
 - Use `errors.Is()` for error checking
+- **For aliasing/isolation tests, verify BOTH directions:** after a merge, mutate the result and confirm the original inputs are unchanged (result→src isolation); also mutate a source map before the merge and confirm the result is unaffected (src→result isolation).
+- **For slice-result tests, assert element contents, not just length:** `require.Len` alone allows regressions that drop or corrupt contents. Assert at least the first and last element by value.
+- **Never use platform-specific binaries in tests** (e.g., `false`, `true`, `sh` on Unix): these don't exist on Windows. Use Go-native test helpers: subprocess via `os.Executable()` + `TestMain`, temp files with cross-platform scripts, or DI to inject a fake command runner.
+
+### Follow-up Tracking (MANDATORY)
+When a PR defers work to a follow-up (e.g., migration, cleanup, refactor), **open a GitHub issue and link it by number** in the blog post, roadmap, and/or PR description before merging. Blog posts with "a follow-up issue will..." with no `#number` are incomplete — the work will never be tracked.
 
 ### Mock Generation (MANDATORY)
 Use `go.uber.org/mock/mockgen` with `//go:generate` directives. Never manual mocks.
@@ -390,6 +396,20 @@ Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 
 ### Cross-Platform (MANDATORY)
 Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
+
+**Subprocess helpers in tests (cross-platform):**
+Instead of `exec.LookPath("false")` or other Unix-only binaries, use the test binary itself:
+```go
+// In testmain_test.go — intercepts before any test runs:
+func TestMain(m *testing.M) {
+    if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" { os.Exit(1) }
+    os.Exit(m.Run())
+}
+// In the test itself:
+exePath, _ := os.Executable()
+info.Command = exePath
+info.ComponentEnvList = []string{"_ATMOS_TEST_EXIT_ONE=1"}
+```
 
 **Path handling in tests:**
 - **NEVER use forward slash concatenation** like `tempDir + "/components/terraform/vpc"`

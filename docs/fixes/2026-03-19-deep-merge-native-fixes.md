@@ -80,6 +80,29 @@ if recorded == "" {
 return recorded == workspace
 ```
 
+The fix also wires the `isTerraformCurrentWorkspace` check into `runWorkspaceSetup` — the function that is actually called during terraform execution:
+
+```go
+// runWorkspaceSetup — recovery path (internal/exec/terraform_execute_helpers_exec.go)
+newErr := ExecuteShellCommand(
+    *atmosConfig, info.Command,
+    []string{"workspace", "new", info.TerraformWorkspace},
+    componentPath, info.ComponentEnvList, info.DryRun, info.RedirectStdErr,
+)
+if newErr == nil {
+    return nil
+}
+var newExitCodeErr errUtils.ExitCodeError
+if errors.As(newErr, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
+    isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace) {
+    log.Warn("Workspace is already active but its state directory is missing; "+
+        "proceeding — subsequent terraform commands may report missing state",
+        "workspace", info.TerraformWorkspace)
+    return nil
+}
+return newErr
+```
+
 ---
 
 ### 4. Workspace recovery log level too low

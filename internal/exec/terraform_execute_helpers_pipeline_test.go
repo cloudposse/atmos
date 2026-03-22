@@ -10,7 +10,6 @@ package exec
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -131,12 +130,15 @@ func TestExecuteCommandPipeline_TTYError(t *testing.T) {
 // "workspace new" fail with exit code 1 but the .terraform/environment file already
 // names the target workspace, runWorkspaceSetup logs a warning and returns nil.
 // This protects against regressions of the workspace-recovery logic added in this PR.
+//
+// Cross-platform approach: the test binary (os.Executable) is used as the "terraform"
+// command with an env var that triggers immediate exit(1) from TestMain (testmain_test.go).
+// This avoids any dependency on platform-specific binaries like "false" (absent on Windows).
 func TestRunWorkspaceSetup_RecoveryPath(t *testing.T) {
-	// Require a command that reliably exits 1 (POSIX "false").
-	falsePath, err := exec.LookPath("false")
-	if err != nil {
-		t.Skip("'false' command not available on this platform")
-	}
+	// Use the test binary itself as the command: it exits 1 immediately when
+	// _ATMOS_TEST_EXIT_ONE=1 is set (handled by TestMain in testmain_test.go).
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
 
 	tmpDir := t.TempDir()
 	workspace := "dev"
@@ -154,11 +156,17 @@ func TestRunWorkspaceSetup_RecoveryPath(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:         "plan",
 		TerraformWorkspace: workspace,
-		Command:            falsePath, // always exits 1 → simulates workspace not found
+		// Use the test binary itself as the command: it exits 1 immediately when
+		// _ATMOS_TEST_EXIT_ONE=1 is set (handled by TestMain in testmain_test.go).
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
 	}
 
 	// Recovery path: both select and new fail with exit 1, environment file names the
 	// workspace → runWorkspaceSetup must return nil (proceed with warning).
+	// This also implicitly verifies that ExecuteShellCommand correctly wraps exit-code
+	// errors as errUtils.ExitCodeError so that the errors.As check in runWorkspaceSetup
+	// fires correctly.
 	wsErr := runWorkspaceSetup(&atmosConfig, &info, tmpDir)
 	assert.NoError(t, wsErr, "runWorkspaceSetup must succeed when environment file confirms active workspace")
 }

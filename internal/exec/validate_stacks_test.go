@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -84,6 +85,21 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 		// then verify context tokens appear at most once per block (+1 as defensive padding).
 		fileCount := strings.Count(errStr, "File being processed:")
 		require.Positive(t, fileCount, "Should have at least one file error block")
+
+		// Self-validate the block counter: "File being processed:" must not appear more
+		// often than there are stack YAML files in the fixture (an independent count).
+		// If a deduplication bug doubled the counter, fileCount would be inflated, making
+		// maxOccurrences too large and letting doubled contextToken occurrences slip through.
+		var fixtureFileCount int
+		_ = filepath.WalkDir(filepath.Join(testCasesPath, "stacks"), func(_ string, d os.DirEntry, _ error) error {
+			if !d.IsDir() && strings.HasSuffix(d.Name(), ".yaml") {
+				fixtureFileCount++
+			}
+			return nil
+		})
+		if fixtureFileCount > 0 && fileCount > fixtureFileCount+1 {
+			t.Errorf("\"File being processed:\" appears %d times but stacks fixture has only %d YAML files — possible block-counter duplication bug", fileCount, fixtureFileCount)
+		}
 
 		// A correct implementation produces exactly one occurrence of each context token per
 		// error block (one per erroring file). Allowing fileCount+1 adds a single defensive
