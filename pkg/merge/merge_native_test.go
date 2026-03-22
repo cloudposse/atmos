@@ -178,7 +178,7 @@ func TestAppendSlices_DstElementsDeepCopied(t *testing.T) {
 func TestDeepMergeNative_NilDstReturnsError(t *testing.T) {
 	err := deepMergeNative(nil, map[string]any{"k": "v"}, false, false)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "dst must not be nil")
+	assert.Contains(t, err.Error(), "must not be nil")
 }
 
 // TestDeepMergeNative_NilSrcIsNoOp verifies the documented invariant:
@@ -582,7 +582,9 @@ func BenchmarkMergeNative_TwoInputs(b *testing.B) {
 	inputs := []map[string]any{input1, input2}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = Merge(cfg, inputs)
+		if _, err := Merge(cfg, inputs); err != nil {
+			b.Fatalf("Merge failed: %v", err)
+		}
 	}
 }
 
@@ -615,7 +617,9 @@ func BenchmarkMergeNative_FiveInputs(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = Merge(cfg, inputs)
+		if _, err := Merge(cfg, inputs); err != nil {
+			b.Fatalf("Merge failed: %v", err)
+		}
 	}
 }
 
@@ -877,7 +881,9 @@ func BenchmarkMergeNative_TenInputs(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = Merge(cfg, inputs)
+		if _, err := Merge(cfg, inputs); err != nil {
+			b.Fatalf("Merge failed: %v", err)
+		}
 	}
 }
 
@@ -973,7 +979,9 @@ func BenchmarkMerge_ProductionScale(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = Merge(cfg, inputs)
+		if _, err := Merge(cfg, inputs); err != nil {
+			b.Fatalf("Merge failed: %v", err)
+		}
 	}
 }
 

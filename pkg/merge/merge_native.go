@@ -1,7 +1,7 @@
 package merge
 
 import (
-	"fmt"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // safeCap returns a capacity hint of a+b, clamped to maxCapHint to prevent
@@ -41,7 +41,7 @@ func safeCap(a, b int) int {
 // dst must not be nil; the function returns an error if it is.
 func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) error {
 	if dst == nil {
-		return fmt.Errorf("deepMergeNative: dst must not be nil")
+		return errUtils.ErrMergeNilDst
 	}
 	for k, srcVal := range src {
 		dstVal, exists := dst[k]
@@ -109,7 +109,7 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 				// Attempt normalization once: maybe srcVal is a typed slice (e.g. []string).
 				normalized := deepCopyValue(srcVal)
 				if _, normalizedIsSlice := normalized.([]any); !normalizedIsSlice {
-					return fmt.Errorf("cannot override two slices with different type")
+					return errUtils.ErrMergeTypeMismatch
 				}
 				// Normalized typed slice → use the result we already computed.
 				dst[k] = normalized
@@ -151,8 +151,16 @@ func appendSlices(dst, src []any) []any {
 	return result
 }
 
-// mergeSlicesNative performs an element-wise deep merge of src into dst, matching
-// the behaviour of mergo.WithSliceDeepCopy + WithOverride + WithTypeCheck:
+// mergeSlicesNative performs an element-wise deep merge of src into dst.
+//
+// This is the **defined contract** for native slice merging.  The behavior
+// intentionally diverges from mergo.WithSliceDeepCopy in one key area: extra
+// src elements beyond the dst length are silently dropped (result length always
+// equals dst length).  This is not an accidental omission — it matches the
+// semantics previously relied on by callers and verified by the opt-in
+// cross-validation tests (go test -tags compare_mergo ./pkg/merge -run TestCompareMergo).
+//
+// Rules:
 //   - The result length equals the dst length (extra src elements are ignored).
 //   - For each position i that exists in both dst and src: if both elements are
 //     map[string]any they are deep-merged (propagating appendSlice/sliceDeepCopy);

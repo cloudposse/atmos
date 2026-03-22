@@ -394,8 +394,10 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template with atmos.Component() integration
 	t.Run("atmos.Component integration", func(t *testing.T) {
-		if _, err := exec.LookPath("tofu"); err != nil {
-			t.Skip("skipping: 'tofu' binary not found in PATH (required for atmos.Component integration test)")
+		_, tofuErr := exec.LookPath("tofu")
+		_, tfErr := exec.LookPath("terraform")
+		if tofuErr != nil && tfErr != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for atmos.Component integration test)")
 		}
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-with-atmos-component",

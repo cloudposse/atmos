@@ -421,7 +421,9 @@ func RequireOCIAuthentication(t *testing.T) {
 	// A bot token may exist but not have access to the ghcr.io registry used by tests.
 	client := &http.Client{Timeout: httpTimeout}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://ghcr.io/v2/", nil)
-	if err == nil {
+	if err != nil {
+		t.Logf("Warning: Could not create ghcr.io request: %v", err)
+	} else {
 		req.Header.Set("Authorization", "Bearer "+githubToken)
 		resp, reqErr := client.Do(req)
 		if reqErr != nil {

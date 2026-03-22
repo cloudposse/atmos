@@ -70,7 +70,7 @@ func TestCompareMergo_NestedMapsMerge(t *testing.T) {
 				// deepCopyValue is available in the same package (merge.go) and handles nested maps correctly.
 				inpCopy := deepCopyValue(inp).(map[string]any)
 				if err := dmergo.Merge(&mergoResult, inpCopy, dmergo.WithOverride); err != nil {
-					t.Logf("mergo.Merge error (may be expected for some cases): %v", err)
+					t.Fatalf("mergo.Merge failed (baseline construction must succeed): %v", err)
 				}
 			}
 

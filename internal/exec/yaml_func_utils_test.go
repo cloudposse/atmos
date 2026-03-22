@@ -262,12 +262,14 @@ func TestProcessCustomYamlTags(t *testing.T) {
 
 	defer func() {
 		// Delete the generated files and folders after the test.
-		// Use assert.NoError for RemoveAll to fail loudly if a directory cannot be removed.
-		err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform"))
-		assert.NoError(t, err)
+		// Log warnings instead of failing — cleanup errors should not mask test results.
+		if err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform")); err != nil {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
 
-		err = os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d"))
-		assert.NoError(t, err)
+		if err := os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d")); err != nil {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
 
 		// Remove any root-level state files that may have been left by other tests
 		// (e.g., when workspaces are disabled the state is stored at terraform.tfstate).
