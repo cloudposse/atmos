@@ -9,6 +9,7 @@ tests:
     workdir: "fixtures/scenarios/native-ci-gha-plan"
     command: "atmos"
     env:
+      CI: "true"
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
       GITHUB_OUTPUT: "github-output-no-changes.txt"
@@ -48,6 +49,7 @@ tests:
     workdir: "fixtures/scenarios/native-ci-gha-plan"
     command: "atmos"
     env:
+      CI: "true"
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
       GITHUB_OUTPUT: "github-output-changes.txt"
@@ -92,6 +94,7 @@ tests:
     workdir: "fixtures/scenarios/native-ci-gha-plan"
     command: "atmos"
     env:
+      CI: "true"
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
       GITHUB_OUTPUT: "github-output-failure.txt"

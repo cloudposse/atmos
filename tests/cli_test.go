@@ -14,6 +14,7 @@ import (
 	"path/filepath" // For resolving absolute paths
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1210,18 +1211,27 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 
 	// Add XDG vars to environment unless test explicitly sets them.
-	for xdgVar, xdgPath := range xdgVars {
+	// Sort keys so the env slice is built in deterministic order across runs.
+	xdgVarNames := make([]string, 0, len(xdgVars))
+	for k := range xdgVars {
+		xdgVarNames = append(xdgVarNames, k)
+	}
+	sort.Strings(xdgVarNames)
+	for _, xdgVar := range xdgVarNames {
+		xdgPath := xdgVars[xdgVar]
 		if _, exists := tc.Env[xdgVar]; exists {
 			continue // Test explicitly set this, don't override
 		}
 
-		// Remove any inherited XDG var first
-		for i, env := range envVars {
-			if strings.HasPrefix(env, xdgVar+"=") {
-				envVars = append(envVars[:i], envVars[i+1:]...)
-				break
+		// Remove all inherited occurrences of this XDG var (duplicates can arise
+		// when AtmosRunner env and os.Environ() both carry the same variable name).
+		filtered := make([]string, 0, len(envVars))
+		for _, env := range envVars {
+			if !strings.HasPrefix(env, xdgVar+"=") {
+				filtered = append(filtered, env)
 			}
 		}
+		envVars = filtered
 
 		// Add our isolated XDG var
 		envVars = append(envVars, fmt.Sprintf("%s=%s", xdgVar, xdgPath))

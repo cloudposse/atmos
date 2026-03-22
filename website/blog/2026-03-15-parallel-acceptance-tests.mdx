@@ -51,8 +51,9 @@ Based on actual GitHub Actions runs (2-core hosted runners):
 
 The modest gains on shared-runner CI are expected: GitHub's hosted runners have
 only 2 logical cores, which limits the parallelism benefit. On a developer
-laptop with 8–16 cores, the same suite runs considerably faster — typically
-3–5× faster than the sequential baseline.
+laptop with 8–16 cores, the same suite completes faster because more tests run
+concurrently, though the actual speedup depends on how many tests are I/O-bound
+vs. CPU-bound.
 
 The primary benefit of this change is **correctness**: eliminating shared-state
 bugs (CI env mutation, Terraform state lock races, stale GHA output files) that

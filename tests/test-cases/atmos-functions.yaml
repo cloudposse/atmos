@@ -1,4 +1,10 @@
 tests:
+  # All four tests in this file use parallel: false. Reasons:
+  # 1. They share a named sandbox "atmos-functions" (mutable Terraform state).
+  # 2. Tests 1–3 run "terraform deploy" (write state); test 4 reads state written
+  #    by test 3 via !terraform.output (component-6 reads from component-5).
+  # 3. Together, tests 3 and 4 form a strict execution order dependency.
+  # Do NOT change any of these to parallel: true.
   - name: terraform output function
     enabled: true
     tty: true

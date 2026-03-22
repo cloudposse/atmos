@@ -139,6 +139,7 @@ tests:
     workdir: "fixtures/scenarios/native-ci"
     command: "atmos"
     env:
+      CI: "true"
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
       GITHUB_OUTPUT: "github-output-gha-env.txt"
