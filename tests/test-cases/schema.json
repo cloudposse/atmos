@@ -21,7 +21,7 @@
               "default": true
             },
             "parallel": {
-              "type": "boolean",
+              "type": ["boolean", "null"],
               "description": "If false, run this test sequentially (without t.Parallel()). Use for tests that share mutable state such as a named sandbox performing write operations. Defaults to true.",
               "default": true
             },

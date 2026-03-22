@@ -1123,7 +1123,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 		// Remove all occurrences of the key before adding the new value.  Duplicates
 		// can arise when the AtmosRunner env and the base env both carry the same key.
-		filtered := envVars[:0]
+		filtered := make([]string, 0, len(envVars))
 		for _, env := range envVars {
 			if !strings.HasPrefix(env, key+"=") {
 				filtered = append(filtered, env)
@@ -1134,7 +1134,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 	// Ensure NO_COLOR is not inherited unless test explicitly sets it (presence disables color).
 	if _, exists := tc.Env["NO_COLOR"]; !exists {
-		filtered := envVars[:0]
+		filtered := make([]string, 0, len(envVars))
 		for _, env := range envVars {
 			if !strings.HasPrefix(env, "NO_COLOR=") {
 				filtered = append(filtered, env)
@@ -1160,7 +1160,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 		// Remove all occurrences from the inherited environment (duplicates can arise
 		// when the AtmosRunner env and os.Environ() both carry the same variable).
-		filtered := envVars[:0]
+		filtered := make([]string, 0, len(envVars))
 		for _, env := range envVars {
 			if !strings.HasPrefix(env, atmosVar+"=") {
 				filtered = append(filtered, env)
@@ -1181,7 +1181,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			}
 			// Remove all occurrences (duplicates can arise when os.Environ() and the
 			// AtmosRunner env both carry the same variable name).
-			filtered := envVars[:0]
+			filtered := make([]string, 0, len(envVars))
 			for _, env := range envVars {
 				if !strings.HasPrefix(env, varName+"=") {
 					filtered = append(filtered, env)
@@ -1235,11 +1235,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	if coverDir != "" {
 		perTestCoverDir := filepath.Join(tempDir, "gocoverdir")
 		if err := os.MkdirAll(perTestCoverDir, 0o755); err == nil {
+			// Update the existing GOCOVERDIR entry if present, or append a new one.
+			// The entry may be absent for non-atmos commands whose cmd.Env starts empty.
+			found := false
 			for i, env := range envVars {
 				if strings.HasPrefix(env, "GOCOVERDIR=") {
 					envVars[i] = fmt.Sprintf("GOCOVERDIR=%s", perTestCoverDir)
+					found = true
 					break
 				}
+			}
+			if !found {
+				envVars = append(envVars, fmt.Sprintf("GOCOVERDIR=%s", perTestCoverDir))
 			}
 			// After the subprocess exits, merge its coverage data into the shared dir.
 			defer mergeIntoCoverDir(perTestCoverDir, coverDir)
