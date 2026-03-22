@@ -41,6 +41,12 @@ func warnIfArchivedGitHubRepo(ctx context.Context, uri, component string) {
 	// repo appears in both vendor.yaml sources and component.yaml definitions.
 	repoKey := owner + "/" + repo
 	if _, loaded := warnedArchivedRepos.LoadOrStore(repoKey, struct{}{}); loaded {
+		// A warning was already emitted for this repo. Log at trace level so
+		// engineers can confirm the suppression without polluting normal output.
+		if component != "" {
+			log.Trace("Archived-repo warning already emitted; skipping duplicate",
+				"repository", repoKey, "component", component)
+		}
 		return
 	}
 

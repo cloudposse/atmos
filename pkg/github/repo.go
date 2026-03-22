@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -14,9 +15,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// archivedCheckTimeout is the maximum time to wait for a GitHub archived-status check.
-// Kept short because the check is best-effort and should never block vendoring for long.
-const archivedCheckTimeout = 5 * time.Second
+// defaultArchivedCheckTimeout is the default maximum time to wait for a GitHub
+// archived-status check. Kept short because the check is best-effort and should
+// never block vendoring for long. Override via ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT
+// (e.g. "0s" to skip the check in air-gapped environments, "10s" for slower networks).
+const defaultArchivedCheckTimeout = 5 * time.Second
+
+// archivedCheckTimeout is the resolved timeout, set at package init from the
+// ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT env var (or the default if unset/invalid).
+var archivedCheckTimeout = defaultArchivedCheckTimeout
 
 // archivedRepoCache caches (owner/repo → archived) results so that multiple vendor
 // sources pointing at the same repository only issue one API call per run.
@@ -28,9 +35,18 @@ var archivedRepoSFGroup singleflight.Group
 
 // scpGitHubURLPattern matches SCP-style GitHub URLs (e.g., git@github.com:owner/repo.git).
 // Capture groups: (1) host, (2) owner, (3) repo.
-// Character class [A-Za-z0-9_.+-] is used instead of \w to restrict to ASCII word characters,
-// since GitHub owner/repo names are restricted to [A-Za-z0-9_.-].
+// Character class [A-Za-z0-9_.-] is used instead of \w to restrict to ASCII word characters,
+// since GitHub owner/repo names are restricted to [A-Za-z0-9_.-]. The '-' is placed at the
+// end of each character class as a standard practice for readability.
 var scpGitHubURLPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.+-]+@)?([A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?://.*)?$`)
+
+func init() {
+	if v := os.Getenv("ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			archivedCheckTimeout = d
+		}
+	}
+}
 
 // ParseGitHubOwnerRepo extracts the GitHub owner and repository name from a URI.
 // It handles various URI formats used in vendor configuration:
@@ -53,9 +69,9 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 		uri = uri[idx+2:]
 	}
 
-	// Handle github:// scheme (e.g., github://owner/repo or github://owner/repo/subdir@ref).
-	if strings.HasPrefix(uri, "github://") {
-		remainder := strings.TrimPrefix(uri, "github://")
+	// Handle github:// scheme (case-insensitive, e.g., github://owner/repo or GITHUB://owner/repo/subdir@ref).
+	if strings.HasPrefix(strings.ToLower(uri), "github://") {
+		remainder := uri[len("github://"):]
 		// Strip @ref suffix.
 		if atIdx := strings.Index(remainder, "@"); atIdx >= 0 {
 			remainder = remainder[:atIdx]
@@ -119,8 +135,10 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 		return "", "", false
 	}
 
-	// Path format: /owner/repo or /owner/repo.git//subdir
-	path := strings.TrimPrefix(parsed.Path, "/")
+	// Strip all leading slashes. url.Parse preserves multiple leading slashes in the
+	// path (e.g., "https://github.com//owner/repo" → Path="//owner/repo"), so we use
+	// TrimLeft to normalize double-slash URIs produced by some template expansions.
+	path := strings.TrimLeft(parsed.Path, "/")
 	// Strip the go-getter path-level subdirectory delimiter ("//" within the path).
 	// This is required for any URL where the scheme's "//" (e.g., "ssh://") caused
 	// the top-level stripping above to stop at the scheme separator, leaving the

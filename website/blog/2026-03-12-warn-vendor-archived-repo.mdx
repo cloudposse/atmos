@@ -21,6 +21,8 @@ WARN GitHub repository is archived and no longer actively maintained.
 
 The check is **best-effort and non-blocking**: if the GitHub API is unavailable (network error, rate limit, missing token), the check is skipped and a `TRACE`-level message is logged—vendoring proceeds normally. Vendoring is never blocked by this check.
 
+In air-gapped or offline environments, set `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT=0s` to disable the check entirely, or reduce it (e.g. `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT=2s`) to shorten the per-repo timeout.
+
 The warning applies to both vendor manifest sources (`vendor.yaml`) and component vendoring configs (`component.yaml`).
 
 ## Why This Matters
@@ -35,7 +37,7 @@ Without this warning, there's no signal that the repository is in a frozen state
 
 ## How It Works
 
-Atmos calls the GitHub REST API (`GET /repos/{owner}/{repo}`) and inspects the `archived` field. The check runs once per source entry, before downloading begins.
+Atmos calls the GitHub REST API (`GET /repos/{owner}/{repo}`) and inspects the `archived` field. The check runs **once per unique repository URL** across all sources and components in a single run — even if multiple vendor entries reference different subdirectories of the same repository. Results are cached in memory so no duplicate API calls are made.
 
 The URI parser handles all common vendor source formats:
 

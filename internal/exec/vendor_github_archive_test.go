@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,16 +13,20 @@ import (
 )
 
 // captureLog redirects the default logger output to a buffer for the duration
-// of the test, sets the given level, and restores the original state on cleanup.
+// of the test at the requested level, and fully restores the original writer
+// and log level on cleanup so other tests in the same binary are unaffected.
 func captureLog(t *testing.T, level log.Level) *bytes.Buffer {
 	t.Helper()
 
+	origLevel := log.GetLevel()
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 	log.SetLevel(level)
 
 	t.Cleanup(func() {
-		log.SetOutput(nil)
+		// Restore the writer to the default (os.Stderr) and the original level.
+		log.SetOutput(os.Stderr)
+		log.SetLevel(origLevel)
 	})
 
 	return &buf
@@ -102,8 +107,9 @@ func TestWarnIfArchivedGitHubRepo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resetWarnedRepos()
-			// Always reset the archive cache on cleanup so tests don't leak into each other.
+			// Register cleanup before any state mutation so that even a panic or
+			// early t.Fatal leaves a clean environment for subsequent sub-tests.
+			t.Cleanup(resetWarnedRepos)
 			t.Cleanup(gh.ResetArchivedRepoCache)
 
 			// Pre-populate the cache so no real API call is made.
@@ -151,7 +157,9 @@ func TestWarnIfArchivedGitHubRepo(t *testing.T) {
 // only emits a warning once, even when called from multiple code paths (vendor.yaml
 // and component.yaml both referencing the same repository).
 func TestWarnIfArchivedGitHubRepo_Deduplication(t *testing.T) {
-	resetWarnedRepos()
+	// Register cleanup before any state mutation so that even a panic or
+	// early t.Fatal leaves a clean environment for subsequent tests.
+	t.Cleanup(resetWarnedRepos)
 	t.Cleanup(gh.ResetArchivedRepoCache)
 
 	const uri = "github.com/cloudposse/dedup-repo"
@@ -160,7 +168,7 @@ func TestWarnIfArchivedGitHubRepo_Deduplication(t *testing.T) {
 
 	gh.SeedArchivedRepoCache(owner, repo, true)
 
-	buf := captureLog(t, log.DebugLevel)
+	buf := captureLog(t, log.TraceLevel)
 
 	// Call twice (simulating vendor.yaml + component.yaml).
 	warnIfArchivedGitHubRepo(context.Background(), uri, "comp-a")
@@ -168,7 +176,11 @@ func TestWarnIfArchivedGitHubRepo_Deduplication(t *testing.T) {
 
 	output := buf.String()
 
-	// Count occurrences of the warning message.
+	// Count occurrences of the warning message: exactly one.
 	count := bytes.Count([]byte(output), []byte("GitHub repository is archived"))
 	assert.Equal(t, 1, count, "expected exactly one warning for the same archived repo")
+
+	// The second call (comp-b) must emit a trace-level suppression note.
+	assert.Contains(t, output, "Archived-repo warning already emitted", "expected dedup trace log for comp-b")
+	assert.Contains(t, output, "comp-b", "expected suppressed component name in dedup trace log")
 }
