@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -100,11 +99,12 @@ func LintStacks(
 		return nil, err
 	}
 
-	// Filter to a specific stack if requested.
+	// Filter to a specific stack if requested. Use exact match to be consistent
+	// with the rest of Atmos (--stack always means an exact stack name).
 	if stackFilter != "" {
 		filtered := make(map[string]any)
 		for name, v := range stacksMap {
-			if name == stackFilter || strings.Contains(name, stackFilter) {
+			if name == stackFilter {
 				filtered[name] = v
 			}
 		}
@@ -292,14 +292,9 @@ func renderLintText(result *lint.LintResult) {
 			continue
 		}
 
-		// Sort by file then rule ID.
-		sort.Slice(findings, func(i, j int) bool {
-			if findings[i].File != findings[j].File {
-				return findings[i].File < findings[j].File
-			}
-			return findings[i].RuleID < findings[j].RuleID
-		})
-
+		// engine.Run already sorts all findings by (severity desc, file, ruleID).
+		// Grouping by severity here preserves that order within each group, so
+		// no secondary sort is needed.
 		for _, f := range findings {
 			location := f.File
 			if f.Line > 0 {

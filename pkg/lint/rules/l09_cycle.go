@@ -80,7 +80,12 @@ func (r *l09CycleRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 					break
 				}
 			}
-			cyclePath := append(path[cycleStart:], node)
+			// Build cycle path with its own backing array to avoid aliasing
+			// with sibling DFS iterations that share the same underlying slice.
+			segment := path[cycleStart:]
+			cyclePath := make([]string, len(segment)+1)
+			copy(cyclePath, segment)
+			cyclePath[len(segment)] = node
 			cycleKey := fmt.Sprintf("%v", cyclePath)
 			if !cyclePaths[cycleKey] {
 				cyclePaths[cycleKey] = true
@@ -100,7 +105,13 @@ func (r *l09CycleRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 		visited[node] = true
 		inStack[node] = true
 		for _, parent := range edges[node] {
-			dfs(parent, append(path, node))
+			// Copy path before appending so that sibling iterations in this
+			// loop do not share the same backing array and corrupt each other's
+			// path entries when the slice has excess capacity.
+			newPath := make([]string, len(path)+1)
+			copy(newPath, path)
+			newPath[len(path)] = node
+			dfs(parent, newPath)
 		}
 		inStack[node] = false
 	}
