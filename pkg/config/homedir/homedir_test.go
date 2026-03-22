@@ -2,6 +2,7 @@ package homedir
 
 import (
 	"errors"
+	"fmt"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -115,22 +116,25 @@ func TestGetHomeFromShell_Failure(t *testing.T) {
 		t.Skip("getHomeFromShell relies on 'sh', which is not available on Windows.")
 	}
 
-	orig := shellHomeDirCmd
-	defer func() { shellHomeDirCmd = orig }()
-
 	t.Run("command failure", func(t *testing.T) {
+		orig := shellHomeDirCmd
+		defer func() { shellHomeDirCmd = orig }()
 		shellHomeDirCmd = "exit 1" // forces cmd.Run() to return an error
 		_, err := getHomeFromShell()
 		assert.Error(t, err, "getHomeFromShell should propagate shell command failures.")
 	})
 
 	t.Run("empty output", func(t *testing.T) {
+		orig := shellHomeDirCmd
+		defer func() { shellHomeDirCmd = orig }()
 		shellHomeDirCmd = "printf ''" // forces empty trimmed output (POSIX compliant, unlike "echo -n")
 		_, err := getHomeFromShell()
 		assert.ErrorIs(t, err, ErrBlankOutput, "getHomeFromShell should return ErrBlankOutput for empty output.")
 	})
 
 	t.Run("tilde-prefixed output treated as blank", func(t *testing.T) {
+		orig := shellHomeDirCmd
+		defer func() { shellHomeDirCmd = orig }()
 		// Simulate the case where the user is not in the password database
 		// (distroless/scratch containers): the shell outputs "~username" literally
 		// instead of expanding it to an absolute path.
@@ -141,6 +145,8 @@ func TestGetHomeFromShell_Failure(t *testing.T) {
 	})
 
 	t.Run("error message contains function context", func(t *testing.T) {
+		orig := shellHomeDirCmd
+		defer func() { shellHomeDirCmd = orig }()
 		shellHomeDirCmd = "exit 1"
 		_, err := getHomeFromShell()
 		require.Error(t, err)
@@ -740,9 +746,9 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 		"user\rcarriage",
 		`user\backslash`,
 	}
-	for _, name := range maliciousNames {
+	for i, name := range maliciousNames {
 		name := name
-		t.Run("rejects_"+name[:4], func(t *testing.T) {
+		t.Run(fmt.Sprintf("rejects_malicious_%d", i), func(t *testing.T) {
 			currentUserFunc = func() (*user.User, error) {
 				return &user.User{Username: name}, nil
 			}
@@ -777,21 +783,37 @@ func TestGetDarwinHomeDir_UserCurrentFallbackToID(t *testing.T) {
 		"after id -un fallback, error should come from dscl (not id -un).")
 }
 
-// TestGetDarwinHomeDir_NoNFSHomeDirectory verifies that getDarwinHomeDir returns
-// ErrBlankOutput when dscl output does not contain the NFSHomeDirectory key.
-// This path is exercised via darwinHomeDirFunc DI so it can run on Linux.
+// TestGetDarwinHomeDir_NoNFSHomeDirectory verifies that dirUnix() falls through
+// to the shell fallback when getDarwinHomeDir returns ErrBlankOutput (i.e., dscl
+// output does not contain the NFSHomeDirectory key). The test exercises this path
+// via the darwinHomeDirFunc DI hook and runs on all platforms.
 func TestGetDarwinHomeDir_NoNFSHomeDirectory(t *testing.T) {
-	orig := darwinHomeDirFunc
-	defer func() { darwinHomeDirFunc = orig }()
+	if runtime.GOOS == "windows" {
+		t.Skip("dirUnix is not used on Windows.")
+	}
 
-	// Stub darwinHomeDirFunc to return ErrBlankOutput — the same error that
-	// getDarwinHomeDir itself returns when NFSHomeDirectory is absent.
+	origDarwin := darwinHomeDirFunc
+	origUser := currentUserFunc
+	defer func() {
+		darwinHomeDirFunc = origDarwin
+		currentUserFunc = origUser
+	}()
+
+	// Force getUnixHomeDir to fail so that darwinHomeDirFunc is tried next.
+	currentUserFunc = func() (*user.User, error) {
+		return nil, errors.New("mock failure")
+	}
+	// Stub darwinHomeDirFunc to return ErrBlankOutput — the error getDarwinHomeDir
+	// returns when dscl output lacks the NFSHomeDirectory key.
 	darwinHomeDirFunc = func() (string, error) { return "", ErrBlankOutput }
 
-	home, err := darwinHomeDirFunc()
-	assert.Empty(t, home)
-	assert.ErrorIs(t, err, ErrBlankOutput,
-		"getDarwinHomeDir should return ErrBlankOutput when NFSHomeDirectory key is absent.")
+	t.Setenv("HOME", "") // ensure env-var path is skipped
+
+	// dirUnix should fall through to the shell fallback after darwinHomeDirFunc
+	// returns ErrBlankOutput.
+	home, err := dirUnix()
+	require.NoError(t, err, "dirUnix should fall through to shell after darwinHomeDirFunc returns ErrBlankOutput.")
+	assert.NotEmpty(t, home, "shell fallback should return a non-empty home directory.")
 }
 
 // TestDir_DoubleCheckLocking verifies that Dir() returns a consistent result
