@@ -1,8 +1,8 @@
 # Atmos MCP Integrations — External MCP Server Management
 
-**Status:** Draft
-**Version:** 0.1
-**Last Updated:** 2026-03-21
+**Status:** In Progress — Phase 1 Implemented
+**Version:** 1.0
+**Last Updated:** 2026-03-22
 
 ---
 
@@ -137,15 +137,14 @@ The `awslabs/mcp` repository provides 20+ MCP servers covering the AWS ecosystem
 ### atmos.yaml Configuration
 
 ```yaml
-ai:
-  mcp:
-    # Existing Atmos MCP server configuration.
-    enabled: true
+mcp:
+  # Existing Atmos MCP server configuration.
+  enabled: true
 
-    # External MCP server integrations.
-    integrations:
-      # AWS EKS MCP server.
-      aws-eks:
+  # External MCP server integrations.
+  integrations:
+    # AWS EKS MCP server.
+    aws-eks:
         description: "Amazon EKS cluster management"
         command: "uvx"
         args:
@@ -199,9 +198,8 @@ vars:
   region: us-east-1
 
 settings:
-  ai:
-    mcp:
-      integrations:
+  mcp:
+    integrations:
         aws-eks:
           env:
             AWS_PROFILE: production
@@ -310,7 +308,7 @@ pkg/mcp/
 
 ```go
 // IntegrationConfig represents an external MCP server configuration
-// from atmos.yaml ai.mcp.integrations.
+// from atmos.yaml mcp.integrations.
 type IntegrationConfig struct {
     Description string            `yaml:"description" mapstructure:"description"`
     Command     string            `yaml:"command" mapstructure:"command"`
@@ -472,9 +470,8 @@ environment variables, and their boto3/AWS SDK picks up the credentials automati
 #### Configuration
 
 ```yaml
-ai:
-  mcp:
-    integrations:
+mcp:
+  integrations:
       # Cost analysis across all accounts.
       aws-cost-explorer:
         description: "AWS Cost Explorer — cost analysis and forecasting"
@@ -539,17 +536,15 @@ Different environments can use different identities:
 ```yaml
 # stacks/prod.yaml
 settings:
-  ai:
-    mcp:
-      integrations:
+  mcp:
+    integrations:
         aws-security:
           auth_identity: "prod-security-audit"
 
 # stacks/staging.yaml
 settings:
-  ai:
-    mcp:
-      integrations:
+  mcp:
+    integrations:
         aws-security:
           auth_identity: "staging-security-audit"
 ```
@@ -569,9 +564,8 @@ refresh credentials and restart the server process transparently.
 
 **Configuration:**
 ```yaml
-ai:
-  mcp:
-    integrations:
+mcp:
+  integrations:
       aws-cost-explorer:
         command: "uvx"
         args: ["awslabs.cost-explorer-mcp-server@latest"]
@@ -637,9 +631,8 @@ mode to avoid surprise charges.
 
 **Configuration:**
 ```yaml
-ai:
-  mcp:
-    integrations:
+mcp:
+  integrations:
       aws-security:
         command: "uvx"
         args:
@@ -756,21 +749,38 @@ Shall I generate an atmos workflow for this decommission sequence?
 
 ## Phased Implementation
 
-### Phase 1: Core Client Infrastructure (MVP)
+### Phase 1: Core Client Infrastructure (MVP) ✅ SHIPPED
 
-- `pkg/mcp/client/` — Manager, ClientSession, connection lifecycle
-- Configuration schema in `atmos.yaml` (`ai.mcp.integrations`)
-- Schema updates in `pkg/schema/` and `pkg/datafetcher/schema/`
-- `atmos mcp list` — list configured integrations
-- `atmos mcp tools <name>` — list tools from a server
-- `atmos mcp test <name>` — test server connectivity
-- Basic stdio transport via `CommandTransport`
+**Implemented files:**
+
+| File | Lines | Purpose |
+|---|---|---|
+| `pkg/schema/mcp.go` | 20 | `MCPIntegrationConfig` type + `Integrations` map on `MCPSettings` |
+| `pkg/mcp/client/config.go` | 50 | Config parsing with validation and timeout resolution |
+| `pkg/mcp/client/session.go` | 180 | Session lifecycle: Start (subprocess + MCP handshake + tool list), Stop, CallTool, Ping |
+| `pkg/mcp/client/manager.go` | 120 | Multi-session manager: NewManager, Start/Stop/StopAll, Get/List, Test |
+| `pkg/mcp/client/bridge.go` | 90 | BridgedTool wrapping external MCP tools with namespaced names |
+| `cmd/mcp/list.go` | 50 | `atmos mcp list` — tabular output of configured integrations |
+| `cmd/mcp/tools.go` | 70 | `atmos mcp tools <name>` — connect, list tools, disconnect |
+| `cmd/mcp/test_cmd.go` | 70 | `atmos mcp test <name>` — start, handshake, list tools, ping |
+| `errors/errors.go` | +5 | `ErrMCPIntegrationNotFound/NotRunning/StartFailed/CommandEmpty/InvalidTimeout` |
+
+**Tests:** 34 unit tests across 4 test files at 73% coverage.
+
+**Configuration path:** `mcp.integrations` in `atmos.yaml` (sibling to existing `mcp.enabled`).
+
+**Key design decisions:**
+- Uses Go MCP SDK v1.4.1 `Client` + `CommandTransport` + `ClientSession` — no new dependencies.
+- Subprocess environment inherits `os.Environ()` + configured `env` map — external tools get PATH, HOME, etc.
+- Session status tracking: `stopped` → `starting` → `running` / `error`.
+- Tool bridge uses `server.tool_name` namespacing to avoid conflicts between servers.
+- Manager.Test performs full lifecycle: start → handshake → list tools → ping → report.
 
 ### Phase 2: Tool Bridge + AI Integration
 
-- Tool bridge: external MCP tools → Atmos AI tool registry
-- Namespaced tool names (`server.tool_name`)
-- `atmos ai chat` integration — external tools available in conversations
+- ~~Tool bridge: external MCP tools → Atmos AI tool registry~~ (BridgedTool implemented in Phase 1)
+- ~~Namespaced tool names (`server.tool_name`)~~ (implemented in Phase 1)
+- `atmos ai chat` integration — register bridged tools in the AI executor
 - `--ai` flag integration — external tools available during analysis
 - Process auto-start on first tool call (lazy initialization)
 - Graceful shutdown on CLI exit
