@@ -228,14 +228,16 @@ func expandGlobImports(imports []string, basePath string) []string {
 	if basePath == "" {
 		return imports
 	}
-	// seen tracks already-added absolute paths to prevent duplicates when multiple
-	// patterns (e.g. *.yaml and *.yml) expand to the same file.
+	// seen tracks already-added absolute paths to prevent duplicates that arise when
+	// multiple glob patterns (e.g. "catalog/*.yaml" and "catalog/*") expand to the
+	// same physical file. Literal (non-glob) imports are passed through unchanged and
+	// intentionally not deduplicated: they represent explicit author intent and
+	// Atmos itself handles duplicate imports at the merge level.
 	seen := make(map[string]bool)
 	result := make([]string, 0, len(imports))
 	for _, imp := range imports {
 		if !strings.ContainsAny(imp, "*?[") {
-			// Not a glob — pass through unchanged (duplicates here are kept to
-			// preserve the original import list semantics).
+			// Not a glob — pass through unchanged.
 			result = append(result, imp)
 			continue
 		}
@@ -353,6 +355,11 @@ func scopeStackFiles(allStackFiles []string, rawStackConfigs map[string]map[stri
 // rulesRelNorm mirrors the relNorm logic used in L-07 (pkg/lint/rules/l07_orphaned_file.go)
 // so that paths are compared consistently in the exec package without importing the rules package.
 // It strips the base path prefix and YAML extension for uniform comparison.
+//
+// Note: this function intentionally duplicates the normalization logic from l07_orphaned_file.go
+// to avoid a circular import dependency between internal/exec and pkg/lint/rules. If the
+// normalization logic changes, both this function and relNorm/normalizeForComparison in
+// l07_orphaned_file.go must be updated together.
 func rulesRelNorm(path, basePath string) string {
 	if filepath.IsAbs(path) && basePath != "" {
 		if rel, err := filepath.Rel(basePath, path); err == nil {

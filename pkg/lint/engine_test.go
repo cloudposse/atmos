@@ -71,53 +71,53 @@ func TestEngineRunRuleFilter(t *testing.T) {
 
 // staticFindingRule is a test-only rule that always returns a single finding with the given severity.
 type staticFindingRule struct {
-id       string
-severity Severity
+	ruleID   string
+	severity Severity
 }
 
-func (r *staticFindingRule) ID() string                          { return r.id }
-func (r *staticFindingRule) Name() string                        { return r.id }
-func (r *staticFindingRule) Description() string                 { return "" }
-func (r *staticFindingRule) Severity() Severity                  { return r.severity }
-func (r *staticFindingRule) AutoFixable() bool                   { return false }
+func (r *staticFindingRule) ID() string          { return r.ruleID }
+func (r *staticFindingRule) Name() string        { return r.ruleID }
+func (r *staticFindingRule) Description() string { return "" }
+func (r *staticFindingRule) Severity() Severity  { return r.severity }
+func (r *staticFindingRule) AutoFixable() bool   { return false }
 func (r *staticFindingRule) Run(_ LintContext) ([]LintFinding, error) {
-return []LintFinding{{RuleID: r.id, Severity: r.severity, Message: "test finding"}}, nil
+	return []LintFinding{{RuleID: r.ruleID, Severity: r.severity, Message: "test finding"}}, nil
 }
 
 // TestEngineRunSeverityOverrideNormalization verifies that severity overrides are
 // case-insensitive and that invalid values leave the original severity unchanged.
 func TestEngineRunSeverityOverrideNormalization(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-rule := &staticFindingRule{id: "T-01", severity: SeverityInfo}
-engine := NewEngine([]LintRule{rule})
+	rule := &staticFindingRule{ruleID: "T-01", severity: SeverityInfo}
+	engine := NewEngine([]LintRule{rule})
 
-tests := []struct {
-name     string
-override string
-want     Severity
-}{
-{"ERROR uppercase", "ERROR", SeverityError},
-{"Warning mixed case", "Warning", SeverityWarning},
-{"warn alias", "warn", SeverityWarning},
-{"info lowercase", "info", SeverityInfo},
-{"empty override no change", "", SeverityInfo},
-{"invalid value no change", "critical", SeverityInfo},
-{"typo no change", "err", SeverityInfo},
-}
+	tests := []struct {
+		name     string
+		override string
+		want     Severity
+	}{
+		{"ERROR uppercase", "ERROR", SeverityError},
+		{"Warning mixed case", "Warning", SeverityWarning},
+		{"warn alias", "warn", SeverityWarning},
+		{"info lowercase", "info", SeverityInfo},
+		{"empty override no change", "", SeverityInfo},
+		{"invalid value no change", "critical", SeverityInfo},
+		{"typo no change", "err", SeverityInfo},
+	}
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-t.Parallel()
-ctx := LintContext{}
-if tt.override != "" {
-ctx.LintConfig.Rules = map[string]string{"T-01": tt.override}
-}
-result, err := engine.Run(ctx, nil, SeverityInfo)
-require.NoError(t, err)
-require.Len(t, result.Findings, 1)
-assert.Equal(t, tt.want, result.Findings[0].Severity,
-"override %q should produce severity %q", tt.override, tt.want)
-})
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := LintContext{}
+			if tt.override != "" {
+				ctx.LintConfig.Rules = map[string]string{"T-01": tt.override}
+			}
+			result, err := engine.Run(ctx, nil, SeverityInfo)
+			require.NoError(t, err)
+			require.Len(t, result.Findings, 1)
+			assert.Equal(t, tt.want, result.Findings[0].Severity,
+				"override %q should produce severity %q", tt.override, tt.want)
+		})
+	}
 }
