@@ -266,6 +266,10 @@ func cleanWindowsPath(path string) string {
 // and obtained the username; passing it here avoids a second OS user lookup.
 // When cachedUsername is empty, getDarwinHomeDir falls back to id -un.
 func getDarwinHomeDir(cachedUsername string) (string, error) {
+	// Create a single context shared by all external commands in this function.
+	ctx, cancel := context.WithTimeout(context.Background(), externalCmdTimeout)
+	defer cancel()
+
 	var username string
 	if cachedUsername != "" {
 		// Reuse the username from the dirUnix caller — no second currentUserFunc call.
@@ -274,9 +278,7 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 		// Fall back to id -un when no cached username is available (e.g., when
 		// called directly from tests via darwinHomeDirFunc).
 		var whoOut, whoErr bytes.Buffer
-		idCtx, idCancel := context.WithTimeout(context.Background(), externalCmdTimeout)
-		defer idCancel()
-		whoCmd := exec.CommandContext(idCtx, "id", "-un")
+		whoCmd := exec.CommandContext(ctx, "id", "-un")
 		whoCmd.Stdout = &whoOut
 		whoCmd.Stderr = &whoErr
 		if err := whoCmd.Run(); err != nil {
@@ -303,8 +305,6 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 
 	// Query the directory service without a shell pipeline or sed.
 	var out, dsErr bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), externalCmdTimeout)
-	defer cancel()
 	dsCmd := exec.CommandContext(ctx, "dscl", "-q", ".", "-read", "/Users/"+username, "NFSHomeDirectory")
 	dsCmd.Stdout = &out
 	dsCmd.Stderr = &dsErr

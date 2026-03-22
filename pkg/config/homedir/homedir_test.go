@@ -3,6 +3,7 @@ package homedir
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -160,7 +161,7 @@ func TestShellHomeDir(t *testing.T) {
 			"user;semi",
 			"user space",
 			"user|pipe",
-			"user&amp",
+			"user&ampersand",
 			"user>redir",
 			"user<redir",
 			"user(paren",
@@ -310,6 +311,29 @@ func TestShellGetUsernameFunc_IDNotFound_ErrIDUnavailable(t *testing.T) {
 	_, err := shellGetUsernameFunc()
 	assert.ErrorIs(t, err, ErrIDUnavailable,
 		"shellGetUsernameFunc must return ErrIDUnavailable when id, whoami, and $USER are all unavailable.")
+}
+
+// TestShellGetUsernameFunc_IDNotFound_WhoamiFallback verifies that the real
+// shellGetUsernameFunc falls back to whoami when id is not found in PATH and
+// $USER is empty. A mock whoami script in a temp directory echoes "mockuser".
+func TestShellGetUsernameFunc_IDNotFound_WhoamiFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shellGetUsernameFunc is not used on Windows.")
+	}
+
+	// Create a temp dir with a mock whoami that prints "mockuser".
+	binDir := t.TempDir()
+	whoamiScript := binDir + "/whoami"
+	err := os.WriteFile(whoamiScript, []byte("#!/bin/sh\necho mockuser\n"), 0o755)
+	require.NoError(t, err, "failed to create mock whoami script")
+
+	// Only whoami is in PATH (no id); $USER is empty so env-var fallback skips.
+	t.Setenv("PATH", binDir)
+	t.Setenv("USER", "")
+
+	name, ferr := shellGetUsernameFunc()
+	require.NoError(t, ferr, "shellGetUsernameFunc should fall back to whoami when id is absent and $USER is empty.")
+	assert.Equal(t, "mockuser", name, "returned username must come from the mock whoami.")
 }
 
 func TestDirWindows(t *testing.T) {
@@ -932,7 +956,7 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 		"user space",
 		// New: operator characters now also rejected by the whitelist regex.
 		"user|pipe",
-		"user&amp",
+		"user&ampersand",
 		"user>redir",
 		"user<redir",
 		"user(paren",
