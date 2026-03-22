@@ -5,6 +5,12 @@ atmos:
   url: https://github.com/cloudposse/atmos
   image_url: https://github.com/cloudposse/atmos/raw/main/docs/img/atmos-logo-128.svg
 
+nitrocode:
+  name: nitrocode
+  title: Former Engineer @ Cloud Posse
+  url: https://github.com/nitrocode
+  image_url: https://github.com/nitrocode.png
+
 osterman:
   name: Erik Osterman
   title: Founder @ Cloud Posse

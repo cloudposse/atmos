@@ -28,15 +28,10 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 		url.QueryEscape(dto.Component))
 	log.Debug("Uploading drift status.", "url", targetURL)
 
-	// Map HasDrift to the correct status format
-	status := "in_sync"
-	if dto.HasDrift {
-		status = "drifted"
-	}
-
-	// Create the correct payload structure expected by the API
+	// Send raw command and exit code — the server interprets them.
 	payload := map[string]interface{}{
-		"status": status,
+		"command":   dto.Command,
+		"exit_code": dto.ExitCode,
 	}
 
 	// Add last_run if we have atmos_pro_run_id or git_sha
