@@ -20,7 +20,11 @@
         "plan": {
           "skip_planfile": false
         },
-        "plugin_cache": true
+        "planfiles": {
+          "default": ""
+        },
+        "plugin_cache": true,
+        "ci": {}
       },
       "helmfile": {
         "base_path": "",
