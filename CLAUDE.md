@@ -209,6 +209,16 @@ Add a constant-lock test when introducing a new constant dependency in tests. Th
 
 **Severity override validation**: When applying user-configured severity overrides from config or CLI, always normalize and validate values case-insensitively (`error|warning|info`). Invalid values must be silently ignored (leaving original severity unchanged) and optionally debug-logged. Never cast string values directly to a `Severity` type without validation.
 
+**Lint stacks scoping contract**: When `--stack` is provided, scope `RawStackConfigs`, `ImportGraph`, and `AllStackFiles` to the reachable import closure from that stack. If no seed file is found (no raw manifest stem matches the requested stack name), **fail closed** with an error — do NOT fall back silently to repo-scope, which would produce misleading results for rules like L-07.
+
+**Lint stacks import graph normalization**: `buildImportGraph` must emit **absolute paths** for non-glob children whenever `basePath` is known. Non-glob imports must be resolved by joining `basePath` and inferring `.yaml`/`.yml` extensions when missing. This ensures L-03 depth traversal can follow edges using consistent absolute keys that match the importGraph key space.
+
+**Cross-component keying in lint rules**: When building lookup maps that span multiple stacks (e.g., L-02 abstract component base vars), always key by `"<stackName>/<componentName>"` rather than just the component name to prevent false positives/negatives across stacks that define abstract components with the same name but different variables. Keep a secondary global-name fallback for cross-stack inheritance.
+
+**File attribution in lint rules**: Build a `stackNameToFileIndex` (logical-name → absolute-manifest-path) in `LintStacks` from `RawStackConfigs`, pass it via `LintContext.StackNameToFileIndex`, and use it in rules (e.g., L-08) that need to resolve a logical stack name to a physical file path. The heuristic `stackNameToFile` fallback is unreliable for simple stack names without a path separator.
+
+**UI output consistency**: All functions that return an error should also call `ui.Error(...)` before returning to provide a consistent user-facing message, even when the wrapped error will be printed by the top-level handler. This applies to rendering functions like `renderLintJSON`.
+
 ### Test Isolation (MANDATORY)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args).
 
@@ -407,6 +417,7 @@ Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 - **Config section constants**: Use `cfg.ComponentsSectionName`, `cfg.TerraformSectionName`, `cfg.HelmfileSectionName`, `cfg.VarsSectionName`, `cfg.MetadataSectionName`, `cfg.EnvSectionName`, `cfg.InheritsSectionName`, `cfg.ImportSectionName` from `pkg/config/const.go` — NEVER hardcode section name strings like `"components"`, `"inherits"`, `"vars"`.
 - **Shared internal helpers**: When a helper function (e.g., `extractInherits`, `getNestedMap`) is used by more than one file in the same package, extract it to a `helpers.go` in that package rather than duplicating it.
 - **Import map `enabled` field**: When processing Atmos import sections that accept map-form objects (`{path: "...", enabled: false}`), always check for and honor the `enabled` field. Skip disabled imports; don't add them to reference graphs or treated as referenced files.
+- **Import path normalization**: When building an import graph (`buildImportGraph`), resolve non-glob relative imports to absolute paths using `basePath` and extension inference (`.yaml` → `.yml` → bare). This ensures depth traversal and orphan detection rules (L-03, L-07) traverse the complete import closure correctly.
 
 ### Cross-Platform (MANDATORY)
 Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
