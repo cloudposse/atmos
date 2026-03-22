@@ -45,11 +45,14 @@ var (
 	ErrIDUnavailable = errors.New("id binary not found and USER env var is empty")
 
 	// usernameRe is a whitelist for valid Unix usernames. It accepts only
-	// letters, digits, dots, underscores, and hyphens. All other characters
-	// (including shell operators |, &, >, <, (, ), tab, newline, space,
-	// single quotes, backticks, $, ;, /) are implicitly rejected, preventing
-	// shell injection when the username is interpolated into sh -c commands.
-	usernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	// letters, digits, dots, underscores, and hyphens. The first character
+	// must be alphanumeric, a dot, or an underscore — it cannot be a hyphen
+	// or a plus sign. This prevents shell tilde-special substitutions:
+	//   ~- expands to $OLDPWD and ~+ expands to $PWD in bash/dash.
+	// All other characters (shell operators |, &, >, <, (, ), tab, newline,
+	// space, single quotes, backticks, $, ;, /) are implicitly rejected,
+	// preventing shell injection when the username is interpolated into sh -c.
+	usernameRe = regexp.MustCompile(`^[A-Za-z0-9._][A-Za-z0-9._-]*$`)
 
 	// externalCmdTimeout is the maximum time allowed for external subprocess
 	// calls (id, dscl, sh). A conservative timeout prevents Dir()/Expand()
@@ -255,8 +258,11 @@ func dirWindows() (string, error) {
 }
 
 // cleanWindowsPath converts forward slashes to the native Windows separator and
-// applies filepath.Clean. This prevents drive-relative paths (e.g., \home\user)
-// when tools like Cygwin or Git Bash set HOME with POSIX-style forward slashes.
+// applies filepath.Clean. Note: POSIX-style paths like "/home/user" become
+// drive-relative ("\\home\\user") after separator conversion on Windows because
+// no drive letter is prepended. Callers that need a guaranteed drive-absolute
+// path should supply a Windows drive-absolute value in HOME or USERPROFILE
+// (e.g., "C:\\Users\\user").
 func cleanWindowsPath(path string) string {
 	return filepath.Clean(filepath.FromSlash(path))
 }
@@ -339,7 +345,9 @@ func getUnixHomeDir() (string, error) {
 	if u.HomeDir == "" {
 		return "", fmt.Errorf("getUnixHomeDir: %w", ErrBlankOutput)
 	}
-	return u.HomeDir, nil
+	// Normalize the path to eliminate redundant separators, trailing slashes,
+	// or symlink oddities, making it consistent with env-var and dscl paths.
+	return filepath.Clean(u.HomeDir), nil
 }
 
 func getHomeFromShell() (string, error) {
@@ -449,6 +457,12 @@ func shellHomeDir() (string, error) {
 	// tilde-prefixed string is not a valid absolute path and must not be returned
 	// as a home directory.
 	if strings.HasPrefix(result, "~") {
+		return "", ErrBlankOutput
+	}
+	// Require an absolute path. A non-absolute result (e.g., "relative/path")
+	// would silently produce wrong results for callers that join it with other
+	// paths. This should not happen in practice, but is a safety net.
+	if !filepath.IsAbs(result) {
 		return "", ErrBlankOutput
 	}
 	return result, nil

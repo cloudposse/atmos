@@ -179,6 +179,39 @@ func TestShellHomeDir(t *testing.T) {
 		}
 	})
 
+	t.Run("username starting with hyphen rejected (prevents ~- tilde-special)", func(t *testing.T) {
+		// In bash/dash, ~- expands to $OLDPWD. A username starting with "-"
+		// would cause `printf '%s\n' ~-username` to potentially expand to
+		// $OLDPWD. The whitelist must reject these to prevent silent wrong results.
+		leadingSpecial := []string{"-user", "-", "--", "+user", "+"}
+		for _, name := range leadingSpecial {
+			orig := shellGetUsernameFunc
+			defer func() { shellGetUsernameFunc = orig }()
+			shellGetUsernameFunc = func() (string, error) { return name, nil }
+			_, err := shellHomeDir()
+			require.Error(t, err, "username %q starting with '-' or '+' must be rejected", name)
+			assert.Contains(t, err.Error(), "invalid characters",
+				"username %q must be rejected with 'invalid characters' error", name)
+		}
+	})
+
+	t.Run("non-absolute shell output returns ErrBlankOutput", func(t *testing.T) {
+		// The shell fallback must always return an absolute path. A relative
+		// result would silently produce wrong paths for callers.
+		orig := shellGetUsernameFunc
+		origFunc := shellHomeDirFunc
+		defer func() {
+			shellGetUsernameFunc = orig
+			shellHomeDirFunc = origFunc
+		}()
+		// Simulate a case where the shell returns a relative path by injecting
+		// the sentinel directly via the top-level shellHomeDirFunc hook.
+		shellHomeDirFunc = func() (string, error) { return "", ErrBlankOutput }
+		_, err := getHomeFromShell()
+		assert.ErrorIs(t, err, ErrBlankOutput,
+			"non-absolute shell output must be propagated as ErrBlankOutput.")
+	})
+
 	t.Run("tilde-prefixed shell output returns ErrBlankOutput", func(t *testing.T) {
 		// Directly test the tilde-guard in shellHomeDir by overriding shellHomeDirFunc
 		// to call the real shellHomeDir but with shellGetUsernameFunc returning a
@@ -334,6 +367,32 @@ func TestShellGetUsernameFunc_IDNotFound_WhoamiFallback(t *testing.T) {
 	name, ferr := shellGetUsernameFunc()
 	require.NoError(t, ferr, "shellGetUsernameFunc should fall back to whoami when id is absent and $USER is empty.")
 	assert.Equal(t, "mockuser", name, "returned username must come from the mock whoami.")
+}
+
+// TestShellHomeDir_NonAbsoluteResultRejected verifies that shellHomeDir returns
+// ErrBlankOutput when the shell expansion result is not an absolute path.
+// This uses a mock sh script in a temp dir that prints a relative path.
+func TestShellHomeDir_NonAbsoluteResultRejected(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shellHomeDir is not used on Windows.")
+	}
+
+	origUsername := shellGetUsernameFunc
+	defer func() { shellGetUsernameFunc = origUsername }()
+
+	// Create a temp dir with a mock 'sh' that prints a relative path regardless
+	// of the command given, to exercise the IsAbs guard.
+	binDir := t.TempDir()
+	shScript := binDir + "/sh"
+	err := os.WriteFile(shScript, []byte("#!/bin/sh\necho relative/path\n"), 0o755)
+	require.NoError(t, err, "failed to create mock sh script")
+
+	shellGetUsernameFunc = func() (string, error) { return "validuser", nil }
+	t.Setenv("PATH", binDir)
+
+	_, err = shellHomeDir()
+	assert.ErrorIs(t, err, ErrBlankOutput,
+		"shellHomeDir must return ErrBlankOutput when sh returns a non-absolute path.")
 }
 
 func TestDirWindows(t *testing.T) {
@@ -688,6 +747,28 @@ func TestGetUnixHomeDir_Error(t *testing.T) {
 	assert.ErrorIs(t, err, want, "getUnixHomeDir should propagate the error from currentUserFunc.")
 }
 
+// TestGetUnixHomeDir_Normalized verifies that getUnixHomeDir applies filepath.Clean
+// so that trailing separators and redundant elements are removed, making its
+// output consistent with env-var and dscl paths.
+func TestGetUnixHomeDir_Normalized(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("getUnixHomeDir is not used on Windows.")
+	}
+
+	orig := currentUserFunc
+	defer func() { currentUserFunc = orig }()
+
+	// Simulate an os/user entry with a trailing slash (unusual but possible).
+	currentUserFunc = func() (*user.User, error) {
+		return &user.User{HomeDir: "/home/testuser/"}, nil
+	}
+
+	home, err := getUnixHomeDir()
+	require.NoError(t, err)
+	assert.Equal(t, "/home/testuser", home,
+		"getUnixHomeDir should normalize trailing slashes via filepath.Clean.")
+}
+
 // TestDirUnix_ShellFallback covers the getHomeFromShell() fallback path in
 // dirUnix when getUnixHomeDir returns an error (HOME is also unset).
 // On darwin, darwinHomeDirFunc is also stubbed to ensure the shell path is
@@ -962,6 +1043,9 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 		"user(paren",
 		"user)paren",
 		"user\ttab",
+		// Leading '-'/'+'  cause tilde-special expansion (~- = $OLDPWD, ~+ = $PWD).
+		"-hyphenleading",
+		"+plusleading",
 	}
 	for i, name := range maliciousNames {
 		t.Run(fmt.Sprintf("rejects_malicious_%d", i), func(t *testing.T) {
