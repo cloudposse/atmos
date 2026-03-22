@@ -1486,46 +1486,46 @@ func TestSetDisableCache(t *testing.T) {
 // to cover all three branches: (1) env not set, (2) valid duration, (3)
 // invalid/zero duration.
 func TestInitExternalCmdTimeout(t *testing.T) {
-	orig := externalCmdTimeout
-	defer func() { externalCmdTimeout = orig }()
+	orig := getExternalCmdTimeout()
+	defer SetExternalCmdTimeout(orig)
 
 	t.Run("valid duration updates timeout", func(t *testing.T) {
-		externalCmdTimeout = orig
+		SetExternalCmdTimeout(orig)
 		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "2s")
 		applyEnvTimeout()
-		assert.Equal(t, 2*time.Second, externalCmdTimeout,
+		assert.Equal(t, 2*time.Second, getExternalCmdTimeout(),
 			"valid ATMOS_HOMEDIR_CMD_TIMEOUT must update externalCmdTimeout.")
 	})
 
 	t.Run("invalid duration keeps default", func(t *testing.T) {
-		externalCmdTimeout = orig
+		SetExternalCmdTimeout(orig)
 		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "not-a-duration")
 		applyEnvTimeout()
-		assert.Equal(t, orig, externalCmdTimeout,
+		assert.Equal(t, orig, getExternalCmdTimeout(),
 			"invalid ATMOS_HOMEDIR_CMD_TIMEOUT must be ignored.")
 	})
 
 	t.Run("zero duration keeps default", func(t *testing.T) {
-		externalCmdTimeout = orig
+		SetExternalCmdTimeout(orig)
 		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "0s")
 		applyEnvTimeout()
-		assert.Equal(t, orig, externalCmdTimeout,
+		assert.Equal(t, orig, getExternalCmdTimeout(),
 			"zero ATMOS_HOMEDIR_CMD_TIMEOUT must be ignored.")
 	})
 
 	t.Run("empty env var keeps default", func(t *testing.T) {
-		externalCmdTimeout = orig
+		SetExternalCmdTimeout(orig)
 		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "")
 		applyEnvTimeout()
-		assert.Equal(t, orig, externalCmdTimeout,
+		assert.Equal(t, orig, getExternalCmdTimeout(),
 			"empty ATMOS_HOMEDIR_CMD_TIMEOUT must be ignored.")
 	})
 
 	t.Run("500ms parsed correctly", func(t *testing.T) {
-		externalCmdTimeout = orig
+		SetExternalCmdTimeout(orig)
 		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "500ms")
 		applyEnvTimeout()
-		assert.Equal(t, 500*time.Millisecond, externalCmdTimeout,
+		assert.Equal(t, 500*time.Millisecond, getExternalCmdTimeout(),
 			"500ms must be correctly parsed.")
 	})
 }
@@ -1534,89 +1534,89 @@ func TestInitExternalCmdTimeout(t *testing.T) {
 // appends "..." when truncation occurs, and returns the original string when
 // it fits within the limit.
 func TestTruncateStderr(t *testing.T) {
-t.Run("short message unchanged", func(t *testing.T) {
-msg := "short"
-assert.Equal(t, msg, truncateStderr(msg))
-})
+	t.Run("short message unchanged", func(t *testing.T) {
+		msg := "short"
+		assert.Equal(t, msg, truncateStderr(msg))
+	})
 
-t.Run("empty string unchanged", func(t *testing.T) {
-assert.Equal(t, "", truncateStderr(""))
-})
+	t.Run("empty string unchanged", func(t *testing.T) {
+		assert.Equal(t, "", truncateStderr(""))
+	})
 
-t.Run("exactly maxStderrLen unchanged", func(t *testing.T) {
-msg := strings.Repeat("x", maxStderrLen)
-assert.Equal(t, msg, truncateStderr(msg))
-})
+	t.Run("exactly maxStderrLen unchanged", func(t *testing.T) {
+		msg := strings.Repeat("x", maxStderrLen)
+		assert.Equal(t, msg, truncateStderr(msg))
+	})
 
-t.Run("over limit truncated with ellipsis", func(t *testing.T) {
-msg := strings.Repeat("x", maxStderrLen+50)
-result := truncateStderr(msg)
-assert.Equal(t, maxStderrLen+3, len(result),
-"truncated message must be maxStderrLen + len('...')")
-assert.True(t, strings.HasSuffix(result, "..."),
-"truncated message must end with '...'")
-})
+	t.Run("over limit truncated with ellipsis", func(t *testing.T) {
+		msg := strings.Repeat("x", maxStderrLen+50)
+		result := truncateStderr(msg)
+		assert.Equal(t, maxStderrLen+3, len(result),
+			"truncated message must be maxStderrLen + len('...')")
+		assert.True(t, strings.HasSuffix(result, "..."),
+			"truncated message must end with '...'")
+	})
 }
 
 // TestStderrTruncatedInError verifies that a very long id stderr message is
 // truncated in the returned error so it cannot flood logs.
 func TestStderrTruncatedInError(t *testing.T) {
-if runtime.GOOS == "windows" {
-t.Skip("id/whoami are not used on Windows.")
-}
+	if runtime.GOOS == "windows" {
+		t.Skip("id/whoami are not used on Windows.")
+	}
 
-longMsg := strings.Repeat("x", maxStderrLen*4)
-binDir := t.TempDir()
-idScript := "#!/bin/sh\nprintf '" + longMsg + "' >&2\nexit 1\n"
-require.NoError(t, os.WriteFile(filepath.Join(binDir, "id"), []byte(idScript), 0o755))
-whoamiScript := "#!/bin/sh\nprintf '" + longMsg + "' >&2\nexit 1\n"
-require.NoError(t, os.WriteFile(filepath.Join(binDir, "whoami"), []byte(whoamiScript), 0o755))
+	longMsg := strings.Repeat("x", maxStderrLen*4)
+	binDir := t.TempDir()
+	idScript := "#!/bin/sh\nprintf '" + longMsg + "' >&2\nexit 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "id"), []byte(idScript), 0o755))
+	whoamiScript := "#!/bin/sh\nprintf '" + longMsg + "' >&2\nexit 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "whoami"), []byte(whoamiScript), 0o755))
 
-origPath := os.Getenv("PATH")
-origUser := os.Getenv("USER")
-defer func() {
-os.Setenv("PATH", origPath)
-os.Setenv("USER", origUser)
-}()
-os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
-os.Setenv("USER", "")
+	origPath := os.Getenv("PATH")
+	origUser := os.Getenv("USER")
+	defer func() {
+		os.Setenv("PATH", origPath)
+		os.Setenv("USER", origUser)
+	}()
+	os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
+	os.Setenv("USER", "")
 
-orig := shellGetUsernameFunc
-defer func() { shellGetUsernameFunc = orig }()
-_, err := shellGetUsernameFunc()
-require.Error(t, err)
-require.ErrorIs(t, err, ErrIDUnavailable)
-// Bound: sentinel + "shellGetUsernameFunc:  (id: )" overhead + maxStderrLen content + "..."
-maxExpected := len(ErrIDUnavailable.Error()) + len("shellGetUsernameFunc:  (id: )") + maxStderrLen + len("...")
-assert.LessOrEqual(t, len(err.Error()), maxExpected,
-"error message must not be unbounded; long stderr must be truncated.")
-assert.Contains(t, err.Error(), "...",
-"truncated stderr must end with '...'")
+	orig := shellGetUsernameFunc
+	defer func() { shellGetUsernameFunc = orig }()
+	_, err := shellGetUsernameFunc()
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrIDUnavailable)
+	// Bound: sentinel + "shellGetUsernameFunc:  (id: )" overhead + maxStderrLen content + "..."
+	maxExpected := len(ErrIDUnavailable.Error()) + len("shellGetUsernameFunc:  (id: )") + maxStderrLen + len("...")
+	assert.LessOrEqual(t, len(err.Error()), maxExpected,
+		"error message must not be unbounded; long stderr must be truncated.")
+	assert.Contains(t, err.Error(), "...",
+		"truncated stderr must end with '...'")
 }
 
 // TestSetExternalCmdTimeout verifies the thread-safe public setter.
 func TestSetExternalCmdTimeout(t *testing.T) {
-orig := externalCmdTimeout
-defer func() { externalCmdTimeout = orig }()
+	orig := getExternalCmdTimeout()
+	defer SetExternalCmdTimeout(orig)
 
-t.Run("valid positive duration sets timeout", func(t *testing.T) {
-SetExternalCmdTimeout(3 * time.Second)
-assert.Equal(t, 3*time.Second, externalCmdTimeout)
-})
+	t.Run("valid positive duration sets timeout", func(t *testing.T) {
+		SetExternalCmdTimeout(3 * time.Second)
+		assert.Equal(t, 3*time.Second, getExternalCmdTimeout())
+	})
 
-t.Run("zero duration is ignored", func(t *testing.T) {
-externalCmdTimeout = orig
-SetExternalCmdTimeout(0)
-assert.Equal(t, orig, externalCmdTimeout,
-"zero duration must not update externalCmdTimeout.")
-})
+	t.Run("zero duration is ignored", func(t *testing.T) {
+		SetExternalCmdTimeout(orig)
+		SetExternalCmdTimeout(0)
+		assert.Equal(t, orig, getExternalCmdTimeout(),
+			"zero duration must not update externalCmdTimeout.")
+	})
 
-t.Run("negative duration is ignored", func(t *testing.T) {
-externalCmdTimeout = orig
-SetExternalCmdTimeout(-1 * time.Second)
-assert.Equal(t, orig, externalCmdTimeout,
-"negative duration must not update externalCmdTimeout.")
-})
+	t.Run("negative duration is ignored", func(t *testing.T) {
+		SetExternalCmdTimeout(orig)
+		SetExternalCmdTimeout(-1 * time.Second)
+		assert.Equal(t, orig, getExternalCmdTimeout(),
+			"negative duration must not update externalCmdTimeout.")
+	})
 }
 
 // TestNoUsernameInErrors is a PII guard that exercises all error paths that
@@ -1624,54 +1624,54 @@ assert.Equal(t, orig, externalCmdTimeout,
 // the current OS username. This guards against regressions where a username
 // might be included in an error string through new code paths.
 func TestNoUsernameInErrors(t *testing.T) {
-if runtime.GOOS == "windows" {
-t.Skip("Unix-only error paths tested here.")
-}
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix-only error paths tested here.")
+	}
 
-u, err := user.Current()
-if err != nil || u.Username == "" {
-t.Skip("Cannot determine current username; skipping PII guard.")
-}
-username := u.Username
+	u, err := user.Current()
+	if err != nil || u.Username == "" {
+		t.Skip("Cannot determine current username; skipping PII guard.")
+	}
+	username := u.Username
 
-checkNoPII := func(t *testing.T, err error) {
-t.Helper()
-if err == nil {
-return
-}
-msg := err.Error()
-assert.NotContains(t, msg, username,
-"error message must not embed the raw username (PII).")
-}
+	checkNoPII := func(t *testing.T, err error) {
+		t.Helper()
+		if err == nil {
+			return
+		}
+		msg := err.Error()
+		assert.NotContains(t, msg, username,
+			"error message must not embed the raw username (PII).")
+	}
 
-t.Run("ErrInvalidUsername does not embed username", func(t *testing.T) {
-// Inject a malicious username to ensure it's not echoed back.
-origFn := shellGetUsernameFunc
-defer func() { shellGetUsernameFunc = origFn }()
-shellGetUsernameFunc = func() (string, error) { return username + "/evil", nil }
-origHome := os.Getenv("HOME")
-defer os.Setenv("HOME", origHome)
-os.Setenv("HOME", "")
+	t.Run("ErrInvalidUsername does not embed username", func(t *testing.T) {
+		// Inject a malicious username to ensure it's not echoed back.
+		origFn := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = origFn }()
+		shellGetUsernameFunc = func() (string, error) { return username + "/evil", nil }
+		origHome := os.Getenv("HOME")
+		defer os.Setenv("HOME", origHome)
+		os.Setenv("HOME", "")
 
-origCurrentUser := currentUserFunc
-defer func() { currentUserFunc = origCurrentUser }()
-currentUserFunc = func() (*user.User, error) { return nil, errors.New("simulated failure") }
+		origCurrentUser := currentUserFunc
+		defer func() { currentUserFunc = origCurrentUser }()
+		currentUserFunc = func() (*user.User, error) { return nil, errors.New("simulated failure") }
 
-_, err := dirUnix()
-// May return ErrInvalidUsername, ErrBlankOutput, or ErrShellUnavailable.
-if err != nil {
-checkNoPII(t, err)
-}
-})
+		_, err := dirUnix()
+		// May return ErrInvalidUsername, ErrBlankOutput, or ErrShellUnavailable.
+		if err != nil {
+			checkNoPII(t, err)
+		}
+	})
 
-t.Run("shellHomeDir ErrInvalidUsername does not embed username", func(t *testing.T) {
-origFn := shellGetUsernameFunc
-defer func() { shellGetUsernameFunc = origFn }()
-shellGetUsernameFunc = func() (string, error) { return username + "/path/evil", nil }
+	t.Run("shellHomeDir ErrInvalidUsername does not embed username", func(t *testing.T) {
+		origFn := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = origFn }()
+		shellGetUsernameFunc = func() (string, error) { return username + "/path/evil", nil }
 
-_, err := shellHomeDir()
-if err != nil {
-checkNoPII(t, err)
-}
-})
+		_, err := shellHomeDir()
+		if err != nil {
+			checkNoPII(t, err)
+		}
+	})
 }
