@@ -993,45 +993,45 @@ func BenchmarkMerge_ProductionScale(b *testing.B) {
 // TestMergeWithOptions_EmptyInputs_ReturnsEmptyMap covers the first fast-path in
 // MergeWithOptions: an empty inputs slice must immediately return an empty map.
 func TestMergeWithOptions_EmptyInputs_ReturnsEmptyMap(t *testing.T) {
-result, err := MergeWithOptions(nil, []map[string]any{}, false, false)
-require.NoError(t, err)
-assert.Equal(t, map[string]any{}, result, "empty inputs must return empty map (not nil)")
+	result, err := MergeWithOptions(nil, []map[string]any{}, false, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{}, result, "empty inputs must return empty map (not nil)")
 }
 
 // TestMergeWithOptions_AllEmptyMaps_ReturnsEmptyMap covers the second fast-path in
 // MergeWithOptions: when every input is an empty map, nonEmptyInputs is empty and
 // the second early return fires.
 func TestMergeWithOptions_AllEmptyMaps_ReturnsEmptyMap(t *testing.T) {
-inputs := []map[string]any{{}, {}}
-result, err := MergeWithOptions(nil, inputs, false, false)
-require.NoError(t, err)
-assert.Equal(t, map[string]any{}, result, "all-empty inputs must return empty map")
+	inputs := []map[string]any{{}, {}}
+	result, err := MergeWithOptions(nil, inputs, false, false)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{}, result, "all-empty inputs must return empty map")
 }
 
 // TestMergeWithOptions_StrategyFlags_WireThrough verifies that appendSlice and
 // sliceDeepCopy flags are correctly propagated through MergeWithOptions down to
 // deepMergeNative.  Both modes must produce distinct, correct results.
 func TestMergeWithOptions_StrategyFlags_WireThrough(t *testing.T) {
-inputs := []map[string]any{
-{"tags": []any{"base-a", "base-b"}},
-{"tags": []any{"override-a"}},
-}
+	inputs := []map[string]any{
+		{"tags": []any{"base-a", "base-b"}},
+		{"tags": []any{"override-a"}},
+	}
 
-// appendSlice=true: result must be the concatenation.
-appendResult, err := MergeWithOptions(nil, inputs, true, false)
-require.NoError(t, err)
-tags, ok := appendResult["tags"].([]any)
-require.True(t, ok)
-assert.Equal(t, []any{"base-a", "base-b", "override-a"}, tags,
-"appendSlice=true: src elements must be appended to dst")
+	// appendSlice=true: result must be the concatenation.
+	appendResult, err := MergeWithOptions(nil, inputs, true, false)
+	require.NoError(t, err)
+	tags, ok := appendResult["tags"].([]any)
+	require.True(t, ok)
+	assert.Equal(t, []any{"base-a", "base-b", "override-a"}, tags,
+		"appendSlice=true: src elements must be appended to dst")
 
-// sliceDeepCopy=true: result length = dst length, element at [0] is dst[0] (scalar kept).
-dcResult, err := MergeWithOptions(nil, inputs, false, true)
-require.NoError(t, err)
-dcTags, ok := dcResult["tags"].([]any)
-require.True(t, ok)
-assert.Len(t, dcTags, 2, "sliceDeepCopy=true: result length must equal dst length")
-assert.Equal(t, "base-a", dcTags[0], "sliceDeepCopy=true: dst scalar at position 0 preserved")
+	// sliceDeepCopy=true: result length = dst length, element at [0] is dst[0] (scalar kept).
+	dcResult, err := MergeWithOptions(nil, inputs, false, true)
+	require.NoError(t, err)
+	dcTags, ok := dcResult["tags"].([]any)
+	require.True(t, ok)
+	assert.Len(t, dcTags, 2, "sliceDeepCopy=true: result length must equal dst length")
+	assert.Equal(t, "base-a", dcTags[0], "sliceDeepCopy=true: dst scalar at position 0 preserved")
 }
 
 // TestDeepMergeNative_TypedSrcMapNormalized covers the normalization branch in
@@ -1039,21 +1039,21 @@ assert.Equal(t, "base-a", dcTags[0], "sliceDeepCopy=true: dst scalar at position
 // map[string]any via deepCopyValue.  When dst holds a matching key with a map[string]any,
 // the normalized src must be recursively merged.
 func TestDeepMergeNative_TypedSrcMapNormalized(t *testing.T) {
-// schema.Provider is a struct that deepCopyValue normalizes to map[string]any.
-// Use an existing typed map from the schema package to trigger the normalization path.
-type providerConfig struct {
-Region string
-}
-src := map[string]any{
-// deepCopyValue will normalize this struct to a map via reflection.
-"provider": map[string]providerConfig{
-"aws": {Region: "us-east-1"},
-},
-}
-dst := map[string]any{}
-require.NoError(t, deepMergeNative(dst, src, false, false))
-// The typed map must be present in dst (normalized form).
-assert.NotNil(t, dst["provider"], "typed src map must be copied to dst via normalization path")
+	// schema.Provider is a struct that deepCopyValue normalizes to map[string]any.
+	// Use an existing typed map from the schema package to trigger the normalization path.
+	type providerConfig struct {
+		Region string
+	}
+	src := map[string]any{
+		// deepCopyValue will normalize this struct to a map via reflection.
+		"provider": map[string]providerConfig{
+			"aws": {Region: "us-east-1"},
+		},
+	}
+	dst := map[string]any{}
+	require.NoError(t, deepMergeNative(dst, src, false, false))
+	// The typed map must be present in dst (normalized form).
+	assert.NotNil(t, dst["provider"], "typed src map must be copied to dst via normalization path")
 }
 
 // TestMergeSlicesNative_InnerErrorPropagated covers the error-return path inside
@@ -1065,22 +1065,22 @@ assert.NotNil(t, dst["provider"], "typed src map must be copied to dst via norma
 // has a string for the same key → deepMergeNative returns "cannot override two slices
 // with different type" → mergeSlicesNative must propagate that error.
 func TestMergeSlicesNative_InnerErrorPropagated(t *testing.T) {
-// dst[0] has "tags": []any — src[0] has "tags": string → type mismatch inside deepMergeNative.
-dst := []any{
-map[string]any{
-"tags": []any{"base-tag"},
-},
-}
-src := []any{
-map[string]any{
-"tags": "not-a-slice", // string, not []any → triggers the type-mismatch error
-},
-}
+	// dst[0] has "tags": []any — src[0] has "tags": string → type mismatch inside deepMergeNative.
+	dst := []any{
+		map[string]any{
+			"tags": []any{"base-tag"},
+		},
+	}
+	src := []any{
+		map[string]any{
+			"tags": "not-a-slice", // string, not []any → triggers the type-mismatch error
+		},
+	}
 
-// sliceDeepCopy=true: mergeSlicesNative calls deepMergeNative for the map elements,
-// which must surface the "cannot override two slices with different type" error.
-_, err := mergeSlicesNative(dst, src, false, true)
-require.Error(t, err, "mergeSlicesNative must propagate the error from deepMergeNative")
-assert.Contains(t, err.Error(), "cannot override two slices with different type",
-"inner error must be propagated without wrapping")
+	// sliceDeepCopy=true: mergeSlicesNative calls deepMergeNative for the map elements,
+	// which must surface the "cannot override two slices with different type" error.
+	_, err := mergeSlicesNative(dst, src, false, true)
+	require.Error(t, err, "mergeSlicesNative must propagate the error from deepMergeNative")
+	assert.Contains(t, err.Error(), "cannot override two slices with different type",
+		"inner error must be propagated without wrapping")
 }
