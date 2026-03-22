@@ -1,3 +1,15 @@
+// Package homedir implements home directory detection across Linux, macOS, and Windows.
+//
+// It uses a layered strategy: environment variable ($HOME / USERPROFILE /
+// HOMEDRIVE+HOMEPATH), os/user.Current(), macOS dscl, and finally a shell
+// fallback as a last resort.
+//
+// CGO=0 note: in CGO-disabled builds (e.g., Alpine/musl containers, distroless
+// images, or builds with -tags netgo), the pure-Go user.Current() reads only
+// /etc/passwd. UIDs managed by NSS/LDAP/SSSD that are absent from /etc/passwd
+// will not be found there; the shell fallback (getHomeFromShell) is the last
+// resort for those environments. When the user is not in any password database,
+// the shell fallback returns ErrBlankOutput.
 package homedir
 
 import (
@@ -35,17 +47,16 @@ var currentUserFunc = user.Current
 // to exercise the darwin path on other operating systems.
 var darwinHomeDirFunc = getDarwinHomeDir
 
-// shellHomeDirCmd is the shell command used by getHomeFromShell to determine
-// the home directory. It can be replaced in tests to simulate failure or
-// empty-output conditions.
+// shellHomeDirFunc is the function used to get the home directory via the shell
+// fallback when $HOME is unset/empty and user.Current() has failed.
+// It can be replaced in tests to simulate failure or empty-output conditions.
 //
-// The default uses `eval "echo ~$(id -un)"` which expands the tilde for the
-// current user via the password database, without relying on $HOME. This is
-// important because getHomeFromShell is called only when $HOME is unset or
-// empty and user.Current() has also failed — using `cd && pwd` in that
-// scenario would return the current working directory instead of the home
-// directory.
-var shellHomeDirCmd = `eval "echo ~$(id -un)"`
+// The default implementation (shellHomeDir) is injection-safe: it fetches the
+// current username via os/exec, validates it, and then uses ~username tilde
+// expansion (NOT eval with $HOME) so that the lookup is always backed by the
+// system password database — independent of $HOME — and works in both bash
+// and dash.
+var shellHomeDirFunc = shellHomeDir
 
 // Dir returns the home directory for the executing user.
 //
@@ -127,7 +138,6 @@ func Expand(path string) (string, error) {
 }
 
 // Reset clears the cache, forcing the next call to Dir to re-detect
-
 // the home directory. This generally never has to be called, but can be
 // useful in tests if you're modifying the home directory via the HOME
 // env var or something.
@@ -179,14 +189,18 @@ func getHomeFromEnv() string {
 }
 
 func dirWindows() (string, error) {
-	// First prefer the HOME environmental variable
+	// First prefer the HOME environmental variable.
+	// Apply filepath.FromSlash before filepath.Clean so that forward-slash
+	// paths set by Cygwin, Git Bash, or WSL1 (e.g., "/home/user") are
+	// converted to native Windows separators before cleaning, avoiding a
+	// drive-relative result (e.g., \home\user) on Windows.
 	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
-		return filepath.Clean(home), nil
+		return filepath.Clean(filepath.FromSlash(home)), nil
 	}
 
 	// Prefer standard environment variable USERPROFILE
 	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
-		return filepath.Clean(home), nil
+		return filepath.Clean(filepath.FromSlash(home)), nil
 	}
 
 	drive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
@@ -263,10 +277,66 @@ func getUnixHomeDir() (string, error) {
 }
 
 func getHomeFromShell() (string, error) {
-	var stdout bytes.Buffer
-	cmd := exec.Command("sh", "-c", shellHomeDirCmd)
+	return shellHomeDirFunc()
+}
+
+// shellGetUsernameFunc is the function used by shellHomeDir to obtain the
+// current username via id -un. It can be replaced in tests to simulate
+// failure conditions without needing OS-level changes.
+var shellGetUsernameFunc = func() (string, error) {
+	var idOut, idErr bytes.Buffer
+	idCmd := exec.Command("id", "-un")
+	idCmd.Stdout = &idOut
+	idCmd.Stderr = &idErr
+	if err := idCmd.Run(); err != nil {
+		msg := strings.TrimSpace(idErr.String())
+		if msg != "" {
+			return "", fmt.Errorf("getHomeFromShell: id: %w (stderr: %s)", err, msg)
+		}
+		return "", fmt.Errorf("getHomeFromShell: id: %w", err)
+	}
+	return strings.TrimSpace(idOut.String()), nil
+}
+
+// shellHomeDir is the production implementation of the shell home-directory
+// fallback. It is injection-safe because it:
+//  1. Fetches the current username via shellGetUsernameFunc (id -un by default).
+//  2. Validates the username with the same guard used by getDarwinHomeDir.
+//  3. Constructs a shell command that expands ~username (not bare ~) so that
+//     the lookup is backed by the system password database in both bash and
+//     dash, independent of $HOME.
+//
+// This replaces the previous `eval "echo ~$(id -un)"` which was vulnerable to
+// shell metacharacter injection if id -un ever returned a malicious string.
+func shellHomeDir() (string, error) {
+	// Step 1: obtain the current username in Go, outside the shell.
+	username, err := shellGetUsernameFunc()
+	if err != nil {
+		return "", err
+	}
+	if username == "" {
+		return "", ErrBlankOutput
+	}
+
+	// Step 2: validate the username to prevent injection in the shell command.
+	// This mirrors the guard in getDarwinHomeDir.
+	if strings.ContainsAny(username, "/\\\x00\n\r") {
+		return "", fmt.Errorf("getHomeFromShell: invalid characters in username %q", username)
+	}
+
+	// Step 3: expand ~username in the shell.
+	// printf '%s\n' ~username expands the home directory from the system
+	// password database in both bash and dash, even when $HOME is unset.
+	// The username is pre-validated, making this safe to interpolate.
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' ~"+username)
 	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return "", fmt.Errorf("getHomeFromShell: %w (stderr: %s)", err, msg)
+		}
 		return "", fmt.Errorf("getHomeFromShell: %w", err)
 	}
 

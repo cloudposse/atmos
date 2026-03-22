@@ -6,6 +6,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -72,13 +73,8 @@ func TestReset_WorksAcrossMultipleTests(t *testing.T) {
 			Reset()
 
 			dir, err := Dir()
-			if err != nil {
-				t.Fatalf("iteration %d: err: %s", i, err)
-			}
-
-			if dir != tmpDir {
-				t.Fatalf("iteration %d: expected Dir() to return %q, got %q", i, tmpDir, dir)
-			}
+			require.NoError(t, err, "iteration %d", i)
+			require.Equal(t, tmpDir, dir, "iteration %d: expected Dir() to return %q, got %q", i, tmpDir, dir)
 		})
 	}
 }
@@ -109,45 +105,109 @@ func TestGetHomeFromShell(t *testing.T) {
 	assert.NotEmpty(t, home, "getHomeFromShell should return a non-empty path.")
 }
 
+// TestShellHomeDir covers the error paths in shellHomeDir (the production
+// implementation), which uses id -un and validates the username before
+// delegating to the shell.
+func TestShellHomeDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shellHomeDir uses id and sh, which are not available on Windows.")
+	}
+
+	t.Run("succeeds in normal environment", func(t *testing.T) {
+		home, err := shellHomeDir()
+		require.NoError(t, err)
+		assert.NotEmpty(t, home, "shellHomeDir should return a non-empty path.")
+		assert.False(t, strings.HasPrefix(home, "~"), "shellHomeDir must not return a tilde-prefixed path.")
+	})
+
+	t.Run("id failure propagates", func(t *testing.T) {
+		orig := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = orig }()
+		shellGetUsernameFunc = func() (string, error) {
+			return "", fmt.Errorf("getHomeFromShell: id: mock id failure")
+		}
+		_, err := shellHomeDir()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "getHomeFromShell: id:", "id failure should propagate with context.")
+	})
+
+	t.Run("empty username returns ErrBlankOutput", func(t *testing.T) {
+		orig := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = orig }()
+		shellGetUsernameFunc = func() (string, error) { return "", nil }
+		_, err := shellHomeDir()
+		assert.ErrorIs(t, err, ErrBlankOutput, "empty username should return ErrBlankOutput.")
+	})
+
+	t.Run("username with path separators rejected", func(t *testing.T) {
+		orig := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = orig }()
+		shellGetUsernameFunc = func() (string, error) { return "user/evil", nil }
+		_, err := shellHomeDir()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid characters", "path traversal username must be rejected.")
+	})
+
+	t.Run("tilde-prefixed shell output returns ErrBlankOutput", func(t *testing.T) {
+		orig := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = orig }()
+		// Use a username that is valid (passes the guard) but is not in passwd,
+		// so the shell outputs ~nonexistent literally.
+		shellGetUsernameFunc = func() (string, error) { return "nonexistentuser12345", nil }
+		_, err := shellHomeDir()
+		// The shell outputs ~nonexistentuser12345 when user is not in passwd.
+		// Our guard catches it and returns ErrBlankOutput.
+		assert.ErrorIs(t, err, ErrBlankOutput, "tilde-prefixed output must be rejected as ErrBlankOutput.")
+	})
+}
+
 // TestGetHomeFromShell_Failure covers the error paths in getHomeFromShell using
-// the shellHomeDirCmd variable for dependency injection.
+// the shellHomeDirFunc variable for dependency injection.
 func TestGetHomeFromShell_Failure(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("getHomeFromShell relies on 'sh', which is not available on Windows.")
 	}
 
 	t.Run("command failure", func(t *testing.T) {
-		orig := shellHomeDirCmd
-		defer func() { shellHomeDirCmd = orig }()
-		shellHomeDirCmd = "exit 1" // forces cmd.Run() to return an error
+		orig := shellHomeDirFunc
+		defer func() { shellHomeDirFunc = orig }()
+		shellHomeDirFunc = func() (string, error) {
+			return "", errors.New("mock shell failure")
+		}
 		_, err := getHomeFromShell()
 		assert.Error(t, err, "getHomeFromShell should propagate shell command failures.")
 	})
 
 	t.Run("empty output", func(t *testing.T) {
-		orig := shellHomeDirCmd
-		defer func() { shellHomeDirCmd = orig }()
-		shellHomeDirCmd = "printf ''" // forces empty trimmed output (POSIX compliant, unlike "echo -n")
+		orig := shellHomeDirFunc
+		defer func() { shellHomeDirFunc = orig }()
+		shellHomeDirFunc = func() (string, error) {
+			return "", ErrBlankOutput
+		}
 		_, err := getHomeFromShell()
 		assert.ErrorIs(t, err, ErrBlankOutput, "getHomeFromShell should return ErrBlankOutput for empty output.")
 	})
 
 	t.Run("tilde-prefixed output treated as blank", func(t *testing.T) {
-		orig := shellHomeDirCmd
-		defer func() { shellHomeDirCmd = orig }()
+		orig := shellHomeDirFunc
+		defer func() { shellHomeDirFunc = orig }()
 		// Simulate the case where the user is not in the password database
 		// (distroless/scratch containers): the shell outputs "~username" literally
 		// instead of expanding it to an absolute path.
-		shellHomeDirCmd = "printf '~nobody'"
+		shellHomeDirFunc = func() (string, error) {
+			return "", ErrBlankOutput
+		}
 		_, err := getHomeFromShell()
 		assert.ErrorIs(t, err, ErrBlankOutput,
 			"getHomeFromShell must reject tilde-prefixed output as it is not a valid absolute path.")
 	})
 
 	t.Run("error message contains function context", func(t *testing.T) {
-		orig := shellHomeDirCmd
-		defer func() { shellHomeDirCmd = orig }()
-		shellHomeDirCmd = "exit 1"
+		orig := shellHomeDirFunc
+		defer func() { shellHomeDirFunc = orig }()
+		shellHomeDirFunc = func() (string, error) {
+			return "", fmt.Errorf("getHomeFromShell: mock error")
+		}
 		_, err := getHomeFromShell()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "getHomeFromShell:", "error should contain function name for traceability.")
@@ -233,6 +293,24 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("HOMEPATH", "")
 		_, err := dirWindows()
 		assert.ErrorIs(t, err, ErrHomeDrivePathBlank)
+	})
+
+	t.Run("forward-slash HOME converted to native separators (Cygwin/WSL/Git Bash)", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			// filepath.FromSlash is a no-op on non-Windows, so this subtest
+			// only proves the conversion logic on the target platform.
+			t.Skip("filepath.FromSlash conversion is only meaningful on Windows.")
+		}
+		t.Setenv("HOME", "/cygwin/home/user")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("HOMEPATH", "")
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		// filepath.FromSlash converts / → \; filepath.Clean then normalises.
+		// The result is a native Windows path, not a drive-relative path.
+		assert.Equal(t, filepath.Clean(filepath.FromSlash("/cygwin/home/user")), dir,
+			"forward-slash HOME must be converted to native separators to avoid drive-relative result.")
 	})
 }
 
@@ -355,11 +433,11 @@ func TestExpand_DirError(t *testing.T) {
 	// On darwin, darwinHomeDirFunc must also be mocked because dirUnix() tries
 	// it before currentUserFunc, and the real dscl command succeeds on macOS.
 	origUser := currentUserFunc
-	origShell := shellHomeDirCmd
+	origShell := shellHomeDirFunc
 	origDarwin := darwinHomeDirFunc
 	defer func() {
 		currentUserFunc = origUser
-		shellHomeDirCmd = origShell
+		shellHomeDirFunc = origShell
 		darwinHomeDirFunc = origDarwin
 	}()
 
@@ -372,7 +450,7 @@ func TestExpand_DirError(t *testing.T) {
 	t.Setenv("HOME", "")
 	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
 	darwinHomeDirFunc = func() (string, error) { return "", errors.New("mock darwin failure") }
-	shellHomeDirCmd = "exit 1"
+	shellHomeDirFunc = func() (string, error) { return "", errors.New("mock shell failure") }
 
 	_, err := Expand("~/test")
 	assert.Error(t, err, "Expand should propagate Dir() errors.")
@@ -388,11 +466,11 @@ func TestDir_Error(t *testing.T) {
 	// On darwin, darwinHomeDirFunc must also be mocked because dirUnix() tries
 	// it before currentUserFunc, and the real dscl command succeeds on macOS.
 	origUser := currentUserFunc
-	origShell := shellHomeDirCmd
+	origShell := shellHomeDirFunc
 	origDarwin := darwinHomeDirFunc
 	defer func() {
 		currentUserFunc = origUser
-		shellHomeDirCmd = origShell
+		shellHomeDirFunc = origShell
 		darwinHomeDirFunc = origDarwin
 	}()
 
@@ -405,7 +483,7 @@ func TestDir_Error(t *testing.T) {
 	t.Setenv("HOME", "")
 	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
 	darwinHomeDirFunc = func() (string, error) { return "", errors.New("mock darwin failure") }
-	shellHomeDirCmd = "exit 1"
+	shellHomeDirFunc = func() (string, error) { return "", errors.New("mock shell failure") }
 
 	_, err := Dir()
 	assert.Error(t, err, "Dir() should return an error when all lookup methods fail.")
@@ -573,8 +651,10 @@ func TestExpand(t *testing.T) {
 
 	for _, tc := range cases {
 		actual, err := Expand(tc.Input)
-		if (err != nil) != tc.Err {
-			t.Fatalf("Input: %#v\n\nErr: %s", tc.Input, err)
+		if tc.Err {
+			require.Error(t, err, "Input: %#v", tc.Input)
+		} else {
+			require.NoError(t, err, "Input: %#v", tc.Input)
 		}
 
 		assert.Equal(t, tc.Output, actual, "Input: %#v", tc.Input)
@@ -709,10 +789,10 @@ func TestGetDarwinHomeDir_UsernameFromCurrentUser(t *testing.T) {
 	}
 
 	_, err = getDarwinHomeDir()
-	// dscl is unavailable on Linux; error must reference "dscl", not "id".
+	// dscl is unavailable on Linux; the error must reference "getDarwinHomeDir: dscl:",
+	// proving that user.Current() was used for the username and id -un was not spawned.
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "dscl", "error should come from dscl, not id -un, when Username is available.")
-	assert.NotContains(t, err.Error(), "id", "id -un should not be called when user.Current().Username is populated.")
+	assert.Contains(t, err.Error(), "getDarwinHomeDir: dscl:", "error should come from dscl, not id -un, when Username is available.")
 }
 
 // TestGetDarwinHomeDir_DsclUnavailable verifies that getDarwinHomeDir returns
@@ -736,9 +816,6 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 		t.Skip("getDarwinHomeDir uses Unix commands.")
 	}
 
-	orig := currentUserFunc
-	defer func() { currentUserFunc = orig }()
-
 	maliciousNames := []string{
 		"user/../../etc/shadow",
 		"user\x00null",
@@ -749,6 +826,8 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 	for i, name := range maliciousNames {
 		name := name
 		t.Run(fmt.Sprintf("rejects_malicious_%d", i), func(t *testing.T) {
+			orig := currentUserFunc
+			defer func() { currentUserFunc = orig }()
 			currentUserFunc = func() (*user.User, error) {
 				return &user.User{Username: name}, nil
 			}
