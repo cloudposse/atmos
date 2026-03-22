@@ -2377,6 +2377,20 @@ func TestL01DeadVarEmptyGlobalVars(t *testing.T) {
 	assert.Empty(t, findings)
 }
 
+
+// findRuleByID looks up a lint rule by its ID from the full rule set.
+// It fails the test immediately if the rule is not found.
+func findRuleByID(t *testing.T, ruleID string) lint.LintRule {
+t.Helper()
+for _, r := range rules.All() {
+if r.ID() == ruleID {
+return r
+}
+}
+t.Fatalf("rule %q not found in rules.All()", ruleID)
+return nil
+}
+
 // TestL09DFSPathAliasing verifies that cycle path strings are not corrupted when a
 // component inherits from multiple parents (branching DFS) and the path slice has excess
 // capacity. Before the fix, append(path, node) for sibling iterations shared the same
@@ -2384,15 +2398,7 @@ func TestL01DeadVarEmptyGlobalVars(t *testing.T) {
 func TestL09DFSPathAliasing(t *testing.T) {
 t.Parallel()
 
-all := rules.All()
-var l09 lint.LintRule
-for _, r := range all {
-if r.ID() == "L-09" {
-l09 = r
-break
-}
-}
-require.NotNil(t, l09)
+l09 := findRuleByID(t, "L-09")
 
 // Graph: comp-diamond inherits from both comp-left and comp-right.
 // comp-left inherits comp-base. comp-right inherits comp-base.
@@ -2467,15 +2473,7 @@ assert.True(t, found, "cycle message must correctly include comp-a and comp-c, n
 func TestL08EmptyPatternsNoFindings(t *testing.T) {
 t.Parallel()
 
-all := rules.All()
-var l08 lint.LintRule
-for _, r := range all {
-if r.ID() == "L-08" {
-l08 = r
-break
-}
-}
-require.NotNil(t, l08)
+l08 := findRuleByID(t, "L-08")
 
 // A stack with an obviously sensitive-looking global var, but empty patterns.
 stacksMap := map[string]any{
@@ -2490,7 +2488,7 @@ StacksMap:       stacksMap,
 RawStackConfigs: make(map[string]map[string]any),
 ImportGraph:     make(map[string][]string),
 LintConfig: schema.LintStacksConfig{
-SensitiveVarPatterns: []string{}, // explicitly empty
+SensitiveVarPatterns: []string{}, // explicitly empty — must produce no findings
 },
 }
 findings, err := l08.Run(ctx)
