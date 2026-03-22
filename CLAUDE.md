@@ -374,6 +374,14 @@ Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 ### Test Coverage (MANDATORY)
 80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.
 
+### Cyclomatic Complexity (MANDATORY)
+golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.
+When refactoring high-complexity functions:
+1. Extract blocks with clear single responsibilities into named helper functions.
+2. Use the pattern: `buildXSubcommandArgs`, `resolveX`, `checkX`, `assembleX`, `handleX`.
+3. Keep the orchestrator function as a flat linear pipeline of named steps (see `ExecuteTerraform`).
+4. Previously high-complexity functions: `ExecuteTerraform` (160→26, see `internal/exec/terraform.go`), `ExecuteDescribeStacks` (247→10), `processArgsAndFlags`.
+
 ### Environment Variables (MANDATORY)
 Use `viper.BindEnv("ATMOS_VAR", "ATMOS_VAR", "FALLBACK")` - ATMOS_ prefix required.
 
