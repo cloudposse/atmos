@@ -70,14 +70,14 @@ func (r *l06DRYRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 				}
 
 				for varKey, varVal := range vars {
-					// Include the type in the map key to avoid false matches between
-					// different-typed values that have the same Sprintf representation
-					// (e.g., bool true vs string "true").
-					valStr := fmt.Sprintf("%T:%v", varVal, varVal)
+					// Use "%T:%v" as the dedup key to avoid false matches between
+					// different-typed values with the same Sprintf representation
+					// (e.g. bool true vs string "true").
+					dedupKey := fmt.Sprintf("%T:%v", varVal, varVal)
 					if stats[compName][varKey] == nil {
 						stats[compName][varKey] = make(map[string]int)
 					}
-					stats[compName][varKey][valStr]++
+					stats[compName][varKey][dedupKey]++
 					totals[compName][varKey]++
 				}
 			}
@@ -95,8 +95,11 @@ func (r *l06DRYRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 			for value, count := range valueCounts {
 				pct := count * 100 / total
 				if pct >= thresholdPct {
-					// Strip the "type:" prefix added for deduplication before displaying.
-					// Use SplitN to handle values that contain colons (e.g., URLs, timestamps).
+					// Strip the "type:" prefix (e.g. "string:", "bool:", "map[string]interface {}:")
+					// that was added to dedupKey to avoid type collisions.  Use SplitN to
+					// preserve colons inside the value itself (e.g. URLs, timestamps).
+					// The resulting display string uses plain %v formatting without the Go
+					// type annotation so findings are readable in terminal output.
 					displayVal := value
 					if parts := strings.SplitN(value, ":", 2); len(parts) == 2 {
 						displayVal = parts[1]

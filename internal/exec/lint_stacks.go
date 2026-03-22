@@ -101,14 +101,42 @@ func LintStacks(
 
 	// Filter to a specific stack if requested. Use exact match to be consistent
 	// with the rest of Atmos (--stack always means an exact stack name).
+	// When a stack filter is active, also narrow RawStackConfigs to the files that
+	// feed into that stack so that L-03, L-05, and L-07 are fully scoped.
 	if stackFilter != "" {
-		filtered := make(map[string]any)
+		filteredStacks := make(map[string]any)
 		for name, v := range stacksMap {
 			if name == stackFilter {
-				filtered[name] = v
+				filteredStacks[name] = v
 			}
 		}
-		stacksMap = filtered
+		stacksMap = filteredStacks
+
+		// Narrow rawStackConfigs to files whose normalized name matches the filter.
+		// Because Atmos logical stack names typically correspond 1:1 with YAML file
+		// stems (e.g. "plat-ue2-prod" ↔ "stacks/deploy/plat-ue2-prod.yaml"), we
+		// include a raw config entry when its file stem (extension + base path stripped)
+		// matches any filtered stack name.
+		filteredRaw := make(map[string]map[string]any)
+		for filePath, rawConfig := range rawStackConfigs {
+			// Derive the logical name from the file path by stripping the base path
+			// prefix and extension, mirroring how Atmos registers stacks.
+			base := filepath.Base(filePath)
+			for _, ext := range []string{".yaml", ".yml"} {
+				if strings.HasSuffix(base, ext) {
+					base = base[:len(base)-len(ext)]
+					break
+				}
+			}
+			if _, ok := filteredStacks[base]; ok {
+				filteredRaw[filePath] = rawConfig
+			}
+		}
+		// Fall back to the full set if matching produced no results (e.g. when stack
+		// names encode environment + region context that doesn't match the bare filename).
+		if len(filteredRaw) > 0 {
+			rawStackConfigs = filteredRaw
+		}
 	}
 
 	// Build import graph from raw stack configs.
@@ -381,5 +409,8 @@ func renderLintText(result *lint.LintResult) {
 func renderLintJSON(result *lint.LintResult) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	return enc.Encode(result)
+	if err := enc.Encode(result); err != nil {
+		return fmt.Errorf("rendering lint output as JSON: %w", err)
+	}
+	return nil
 }

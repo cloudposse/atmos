@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/lint"
 	"github.com/cloudposse/atmos/pkg/lint/rules"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -826,20 +827,26 @@ func TestL07OrphanedFile(t *testing.T) {
 			expectFindings: true,
 		},
 		{
-			name:          "file in stacksMap - not orphaned",
+			// StacksMap keys are logical stack names (e.g. "plat-ue2-prod"), not file
+			// paths. L-07 now only uses RawStackConfigs for root-file protection.
+			// This test confirms that a file only in StacksMap (not in RawStackConfigs
+			// or ImportGraph) IS reported as orphaned — the StacksMap key provides no
+			// protection because relNorm("plat-ue2-prod") never matches a physical path.
+			name:          "file only in stacksMap logical name - still orphaned",
 			allStackFiles: []string{"/stacks/deploy/prod.yaml"},
 			importGraph:   map[string][]string{},
 			stacksMap: map[string]any{
-				"/stacks/deploy/prod": map[string]any{},
+				"plat-ue2-prod": map[string]any{}, // logical name, not a file path
 			},
-			expectFindings: false,
+			expectFindings: true,
 		},
 		{
+			// RawStackConfigs keys are absolute file paths and correctly protect root stacks.
 			name:          "file in rawStackConfigs - not orphaned",
 			allStackFiles: []string{"/stacks/catalog/base.yaml"},
 			importGraph:   map[string][]string{},
 			rawStackConfig: map[string]map[string]any{
-				"/stacks/catalog/base": {},
+				"/stacks/catalog/base.yaml": {},
 			},
 			expectFindings: false,
 		},
@@ -1024,13 +1031,13 @@ func TestL10EnvShadowing(t *testing.T) {
 			name: "env shadowing detected",
 			stacksMap: map[string]any{
 				"stack1": map[string]any{
-					"env": map[string]any{
+					cfg.EnvSectionName: map[string]any{
 						"MY_VAR": "stack-value",
 					},
 					"components": map[string]any{
 						"terraform": map[string]any{
 							"mycomp": map[string]any{
-								"env": map[string]any{
+								cfg.EnvSectionName: map[string]any{
 									"MY_VAR": "component-value",
 								},
 							},
@@ -1044,13 +1051,13 @@ func TestL10EnvShadowing(t *testing.T) {
 			name: "same env value - no shadowing",
 			stacksMap: map[string]any{
 				"stack1": map[string]any{
-					"env": map[string]any{
+					cfg.EnvSectionName: map[string]any{
 						"MY_VAR": "same-value",
 					},
 					"components": map[string]any{
 						"terraform": map[string]any{
 							"mycomp": map[string]any{
-								"env": map[string]any{
+								cfg.EnvSectionName: map[string]any{
 									"MY_VAR": "same-value",
 								},
 							},
@@ -1064,13 +1071,13 @@ func TestL10EnvShadowing(t *testing.T) {
 			name: "helmfile env shadowing detected",
 			stacksMap: map[string]any{
 				"stack1": map[string]any{
-					"env": map[string]any{
+					cfg.EnvSectionName: map[string]any{
 						"APP_ENV": "staging",
 					},
 					"components": map[string]any{
 						"helmfile": map[string]any{
 							"nginx": map[string]any{
-								"env": map[string]any{
+								cfg.EnvSectionName: map[string]any{
 									"APP_ENV": "production",
 								},
 							},
@@ -1084,11 +1091,11 @@ func TestL10EnvShadowing(t *testing.T) {
 			name: "component env not in stack env - no finding",
 			stacksMap: map[string]any{
 				"stack1": map[string]any{
-					"env": map[string]any{},
+					cfg.EnvSectionName: map[string]any{},
 					"components": map[string]any{
 						"terraform": map[string]any{
 							"mycomp": map[string]any{
-								"env": map[string]any{
+								cfg.EnvSectionName: map[string]any{
 									"COMPONENT_ONLY_VAR": "value",
 								},
 							},
@@ -1134,6 +1141,21 @@ func TestAllRulesArePresent(t *testing.T) {
 	for _, id := range expectedIDs {
 		assert.True(t, foundIDs[id], "Expected rule %s to be registered", id)
 	}
+}
+
+// TestCfgSectionNameConstants locks the values of cfg constants that test fixtures
+// depend on.  If a constant changes, tests that embed its value as a literal would
+// silently pass while production behavior would be wrong.
+func TestCfgSectionNameConstants(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "env", cfg.EnvSectionName,
+		"cfg.EnvSectionName changed — update all env-section test data if intentional")
+	assert.Equal(t, "vars", cfg.VarsSectionName,
+		"cfg.VarsSectionName changed — update all vars-section test data if intentional")
+	assert.Equal(t, "components", cfg.ComponentsSectionName,
+		"cfg.ComponentsSectionName changed — update all components-section test data if intentional")
+	assert.Equal(t, "metadata", cfg.MetadataSectionName,
+		"cfg.MetadataSectionName changed — update all metadata-section test data if intentional")
 }
 
 func TestEngineRunWithFilter(t *testing.T) {
@@ -1394,6 +1416,60 @@ func TestHelpersAppendIfMissingNoDuplicate(t *testing.T) {
 	findings, err := l09.Run(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, findings, "duplicate inherits entries should not create false cycles")
+}
+
+// TestGetNestedMap exercises the getNestedMap helper directly.
+func TestGetNestedMap(t *testing.T) {
+	t.Parallel()
+
+	t.Run("happy path single key", func(t *testing.T) {
+		t.Parallel()
+		m := map[string]any{
+			"components": map[string]any{"terraform": map[string]any{}},
+		}
+		result, ok := rules.ExportedGetNestedMap(m, "components")
+		require.True(t, ok)
+		assert.NotNil(t, result)
+	})
+
+	t.Run("happy path nested keys", func(t *testing.T) {
+		t.Parallel()
+		inner := map[string]any{"vpc": "config"}
+		m := map[string]any{
+			"components": map[string]any{
+				"terraform": inner,
+			},
+		}
+		result, ok := rules.ExportedGetNestedMap(m, "components", "terraform")
+		require.True(t, ok)
+		assert.Equal(t, inner, result)
+	})
+
+	t.Run("missing key returns false", func(t *testing.T) {
+		t.Parallel()
+		m := map[string]any{}
+		result, ok := rules.ExportedGetNestedMap(m, "missing")
+		assert.False(t, ok)
+		assert.Nil(t, result)
+	})
+
+	t.Run("non-map value at intermediate key returns false", func(t *testing.T) {
+		t.Parallel()
+		m := map[string]any{
+			"components": "not-a-map",
+		}
+		result, ok := rules.ExportedGetNestedMap(m, "components", "terraform")
+		assert.False(t, ok)
+		assert.Nil(t, result)
+	})
+
+	t.Run("empty key path returns input map", func(t *testing.T) {
+		t.Parallel()
+		inner := map[string]any{"a": "b"}
+		result, ok := rules.ExportedGetNestedMap(inner)
+		require.True(t, ok)
+		assert.Equal(t, inner, result)
+	})
 }
 
 // TestL05ConcernGroupSingleSegment covers the "no hyphen" branch in concernGroup.
@@ -1939,7 +2015,7 @@ func TestL10EnvShadowingNoComponentsSection(t *testing.T) {
 	// Stack with env vars but no components section must produce no findings.
 	ctx := makeContext(map[string]any{
 		"stack1": map[string]any{
-			"env": map[string]any{"MY_VAR": "global-value"},
+			cfg.EnvSectionName: map[string]any{"MY_VAR": "global-value"},
 			// no components section
 		},
 	})
@@ -2165,8 +2241,8 @@ func TestL10EnvShadowingNonMapCompData(t *testing.T) {
 
 	ctx := makeContext(map[string]any{
 		"stack1": map[string]any{
-			"env":        map[string]any{"MY_VAR": "global-value"},
-			"components": map[string]any{"terraform": map[string]any{"comp-bad": "not-a-map"}},
+			cfg.EnvSectionName: map[string]any{"MY_VAR": "global-value"},
+			"components":       map[string]any{"terraform": map[string]any{"comp-bad": "not-a-map"}},
 		},
 	})
 	findings, err := l10.Run(ctx)
@@ -2407,11 +2483,11 @@ func TestL10EnvShadowingEmptyCompEnv(t *testing.T) {
 	// Component with an empty env map must produce no findings.
 	ctx := makeContext(map[string]any{
 		"stack1": map[string]any{
-			"env": map[string]any{"MY_VAR": "global-value"},
+			cfg.EnvSectionName: map[string]any{"MY_VAR": "global-value"},
 			"components": map[string]any{
 				"terraform": map[string]any{
 					"comp-a": map[string]any{
-						"env": map[string]any{}, // empty env map
+						cfg.EnvSectionName: map[string]any{}, // empty env map
 					},
 				},
 			},

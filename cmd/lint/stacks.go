@@ -36,7 +36,20 @@ Rules:
   L-07  Orphaned Catalog File        (warning)
   L-08  Sensitive Var at Global Scope (warning)
   L-09  Inheritance Cycle Detection  (error)
-  L-10  Env Var Shadowing            (warning)`,
+  L-10  Env Var Shadowing            (warning)
+
+Controlling severity and silencing rules:
+  To run only specific rules:
+    atmos lint stacks --rule L-02,L-07
+
+  To silence a rule without removing it, set its severity to 'info' in
+  atmos.yaml and use --severity warning or --severity error:
+    lint:
+      stacks:
+        rules:
+          L-05: info  # silenced — below default reporting threshold
+
+  A declarative 'disabled_rules' key is not yet supported.`,
 	Example: lintStacksUsage,
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

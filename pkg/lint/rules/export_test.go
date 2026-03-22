@@ -16,3 +16,6 @@ var ExportedRelNorm = relNorm
 
 // ExportedStackNameToFile exposes the private stackNameToFile function for testing.
 var ExportedStackNameToFile = stackNameToFile
+
+// ExportedGetNestedMap exposes the private getNestedMap function for testing.
+var ExportedGetNestedMap = getNestedMap

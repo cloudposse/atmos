@@ -38,10 +38,11 @@ func (r *l07OrphanedFileRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 		}
 	}
 
-	// Also mark all files in StacksMap and RawStackConfigs as referenced (root files).
-	for key := range ctx.StacksMap {
-		referenced[relNorm(key, ctx.StacksBasePath)] = true
-	}
+	// Mark all files in RawStackConfigs as referenced (root/entry-point files).
+	// Note: StacksMap keys are logical stack names (e.g. "plat-ue2-prod"), NOT file
+	// paths. relNorm("plat-ue2-prod", "/stacks") → "plat-ue2-prod", which never
+	// matches a physical file path. RawStackConfigs keys are absolute paths and
+	// correctly protect root stacks from being flagged as orphans.
 	for key := range ctx.RawStackConfigs {
 		referenced[relNorm(key, ctx.StacksBasePath)] = true
 	}

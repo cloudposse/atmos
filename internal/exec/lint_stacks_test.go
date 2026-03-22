@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/lint"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -125,6 +126,13 @@ func TestMergedLintConfig(t *testing.T) {
 func TestBuildImportGraph(t *testing.T) {
 	t.Parallel()
 
+	// Lock the constant so that any future rename is caught immediately.
+	// L-03 and L-07 depend on this key matching what Atmos writes to rawStackConfigs.
+	t.Run("cfg.ImportSectionName matches expected YAML key", func(t *testing.T) {
+		assert.Equal(t, "import", cfg.ImportSectionName,
+			"cfg.ImportSectionName changed — update all import graph logic if this is intentional")
+	})
+
 	t.Run("nil raw configs produces empty graph", func(t *testing.T) {
 		t.Parallel()
 		graph := buildImportGraph(nil, "")
@@ -141,7 +149,7 @@ func TestBuildImportGraph(t *testing.T) {
 		t.Parallel()
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"vars": map[string]any{"env": "dev"},
+				cfg.VarsSectionName: map[string]any{"env": "dev"},
 			},
 		}
 		graph := buildImportGraph(raw, "")
@@ -152,7 +160,7 @@ func TestBuildImportGraph(t *testing.T) {
 		t.Parallel()
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"import": []string{"catalog/vpc", "catalog/ecs"},
+				cfg.ImportSectionName: []string{"catalog/vpc", "catalog/ecs"},
 			},
 		}
 		graph := buildImportGraph(raw, "")
@@ -163,7 +171,7 @@ func TestBuildImportGraph(t *testing.T) {
 		t.Parallel()
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"import": []any{"catalog/vpc", "catalog/ecs"},
+				cfg.ImportSectionName: []any{"catalog/vpc", "catalog/ecs"},
 			},
 		}
 		graph := buildImportGraph(raw, "")
@@ -174,7 +182,7 @@ func TestBuildImportGraph(t *testing.T) {
 		t.Parallel()
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"import": []any{
+				cfg.ImportSectionName: []any{
 					map[string]any{"path": "catalog/vpc"},
 					map[string]any{"path": "catalog/rds"},
 				},
@@ -188,7 +196,7 @@ func TestBuildImportGraph(t *testing.T) {
 		t.Parallel()
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"import": []any{
+				cfg.ImportSectionName: []any{
 					map[string]any{"path": "catalog/vpc"},
 					map[string]any{"other": "value"}, // no "path" key
 				},
@@ -203,7 +211,7 @@ func TestBuildImportGraph(t *testing.T) {
 		t.Parallel()
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"import": []string{},
+				cfg.ImportSectionName: []string{},
 			},
 		}
 		graph := buildImportGraph(raw, "")
@@ -213,8 +221,8 @@ func TestBuildImportGraph(t *testing.T) {
 	t.Run("multiple files each contribute to graph", func(t *testing.T) {
 		t.Parallel()
 		raw := map[string]map[string]any{
-			"stacks/dev.yaml":  {"import": []string{"catalog/vpc"}},
-			"stacks/prod.yaml": {"import": []string{"catalog/vpc", "catalog/rds"}},
+			"stacks/dev.yaml":  {cfg.ImportSectionName: []string{"catalog/vpc"}},
+			"stacks/prod.yaml": {cfg.ImportSectionName: []string{"catalog/vpc", "catalog/rds"}},
 		}
 		graph := buildImportGraph(raw, "")
 		assert.Len(t, graph, 2)
@@ -233,7 +241,7 @@ func TestBuildImportGraph(t *testing.T) {
 
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"import": []string{"catalog/*"},
+				cfg.ImportSectionName: []string{"catalog/*"},
 			},
 		}
 		graph := buildImportGraph(raw, dir)
@@ -256,7 +264,7 @@ func TestBuildImportGraph(t *testing.T) {
 		// No files created — glob will match nothing.
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"import": []string{"catalog/*"},
+				cfg.ImportSectionName: []string{"catalog/*"},
 			},
 		}
 		graph := buildImportGraph(raw, dir)
@@ -268,12 +276,33 @@ func TestBuildImportGraph(t *testing.T) {
 		t.Parallel()
 		raw := map[string]map[string]any{
 			"stacks/dev.yaml": {
-				"import": []string{"catalog/*"},
+				cfg.ImportSectionName: []string{"catalog/*"},
 			},
 		}
 		graph := buildImportGraph(raw, "")
 		// No expansion — literal passed through.
 		assert.Equal(t, []string{"catalog/*"}, graph["stacks/dev.yaml"])
+	})
+
+	t.Run("glob with explicit .yaml extension does not produce double extension", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		// Create catalog YAML files that a .yaml-suffixed glob would match.
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "catalog"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "catalog", "vpc.yaml"), []byte("vars: {}"), 0o600))
+
+		raw := map[string]map[string]any{
+			"stacks/dev.yaml": {
+				// Import already contains a .yaml extension — must not become vpc.yaml.yaml.
+				cfg.ImportSectionName: []string{"catalog/*.yaml"},
+			},
+		}
+		graph := buildImportGraph(raw, dir)
+		imports := graph["stacks/dev.yaml"]
+		require.Len(t, imports, 1, "should find exactly one expanded file")
+		assert.Equal(t, "vpc.yaml", filepath.Base(imports[0]), "base name must be vpc.yaml, not vpc.yaml.yaml")
+		assert.NotContains(t, imports[0], ".yaml.yaml", "double extension must not appear")
 	})
 }
 
