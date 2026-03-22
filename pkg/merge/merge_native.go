@@ -36,6 +36,9 @@ func safeCap(a, b int) int {
 //   - sliceDeepCopy=true and both are slices: element-wise deep-merge.
 //   - dst is []any but src is not a slice: return type mismatch error (WithTypeCheck).
 //   - Otherwise: src value overrides dst value (deep-copied to isolate src from dst).
+//
+// A nil src is safe: ranging over a nil map is a no-op in Go, so no keys are visited.
+// dst must not be nil; the function returns an error if it is.
 func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) error {
 	if dst == nil {
 		return fmt.Errorf("deepMergeNative: dst must not be nil")

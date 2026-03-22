@@ -780,8 +780,13 @@ func TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ScalarKeptAtDst(t *testi
 
 	tags, ok := nativeResult["tags"].([]any)
 	require.True(t, ok)
-	// Position [0]: scalar src[0] → dst[0]="base-tag-1" is preserved (not overridden by scalar src).
-	// Position [1]: tail element (beyond src length) → deep-copied from dst[1]="base-tag-2".
+	// mergeSlicesNative(sliceDeepCopy=true) uses two loops:
+	//   Loop 1 (overlap, 0..min(len(src),len(dst))-1): if src[i] is a map, deep-merge src[i]
+	//     into a copy of dst[i]; otherwise dst[i] is preserved unchanged (scalar src is discarded).
+	//   Loop 2 (tail, len(src)..len(dst)-1): deep-copy remaining dst elements verbatim.
+	// Here len(src)=1, len(dst)=2:
+	//   Loop 1 position [0]: src[0]="override-tag-1" is a scalar → dst[0]="base-tag-1" kept.
+	//   Loop 2 position [1]: tail → dst[1]="base-tag-2" deep-copied.
 	assert.Equal(t, []any{"base-tag-1", "base-tag-2"}, tags,
 		"sliceDeepCopy with scalar elements must preserve all dst elements")
 }
@@ -805,7 +810,8 @@ func TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ExtraSrcDropped(t *testi
 }
 
 // TestMergeNative_CrossValidateVsMergo_NestedMaps verifies that nested map merges
-// are deep (keys from both sides are present in the result).
+// are deep (keys from both sides are present in the result) and that the result is
+// isolated from the original inputs — mutating the result must not change the inputs.
 func TestMergeNative_CrossValidateVsMergo_NestedMaps(t *testing.T) {
 	inputs := []map[string]any{
 		{"settings": map[string]any{"region": "us-east-1", "debug": false}},
@@ -819,6 +825,13 @@ func TestMergeNative_CrossValidateVsMergo_NestedMaps(t *testing.T) {
 	assert.Equal(t, "eu-west-1", settings["region"], "src region must override dst region")
 	assert.Equal(t, false, settings["debug"], "dst-only key must be preserved")
 	assert.Equal(t, 30, settings["timeout"], "src-only key must be added")
+
+	// Verify result isolation: mutating the merged result must not affect the original inputs.
+	settings["region"] = "ap-southeast-1"
+	assert.Equal(t, "us-east-1", inputs[0]["settings"].(map[string]any)["region"],
+		"mutating the result must not affect the first input")
+	assert.Equal(t, "eu-west-1", inputs[1]["settings"].(map[string]any)["region"],
+		"mutating the result must not affect the second input")
 }
 
 // BenchmarkMergeNative_TenInputs measures merge performance for 10 inputs —

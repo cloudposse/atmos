@@ -85,15 +85,13 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 		fileCount := strings.Count(errStr, "File being processed:")
 		require.Positive(t, fileCount, "Should have at least one file error block")
 
-		// Cap the threshold so a deduplication bug that triples context blocks is always caught,
-		// regardless of how many stack files the fixture contains. A correct implementation
-		// produces exactly one occurrence of each token per error block; allowing fileCount+1
-		// accommodates one extra occurrence in summary lines without masking a 2× regression.
-		// The min(fileCount+1, 3) cap ensures the check degrades gracefully for large fixtures.
+		// A correct implementation produces exactly one occurrence of each context token per
+		// error block (one per erroring file). Allowing fileCount+1 adds a single defensive
+		// tolerance for any summary lines that repeat a token.  The important property is that
+		// the bound scales with fileCount, so the check catches 2× duplication bugs regardless
+		// of how large the fixture grows — unlike a fixed cap of 3 that would cause false
+		// failures the moment the fixture has 4+ erroring files.
 		maxOccurrences := fileCount + 1
-		if maxOccurrences > 3 {
-			maxOccurrences = 3
-		}
 		contextTokens := []string{
 			// "File being processed:" is the block counter used above — do not re-validate here.
 			// Its presence is already asserted by assert.Contains (line 68) and require.Positive.
