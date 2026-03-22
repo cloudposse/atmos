@@ -847,6 +847,8 @@ func TestShellGetUsernameFunc_StderrContext(t *testing.T) {
 	assert.Contains(t, err.Error(), "NSS lookup failed",
 		"id stderr should be included in the error for diagnostics.")
 }
+
+// TestDir_Cache verifies that Dir() caches its result and returns it on
 // subsequent calls without re-reading the home directory.
 func TestDir_Cache(t *testing.T) {
 	Reset()
