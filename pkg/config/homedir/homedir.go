@@ -47,6 +47,7 @@ func SetDisableCache(v bool) {
 var (
 	homedirCache           string
 	cacheLock              sync.RWMutex
+	timeoutLock            sync.RWMutex
 	ErrCannotExpandHomeDir = errors.New("cannot expand user-specific home dir")
 	ErrBlankOutput         = errors.New("blank output when reading home directory")
 	ErrHomeDrivePathBlank  = errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
@@ -98,18 +99,33 @@ func init() {
 func applyEnvTimeout() {
 	if v := os.Getenv("ATMOS_HOMEDIR_CMD_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			timeoutLock.Lock()
 			externalCmdTimeout = d
+			timeoutLock.Unlock()
 		}
 	}
 }
 
 // SetExternalCmdTimeout sets the timeout used for all external subprocess calls
-// (id, dscl, sh). It is safe to call from any goroutine. Prefer this over
-// directly setting externalCmdTimeout in concurrent programs or tests.
+// (id, dscl, sh) in a thread-safe manner. It is safe to call from any goroutine,
+// including concurrent callers of Dir or Expand. Zero and negative durations are
+// ignored. Prefer this over directly assigning externalCmdTimeout, which is not
+// protected by the timeout lock.
 func SetExternalCmdTimeout(d time.Duration) {
 	if d > 0 {
+		timeoutLock.Lock()
 		externalCmdTimeout = d
+		timeoutLock.Unlock()
 	}
+}
+
+// getExternalCmdTimeout returns the current external command timeout in a
+// thread-safe manner. All code that reads externalCmdTimeout should use this
+// function rather than reading the variable directly.
+func getExternalCmdTimeout() time.Duration {
+	timeoutLock.RLock()
+	defer timeoutLock.RUnlock()
+	return externalCmdTimeout
 }
 
 // truncateStderr returns at most maxStderrLen bytes from msg, appending "..."
@@ -342,7 +358,7 @@ func cleanWindowsPath(path string) string {
 // When cachedUsername is empty, getDarwinHomeDir falls back to id -un.
 func getDarwinHomeDir(cachedUsername string) (string, error) {
 	// Create a single context shared by all external commands in this function.
-	ctx, cancel := context.WithTimeout(context.Background(), externalCmdTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
 	defer cancel()
 
 	var username string
@@ -459,7 +475,7 @@ func redactStderr(stderr, username string) string {
 // id exists but exits non-zero can still resolve the home directory.
 // It can be replaced in tests to simulate failure conditions.
 var shellGetUsernameFunc = func() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), externalCmdTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
 	defer cancel()
 	var idOut, idErr bytes.Buffer
 	idCmd := exec.CommandContext(ctx, "id", "-un")
@@ -476,7 +492,7 @@ var shellGetUsernameFunc = func() (string, error) {
 	if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
 		return u, nil
 	}
-	whoamiCtx, whoamiCancel := context.WithTimeout(context.Background(), externalCmdTimeout)
+	whoamiCtx, whoamiCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
 	defer whoamiCancel()
 	var whoOut, whoErr bytes.Buffer
 	whoamiCmd := exec.CommandContext(whoamiCtx, "whoami")
@@ -534,7 +550,7 @@ func shellHomeDir() (string, error) {
 	// Safe to interpolate: username is pre-validated above to contain only
 	// safe characters (no shell metacharacters), making string concatenation
 	// equivalent to passing a literal.
-	shCtx, shCancel := context.WithTimeout(context.Background(), externalCmdTimeout)
+	shCtx, shCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
 	defer shCancel()
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(shCtx, "sh", "-c", "printf '%s\\n' ~"+username)

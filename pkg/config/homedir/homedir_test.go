@@ -1582,11 +1582,13 @@ os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
 os.Setenv("USER", "")
 
 orig := shellGetUsernameFunc
-shellGetUsernameFunc = orig
+defer func() { shellGetUsernameFunc = orig }()
 _, err := shellGetUsernameFunc()
 require.Error(t, err)
 require.ErrorIs(t, err, ErrIDUnavailable)
-assert.LessOrEqual(t, len(err.Error()), len("shellGetUsernameFunc: id binary not found and USER env var is empty (id: )")+maxStderrLen+10,
+// Bound: sentinel + "shellGetUsernameFunc:  (id: )" overhead + maxStderrLen content + "..."
+maxExpected := len(ErrIDUnavailable.Error()) + len("shellGetUsernameFunc:  (id: )") + maxStderrLen + len("...")
+assert.LessOrEqual(t, len(err.Error()), maxExpected,
 "error message must not be unbounded; long stderr must be truncated.")
 assert.Contains(t, err.Error(), "...",
 "truncated stderr must end with '...'")

@@ -104,8 +104,8 @@ is valid. Zero or invalid values are silently ignored and the default is retaine
 
 > **Important:** `ATMOS_HOMEDIR_CMD_TIMEOUT` is read **once at program init** and cannot
 > be changed at runtime by modifying the environment variable after the process starts.
-> Use `SetExternalCmdTimeout(d time.Duration)` for runtime adjustment in tests or
-> embedded scenarios.
+> Use `SetExternalCmdTimeout(d time.Duration)` for runtime adjustment — it is thread-safe
+> and may be called from any goroutine, including concurrent callers of `Dir` or `Expand`.
 
 ```sh
 # Tighter timeout for fast NSS backends (recommended default for most installs)
