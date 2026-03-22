@@ -48,10 +48,29 @@ exactly the shapes that matter most in production stacks with multiple layers of
 
 ## Semantic Compatibility
 
-The new implementation preserves the exact same merge semantics as the mergo-based code,
-including all three list merge strategies (`replace`, `append`, `merge`) and the
-`WithSliceDeepCopy` / `WithAppendSlice` behaviours verified by the existing test suite.
-No configuration changes are needed.
+The new implementation preserves the same merge semantics as the mergo-based code for the
+common cases, including all three list merge strategies (`replace`, `append`, `merge`) and the
+`WithSliceDeepCopy` / `WithAppendSlice` behaviours.
+
+### Edge case: `sliceDeepCopy` result length
+
+When `sliceDeepCopy` is active and the source list is **longer** than the destination list,
+extra source elements beyond `len(dst)` are silently dropped (the result length equals
+`len(dst)`). This matches the observed mergo behaviour and is intentional — element-wise
+deep-copy merges only the positions that already exist in the destination. See
+[`docs/fixes/2026-03-19-deep-merge-native-fixes.md`](https://github.com/cloudposse/atmos/blob/main/docs/fixes/2026-03-19-deep-merge-native-fixes.md)
+for full edge-case documentation.
+
+### Partial mergo replacement
+
+This change replaces the hot-path deep merge in `pkg/merge/merge.go`.  The `mergo` library is
+still used in two lower-traffic call sites:
+
+- `pkg/merge/merge_yaml_functions.go` — YAML function merge helpers
+- `pkg/devcontainer/config_loader.go` — devcontainer config loading
+
+A follow-up issue will migrate these remaining sites and remove the `mergo` dependency from
+`go.mod` entirely.  A future CVE in mergo still affects atmos until that work is complete.
 
 ## How to Use It
 

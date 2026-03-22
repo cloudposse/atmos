@@ -85,11 +85,19 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 		fileCount := strings.Count(errStr, "File being processed:")
 		require.Positive(t, fileCount, "Should have at least one file error block")
 
-		// Tokens that should appear at most once per error block.
-		maxOccurrences := fileCount + 1 // +1: defensive padding for any summary line
+		// Cap the threshold so a deduplication bug that triples context blocks is always caught,
+		// regardless of how many stack files the fixture contains. A correct implementation
+		// produces exactly one occurrence of each token per error block; allowing fileCount+1
+		// accommodates one extra occurrence in summary lines without masking a 2× regression.
+		// The min(fileCount+1, 3) cap ensures the check degrades gracefully for large fixtures.
+		maxOccurrences := fileCount + 1
+		if maxOccurrences > 3 {
+			maxOccurrences = 3
+		}
 		contextTokens := []string{
 			"**Likely cause:**",
 			"**Debug hint:**",
+			"Import chain:", // must not be duplicated within a single error block
 		}
 		for _, token := range contextTokens {
 			count := strings.Count(errStr, token)

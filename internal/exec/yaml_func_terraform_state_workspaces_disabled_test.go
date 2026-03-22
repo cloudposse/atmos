@@ -44,8 +44,9 @@ func TestYamlFuncTerraformStateWorkspacesDisabled(t *testing.T) {
 
 	// Compute the absolute path to the mock component before changing directories so that the
 	// cleanup defer below uses a stable path regardless of the working-directory changes made
-	// by t.Chdir further down.
-	mockComponentPath, err := filepath.Abs(filepath.Join(workDir, "..", "..", "components", "terraform", "mock"))
+	// by t.Chdir further down.  Use the direct path (not a multi-hop via workDir) so a rename
+	// of the scenarios directory does not silently produce a wrong path.
+	mockComponentPath, err := filepath.Abs("../../tests/fixtures/components/terraform/mock")
 	if err != nil {
 		t.Fatalf("Failed to compute absolute mock component path: %v", err)
 	}

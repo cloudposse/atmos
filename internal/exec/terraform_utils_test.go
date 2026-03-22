@@ -1812,11 +1812,15 @@ func TestIsTerraformCurrentWorkspace(t *testing.T) {
 
 	t.Run("returns false when environment file does not exist", func(t *testing.T) {
 		dir := t.TempDir()
+		// Create .terraform dir but omit the environment file — distinct from the
+		// directory-absent case covered by the next sub-test.
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, ".terraform"), 0o755))
 		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod"))
 	})
 
 	t.Run("returns false when .terraform directory does not exist", func(t *testing.T) {
 		dir := t.TempDir()
+		// No .terraform directory at all — environment file is implicitly absent.
 		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod"))
 	})
 

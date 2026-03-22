@@ -2,16 +2,23 @@ package merge
 
 import (
 	"fmt"
-	"math"
 )
 
-// safeAdd returns a+b, clamped to math.MaxInt on overflow.
-// This prevents integer overflow in size computations passed to make().
-func safeAdd(a, b int) int {
-	if b > math.MaxInt-a {
-		return math.MaxInt
+// safeCap returns a capacity hint of a+b, clamped to maxCapHint to prevent
+// OOM panics from oversize make() calls.
+// The hint is only used for make() capacity; append() will grow the backing array as needed.
+const maxCapHint = 1 << 24 // 16 M entries — realistic upper bound for atmos configs
+
+func safeCap(a, b int) int {
+	// Guard against integer overflow in the sum itself.
+	if b > maxCapHint-a {
+		return maxCapHint
 	}
-	return a + b
+	sum := a + b
+	if sum > maxCapHint {
+		return maxCapHint
+	}
+	return sum
 }
 
 // deepMergeNative performs a deep merge of src into dst in place.
@@ -77,9 +84,9 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 			if dstSlice, dstIsSlice := dstVal.([]any); dstIsSlice {
 				if srcSlice, ok := toAnySlice(srcVal); ok {
 					if sliceDeepCopy {
-						// sliceDeepCopy: element-wise merge.
+						// sliceDeepCopy: element-wise merge (propagate flags for nested slices of maps).
 						var err error
-						dst[k], err = mergeSlicesNative(dstSlice, srcSlice)
+						dst[k], err = mergeSlicesNative(dstSlice, srcSlice, appendSlice, sliceDeepCopy)
 						if err != nil {
 							return err
 						}
@@ -127,7 +134,7 @@ func toAnySlice(v any) ([]any, bool) {
 // Both dst and src elements are deep-copied to prevent the result from aliasing
 // the accumulator's elements across multiple merge passes.
 func appendSlices(dst, src []any) []any {
-	result := make([]any, 0, safeAdd(len(dst), len(src)))
+	result := make([]any, 0, safeCap(len(dst), len(src)))
 	for _, v := range dst {
 		result = append(result, deepCopyValue(v))
 	}
@@ -141,11 +148,14 @@ func appendSlices(dst, src []any) []any {
 // the behaviour of mergo.WithSliceDeepCopy + WithOverride + WithTypeCheck:
 //   - The result length equals the dst length (extra src elements are ignored).
 //   - For each position i that exists in both dst and src: if both elements are
-//     map[string]any they are deep-merged; otherwise the dst element is kept.
-//   - Positions that exist only in dst are preserved as-is.
-func mergeSlicesNative(dst, src []any) ([]any, error) {
+//     map[string]any they are deep-merged (propagating appendSlice/sliceDeepCopy);
+//     otherwise the dst element is deep-copied (kept).
+//   - Positions that exist only in dst are deep-copied (preserved as-is).
+func mergeSlicesNative(dst, src []any, appendSlice, sliceDeepCopy bool) ([]any, error) {
 	result := make([]any, len(dst))
-	copy(result, dst)
+	// Do NOT shallow-copy dst into result here; every position is overwritten by
+	// the two loops below, so the copy() call would only create transient shallow
+	// aliases that are immediately replaced — latent aliasing risk with no benefit.
 
 	// Merge src elements into the result up to the length of dst.
 	for i := 0; i < len(src) && i < len(dst); i++ {
@@ -167,11 +177,11 @@ func mergeSlicesNative(dst, src []any) ([]any, error) {
 		// Use combined length as capacity hint to avoid reallocations when src adds new keys.
 		// Deep-copy dstMap values so that deepMergeNative cannot mutate shared inner maps
 		// (which would corrupt the accumulator in multi-input merges).
-		merged := make(map[string]any, safeAdd(len(dstMap), len(srcMap)))
+		merged := make(map[string]any, safeCap(len(dstMap), len(srcMap)))
 		for k, v := range dstMap {
 			merged[k] = deepCopyValue(v)
 		}
-		if err := deepMergeNative(merged, srcMap, false, false); err != nil {
+		if err := deepMergeNative(merged, srcMap, appendSlice, sliceDeepCopy); err != nil {
 			return nil, err
 		}
 		result[i] = merged
