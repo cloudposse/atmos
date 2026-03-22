@@ -641,15 +641,44 @@ func TestStandardOptionsBuilder_WithModulePaths(t *testing.T) {
 }
 
 func TestStandardOptionsBuilder_WithTimeout(t *testing.T) {
-	builder := NewStandardOptionsBuilder().WithTimeout(30)
-	parser := builder.Build()
-	require.NotNil(t, parser)
+	t.Run("flag registration", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithTimeout(30)
+		parser := builder.Build()
+		require.NotNil(t, parser)
 
-	cmd := &cobra.Command{Use: "test"}
-	parser.RegisterFlags(cmd)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
 
-	flag := cmd.Flags().Lookup("timeout")
-	require.NotNil(t, flag, "timeout flag should be registered")
+		flag := cmd.Flags().Lookup("timeout")
+		require.NotNil(t, flag, "timeout flag should be registered")
+		assert.Equal(t, "30", flag.DefValue)
+	})
+
+	t.Run("default value", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithTimeout(30)
+		parser := builder.Build()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		v := viper.New()
+		_ = parser.BindToViper(v)
+
+		opts, err := parser.Parse(context.Background(), []string{})
+		require.NoError(t, err)
+		assert.Equal(t, 30, opts.Timeout)
+	})
+
+	t.Run("explicit value", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithTimeout(30)
+		parser := builder.Build()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		v := viper.New()
+		_ = parser.BindToViper(v)
+
+		opts, err := parser.Parse(context.Background(), []string{"--timeout", "60"})
+		require.NoError(t, err)
+		assert.Equal(t, 60, opts.Timeout)
+	})
 }
 
 func TestStandardOptionsBuilder_WithSchemasAtmosManifest(t *testing.T) {
@@ -675,6 +704,14 @@ func TestStandardOptionsBuilder_WithLogin(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("login")
 	require.NotNil(t, flag, "login flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--login"})
+	require.NoError(t, err)
+	assert.True(t, opts.Login)
 }
 
 func TestStandardOptionsBuilder_WithProvider(t *testing.T) {
@@ -687,6 +724,14 @@ func TestStandardOptionsBuilder_WithProvider(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("provider")
 	require.NotNil(t, flag, "provider flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--provider", "aws"})
+	require.NoError(t, err)
+	assert.Equal(t, "aws", opts.Provider)
 }
 
 func TestStandardOptionsBuilder_WithProviders(t *testing.T) {
@@ -723,6 +768,14 @@ func TestStandardOptionsBuilder_WithAll(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("all")
 	require.NotNil(t, flag, "all flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--all"})
+	require.NoError(t, err)
+	assert.True(t, opts.All)
 }
 
 func TestStandardOptionsBuilder_WithEverything(t *testing.T) {
@@ -738,16 +791,44 @@ func TestStandardOptionsBuilder_WithEverything(t *testing.T) {
 }
 
 func TestStandardOptionsBuilder_WithRef(t *testing.T) {
-	builder := NewStandardOptionsBuilder().WithRef("main")
-	parser := builder.Build()
-	require.NotNil(t, parser)
+	t.Run("flag registration with default", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithRef("main")
+		parser := builder.Build()
+		require.NotNil(t, parser)
 
-	cmd := &cobra.Command{Use: "test"}
-	parser.RegisterFlags(cmd)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
 
-	flag := cmd.Flags().Lookup("ref")
-	require.NotNil(t, flag, "ref flag should be registered")
-	assert.Equal(t, "main", flag.DefValue)
+		flag := cmd.Flags().Lookup("ref")
+		require.NotNil(t, flag, "ref flag should be registered")
+		assert.Equal(t, "main", flag.DefValue)
+	})
+
+	t.Run("default value", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithRef("main")
+		parser := builder.Build()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		v := viper.New()
+		_ = parser.BindToViper(v)
+
+		opts, err := parser.Parse(context.Background(), []string{})
+		require.NoError(t, err)
+		assert.Equal(t, "main", opts.Ref)
+	})
+
+	t.Run("explicit value overrides default", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithRef("main")
+		parser := builder.Build()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		v := viper.New()
+		_ = parser.BindToViper(v)
+
+		opts, err := parser.Parse(context.Background(), []string{"--ref", "v1.0.0"})
+		require.NoError(t, err)
+		assert.Equal(t, "v1.0.0", opts.Ref)
+	})
 }
 
 func TestStandardOptionsBuilder_WithSha(t *testing.T) {
@@ -886,16 +967,45 @@ func TestStandardOptionsBuilder_WithComponents(t *testing.T) {
 
 func TestStandardOptionsBuilder_WithOutput(t *testing.T) {
 	validOutputs := []string{"json", "yaml", "table"}
-	builder := NewStandardOptionsBuilder().WithOutput(validOutputs, "json")
-	parser := builder.Build()
-	require.NotNil(t, parser)
 
-	cmd := &cobra.Command{Use: "test"}
-	parser.RegisterFlags(cmd)
+	t.Run("flag registration with default", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithOutput(validOutputs, "json")
+		parser := builder.Build()
+		require.NotNil(t, parser)
 
-	flag := cmd.Flags().Lookup("output")
-	require.NotNil(t, flag, "output flag should be registered")
-	assert.Equal(t, "json", flag.DefValue)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		flag := cmd.Flags().Lookup("output")
+		require.NotNil(t, flag, "output flag should be registered")
+		assert.Equal(t, "json", flag.DefValue)
+	})
+
+	t.Run("default value", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithOutput(validOutputs, "json")
+		parser := builder.Build()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		v := viper.New()
+		_ = parser.BindToViper(v)
+
+		opts, err := parser.Parse(context.Background(), []string{})
+		require.NoError(t, err)
+		assert.Equal(t, "json", opts.Output)
+	})
+
+	t.Run("explicit value overrides default", func(t *testing.T) {
+		builder := NewStandardOptionsBuilder().WithOutput(validOutputs, "json")
+		parser := builder.Build()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		v := viper.New()
+		_ = parser.BindToViper(v)
+
+		opts, err := parser.Parse(context.Background(), []string{"--output", "yaml"})
+		require.NoError(t, err)
+		assert.Equal(t, "yaml", opts.Output)
+	})
 }
 
 func TestStandardOptionsBuilder_WithPositionalArgs(t *testing.T) {

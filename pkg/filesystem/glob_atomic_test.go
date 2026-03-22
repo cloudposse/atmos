@@ -19,6 +19,7 @@ import (
 func TestGetGlobMatches_CacheHit(t *testing.T) {
 	// Use a fresh cache state by clearing it.
 	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.yaml"), []byte(""), 0o644))
@@ -36,14 +37,17 @@ func TestGetGlobMatches_CacheHit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, second, 2)
 
-	// Results should be equal.
-	assert.ElementsMatch(t, first, second)
+	// Results should be strictly equal — same type (non-nil), same order, same content.
+	// Using assert.Equal (not ElementsMatch) to lock in the "always non-nil" return contract
+	// and verify that cached results are identical (not just order-equivalent).
+	assert.Equal(t, first, second)
 }
 
 // TestGetGlobMatches_CacheIsolation verifies that cached results are cloned, so
 // mutating the returned slice does not corrupt subsequent calls.
 func TestGetGlobMatches_CacheIsolation(t *testing.T) {
 	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "c.yaml"), []byte(""), 0o644))
@@ -70,6 +74,7 @@ func TestGetGlobMatches_CacheIsolation(t *testing.T) {
 // appropriate error when the base directory does not exist.
 func TestGetGlobMatches_NonExistentBaseDir(t *testing.T) {
 	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
 
 	// Build a path guaranteed to not exist by using a non-existent sub-directory
 	// of a fresh t.TempDir() (which will be cleaned up, but we never create the subdir).
@@ -83,6 +88,7 @@ func TestGetGlobMatches_NonExistentBaseDir(t *testing.T) {
 // an empty slice (not an error).
 func TestGetGlobMatches_EmptyResults(t *testing.T) {
 	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
 
 	tmpDir := t.TempDir()
 	// No files created in tmpDir.
@@ -97,6 +103,7 @@ func TestGetGlobMatches_EmptyResults(t *testing.T) {
 // retrieved without hitting the filesystem again.
 func TestGetGlobMatches_EmptyResultsCache(t *testing.T) {
 	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
 
 	tmpDir := t.TempDir()
 

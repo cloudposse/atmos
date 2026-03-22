@@ -533,6 +533,22 @@ func TestGetGitHubTokenFromEnv_ViperPrecedence(t *testing.T) {
 	assert.Equal(t, "viper-token", got)
 }
 
+// TestGetGitHubTokenFromEnv_NilViperFallsBackToGlobal verifies that passing an explicit
+// nil viper instance falls back to the global viper singleton rather than panicking.
+func TestGetGitHubTokenFromEnv_NilViperFallsBackToGlobal(t *testing.T) {
+	t.Setenv("ATMOS_GITHUB_TOKEN", "nil-guard-token")
+
+	// Passing nil must not panic — it must fall back to global viper, which in turn
+	// falls back to os.Getenv for ATMOS_GITHUB_TOKEN.
+	assert.NotPanics(t, func() {
+		_ = GetGitHubTokenFromEnv(nil)
+	})
+
+	// With env var set, global viper fallback or direct os.Getenv returns the token.
+	got := GetGitHubTokenFromEnv(nil)
+	assert.Equal(t, "nil-guard-token", got)
+}
+
 // TestWithTransport_AfterWithGitHubToken verifies that WithTransport applied after
 // WithGitHubToken does NOT drop the auth wrapper; the provided transport becomes the
 // inner base of the GitHubAuthenticatedTransport.

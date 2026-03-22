@@ -50,6 +50,9 @@ func WithTimeout(timeout time.Duration) ClientOption {
 
 // WithGitHubToken sets the GitHub token for authenticated requests.
 // Wraps the existing transport instead of replacing it to allow composition with WithTransport.
+//
+// Triple-composition caveat: if a second WithTransport call follows this option, the
+// earlier base transport is silently replaced. See WithTransport for details.
 func WithGitHubToken(token string) ClientOption {
 	defer perf.Track(nil, "http.WithGitHubToken")()
 
@@ -159,7 +162,7 @@ func GetGitHubTokenFromEnv(v ...*viper.Viper) string {
 	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
 
 	viperInst := viper.GetViper()
-	if len(v) > 0 {
+	if len(v) > 0 && v[0] != nil {
 		viperInst = v[0]
 	}
 

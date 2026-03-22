@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSetSeparated(t *testing.T) {
@@ -101,12 +102,13 @@ func TestSeparated_Concurrent(t *testing.T) {
 	}
 
 	// Mutating one copy must not affect others (defensive copy guarantee).
-	// Guard both index accesses: nil indicates a goroutine returned nil (shouldn't happen,
-	// but guards against a potential future panic if GetSeparated changes semantics).
-	if len(copies) >= 2 && copies[0] != nil && copies[1] != nil {
-		copies[0][0] = "mutated"
-		assert.Equal(t, "-var", copies[1][0], "defensive copies must be independent")
-	}
+	// Use require.NotNil so any future change that makes GetSeparated() return nil
+	// fails loudly here rather than silently skipping the independence assertion.
+	require.True(t, len(copies) >= 2, "expected at least 2 goroutine copies")
+	require.NotNil(t, copies[0], "goroutine 0 must return non-nil slice")
+	require.NotNil(t, copies[1], "goroutine 1 must return non-nil slice")
+	copies[0][0] = "mutated"
+	assert.Equal(t, "-var", copies[1][0], "defensive copies must be independent")
 
 	// Phase 2: Reset — run serially after all reads are complete.
 	ResetSeparated()

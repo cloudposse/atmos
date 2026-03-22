@@ -1493,6 +1493,7 @@ func TestStandardParser_SetPositionalArgs(t *testing.T) {
 			Name:        "component",
 			Description: "Component name",
 			Required:    true,
+			TargetField: "Component",
 		},
 	}
 	validator := cobra.ExactArgs(1)
@@ -1501,4 +1502,15 @@ func TestStandardParser_SetPositionalArgs(t *testing.T) {
 	assert.NotPanics(t, func() {
 		parser.SetPositionalArgs(specs, validator, "component")
 	})
+
+	// Verify that positional args are actually extracted during Parse.
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"vpc"})
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", opts.Component, "positional arg should be mapped to Component field")
 }

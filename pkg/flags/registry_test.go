@@ -320,7 +320,11 @@ func TestFlagRegistry_BindToViper(t *testing.T) {
 	err := registry.BindToViper(v)
 	require.NoError(t, err)
 
-	// Verify the binding actually works: viper reads ATMOS_STACK via the bound flag name.
+	// BindToViper calls viper.BindEnv (not AutomaticEnv) to map flag names to env vars.
+	// This is intentional: BindEnv binds a specific env var to a specific key without
+	// enabling global env-var lookup. If the implementation changes to rely on AutomaticEnv
+	// instead, this test would silently pass while production behavior breaks for keys
+	// that don't follow the ATMOS_ prefix convention.
 	t.Setenv("ATMOS_STACK", "test-stack")
 	got := v.GetString("stack")
 	assert.Equal(t, "test-stack", got, "viper should read ATMOS_STACK via bound flag name 'stack'")
