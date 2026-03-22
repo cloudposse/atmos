@@ -19,7 +19,7 @@ WARN GitHub repository is archived and no longer actively maintained.
      repository=cloudposse/terraform-null-label component=null-label
 ```
 
-The check is **best-effort and non-blocking**: if the GitHub API is unavailable (network error, rate limit, missing token), the check is skipped and a `DEBUG`-level message is logged—vendoring proceeds normally. Vendoring is never blocked by this check.
+The check is **best-effort and non-blocking**: if the GitHub API is unavailable (network error, rate limit, missing token), the check is skipped and a `TRACE`-level message is logged—vendoring proceeds normally. Vendoring is never blocked by this check.
 
 The warning applies to both vendor manifest sources (`vendor.yaml`) and component vendoring configs (`component.yaml`).
 

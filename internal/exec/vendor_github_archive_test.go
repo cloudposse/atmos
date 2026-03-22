@@ -12,13 +12,13 @@ import (
 )
 
 // captureLog redirects the default logger output to a buffer for the duration
-// of the test and restores it on cleanup.
-func captureLog(t *testing.T) *bytes.Buffer {
+// of the test, sets the given level, and restores the original state on cleanup.
+func captureLog(t *testing.T, level log.Level) *bytes.Buffer {
 	t.Helper()
 
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(level)
 
 	t.Cleanup(func() {
 		log.SetOutput(nil)
@@ -42,8 +42,9 @@ func TestWarnIfArchivedGitHubRepo(t *testing.T) {
 		uri           string
 		component     string
 		seedArchived  *bool // nil means no cache seed (real API call avoided via non-GitHub URI)
+		cancelCtx     bool  // pass a cancelled context to force an API error
 		wantWarn      bool
-		wantDebug     bool
+		wantTrace     bool // expect a trace-level "Skipping" message
 		wantComponent bool
 	}{
 		{
@@ -90,6 +91,13 @@ func TestWarnIfArchivedGitHubRepo(t *testing.T) {
 			}(),
 			wantWarn: false,
 		},
+		{
+			name:      "API error (cancelled context) — no warning, trace logged",
+			uri:       "github.com/cloudposse/error-repo",
+			cancelCtx: true,
+			wantWarn:  false,
+			wantTrace: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -106,9 +114,17 @@ func TestWarnIfArchivedGitHubRepo(t *testing.T) {
 				}
 			}
 
-			buf := captureLog(t)
+			// Capture at Trace level so both warnings and trace messages are visible.
+			buf := captureLog(t, log.TraceLevel)
 
-			warnIfArchivedGitHubRepo(context.Background(), tt.uri, tt.component)
+			ctx := context.Background()
+			if tt.cancelCtx {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel() // cancelled immediately to force API error
+			}
+
+			warnIfArchivedGitHubRepo(ctx, tt.uri, tt.component)
 
 			output := buf.String()
 
@@ -118,6 +134,10 @@ func TestWarnIfArchivedGitHubRepo(t *testing.T) {
 				assert.Contains(t, output, owner+"/"+repo, "expected repo name in log output")
 			} else {
 				assert.NotContains(t, output, "GitHub repository is archived", "did not expect archived warning")
+			}
+
+			if tt.wantTrace {
+				assert.Contains(t, output, "Skipping archived-repo check", "expected trace-level skip message")
 			}
 
 			if tt.wantComponent {
@@ -132,6 +152,7 @@ func TestWarnIfArchivedGitHubRepo(t *testing.T) {
 // and component.yaml both referencing the same repository).
 func TestWarnIfArchivedGitHubRepo_Deduplication(t *testing.T) {
 	resetWarnedRepos()
+	t.Cleanup(gh.ResetArchivedRepoCache)
 
 	const uri = "github.com/cloudposse/dedup-repo"
 	owner, repo, ok := gh.ParseGitHubOwnerRepo(uri)
@@ -139,7 +160,7 @@ func TestWarnIfArchivedGitHubRepo_Deduplication(t *testing.T) {
 
 	gh.SeedArchivedRepoCache(owner, repo, true)
 
-	buf := captureLog(t)
+	buf := captureLog(t, log.DebugLevel)
 
 	// Call twice (simulating vendor.yaml + component.yaml).
 	warnIfArchivedGitHubRepo(context.Background(), uri, "comp-a")
