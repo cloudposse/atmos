@@ -17,6 +17,9 @@ type InstancesUploadRequest struct {
 // InstanceStatusUploadRequest represents the data structure for uploading a single instance's status.
 type InstanceStatusUploadRequest struct {
 	AtmosProRunID string `json:"atmos_pro_run_id"`
+	AtmosVersion  string `json:"atmos_version"`
+	AtmosOS       string `json:"atmos_os"`
+	AtmosArch     string `json:"atmos_arch"`
 	GitSHA        string `json:"git_sha"`
 	RepoURL       string `json:"repo_url"`
 	RepoName      string `json:"repo_name"`
@@ -24,5 +27,6 @@ type InstanceStatusUploadRequest struct {
 	RepoHost      string `json:"repo_host"`
 	Component     string `json:"component"`
 	Stack         string `json:"stack"`
-	HasDrift      bool   `json:"has_drift"`
+	Command       string `json:"command"`
+	ExitCode      int    `json:"exit_code"`
 }
