@@ -4,18 +4,22 @@ import "time"
 
 // ArchivedCheckTimeoutForTest returns the current archived-check timeout for use in tests.
 //
-// NOTE: These helpers mutate package-level state and are not safe for use with t.Parallel().
-// Do not add t.Parallel() to tests that call SetArchivedCheckTimeoutForTest.
+// NOTE: These helpers manipulate package-level state via atomic operations and are safe
+// for concurrent access, but they mutate shared state — do not add t.Parallel() to tests
+// that call SetArchivedCheckTimeoutForTest, as parallel sub-tests with different timeout
+// values would interfere with each other.
 func ArchivedCheckTimeoutForTest() time.Duration {
-	return archivedCheckTimeout
+	return getArchivedCheckTimeout()
 }
 
 // SetArchivedCheckTimeoutForTest sets the archived-check timeout and returns a function
 // that resets it to the previous value. Intended for use with t.Cleanup.
 //
-// NOTE: Not goroutine-safe. Do not call from parallel sub-tests.
+// Thread-safe: uses atomic store internally, so it is safe to call concurrently
+// with IsRepoArchived. However, parallel sub-tests that each set a different value
+// will race on the shared timeout; only use in sequential sub-tests.
 func SetArchivedCheckTimeoutForTest(d time.Duration) func() {
-	prev := archivedCheckTimeout
-	archivedCheckTimeout = d
-	return func() { archivedCheckTimeout = prev }
+	prev := getArchivedCheckTimeout()
+	setArchivedCheckTimeout(d)
+	return func() { setArchivedCheckTimeout(prev) }
 }

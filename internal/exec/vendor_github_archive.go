@@ -45,10 +45,12 @@ func warnIfArchivedGitHubRepo(ctx context.Context, uri, component string) {
 	if _, loaded := warnedArchivedRepos.LoadOrStore(repoKey, struct{}{}); loaded {
 		// A warning was already emitted for this repo. Log at trace level so
 		// engineers can confirm the suppression without polluting normal output.
+		// Emit unconditionally; conditionally append the component key.
+		traceArgs := []any{"repository", repoKey}
 		if component != "" {
-			log.Trace("Archived-repo warning already emitted; skipping duplicate",
-				"repository", repoKey, "component", component)
+			traceArgs = append(traceArgs, "component", component)
 		}
+		log.Trace("Archived-repo warning already emitted; skipping duplicate", traceArgs...)
 		return
 	}
 

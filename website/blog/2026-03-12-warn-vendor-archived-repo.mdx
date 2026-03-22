@@ -19,7 +19,7 @@ WARN GitHub repository is archived and no longer actively maintained.
      repository=cloudposse/terraform-null-label component=null-label
 ```
 
-The check is **best-effort and non-blocking**: if the GitHub API is unavailable (network error, rate limit, missing token), the check is skipped and a `TRACE`-level message is logged—vendoring proceeds normally. Vendoring is never blocked by this check.
+The check is **best-effort**: if the GitHub API is unavailable (network error, rate limit, missing token), the check is skipped and a `TRACE`-level message is logged—vendoring proceeds normally. Each unique repository incurs at most one API call per run, bounded by the per-repo timeout (default 5s, configurable via `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT`). In environments with many unique repositories, the total latency is at most `timeout × number_of_unique_repos`.
 
 In air-gapped or offline environments, set `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT=0s` to skip the check entirely (no API call is made, no error is logged). To shorten the per-repo timeout, use a smaller value such as `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT=2s`.
 

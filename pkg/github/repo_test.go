@@ -372,11 +372,15 @@ func TestArchivedCheckTimeoutOverride(t *testing.T) {
 		require.NoError(t, err)
 		client.BaseURL = u
 
-		// Use an already-expired context to exercise the error-path in isRepoArchivedWithClient.
-		expiredCtx, cancel := context.WithTimeout(context.Background(), 0)
+		// Use a reliably cancelled context to exercise the error-path in isRepoArchivedWithClient.
+		// context.WithTimeout(ctx, 0) is racy — a zero duration creates a deadline of time.Now()
+		// which may not be past yet on fast hardware. context.WithCancel + immediate cancel()
+		// is always-expired before the first select.
+		cancelledCtx, cancel := context.WithCancel(context.Background())
+		cancel() // cancelled immediately — context.Err() == context.Canceled before first use
 		defer cancel()
 
-		_, err = isRepoArchivedWithClient(expiredCtx, client.Repositories, "org", "repo")
-		assert.Error(t, err, "expected error with already-expired context")
+		_, err = isRepoArchivedWithClient(cancelledCtx, client.Repositories, "org", "repo")
+		assert.Error(t, err, "expected error with already-cancelled context")
 	})
 }

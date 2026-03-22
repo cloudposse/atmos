@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	ghpkg "github.com/google/go-github/v59/github"
@@ -22,9 +23,21 @@ import (
 // (e.g. "0s" to skip the check in air-gapped environments, "10s" for slower networks).
 const defaultArchivedCheckTimeout = 5 * time.Second
 
-// archivedCheckTimeout is the resolved timeout, set at package init from the
-// ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT env var (or the default if unset/invalid).
-var archivedCheckTimeout = defaultArchivedCheckTimeout
+// archivedCheckTimeoutNs stores the resolved timeout in nanoseconds as an atomic int64.
+// Atomic access allows SetArchivedCheckTimeoutForTest to be called safely from test goroutines
+// concurrently with IsRepoArchived reading the value. Initialized from
+// ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT in init(); defaults to defaultArchivedCheckTimeout.
+var archivedCheckTimeoutNs = atomic.Int64{}
+
+// getArchivedCheckTimeout returns the current archived-check timeout.
+func getArchivedCheckTimeout() time.Duration {
+	return time.Duration(archivedCheckTimeoutNs.Load())
+}
+
+// setArchivedCheckTimeout sets the archived-check timeout.
+func setArchivedCheckTimeout(d time.Duration) {
+	archivedCheckTimeoutNs.Store(int64(d))
+}
 
 // archivedRepoCache caches (owner/repo → archived) results so that multiple vendor
 // sources pointing at the same repository only issue one API call per run.
@@ -41,6 +54,10 @@ var archivedRepoSFGroup singleflight.Group
 var scpGitHubURLPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.+-]+@)?([A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?://.*)?$`)
 
 func init() {
+	// Initialise with the default. The atomic is used instead of a plain var so that
+	// SetArchivedCheckTimeoutForTest can safely modify it concurrently with IsRepoArchived.
+	setArchivedCheckTimeout(defaultArchivedCheckTimeout)
+
 	if v := os.Getenv("ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
@@ -51,7 +68,7 @@ func init() {
 					" (expected a Go duration such as \"5s\" or \"0s\"); using default %s\n",
 				v, defaultArchivedCheckTimeout)
 		} else {
-			archivedCheckTimeout = d
+			setArchivedCheckTimeout(d)
 		}
 	}
 }
@@ -174,6 +191,8 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 //
 // When archivedCheckTimeout is zero or negative (e.g., ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT=0s),
 // the check is skipped entirely and false is returned so vendoring proceeds normally.
+// In a slow-network environment with many unique repositories the per-repo timeout
+// (default 5s) bounds each API call; the total delay is at most 5s × number_of_repos.
 //
 // It returns an error when the API call fails; callers that treat the check as
 // best-effort should silently ignore the error and continue rather than
@@ -181,14 +200,16 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 	defer perf.Track(nil, "github.IsRepoArchived")()
 
+	timeout := getArchivedCheckTimeout()
+
 	// Honour a zero or negative timeout as an explicit opt-out: skip the API call
 	// entirely so air-gapped environments never pay any latency for this check.
-	if archivedCheckTimeout <= 0 {
+	if timeout <= 0 {
 		return false, nil
 	}
 
 	// Use a short timeout so this best-effort check never hangs vendoring.
-	checkCtx, cancel := context.WithTimeout(ctx, archivedCheckTimeout)
+	checkCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	client := newGitHubClient(checkCtx)
@@ -198,6 +219,10 @@ func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 // SeedArchivedRepoCache pre-populates the archived-repo cache for the given owner/repo
 // pair. This is primarily intended for tests to exercise callers of IsRepoArchived
 // (e.g., warnIfArchivedGitHubRepo) without making real GitHub API calls.
+//
+// NOTE: This is a test utility. It is exported because it is needed from tests in
+// multiple packages (e.g., internal/exec), which Go's export_test.go mechanism cannot
+// satisfy across package boundaries. Do not rely on this function in production code.
 func SeedArchivedRepoCache(owner, repo string, archived bool) {
 	archivedRepoCache.Store(owner+"/"+repo, archived)
 }
@@ -205,6 +230,13 @@ func SeedArchivedRepoCache(owner, repo string, archived bool) {
 // ResetArchivedRepoCache clears the in-memory archived-repo cache and resets the
 // singleflight group. It is intended for use in tests to prevent cache entries from
 // one sub-test leaking into subsequent sub-tests.
+//
+// NOTE: This is a test utility — see SeedArchivedRepoCache for the rationale.
+//
+// CONCURRENCY: Must only be called when no concurrent IsRepoArchived or
+// isRepoArchivedWithClient calls are in progress. Resetting the singleflight group
+// while an in-flight call is running may cause the in-flight callback to write to
+// the old group after it has been replaced.
 func ResetArchivedRepoCache() {
 	archivedRepoCache.Range(func(k, _ any) bool {
 		archivedRepoCache.Delete(k)
