@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,22 +94,30 @@ func TestMergedLintConfig(t *testing.T) {
 		assert.Equal(t, "error", cfg.Rules["L-04"])
 	})
 
-	t.Run("uses maskKeyPatterns as defaults when SensitiveVarPatterns is empty", func(t *testing.T) {
+	t.Run("merges maskKeyPatterns with built-in defaults when SensitiveVarPatterns is empty", func(t *testing.T) {
 		t.Parallel()
 		maskPatterns := []string{"*api_key*", "*credentials*"}
 		cfg := mergedLintConfig(schema.LintStacksConfig{}, maskPatterns)
-		assert.Equal(t, maskPatterns, cfg.SensitiveVarPatterns)
-	})
-
-	t.Run("merges SensitiveVarPatterns with maskKeyPatterns when both are set", func(t *testing.T) {
-		t.Parallel()
-		lintPatterns := []string{"*token*"}
-		maskPatterns := []string{"*api_key*", "*credentials*"}
-		cfg := mergedLintConfig(schema.LintStacksConfig{SensitiveVarPatterns: lintPatterns}, maskPatterns)
-		// User lint patterns come first; mask patterns are appended.
-		assert.Contains(t, cfg.SensitiveVarPatterns, "*token*")
+		// maskKeyPatterns are merged with built-in defaults — not a replacement.
 		assert.Contains(t, cfg.SensitiveVarPatterns, "*api_key*")
 		assert.Contains(t, cfg.SensitiveVarPatterns, "*credentials*")
+		// Built-in defaults must still be present.
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*password*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*secret*")
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*token*")
+	})
+
+	t.Run("three-way merge: user patterns + mask patterns + built-in defaults", func(t *testing.T) {
+		t.Parallel()
+		lintPatterns := []string{"*custom*"}
+		maskPatterns := []string{"*api_key*", "*credentials*"}
+		cfg := mergedLintConfig(schema.LintStacksConfig{SensitiveVarPatterns: lintPatterns}, maskPatterns)
+		// All three sources must be present.
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*custom*")      // user lint patterns
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*api_key*")     // mask patterns
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*credentials*") // mask patterns
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*password*")    // built-in defaults
+		assert.Contains(t, cfg.SensitiveVarPatterns, "*secret*")      // built-in defaults
 	})
 }
 
@@ -119,13 +128,13 @@ func TestBuildImportGraph(t *testing.T) {
 
 	t.Run("nil raw configs produces empty graph", func(t *testing.T) {
 		t.Parallel()
-		graph := buildImportGraph(nil)
+		graph := buildImportGraph(nil, "")
 		assert.Empty(t, graph)
 	})
 
 	t.Run("empty raw configs produces empty graph", func(t *testing.T) {
 		t.Parallel()
-		graph := buildImportGraph(map[string]map[string]any{})
+		graph := buildImportGraph(map[string]map[string]any{}, "")
 		assert.Empty(t, graph)
 	})
 
@@ -136,7 +145,7 @@ func TestBuildImportGraph(t *testing.T) {
 				"vars": map[string]any{"env": "dev"},
 			},
 		}
-		graph := buildImportGraph(raw)
+		graph := buildImportGraph(raw, "")
 		assert.Empty(t, graph)
 	})
 
@@ -147,7 +156,7 @@ func TestBuildImportGraph(t *testing.T) {
 				"import": []string{"catalog/vpc", "catalog/ecs"},
 			},
 		}
-		graph := buildImportGraph(raw)
+		graph := buildImportGraph(raw, "")
 		assert.Equal(t, []string{"catalog/vpc", "catalog/ecs"}, graph["stacks/dev.yaml"])
 	})
 
@@ -158,7 +167,7 @@ func TestBuildImportGraph(t *testing.T) {
 				"import": []any{"catalog/vpc", "catalog/ecs"},
 			},
 		}
-		graph := buildImportGraph(raw)
+		graph := buildImportGraph(raw, "")
 		assert.Equal(t, []string{"catalog/vpc", "catalog/ecs"}, graph["stacks/dev.yaml"])
 	})
 
@@ -172,7 +181,7 @@ func TestBuildImportGraph(t *testing.T) {
 				},
 			},
 		}
-		graph := buildImportGraph(raw)
+		graph := buildImportGraph(raw, "")
 		assert.Equal(t, []string{"catalog/vpc", "catalog/rds"}, graph["stacks/dev.yaml"])
 	})
 
@@ -186,7 +195,7 @@ func TestBuildImportGraph(t *testing.T) {
 				},
 			},
 		}
-		graph := buildImportGraph(raw)
+		graph := buildImportGraph(raw, "")
 		// Only the entry with "path" is included.
 		assert.Equal(t, []string{"catalog/vpc"}, graph["stacks/dev.yaml"])
 	})
@@ -198,7 +207,7 @@ func TestBuildImportGraph(t *testing.T) {
 				"import": []string{},
 			},
 		}
-		graph := buildImportGraph(raw)
+		graph := buildImportGraph(raw, "")
 		assert.Empty(t, graph)
 	})
 
@@ -208,10 +217,64 @@ func TestBuildImportGraph(t *testing.T) {
 			"stacks/dev.yaml":  {"import": []string{"catalog/vpc"}},
 			"stacks/prod.yaml": {"import": []string{"catalog/vpc", "catalog/rds"}},
 		}
-		graph := buildImportGraph(raw)
+		graph := buildImportGraph(raw, "")
 		assert.Len(t, graph, 2)
 		assert.Contains(t, graph["stacks/dev.yaml"], "catalog/vpc")
 		assert.Contains(t, graph["stacks/prod.yaml"], "catalog/rds")
+	})
+
+	t.Run("glob import is expanded to matching YAML files", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		// Create catalog YAML files that a glob would match.
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "catalog"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "catalog", "vpc.yaml"), []byte("vars: {}"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "catalog", "rds.yaml"), []byte("vars: {}"), 0o600))
+
+		raw := map[string]map[string]any{
+			"stacks/dev.yaml": {
+				"import": []string{"catalog/*"},
+			},
+		}
+		graph := buildImportGraph(raw, dir)
+		imports := graph["stacks/dev.yaml"]
+		require.NotEmpty(t, imports, "glob import must expand to at least one file")
+		// Both catalog files must be present after expansion.
+		var found int
+		for _, p := range imports {
+			if strings.HasSuffix(filepath.ToSlash(p), "/catalog/vpc.yaml") ||
+				strings.HasSuffix(filepath.ToSlash(p), "/catalog/rds.yaml") {
+				found++
+			}
+		}
+		assert.Equal(t, 2, found, "both catalog YAML files must be in the expanded import list")
+	})
+
+	t.Run("glob with no matches falls back to literal pattern", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		// No files created — glob will match nothing.
+		raw := map[string]map[string]any{
+			"stacks/dev.yaml": {
+				"import": []string{"catalog/*"},
+			},
+		}
+		graph := buildImportGraph(raw, dir)
+		// Literal pattern is kept as a fallback.
+		assert.Equal(t, []string{"catalog/*"}, graph["stacks/dev.yaml"])
+	})
+
+	t.Run("empty basePath skips glob expansion", func(t *testing.T) {
+		t.Parallel()
+		raw := map[string]map[string]any{
+			"stacks/dev.yaml": {
+				"import": []string{"catalog/*"},
+			},
+		}
+		graph := buildImportGraph(raw, "")
+		// No expansion — literal passed through.
+		assert.Equal(t, []string{"catalog/*"}, graph["stacks/dev.yaml"])
 	})
 }
 

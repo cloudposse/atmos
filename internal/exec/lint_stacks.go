@@ -112,7 +112,7 @@ func LintStacks(
 	}
 
 	// Build import graph from raw stack configs.
-	importGraph := buildImportGraph(rawStackConfigs)
+	importGraph := buildImportGraph(rawStackConfigs, atmosConfig.StacksBaseAbsolutePath)
 
 	// Find all YAML files under the stacks base path for orphan detection (L-07).
 	// Use the existing utility and convert relative paths back to absolute,
@@ -142,7 +142,12 @@ func LintStacks(
 }
 
 // buildImportGraph constructs a file → []importedFiles map from raw stack configs.
-func buildImportGraph(rawStackConfigs map[string]map[string]any) map[string][]string {
+// basePath is the absolute stacks base path used to expand glob import patterns.
+// Glob patterns (e.g. "catalog/**/*") are expanded to the matching YAML files so
+// that L-03 (import depth) and L-07 (orphan detection) produce accurate results.
+// If basePath is empty or a glob cannot be expanded, the literal pattern string is
+// retained as a best-effort fallback so callers still see partial import data.
+func buildImportGraph(rawStackConfigs map[string]map[string]any, basePath string) map[string][]string {
 	graph := make(map[string][]string)
 	for filePath, rawConfig := range rawStackConfigs {
 		rawImports, ok := rawConfig[cfg.ImportSectionName]
@@ -166,10 +171,47 @@ func buildImportGraph(rawStackConfigs map[string]map[string]any) map[string][]st
 			}
 		}
 		if len(imports) > 0 {
-			graph[filePath] = imports
+			graph[filePath] = expandGlobImports(imports, basePath)
 		}
 	}
 	return graph
+}
+
+// expandGlobImports replaces glob import patterns with the matching YAML file paths.
+// Non-glob strings are passed through unchanged. If basePath is empty or a glob
+// yields no matches, the original pattern is kept so callers retain partial data.
+func expandGlobImports(imports []string, basePath string) []string {
+	if basePath == "" {
+		return imports
+	}
+	result := make([]string, 0, len(imports))
+	for _, imp := range imports {
+		if !strings.ContainsAny(imp, "*?[") {
+			// Not a glob — pass through unchanged.
+			result = append(result, imp)
+			continue
+		}
+		// Try both .yaml and .yml suffixes, and also the raw pattern if it already
+		// has an extension.
+		patterns := []string{
+			filepath.Join(basePath, imp+".yaml"),
+			filepath.Join(basePath, imp+".yml"),
+			filepath.Join(basePath, imp),
+		}
+		var matched []string
+		for _, pattern := range patterns {
+			if hits, err := filepath.Glob(pattern); err == nil {
+				matched = append(matched, hits...)
+			}
+		}
+		if len(matched) == 0 {
+			// No expansion — keep the literal so callers see the original intent.
+			result = append(result, imp)
+		} else {
+			result = append(result, matched...)
+		}
+	}
+	return result
 }
 
 // stackYAMLFiles returns all non-template YAML files under root as absolute paths,
@@ -204,40 +246,34 @@ func mergedLintConfig(cfg schema.LintStacksConfig, maskKeyPatterns []string) sch
 		cfg.DRYThresholdPct = 80
 	}
 
-	// Build the effective sensitive var patterns by merging user-configured patterns
-	// with defaults. This ensures common sensitive names are always covered even when
-	// users add custom patterns. The single source of truth for base patterns is
-	// settings.terminal.mask.sensitive_key_patterns when set, with built-in defaults
-	// as the final fallback.
+	// Build the effective sensitive var patterns using a three-way merge:
+	//   1. User-configured lint.stacks.sensitive_var_patterns (highest priority)
+	//   2. settings.terminal.mask.sensitive_key_patterns (mask-config patterns)
+	//   3. Built-in defaults (always present as a safety net)
+	//
+	// maskKeyPatterns AUGMENTS the built-in defaults rather than replacing them.
+	// This ensures that a user who sets mask patterns does not inadvertently lose
+	// the built-in safety net for well-known sensitive names.
 	defaults := []string{
 		"*password*", "*secret*", "*token*", "*key*",
 		"*arn*", "*account_id*", "*role*",
 	}
-	basePatterns := defaults
-	if len(maskKeyPatterns) > 0 {
-		basePatterns = maskKeyPatterns
-	}
-	if len(cfg.SensitiveVarPatterns) > 0 {
-		// Merge user-specified patterns with base patterns, deduplicating.
-		// The capacity hint is the upper bound; actual size may be smaller after deduplication.
-		seen := make(map[string]bool, len(cfg.SensitiveVarPatterns)+len(basePatterns))
-		merged := make([]string, 0, len(cfg.SensitiveVarPatterns)+len(basePatterns))
-		for _, p := range cfg.SensitiveVarPatterns {
-			if !seen[p] {
-				merged = append(merged, p)
-				seen[p] = true
+	// mergePatterns deduplicates slices in order, appending unique items from each source.
+	mergePatterns := func(sources ...[]string) []string {
+		seen := make(map[string]bool)
+		var result []string
+		for _, src := range sources {
+			for _, p := range src {
+				if !seen[p] {
+					result = append(result, p)
+					seen[p] = true
+				}
 			}
 		}
-		for _, p := range basePatterns {
-			if !seen[p] {
-				merged = append(merged, p)
-				seen[p] = true
-			}
-		}
-		cfg.SensitiveVarPatterns = merged
-	} else {
-		cfg.SensitiveVarPatterns = basePatterns
+		return result
 	}
+	// Three-way merge: user patterns → mask patterns → built-in defaults.
+	cfg.SensitiveVarPatterns = mergePatterns(cfg.SensitiveVarPatterns, maskKeyPatterns, defaults)
 
 	// Build effective rules by starting with defaults and applying user overrides on top,
 	// so that rules not specified by the user still have their default severity.

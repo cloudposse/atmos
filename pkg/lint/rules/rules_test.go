@@ -194,6 +194,39 @@ func TestL04AbstractLeak(t *testing.T) {
 	}
 }
 
+// TestL04CatalogDeploySplit verifies that L-04 does not flag abstract components
+// when their concrete inheritors live in a different stack (catalog/deploy pattern).
+// Before the cross-stack fix, L-04 evaluated per-stack and always flagged abstract
+// components in catalog files — making the rule permanently red in standard Atmos repos.
+func TestL04CatalogDeploySplit(t *testing.T) {
+	t.Parallel()
+
+	l04 := findRuleByID(t, "L-04")
+
+	// Catalog stack: defines the abstract base component.
+	// Deploy stack: defines the concrete component that inherits from the catalog base.
+	// The two stacks are separate entries in StacksMap (simulating catalog/ vs deploy/ files).
+	stacksMap := map[string]any{
+		"catalog/network": componentsMap("terraform", map[string]any{
+			"vpc": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+			},
+		}),
+		"deploy/prod": componentsMap("terraform", map[string]any{
+			"vpc-prod": map[string]any{
+				"metadata": map[string]any{
+					"inherits": []any{"vpc"},
+				},
+			},
+		}),
+	}
+
+	ctx := makeContext(stacksMap)
+	findings, err := l04.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "abstract component with concrete inheritor in a different stack must not be flagged")
+}
+
 func TestL02RedundantOverride(t *testing.T) {
 	t.Parallel()
 
@@ -354,6 +387,43 @@ func TestL01DeadVar(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestL01DeadVarCrossStack verifies that L-01 uses a cross-stack check.
+// A global var in one stack must not be flagged as dead if any component in any
+// other stack uses that var key — simulating how Atmos deep-merge works in practice
+// (global vars in a catalog/base stack flow to components in deploy stacks).
+func TestL01DeadVarCrossStack(t *testing.T) {
+	t.Parallel()
+
+	l01 := findRuleByID(t, "L-01")
+
+	// Stack A defines a global var "region".
+	// Stack B has a component that explicitly includes "region" in its vars
+	// (as the merged StacksMap would after deep-merge delivers the global var).
+	stacksMap := map[string]any{
+		"catalog/globals": map[string]any{
+			"vars": map[string]any{
+				"region": "us-east-1",
+			},
+		},
+		"deploy/prod": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{
+							"region": "us-east-1", // present in merged component vars
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx := makeContext(stacksMap)
+	findings, err := l01.Run(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, findings, "global var consumed in a different stack must not be flagged")
 }
 
 func TestL03ImportDepth(t *testing.T) {
