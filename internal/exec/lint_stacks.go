@@ -191,18 +191,30 @@ func expandGlobImports(imports []string, basePath string) []string {
 			result = append(result, imp)
 			continue
 		}
-		// Try both .yaml and .yml suffixes, and also the raw pattern if it already
-		// has an extension.
-		patterns := []string{
-			filepath.Join(basePath, imp+".yaml"),
-			filepath.Join(basePath, imp+".yml"),
-			filepath.Join(basePath, imp),
+		// Build the set of glob patterns to try. If the import already ends with
+		// ".yaml" or ".yml" (e.g. "catalog/*.yaml"), only match as-is. Otherwise
+		// try both extensions and the bare pattern so that extension-less imports
+		// like "catalog/**/*" are also expanded correctly.
+		var patterns []string
+		ext := strings.ToLower(filepath.Ext(imp))
+		if ext == ".yaml" || ext == ".yml" {
+			patterns = []string{filepath.Join(basePath, imp)}
+		} else {
+			patterns = []string{
+				filepath.Join(basePath, imp+".yaml"),
+				filepath.Join(basePath, imp+".yml"),
+				filepath.Join(basePath, imp),
+			}
 		}
 		var matched []string
 		for _, pattern := range patterns {
-			if hits, err := filepath.Glob(pattern); err == nil {
-				matched = append(matched, hits...)
+			hits, err := filepath.Glob(pattern)
+			if err != nil {
+				// Malformed pattern (e.g. unclosed bracket) — log and skip.
+				log.Debug("Skipping malformed glob import pattern", "pattern", pattern, "error", err)
+				continue
 			}
+			matched = append(matched, hits...)
 		}
 		if len(matched) == 0 {
 			// No expansion — keep the literal so callers see the original intent.

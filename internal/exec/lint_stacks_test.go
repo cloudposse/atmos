@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -243,8 +242,8 @@ func TestBuildImportGraph(t *testing.T) {
 		// Both catalog files must be present after expansion.
 		var found int
 		for _, p := range imports {
-			if strings.HasSuffix(filepath.ToSlash(p), "/catalog/vpc.yaml") ||
-				strings.HasSuffix(filepath.ToSlash(p), "/catalog/rds.yaml") {
+			base := filepath.Base(p)
+			if base == "vpc.yaml" || base == "rds.yaml" {
 				found++
 			}
 		}
