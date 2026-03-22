@@ -3,6 +3,21 @@ package provider
 
 import "context"
 
+// BaseResolution contains the resolved base commit for affected detection.
+type BaseResolution struct {
+	// Ref is a git reference (branch/tag). Mutually exclusive with SHA.
+	Ref string
+
+	// SHA is a git commit hash. Mutually exclusive with Ref.
+	SHA string
+
+	// Source describes where the base was resolved from (for logging).
+	Source string
+
+	// EventType describes the CI event (e.g., "pull_request", "push").
+	EventType string
+}
+
 // Provider represents a CI/CD provider (GitHub Actions, GitLab CI, etc.).
 type Provider interface {
 	// Name returns the provider name (e.g., "github-actions", "generic").
@@ -25,6 +40,10 @@ type Provider interface {
 
 	// OutputWriter returns a writer for CI outputs ($GITHUB_OUTPUT, etc.).
 	OutputWriter() OutputWriter
+
+	// ResolveBase returns the base commit for affected detection.
+	// Returns nil if the provider cannot determine the base.
+	ResolveBase() (*BaseResolution, error)
 }
 
 // OutputWriter writes CI outputs (environment variables, job summaries, etc.).
