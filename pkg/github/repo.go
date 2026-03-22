@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"regexp"
@@ -35,14 +36,21 @@ var archivedRepoSFGroup singleflight.Group
 
 // scpGitHubURLPattern matches SCP-style GitHub URLs (e.g., git@github.com:owner/repo.git).
 // Capture groups: (1) host, (2) owner, (3) repo.
-// Character class [A-Za-z0-9_.-] is used instead of \w to restrict to ASCII word characters,
-// since GitHub owner/repo names are restricted to [A-Za-z0-9_.-]. The '-' is placed at the
-// end of each character class as a standard practice for readability.
+// In each character class the '-' is placed last (immediately before ']') so that it is
+// always treated as a literal hyphen, not as a range operator.
 var scpGitHubURLPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.+-]+@)?([A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?://.*)?$`)
 
 func init() {
 	if v := os.Getenv("ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			// Warn using fmt so the message is visible even before the logger is
+			// initialized, and to avoid an import cycle with pkg/logger.
+			_, _ = fmt.Fprintf(os.Stderr,
+				"atmos: WARN invalid ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT %q"+
+					" (expected a Go duration such as \"5s\" or \"0s\"); using default %s\n",
+				v, defaultArchivedCheckTimeout)
+		} else {
 			archivedCheckTimeout = d
 		}
 	}
@@ -82,7 +90,9 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 		}
 		parts := strings.SplitN(strings.Trim(remainder, "/"), "/", 3)
 		if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
-			return parts[0], parts[1], true
+			// Strip .git suffix from the repository name, as the github:// scheme
+			// does not automatically strip it (unlike the HTTPS/SCP paths).
+			return parts[0], strings.TrimSuffix(parts[1], ".git"), true
 		}
 		return "", "", false
 	}
@@ -162,11 +172,20 @@ func ParseGitHubOwnerRepo(uri string) (owner, repo string, ok bool) {
 // vendoring in air-gapped or slow-network environments. Results are cached for the
 // duration of the process so repeated calls for the same repository are free.
 //
+// When archivedCheckTimeout is zero or negative (e.g., ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT=0s),
+// the check is skipped entirely and false is returned so vendoring proceeds normally.
+//
 // It returns an error when the API call fails; callers that treat the check as
 // best-effort should silently ignore the error and continue rather than
 // blocking the operation.
 func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 	defer perf.Track(nil, "github.IsRepoArchived")()
+
+	// Honour a zero or negative timeout as an explicit opt-out: skip the API call
+	// entirely so air-gapped environments never pay any latency for this check.
+	if archivedCheckTimeout <= 0 {
+		return false, nil
+	}
 
 	// Use a short timeout so this best-effort check never hangs vendoring.
 	checkCtx, cancel := context.WithTimeout(ctx, archivedCheckTimeout)

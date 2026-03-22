@@ -3,7 +3,6 @@ package exec
 import (
 	"bytes"
 	"context"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,13 +18,13 @@ func captureLog(t *testing.T, level log.Level) *bytes.Buffer {
 	t.Helper()
 
 	origLevel := log.GetLevel()
+	origWriter := log.GetOutput()
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 	log.SetLevel(level)
 
 	t.Cleanup(func() {
-		// Restore the writer to the default (os.Stderr) and the original level.
-		log.SetOutput(os.Stderr)
+		log.SetOutput(origWriter)
 		log.SetLevel(origLevel)
 	})
 

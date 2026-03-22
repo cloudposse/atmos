@@ -11,7 +11,9 @@ import (
 
 // warnedArchivedRepos tracks repositories for which an archived warning has already
 // been emitted during the current run. This prevents duplicate warnings when the same
-// repo is referenced by both vendor.yaml sources and component.yaml definitions.
+// owner/repo pair is referenced by both vendor.yaml sources and component.yaml definitions.
+// The deduplication key is "owner/repo" (not the full URI), so different URI formats
+// pointing to the same repository (e.g., https:// vs github://) are correctly deduplicated.
 var warnedArchivedRepos sync.Map
 
 // warnIfArchivedGitHubRepo checks whether the given URI references an archived GitHub

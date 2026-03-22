@@ -3,6 +3,8 @@ package logger
 import (
 	"io"
 	"math"
+	"os"
+	"sync"
 
 	charm "github.com/charmbracelet/log"
 	"github.com/muesli/termenv"
@@ -10,15 +12,20 @@ import (
 
 // AtmosLogger wraps the Charm Bracelet logger to provide a consistent interface for Atmos while maintaining full compatibility.
 type AtmosLogger struct {
-	charm *charm.Logger
+	charm  *charm.Logger
+	mu     sync.RWMutex
+	writer io.Writer // tracks the current output writer for GetOutput
 }
 
 // NewAtmosLogger creates a new AtmosLogger instance wrapping the given charm logger.
+// The internal writer field is initialised to os.Stderr, which is the default output
+// for charm.Default(). If charmLogger already has a non-default output set, callers
+// must call SetOutput after construction to keep the tracked writer in sync.
 func NewAtmosLogger(charmLogger *charm.Logger) *AtmosLogger {
 	if charmLogger == nil {
 		charmLogger = charm.Default()
 	}
-	return &AtmosLogger{charm: charmLogger}
+	return &AtmosLogger{charm: charmLogger, writer: os.Stderr}
 }
 
 // Trace logs a trace message.
@@ -103,7 +110,17 @@ func (l *AtmosLogger) GetLevel() Level {
 
 // SetOutput sets the output writer.
 func (l *AtmosLogger) SetOutput(w io.Writer) {
+	l.mu.Lock()
+	l.writer = w
+	l.mu.Unlock()
 	l.charm.SetOutput(w)
+}
+
+// GetOutput returns the current output writer.
+func (l *AtmosLogger) GetOutput() io.Writer {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.writer
 }
 
 // SetStyles sets the log styles.

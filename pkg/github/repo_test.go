@@ -181,6 +181,21 @@ func TestParseGitHubOwnerRepo(t *testing.T) {
 			wantRepo:  "terraform-null-label",
 			wantOK:    true,
 		},
+		// github:// with .git suffix — must strip .git to avoid 404.
+		{
+			name:      "github:// scheme with .git suffix",
+			uri:       "github://cloudposse/terraform-null-label.git",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "github:// scheme with .git suffix and subdir",
+			uri:       "github://cloudposse/repo.git/modules/vpc@v1.0.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
 
 		// github:// scheme with fragment — must strip #fragment.
 		{
@@ -310,8 +325,8 @@ func TestIsRepoArchived(t *testing.T) {
 
 // TestArchivedCheckTimeoutOverride verifies that the archivedCheckTimeout can be
 // overridden at runtime (simulating the ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT env var
-// read during init) and that a zero timeout causes the API call to be cancelled
-// before completing (IsRepoArchived returns an error rather than blocking).
+// read during init) and that a zero/negative timeout causes IsRepoArchived to skip
+// the API call entirely (opt-out semantics) rather than blocking.
 func TestArchivedCheckTimeoutOverride(t *testing.T) {
 	t.Run("default timeout is 5s", func(t *testing.T) {
 		reset := SetArchivedCheckTimeoutForTest(defaultArchivedCheckTimeout)
@@ -319,14 +334,33 @@ func TestArchivedCheckTimeoutOverride(t *testing.T) {
 		assert.Equal(t, 5*time.Second, ArchivedCheckTimeoutForTest())
 	})
 
-	t.Run("zero timeout cancels API call immediately", func(t *testing.T) {
+	t.Run("zero timeout skips API call via IsRepoArchived public API", func(t *testing.T) {
 		t.Cleanup(ResetArchivedRepoCache)
 		reset := SetArchivedCheckTimeoutForTest(0)
 		t.Cleanup(reset)
 
-		// A dummy server that blocks the response to prove the test doesn't hang.
-		// We pass a zero-timeout context directly to isRepoArchivedWithClient so the
-		// call should fail before ever reaching the server.
+		// Call the public API with zero timeout. IsRepoArchived must return (false, nil)
+		// without making any network call — zero timeout is the opt-out sentinel.
+		// (If it tried to hit api.github.com, this test would be flaky in CI.)
+		archived, err := IsRepoArchived(context.Background(), "org", "repo-zero-timeout")
+		assert.NoError(t, err, "zero timeout must not return an error")
+		assert.False(t, archived, "zero timeout must return false (skipped)")
+	})
+
+	t.Run("negative timeout also skips API call", func(t *testing.T) {
+		t.Cleanup(ResetArchivedRepoCache)
+		reset := SetArchivedCheckTimeoutForTest(-1 * time.Second)
+		t.Cleanup(reset)
+
+		archived, err := IsRepoArchived(context.Background(), "org", "repo-negative-timeout")
+		assert.NoError(t, err, "negative timeout must not return an error")
+		assert.False(t, archived, "negative timeout must return false (skipped)")
+	})
+
+	t.Run("expired context causes API error via isRepoArchivedWithClient", func(t *testing.T) {
+		t.Cleanup(ResetArchivedRepoCache)
+
+		// A fast server that would respond if reached — we never should reach it.
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"archived": false}`))
@@ -338,8 +372,7 @@ func TestArchivedCheckTimeoutOverride(t *testing.T) {
 		require.NoError(t, err)
 		client.BaseURL = u
 
-		// Use an already-expired context (0 timeout) to simulate the effect of
-		// IsRepoArchived applying archivedCheckTimeout=0 to the parent context.
+		// Use an already-expired context to exercise the error-path in isRepoArchivedWithClient.
 		expiredCtx, cancel := context.WithTimeout(context.Background(), 0)
 		defer cancel()
 
