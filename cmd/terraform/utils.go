@@ -294,6 +294,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.Components = opts.Components
 	info.DryRun = opts.DryRun
 	info.SkipInit = opts.SkipInit
+	info.UploadStatus = opts.UploadStatus
 	info.All = opts.All
 	info.Affected = opts.Affected
 	info.Query = opts.Query
