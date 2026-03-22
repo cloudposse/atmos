@@ -1,38 +1,19 @@
 package exec
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
-	osexec "os/exec"
-	"path/filepath"
-	"strings"
-	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
-	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/pro"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/xdg"
 
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
-	// Import source provisioner for JIT source provisioning.
-	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
-	// Import workdir provisioner to register workdir provisioner.
-	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
-	// Import generate package for early file generation.
-	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
-
-	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
 const (
@@ -40,6 +21,11 @@ const (
 	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
 	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
 	beforeTerraformInitEvent = "before.terraform.init"
+
+	subcommandApply     = "apply"
+	subcommandDeploy    = "deploy"
+	subcommandInit      = "init"
+	subcommandWorkspace = "workspace"
 
 	autoApproveFlag           = "-auto-approve"
 	outFlag                   = "-out"
@@ -49,6 +35,7 @@ const (
 	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
+	dirPermissions            = 0o755
 )
 
 // resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
@@ -69,7 +56,14 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
-	log.Debug("ExecuteTerraform entry", "SubCommand", info.SubCommand, "ComponentFromArg", info.ComponentFromArg, "FinalComponent", info.FinalComponent, "Stack", info.Stack, "StackFromArg", info.StackFromArg)
+	log.Debug("ExecuteTerraform entry",
+		"SubCommand", info.SubCommand,
+		"ComponentFromArg", info.ComponentFromArg,
+		"FinalComponent", info.FinalComponent,
+		"Stack", info.Stack,
+		"StackFromArg", info.StackFromArg,
+	)
+
 	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -81,364 +75,38 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		return nil
 	}
 
-	// Add the `command` from `components.terraform.command` from `atmos.yaml`.
-	if info.Command == "" {
-		if atmosConfig.Components.Terraform.Command != "" {
-			info.Command = atmosConfig.Components.Terraform.Command
-		} else {
-			info.Command = cfg.TerraformComponentType
-		}
-	}
+	// Resolve the terraform executable (e.g. "terraform", "tofu", or a custom path).
+	resolveTerraformCommand(&atmosConfig, &info)
 
+	// Short-circuit for `terraform version` – no stack processing required.
 	if info.SubCommand == "version" {
-		tenv, err := dependencies.ForComponent(&atmosConfig, "terraform", nil, nil)
-		if err != nil {
-			return err
-		}
-		return ExecuteShellCommand(
-			atmosConfig,
-			tenv.Resolve(info.Command),
-			[]string{info.SubCommand},
-			"",
-			tenv.EnvVars(),
-			false,
-			info.RedirectStdErr)
+		return handleVersionSubcommand(&atmosConfig, &info)
 	}
 
-	// Get component-specific auth config and merge with global auth config.
-	// This allows components to define their own auth identities and defaults in stack configurations.
-	// Start with global config.
-	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
-
-	// If stack and component are specified, get component config and merge auth section.
-	log.Debug("Checking if should call ExecuteDescribeComponent", "Stack", info.Stack, "ComponentFromArg", info.ComponentFromArg, "SubCommand", info.SubCommand)
-	if info.Stack != "" && info.ComponentFromArg != "" {
-		// Get component configuration from stack.
-		// Use nil AuthManager and disable functions to avoid circular dependency.
-		componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
-			Component:            info.ComponentFromArg,
-			Stack:                info.Stack,
-			ProcessTemplates:     false,
-			ProcessYamlFunctions: false, // Critical: avoid circular dependency with YAML functions that need auth.
-			Skip:                 nil,
-			AuthManager:          nil, // Critical: no AuthManager yet, we're determining which identity to use.
-		})
-		if err != nil {
-			// If component doesn't exist, exit immediately before attempting authentication.
-			// This prevents prompting for identity when the component is invalid.
-			if errors.Is(err, errUtils.ErrInvalidComponent) {
-				return err
-			}
-			// For other errors (e.g., permission issues), continue with global auth config.
-		} else {
-			// Merge component-specific auth with global auth.
-			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	// Create and authenticate AuthManager from --identity flag if specified.
-	// Uses merged auth config that includes both global and component-specific identities/defaults.
-	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	// Use WithAtmosConfig variant to enable stack-level default identity loading.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, &atmosConfig)
+	// Set up authentication (merge global + component auth, create AuthManager, inject bridge).
+	authManager, err := setupTerraformAuth(&atmosConfig, &info)
 	if err != nil {
-		// Special case: If user aborted (Ctrl+C), exit immediately without showing error.
-		if errors.Is(err, errUtils.ErrUserAborted) {
-			errUtils.Exit(errUtils.ExitCodeSIGINT)
-		}
 		return err
 	}
 
-	// If AuthManager was created and identity was auto-detected (info.Identity was empty),
-	// store the authenticated identity back into info.Identity so that hooks can access it.
-	// This prevents TerraformPreHook from prompting for identity selection again.
-	if authManager != nil && info.Identity == "" {
-		chain := authManager.GetChain()
-		if len(chain) > 0 {
-			// The last element in the chain is the authenticated identity.
-			authenticatedIdentity := chain[len(chain)-1]
-			info.Identity = authenticatedIdentity
-			log.Debug("Stored authenticated identity for hooks", "identity", authenticatedIdentity)
-		}
-	}
-
-	// Store AuthManager in configAndStacksInfo for nested operations.
-	// This enables nested YAML functions (e.g., !terraform.state within component configs)
-	// to access the same authenticated session without re-prompting for credentials.
-	info.AuthManager = authManager
-
-	// Inject auth resolver into identity-aware stores so they can lazily resolve credentials
-	// on first access. This bridges the store system with the auth system.
-	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, &info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
-	}
-
-	// Determine whether to process stacks and check stack configuration.
+	// Process and validate stack configuration.
 	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
-
 	if shouldProcess {
 		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
 		if err != nil {
 			return err
 		}
 	}
-
-	// Only enforce stack requirement if shouldCheckStack is true.
 	if shouldCheckStack && len(info.Stack) < 1 {
 		return errUtils.ErrMissingStack
 	}
-
 	if !info.ComponentIsEnabled {
 		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
 		return nil
 	}
 
-	err = checkTerraformConfig(atmosConfig)
-	if err != nil {
-		return err
-	}
-
-	// Get component path early - needed for both auto-generation and path validation.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
-	if err != nil {
-		return fmt.Errorf("failed to resolve component path: %w", err)
-	}
-
-	// Auto-generate files BEFORE path validation when the following conditions hold.
-	// 1. auto_generate_files is enabled.
-	// 2. Component has a generate section.
-	// 3. Not in dry-run mode (to avoid filesystem modifications).
-	// This allows generating entire components from stack configuration.
-	if atmosConfig.Components.Terraform.AutoGenerateFiles && !info.DryRun { //nolint:nestif
-		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
-		if generateSection != nil {
-			// Ensure component directory exists for file generation.
-			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
-				return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
-			}
-
-			// Generate files before path validation.
-			if genErr := GenerateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
-				return errors.Join(errUtils.ErrFileOperation, genErr)
-			}
-		}
-	}
-
-	// Check if the component (or base component) exists as a Terraform component.
-	componentPathExists, err := u.IsDirectory(componentPath)
-
-	// JIT source provisioning: run FIRST if source is configured (regardless of local existence).
-	// When source + workdir are both enabled, source takes precedence and vendors to workdir path.
-	// This ensures that even if a local component exists (e.g., from vendor.yaml), the source
-	// provisioner will vendor to workdir with the version specified in stack config.
-	if provSource.HasSource(info.ComponentSection) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
-			return fmt.Errorf("failed to auto-provision component source: %w", err)
-		}
-
-		// Check if source provisioner set a workdir path (source + workdir case).
-		// If so, use that path instead of the component path.
-		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
-			componentPath = workdirPath
-			componentPathExists = true
-			err = nil // Clear any previous error since we have a valid workdir path.
-		} else {
-			// Re-check if component path now exists after provisioning (source only case).
-			componentPathExists, err = u.IsDirectory(componentPath)
-		}
-	}
-
-	// If component path still doesn't exist, return the error.
-	if err != nil || !componentPathExists {
-		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, cfg.TerraformComponentType)
-		return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
-			errUtils.ErrInvalidTerraformComponent,
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
-	}
-
-	// Check if the component is allowed to be provisioned (the `metadata.type` attribute is not set to `abstract`).
-	if (info.SubCommand == "plan" || info.SubCommand == "apply" || info.SubCommand == "deploy" || info.SubCommand == "workspace") && info.ComponentIsAbstract {
-		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
-			errUtils.ErrAbstractComponentCantBeProvisioned,
-			filepath.Join(info.ComponentFolderPrefix,
-				info.Component,
-			))
-	}
-
-	// Check if the component is locked (`metadata.locked` is set to true).
-	if info.ComponentIsLocked {
-		// Allow read-only commands, block modification commands
-		switch info.SubCommand {
-		case "apply", "deploy", "destroy", "import", "state", "taint", "untaint":
-			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
-				errUtils.ErrLockedComponentCantBeProvisioned,
-				filepath.Join(info.ComponentFolderPrefix, info.Component),
-			)
-		}
-	}
-
-	// Check if trying to use `workspace` commands with HTTP backend.
-	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
-		return errUtils.ErrHTTPBackendWorkspaces
-	}
-
-	// Resolve and install component dependencies.
-	// tenv is declared outside the block so its EnvVars() can be appended
-	// after all other env assembly, ensuring toolchain PATH takes precedence.
-	var tenv *dependencies.ToolchainEnvironment
-	if shouldProcess {
-		tenv, err = resolveAndInstallToolchainDeps(&atmosConfig, &info)
-		if err != nil {
-			return err
-		}
-		info.Command = tenv.Resolve(info.Command)
-	}
-
-	varFile := constructTerraformComponentVarfileName(&info)
-	planFile := constructTerraformComponentPlanfileName(&info)
-
-	// Print component variables and write to file
-	// Don't process variables when executing `terraform workspace` commands.
-	if info.SubCommand != "workspace" {
-		log.Debug("Variables for the component in the stack", logFieldComponent, info.ComponentFromArg, "stack", info.Stack)
-		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-			err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, info.ComponentVarsSection)
-			if err != nil {
-				return err
-			}
-		}
-
-		// Write variables to a file (only if we are not using the previously generated terraform plan)
-		if !info.UseTerraformPlan {
-			varFilePath := constructTerraformComponentVarfilePath(&atmosConfig, &info)
-
-			log.Debug("Writing the variables", "file", varFilePath)
-
-			if !info.DryRun {
-				err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
-				if err != nil {
-					return err
-				}
-			}
-		}
-
-		/*
-		   Variables provided on the command line
-		   https://developer.hashicorp.com/terraform/language/values/variables#variables-on-the-command-line
-		   Terraform processes variables in the following order of precedence (from highest to lowest):
-		     - Explicit -var flags: these have the highest priority and will override any other variable values, including those in --var-file
-		     - Variables in --var-file: values in a variable file specified with --var-file override default values set in the Terraform configuration
-		     - Environment variables: variables set as environment variables using the TF_VAR_ prefix
-		     - Default values in the configuration file: these have the lowest priority
-		*/
-		if cliVars, ok := info.ComponentSection[cfg.TerraformCliVarsSectionName].(map[string]any); ok && len(cliVars) > 0 {
-			log.Debug("CLI variables (will override the variables defined in the stack manifests):")
-			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-				err = u.PrintAsYAMLToFileDescriptor(&atmosConfig, cliVars)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	// Check if the component 'settings.validation' section is specified and validate the component
-	valid, err := ValidateComponent(
-		&atmosConfig,
-		info.ComponentFromArg,
-		info.ComponentSection,
-		"",
-		"",
-		nil,
-		0,
-	)
-	if err != nil {
-		return err
-	}
-	if !valid {
-		return fmt.Errorf("%w: the component '%s' did not pass the validation policies",
-			errUtils.ErrInvalidComponent,
-			info.ComponentFromArg,
-		)
-	}
-
-	err = auth.TerraformPreHook(&atmosConfig, &info)
-	if err != nil {
-		log.Error("Error executing 'atmos auth terraform pre-hook'", logFieldComponent, info.ComponentFromArg, "error", err)
-		return err
-	}
-
-	// Component working directory
-	workingDir := constructTerraformComponentWorkingDir(&atmosConfig, &info)
-
-	err = generateBackendConfig(&atmosConfig, &info, workingDir)
-	if err != nil {
-		return err
-	}
-
-	// Generate files from the generate section when auto_generate_files is enabled.
-	err = GenerateFilesForComponent(&atmosConfig, &info, workingDir)
-	if err != nil {
-		return err
-	}
-
-	err = generateProviderOverrides(&atmosConfig, &info, workingDir)
-	if err != nil {
-		return err
-	}
-
-	// Check for specific Terraform environment variables that might conflict with Atmos
-	warnOnExactVars := []string{
-		"TF_CLI_ARGS",
-		"TF_WORKSPACE",
-	}
-
-	warnOnPrefixVars := []string{
-		"TF_VAR_",
-		"TF_CLI_ARGS_",
-	}
-
-	var problematicVars []string
-
-	for _, envVar := range os.Environ() {
-		if parts := strings.SplitN(envVar, "=", 2); len(parts) == 2 {
-			// Check for exact matches.
-			if u.SliceContainsString(warnOnExactVars, parts[0]) {
-				problematicVars = append(problematicVars, parts[0])
-			}
-			// Check for prefix matches.
-			for _, prefix := range warnOnPrefixVars {
-				if strings.HasPrefix(parts[0], prefix) {
-					problematicVars = append(problematicVars, parts[0])
-					break
-				}
-			}
-		}
-	}
-
-	if len(problematicVars) > 0 {
-		log.Warn("Detected environment variables that may interfere with Atmos's control of Terraform",
-			"variables", problematicVars)
-	}
-
-	// Convert ComponentEnvSection to ComponentEnvList.
-	// ComponentEnvSection is populated by auth hooks and stack config env sections.
-	for k, v := range info.ComponentEnvSection {
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%v", k, v))
-	}
-
-	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
-	basePath, err := filepath.Abs(atmosConfig.BasePath)
+	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
+	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
 	}
@@ -813,7 +481,8 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		}
 	}
 
-	return nil
+	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
+	return executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
 }
 
 // configurePluginCache returns environment variables for Terraform plugin caching.
