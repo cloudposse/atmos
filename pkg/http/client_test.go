@@ -533,18 +533,20 @@ func TestGetGitHubTokenFromEnv_ViperPrecedence(t *testing.T) {
 	assert.Equal(t, "viper-token", got)
 }
 
-// TestGetGitHubTokenFromEnv_NilViperFallsBackToGlobal verifies that passing an explicit
-// nil viper instance falls back to the global viper singleton rather than panicking.
-func TestGetGitHubTokenFromEnv_NilViperFallsBackToGlobal(t *testing.T) {
+// TestGetGitHubTokenFromEnv_NilViperFallsBackToOsEnv verifies that passing an explicit
+// nil viper instance falls back to the global viper singleton (which has no token binding
+// in this test context), and then falls through to the os.Getenv fallback path.
+func TestGetGitHubTokenFromEnv_NilViperFallsBackToOsEnv(t *testing.T) {
 	t.Setenv("ATMOS_GITHUB_TOKEN", "nil-guard-token")
 
 	// Passing nil must not panic — it must fall back to global viper, which in turn
-	// falls back to os.Getenv for ATMOS_GITHUB_TOKEN.
+	// falls back to os.Getenv for ATMOS_GITHUB_TOKEN (since no BindEnv is active here).
 	assert.NotPanics(t, func() {
 		_ = GetGitHubTokenFromEnv(nil)
 	})
 
-	// With env var set, global viper fallback or direct os.Getenv returns the token.
+	// The token is returned via the os.Getenv("ATMOS_GITHUB_TOKEN") fallback path,
+	// not via the global viper key (which is unbound in this test).
 	got := GetGitHubTokenFromEnv(nil)
 	assert.Equal(t, "nil-guard-token", got)
 }
@@ -610,8 +612,14 @@ func TestWithGitHubToken_AfterWithTransport(t *testing.T) {
 	// inner (Base) is the mock roundTripperFunc.
 	authTransport, ok := client.client.Transport.(*GitHubAuthenticatedTransport)
 	require.True(t, ok, "client transport should be *GitHubAuthenticatedTransport")
-	_, baseIsRoundTripper := authTransport.Base.(roundTripperFunc)
-	assert.True(t, baseIsRoundTripper, "Base should be a roundTripperFunc (the mockTransport)")
+
+	// Structural check: verify Base is the exact mockTransport instance (not just the type).
+	// Function values are not == comparable in Go; verify identity by checking that Base
+	// is a roundTripperFunc AND that its pointer matches mockTransport's pointer.
+	baseTransport, baseIsRoundTripper := authTransport.Base.(roundTripperFunc)
+	require.True(t, baseIsRoundTripper, "Base should be a roundTripperFunc (the mockTransport)")
+	assert.Equal(t, fmt.Sprintf("%p", http.RoundTripper(mockTransport)), fmt.Sprintf("%p", http.RoundTripper(baseTransport)),
+		"Base transport pointer must match the exact mockTransport instance")
 	assert.Equal(t, "secret-token", authTransport.GitHubToken)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)

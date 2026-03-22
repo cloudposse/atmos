@@ -126,6 +126,7 @@ func TestGetGlobMatches_EmptyResultsCache(t *testing.T) {
 func TestPathMatch_CacheHit(t *testing.T) {
 	// Clear the path match cache using the exported test helper.
 	ResetPathMatchCache()
+	t.Cleanup(ResetPathMatchCache)
 
 	pattern := "stacks/**/*.yaml"
 	name := "stacks/dev/vpc.yaml"
@@ -146,6 +147,7 @@ func TestPathMatch_CacheHit(t *testing.T) {
 // are also cached and returned correctly.
 func TestPathMatch_CacheHit_NoMatch(t *testing.T) {
 	ResetPathMatchCache()
+	t.Cleanup(ResetPathMatchCache)
 
 	pattern := "*.go"
 	name := "file.yaml"
@@ -165,6 +167,7 @@ func TestPathMatch_CacheHit_NoMatch(t *testing.T) {
 // TestPathMatch_InvalidPattern verifies that an invalid glob pattern returns an error.
 func TestPathMatch_InvalidPattern(t *testing.T) {
 	ResetPathMatchCache()
+	t.Cleanup(ResetPathMatchCache)
 
 	// An invalid pattern with unclosed bracket.
 	_, err := PathMatch("[invalid", "file.yaml")

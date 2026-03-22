@@ -744,6 +744,14 @@ func TestStandardOptionsBuilder_WithProviders(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("providers")
 	require.NotNil(t, flag, "providers flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--providers", "aws,gcp"})
+	require.NoError(t, err)
+	assert.Equal(t, "aws,gcp", opts.Providers)
 }
 
 func TestStandardOptionsBuilder_WithIdentities(t *testing.T) {
@@ -756,6 +764,14 @@ func TestStandardOptionsBuilder_WithIdentities(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("identities")
 	require.NotNil(t, flag, "identities flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--identities", "role1,role2"})
+	require.NoError(t, err)
+	assert.Equal(t, "role1,role2", opts.Identities)
 }
 
 func TestStandardOptionsBuilder_WithAll(t *testing.T) {
@@ -788,6 +804,14 @@ func TestStandardOptionsBuilder_WithEverything(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("everything")
 	require.NotNil(t, flag, "everything flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--everything"})
+	require.NoError(t, err)
+	assert.True(t, opts.Everything)
 }
 
 func TestStandardOptionsBuilder_WithRef(t *testing.T) {
@@ -841,6 +865,14 @@ func TestStandardOptionsBuilder_WithSha(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("sha")
 	require.NotNil(t, flag, "sha flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--sha", "abc123def"})
+	require.NoError(t, err)
+	assert.Equal(t, "abc123def", opts.Sha)
 }
 
 func TestStandardOptionsBuilder_WithRepoPath(t *testing.T) {
@@ -879,6 +911,14 @@ func TestStandardOptionsBuilder_WithSSHKeyPassword(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("ssh-key-password")
 	require.NotNil(t, flag, "ssh-key-password flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--ssh-key-password", "s3cr3t"})
+	require.NoError(t, err)
+	assert.Equal(t, "s3cr3t", opts.SSHKeyPassword)
 }
 
 func TestStandardOptionsBuilder_WithIncludeSpaceliftAdminStacks(t *testing.T) {
@@ -891,6 +931,14 @@ func TestStandardOptionsBuilder_WithIncludeSpaceliftAdminStacks(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("include-spacelift-admin-stacks")
 	require.NotNil(t, flag, "include-spacelift-admin-stacks flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--include-spacelift-admin-stacks"})
+	require.NoError(t, err)
+	assert.True(t, opts.IncludeSpaceliftAdminStacks)
 }
 
 func TestStandardOptionsBuilder_WithIncludeDependents(t *testing.T) {
@@ -903,6 +951,14 @@ func TestStandardOptionsBuilder_WithIncludeDependents(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("include-dependents")
 	require.NotNil(t, flag, "include-dependents flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--include-dependents"})
+	require.NoError(t, err)
+	assert.True(t, opts.IncludeDependents)
 }
 
 func TestStandardOptionsBuilder_WithIncludeSettings(t *testing.T) {
@@ -915,6 +971,14 @@ func TestStandardOptionsBuilder_WithIncludeSettings(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("include-settings")
 	require.NotNil(t, flag, "include-settings flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--include-settings"})
+	require.NoError(t, err)
+	assert.True(t, opts.IncludeSettings)
 }
 
 func TestStandardOptionsBuilder_WithUpload(t *testing.T) {
@@ -927,6 +991,14 @@ func TestStandardOptionsBuilder_WithUpload(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("upload")
 	require.NotNil(t, flag, "upload flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--upload"})
+	require.NoError(t, err)
+	assert.True(t, opts.Upload)
 }
 
 func TestStandardOptionsBuilder_WithCloneTargetRef(t *testing.T) {
@@ -939,6 +1011,14 @@ func TestStandardOptionsBuilder_WithCloneTargetRef(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("clone-target-ref")
 	require.NotNil(t, flag, "clone-target-ref flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--clone-target-ref"})
+	require.NoError(t, err)
+	assert.True(t, opts.CloneTargetRef)
 }
 
 func TestStandardOptionsBuilder_WithExcludeLocked(t *testing.T) {
@@ -951,6 +1031,14 @@ func TestStandardOptionsBuilder_WithExcludeLocked(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("exclude-locked")
 	require.NotNil(t, flag, "exclude-locked flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--exclude-locked"})
+	require.NoError(t, err)
+	assert.True(t, opts.ExcludeLocked)
 }
 
 func TestStandardOptionsBuilder_WithComponents(t *testing.T) {
@@ -963,6 +1051,14 @@ func TestStandardOptionsBuilder_WithComponents(t *testing.T) {
 
 	flag := cmd.Flags().Lookup("components")
 	require.NotNil(t, flag, "components flag should be registered")
+
+	// Verify that the parsed value is propagated correctly.
+	v := viper.New()
+	_ = parser.BindToViper(v)
+
+	opts, err := parser.Parse(context.Background(), []string{"--components", "vpc", "--components", "rds"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc", "rds"}, opts.Components)
 }
 
 func TestStandardOptionsBuilder_WithOutput(t *testing.T) {

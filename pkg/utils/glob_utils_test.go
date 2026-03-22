@@ -346,8 +346,9 @@ func TestGetGlobMatches_Basic(t *testing.T) {
 
 	matches, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
-	// GetGlobMatches always returns a non-nil slice; for a "*.go" pattern in a Go package
-	// directory there must be at least one match.
+	// pkg/utils.GetGlobMatches returns non-nil only when matches are found (unlike
+	// pkg/filesystem.GetGlobMatches which always returns a non-nil slice). For a "*.go"
+	// pattern in a Go package directory there must be at least one match.
 	assert.NotEmpty(t, matches)
 	// We can't assert exact matches since it depends on the directory contents.
 	// But we can verify the function completes without error.
