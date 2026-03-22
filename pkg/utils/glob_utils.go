@@ -41,6 +41,10 @@ var (
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "utils.GetGlobMatches")()
 
+	// Normalize pattern before cache lookup so that Windows backslash paths and
+	// forward-slash paths resolve to the same cache key (mirrors pkg/filesystem behavior).
+	pattern = filepath.ToSlash(pattern)
+
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
 	if found && existingMatches != nil {
 		cached := existingMatches.(string)
@@ -53,7 +57,6 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		}
 	}
 
-	pattern = filepath.ToSlash(pattern)
 	base, cleanPattern := doublestar.SplitPattern(pattern)
 	f := os.DirFS(base)
 

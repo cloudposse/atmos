@@ -217,6 +217,9 @@ func TestPathMatch_AtmosStackPatterns(t *testing.T) {
 // TestPathMatch_ConsistentResults tests that multiple calls with same inputs return consistent results.
 // This indirectly validates that caching doesn't break behavior.
 func TestPathMatch_ConsistentResults(t *testing.T) {
+	ResetPathMatchCache()
+	t.Cleanup(ResetPathMatchCache)
+
 	pattern := "stacks/**/*.yaml"
 	path := "stacks/catalog/vpc.yaml"
 
@@ -448,6 +451,9 @@ func TestGetGlobMatches_WindowsAbsolutePath(t *testing.T) {
 // Before the fix, pattern="a|b" + name="c" and pattern="a" + name="b|c" would collide
 // because both produced cache key "a|b|c" when using string concatenation.
 func TestPathMatch_PipeCharacterNoCollision(t *testing.T) {
+	ResetPathMatchCache()
+	t.Cleanup(ResetPathMatchCache)
+
 	tests := []struct {
 		name     string
 		pattern  string
@@ -521,6 +527,10 @@ func TestPathMatch_PipeCharacterNoCollision(t *testing.T) {
 // strings.Join([]string{}, ",") == "" in the cache. A subsequent call (cache hit) would
 // return strings.Split("", ",") == []string{""} — a single empty-string "phantom path".
 // The fix: only cache non-empty result sets; return and guard against empty cached entries.
+//
+// Note: this test relies on doublestar.Glob returning nil (not []string{}) for no matches —
+// documented behavior per the doublestar library: "returns nil, nil when no matches are found".
+// If that library contract changes, this test will return (nil, nil) rather than an error.
 func TestGetGlobMatches_EmptyResultCachingBug(t *testing.T) {
 	// Reset cache before and after to avoid inter-test pollution.
 	ResetGlobMatchesCache()
@@ -536,10 +546,9 @@ func TestGetGlobMatches_EmptyResultCachingBug(t *testing.T) {
 	assert.Nil(t, result1)
 
 	// Second call — should not return a phantom empty-string entry from a cached "".
+	// Expected: same error as first call (no-op cache miss — nothing was cached for empty results).
 	result2, err2 := GetGlobMatches(pattern)
 	assert.Error(t, err2, "second call (potential cache hit) should still return an error")
-	// Critically: must not return []string{""} (the phantom path).
-	// The original bug: strings.Split("", ",") == []string{""} on cache hit.
+	// Must return nil, not []string{""} (the phantom path from the original bug).
 	assert.Nil(t, result2, "second call must not return a phantom empty-string path from cache")
-	assert.NotContains(t, result2, "", "cache hit must never contain an empty-string phantom path")
 }
