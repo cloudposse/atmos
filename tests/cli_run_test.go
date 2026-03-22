@@ -133,9 +133,14 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["HOME"] = tempDir
 		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
 		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
-		// Copy some files to the temporary HOME directory
+		// Copy some files to the temporary HOME directory.
+		// .ssh and .netrc are gated behind ATMOS_TEST_COPY_SSH=1 to avoid exposing
+		// private credentials on local developer machines by default.
 		originalHome := os.Getenv("HOME")
-		filesToCopy := []string{".gitconfig", ".ssh", ".netrc"} // Expand list if needed
+		filesToCopy := []string{".gitconfig"}
+		if os.Getenv("ATMOS_TEST_COPY_SSH") == "1" {
+			filesToCopy = append(filesToCopy, ".ssh", ".netrc")
+		}
 		for _, file := range filesToCopy {
 			src := filepath.Join(originalHome, file)
 			dest := filepath.Join(tempDir, file)
@@ -327,9 +332,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		envVars = append(envVars, existingEnv...)
 	}
 
-	// Add/override test-specific environment variables
-	for key, value := range tc.Env {
-		// NEVER allow test cases to override PATH - AtmosRunner's PATH must be preserved
+	// Add/override test-specific environment variables.
+	// Sort keys for deterministic env ordering and process tc.Env overrides.
+	// PATH is always excluded — AtmosRunner's PATH must win (see line 238).
+	tcEnvKeys := make([]string, 0, len(tc.Env))
+	for k := range tc.Env {
+		tcEnvKeys = append(tcEnvKeys, k)
+	}
+	sort.Strings(tcEnvKeys)
+
+	for _, key := range tcEnvKeys {
+		value := tc.Env[key]
+		// NEVER allow test cases to override PATH - AtmosRunner's PATH must be preserved.
 		if key == "PATH" {
 			continue
 		}
@@ -404,14 +418,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Set up XDG directories in temp locations to ensure test isolation.
-	// This prevents tests from:
-	// 1. Reading user's telemetry acknowledgment state (causing inconsistent telemetry notices)
-	// 2. Writing to user's cache/config/data directories
-	// 3. Being affected by user's XDG environment settings
-	//
-	// Use the existing tempDir to ensure XDG paths share the same root directory.
-	// This preserves isolation and avoids bypass issues when tc.Env already contains XDG vars.
+	// Set up isolated XDG directories (telemetry state, config, cache) in tempDir so
+	// tests don't read or write the developer's XDG paths.
 	xdgTempDir := filepath.Join(tempDir, "xdg")
 	xdgVars := map[string]string{
 		"XDG_CACHE_HOME":        filepath.Join(xdgTempDir, "cache"),
@@ -422,8 +430,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		"ATMOS_XDG_DATA_HOME":   filepath.Join(xdgTempDir, "data"),
 	}
 
-	// Add XDG vars to environment unless test explicitly sets them.
-	// Build the sorted list of XDG var names once for deterministic ordering.
+	// Sort non-overridden XDG var names for deterministic injection order.
 	xdgVarNames := make([]string, 0, len(xdgVars))
 	for k := range xdgVars {
 		if _, overridden := tc.Env[k]; !overridden {
@@ -433,16 +440,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	sort.Strings(xdgVarNames)
 
 	if len(xdgVarNames) > 0 {
-		// Build a prefix-set for the XDG vars that need replacing so we can remove
-		// all of them in a single O(n) pass instead of one pass per variable.
+		// Build a prefix-set for a single O(n) dedup pass (not one per XDG var).
 		xdgPrefixes := make(map[string]struct{}, len(xdgVarNames))
 		for _, name := range xdgVarNames {
 			xdgPrefixes[name+"="] = struct{}{}
 		}
 
 		// Remove all inherited occurrences of the XDG vars we will inject.
-		// Duplicates can arise when AtmosRunner env and os.Environ() both carry
-		// the same variable name.
 		filtered := make([]string, 0, len(envVars))
 		for _, env := range envVars {
 			keep := true
@@ -464,11 +468,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Give each parallel test subprocess its own GOCOVERDIR subdirectory to prevent
-	// rename races. When multiple parallel tests share one GOCOVERDIR, they all try
-	// to write the same covmeta.<hash> file on exit (the hash is deterministic from
-	// the binary), and the atomic rename fails on macOS. Using a per-test directory
-	// avoids the conflict; coverage files are merged into the shared dir afterward.
+	// Per-test GOCOVERDIR prevents covmeta rename races in parallel runs.
 	if coverDir != "" {
 		perTestCoverDir := filepath.Join(tempDir, "gocoverdir")
 		if err := os.MkdirAll(perTestCoverDir, 0o755); err == nil {

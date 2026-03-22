@@ -19,6 +19,49 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
+// Stable package-level compiled regexes.
+//
+// All patterns here are invariant across tests (they do not depend on runtime
+// values such as the repository root path).  Compiling them once at process
+// startup avoids re-compilation inside hot paths like sanitizeOutput and
+// collapseExtraSlashes, which are called for every test.
+var (
+	// Used by collapseExtraSlashes.
+	reProtocol      = regexp.MustCompile(`(?i)(https?):/*`)
+	reProtocolSplit = regexp.MustCompile(`(?i)^(https?://)(.*)$`)
+	reSlashCollapse = regexp.MustCompile(`/+`)
+
+	// unicodePlaceholder is a byte sequence unlikely to appear in real output.
+	// It is used to shield JSON unicode escapes (e.g. \u003e) from filepath.ToSlash
+	// and the backslash-path regex during sanitizeOutput.
+	unicodePlaceholder = "\x00UNICODE_ESCAPE_"
+
+	// Used by sanitizeOutput.
+	reJSONUnicodeEscape       = regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
+	reUnicodePlaceholderRestore = regexp.MustCompile(regexp.QuoteMeta("\x00UNICODE_ESCAPE_") + `([0-9a-fA-F]{4})`)
+	reBackslashPath           = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`)
+	reFixPlaceholderPaths     = regexp.MustCompile(`(/absolute/path/to/repo)([^",]+)`)
+	reHintPath                = regexp.MustCompile("(\U0001f4a1[^:]+:)\\s*\n+(/absolute/path/to/repo[^\n]*)")
+	reDirPath                 = regexp.MustCompile(`((?:Stacks|Workflows) directory:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	reURL                     = regexp.MustCompile(`(https?:/+[^\s]+)`)
+	reRequestID1              = regexp.MustCompile(`(?i)\bRequestI[Dd]\s*:\s*[A-Za-z0-9-]+`)
+	reRequestID2              = regexp.MustCompile(`(?i)\bX-Amzn-RequestId\s*:\s*[A-Za-z0-9-]+`)
+	reFilePath                = regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
+	rePosthogToken            = regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
+	reExpires                 = regexp.MustCompile(`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4})\s+\([^)]+\)`)
+	reDebugTimestamp          = regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
+	reExternalPath            = regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	reLastUpdated             = regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	reExpirationDuration      = regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
+	reCredentialStore     = regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
+	reTempGitRoot         = regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|/home/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root|/absolute/path/to/repo/mock-git-root|/absolute/path/to/external/mock-git-root)`)
+	reTempHomeDir         = regexp.MustCompile(`path=(/var/folders/[^\s]+/\.atmos|/tmp/[^\s]+/\.atmos|/Users/[^\s]+/\.atmos|/home/[^\s]+/\.atmos|[A-Z]:/[^\s]+/\.atmos|/absolute/path/to/repo/[^\s]+/\.atmos)`)
+	reExternalPath2       = regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:/Users/[^/]+/[^/]+/[^/]+/[^\s":]+)`)
+	reProvisionedByUser   = regexp.MustCompile(`provisioned_by_user: [^\s]+`)
+	reHintPath2           = regexp.MustCompile("(?m)(\U0001f4a1[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\\s*\n(/absolute/path/to/repo[^\\s\n]*)")
+	reInvalidChars        = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
+)
+
 func init() {
 	// Initialize logger with default settings.
 	// Verbosity level will be configured in TestMain based on -v flag.
@@ -56,23 +99,22 @@ func isCIEnvironment() bool {
 // collapseExtraSlashes replaces multiple consecutive slashes with a single slash.
 func collapseExtraSlashes(s string) string {
 	// Normalize the protocol to have exactly two slashes after http: or https:
-	protocolRegex := regexp.MustCompile(`(?i)(https?):/*`)
-	s = protocolRegex.ReplaceAllString(s, "$1://")
+	s = reProtocol.ReplaceAllString(s, "$1://")
 
 	// Split into protocol and the rest of the URL
-	parts := regexp.MustCompile(`(?i)^(https?://)(.*)$`).FindStringSubmatch(s)
+	parts := reProtocolSplit.FindStringSubmatch(s)
 	if len(parts) == 3 {
 		protocol := parts[1]
 		rest := parts[2]
 		// Collapse multiple slashes in the rest part
-		rest = regexp.MustCompile(`/+`).ReplaceAllString(rest, "/")
+		rest = reSlashCollapse.ReplaceAllString(rest, "/")
 		// Remove any leading slashes after the protocol to avoid triple slashes
 		rest = strings.TrimLeft(rest, "/")
 		return protocol + rest
 	}
 
 	// If no protocol, collapse all slashes
-	return regexp.MustCompile(`/+`).ReplaceAllString(s, "/")
+	return reSlashCollapse.ReplaceAllString(s, "/")
 }
 
 // sanitizeOption is a functional option for customizing output sanitization.
@@ -174,14 +216,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// First, protect JSON unicode escapes like \u003e from being corrupted by filepath.ToSlash
 	// and the path normalization regex below. On Windows, filepath.ToSlash converts ALL backslashes
 	// to forward slashes, which would turn \u003e into /u003e.
-	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
-	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
-	protectedOutput := jsonUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
+	// reJSONUnicodeEscape, unicodePlaceholder, and reUnicodePlaceholderRestore are package-level vars.
+	protectedOutput := reJSONUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
 	normalizedOutput := filepath.ToSlash(protectedOutput)
 	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
-	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
+	normalizedOutput = reBackslashPath.ReplaceAllString(normalizedOutput, "/$1")
 	// Restore protected unicode escapes.
-	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
+	normalizedOutput = reUnicodePlaceholderRestore.ReplaceAllString(normalizedOutput, `\u$1`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
@@ -204,10 +245,10 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// 5. Now collapse extra slashes in the remainder of file paths that start with the placeholder.
 	//    We use a regex to find segments that start with the placeholder followed by some path characters.
 	//    (We assume that file paths appear in quotes or other delimited contexts, and that URLs won't match.)
-	fixRegex := regexp.MustCompile(`(/absolute/path/to/repo)([^",]+)`)
-	result := fixRegex.ReplaceAllStringFunc(replaced, func(match string) string {
+	// reFixPlaceholderPaths is a package-level var.
+	result := reFixPlaceholderPaths.ReplaceAllStringFunc(replaced, func(match string) string {
 		// The regex has two groups: group 1 is the placeholder, group 2 is the remainder.
-		groups := fixRegex.FindStringSubmatch(match)
+		groups := reFixPlaceholderPaths.FindStringSubmatch(match)
 		if len(groups) < 3 {
 			return match
 		}
@@ -221,74 +262,72 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Example:
 	//   Input:  "💡 Path points to the stacks configuration directory, not a component:\n/absolute/path/to/repo/..."
 	//   Output: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/..."
-	hintPathRegex := regexp.MustCompile(`(💡[^:]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
-	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
+	// reHintPath and reDirPath are package-level vars.
+	result = reHintPath.ReplaceAllString(result, "$1 $2")
 
 	// Also handle "Stacks directory:" and "Workflows directory:" patterns.
 	// Example:
 	//   Input:  "Stacks directory:\n/absolute/path/to/repo/..."
 	//   Output: "Stacks directory: /absolute/path/to/repo/..."
-	dirPathRegex := regexp.MustCompile(`((?:Stacks|Workflows) directory:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
-	result = dirPathRegex.ReplaceAllString(result, "$1 $2")
+	result = reDirPath.ReplaceAllString(result, "$1 $2")
 
 	// 6. Handle URLs in the output to ensure they are normalized.
 	//    Use a regex to find URLs and collapse extra slashes while preserving the protocol.
-	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
-	result = urlRegex.ReplaceAllStringFunc(result, collapseExtraSlashes)
+	// reURL is a package-level var.
+	result = reURL.ReplaceAllStringFunc(result, collapseExtraSlashes)
 
 	// 6b. Redact volatile request IDs to avoid snapshot flakiness.
-	requestIDRegex1 := regexp.MustCompile(`(?i)\bRequestI[Dd]\s*:\s*[A-Za-z0-9-]+`)
-	requestIDRegex2 := regexp.MustCompile(`(?i)\bX-Amzn-RequestId\s*:\s*[A-Za-z0-9-]+`)
-	result = requestIDRegex1.ReplaceAllString(result, "RequestID: <REDACTED>")
-	result = requestIDRegex2.ReplaceAllString(result, "RequestID: <REDACTED>")
+	// reRequestID1, reRequestID2 are package-level vars.
+	result = reRequestID1.ReplaceAllString(result, "RequestID: <REDACTED>")
+	result = reRequestID2.ReplaceAllString(result, "RequestID: <REDACTED>")
 
 	// 7. Remove the random number added to file name like `atmos-import-454656846`
-	filePathRegex := regexp.MustCompile(`file_path=[^ ]+/atmos-import-\d+/atmos-import-\d+\.yaml`)
-	result = filePathRegex.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
+	// reFilePath is a package-level var.
+	result = reFilePath.ReplaceAllString(result, "file_path=/atmos-import/atmos-import.yaml")
 
 	// 8. Mask PostHog tokens to prevent real tokens from appearing in snapshots.
 	// Match any token starting with phc_ followed by alphanumeric characters and underscores.
-	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
-	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
+	// rePosthogToken is a package-level var.
+	result = rePosthogToken.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
 	// 9. Normalize expiration timestamps to avoid snapshot mismatches.
 	// Replace the relative duration part (e.g., "(59m 59s)", "expired") with a deterministic placeholder.
 	// This preserves the actual timestamp while normalizing the time-sensitive duration.
 	// Use "1h 0m" format which matches the actual formatDuration output for hour-based durations.
-	expiresRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4})\s+\([^)]+\)`)
-	result = expiresRegex.ReplaceAllString(result, "$1 (1h 0m)")
+	// reExpires is a package-level var.
+	result = reExpires.ReplaceAllString(result, "$1 (1h 0m)")
 
 	// 10. Normalize debug log timestamps (Go time.Time string format).
 	// These appear in debug logs like: expiration="2025-10-26 23:04:36.236866 -0500 CDT m=+3600.098519710"
 	// Replace with a constant timestamp to avoid snapshot mismatches.
-	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
-	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
+	// reDebugTimestamp is a package-level var.
+	result = reDebugTimestamp.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
 	// 11. Normalize external absolute paths to avoid environment-specific paths in snapshots.
 	// Replace common absolute path prefixes with generic placeholders.
 	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
 	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
-	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
-	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+	// reExternalPath is a package-level var.
+	result = reExternalPath.ReplaceAllString(result, "/absolute/path/to/external")
 
 	// 12. Normalize "Last Updated" timestamps in auth whoami output.
 	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
 	// Replace with a fixed timestamp to avoid snapshot mismatches.
-	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
-	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+	// reLastUpdated is a package-level var.
+	result = reLastUpdated.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
 
 	// 13. Normalize credential expiration durations in auth list output.
 	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
 	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
 	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
-	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
-	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
+	// reExpirationDuration is a package-level var.
+	result = reExpirationDuration.ReplaceAllString(result, "$1 1h 0m")
 
 	// 14. Normalize credential_store values in error messages.
 	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
 	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
-	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
-	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+	// reCredentialStore is a package-level var.
+	result = reCredentialStore.ReplaceAllString(result, "credential_store=keyring-placeholder")
 
 	// 15. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
@@ -305,33 +344,33 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// These appear in trace logs as path=/var/folders/.../mock-git-root or path=/absolute/path/to/repo/mock-git-root.
 	// Replace with a stable placeholder since these are test-specific paths.
 	// Matches both raw paths and already-sanitized repo paths.
-	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|/home/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root|/absolute/path/to/repo/mock-git-root|/absolute/path/to/external/mock-git-root)`)
-	result = tempGitRootRegex.ReplaceAllString(result, "path=/mock-git-root")
+	// reTempGitRoot is a package-level var.
+	result = reTempGitRoot.ReplaceAllString(result, "path=/mock-git-root")
 
 	// 15b. Normalize temp home directory paths in trace logs (e.g., path=/var/folders/.../T/TestCLI.../.atmos).
 	// These are used for home directory mocking in tests.
 	// Matches both raw paths and already-sanitized repo paths.
-	tempHomeDirRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/\.atmos|/tmp/[^\s]+/\.atmos|/Users/[^\s]+/\.atmos|/home/[^\s]+/\.atmos|[A-Z]:/[^\s]+/\.atmos|/absolute/path/to/repo/[^\s]+/\.atmos)`)
-	result = tempHomeDirRegex.ReplaceAllString(result, "path=/mock-home/.atmos")
+	// reTempHomeDir is a package-level var.
+	result = reTempHomeDir.ReplaceAllString(result, "path=/mock-home/.atmos")
 
 	// 15c. Normalize external absolute paths (additional pattern with forward slashes for Windows).
 	// Note: Windows paths use forward slashes here because filepath.ToSlash normalizes them earlier.
 	// The pattern matches the entire path including subdirectories by not excluding slashes in the final segment.
-	externalPathRegex2 := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:/Users/[^/]+/[^/]+/[^/]+/[^\s":]+)`)
-	result = externalPathRegex2.ReplaceAllString(result, "/absolute/path/to/external")
+	// reExternalPath2 is a package-level var.
+	result = reExternalPath2.ReplaceAllString(result, "/absolute/path/to/external")
 
 	// 16. Normalize provisioned_by_user values in component output.
 	// This field shows the current username, which varies by environment (erik, runner, etc.).
 	// Replace with a generic placeholder.
-	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
-	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+	// reProvisionedByUser is a package-level var.
+	result = reProvisionedByUser.ReplaceAllString(result, "provisioned_by_user: user")
 
 	// 17. Join hint messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
 	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
 	// Also handles plain labels like "Stacks directory:\n/path"
-	hintPathRegex2 := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
-	result = hintPathRegex2.ReplaceAllString(result, "$1 $2")
+	// reHintPath2 is a package-level var.
+	result = reHintPath2.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }
@@ -341,9 +380,9 @@ func sanitizeTestName(name string) string {
 	// Replace slashes with underscores
 	name = strings.ReplaceAll(name, "/", "_")
 
-	// Remove or replace other problematic characters
-	invalidChars := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`) // Matches invalid filename characters
-	name = invalidChars.ReplaceAllString(name, "_")
+	// Remove or replace other problematic characters.
+	// reInvalidChars is a package-level var.
+	name = reInvalidChars.ReplaceAllString(name, "_")
 
 	// Trim trailing periods and spaces (Windows-specific issue)
 	name = strings.TrimRight(name, " .")
@@ -361,25 +400,37 @@ func stripTrailingWhitespace(input string) string {
 	return strings.Join(lines, "\n")
 }
 
+// applyIgnorePatterns removes lines that match any of the given regex patterns.
+// Patterns are compiled once per call (not per line) to avoid O(N_lines × N_patterns)
+// regex recompilation overhead.
 func applyIgnorePatterns(input string, patterns []string) string {
-	lines := strings.Split(input, "\n") // Split input into lines
-	var filteredLines []string          // Store lines that don't match the patterns
+	if len(patterns) == 0 {
+		return input
+	}
+
+	// Precompile all patterns once.
+	compiled := make([]*regexp.Regexp, 0, len(patterns))
+	for _, pattern := range patterns {
+		compiled = append(compiled, regexp.MustCompile(pattern))
+	}
+
+	lines := strings.Split(input, "\n")
+	filteredLines := make([]string, 0, len(lines))
 
 	for _, line := range lines {
 		shouldIgnore := false
-		for _, pattern := range patterns {
-			re := regexp.MustCompile(pattern)
-			if re.MatchString(line) { // Check if the line matches the pattern
+		for _, re := range compiled {
+			if re.MatchString(line) {
 				shouldIgnore = true
-				break // No need to check further patterns for this line
+				break
 			}
 		}
 		if !shouldIgnore {
-			filteredLines = append(filteredLines, line) // Add non-matching lines
+			filteredLines = append(filteredLines, line)
 		}
 	}
 
-	return strings.Join(filteredLines, "\n") // Join the filtered lines back into a string
+	return strings.Join(filteredLines, "\n")
 }
 
 // simulateTtyCommand executes a command in a pseudo-terminal (PTY) environment.

@@ -2,12 +2,9 @@ package tests
 
 import (
 	"fmt"
-	"os"
+	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	"github.com/go-git/go-git/v5"
 
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
@@ -46,58 +43,53 @@ func createIsolatedSandbox(t *testing.T, workdir string) *testhelpers.SandboxEnv
 }
 
 // cleanupSandboxes cleans up all registered sandboxes.
+// Each sandbox's Cleanup() is guarded with a recover() so that a panic in one
+// entry does not prevent the remaining sandboxes from being cleaned up.
 func cleanupSandboxes() {
 	sandboxMutex.Lock()
 	defer sandboxMutex.Unlock()
 
 	for name, env := range sandboxRegistry {
-		env.Cleanup()
+		name, env := name, env // capture for closure
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Error("panic during sandbox cleanup", "name", name, "panic", r)
+				}
+			}()
+			env.Cleanup()
+		}()
 		delete(sandboxRegistry, name)
 	}
 }
 
 // Clean up untracked files in the working directory.
+//
+// Uses `git clean -fd` scoped to the workdir subtree, which is significantly faster than
+// calling go-git's Worktree.Status() which scans the entire repository.
 func cleanDirectory(t *testing.T, workdir string) error {
-	// Find the root of the Git repository
+	// Find the root of the Git repository so we can compute a relative path.
 	repoRoot, err := findGitRepoRoot(workdir)
 	if err != nil {
 		return fmt.Errorf("failed to locate git repository from %q: %w", workdir, err)
 	}
 
-	// Open the repository
-	repo, err := git.PlainOpen(repoRoot)
+	// Compute the path relative to the repo root so git clean only touches
+	// files within the workdir subtree (not the entire repository).
+	relWorkdir, err := filepath.Rel(repoRoot, workdir)
 	if err != nil {
-		return fmt.Errorf("failed to open git repository: %w", err)
+		return fmt.Errorf("failed to compute relative path from %q to %q: %w", repoRoot, workdir, err)
 	}
 
-	// Get the worktree
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return fmt.Errorf("failed to get worktree: %w", err)
+	// -f: force, -d: recurse into untracked directories.
+	// The pathspec `-- <relWorkdir>` limits the clean to the specified subtree only.
+	// Note: the '-x' flag is deliberately omitted so .gitignore-matched files are preserved.
+	cmd := exec.Command("git", "-C", repoRoot, "clean", "-fd", "--", relWorkdir) //nolint:gosec
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git clean failed in %q: %w\n%s", workdir, err, out)
 	}
 
-	// Get the repository status
-	status, err := worktree.Status()
-	if err != nil {
-		return fmt.Errorf("failed to get git status: %w", err)
-	}
-
-	// Clean only files in the provided working directory.
-	// Use workdir + separator to avoid matching directories with a shared prefix
-	// (e.g., "native-ci" should not match "native-ci-gha-plan").
-	workdirPrefix := workdir + string(filepath.Separator)
-	for file, statusEntry := range status {
-		if statusEntry.Worktree == git.Untracked {
-			fullPath := filepath.Join(repoRoot, file)
-			if strings.HasPrefix(fullPath, workdirPrefix) || fullPath == workdir {
-				t.Logf("Removing untracked file: %q", fullPath)
-				if err := os.RemoveAll(fullPath); err != nil {
-					return fmt.Errorf("failed to remove %q: %w", fullPath, err)
-				}
-			}
-		}
-	}
-
+	t.Logf("Cleaned untracked files in %q", workdir)
 	return nil
 }
 
