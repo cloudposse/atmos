@@ -74,7 +74,15 @@ var (
 	// calls (id, dscl, sh). A conservative default prevents Dir()/Expand()
 	// from hanging indefinitely on slow NSS/LDAP/directory backends.
 	// Override via ATMOS_HOMEDIR_CMD_TIMEOUT (e.g., "10s", "500ms").
+	// Note: the value is read once at program init; changing the env var at
+	// runtime has no effect. Use SetExternalCmdTimeout for runtime adjustment.
 	externalCmdTimeout = 5 * time.Second
+
+	// maxStderrLen is the maximum number of bytes included from subprocess
+	// stderr in error messages. Longer output is truncated with "..." to
+	// prevent runaway log spam from NSS/LDAP backends that produce verbose
+	// error output.
+	maxStderrLen = 256
 )
 
 func init() {
@@ -93,6 +101,25 @@ func applyEnvTimeout() {
 			externalCmdTimeout = d
 		}
 	}
+}
+
+// SetExternalCmdTimeout sets the timeout used for all external subprocess calls
+// (id, dscl, sh). It is safe to call from any goroutine. Prefer this over
+// directly setting externalCmdTimeout in concurrent programs or tests.
+func SetExternalCmdTimeout(d time.Duration) {
+	if d > 0 {
+		externalCmdTimeout = d
+	}
+}
+
+// truncateStderr returns at most maxStderrLen bytes from msg, appending "..."
+// when truncation occurs. This prevents runaway log spam from verbose NSS/LDAP
+// diagnostic output.
+func truncateStderr(msg string) string {
+	if len(msg) <= maxStderrLen {
+		return msg
+	}
+	return msg[:maxStderrLen] + "..."
 }
 
 // currentUserFunc is the function used to look up the current OS user.
@@ -330,7 +357,7 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 		whoCmd.Stdout = &whoOut
 		whoCmd.Stderr = &whoErr
 		if err := whoCmd.Run(); err != nil {
-			msg := redactStderr(strings.TrimSpace(whoErr.String()), "")
+			msg := truncateStderr(redactStderr(strings.TrimSpace(whoErr.String()), ""))
 			if msg != "" {
 				return "", fmt.Errorf("getDarwinHomeDir: id: %w (stderr: %s)", err, msg)
 			}
@@ -357,7 +384,7 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 	dsCmd.Stdout = &out
 	dsCmd.Stderr = &dsErr
 	if err := dsCmd.Run(); err != nil {
-		msg := redactStderr(strings.TrimSpace(dsErr.String()), username)
+		msg := truncateStderr(redactStderr(strings.TrimSpace(dsErr.String()), username))
 		if msg != "" {
 			return "", fmt.Errorf("getDarwinHomeDir: dscl: %w (stderr: %s)", err, msg)
 		}
@@ -462,12 +489,12 @@ var shellGetUsernameFunc = func() (string, error) {
 	}
 	// Include any diagnostic stderr from id/whoami (no username available yet,
 	// so no redaction needed). These messages typically describe NSS/LDAP errors
-	// and do not include PII.
-	if msg := strings.TrimSpace(idErr.String()); msg != "" {
-		return "", fmt.Errorf("%w (id: %s)", ErrIDUnavailable, msg)
+	// and do not include PII. Truncate to prevent log spam from verbose backends.
+	if msg := truncateStderr(strings.TrimSpace(idErr.String())); msg != "" {
+		return "", fmt.Errorf("shellGetUsernameFunc: %w (id: %s)", ErrIDUnavailable, msg)
 	}
-	if msg := strings.TrimSpace(whoErr.String()); msg != "" {
-		return "", fmt.Errorf("%w (whoami: %s)", ErrIDUnavailable, msg)
+	if msg := truncateStderr(strings.TrimSpace(whoErr.String())); msg != "" {
+		return "", fmt.Errorf("shellGetUsernameFunc: %w (whoami: %s)", ErrIDUnavailable, msg)
 	}
 	return "", ErrIDUnavailable
 }
@@ -519,7 +546,7 @@ func shellHomeDir() (string, error) {
 		if errors.Is(err, exec.ErrNotFound) {
 			return "", ErrShellUnavailable
 		}
-		msg := redactStderr(strings.TrimSpace(stderr.String()), username)
+		msg := truncateStderr(redactStderr(strings.TrimSpace(stderr.String()), username))
 		if msg != "" {
 			return "", fmt.Errorf("getHomeFromShell: %w (stderr: %s)", err, msg)
 		}

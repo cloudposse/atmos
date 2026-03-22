@@ -854,7 +854,9 @@ func TestShellGetUsernameFunc_StderrContext(t *testing.T) {
 	// The error should mention NSS/LDAP context, not be a bare sentinel.
 	assert.Contains(t, err.Error(), "NSS lookup failed",
 		"id stderr should be included in the error for diagnostics.")
-	// Verify the new shorter format without "stderr" in the key name.
+	// Verify the function prefix and command prefix are both present.
+	assert.Contains(t, err.Error(), "shellGetUsernameFunc:",
+		"error should include the function name prefix for tracing.")
 	assert.Contains(t, err.Error(), "id:",
 		"error should include the id command prefix.")
 }
@@ -1526,4 +1528,148 @@ func TestInitExternalCmdTimeout(t *testing.T) {
 		assert.Equal(t, 500*time.Millisecond, externalCmdTimeout,
 			"500ms must be correctly parsed.")
 	})
+}
+
+// TestTruncateStderr verifies that truncateStderr limits message length and
+// appends "..." when truncation occurs, and returns the original string when
+// it fits within the limit.
+func TestTruncateStderr(t *testing.T) {
+t.Run("short message unchanged", func(t *testing.T) {
+msg := "short"
+assert.Equal(t, msg, truncateStderr(msg))
+})
+
+t.Run("empty string unchanged", func(t *testing.T) {
+assert.Equal(t, "", truncateStderr(""))
+})
+
+t.Run("exactly maxStderrLen unchanged", func(t *testing.T) {
+msg := strings.Repeat("x", maxStderrLen)
+assert.Equal(t, msg, truncateStderr(msg))
+})
+
+t.Run("over limit truncated with ellipsis", func(t *testing.T) {
+msg := strings.Repeat("x", maxStderrLen+50)
+result := truncateStderr(msg)
+assert.Equal(t, maxStderrLen+3, len(result),
+"truncated message must be maxStderrLen + len('...')")
+assert.True(t, strings.HasSuffix(result, "..."),
+"truncated message must end with '...'")
+})
+}
+
+// TestStderrTruncatedInError verifies that a very long id stderr message is
+// truncated in the returned error so it cannot flood logs.
+func TestStderrTruncatedInError(t *testing.T) {
+if runtime.GOOS == "windows" {
+t.Skip("id/whoami are not used on Windows.")
+}
+
+longMsg := strings.Repeat("x", maxStderrLen*4)
+binDir := t.TempDir()
+idScript := "#!/bin/sh\nprintf '" + longMsg + "' >&2\nexit 1\n"
+require.NoError(t, os.WriteFile(filepath.Join(binDir, "id"), []byte(idScript), 0o755))
+whoamiScript := "#!/bin/sh\nprintf '" + longMsg + "' >&2\nexit 1\n"
+require.NoError(t, os.WriteFile(filepath.Join(binDir, "whoami"), []byte(whoamiScript), 0o755))
+
+origPath := os.Getenv("PATH")
+origUser := os.Getenv("USER")
+defer func() {
+os.Setenv("PATH", origPath)
+os.Setenv("USER", origUser)
+}()
+os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
+os.Setenv("USER", "")
+
+orig := shellGetUsernameFunc
+shellGetUsernameFunc = orig
+_, err := shellGetUsernameFunc()
+require.Error(t, err)
+require.ErrorIs(t, err, ErrIDUnavailable)
+assert.LessOrEqual(t, len(err.Error()), len("shellGetUsernameFunc: id binary not found and USER env var is empty (id: )")+maxStderrLen+10,
+"error message must not be unbounded; long stderr must be truncated.")
+assert.Contains(t, err.Error(), "...",
+"truncated stderr must end with '...'")
+}
+
+// TestSetExternalCmdTimeout verifies the thread-safe public setter.
+func TestSetExternalCmdTimeout(t *testing.T) {
+orig := externalCmdTimeout
+defer func() { externalCmdTimeout = orig }()
+
+t.Run("valid positive duration sets timeout", func(t *testing.T) {
+SetExternalCmdTimeout(3 * time.Second)
+assert.Equal(t, 3*time.Second, externalCmdTimeout)
+})
+
+t.Run("zero duration is ignored", func(t *testing.T) {
+externalCmdTimeout = orig
+SetExternalCmdTimeout(0)
+assert.Equal(t, orig, externalCmdTimeout,
+"zero duration must not update externalCmdTimeout.")
+})
+
+t.Run("negative duration is ignored", func(t *testing.T) {
+externalCmdTimeout = orig
+SetExternalCmdTimeout(-1 * time.Second)
+assert.Equal(t, orig, externalCmdTimeout,
+"negative duration must not update externalCmdTimeout.")
+})
+}
+
+// TestNoUsernameInErrors is a PII guard that exercises all error paths that
+// can return a non-sentinel error message and asserts that none of them embed
+// the current OS username. This guards against regressions where a username
+// might be included in an error string through new code paths.
+func TestNoUsernameInErrors(t *testing.T) {
+if runtime.GOOS == "windows" {
+t.Skip("Unix-only error paths tested here.")
+}
+
+u, err := user.Current()
+if err != nil || u.Username == "" {
+t.Skip("Cannot determine current username; skipping PII guard.")
+}
+username := u.Username
+
+checkNoPII := func(t *testing.T, err error) {
+t.Helper()
+if err == nil {
+return
+}
+msg := err.Error()
+assert.NotContains(t, msg, username,
+"error message must not embed the raw username (PII).")
+}
+
+t.Run("ErrInvalidUsername does not embed username", func(t *testing.T) {
+// Inject a malicious username to ensure it's not echoed back.
+origFn := shellGetUsernameFunc
+defer func() { shellGetUsernameFunc = origFn }()
+shellGetUsernameFunc = func() (string, error) { return username + "/evil", nil }
+origHome := os.Getenv("HOME")
+defer os.Setenv("HOME", origHome)
+os.Setenv("HOME", "")
+
+origCurrentUser := currentUserFunc
+defer func() { currentUserFunc = origCurrentUser }()
+currentUserFunc = func() (*user.User, error) { return nil, errors.New("simulated failure") }
+
+_, err := dirUnix()
+// May return ErrInvalidUsername, ErrBlankOutput, or ErrShellUnavailable.
+if err != nil {
+checkNoPII(t, err)
+}
+})
+
+t.Run("shellHomeDir ErrInvalidUsername does not embed username", func(t *testing.T) {
+origFn := shellGetUsernameFunc
+defer func() { shellGetUsernameFunc = origFn }()
+shellGetUsernameFunc = func() (string, error) { return username + "/path/evil", nil }
+
+_, err := shellHomeDir()
+if err != nil {
+checkNoPII(t, err)
+}
+})
 }

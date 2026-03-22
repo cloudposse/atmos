@@ -102,15 +102,61 @@ All external subprocess calls (`id`, `dscl`, `sh`) use a shared timeout
 variable — any value accepted by [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration)
 is valid. Zero or invalid values are silently ignored and the default is retained.
 
+> **Important:** `ATMOS_HOMEDIR_CMD_TIMEOUT` is read **once at program init** and cannot
+> be changed at runtime by modifying the environment variable after the process starts.
+> Use `SetExternalCmdTimeout(d time.Duration)` for runtime adjustment in tests or
+> embedded scenarios.
+
 ```sh
-# Tighter timeout for fast NSS backends
+# Tighter timeout for fast NSS backends (recommended default for most installs)
 export ATMOS_HOMEDIR_CMD_TIMEOUT=2s
 
-# Generous timeout for slow LDAP backends
+# Generous timeout for slow LDAP/NIS backends with high round-trip latency
 export ATMOS_HOMEDIR_CMD_TIMEOUT=15s
 
 # Sub-second timeout in containers where id should be instant
+# (distroless Alpine, scratch images, Kubernetes init containers)
 export ATMOS_HOMEDIR_CMD_TIMEOUT=250ms
 ```
 
 See `pkg/config/homedir/homedir_test.go` for working examples.
+
+## Odd-Case Examples
+
+### Quoted HOME on Unix
+
+Some shell init scripts write `HOME` with literal surrounding quotes. The library
+strips them automatically:
+
+```sh
+export HOME='"/home/user"'   # literal quotes
+# homedir.Dir() returns /home/user (quotes stripped)
+```
+
+### macOS dscl Fallback
+
+When `$HOME` is unset and `os/user.Current()` fails (e.g., CGO=0 builds on macOS),
+the library queries macOS Directory Services:
+
+```sh
+unset HOME
+# dirUnix() → os/user.Current() → getDarwinHomeDir() → dscl -q . -read /Users/<user> NFSHomeDirectory
+# Returns the NFSHomeDirectory value from the local user database.
+```
+
+### Windows POSIX-style HOME (Drive-Relative)
+
+When `HOME` contains a POSIX-style path without a drive letter (e.g., from Cygwin,
+Git Bash, or WSL1), it becomes **drive-relative** after Windows path conversion:
+
+```sh
+# Input:  HOME=/home/user
+# Output: \home\user  (drive-relative, not absolute!)
+#
+# For a guaranteed absolute path on Windows, use a drive-absolute value:
+set HOME=C:\home\user
+# Output: C:\home\user  (absolute)
+```
+
+This behavior is by design to match the output of `filepath.FromSlash + filepath.Clean`
+on Windows. See the Windows priority table above for details.
