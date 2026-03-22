@@ -43,6 +43,10 @@ var (
 	ErrShellUnavailable = errors.New("shell (sh) not available")
 	// ErrIDUnavailable is returned when id is not found and USER env var is empty.
 	ErrIDUnavailable = errors.New("id binary not found and USER env var is empty")
+	// ErrInvalidUsername is returned when the username contains characters outside
+	// the allowed whitelist. Using a sentinel avoids embedding the raw username
+	// (PII) in error messages or logs.
+	ErrInvalidUsername = errors.New("username contains invalid characters")
 
 	// usernameRe is a whitelist for valid Unix usernames. It accepts only
 	// letters, digits, dots, underscores, and hyphens. The first character
@@ -206,7 +210,7 @@ func dirUnix() (string, error) {
 	var cachedUsername string
 	if u, err := currentUserFunc(); err == nil {
 		if u.HomeDir != "" {
-			return u.HomeDir, nil
+			return filepath.Clean(u.HomeDir), nil
 		}
 		// HomeDir is empty but Username may still be available for dscl.
 		cachedUsername = u.Username
@@ -232,7 +236,11 @@ func getHomeFromEnv() string {
 	}
 	// TrimSpace for consistency with dirWindows(), which also trims env vars.
 	// A whitespace-only value is treated the same as an empty value.
-	return strings.TrimSpace(os.Getenv(homeEnv))
+	// Strip wrapping quotes for parity with dirWindows: some shell init scripts
+	// or environment managers write HOME="~/path" or HOME="/home/user" with
+	// literal surrounding quotes.
+	home := strings.TrimSpace(os.Getenv(homeEnv))
+	return strings.Trim(home, `"'`)
 }
 
 func dirWindows() (string, error) {
@@ -303,7 +311,7 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 		whoCmd.Stdout = &whoOut
 		whoCmd.Stderr = &whoErr
 		if err := whoCmd.Run(); err != nil {
-			msg := strings.TrimSpace(whoErr.String())
+			msg := redactStderr(strings.TrimSpace(whoErr.String()), "")
 			if msg != "" {
 				return "", fmt.Errorf("getDarwinHomeDir: id: %w (stderr: %s)", err, msg)
 			}
@@ -321,7 +329,7 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 	// separators, control characters, shell operators (|, &, >, <, (, )),
 	// quotes, backticks, dollar signs, semicolons, spaces, and tabs.
 	if !usernameRe.MatchString(username) {
-		return "", fmt.Errorf("getDarwinHomeDir: invalid characters in username %q", username)
+		return "", fmt.Errorf("getDarwinHomeDir: %w", ErrInvalidUsername)
 	}
 
 	// Query the directory service without a shell pipeline or sed.
@@ -330,7 +338,7 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 	dsCmd.Stdout = &out
 	dsCmd.Stderr = &dsErr
 	if err := dsCmd.Run(); err != nil {
-		msg := strings.TrimSpace(dsErr.String())
+		msg := redactStderr(strings.TrimSpace(dsErr.String()), username)
 		if msg != "" {
 			return "", fmt.Errorf("getDarwinHomeDir: dscl: %w (stderr: %s)", err, msg)
 		}
@@ -367,6 +375,17 @@ func getUnixHomeDir() (string, error) {
 
 func getHomeFromShell() (string, error) {
 	return shellHomeDirFunc()
+}
+
+// redactStderr returns a sanitized version of a stderr string with any
+// occurrence of the given username replaced by "<redacted>". This prevents
+// PII (e.g., /Users/<username> in dscl error messages) from leaking into
+// logs or error chains.
+func redactStderr(stderr, username string) string {
+	if username == "" {
+		return stderr
+	}
+	return strings.ReplaceAll(stderr, username, "<redacted>")
 }
 
 // shellGetUsernameFunc is the function used by shellHomeDir to obtain the
@@ -431,7 +450,7 @@ func shellHomeDir() (string, error) {
 	// control characters, shell operators (|, &, >, <, (, )), quotes,
 	// backticks, dollar signs, semicolons, spaces, and tabs.
 	if !usernameRe.MatchString(username) {
-		return "", fmt.Errorf("getHomeFromShell: invalid characters in username %q", username)
+		return "", fmt.Errorf("getHomeFromShell: %w", ErrInvalidUsername)
 	}
 
 	// Step 3: expand ~username in the shell.

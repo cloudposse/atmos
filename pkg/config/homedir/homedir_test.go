@@ -148,7 +148,7 @@ func TestShellHomeDir(t *testing.T) {
 		shellGetUsernameFunc = func() (string, error) { return "user/evil", nil }
 		_, err := shellHomeDir()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid characters", "path traversal username must be rejected.")
+		assert.ErrorIs(t, err, ErrInvalidUsername, "path traversal username must be rejected with ErrInvalidUsername.")
 	})
 
 	t.Run("username with shell metacharacters rejected", func(t *testing.T) {
@@ -175,8 +175,8 @@ func TestShellHomeDir(t *testing.T) {
 			shellGetUsernameFunc = func() (string, error) { return name, nil }
 			_, err := shellHomeDir()
 			require.Error(t, err, "username %q should be rejected", name)
-			assert.Contains(t, err.Error(), "invalid characters",
-				"username %q should be rejected with 'invalid characters' error", name)
+			assert.ErrorIs(t, err, ErrInvalidUsername,
+				"username %q should be rejected with ErrInvalidUsername", name)
 		}
 	})
 
@@ -191,8 +191,8 @@ func TestShellHomeDir(t *testing.T) {
 			shellGetUsernameFunc = func() (string, error) { return name, nil }
 			_, err := shellHomeDir()
 			require.Error(t, err, "username %q starting with '-' or '+' must be rejected", name)
-			assert.Contains(t, err.Error(), "invalid characters",
-				"username %q must be rejected with 'invalid characters' error", name)
+			assert.ErrorIs(t, err, ErrInvalidUsername,
+				"username %q must be rejected with ErrInvalidUsername", name)
 		}
 	})
 
@@ -604,6 +604,21 @@ func TestGetHomeFromEnv(t *testing.T) {
 		t.Setenv("HOME", "   ")
 		assert.Equal(t, "", getHomeFromEnv(), "whitespace-only HOME should be treated as empty.")
 	})
+
+	t.Run("strips wrapping double-quotes from HOME (Unix parity with Windows)", func(t *testing.T) {
+		// Some shell init scripts or environment managers write
+		// HOME="/home/user" with literal surrounding double-quotes.
+		// Strip them for Unix/Windows parity.
+		t.Setenv("HOME", `"/home/user"`)
+		assert.Equal(t, "/home/user", getHomeFromEnv(),
+			"double-quoted HOME must have wrapping quotes stripped.")
+	})
+
+	t.Run("strips wrapping single-quotes from HOME", func(t *testing.T) {
+		t.Setenv("HOME", `'/home/user'`)
+		assert.Equal(t, "/home/user", getHomeFromEnv(),
+			"single-quoted HOME must have wrapping quotes stripped.")
+	})
 }
 
 // TestExternalCmdTimeoutEnvOverride verifies that ATMOS_HOMEDIR_CMD_TIMEOUT is
@@ -662,13 +677,13 @@ func TestDirUnix_FallbackToUnixHomeDir(t *testing.T) {
 
 	home, err := dirUnix()
 	require.NoError(t, err)
-	assert.Equal(t, u.HomeDir, home)
+	assert.Equal(t, filepath.Clean(u.HomeDir), home)
 }
 
-// TestDirUnix_CleanesEnvPath verifies that dirUnix applies filepath.Clean to
+// TestDirUnix_CleansEnvPath verifies that dirUnix applies filepath.Clean to
 // the HOME env var result — consistent with dirWindows() which also cleans.
 // A trailing slash in HOME must be stripped.
-func TestDirUnix_CleanesEnvPath(t *testing.T) {
+func TestDirUnix_CleansEnvPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("dirUnix is not used on Windows.")
 	}
@@ -681,6 +696,74 @@ func TestDirUnix_CleanesEnvPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Clean(tmpDir), home,
 		"dirUnix should apply filepath.Clean to the HOME env var value.")
+}
+
+// TestDirUnix_CleansHomeDirFromCurrentUser verifies that the HomeDir returned
+// by os/user.Current() is also cleaned before being returned, providing
+// consistent normalization across all code paths in dirUnix.
+func TestDirUnix_CleansHomeDirFromCurrentUser(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("dirUnix is not used on Windows.")
+	}
+
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", "") // Force os/user path
+	orig := currentUserFunc
+	defer func() { currentUserFunc = orig }()
+	currentUserFunc = func() (*user.User, error) {
+		return &user.User{HomeDir: tmpDir + "/"}, nil
+	}
+	home, err := dirUnix()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean(tmpDir), home,
+		"dirUnix must apply filepath.Clean to u.HomeDir from os/user.Current().")
+}
+
+// TestRedactStderr verifies that PII (username) is scrubbed from stderr strings
+// before being included in error messages.
+func TestRedactStderr(t *testing.T) {
+	t.Run("replaces username with redacted", func(t *testing.T) {
+		result := redactStderr("/Users/jdoe: not found", "jdoe")
+		assert.Equal(t, "/Users/<redacted>: not found", result)
+	})
+
+	t.Run("empty username returns original", func(t *testing.T) {
+		result := redactStderr("some error", "")
+		assert.Equal(t, "some error", result)
+	})
+
+	t.Run("empty stderr returns empty", func(t *testing.T) {
+		result := redactStderr("", "jdoe")
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("replaces all occurrences", func(t *testing.T) {
+		result := redactStderr("jdoe: /Users/jdoe not found (jdoe)", "jdoe")
+		assert.Equal(t, "<redacted>: /Users/<redacted> not found (<redacted>)", result)
+	})
+}
+
+// TestInvalidUsernameErrorNoPII verifies that the error returned for invalid
+// usernames does not contain the raw username string (PII avoidance).
+func TestInvalidUsernameErrorNoPII(t *testing.T) {
+	malicious := "user\x00evil"
+
+	t.Run("shellHomeDir does not leak username in error", func(t *testing.T) {
+		orig := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = orig }()
+		shellGetUsernameFunc = func() (string, error) { return malicious, nil }
+		_, err := shellHomeDir()
+		require.ErrorIs(t, err, ErrInvalidUsername)
+		assert.NotContains(t, err.Error(), malicious,
+			"error message must not contain the raw username.")
+	})
+
+	t.Run("getDarwinHomeDir does not leak username in error", func(t *testing.T) {
+		_, err := getDarwinHomeDir(malicious)
+		require.ErrorIs(t, err, ErrInvalidUsername)
+		assert.NotContains(t, err.Error(), malicious,
+			"error message must not contain the raw username.")
+	})
 }
 
 // TestDir_Cache verifies that Dir() caches its result and returns it on
@@ -1164,7 +1247,7 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 		t.Run(fmt.Sprintf("rejects_malicious_%d", i), func(t *testing.T) {
 			_, err := getDarwinHomeDir(name)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid characters",
+			assert.ErrorIs(t, err, ErrInvalidUsername,
 				"getDarwinHomeDir should reject username with path-traversal characters.")
 		})
 	}
