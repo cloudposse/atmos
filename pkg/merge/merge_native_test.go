@@ -792,7 +792,6 @@ func TestMergeNative_CrossValidateVsMergo_NestedMaps(t *testing.T) {
 	assert.Equal(t, 30, settings["timeout"], "src-only key must be added")
 }
 
-
 // a worst-case for deep import chains.
 func BenchmarkMergeNative_TenInputs(b *testing.B) {
 	cfg := &schema.AtmosConfiguration{
