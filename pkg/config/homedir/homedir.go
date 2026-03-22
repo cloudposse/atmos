@@ -43,8 +43,10 @@ var (
 var currentUserFunc = user.Current
 
 // darwinHomeDirFunc is the function used to look up the home directory on
-// macOS via dscl. It is a variable so that tests can replace it with a stub
-// to exercise the darwin path on other operating systems.
+// macOS via dscl. It accepts a cached username (may be empty) from dirUnix so
+// that currentUserFunc is not called a second time on the darwin fallback path.
+// It is a variable so that tests can replace it with a stub to exercise the
+// darwin path on other operating systems.
 var darwinHomeDirFunc = getDarwinHomeDir
 
 // shellHomeDirFunc is the function used to get the home directory via the shell
@@ -163,13 +165,23 @@ func dirUnix() (string, error) {
 	// pure-Go implementation that reads only /etc/passwd. Users whose UID is
 	// managed by NSS/LDAP/SSSD and not listed in /etc/passwd will not be found
 	// here; the shell fallback below is the last resort for those environments.
-	if home, err := getUnixHomeDir(); err == nil && home != "" {
-		return home, nil
+	//
+	// The user object is retained so that getDarwinHomeDir can reuse the
+	// Username without a second currentUserFunc() call on the darwin path.
+	var cachedUsername string
+	if u, err := currentUserFunc(); err == nil {
+		if u.HomeDir != "" {
+			return u.HomeDir, nil
+		}
+		// HomeDir is empty but Username may still be available for dscl.
+		cachedUsername = u.Username
 	}
 
-	// Darwin-specific dscl fallback (only reached when user.Current() fails).
+	// Darwin-specific dscl fallback (only reached when user.Current() fails
+	// or returns an empty HomeDir). Pass the cached username to avoid a
+	// second currentUserFunc() call inside darwinHomeDirFunc.
 	if runtime.GOOS == "darwin" {
-		if home, err := darwinHomeDirFunc(); err == nil && home != "" {
+		if home, err := darwinHomeDirFunc(cachedUsername); err == nil && home != "" {
 			return home, nil
 		}
 	}
@@ -219,22 +231,27 @@ func cleanWindowsPath(path string) string {
 	return filepath.Clean(filepath.FromSlash(path))
 }
 
-func getDarwinHomeDir() (string, error) {
-	// Prefer user.Current().Username to avoid spawning an extra subprocess.
-	// user.Current() is called earlier in the chain (getUnixHomeDir) and may
-	// have failed to populate HomeDir, but Username is often still available.
-	// Cache the result to avoid calling currentUserFunc() twice (once here
-	// and once in getUnixHomeDir which runs before getDarwinHomeDir).
+// getDarwinHomeDir looks up the home directory via macOS dscl.
+// cachedUsername may be non-empty when dirUnix already called currentUserFunc
+// and obtained the username; passing it here avoids a second OS user lookup.
+// When cachedUsername is empty, getDarwinHomeDir falls back to id -un.
+func getDarwinHomeDir(cachedUsername string) (string, error) {
 	var username string
-	cachedUser, userErr := currentUserFunc()
-	if userErr == nil && cachedUser.Username != "" {
-		username = cachedUser.Username
+	if cachedUsername != "" {
+		// Reuse the username from the dirUnix caller — no second currentUserFunc call.
+		username = cachedUsername
 	} else {
-		// Fall back to id -un when user.Current() fails or returns an empty username.
-		var whoOut bytes.Buffer
+		// Fall back to id -un when no cached username is available (e.g., when
+		// called directly from tests via darwinHomeDirFunc).
+		var whoOut, whoErr bytes.Buffer
 		whoCmd := exec.Command("id", "-un")
 		whoCmd.Stdout = &whoOut
+		whoCmd.Stderr = &whoErr
 		if err := whoCmd.Run(); err != nil {
+			msg := strings.TrimSpace(whoErr.String())
+			if msg != "" {
+				return "", fmt.Errorf("getDarwinHomeDir: id: %w (stderr: %s)", err, msg)
+			}
 			return "", fmt.Errorf("getDarwinHomeDir: id: %w", err)
 		}
 		username = strings.TrimSpace(whoOut.String())
@@ -243,9 +260,11 @@ func getDarwinHomeDir() (string, error) {
 		}
 	}
 
-	// Guard against path traversal: dscl path is /Users/<username>, so the
-	// username must not contain path separators, null bytes, or newlines.
-	if strings.ContainsAny(username, "/\\\x00\n\r") {
+	// Guard against path traversal and shell injection: dscl path is
+	// /Users/<username>. Reject path separators, control characters, and
+	// shell metacharacters that could enable injection via string concatenation
+	// (e.g., single quotes, backticks, dollar signs, semicolons, spaces).
+	if strings.ContainsAny(username, "/\\\x00\n\r '`$;") {
 		return "", fmt.Errorf("getDarwinHomeDir: invalid characters in username %q", username)
 	}
 
@@ -326,10 +345,11 @@ func shellHomeDir() (string, error) {
 	}
 
 	// Step 2: validate the username to prevent injection in the shell command.
-	// Reject path separators and control characters that could enable injection
-	// or path traversal (e.g., "/", "\", null bytes, newlines).
-	// This mirrors the guard in getDarwinHomeDir.
-	if strings.ContainsAny(username, "/\\\x00\n\r") {
+	// Reject path separators, control characters, and shell metacharacters
+	// that could enable injection or path traversal (e.g., "/", "\", null
+	// bytes, newlines, single quotes, backticks, dollar signs, semicolons,
+	// spaces). This mirrors the guard in getDarwinHomeDir.
+	if strings.ContainsAny(username, "/\\\x00\n\r '`$;") {
 		return "", fmt.Errorf("getHomeFromShell: invalid characters in username %q", username)
 	}
 
