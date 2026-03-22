@@ -210,6 +210,10 @@ ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, 
 - **For aliasing/isolation tests, verify BOTH directions:** after a merge, mutate the result and confirm the original inputs are unchanged (result→src isolation); also mutate a source map before the merge and confirm the result is unaffected (src→result isolation).
 - **For slice-result tests, assert element contents, not just length:** `require.Len` alone allows regressions that drop or corrupt contents. Assert at least the first and last element by value.
 - **Never use platform-specific binaries in tests** (e.g., `false`, `true`, `sh` on Unix): these don't exist on Windows. Use Go-native test helpers: subprocess via `os.Executable()` + `TestMain`, temp files with cross-platform scripts, or DI to inject a fake command runner.
+- **Safety guards must fail loudly:** any check that counts fixture files or validates test preconditions must use `require.Positive` (or equivalent) — never `if count > 0 { ... }` which silently disables the check when misconfigured.
+- **Use absolute paths for fixture counting:** any `filepath.WalkDir` or file-count assertion must use an already-resolved absolute path (not a relative one) to be CWD-independent.
+- **Add compile-time sentinels for schema field references in tests:** when a test uses a specific struct field (e.g., `schema.Provider{Kind: "azure"}`), add `var _ = schema.Provider{Kind: "azure"}` as a compile guard so a field rename immediately fails the build.
+- **Add prerequisite sub-tests for subprocess behavior:** when a test depends on implicit env propagation (e.g., `ComponentEnvList` reaching a subprocess), add an explicit sub-test that confirms the behavior before the main test runs.
 
 ### Follow-up Tracking (MANDATORY)
 When a PR defers work to a follow-up (e.g., migration, cleanup, refactor), **open a GitHub issue and link it by number** in the blog post, roadmap, and/or PR description before merging. Blog posts with "a follow-up issue will..." with no `#number` are incomplete — the work will never be tracked.

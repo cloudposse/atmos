@@ -69,8 +69,11 @@ still used in two lower-traffic call sites:
 - `pkg/merge/merge_yaml_functions.go` — YAML function merge helpers
 - `pkg/devcontainer/config_loader.go` — devcontainer config loading
 
-A follow-up issue will migrate these remaining sites and remove the `mergo` dependency from
-`go.mod` entirely.  A future CVE in mergo still affects atmos until that work is complete.
+Migration of these remaining sites is tracked as a follow-up work item (see
+[PR #2201 description](https://github.com/cloudposse/atmos/pull/2201) for status).
+Once the follow-up issue is opened, this sentence will be updated with its `#number`.
+Until then, a future CVE in mergo still affects atmos — and the dependency will be
+removed as part of the tracked follow-up.
 
 ## How to Use It
 

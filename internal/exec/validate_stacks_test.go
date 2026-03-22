@@ -90,14 +90,18 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 		// often than there are stack YAML files in the fixture (an independent count).
 		// If a deduplication bug doubled the counter, fileCount would be inflated, making
 		// maxOccurrences too large and letting doubled contextToken occurrences slip through.
+		// Use absPath (already resolved above) for CWD-independent counting.
 		var fixtureFileCount int
-		_ = filepath.WalkDir(filepath.Join(testCasesPath, "stacks"), func(_ string, d os.DirEntry, _ error) error {
+		_ = filepath.WalkDir(filepath.Join(absPath, "stacks"), func(_ string, d os.DirEntry, _ error) error {
 			if !d.IsDir() && strings.HasSuffix(d.Name(), ".yaml") {
 				fixtureFileCount++
 			}
 			return nil
 		})
-		if fixtureFileCount > 0 && fileCount > fixtureFileCount+1 {
+		// Fail loudly if the fixture is empty or the path is wrong — a silent 0 would
+		// disable the independence check and make it a no-op.
+		require.Positive(t, fixtureFileCount, "stacks fixture must contain YAML files — check absPath: %s", filepath.Join(absPath, "stacks"))
+		if fileCount > fixtureFileCount+1 {
 			t.Errorf("\"File being processed:\" appears %d times but stacks fixture has only %d YAML files — possible block-counter duplication bug", fileCount, fixtureFileCount)
 		}
 

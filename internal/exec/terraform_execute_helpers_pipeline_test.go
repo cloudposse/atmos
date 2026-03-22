@@ -9,6 +9,7 @@ package exec
 //   - runWorkspaceSetup (recovery path when workspace already active)
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -126,6 +127,32 @@ func TestExecuteCommandPipeline_TTYError(t *testing.T) {
 // runWorkspaceSetup (workspace recovery path)
 // ──────────────────────────────────────────────────────────────────────────────
 
+// TestExecuteShellCommand_PropagatesEnvToSubprocess is a prerequisite for
+// TestRunWorkspaceSetup_RecoveryPath.  It confirms that ExecuteShellCommand
+// correctly propagates the ComponentEnvList (env slice) to the spawned subprocess
+// so that _ATMOS_TEST_EXIT_ONE=1 actually reaches the process and triggers exit(1).
+// Without this guarantee the recovery test would pass vacuously (subprocess never
+// exits 1 → no error to recover from → wsErr is nil for the wrong reason).
+func TestExecuteShellCommand_PropagatesEnvToSubprocess(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	atmosConfig := schema.AtmosConfiguration{}
+	execErr := ExecuteShellCommand(
+		atmosConfig, exePath,
+		[]string{"-test.run=^$"}, // no test matches → exits 0 normally WITHOUT the env var
+		"", // dir: current
+		[]string{"_ATMOS_TEST_EXIT_ONE=1"}, // env — should make it exit 1
+		false, // dryRun
+		"",    // redirectStdErr
+	)
+	// The subprocess must have exited 1 (TestMain intercepts _ATMOS_TEST_EXIT_ONE).
+	require.Error(t, execErr, "subprocess should have exited 1 when _ATMOS_TEST_EXIT_ONE=1 is propagated")
+	var exitErr errUtils.ExitCodeError
+	require.True(t, errors.As(execErr, &exitErr), "exit-1 must be wrapped as ExitCodeError, got: %T (%v)", execErr, execErr)
+	assert.Equal(t, 1, exitErr.Code, "ExitCodeError.Code must be 1")
+}
+
 // TestRunWorkspaceSetup_RecoveryPath verifies that when both "workspace select" and
 // "workspace new" fail with exit code 1 but the .terraform/environment file already
 // names the target workspace, runWorkspaceSetup logs a warning and returns nil.
@@ -134,6 +161,8 @@ func TestExecuteCommandPipeline_TTYError(t *testing.T) {
 // Cross-platform approach: the test binary (os.Executable) is used as the "terraform"
 // command with an env var that triggers immediate exit(1) from TestMain (testmain_test.go).
 // This avoids any dependency on platform-specific binaries like "false" (absent on Windows).
+// TestExecuteShellCommand_PropagatesEnvToSubprocess (above) verifies that the env is
+// actually propagated — ensuring this test cannot pass vacuously.
 func TestRunWorkspaceSetup_RecoveryPath(t *testing.T) {
 	// Use the test binary itself as the command: it exits 1 immediately when
 	// _ATMOS_TEST_EXIT_ONE=1 is set (handled by TestMain in testmain_test.go).
@@ -164,9 +193,6 @@ func TestRunWorkspaceSetup_RecoveryPath(t *testing.T) {
 
 	// Recovery path: both select and new fail with exit 1, environment file names the
 	// workspace → runWorkspaceSetup must return nil (proceed with warning).
-	// This also implicitly verifies that ExecuteShellCommand correctly wraps exit-code
-	// errors as errUtils.ExitCodeError so that the errors.As check in runWorkspaceSetup
-	// fires correctly.
 	wsErr := runWorkspaceSetup(&atmosConfig, &info, tmpDir)
 	assert.NoError(t, wsErr, "runWorkspaceSetup must succeed when environment file confirms active workspace")
 }

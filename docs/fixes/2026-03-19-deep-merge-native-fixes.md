@@ -176,7 +176,10 @@ func safeCap(a, b int) int {
 | File | Change |
 |------|--------|
 | `pkg/merge/merge_native.go` | Precedence fix; tail deep-copy; inner map deep-copy |
-| `pkg/merge/merge_native_test.go` | Tests for precedence, tail isolation, dstMap isolation |
+| `pkg/merge/merge_native_test.go` | Tests for precedence, tail isolation, dstMap isolation, nil-src invariant |
 | `internal/exec/terraform_utils.go` | Default-workspace handling; docstring clarification |
-| `internal/exec/terraform_utils_test.go` | Tests for default workspace variants |
+| `internal/exec/terraform_utils_test.go` | Tests for default workspace variants; absolute TF_DATA_DIR path |
 | `internal/exec/terraform_execute_helpers_exec.go` | Debug → Warn for workspace recovery |
+| `internal/exec/terraform_execute_helpers_pipeline_test.go` | Recovery path test; env propagation verification |
+| `internal/exec/testmain_test.go` | Cross-platform subprocess helper: `TestMain` intercepts `_ATMOS_TEST_EXIT_ONE=1` to provide a platform-agnostic "exit 1" binary |
+| `internal/exec/validate_stacks_test.go` | Independent fixture YAML count to self-validate block counter |

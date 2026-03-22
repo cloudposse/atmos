@@ -180,6 +180,17 @@ func TestDeepMergeNative_NilDstReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "dst must not be nil")
 }
 
+// TestDeepMergeNative_NilSrcIsNoOp verifies the documented invariant:
+// "A nil src is safe: ranging over a nil map is a no-op."
+// This test catches any future refactor that accidentally panics or mutates dst on nil src.
+func TestDeepMergeNative_NilSrcIsNoOp(t *testing.T) {
+	dst := map[string]any{"key": "value", "num": 42}
+	original := map[string]any{"key": "value", "num": 42}
+	err := deepMergeNative(dst, nil, false, false)
+	require.NoError(t, err, "nil src must not return an error")
+	assert.Equal(t, original, dst, "nil src must not mutate dst")
+}
+
 // TestMergeSlicesNative_OverlapPreservedDstDeepCopied verifies that preserved overlap
 // positions (non-map src element or dst/src type mismatch) are deep-copied so that the
 // result slice does not alias the accumulator's elements.
@@ -615,6 +626,11 @@ func BenchmarkMergeNative_FiveInputs(b *testing.B) {
 // src contains a typed map (e.g. map[string]schema.Provider) that deepCopyValue
 // normalises to map[string]any, while dst already has a map[string]any at the same
 // key.  The two maps should be recursively merged, not replaced.
+//
+// Compile guard: package-level so it fires even if this test is skipped via -run.
+// If schema.Provider ever renames the Kind field, this sentinel fails to compile,
+// immediately catching a schema-incompatible merge behavior before any test runs.
+var _ = schema.Provider{Kind: "azure"} // nolint:gochecknoglobals // compile-time sentinel only
 func TestDeepMergeNative_TypedMapMergesWithMapDst(t *testing.T) {
 	dst := map[string]any{
 		"providers": map[string]any{
