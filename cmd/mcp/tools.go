@@ -1,0 +1,76 @@
+package mcp
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"text/tabwriter"
+
+	"github.com/spf13/cobra"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+var toolsCmd = &cobra.Command{
+	Use:   "tools <name>",
+	Short: "List tools from an MCP integration",
+	Long:  "Connect to an external MCP server integration and list its available tools.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  executeMCPTools,
+}
+
+func init() {
+	mcpCmd.AddCommand(toolsCmd)
+}
+
+func executeMCPTools(cmd *cobra.Command, args []string) error {
+	name := args[0]
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return err
+	}
+
+	mgr, err := mcpclient.NewManager(atmosConfig.MCP.Integrations)
+	if err != nil {
+		return err
+	}
+	defer mgr.StopAll() //nolint:errcheck // Best-effort cleanup.
+
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if err := mgr.Start(ctx, name); err != nil {
+		return err
+	}
+
+	session, err := mgr.Get(name)
+	if err != nil {
+		return err
+	}
+
+	tools := session.Tools()
+	if len(tools) == 0 {
+		fmt.Fprintln(os.Stdout, "No tools available from "+name)
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(w, "TOOL\tDESCRIPTION")
+
+	const maxDescLen = 80
+
+	for _, tool := range tools {
+		desc := tool.Description
+		if len(desc) > maxDescLen {
+			desc = desc[:maxDescLen-3] + "..."
+		}
+		fmt.Fprintf(w, "%s\t%s\n", tool.Name, desc)
+	}
+
+	return w.Flush()
+}
