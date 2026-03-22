@@ -552,3 +552,25 @@ func TestGetGlobMatches_EmptyResultCachingBug(t *testing.T) {
 	// Must return nil, not []string{""} (the phantom path from the original bug).
 	assert.Nil(t, result2, "second call must not return a phantom empty-string path from cache")
 }
+
+// TestGetGlobMatches_NonExistentBaseDirError verifies that a pattern whose base directory
+// does not exist returns an error regardless of doublestar.Glob's nil-vs-empty semantics.
+// This is the "library-contract-independent" companion to TestGetGlobMatches_EmptyResultCachingBug:
+// it proves the error path without relying on doublestar returning nil for no matches.
+func TestGetGlobMatches_NonExistentBaseDirError(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	// Use a base dir that cannot exist — a path inside a temp dir that was never created.
+	pattern := filepath.Join(t.TempDir(), "subdir-that-does-not-exist", "*.yaml")
+
+	// First call: the base dir doesn't exist; doublestar.Glob will fail to open it.
+	result1, err1 := GetGlobMatches(pattern)
+	assert.Error(t, err1, "pattern with non-existent base dir must return an error")
+	assert.Nil(t, result1, "error path must not return a non-nil slice")
+
+	// Second call: nothing was cached (empty results are not stored), so same error.
+	result2, err2 := GetGlobMatches(pattern)
+	assert.Error(t, err2, "second call must also return an error — nothing was cached")
+	assert.Nil(t, result2, "second call must also return nil slice")
+}

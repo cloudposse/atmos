@@ -34,6 +34,14 @@ var (
 //
 // Contract: the returned slice is always non-nil (never nil). An empty result is returned as []string{}, not nil.
 // This guarantee holds for both cache hits and misses, allowing callers to safely use len(result) without a nil check.
+//
+// Migration note: if your code uses "if result == nil" to detect no matches, update it to "if len(result) == 0".
+// All known internal call sites use len-based checks; no existing callers depend on a nil return.
+// (Verified in PR #2173: all callers in pkg/config, internal/exec use len() or append(), not nil comparison.)
+//
+// Empty results are cached: patterns that match no files return []string{} on the first call and on all
+// subsequent cache hits. This avoids repeated filesystem scans for known-empty patterns but means each
+// unique non-matching pattern permanently occupies one cache entry for the process lifetime.
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "filesystem.GetGlobMatches")()
 

@@ -721,3 +721,35 @@ func TestWithGitHubToken_MultipleCallsLastWins(t *testing.T) {
 	assert.Equal(t, "Bearer token-t2", capturedReq.Header.Get("Authorization"),
 		"last-applied (outermost) token must win when multiple WithGitHubToken calls are composed")
 }
+
+// TestGitHubAuthenticatedTransport_PresetAuthorizationNotClobbered verifies that a
+// pre-existing Authorization header on the request is NOT overwritten by the transport.
+// This tests the "only set if empty" guard at the transport level.
+func TestGitHubAuthenticatedTransport_PresetAuthorizationNotClobbered(t *testing.T) {
+	var capturedReq *http.Request
+	mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		capturedReq = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("ok")),
+		}, nil
+	})
+
+	client := NewDefaultClient(
+		WithTransport(mockTransport),
+		WithGitHubToken("injected-token"),
+	)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
+	require.NoError(t, err)
+	// Pre-set a caller-supplied Authorization header — must survive the transport.
+	req.Header.Set("Authorization", "Bearer preset-token")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.NotNil(t, capturedReq, "mock transport must be reached")
+	assert.Equal(t, "Bearer preset-token", capturedReq.Header.Get("Authorization"),
+		"transport must not overwrite a pre-set Authorization header on the request")
+}

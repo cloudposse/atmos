@@ -96,7 +96,34 @@ func TestGetGlobMatches_EmptyResults(t *testing.T) {
 	pattern := filepath.Join(tmpDir, "*.yaml")
 	matches, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
+	assert.NotNil(t, matches, "GetGlobMatches must return non-nil slice for empty results")
 	assert.Empty(t, matches)
+}
+
+// TestGetGlobMatches_NonNilContractOnCacheHit verifies the non-nil slice contract is
+// preserved on a cache hit — the cached empty result must also be non-nil.
+// This is the contract test for the Critical #1 behavior documented in the function docstring.
+func TestGetGlobMatches_NonNilContractOnCacheHit(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+	pattern := filepath.Join(tmpDir, "*.nomatches")
+
+	// First call (cache miss): verify non-nil.
+	first, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.NotNil(t, first, "first call must return non-nil slice for empty results")
+	assert.Empty(t, first)
+
+	// Second call (cache hit): must also be non-nil with identical content.
+	second, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.NotNil(t, second, "cached result must also be non-nil — never nil on cache hit")
+	assert.Empty(t, second)
+
+	// Strict equality (same type, same content) between cache miss and cache hit.
+	assert.Equal(t, first, second, "cache hit must return same non-nil type as cache miss")
 }
 
 // TestGetGlobMatches_EmptyResultsCache verifies that empty results are cached and
