@@ -10,15 +10,12 @@ import (
 const maxCapHint = 1 << 24 // 16 M entries — realistic upper bound for atmos configs
 
 func safeCap(a, b int) int {
-	// Guard against integer overflow in the sum itself.
+	// Guard against integer overflow: if b > maxCapHint-a, then a+b > maxCapHint.
+	// This single check is sufficient; no second guard is needed.
 	if b > maxCapHint-a {
 		return maxCapHint
 	}
-	sum := a + b
-	if sum > maxCapHint {
-		return maxCapHint
-	}
-	return sum
+	return a + b
 }
 
 // deepMergeNative performs a deep merge of src into dst in place.
@@ -29,7 +26,7 @@ func safeCap(a, b int) int {
 // Values from src are only copied when they are stored as leaves in dst, preventing
 // corruption of the caller's src map through shared pointers in dst.
 //
-// Behaviour summary (matches observed mergo behaviour):
+// Behavior summary (defined contract for native merge):
 //   - Both values are map[string]any: recurse, merge in place (no container allocation).
 //   - Typed maps (e.g., map[string]schema.Provider): normalized to map[string]any via deepCopyValue and recursed.
 //   - appendSlice=true and both are slices: append src elements to dst.
@@ -81,7 +78,7 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		}
 
 		// Slice strategies when both sides are slices.
-		// sliceDeepCopy takes precedence over appendSlice, matching the old mergo behaviour where
+		// sliceDeepCopy takes precedence over appendSlice, matching the old mergo behavior where
 		// WithSliceDeepCopy was checked before WithAppendSlice.
 		if sliceDeepCopy || appendSlice {
 			if dstSlice, dstIsSlice := dstVal.([]any); dstIsSlice {
@@ -102,7 +99,7 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 			}
 		}
 
-		// Type check (matches mergo.WithTypeCheck): if dst holds a slice but src is
+		// Type check (defined contract: dst-slice/src-non-slice is a type mismatch): if dst holds a slice but src is
 		// not a slice, refuse the override to prevent silent data corruption.
 		if _, dstIsSlice := dstVal.([]any); dstIsSlice {
 			if _, srcIsSlice := srcVal.([]any); !srcIsSlice {

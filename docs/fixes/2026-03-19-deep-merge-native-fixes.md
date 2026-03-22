@@ -158,11 +158,16 @@ A follow-up task should migrate those to eliminate the mergo dependency entirely
 clamps the result to `1<<24` (16 M entries) — a practical upper bound that prevents
 oversized `make()` calls without triggering OOM panics, then replaced direct additions.
 
+The implementation uses a single overflow guard (the redundant second `if sum > maxCapHint`
+check was removed as dead code — the first guard `b > maxCapHint-a` already covers every
+case where the sum would exceed `maxCapHint`):
+
 ```go
 const maxCapHint = 1 << 24 // 16 M entries — practical upper bound to prevent OOM
 
 func safeCap(a, b int) int {
-    if a > maxCapHint-b {
+    // Guard against integer overflow: if b > maxCapHint-a, then a+b > maxCapHint.
+    if b > maxCapHint-a {
         return maxCapHint
     }
     return a + b
@@ -180,6 +185,15 @@ func safeCap(a, b int) int {
 | `internal/exec/terraform_utils.go` | Default-workspace handling; docstring clarification |
 | `internal/exec/terraform_utils_test.go` | Tests for default workspace variants; absolute TF_DATA_DIR path |
 | `internal/exec/terraform_execute_helpers_exec.go` | Debug → Warn for workspace recovery |
-| `internal/exec/terraform_execute_helpers_pipeline_test.go` | Recovery path test; env propagation verification |
+| `internal/exec/terraform_execute_helpers_pipeline_test.go` | Recovery path test; env propagation verification; negative-path logger assertion |
 | `internal/exec/testmain_test.go` | Cross-platform subprocess helper: `TestMain` intercepts `_ATMOS_TEST_EXIT_ONE=1` to provide a platform-agnostic "exit 1" binary |
 | `internal/exec/validate_stacks_test.go` | Independent fixture YAML count to self-validate block counter |
+| `internal/exec/terraform_test.go` | Use `tests.RequireTerraform(t)` for `TestExecuteTerraform_DeploymentStatus`; remove unused `os/exec` import |
+| `internal/exec/terraform_clean_test.go` | Use `tests.RequireTerraform(t)` for `TestCLITerraformClean`; add `tests` import |
+| `internal/exec/yaml_func_utils_test.go` | Make `RemoveAll` cleanup non-fatal (use `t.Logf` instead of `assert.NoError`) |
+| `internal/exec/yaml_func_template_test.go` | Fall back to terraform if tofu binary not found; skip only when both are absent |
+| `tests/preconditions.go` | Handle `http.NewRequestWithContext` error with `t.Logf` warning branch |
+| `pkg/merge/merge_compare_mergo_test.go` | Use `t.Fatalf` (not `t.Logf`) for `dmergo.Merge` errors in baseline construction |
+| `pkg/merge/merge_native_test.go` | Capture error in all 4 benchmark loops (`b.Fatalf` on failure) |
+| `errors/errors.go` | Add `ErrMergeNilDst` and `ErrMergeTypeMismatch` sentinel errors |
+| `website/src/data/roadmap.js` | Add `pr: 2201` to faster-deep-merge milestone |
