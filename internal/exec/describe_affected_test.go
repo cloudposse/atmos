@@ -1549,7 +1549,7 @@ func TestConvertAffectedToMatrix(t *testing.T) {
 			{
 				Stack:         "ue1-dev",
 				Component:     "vpc",
-				ComponentPath: "components/terraform/vpc",
+				ComponentPath: filepath.Join("components", "terraform", "vpc"),
 				ComponentType: "terraform",
 			},
 		}
@@ -1557,7 +1557,7 @@ func TestConvertAffectedToMatrix(t *testing.T) {
 		require.Len(t, matrix.Include, 1)
 		assert.Equal(t, "ue1-dev", matrix.Include[0].Stack)
 		assert.Equal(t, "vpc", matrix.Include[0].Component)
-		assert.Equal(t, "components/terraform/vpc", matrix.Include[0].ComponentPath)
+		assert.Equal(t, filepath.Join("components", "terraform", "vpc"), matrix.Include[0].ComponentPath)
 		assert.Equal(t, "terraform", matrix.Include[0].ComponentType)
 	})
 
@@ -1566,13 +1566,13 @@ func TestConvertAffectedToMatrix(t *testing.T) {
 			{
 				Stack:         "ue1-dev",
 				Component:     "vpc",
-				ComponentPath: "components/terraform/vpc",
+				ComponentPath: filepath.Join("components", "terraform", "vpc"),
 				ComponentType: "terraform",
 			},
 			{
 				Stack:         "ue1-staging",
 				Component:     "eks",
-				ComponentPath: "components/terraform/eks",
+				ComponentPath: filepath.Join("components", "terraform", "eks"),
 				ComponentType: "terraform",
 			},
 		}
@@ -1591,7 +1591,7 @@ func TestWriteMatrixOutput_File(t *testing.T) {
 			{
 				Stack:         "ue1-dev",
 				Component:     "vpc",
-				ComponentPath: "components/terraform/vpc",
+				ComponentPath: filepath.Join("components", "terraform", "vpc"),
 				ComponentType: "terraform",
 			},
 		}
@@ -1643,7 +1643,7 @@ func TestWriteMatrixOutput_Stdout(t *testing.T) {
 		{
 			Stack:         "ue1-dev",
 			Component:     "vpc",
-			ComponentPath: "components/terraform/vpc",
+			ComponentPath: filepath.Join("components", "terraform", "vpc"),
 			ComponentType: "terraform",
 		},
 	}, "")
@@ -1653,6 +1653,10 @@ func TestWriteMatrixOutput_Stdout(t *testing.T) {
 // TestResolveBaseFromCI tests CI base auto-detection.
 func TestResolveBaseFromCI(t *testing.T) {
 	t.Run("no CI provider detected", func(t *testing.T) {
+		// Reset provider registry to ensure clean state.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+
 		// Clear CI env vars to ensure no provider is detected.
 		t.Setenv("GITHUB_ACTIONS", "")
 		t.Setenv("CI", "")
@@ -1667,7 +1671,11 @@ func TestResolveBaseFromCI(t *testing.T) {
 	})
 
 	t.Run("GitHub Actions PR event detected", func(t *testing.T) {
-		// Register GitHub provider for this test.
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
 		t.Setenv("GITHUB_ACTIONS", "true")
 		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 		t.Setenv("GITHUB_BASE_REF", "main")
@@ -1678,10 +1686,6 @@ func TestResolveBaseFromCI(t *testing.T) {
 		require.NoError(t, err)
 		t.Setenv("GITHUB_EVENT_PATH", eventPath)
 
-		// Register the provider since init() only registers if GITHUB_ACTIONS was true at startup.
-		ghProvider := githubCI.NewProvider()
-		ci.Register(ghProvider)
-
 		describe := &DescribeAffectedCmdArgs{
 			CLIConfig: &schema.AtmosConfiguration{},
 		}
@@ -1691,6 +1695,11 @@ func TestResolveBaseFromCI(t *testing.T) {
 	})
 
 	t.Run("GitHub Actions push event with before SHA", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
 		t.Setenv("GITHUB_ACTIONS", "true")
 		t.Setenv("GITHUB_EVENT_NAME", "push")
 
@@ -1700,7 +1709,6 @@ func TestResolveBaseFromCI(t *testing.T) {
 		require.NoError(t, err)
 		t.Setenv("GITHUB_EVENT_PATH", eventPath)
 
-		// Provider may already be registered from previous subtest.
 		describe := &DescribeAffectedCmdArgs{
 			CLIConfig: &schema.AtmosConfiguration{},
 		}
@@ -1710,6 +1718,11 @@ func TestResolveBaseFromCI(t *testing.T) {
 	})
 
 	t.Run("ResolveBase returns error logs warning", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
 		t.Setenv("GITHUB_ACTIONS", "true")
 		t.Setenv("GITHUB_EVENT_NAME", "push")
 		// Missing GITHUB_EVENT_PATH causes ResolveBase to error.
@@ -1725,6 +1738,11 @@ func TestResolveBaseFromCI(t *testing.T) {
 	})
 
 	t.Run("ResolveBase returns nil", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
 		t.Setenv("GITHUB_ACTIONS", "true")
 		t.Setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
 
@@ -1798,13 +1816,14 @@ func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
 	})
 
 	t.Run("CI auto-detect when enabled and no explicit base", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
 		t.Setenv("GITHUB_ACTIONS", "true")
 		t.Setenv("GITHUB_EVENT_NAME", "merge_group")
 		t.Setenv("GITHUB_BASE_REF", "main")
-
-		// Register GitHub provider.
-		ghProvider := githubCI.NewProvider()
-		ci.Register(ghProvider)
 
 		flags := newDescribeAffectedFlagSet()
 		describe := &DescribeAffectedCmdArgs{
@@ -1841,7 +1860,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 			{
 				Stack:         "ue1-dev",
 				Component:     "vpc",
-				ComponentPath: "components/terraform/vpc",
+				ComponentPath: filepath.Join("components", "terraform", "vpc"),
 				ComponentType: "terraform",
 			},
 		}, nil, nil, "", nil
