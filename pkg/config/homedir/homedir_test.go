@@ -161,7 +161,6 @@ func TestShellHomeDir(t *testing.T) {
 			"user space",
 		}
 		for _, name := range metacharNames {
-			name := name
 			orig := shellGetUsernameFunc
 			defer func() { shellGetUsernameFunc = orig }()
 			shellGetUsernameFunc = func() (string, error) { return name, nil }
@@ -176,12 +175,10 @@ func TestShellHomeDir(t *testing.T) {
 		// Directly test the tilde-guard in shellHomeDir by overriding shellHomeDirFunc
 		// to call the real shellHomeDir but with shellGetUsernameFunc returning a
 		// username that the shell will expand as a tilde literal (user not in passwd).
-		// We don't rely on nonexistentuser12345 not existing in the system's passwd;
-		// instead we verify the guard is reachable by calling shellHomeDir with the
-		// real shell after stubbing shellGetUsernameFunc.
-		// Note: if the user somehow exists, the test will not exercise the guard path
+		// We don't rely on atmostestnonexistentuser not existing in the system's passwd;
+		// if the user somehow exists, the test will not exercise the guard path
 		// but will also not fail — the subtest is environment-dependent by design.
-		// For a deterministic test of the guard, see TestShellHomeDir_TildeGuard.
+		// The deterministic guard tests live in TestShellHomeDir/username_with_shell_metacharacters_rejected.
 		origShell := shellGetUsernameFunc
 		defer func() { shellGetUsernameFunc = origShell }()
 		shellGetUsernameFunc = func() (string, error) { return "atmostestnonexistentuser", nil }
@@ -857,7 +854,6 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 		"user space",
 	}
 	for i, name := range maliciousNames {
-		name := name
 		t.Run(fmt.Sprintf("rejects_malicious_%d", i), func(t *testing.T) {
 			_, err := getDarwinHomeDir(name)
 			require.Error(t, err)
