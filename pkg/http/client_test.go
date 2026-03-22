@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -614,11 +615,12 @@ func TestWithGitHubToken_AfterWithTransport(t *testing.T) {
 	require.True(t, ok, "client transport should be *GitHubAuthenticatedTransport")
 
 	// Structural check: verify Base is the exact mockTransport instance (not just the type).
-	// Function values are not == comparable in Go; verify identity by checking that Base
-	// is a roundTripperFunc AND that its pointer matches mockTransport's pointer.
+	// Function values are not == comparable in Go; use reflect.ValueOf().Pointer() to compare
+	// the underlying function pointer, which is stable and not affected by interface boxing.
 	baseTransport, baseIsRoundTripper := authTransport.Base.(roundTripperFunc)
 	require.True(t, baseIsRoundTripper, "Base should be a roundTripperFunc (the mockTransport)")
-	assert.Equal(t, fmt.Sprintf("%p", http.RoundTripper(mockTransport)), fmt.Sprintf("%p", http.RoundTripper(baseTransport)),
+	assert.Equal(t, reflect.ValueOf(http.RoundTripper(mockTransport)).Pointer(),
+		reflect.ValueOf(http.RoundTripper(baseTransport)).Pointer(),
 		"Base transport pointer must match the exact mockTransport instance")
 	assert.Equal(t, "secret-token", authTransport.GitHubToken)
 

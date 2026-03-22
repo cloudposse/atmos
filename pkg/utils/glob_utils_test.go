@@ -553,24 +553,54 @@ func TestGetGlobMatches_EmptyResultCachingBug(t *testing.T) {
 	assert.Nil(t, result2, "second call must not return a phantom empty-string path from cache")
 }
 
+// TestGetGlobMatches_CommaSafeCache verifies that filenames containing commas are
+// preserved correctly through a cache round-trip. Before the fix, the cache stored
+// paths as a comma-joined string; a path like "stack,env.yaml" would be split into
+// ["stack", "env.yaml"] on a cache hit, producing two wrong entries.
+func TestGetGlobMatches_CommaSafeCache(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+
+	// Create a file whose name contains a comma.
+	commaFile := filepath.Join(tmpDir, "stack,env.yaml")
+	require.NoError(t, os.WriteFile(commaFile, []byte(""), 0o644))
+
+	pattern := filepath.Join(tmpDir, "*.yaml")
+
+	// First call (cache miss): verify we get the correct single result.
+	first, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	require.Len(t, first, 1, "expected exactly one file matching *.yaml")
+	assert.True(t, strings.HasSuffix(filepath.ToSlash(first[0]), "stack,env.yaml"),
+		"returned path must contain the full filename with comma, got: %s", first[0])
+
+	// Second call (cache hit): verify the comma-containing filename survived round-trip.
+	second, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	require.Len(t, second, 1, "cache hit must return exactly one entry, not split on comma")
+	assert.Equal(t, first[0], second[0], "cached filename must be identical to original")
+}
+
 // TestGetGlobMatches_NonExistentBaseDirError verifies that a pattern whose base directory
 // does not exist returns an error regardless of doublestar.Glob's nil-vs-empty semantics.
 // This is the "library-contract-independent" companion to TestGetGlobMatches_EmptyResultCachingBug:
 // it proves the error path without relying on doublestar returning nil for no matches.
 func TestGetGlobMatches_NonExistentBaseDirError(t *testing.T) {
-	ResetGlobMatchesCache()
-	t.Cleanup(ResetGlobMatchesCache)
+ResetGlobMatchesCache()
+t.Cleanup(ResetGlobMatchesCache)
 
-	// Use a base dir that cannot exist — a path inside a temp dir that was never created.
-	pattern := filepath.Join(t.TempDir(), "subdir-that-does-not-exist", "*.yaml")
+// Use a base dir that cannot exist — a path inside a temp dir that was never created.
+pattern := filepath.Join(t.TempDir(), "subdir-that-does-not-exist", "*.yaml")
 
-	// First call: the base dir doesn't exist; doublestar.Glob will fail to open it.
-	result1, err1 := GetGlobMatches(pattern)
-	assert.Error(t, err1, "pattern with non-existent base dir must return an error")
-	assert.Nil(t, result1, "error path must not return a non-nil slice")
+// First call: the base dir doesn't exist; doublestar.Glob will fail to open it.
+result1, err1 := GetGlobMatches(pattern)
+assert.Error(t, err1, "pattern with non-existent base dir must return an error")
+assert.Nil(t, result1, "error path must not return a non-nil slice")
 
-	// Second call: nothing was cached (empty results are not stored), so same error.
-	result2, err2 := GetGlobMatches(pattern)
-	assert.Error(t, err2, "second call must also return an error — nothing was cached")
-	assert.Nil(t, result2, "second call must also return nil slice")
+// Second call: nothing was cached (empty results are not stored), so same error.
+result2, err2 := GetGlobMatches(pattern)
+assert.Error(t, err2, "second call must also return an error — nothing was cached")
+assert.Nil(t, result2, "second call must also return nil slice")
 }
