@@ -22,7 +22,8 @@
       "planfiles": {
         "default": ""
       },
-      "plugin_cache": true
+      "plugin_cache": true,
+      "ci": {}
     },
     "helmfile": {
       "base_path": "",
