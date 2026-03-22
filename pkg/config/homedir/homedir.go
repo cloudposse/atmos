@@ -378,12 +378,10 @@ func getHomeFromShell() (string, error) {
 var shellGetUsernameFunc = func() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), externalCmdTimeout)
 	defer cancel()
-	var idOut, idErr bytes.Buffer
+	var idOut bytes.Buffer
 	idCmd := exec.CommandContext(ctx, "id", "-un")
 	idCmd.Stdout = &idOut
-	idCmd.Stderr = &idErr
-	idOK := idCmd.Run() == nil
-	if idOK {
+	if err := idCmd.Run(); err == nil {
 		if name := strings.TrimSpace(idOut.String()); name != "" {
 			return name, nil
 		}

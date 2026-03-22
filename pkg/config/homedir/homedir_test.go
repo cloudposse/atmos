@@ -557,9 +557,10 @@ func TestDirWindows(t *testing.T) {
 		dir, err := dirWindows()
 		require.NoError(t, err)
 		// filepath.FromSlash converts / → \; filepath.Clean then normalises.
-		// Note: POSIX-style paths like "/cygwin/home/user" become drive-relative
-		// ("\cygwin\home\user") on Windows because no drive letter is prepended.
-		// This is documented behavior; use a drive-absolute HOME for an absolute result.
+		// Note: forward-slash paths without a drive letter (e.g., "/cygwin/home/user")
+		// become drive-relative ("\cygwin\home\user") on Windows because no drive
+		// letter is prepended. Use drive-absolute paths (e.g., "C:\cygwin\home\user")
+		// for results that are guaranteed to be absolute.
 		assert.Equal(t, filepath.Clean(filepath.FromSlash("/cygwin/home/user")), dir,
 			"forward-slash HOME must be converted to native separators.")
 	})
@@ -612,14 +613,20 @@ func TestExternalCmdTimeoutEnvOverride(t *testing.T) {
 	orig := externalCmdTimeout
 	defer func() { externalCmdTimeout = orig }()
 
-	t.Run("valid duration overrides default", func(t *testing.T) {
-		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "2s")
-		// Manually invoke the same parsing logic (init already ran; re-simulate).
+	// applyEnvTimeout re-simulates the init() parsing logic for test purposes.
+	// init() runs once at package startup; tests must replicate the logic to
+	// verify the correct parsing semantics without relying on re-running init.
+	applyEnvTimeout := func() {
 		if v := os.Getenv("ATMOS_HOMEDIR_CMD_TIMEOUT"); v != "" {
 			if d, err := time.ParseDuration(v); err == nil && d > 0 {
 				externalCmdTimeout = d
 			}
 		}
+	}
+
+	t.Run("valid duration overrides default", func(t *testing.T) {
+		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "2s")
+		applyEnvTimeout()
 		assert.Equal(t, 2*time.Second, externalCmdTimeout,
 			"ATMOS_HOMEDIR_CMD_TIMEOUT=2s must set externalCmdTimeout to 2 seconds.")
 	})
@@ -627,11 +634,7 @@ func TestExternalCmdTimeoutEnvOverride(t *testing.T) {
 	t.Run("invalid duration is silently ignored", func(t *testing.T) {
 		externalCmdTimeout = orig // reset
 		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "notaduration")
-		if v := os.Getenv("ATMOS_HOMEDIR_CMD_TIMEOUT"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil && d > 0 {
-				externalCmdTimeout = d
-			}
-		}
+		applyEnvTimeout()
 		assert.Equal(t, orig, externalCmdTimeout,
 			"Invalid ATMOS_HOMEDIR_CMD_TIMEOUT must leave externalCmdTimeout unchanged.")
 	})
@@ -639,11 +642,7 @@ func TestExternalCmdTimeoutEnvOverride(t *testing.T) {
 	t.Run("zero duration is silently ignored", func(t *testing.T) {
 		externalCmdTimeout = orig // reset
 		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "0s")
-		if v := os.Getenv("ATMOS_HOMEDIR_CMD_TIMEOUT"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil && d > 0 {
-				externalCmdTimeout = d
-			}
-		}
+		applyEnvTimeout()
 		assert.Equal(t, orig, externalCmdTimeout,
 			"Zero ATMOS_HOMEDIR_CMD_TIMEOUT must leave externalCmdTimeout unchanged.")
 	})
