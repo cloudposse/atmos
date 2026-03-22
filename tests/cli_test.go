@@ -1121,24 +1121,26 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			continue
 		}
 
-		// Remove any existing env var with the same key before adding the new one
-		for i, env := range envVars {
-			if strings.HasPrefix(env, key+"=") {
-				envVars = append(envVars[:i], envVars[i+1:]...)
-				break
+		// Remove all occurrences of the key before adding the new value.  Duplicates
+		// can arise when the AtmosRunner env and the base env both carry the same key.
+		filtered := envVars[:0]
+		for _, env := range envVars {
+			if !strings.HasPrefix(env, key+"=") {
+				filtered = append(filtered, env)
 			}
 		}
-		envVars = append(envVars, fmt.Sprintf("%s=%s", key, value))
+		envVars = append(filtered, fmt.Sprintf("%s=%s", key, value))
 	}
 
 	// Ensure NO_COLOR is not inherited unless test explicitly sets it (presence disables color).
 	if _, exists := tc.Env["NO_COLOR"]; !exists {
-		for i, env := range envVars {
-			if strings.HasPrefix(env, "NO_COLOR=") {
-				envVars = append(envVars[:i], envVars[i+1:]...)
-				break
+		filtered := envVars[:0]
+		for _, env := range envVars {
+			if !strings.HasPrefix(env, "NO_COLOR=") {
+				filtered = append(filtered, env)
 			}
 		}
+		envVars = filtered
 	}
 
 	// Filter out ATMOS_* environment variables that shouldn't be inherited from developer's shell.
@@ -2020,7 +2022,7 @@ func mergeIntoCoverDir(src, dst string) {
 // entire file into memory (coverage counter files can be several MB each).
 // src and dst are always paths within t.TempDir() or the shared coverDir, never
 // user-supplied input, so the G304/G306 gosec warnings are safe to suppress here.
-func copyFile(src, dst string) error {
+func copyFile(src, dst string) (retErr error) {
 	in, err := os.Open(src) //nolint:gosec // src is always a controlled temp path
 	if err != nil {
 		return err
@@ -2031,7 +2033,14 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close() //nolint:errcheck
+	// Explicitly close the write side so OS flush errors (e.g. disk full) are
+	// captured and returned to the caller rather than silently swallowed by a
+	// deferred close.
+	defer func() {
+		if closeErr := out.Close(); closeErr != nil && retErr == nil {
+			retErr = closeErr
+		}
+	}()
 
 	_, err = io.Copy(out, in)
 	return err

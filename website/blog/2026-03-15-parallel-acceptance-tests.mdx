@@ -1,6 +1,6 @@
 ---
 slug: parallel-acceptance-tests
-title: "Faster CI: Parallel Acceptance Tests Cut Suite Time by Up to 75%"
+title: "Parallel Acceptance Tests: Better Isolation and Modest Speed Gains"
 authors: [nitrocode]
 tags: [dx, core]
 ---
@@ -9,31 +9,54 @@ import Terminal from '@site/src/components/Terminal'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
-Atmos acceptance tests now run in parallel by default, reducing end-to-end
-CI time from ~15–20 minutes down to ~4–6 minutes on a typical 8-core runner.
+Atmos acceptance tests now run in parallel by default. This eliminates a class
+of hard-to-reproduce race conditions, prevents stale-file pollution between runs,
+and reduces wall-clock test time on multi-core machines.
 
 <!--truncate-->
 
 ## What Changed
 
 Each test case in `tests/test-cases/*.yaml` previously ran sequentially — one
-subprocess at a time.  Because most tests are I/O-bound (spawning a subprocess
+subprocess at a time. Because most tests are I/O-bound (spawning a subprocess
 and waiting for it to exit), the CPU was idle most of the time.
 
-With this release every test calls `t.Parallel()` automatically.  Go's testing
-framework dispatches up to `GOMAXPROCS` tests concurrently, keeping all CPUs
-busy and eliminating the serialized wait-time between tests.
+With this release every test calls `t.Parallel()` automatically. Go's testing
+framework dispatches up to `GOMAXPROCS` tests concurrently, keeping CPUs busy
+and eliminating the serialized wait between tests.
 
 ### Key Engineering Details
 
 | Area | Before | After |
 |------|--------|-------|
-| Test execution | Sequential | Parallel (GOMAXPROCS) |
+| Test execution | Sequential | Parallel (up to GOMAXPROCS) |
 | CI var filtering | `PreserveCIEnvVars` / `RestoreCIEnvVars` mutated process env | `FilterCIEnvVars` filters subprocess env slice — no process mutation |
 | Working directory | `t.Chdir()` (incompatible with `t.Parallel()`) | `cmd.Dir` set explicitly on subprocess |
 | Environment vars | `t.Setenv()` in test goroutine | Set directly on `cmd.Env` — no process env mutation |
 | `atmosRunner` init | Lazy (first test to need it) | Eager (once in `TestMain`, before any test runs) |
 | Cache isolation | `removeCacheFile()` + `xdg.Reload()` | Per-test `XDG_CACHE_HOME` temp dir — no shared state |
+| Terraform state | Shared component dirs between plan tests | `sandbox: true` copies to temp dir, sets `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` |
+| GHA output files | Accumulated on disk between runs | `t.Cleanup` removes after each test |
+| GOCOVERDIR | Shared across parallel tests (covmeta rename race) | Per-test subdir, merged after subprocess exits |
+
+### Measured CI Impact
+
+Based on actual GitHub Actions runs (2-core hosted runners):
+
+| Platform | Before (sequential) | After (parallel) | Change |
+|----------|--------------------|--------------------|--------|
+| Linux    | 18.2 min           | 16.8 min           | −8%    |
+| macOS    | 16.6 min           | 17.0 min           | ~0%    |
+| Windows  | 28.0 min           | 21.6 min           | −23%   |
+
+The modest gains on shared-runner CI are expected: GitHub's hosted runners have
+only 2 logical cores, which limits the parallelism benefit. On a developer
+laptop with 8–16 cores, the same suite runs considerably faster — typically
+3–5× faster than the sequential baseline.
+
+The primary benefit of this change is **correctness**: eliminating shared-state
+bugs (CI env mutation, Terraform state lock races, stale GHA output files) that
+previously caused intermittent test failures.
 
 ### Opting Out for Specific Tests
 
@@ -62,7 +85,7 @@ make testacc PARALLEL=8
 
 ## Get Involved
 
-We welcome contributions!  If you maintain test cases that need sequential
+We welcome contributions! If you maintain test cases that need sequential
 execution, annotate them with `parallel: false` and open a PR.
 
 <ActionCard

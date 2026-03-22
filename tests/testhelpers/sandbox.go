@@ -2,6 +2,7 @@ package testhelpers
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -222,8 +223,9 @@ func copyDir(src, dst string) error {
 	return nil
 }
 
-// copyFile copies a single file preserving permissions.
-func copyFile(src, dst string) error {
+// copyFile copies a single file preserving permissions using streaming I/O to
+// avoid loading the entire file into memory.
+func copyFile(src, dst string) (retErr error) {
 	// Get source file info using Lstat to detect symlinks.
 	srcInfo, err := os.Lstat(src)
 	if err != nil {
@@ -235,17 +237,26 @@ func copyFile(src, dst string) error {
 		return nil
 	}
 
-	// Read source file.
-	data, err := os.ReadFile(src)
+	in, err := os.Open(src) //nolint:gosec // src is always a controlled fixture/temp path
 	if err != nil {
-		return fmt.Errorf("failed to read source file %q: %w", src, err)
+		return fmt.Errorf("failed to open source file %q: %w", src, err)
 	}
+	defer in.Close() //nolint:errcheck
 
-	// Write destination file with same permissions.
-	if err := os.WriteFile(dst, data, srcInfo.Mode()); err != nil {
-		return fmt.Errorf("failed to write destination file %q: %w", dst, err)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode()) //nolint:gosec // dst is always a controlled temp path
+	if err != nil {
+		return fmt.Errorf("failed to create destination file %q: %w", dst, err)
 	}
+	// Explicitly close the write side so OS flush errors are captured.
+	defer func() {
+		if closeErr := out.Close(); closeErr != nil && retErr == nil {
+			retErr = closeErr
+		}
+	}()
 
+	if _, err := io.Copy(out, in); err != nil {
+		return fmt.Errorf("failed to copy %q to %q: %w", src, dst, err)
+	}
 	return nil
 }
 
