@@ -16,9 +16,11 @@ import (
 // defaultSensitiveVarPatterns mirrors the defaults applied by mergedLintConfig
 // in internal/exec/lint_stacks.go.  Tests that exercise L-08 with the default
 // patterns must set these explicitly because the rule no longer hard-codes them.
+// Note: "*arn*", "*account_id*", and "*role*" were removed from defaults in v4
+// because they match ubiquitous infrastructure vars and create noise. They can
+// be added as opt-in via lint.stacks.sensitive_var_patterns in atmos.yaml.
 var defaultSensitiveVarPatterns = []string{
 	"*password*", "*secret*", "*token*", "*key*",
-	"*arn*", "*account_id*", "*role*",
 }
 
 // makeContext creates a minimal LintContext for testing.

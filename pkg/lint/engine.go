@@ -2,6 +2,7 @@ package lint
 
 import (
 	"sort"
+	"strings"
 )
 
 // Engine manages and runs lint rules against a LintContext.
@@ -39,8 +40,19 @@ func (e *Engine) Run(ctx LintContext, ruleIDs []string, minSeverity Severity) (*
 
 		for _, f := range findings {
 			// Apply configured severity override if present.
+			// Normalize the override value (case-insensitive) and ignore invalid values
+			// so that "ERROR", "Warning", or typos don't silently corrupt findings.
 			if override, ok := ctx.LintConfig.Rules[f.RuleID]; ok {
-				f.Severity = Severity(override)
+				switch strings.ToLower(strings.TrimSpace(override)) {
+				case "error":
+					f.Severity = SeverityError
+				case "warning", "warn":
+					f.Severity = SeverityWarning
+				case "info":
+					f.Severity = SeverityInfo
+				default:
+					// Invalid value — leave the original rule severity unchanged.
+				}
 			}
 
 			// Apply minimum severity filter.

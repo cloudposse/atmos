@@ -196,6 +196,19 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - Table-driven tests for comprehensive coverage
 - Target >80% coverage
 
+### Test Fixture Standards (MANDATORY)
+All test data and fixtures that use Atmos config section keys **MUST** use `cfg.XxxSectionName` constants from `pkg/config/const.go`, never hardcoded strings like `"import"`, `"env"`, `"vars"`:
+- `"import":` → `cfg.ImportSectionName`
+- `"env":` → `cfg.EnvSectionName`
+- `"vars":` → `cfg.VarsSectionName`
+- `"components":` → `cfg.ComponentsSectionName`
+- `"metadata":` → `cfg.MetadataSectionName`
+- `"terraform":` → `cfg.TerraformSectionName`
+
+Add a constant-lock test when introducing a new constant dependency in tests. This ensures that if a constant value ever changes, the test catches the drift immediately.
+
+**Severity override validation**: When applying user-configured severity overrides from config or CLI, always normalize and validate values case-insensitively (`error|warning|info`). Invalid values must be silently ignored (leaving original severity unchanged) and optionally debug-logged. Never cast string values directly to a `Severity` type without validation.
+
 ### Test Isolation (MANDATORY)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args).
 
@@ -393,6 +406,7 @@ Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 - **Slice membership**: Use `u.SliceContainsString(slice, str)` from `pkg/utils/slice_utils.go` — do NOT write inline `for` loops to check membership.
 - **Config section constants**: Use `cfg.ComponentsSectionName`, `cfg.TerraformSectionName`, `cfg.HelmfileSectionName`, `cfg.VarsSectionName`, `cfg.MetadataSectionName`, `cfg.EnvSectionName`, `cfg.InheritsSectionName`, `cfg.ImportSectionName` from `pkg/config/const.go` — NEVER hardcode section name strings like `"components"`, `"inherits"`, `"vars"`.
 - **Shared internal helpers**: When a helper function (e.g., `extractInherits`, `getNestedMap`) is used by more than one file in the same package, extract it to a `helpers.go` in that package rather than duplicating it.
+- **Import map `enabled` field**: When processing Atmos import sections that accept map-form objects (`{path: "...", enabled: false}`), always check for and honor the `enabled` field. Skip disabled imports; don't add them to reference graphs or treated as referenced files.
 
 ### Cross-Platform (MANDATORY)
 Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.

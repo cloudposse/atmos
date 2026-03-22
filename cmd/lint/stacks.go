@@ -69,6 +69,7 @@ func init() {
 		flags.WithStringFlag("format", "", "text", "Output format: text (default), json"),
 		flags.WithStringFlag("severity", "", "info", "Minimum severity to report: info (default), warning, error"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
+		flags.WithEnvVars("rule", "ATMOS_LINT_RULE"),
 		flags.WithEnvVars("format", "ATMOS_LINT_FORMAT"),
 		flags.WithEnvVars("severity", "ATMOS_LINT_SEVERITY"),
 	)

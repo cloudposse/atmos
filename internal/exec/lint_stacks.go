@@ -151,6 +151,14 @@ func LintStacks(
 		allStackFiles = nil
 	}
 
+	// When a stack filter is active, scope AllStackFiles to only the files that are
+	// reachable from the filtered root stack via the import graph.  This prevents
+	// L-07 from reporting orphaned files that belong to other stacks in the repo —
+	// which would be noise, not actionable findings for the targeted stack.
+	if stackFilter != "" && len(importGraph) > 0 {
+		allStackFiles = scopeStackFiles(allStackFiles, rawStackConfigs, importGraph, atmosConfig.StacksBaseAbsolutePath)
+	}
+
 	// Merge lint config defaults, passing the full atmos config so sensitive_key_patterns
 	// from settings.terminal.mask can serve as the single source of truth.
 	lintConfig := mergedLintConfig(atmosConfig.Lint.Stacks, atmosConfig.Settings.Terminal.Mask.SensitiveKeyPatterns)
@@ -193,6 +201,12 @@ func buildImportGraph(rawStackConfigs map[string]map[string]any, basePath string
 					imports = append(imports, s)
 				case map[string]any:
 					if path, ok := s["path"].(string); ok {
+						// Respect the optional "enabled" field on map-form imports.
+						// An import with enabled: false is disabled and should not be
+						// counted as referenced by L-03 or L-07.
+						if en, ok := s["enabled"].(bool); ok && !en {
+							continue
+						}
 						imports = append(imports, path)
 					}
 				}
@@ -208,14 +222,20 @@ func buildImportGraph(rawStackConfigs map[string]map[string]any, basePath string
 // expandGlobImports replaces glob import patterns with the matching YAML file paths.
 // Non-glob strings are passed through unchanged. If basePath is empty or a glob
 // yields no matches, the original pattern is kept so callers retain partial data.
+// Duplicate results from overlapping patterns (e.g. "catalog/*" and "catalog/*.yaml"
+// both matching the same file) are automatically deduplicated.
 func expandGlobImports(imports []string, basePath string) []string {
 	if basePath == "" {
 		return imports
 	}
+	// seen tracks already-added absolute paths to prevent duplicates when multiple
+	// patterns (e.g. *.yaml and *.yml) expand to the same file.
+	seen := make(map[string]bool)
 	result := make([]string, 0, len(imports))
 	for _, imp := range imports {
 		if !strings.ContainsAny(imp, "*?[") {
-			// Not a glob — pass through unchanged.
+			// Not a glob — pass through unchanged (duplicates here are kept to
+			// preserve the original import list semantics).
 			result = append(result, imp)
 			continue
 		}
@@ -242,10 +262,17 @@ func expandGlobImports(imports []string, basePath string) []string {
 				log.Debug("Skipping malformed glob import pattern", "pattern", pattern, "error", err)
 				continue
 			}
-			matched = append(matched, hits...)
+			for _, h := range hits {
+				if !seen[h] {
+					seen[h] = true
+					matched = append(matched, h)
+				}
+			}
 		}
 		if len(matched) == 0 {
 			// No expansion — keep the literal so callers see the original intent.
+			// Note: literal globs with no matches are NOT added to the seen map so
+			// they don't prevent a later real file from being recorded.
 			result = append(result, imp)
 		} else {
 			result = append(result, matched...)
@@ -275,6 +302,73 @@ func stackYAMLFiles(root string) ([]string, error) {
 	return files, nil
 }
 
+// scopeStackFiles narrows allStackFiles to only those reachable from the root
+// stack files in rawStackConfigs via a BFS traversal of importGraph.  This ensures
+// that when a --stack filter is active, L-07 only flags orphans that are actually
+// in scope — preventing false positives from other stacks in the same repo.
+//
+// importGraph keys are absolute paths; values are the import paths recorded for
+// that file (may be absolute or relative, with or without YAML extension).
+func scopeStackFiles(allStackFiles []string, rawStackConfigs map[string]map[string]any, importGraph map[string][]string, basePath string) []string {
+	// Build the reachable set via BFS starting from the root files (rawStackConfigs keys).
+	reachable := make(map[string]bool)
+
+	queue := make([]string, 0, len(rawStackConfigs))
+	for k := range rawStackConfigs {
+		rn := rulesRelNorm(k, basePath)
+		if !reachable[rn] {
+			reachable[rn] = true
+			queue = append(queue, k) // use absolute path for importGraph lookup
+		}
+	}
+
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+
+		for _, imp := range importGraph[cur] {
+			rn := rulesRelNorm(imp, basePath)
+			if !reachable[rn] {
+				reachable[rn] = true
+				// Reconstruct the absolute path so we can look it up in importGraph.
+				abs := imp
+				if !filepath.IsAbs(abs) && basePath != "" {
+					abs = filepath.Join(basePath, abs)
+				}
+				queue = append(queue, abs)
+			}
+		}
+	}
+
+	// Keep only files whose normalized name is in the reachable set.
+	result := make([]string, 0, len(allStackFiles))
+	for _, f := range allStackFiles {
+		if reachable[rulesRelNorm(f, basePath)] {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// rulesRelNorm mirrors the relNorm logic used in L-07 (pkg/lint/rules/l07_orphaned_file.go)
+// so that paths are compared consistently in the exec package without importing the rules package.
+// It strips the base path prefix and YAML extension for uniform comparison.
+func rulesRelNorm(path, basePath string) string {
+	if filepath.IsAbs(path) && basePath != "" {
+		if rel, err := filepath.Rel(basePath, path); err == nil {
+			path = rel
+		}
+	}
+	// Strip YAML extensions (same as normalizeForComparison in l07).
+	for _, ext := range []string{".yaml", ".yml"} {
+		if len(path) > len(ext) && strings.HasSuffix(path, ext) {
+			path = path[:len(path)-len(ext)]
+			break
+		}
+	}
+	return filepath.ToSlash(filepath.Clean(path))
+}
+
 // mergedLintConfig returns a LintStacksConfig with defaults applied for missing fields.
 // maskKeyPatterns are glob patterns from settings.terminal.mask.sensitive_key_patterns —
 // the single source of truth for sensitive key names used by both masking and lint L-08.
@@ -294,9 +388,19 @@ func mergedLintConfig(cfg schema.LintStacksConfig, maskKeyPatterns []string) sch
 	// maskKeyPatterns AUGMENTS the built-in defaults rather than replacing them.
 	// This ensures that a user who sets mask patterns does not inadvertently lose
 	// the built-in safety net for well-known sensitive names.
+	//
+	// Note: patterns like "*arn*", "*account_id*", and "*role*" are intentionally
+	// NOT included in the defaults because they match ubiquitous infrastructure
+	// variables (e.g. "iam_role", "account_id", "region_arn") and would produce
+	// excessive noise in typical stacks. Add them to your atmos.yaml as opt-in:
+	//   lint:
+	//     stacks:
+	//       sensitive_var_patterns:
+	//         - "*arn*"
+	//         - "*account_id*"
+	//         - "*role*"
 	defaults := []string{
 		"*password*", "*secret*", "*token*", "*key*",
-		"*arn*", "*account_id*", "*role*",
 	}
 	// mergePatterns deduplicates slices in order, appending unique items from each source.
 	mergePatterns := func(sources ...[]string) []string {

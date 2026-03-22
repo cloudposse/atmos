@@ -304,6 +304,103 @@ func TestBuildImportGraph(t *testing.T) {
 		assert.Equal(t, "vpc.yaml", filepath.Base(imports[0]), "base name must be vpc.yaml, not vpc.yaml.yaml")
 		assert.NotContains(t, imports[0], ".yaml.yaml", "double extension must not appear")
 	})
+
+	t.Run("overlapping glob patterns do not produce duplicate entries", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "catalog"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "catalog", "vpc.yaml"), []byte("vars: {}"), 0o600))
+
+		// Both "catalog/*" and "catalog/*.yaml" would match vpc.yaml; dedup must ensure only one entry.
+		raw := map[string]map[string]any{
+			"stacks/dev.yaml": {
+				cfg.ImportSectionName: []string{"catalog/*", "catalog/*.yaml"},
+			},
+		}
+		graph := buildImportGraph(raw, dir)
+		imports := graph["stacks/dev.yaml"]
+		for _, imp := range imports {
+			// Verify the absolute path appears only once.
+			count := 0
+			for _, other := range imports {
+				if other == imp {
+					count++
+				}
+			}
+			assert.Equal(t, 1, count, "each file must appear exactly once in import list, found duplicates: %s", imp)
+		}
+	})
+
+	t.Run("import with enabled: false is excluded from graph", func(t *testing.T) {
+		t.Parallel()
+		raw := map[string]map[string]any{
+			"stacks/dev.yaml": {
+				cfg.ImportSectionName: []any{
+					map[string]any{"path": "catalog/vpc", "enabled": true},
+					map[string]any{"path": "catalog/disabled", "enabled": false},
+				},
+			},
+		}
+		graph := buildImportGraph(raw, "")
+		imports := graph["stacks/dev.yaml"]
+		require.NotEmpty(t, imports, "enabled imports should appear in graph")
+		assert.Contains(t, imports, "catalog/vpc", "enabled import must be present")
+		assert.NotContains(t, imports, "catalog/disabled", "disabled import must be excluded")
+	})
+}
+
+// TestScopeStackFiles verifies that scopeStackFiles limits AllStackFiles to
+// the reachable import closure from the seed root files.
+func TestScopeStackFiles(t *testing.T) {
+	t.Parallel()
+
+	basePath := "/stacks"
+
+	t.Run("files not reachable from root are excluded", func(t *testing.T) {
+		t.Parallel()
+		rawStackConfigs := map[string]map[string]any{
+			"/stacks/deploy/prod.yaml": {},
+		}
+		importGraph := map[string][]string{
+			"/stacks/deploy/prod.yaml": {"/stacks/catalog/vpc.yaml"},
+		}
+		allStackFiles := []string{
+			"/stacks/deploy/prod.yaml",
+			"/stacks/catalog/vpc.yaml",
+			"/stacks/catalog/unrelated.yaml",
+		}
+		result := scopeStackFiles(allStackFiles, rawStackConfigs, importGraph, basePath)
+		assert.Contains(t, result, "/stacks/deploy/prod.yaml", "root file must be in scope")
+		assert.Contains(t, result, "/stacks/catalog/vpc.yaml", "directly imported file must be in scope")
+		assert.NotContains(t, result, "/stacks/catalog/unrelated.yaml", "unrelated file must be excluded")
+	})
+
+	t.Run("transitive imports are reachable", func(t *testing.T) {
+		t.Parallel()
+		rawStackConfigs := map[string]map[string]any{
+			"/stacks/deploy/prod.yaml": {},
+		}
+		importGraph := map[string][]string{
+			"/stacks/deploy/prod.yaml": {"/stacks/catalog/vpc.yaml"},
+			"/stacks/catalog/vpc.yaml": {"/stacks/catalog/base.yaml"},
+		}
+		allStackFiles := []string{
+			"/stacks/deploy/prod.yaml",
+			"/stacks/catalog/vpc.yaml",
+			"/stacks/catalog/base.yaml",
+			"/stacks/catalog/other.yaml",
+		}
+		result := scopeStackFiles(allStackFiles, rawStackConfigs, importGraph, basePath)
+		assert.Contains(t, result, "/stacks/catalog/base.yaml", "transitively imported file must be in scope")
+		assert.NotContains(t, result, "/stacks/catalog/other.yaml", "non-imported file must be excluded")
+	})
+
+	t.Run("empty allStackFiles returns empty result", func(t *testing.T) {
+		t.Parallel()
+		result := scopeStackFiles(nil, map[string]map[string]any{}, map[string][]string{}, basePath)
+		assert.Empty(t, result)
+	})
 }
 
 // TestStackYAMLFiles verifies that stackYAMLFiles enumerates YAML files and
