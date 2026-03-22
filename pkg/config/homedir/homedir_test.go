@@ -123,12 +123,13 @@ func TestShellHomeDir(t *testing.T) {
 	t.Run("id failure propagates", func(t *testing.T) {
 		orig := shellGetUsernameFunc
 		defer func() { shellGetUsernameFunc = orig }()
+		want := errors.New("mock id failure")
 		shellGetUsernameFunc = func() (string, error) {
-			return "", fmt.Errorf("getHomeFromShell: id: mock id failure")
+			return "", want
 		}
 		_, err := shellHomeDir()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "getHomeFromShell: id:", "id failure should propagate with context.")
+		assert.ErrorIs(t, err, want, "id failure should propagate from shellGetUsernameFunc.")
 	})
 
 	t.Run("empty username returns ErrBlankOutput", func(t *testing.T) {
@@ -614,9 +615,9 @@ func TestExpand(t *testing.T) {
 	require.NoError(t, err)
 
 	cases := []struct {
-		Input  string
-		Output string
-		Err    bool
+		Input     string
+		Output    string
+		ExpectErr bool
 	}{
 		{
 			"/foo",
@@ -651,7 +652,7 @@ func TestExpand(t *testing.T) {
 
 	for _, tc := range cases {
 		actual, err := Expand(tc.Input)
-		if tc.Err {
+		if tc.ExpectErr {
 			require.Error(t, err, "Input: %#v", tc.Input)
 		} else {
 			require.NoError(t, err, "Input: %#v", tc.Input)

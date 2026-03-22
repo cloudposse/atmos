@@ -195,12 +195,12 @@ func dirWindows() (string, error) {
 	// converted to native Windows separators before cleaning, avoiding a
 	// drive-relative result (e.g., \home\user) on Windows.
 	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
-		return filepath.Clean(filepath.FromSlash(home)), nil
+		return cleanWindowsPath(home), nil
 	}
 
 	// Prefer standard environment variable USERPROFILE
 	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
-		return filepath.Clean(filepath.FromSlash(home)), nil
+		return cleanWindowsPath(home), nil
 	}
 
 	drive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
@@ -210,6 +210,13 @@ func dirWindows() (string, error) {
 	}
 
 	return filepath.Clean(drive + path), nil
+}
+
+// cleanWindowsPath converts forward slashes to the native Windows separator and
+// applies filepath.Clean. This prevents drive-relative paths (e.g., \home\user)
+// when tools like Cygwin or Git Bash set HOME with POSIX-style forward slashes.
+func cleanWindowsPath(path string) string {
+	return filepath.Clean(filepath.FromSlash(path))
 }
 
 func getDarwinHomeDir() (string, error) {
@@ -319,6 +326,8 @@ func shellHomeDir() (string, error) {
 	}
 
 	// Step 2: validate the username to prevent injection in the shell command.
+	// Reject path separators and control characters that could enable injection
+	// or path traversal (e.g., "/", "\", null bytes, newlines).
 	// This mirrors the guard in getDarwinHomeDir.
 	if strings.ContainsAny(username, "/\\\x00\n\r") {
 		return "", fmt.Errorf("getHomeFromShell: invalid characters in username %q", username)
@@ -327,7 +336,9 @@ func shellHomeDir() (string, error) {
 	// Step 3: expand ~username in the shell.
 	// printf '%s\n' ~username expands the home directory from the system
 	// password database in both bash and dash, even when $HOME is unset.
-	// The username is pre-validated, making this safe to interpolate.
+	// Safe to interpolate: username is pre-validated above to contain only
+	// safe characters (no shell metacharacters), making string concatenation
+	// equivalent to passing a literal.
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command("sh", "-c", "printf '%s\\n' ~"+username)
 	cmd.Stdout = &stdout
