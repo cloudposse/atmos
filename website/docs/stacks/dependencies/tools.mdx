@@ -1,0 +1,219 @@
+---
+title: Tool Dependencies
+sidebar_position: 3
+sidebar_label: tools
+sidebar_class_name: command
+description: Declare tool version requirements so Atmos automatically installs the correct CLI tool versions for each component.
+id: tools
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `dependencies.tools` section declares which CLI tool versions a component requires. Atmos automatically installs and uses the specified versions when executing the component.
+</Intro>
+
+## Use Cases
+
+- **Tool Version Requirements:** Ensure components use specific Terraform, kubectl, or helm versions
+- **Team Consistency:** Version-control tool requirements for reproducible deployments
+- **CI/CD Reliability:** Guarantee correct tool versions in automated pipelines
+
+## Configuration
+
+The `dependencies.tools` section is a map of tool names to version constraints.
+
+### Schema
+
+<dl>
+  <dt>tool name <em>(string key)</em></dt>
+  <dd>The CLI tool name as registered in the <a href="/cli/commands/toolchain/usage">toolchain</a> (e.g., <code>terraform</code>, <code>kubectl</code>, <code>helm</code>, <code>aws-cli</code>).</dd>
+
+  <dt>version constraint <em>(string value)</em></dt>
+  <dd>The required version. Supported formats: exact version (<code>"1.9.8"</code>), latest (<code>"latest"</code>), or semver constraint (planned: <code>"&gt;=1.8.0"</code>, <code>"~&gt;1.9.0"</code>).</dd>
+</dl>
+
+### Configuration Scopes
+
+Tool dependencies can be defined at multiple levels, with more specific levels taking precedence.
+
+#### Global Level
+
+Tool versions defined at the root level apply to all components:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+# Global tool dependencies
+dependencies:
+  tools:
+    terraform: "1.9.8"      # All Terraform components use this version
+    kubectl: "1.28.0"        # All kubectl commands use this version
+```
+</File>
+
+#### Component-Type Level
+
+Tool versions defined under `terraform`, `helmfile`, `packer`, or `ansible` apply to all components of that type:
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"     # All Terraform components use 1.9.8
+      tflint: "0.44.1"       # All Terraform components use tflint 0.44.1
+
+helmfile:
+  dependencies:
+    tools:
+      helm: "3.13.0"         # All Helmfile releases use helm 3.13.0
+      kubectl: "1.28.0"      # All Helmfile releases use kubectl 1.28.0
+
+ansible:
+  dependencies:
+    tools:
+      ansible: "2.16.0"      # All Ansible components use ansible 2.16.0
+```
+</File>
+
+#### Component Level
+
+Tool versions defined within a component override all higher-level settings:
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.8.5"   # This component uses older Terraform version
+          aws-cli: "2.13.0"    # Component-specific AWS CLI version
+```
+</File>
+
+## Inheritance and Merge Behavior
+
+Tool dependencies are merged from the most general to the most specific level:
+
+1. **Global `dependencies.tools`** (applies to all components)
+2. **Component-type `terraform.dependencies.tools`** (applies to all components of that type)
+3. **Component `components.terraform.<name>.dependencies.tools`** (applies to specific component)
+
+More specific levels override less specific levels. For example:
+
+<File title="Example: Version Override">
+```yaml
+# Global default
+dependencies:
+  tools:
+    terraform: "1.9.8"
+
+# Component-type override
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"
+      tflint: "0.44.1"     # Added for all Terraform components
+
+# Component-specific override
+components:
+  terraform:
+    legacy-vpc:
+      dependencies:
+        tools:
+          terraform: "1.5.0"  # This component uses older version
+          tflint: "0.44.1"    # Inherited from component-type level
+```
+</File>
+
+Result:
+- Most Terraform components use Terraform 1.9.8
+- `legacy-vpc` component uses Terraform 1.5.0
+- All Terraform components use tflint 0.44.1
+
+## Integration with Toolchain
+
+Tool dependencies integrate seamlessly with the [toolchain management system](/cli/commands/toolchain/usage):
+
+1. **Automatic Installation:** When you run a component, Atmos installs the required tool versions automatically
+2. **Version Isolation:** Each component uses its declared versions, isolated from other components
+3. **Cache Efficiency:** Tools are cached and reused across components with the same version requirements
+
+Example workflow:
+
+```bash
+# Component declares terraform: "1.9.8"
+atmos terraform plan vpc -s prod
+
+# Atmos automatically:
+# 1. Checks if terraform 1.9.8 is installed
+# 2. Installs it if missing (from toolchain registries)
+# 3. Executes: terraform plan (using 1.9.8)
+```
+
+## Complete Example
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+# Global tool dependencies (all components)
+dependencies:
+  tools:
+    terraform: "1.9.8"
+    kubectl: "1.28.0"
+
+# Component-type dependencies (all Terraform components)
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"      # Override global if needed
+      tflint: "0.44.1"        # Terraform-specific tool
+      tfsec: "1.28.0"         # Security scanning
+      aws-cli: "latest"       # Use latest AWS CLI
+
+# Component-type dependencies (all Helmfile releases)
+helmfile:
+  dependencies:
+    tools:
+      helm: "3.13.0"
+      kubectl: "1.28.0"
+      helmfile: "0.157.0"
+
+# Component-specific dependencies
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.9.8"    # Use default
+          aws-cli: "2.13.0"     # Component needs specific AWS CLI version
+
+    legacy-app:
+      dependencies:
+        tools:
+          terraform: "1.5.0"    # Legacy component requires older version
+          aws-cli: "2.10.0"
+
+  helmfile:
+    monitoring:
+      dependencies:
+        tools:
+          helm: "3.13.0"
+          kubectl: "1.28.0"
+```
+</File>
+
+## Best Practices
+
+1. **Pin Versions Explicitly** - Use exact versions (`"1.9.8"`) instead of `"latest"` for production
+2. **Consistent Team Standards** - Define global defaults in `_defaults.yaml` files
+3. **Component-Specific Overrides** - Only override when necessary (legacy code, compatibility)
+4. **Document Reasons** - Add comments explaining why a component uses a different version
+5. **Test Before Upgrading** - Test tool version changes in dev/staging before production
+
+## Related
+
+- [Dependencies Overview](/stacks/dependencies) - Tool and component dependencies overview
+- [Component Dependencies](/stacks/dependencies/components) - Component-to-component dependencies
+- [Toolchain Management](/cli/commands/toolchain/usage) - Installing and managing CLI tools
+- [Toolchain Configuration](/cli/configuration/toolchain/) - Configuring toolchain behavior
