@@ -129,7 +129,12 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 
 	host := reqClone.URL.Hostname()
 	if (host == "api.github.com" || host == "raw.githubusercontent.com") && t.GitHubToken != "" {
-		reqClone.Header.Set("Authorization", "Bearer "+t.GitHubToken)
+		// Only set Authorization if not already set, so the outermost (last-applied)
+		// GitHubAuthenticatedTransport layer wins when multiple WithGitHubToken calls
+		// are composed. Inner (earlier-applied) layers must not overwrite the outer token.
+		if reqClone.Header.Get("Authorization") == "" {
+			reqClone.Header.Set("Authorization", "Bearer "+t.GitHubToken)
+		}
 		reqClone.Header.Set("User-Agent", userAgent)
 	}
 

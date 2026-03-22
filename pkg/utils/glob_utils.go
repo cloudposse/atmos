@@ -32,12 +32,25 @@ var (
 
 // GetGlobMatches tries to read and return the Glob matches content from the sync map if it exists in the map,
 // otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files.
+//
+// Note: unlike pkg/filesystem.GetGlobMatches, this function returns an error when no files match the pattern
+// (consistent with its use as an import-path resolver). The returned slice may be nil when an error is returned.
+//
+// Caching contract: only non-empty result sets are cached to avoid the phantom-path bug where
+// strings.Split("", ",") would return []string{""} (a single empty string) on a cache hit.
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "utils.GetGlobMatches")()
 
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
 	if found && existingMatches != nil {
-		return strings.Split(existingMatches.(string), ","), nil
+		cached := existingMatches.(string)
+		if cached == "" {
+			// Treat empty-string cache entries as a cache miss; this should never happen
+			// with the guarded Store below, but provides a belt-and-suspenders safety net.
+			getGlobMatchesSyncMap.Delete(pattern)
+		} else {
+			return strings.Split(cached, ","), nil
+		}
 	}
 
 	pattern = filepath.ToSlash(pattern)
@@ -62,7 +75,12 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		fullMatches = append(fullMatches, filepath.Join(filepath.FromSlash(base), match))
 	}
 
-	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
+	// Only cache non-empty results to prevent the phantom-path bug:
+	// strings.Join(nil/[]string{}, ",") == "" and strings.Split("", ",") == []string{""}
+	// which would return a single empty-string path on a subsequent cache hit.
+	if len(fullMatches) > 0 {
+		getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
+	}
 
 	return fullMatches, nil
 }

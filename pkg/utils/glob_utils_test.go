@@ -515,3 +515,31 @@ func TestPathMatch_PipeCharacterNoCollision(t *testing.T) {
 		assert.Equal(t, match1, match2, "Both should have same result (false)")
 	}
 }
+
+// TestGetGlobMatches_EmptyResultCachingBug is a regression test for the phantom-path bug.
+// When doublestar.Glob returns a non-nil but empty slice, the original code stored
+// strings.Join([]string{}, ",") == "" in the cache. A subsequent call (cache hit) would
+// return strings.Split("", ",") == []string{""} — a single empty-string "phantom path".
+// The fix: only cache non-empty result sets; return and guard against empty cached entries.
+func TestGetGlobMatches_EmptyResultCachingBug(t *testing.T) {
+	// Reset cache before and after to avoid inter-test pollution.
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	// Use a pattern that legitimately matches no files in the tmp directory.
+	tmpDir := t.TempDir()
+	pattern := filepath.Join(tmpDir, "no-such-file-*.xyz")
+
+	// First call — no matches, should return an error (pkg/utils contract).
+	result1, err1 := GetGlobMatches(pattern)
+	assert.Error(t, err1, "first call with no matches should return an error")
+	assert.Nil(t, result1)
+
+	// Second call — should not return a phantom empty-string entry from a cached "".
+	result2, err2 := GetGlobMatches(pattern)
+	assert.Error(t, err2, "second call (potential cache hit) should still return an error")
+	// Critically: must not return []string{""} (the phantom path).
+	// The original bug: strings.Split("", ",") == []string{""} on cache hit.
+	assert.Nil(t, result2, "second call must not return a phantom empty-string path from cache")
+	assert.NotContains(t, result2, "", "cache hit must never contain an empty-string phantom path")
+}

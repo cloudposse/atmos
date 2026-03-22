@@ -682,3 +682,42 @@ func TestWithTransport_TripleComposition(t *testing.T) {
 	assert.Equal(t, "Bearer triple-token", capturedReq.Header.Get("Authorization"),
 		"Authorization header must be present after triple composition")
 }
+
+// TestWithGitHubToken_MultipleCallsLastWins is a regression test for the multiple
+// WithGitHubToken wrappers bug. When two WithGitHubToken calls are composed, the INNER
+// (earlier-applied) transport's RoundTrip previously overwrote the OUTER (later-applied)
+// transport's Authorization header, causing the wrong token to be sent.
+// After the fix (only set Authorization if not already set), the outermost (last-applied)
+// token must win.
+func TestWithGitHubToken_MultipleCallsLastWins(t *testing.T) {
+	var capturedReq *http.Request
+	mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		capturedReq = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("ok")),
+		}, nil
+	})
+
+	// Apply t1 first, t2 second — t2 is the outermost (last-applied) wrapper.
+	// t2's token must win. Before the fix, t1 (inner) would overwrite t2 (outer).
+	client := NewDefaultClient(
+		WithTransport(mockTransport),
+		WithGitHubToken("token-t1"),
+		WithGitHubToken("token-t2"),
+	)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos/test/repo", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.NotNil(t, capturedReq, "mock transport should have been reached")
+	// The outermost (last-applied, t2) token must be in the Authorization header.
+	// Before the fix, the inner t1 would overwrite: Authorization: Bearer token-t1 (wrong).
+	// After the fix: Authorization: Bearer token-t2 (correct).
+	assert.Equal(t, "Bearer token-t2", capturedReq.Header.Get("Authorization"),
+		"last-applied (outermost) token must win when multiple WithGitHubToken calls are composed")
+}
