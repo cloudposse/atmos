@@ -150,15 +150,22 @@ func TestShellHomeDir(t *testing.T) {
 	})
 
 	t.Run("username with shell metacharacters rejected", func(t *testing.T) {
-		// Verify the extended guard also rejects single quotes, backticks, dollar
-		// signs, semicolons, and spaces — all of which could cause shell injection
-		// or unexpected multi-argument expansion when concatenated into the command.
+		// Verify the whitelist rejects shell metacharacters that could cause
+		// injection or unexpected expansion when interpolated into sh -c.
+		// Also verifies new chars (|, &, >, <, (, ), tab) caught by whitelist.
 		metacharNames := []string{
 			"user'quote",
 			"user`backtick",
 			"user$dollar",
 			"user;semi",
 			"user space",
+			"user|pipe",
+			"user&amp",
+			"user>redir",
+			"user<redir",
+			"user(paren",
+			"user)paren",
+			"user\ttab",
 		}
 		for _, name := range metacharNames {
 			orig := shellGetUsernameFunc
@@ -250,6 +257,61 @@ func TestGetHomeFromShell_Failure(t *testing.T) {
 	})
 }
 
+// TestShellHomeDir_ShellUnavailableReal verifies that the real shellHomeDir
+// returns ErrShellUnavailable when sh cannot be found, using PATH manipulation
+// to simulate a minimal container environment without a shell.
+func TestShellHomeDir_ShellUnavailableReal(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shellHomeDir is not used on Windows.")
+	}
+
+	origUsername := shellGetUsernameFunc
+	defer func() { shellGetUsernameFunc = origUsername }()
+
+	// Provide a valid username so the guard passes; use an empty PATH so sh
+	// cannot be found, exercising the exec.ErrNotFound branch in shellHomeDir.
+	shellGetUsernameFunc = func() (string, error) { return "validuser", nil }
+	t.Setenv("PATH", t.TempDir()) // PATH contains no executables
+
+	_, err := shellHomeDir()
+	assert.ErrorIs(t, err, ErrShellUnavailable,
+		"shellHomeDir must return ErrShellUnavailable when sh is not in PATH.")
+}
+
+// TestShellGetUsernameFunc_IDNotFound_UserEnvFallback verifies that the real
+// shellGetUsernameFunc falls back to $USER when id is not found in PATH.
+func TestShellGetUsernameFunc_IDNotFound_UserEnvFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shellGetUsernameFunc is not used on Windows.")
+	}
+
+	// Use an empty directory as PATH so id cannot be found; $USER is set.
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("USER", "fallbackuser")
+
+	name, err := shellGetUsernameFunc()
+	require.NoError(t, err, "shellGetUsernameFunc should fall back to $USER when id is absent.")
+	assert.Equal(t, "fallbackuser", name, "returned username must match the $USER env var.")
+}
+
+// TestShellGetUsernameFunc_IDNotFound_ErrIDUnavailable verifies that the real
+// shellGetUsernameFunc returns ErrIDUnavailable when id is not found and both
+// $USER and whoami are unavailable.
+func TestShellGetUsernameFunc_IDNotFound_ErrIDUnavailable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shellGetUsernameFunc is not used on Windows.")
+	}
+
+	// Use an empty directory as PATH so both id and whoami cannot be found;
+	// clear $USER so the env-var fallback also fails.
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("USER", "")
+
+	_, err := shellGetUsernameFunc()
+	assert.ErrorIs(t, err, ErrIDUnavailable,
+		"shellGetUsernameFunc must return ErrIDUnavailable when id, whoami, and $USER are all unavailable.")
+}
+
 func TestDirWindows(t *testing.T) {
 	t.Run("HOME env var wins", func(t *testing.T) {
 		t.Setenv("HOME", "/my/home")
@@ -329,6 +391,22 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("HOMEPATH", "")
 		_, err := dirWindows()
 		assert.ErrorIs(t, err, ErrHomeDrivePathBlank)
+	})
+
+	t.Run("HOMEPATH without leading backslash gets backslash prepended", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("Windows backslash path semantics only apply on Windows.")
+		}
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("HOMEDRIVE", "C:")
+		t.Setenv("HOMEPATH", `Users\testuser`)
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		// Missing leading backslash in HOMEPATH must be fixed; result must be
+		// C:\Users\testuser (absolute), not C:Users\testuser (drive-relative).
+		assert.Equal(t, filepath.Clean(`C:\Users\testuser`), dir,
+			"HOMEPATH without leading backslash must be normalised to absolute path.")
 	})
 
 	t.Run("forward-slash HOME converted to native separators (Cygwin/WSL/Git Bash)", func(t *testing.T) {
@@ -852,6 +930,14 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 		"user$dollar",
 		"user;semicolon",
 		"user space",
+		// New: operator characters now also rejected by the whitelist regex.
+		"user|pipe",
+		"user&amp",
+		"user>redir",
+		"user<redir",
+		"user(paren",
+		"user)paren",
+		"user\ttab",
 	}
 	for i, name := range maliciousNames {
 		t.Run(fmt.Sprintf("rejects_malicious_%d", i), func(t *testing.T) {
