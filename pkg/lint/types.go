@@ -72,6 +72,12 @@ type LintContext struct {
 	// AllStackFiles contains all YAML files found under the stacks base path.
 	AllStackFiles []string
 
+	// StackNameToFileIndex maps logical stack names to their physical manifest path.
+	// This index is built from RawStackConfigs by stripping the stacks base path and
+	// YAML extension from the file path key. It is used by rules (e.g. L-08) that need
+	// to attribute a finding to a specific file but only know the logical stack name.
+	StackNameToFileIndex map[string]string
+
 	// AtmosConfig is the loaded Atmos configuration.
 	AtmosConfig schema.AtmosConfiguration
 

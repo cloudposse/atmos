@@ -18,7 +18,9 @@ func newL03ImportDepthRule() lint.LintRule {
 func (r *l03ImportDepthRule) ID() string   { return "L-03" }
 func (r *l03ImportDepthRule) Name() string { return "Import Depth Warning" }
 func (r *l03ImportDepthRule) Description() string {
-	return "Warns when the import graph depth for a stack file exceeds the configured threshold."
+	return "Warns when the import graph depth for a stack file exceeds the configured threshold. " +
+		"Depth is measured as the number of nodes in the longest import chain (node count, not edge count): " +
+		"a file with no imports has depth 1, a file importing one other file has depth 2, etc."
 }
 func (r *l03ImportDepthRule) Severity() lint.Severity { return lint.SeverityWarning }
 func (r *l03ImportDepthRule) AutoFixable() bool       { return false }

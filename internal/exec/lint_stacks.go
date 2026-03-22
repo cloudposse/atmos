@@ -132,11 +132,17 @@ func LintStacks(
 				filteredRaw[filePath] = rawConfig
 			}
 		}
-		// Fall back to the full set if matching produced no results (e.g. when stack
-		// names encode environment + region context that doesn't match the bare filename).
-		if len(filteredRaw) > 0 {
-			rawStackConfigs = filteredRaw
+		// Fail closed when no raw manifest stem matches the requested stack name.
+		// Falling back to the full repo scope would silently give misleading results —
+		// in particular, L-07 would flag unrelated orphans that belong to other stacks,
+		// producing noise rather than actionable findings for the targeted stack.
+		if len(filteredRaw) == 0 {
+			return nil, fmt.Errorf(
+				"stack %q not found under %s; run without --stack or verify the stack name",
+				stackFilter, atmosConfig.StacksBaseAbsolutePath,
+			)
 		}
+		rawStackConfigs = filteredRaw
 	}
 
 	// Build import graph from raw stack configs.
@@ -159,18 +165,25 @@ func LintStacks(
 		allStackFiles = scopeStackFiles(allStackFiles, rawStackConfigs, importGraph, atmosConfig.StacksBaseAbsolutePath)
 	}
 
+	// Build a logical-stack-name → manifest-file-path index from RawStackConfigs so
+	// that rules (e.g. L-08) can attribute findings to a physical file when they only
+	// know the logical stack name.  The key is derived by stripping the stacks base
+	// path prefix and YAML extension from the raw manifest path.
+	stackNameToFile := buildStackNameToFileIndex(rawStackConfigs, atmosConfig.StacksBaseAbsolutePath)
+
 	// Merge lint config defaults, passing the full atmos config so sensitive_key_patterns
 	// from settings.terminal.mask can serve as the single source of truth.
 	lintConfig := mergedLintConfig(atmosConfig.Lint.Stacks, atmosConfig.Settings.Terminal.Mask.SensitiveKeyPatterns)
 
 	ctx := lint.LintContext{
-		StacksMap:       stacksMap,
-		RawStackConfigs: rawStackConfigs,
-		ImportGraph:     importGraph,
-		StacksBasePath:  atmosConfig.StacksBaseAbsolutePath,
-		AllStackFiles:   allStackFiles,
-		AtmosConfig:     *atmosConfig,
-		LintConfig:      lintConfig,
+		StacksMap:            stacksMap,
+		RawStackConfigs:      rawStackConfigs,
+		ImportGraph:          importGraph,
+		StacksBasePath:       atmosConfig.StacksBaseAbsolutePath,
+		AllStackFiles:        allStackFiles,
+		StackNameToFileIndex: stackNameToFile,
+		AtmosConfig:          *atmosConfig,
+		LintConfig:           lintConfig,
 	}
 
 	engine := lint.NewEngine(rules.All())
@@ -219,9 +232,12 @@ func buildImportGraph(rawStackConfigs map[string]map[string]any, basePath string
 	return graph
 }
 
-// expandGlobImports replaces glob import patterns with the matching YAML file paths.
-// Non-glob strings are passed through unchanged. If basePath is empty or a glob
-// yields no matches, the original pattern is kept so callers retain partial data.
+// expandGlobImports replaces glob import patterns with the matching YAML file paths
+// and resolves non-glob relative imports to absolute paths.
+// Non-glob strings are resolved against basePath (with .yaml/.yml extension inference)
+// so that L-03 depth traversal can follow edges consistently using absolute path keys.
+// If basePath is empty or a glob yields no matches, the original pattern is kept so
+// callers retain partial data.
 // Duplicate results from overlapping patterns (e.g. "catalog/*" and "catalog/*.yaml"
 // both matching the same file) are automatically deduplicated.
 func expandGlobImports(imports []string, basePath string) []string {
@@ -237,8 +253,10 @@ func expandGlobImports(imports []string, basePath string) []string {
 	result := make([]string, 0, len(imports))
 	for _, imp := range imports {
 		if !strings.ContainsAny(imp, "*?[") {
-			// Not a glob — pass through unchanged.
-			result = append(result, imp)
+			// Not a glob — resolve to absolute path so L-03 depth traversal can follow
+			// edges using consistent absolute keys that match the importGraph key space.
+			abs := resolveNonGlobImport(imp, basePath)
+			result = append(result, abs)
 			continue
 		}
 		// Build the set of glob patterns to try. If the import already ends with
@@ -281,6 +299,38 @@ func expandGlobImports(imports []string, basePath string) []string {
 		}
 	}
 	return result
+}
+
+// resolveNonGlobImport converts a non-glob import string to an absolute path,
+// inferring ".yaml"/".yml" extensions when missing so that L-03 depth traversal
+// can follow import edges using consistent absolute keys that match the importGraph
+// key space (which is always keyed by absolute file path).
+//
+// If the import is already absolute, it is returned unchanged. For relative imports,
+// basePath is joined and extension candidates are probed in order (.yaml, .yml, bare).
+// If no file exists at any candidate, the basePath-joined import is returned as a
+// best-effort fallback so callers still see the intended target.
+func resolveNonGlobImport(imp, basePath string) string {
+	if filepath.IsAbs(imp) {
+		return imp
+	}
+	if basePath == "" {
+		return imp
+	}
+	ext := strings.ToLower(filepath.Ext(imp))
+	// If the import already carries a YAML extension, just join and return.
+	if ext == ".yaml" || ext == ".yml" {
+		return filepath.Join(basePath, imp)
+	}
+	// Try extension candidates in order: .yaml first, then .yml, then bare.
+	for _, suffix := range []string{".yaml", ".yml", ""} {
+		candidate := filepath.Join(basePath, imp+suffix)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	// No file found — return the bare joined path as a best-effort fallback.
+	return filepath.Join(basePath, imp)
 }
 
 // stackYAMLFiles returns all non-template YAML files under root as absolute paths,
@@ -374,6 +424,26 @@ func rulesRelNorm(path, basePath string) string {
 		}
 	}
 	return filepath.ToSlash(filepath.Clean(path))
+}
+
+// buildStackNameToFileIndex creates a map from logical stack name to absolute manifest
+// file path, derived from RawStackConfigs. The logical name is computed by stripping
+// basePath prefix and YAML extension from the file path key — mirroring how Atmos
+// derives stack names. This index is used by L-08 and other rules that need to attribute
+// a finding to a physical file when only a logical stack name is known.
+func buildStackNameToFileIndex(rawStackConfigs map[string]map[string]any, basePath string) map[string]string {
+	index := make(map[string]string, len(rawStackConfigs))
+	for filePath := range rawStackConfigs {
+		name := rulesRelNorm(filePath, basePath)
+		// rulesRelNorm strips basePath and extension, leaving a slash-separated stem.
+		// Use only the final segment (basename) as the logical name since that is what
+		// Atmos exposes as the stack name in StacksMap entries.
+		if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
+			name = name[idx+1:]
+		}
+		index[name] = filePath
+	}
+	return index
 }
 
 // mergedLintConfig returns a LintStacksConfig with defaults applied for missing fields.
@@ -521,6 +591,7 @@ func renderLintJSON(result *lint.LintResult) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(result); err != nil {
+		ui.Error(fmt.Sprintf("failed to render lint output as JSON: %v", err))
 		return fmt.Errorf("rendering lint output as JSON: %w", err)
 	}
 	return nil

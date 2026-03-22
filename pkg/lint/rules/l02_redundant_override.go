@@ -28,10 +28,14 @@ func (r *l02RedundantOverrideRule) Run(ctx lint.LintContext) ([]lint.LintFinding
 	var findings []lint.LintFinding
 
 	// Build a map of component base vars from abstract/catalog components.
-	// Key: component name, Value: vars map.
-	baseVars := make(map[string]map[string]any)
+	// Key: "<stackName>/<componentName>" to prevent false positives/negatives when
+	// different stacks define abstract components with the same name but different vars.
+	// A secondary global index by component name alone is kept as a fallback for
+	// cross-stack inheritance where the parent stack is not the current stack.
+	baseVars := make(map[string]map[string]any)        // "<stack>/<comp>" → vars
+	globalBaseVars := make(map[string]map[string]any)  // "<comp>" → vars (fallback)
 
-	for _, stackSection := range ctx.StacksMap {
+	for stackName, stackSection := range ctx.StacksMap {
 		stackMap, ok := stackSection.(map[string]any)
 		if !ok {
 			continue
@@ -57,7 +61,13 @@ func (r *l02RedundantOverrideRule) Run(ctx lint.LintContext) ([]lint.LintFinding
 					continue
 				}
 				if vars, ok := compMap[cfg.VarsSectionName].(map[string]any); ok {
-					baseVars[compName] = vars
+					key := stackName + "/" + compName
+					baseVars[key] = vars
+					// Keep a global fallback for cross-stack lookups; the first
+					// abstract component with a given name wins (arbitrary but stable).
+					if _, exists := globalBaseVars[compName]; !exists {
+						globalBaseVars[compName] = vars
+					}
 				}
 			}
 		}
@@ -103,7 +113,12 @@ func (r *l02RedundantOverrideRule) Run(ctx lint.LintContext) ([]lint.LintFinding
 
 				// For each parent in the inheritance chain, check for redundant overrides.
 				for _, parent := range inherits {
-					parentVars, hasParent := baseVars[parent]
+					// Prefer same-stack parent to avoid cross-stack false positives;
+					// fall back to the global index for cross-stack inheritance.
+					parentVars, hasParent := baseVars[stackName+"/"+parent]
+					if !hasParent {
+						parentVars, hasParent = globalBaseVars[parent]
+					}
 					if !hasParent {
 						continue
 					}

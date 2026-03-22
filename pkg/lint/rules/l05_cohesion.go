@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/lint"
 )
 
@@ -28,14 +29,18 @@ func (r *l05CohesionRule) AutoFixable() bool       { return false }
 
 func (r *l05CohesionRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
 	threshold := defaultCohesionThreshold
+	// Allow the threshold to be configured via lint.stacks.cohesion_max_groups.
+	if ctx.LintConfig.CohesionMaxGroups > 0 {
+		threshold = ctx.LintConfig.CohesionMaxGroups
+	}
 
 	// Map: file -> set of concern groups (component name prefixes).
 	// RawStackConfigs is keyed by file path.
 	fileConcerns := make(map[string]map[string]bool)
 
 	for filePath, rawConfig := range ctx.RawStackConfigs {
-		for _, compType := range []string{"terraform", "helmfile"} {
-			compSection, ok := getNestedMap(rawConfig, "components", compType)
+		for _, compType := range []string{cfg.TerraformSectionName, cfg.HelmfileSectionName} {
+			compSection, ok := getNestedMap(rawConfig, cfg.ComponentsSectionName, compType)
 			if !ok {
 				continue
 			}

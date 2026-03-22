@@ -7,6 +7,9 @@ type LintStacksConfig struct {
 	MaxImportDepth int `yaml:"max_import_depth,omitempty" json:"max_import_depth,omitempty" mapstructure:"max_import_depth"`
 	// DRYThresholdPct is the percentage threshold for L-06 DRY extraction suggestions. Default: 80.
 	DRYThresholdPct int `yaml:"dry_threshold_pct,omitempty" json:"dry_threshold_pct,omitempty" mapstructure:"dry_threshold_pct"`
+	// CohesionMaxGroups is the maximum number of concern groups allowed per catalog file
+	// before L-05 triggers a finding. Default: 3.
+	CohesionMaxGroups int `yaml:"cohesion_max_groups,omitempty" json:"cohesion_max_groups,omitempty" mapstructure:"cohesion_max_groups"`
 	// SensitiveVarPatterns is a list of glob patterns for sensitive variable names (L-08).
 	// User-provided patterns are merged with built-in defaults (*password*, *secret*, etc.)
 	// so common sensitive names are always checked. When empty, patterns from

@@ -44,8 +44,12 @@ func (r *l08SensitiveVarRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 
 		for varKey := range globalVars {
 			if matchesSensitivePattern(varKey, patterns) {
-				// Try to find the file for this stack.
-				file := stackNameToFile(stackName, ctx.StacksBasePath)
+				// Use the pre-built index for reliable file attribution; fall back to
+				// the heuristic for stack names that don't match any known manifest stem.
+				file := ctx.StackNameToFileIndex[stackName]
+				if file == "" {
+					file = stackNameToFile(stackName, ctx.StacksBasePath)
+				}
 				findings = append(findings, lint.LintFinding{
 					RuleID:   r.ID(),
 					Severity: r.Severity(),
