@@ -741,6 +741,19 @@ func TestRedactStderr(t *testing.T) {
 		result := redactStderr("jdoe: /Users/jdoe not found (jdoe)", "jdoe")
 		assert.Equal(t, "<redacted>: /Users/<redacted> not found (<redacted>)", result)
 	})
+
+	t.Run("case-insensitive replacement", func(t *testing.T) {
+		// macOS dscl stderr may format the username with different casing
+		// (e.g., /Users/JDoe when the system username is jdoe).
+		result := redactStderr("/Users/JDoe: record not found", "jdoe")
+		assert.Equal(t, "/Users/<redacted>: record not found", result,
+			"case-variant username must be redacted.")
+	})
+
+	t.Run("mixed case all occurrences", func(t *testing.T) {
+		result := redactStderr("JDOE is jdoe and Jdoe", "jdoe")
+		assert.Equal(t, "<redacted> is <redacted> and <redacted>", result)
+	})
 }
 
 // TestInvalidUsernameErrorNoPII verifies that the error returned for invalid
@@ -766,7 +779,74 @@ func TestInvalidUsernameErrorNoPII(t *testing.T) {
 	})
 }
 
-// TestDir_Cache verifies that Dir() caches its result and returns it on
+// TestShellHomeDirStderrRedacted verifies that when `sh -c printf '~username'`
+// writes the username to stderr (e.g., in error messages from a distroless
+// container), the error returned by shellHomeDir does not contain the raw
+// username string. This is the cross-check for Medium #7 (PII in shell path).
+func TestShellHomeDirStderrRedacted(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shellHomeDir is not used on Windows.")
+	}
+
+	// Inject a fixed username and create a mock sh that echoes the username in
+	// stderr and exits 1, so the error-wrapping code path is exercised.
+	const testUsername = "pii_test_user"
+	binDir := t.TempDir()
+	// Write a mock sh that writes the username in its stderr output, simulating
+	// a shell error that embeds the username (e.g., permission-denied messages).
+	shScript := "#!/bin/sh\necho " + testUsername + " is unknown >&2\nexit 1\n"
+	shPath := filepath.Join(binDir, "sh")
+	require.NoError(t, os.WriteFile(shPath, []byte(shScript), 0o755))
+
+	orig := shellGetUsernameFunc
+	origPath := os.Getenv("PATH")
+	defer func() {
+		shellGetUsernameFunc = orig
+		os.Setenv("PATH", origPath)
+	}()
+	shellGetUsernameFunc = func() (string, error) { return testUsername, nil }
+	os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
+
+	_, err := shellHomeDir()
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), testUsername,
+		"error message must not contain the raw username (PII).")
+}
+
+// TestShellGetUsernameFunc_StderrContext verifies that when id and whoami both
+// fail and write to stderr, the diagnostic context is included in the returned
+// error while not containing raw PII (no username available at this stage).
+func TestShellGetUsernameFunc_StderrContext(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("id/whoami are not used on Windows.")
+	}
+
+	// Create mock id and whoami binaries that write diagnostic stderr and exit 1.
+	binDir := t.TempDir()
+	idScript := "#!/bin/sh\necho 'NSS lookup failed' >&2\nexit 1\n"
+	whoamiScript := "#!/bin/sh\necho 'service unavailable' >&2\nexit 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "id"), []byte(idScript), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "whoami"), []byte(whoamiScript), 0o755))
+
+	origPath := os.Getenv("PATH")
+	origUser := os.Getenv("USER")
+	defer func() {
+		os.Setenv("PATH", origPath)
+		os.Setenv("USER", origUser)
+	}()
+	os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
+	os.Setenv("USER", "") // Disable USER env fallback
+
+	orig := shellGetUsernameFunc
+	// Temporarily restore the real shellGetUsernameFunc to test the real impl.
+	shellGetUsernameFunc = orig
+	_, err := shellGetUsernameFunc()
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrIDUnavailable)
+	// The error should mention NSS/LDAP context, not be a bare sentinel.
+	assert.Contains(t, err.Error(), "NSS lookup failed",
+		"id stderr should be included in the error for diagnostics.")
+}
 // subsequent calls without re-reading the home directory.
 func TestDir_Cache(t *testing.T) {
 	Reset()

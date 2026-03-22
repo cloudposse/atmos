@@ -378,14 +378,32 @@ func getHomeFromShell() (string, error) {
 }
 
 // redactStderr returns a sanitized version of a stderr string with any
-// occurrence of the given username replaced by "<redacted>". This prevents
-// PII (e.g., /Users/<username> in dscl error messages) from leaking into
-// logs or error chains.
+// occurrence of the given username replaced by "<redacted>". The replacement
+// is case-insensitive so that stderr messages with a different casing variant
+// (e.g., "/Users/JDoe" when username is "jdoe") are also scrubbed. This
+// prevents PII (e.g., /Users/<username> in dscl error messages) from leaking
+// into logs or error chains.
 func redactStderr(stderr, username string) string {
-	if username == "" {
+	if username == "" || stderr == "" {
 		return stderr
 	}
-	return strings.ReplaceAll(stderr, username, "<redacted>")
+	// Case-insensitive scan: walk stderr looking for the username in any casing.
+	lowerSrc := strings.ToLower(stderr)
+	lowerUser := strings.ToLower(username)
+	var result strings.Builder
+	result.Grow(len(stderr))
+	i := 0
+	for {
+		idx := strings.Index(lowerSrc[i:], lowerUser)
+		if idx < 0 {
+			result.WriteString(stderr[i:])
+			break
+		}
+		result.WriteString(stderr[i : i+idx])
+		result.WriteString("<redacted>")
+		i += idx + len(lowerUser)
+	}
+	return result.String()
 }
 
 // shellGetUsernameFunc is the function used by shellHomeDir to obtain the
@@ -397,9 +415,10 @@ func redactStderr(stderr, username string) string {
 var shellGetUsernameFunc = func() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), externalCmdTimeout)
 	defer cancel()
-	var idOut bytes.Buffer
+	var idOut, idErr bytes.Buffer
 	idCmd := exec.CommandContext(ctx, "id", "-un")
 	idCmd.Stdout = &idOut
+	idCmd.Stderr = &idErr
 	if err := idCmd.Run(); err == nil {
 		if name := strings.TrimSpace(idOut.String()); name != "" {
 			return name, nil
@@ -413,13 +432,23 @@ var shellGetUsernameFunc = func() (string, error) {
 	}
 	whoamiCtx, whoamiCancel := context.WithTimeout(context.Background(), externalCmdTimeout)
 	defer whoamiCancel()
-	var whoOut bytes.Buffer
+	var whoOut, whoErr bytes.Buffer
 	whoamiCmd := exec.CommandContext(whoamiCtx, "whoami")
 	whoamiCmd.Stdout = &whoOut
+	whoamiCmd.Stderr = &whoErr
 	if werr := whoamiCmd.Run(); werr == nil {
 		if name := strings.TrimSpace(whoOut.String()); name != "" {
 			return name, nil
 		}
+	}
+	// Include any diagnostic stderr from id/whoami (no username available yet,
+	// so no redaction needed). These messages typically describe NSS/LDAP errors
+	// and do not include PII.
+	if msg := strings.TrimSpace(idErr.String()); msg != "" {
+		return "", fmt.Errorf("%w (id stderr: %s)", ErrIDUnavailable, msg)
+	}
+	if msg := strings.TrimSpace(whoErr.String()); msg != "" {
+		return "", fmt.Errorf("%w (whoami stderr: %s)", ErrIDUnavailable, msg)
 	}
 	return "", ErrIDUnavailable
 }
@@ -471,7 +500,7 @@ func shellHomeDir() (string, error) {
 		if errors.Is(err, exec.ErrNotFound) {
 			return "", ErrShellUnavailable
 		}
-		msg := strings.TrimSpace(stderr.String())
+		msg := redactStderr(strings.TrimSpace(stderr.String()), username)
 		if msg != "" {
 			return "", fmt.Errorf("getHomeFromShell: %w (stderr: %s)", err, msg)
 		}
