@@ -9,15 +9,18 @@ package exec
 //   - runWorkspaceSetup (recovery path when workspace already active)
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -204,6 +207,9 @@ func TestRunWorkspaceSetup_RecoveryPath(t *testing.T) {
 //
 // This prevents regressions where recovery triggers too eagerly (e.g., in "staging" but
 // requesting "dev" → should fail, not silently continue with the wrong workspace).
+//
+// Additionally, the warn log ("Workspace is already active…") must NOT be emitted,
+// since the recovery path is never entered.
 func TestRunWorkspaceSetup_NoRecoveryOnMismatchedEnv(t *testing.T) {
 	exePath, err := os.Executable()
 	require.NoError(t, err, "os.Executable() must succeed")
@@ -220,6 +226,11 @@ func TestRunWorkspaceSetup_NoRecoveryOnMismatchedEnv(t *testing.T) {
 		0o600,
 	))
 
+	// Redirect log output to a buffer so we can assert no Warn was emitted.
+	var logBuf bytes.Buffer
+	log.Default().SetOutput(&logBuf)
+	defer log.Default().SetOutput(os.Stderr)
+
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:         "plan",
@@ -234,4 +245,11 @@ func TestRunWorkspaceSetup_NoRecoveryOnMismatchedEnv(t *testing.T) {
 	require.Error(t, wsErr, "runWorkspaceSetup must fail when environment file names a different workspace")
 	var exitErr errUtils.ExitCodeError
 	require.True(t, errors.As(wsErr, &exitErr), "error must be an ExitCodeError, got: %T (%v)", wsErr, wsErr)
+
+	// Assert the recovery warn log was NOT emitted.
+	// If it were, it would indicate recovery triggered despite the workspace mismatch.
+	logOutput := logBuf.String()
+	assert.False(t,
+		strings.Contains(logOutput, "Workspace is already active"),
+		"recovery warn log must NOT be emitted on mismatch; got log output: %q", logOutput)
 }
