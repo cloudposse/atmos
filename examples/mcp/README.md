@@ -344,7 +344,32 @@ Real-time pricing lookups and cost comparisons. All Pricing API calls are free.
 
 ### aws-docs — Documentation Search
 
-Searches and fetches AWS documentation in Markdown format. No credentials needed.
+Searches and fetches AWS documentation in markdown format. **No credentials needed** — this is
+the easiest server to try first since it accesses public AWS documentation endpoints.
+
+**Try it now:**
+
+```bash
+# Verify the server works
+atmos mcp test aws-docs
+
+# See what tools are available
+atmos mcp tools aws-docs
+
+# Ask a documentation question
+atmos ai ask "How do I configure S3 bucket lifecycle rules?"
+
+# Research a topic
+atmos ai ask "What are the VPC quotas and limits?"
+
+# Interactive session for deeper research
+atmos ai chat
+# Then: "Search AWS docs for EKS pod identity best practices"
+# Then: "What's the difference between IRSA and EKS Pod Identity?"
+```
+
+**Configuration:** No `env` variables needed. Optionally set `AWS_DOCUMENTATION_PARTITION`
+to `"aws-cn"` for China partition docs.
 
 ### aws-knowledge — Managed Knowledge Base
 
