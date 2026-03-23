@@ -14,8 +14,8 @@ import (
 
 var restartCmd = &cobra.Command{
 	Use:   "restart <name>",
-	Short: "Restart an MCP integration",
-	Long:  "Stop and restart an external MCP server integration.",
+	Short: "Restart an MCP server",
+	Long:  "Stop and restart an external MCP server.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "cmd.mcpRestart")()
@@ -27,7 +27,7 @@ var restartCmd = &cobra.Command{
 			return err
 		}
 
-		mgr, err := mcpclient.NewManager(atmosConfig.MCP.Integrations)
+		mgr, err := mcpclient.NewManager(atmosConfig.MCP.Servers)
 		if err != nil {
 			return err
 		}
@@ -50,7 +50,7 @@ var restartCmd = &cobra.Command{
 			return err
 		}
 
-		ui.Successf("Restarted MCP integration %q (%d tools available)", name, len(session.Tools()))
+		ui.Successf("Restarted MCP server %q (%d tools available)", name, len(session.Tools()))
 
 		// Keep running until context is cancelled (for interactive use).
 		// For non-interactive use (CI), the process will exit after this.

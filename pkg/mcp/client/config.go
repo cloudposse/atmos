@@ -10,7 +10,7 @@ import (
 
 const defaultTimeout = 30 * time.Second
 
-// ParsedConfig holds a parsed integration config with resolved timeout.
+// ParsedConfig holds a parsed server config with resolved timeout.
 type ParsedConfig struct {
 	Name         string
 	Description  string
@@ -22,10 +22,10 @@ type ParsedConfig struct {
 	AuthIdentity string
 }
 
-// ParseConfig validates and converts an MCPIntegrationConfig into a ParsedConfig.
-func ParseConfig(name string, cfg schema.MCPIntegrationConfig) (*ParsedConfig, error) { //nolint:gocritic // hugeParam: cfg is read-only config value.
+// ParseConfig validates and converts an MCPServerConfig into a ParsedConfig.
+func ParseConfig(name string, cfg schema.MCPServerConfig) (*ParsedConfig, error) { //nolint:gocritic // hugeParam: cfg is read-only config value.
 	if cfg.Command == "" {
-		return nil, fmt.Errorf("%w: integration %q", errUtils.ErrMCPIntegrationCommandEmpty, name)
+		return nil, fmt.Errorf("%w: server %q", errUtils.ErrMCPServerCommandEmpty, name)
 	}
 
 	timeout := defaultTimeout
@@ -33,7 +33,7 @@ func ParseConfig(name string, cfg schema.MCPIntegrationConfig) (*ParsedConfig, e
 		var err error
 		timeout, err = time.ParseDuration(cfg.Timeout)
 		if err != nil {
-			return nil, fmt.Errorf("%w: integration %q: %w", errUtils.ErrMCPIntegrationInvalidTimeout, name, err)
+			return nil, fmt.Errorf("%w: server %q: %w", errUtils.ErrMCPServerInvalidTimeout, name, err)
 		}
 	}
 

@@ -679,7 +679,7 @@ ai:
 
 ### Phase 3: MCP Pass-Through
 
-- Generate temporary MCP config from `ai.mcp.integrations`.
+- Generate temporary MCP config from `ai.mcp.servers`.
 - Pass `--mcp-config` to `claude -p` invocations (Claude Code).
 - Pass MCP config via `~/.codex/config.toml` for Codex CLI.
 - All three local providers gain access to configured MCP servers (AWS, Atmos, custom).

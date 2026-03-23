@@ -11,26 +11,26 @@ import (
 
 const registrationTimeout = 60 * time.Second
 
-// RegisterMCPTools starts configured MCP integrations and registers their tools
+// RegisterMCPTools starts configured MCP servers and registers their tools
 // in the Atmos AI tool registry. Returns the Manager so the caller can stop
 // all servers on exit.
 //
-// If authProvider is non-nil, integrations with auth_identity configured will
+// If authProvider is non-nil, servers with auth_identity configured will
 // have credentials injected into their subprocess environment automatically.
 //
-// Integrations that fail to start are logged as warnings but do not prevent
-// other integrations from registering. This follows the principle of best-effort
+// Servers that fail to start are logged as warnings but do not prevent
+// other servers from registering. This follows the principle of best-effort
 // availability — a broken AWS Cost Explorer server should not block EKS tools.
 func RegisterMCPTools(
 	registry *tools.Registry,
 	atmosConfig *schema.AtmosConfiguration,
 	authProvider AuthEnvProvider,
 ) (*Manager, error) {
-	if len(atmosConfig.MCP.Integrations) == 0 {
+	if len(atmosConfig.MCP.Servers) == 0 {
 		return nil, nil
 	}
 
-	mgr, err := NewManager(atmosConfig.MCP.Integrations)
+	mgr, err := NewManager(atmosConfig.MCP.Servers)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func RegisterMCPTools(
 
 	for _, session := range mgr.List() {
 		if err := session.Start(ctx, startOpts...); err != nil {
-			log.Warnf("MCP integration %q failed to start: %v", session.Name(), err)
+			log.Warnf("MCP server %q failed to start: %v", session.Name(), err)
 			continue
 		}
 
@@ -63,7 +63,7 @@ func RegisterMCPTools(
 	}
 
 	if totalTools > 0 {
-		log.Debugf("Registered %d MCP integration tools", totalTools)
+		log.Debugf("Registered %d MCP server tools", totalTools)
 	}
 
 	return mgr, nil

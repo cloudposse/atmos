@@ -96,13 +96,13 @@ func TestWithAuthManager_Error_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 }
 
-// newTestIntegrationConfig creates a minimal MCPIntegrationConfig for testing.
-func newTestIntegrationConfig(command string) schema.MCPIntegrationConfig {
-	return schema.MCPIntegrationConfig{Command: command}
+// newTestServerConfig creates a minimal MCPServerConfig for testing.
+func newTestServerConfig(command string) schema.MCPServerConfig {
+	return schema.MCPServerConfig{Command: command}
 }
 
 func TestParseConfig_AuthIdentity(t *testing.T) {
-	cfg := newTestIntegrationConfig("uvx")
+	cfg := newTestServerConfig("uvx")
 	cfg.AuthIdentity = "billing-readonly"
 
 	parsed, err := ParseConfig("aws-cost", cfg)
@@ -111,7 +111,7 @@ func TestParseConfig_AuthIdentity(t *testing.T) {
 }
 
 func TestParseConfig_EmptyAuthIdentity(t *testing.T) {
-	cfg := newTestIntegrationConfig("echo")
+	cfg := newTestServerConfig("echo")
 
 	parsed, err := ParseConfig("test", cfg)
 	require.NoError(t, err)

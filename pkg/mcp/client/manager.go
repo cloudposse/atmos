@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestResult contains the results of testing an MCP integration.
+// TestResult contains the results of testing an MCP server.
 type TestResult struct {
 	ServerStarted bool
 	Initialized   bool
@@ -27,10 +27,10 @@ type Manager struct {
 }
 
 // NewManager creates a Manager from atmos configuration.
-func NewManager(integrations map[string]schema.MCPIntegrationConfig) (*Manager, error) {
-	sessions := make(map[string]*Session, len(integrations))
+func NewManager(servers map[string]schema.MCPServerConfig) (*Manager, error) {
+	sessions := make(map[string]*Session, len(servers))
 
-	for name, cfg := range integrations {
+	for name, cfg := range servers {
 		parsed, err := ParseConfig(name, cfg)
 		if err != nil {
 			return nil, err
@@ -48,7 +48,7 @@ func (m *Manager) Get(name string) (*Session, error) {
 
 	session, ok := m.sessions[name]
 	if !ok {
-		return nil, fmt.Errorf("%w: %q", errUtils.ErrMCPIntegrationNotFound, name)
+		return nil, fmt.Errorf("%w: %q", errUtils.ErrMCPServerNotFound, name)
 	}
 	return session, nil
 }
@@ -68,7 +68,7 @@ func (m *Manager) List() []*Session {
 	return result
 }
 
-// Start starts a specific integration with optional start options (e.g., auth).
+// Start starts a specific server with optional start options (e.g., auth).
 func (m *Manager) Start(ctx context.Context, name string, opts ...StartOption) error {
 	session, err := m.Get(name)
 	if err != nil {
@@ -77,7 +77,7 @@ func (m *Manager) Start(ctx context.Context, name string, opts ...StartOption) e
 	return session.Start(ctx, opts...)
 }
 
-// Stop stops a specific integration.
+// Stop stops a specific server.
 func (m *Manager) Stop(name string) error {
 	session, err := m.Get(name)
 	if err != nil {
@@ -86,7 +86,7 @@ func (m *Manager) Stop(name string) error {
 	return session.Stop()
 }
 
-// StopAll stops all running integrations.
+// StopAll stops all running servers.
 func (m *Manager) StopAll() error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -102,7 +102,7 @@ func (m *Manager) StopAll() error {
 	return errors.Join(errs...)
 }
 
-// Test tests connectivity to an MCP integration by starting it,
+// Test tests connectivity to an MCP server by starting it,
 // listing tools, and pinging the server.
 func (m *Manager) Test(ctx context.Context, name string, opts ...StartOption) *TestResult {
 	result := &TestResult{}

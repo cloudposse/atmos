@@ -13,7 +13,7 @@ import (
 
 var testCmd = &cobra.Command{
 	Use:   "test <name>",
-	Short: "Test connectivity to an MCP integration",
+	Short: "Test connectivity to an MCP server",
 	Long:  "Start an external MCP server, verify the initialization handshake, list tools, and ping the server.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  executeMCPTest,
@@ -31,7 +31,7 @@ func executeMCPTest(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	mgr, err := mcpclient.NewManager(atmosConfig.MCP.Integrations)
+	mgr, err := mcpclient.NewManager(atmosConfig.MCP.Servers)
 	if err != nil {
 		return err
 	}

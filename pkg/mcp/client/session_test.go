@@ -32,7 +32,7 @@ func TestSession_Start_InvalidCommand(t *testing.T) {
 
 	err := session.Start(context.Background())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMCPIntegrationStartFailed)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerStartFailed)
 	assert.Equal(t, StatusError, session.Status())
 	assert.NotNil(t, session.LastError())
 }
@@ -59,7 +59,7 @@ func TestSession_CallTool_WhenNotRunning(t *testing.T) {
 
 	_, err := session.CallTool(context.Background(), "some-tool", nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMCPIntegrationNotRunning)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerNotRunning)
 }
 
 func TestSession_Ping_WhenNotRunning(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSession_Ping_WhenNotRunning(t *testing.T) {
 
 	err := session.Ping(context.Background())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMCPIntegrationNotRunning)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerNotRunning)
 }
 
 func TestBuildEnv(t *testing.T) {

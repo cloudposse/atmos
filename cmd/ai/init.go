@@ -35,13 +35,13 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiTo
 		log.Warnf("Failed to register Atmos tools: %v", err)
 	}
 
-	// Register external MCP integration tools (if configured).
+	// Register external MCP server tools (if configured).
 	var mcpMgr *mcpclient.Manager
-	if len(atmosConfig.MCP.Integrations) > 0 {
+	if len(atmosConfig.MCP.Servers) > 0 {
 		var mcpErr error
 		mcpMgr, mcpErr = mcpclient.RegisterMCPTools(registry, atmosConfig, nil)
 		if mcpErr != nil {
-			log.Warnf("Failed to initialize MCP integrations: %v", mcpErr)
+			log.Warnf("Failed to initialize MCP servers: %v", mcpErr)
 		}
 	}
 

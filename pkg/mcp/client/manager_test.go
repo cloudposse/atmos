@@ -11,18 +11,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestNewManager_EmptyIntegrations(t *testing.T) {
-	mgr, err := NewManager(map[string]schema.MCPIntegrationConfig{})
+func TestNewManager_EmptyServers(t *testing.T) {
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{})
 	require.NoError(t, err)
 	assert.Empty(t, mgr.List())
 }
 
 func TestNewManager_ValidConfig(t *testing.T) {
-	integrations := map[string]schema.MCPIntegrationConfig{
+	servers := map[string]schema.MCPServerConfig{
 		"server-a": {Command: "echo", Description: "Test A"},
 		"server-b": {Command: "cat", Description: "Test B"},
 	}
-	mgr, err := NewManager(integrations)
+	mgr, err := NewManager(servers)
 	require.NoError(t, err)
 
 	sessions := mgr.List()
@@ -33,27 +33,27 @@ func TestNewManager_ValidConfig(t *testing.T) {
 }
 
 func TestNewManager_InvalidConfig(t *testing.T) {
-	integrations := map[string]schema.MCPIntegrationConfig{
+	servers := map[string]schema.MCPServerConfig{
 		"bad": {Command: ""}, // Empty command.
 	}
-	_, err := NewManager(integrations)
+	_, err := NewManager(servers)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMCPIntegrationCommandEmpty)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerCommandEmpty)
 }
 
 func TestManager_Get_NotFound(t *testing.T) {
-	mgr, err := NewManager(map[string]schema.MCPIntegrationConfig{
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{
 		"exists": {Command: "echo"},
 	})
 	require.NoError(t, err)
 
 	_, err = mgr.Get("nonexistent")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMCPIntegrationNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerNotFound)
 }
 
 func TestManager_Get_Found(t *testing.T) {
-	mgr, err := NewManager(map[string]schema.MCPIntegrationConfig{
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{
 		"test": {Command: "echo", Description: "Test server"},
 	})
 	require.NoError(t, err)
@@ -65,25 +65,25 @@ func TestManager_Get_Found(t *testing.T) {
 }
 
 func TestManager_Start_NotFound(t *testing.T) {
-	mgr, err := NewManager(map[string]schema.MCPIntegrationConfig{})
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{})
 	require.NoError(t, err)
 
 	err = mgr.Start(context.Background(), "nonexistent")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMCPIntegrationNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerNotFound)
 }
 
 func TestManager_Stop_NotFound(t *testing.T) {
-	mgr, err := NewManager(map[string]schema.MCPIntegrationConfig{})
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{})
 	require.NoError(t, err)
 
 	err = mgr.Stop("nonexistent")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMCPIntegrationNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerNotFound)
 }
 
 func TestManager_StopAll_NoRunning(t *testing.T) {
-	mgr, err := NewManager(map[string]schema.MCPIntegrationConfig{
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{
 		"a": {Command: "echo"},
 		"b": {Command: "cat"},
 	})
@@ -95,7 +95,7 @@ func TestManager_StopAll_NoRunning(t *testing.T) {
 }
 
 func TestManager_List_Sorted(t *testing.T) {
-	mgr, err := NewManager(map[string]schema.MCPIntegrationConfig{
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{
 		"zulu":  {Command: "echo"},
 		"alpha": {Command: "echo"},
 		"mike":  {Command: "echo"},
@@ -110,11 +110,11 @@ func TestManager_List_Sorted(t *testing.T) {
 }
 
 func TestManager_Test_NotFound(t *testing.T) {
-	mgr, err := NewManager(map[string]schema.MCPIntegrationConfig{})
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{})
 	require.NoError(t, err)
 
 	result := mgr.Test(context.Background(), "nonexistent")
 	require.Error(t, result.Error)
-	assert.ErrorIs(t, result.Error, errUtils.ErrMCPIntegrationNotFound)
+	assert.ErrorIs(t, result.Error, errUtils.ErrMCPServerNotFound)
 	assert.False(t, result.ServerStarted)
 }

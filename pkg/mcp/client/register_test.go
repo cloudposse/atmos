@@ -10,20 +10,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestRegisterMCPTools_NoIntegrations(t *testing.T) {
+func TestRegisterMCPTools_NoServers(t *testing.T) {
 	registry := tools.NewRegistry()
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	mgr, err := RegisterMCPTools(registry, atmosConfig, nil)
 	require.NoError(t, err)
-	assert.Nil(t, mgr, "no manager when no integrations configured")
+	assert.Nil(t, mgr, "no manager when no servers configured")
 	assert.Equal(t, 0, registry.Count())
 }
 
 func TestRegisterMCPTools_InvalidConfig(t *testing.T) {
 	registry := tools.NewRegistry()
 	atmosConfig := &schema.AtmosConfiguration{}
-	atmosConfig.MCP.Integrations = map[string]schema.MCPIntegrationConfig{
+	atmosConfig.MCP.Servers = map[string]schema.MCPServerConfig{
 		"bad": {Command: ""}, // Empty command.
 	}
 
@@ -31,10 +31,10 @@ func TestRegisterMCPTools_InvalidConfig(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRegisterMCPTools_FailedStart_ContinuesOtherIntegrations(t *testing.T) {
+func TestRegisterMCPTools_FailedStart_ContinuesOtherServers(t *testing.T) {
 	registry := tools.NewRegistry()
 	atmosConfig := &schema.AtmosConfiguration{}
-	atmosConfig.MCP.Integrations = map[string]schema.MCPIntegrationConfig{
+	atmosConfig.MCP.Servers = map[string]schema.MCPServerConfig{
 		"bad-server": {Command: "nonexistent-binary-xyz-123"},
 	}
 

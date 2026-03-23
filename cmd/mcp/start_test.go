@@ -1341,8 +1341,8 @@ func TestGetPermissionMode_WithRequireConfirmationNilAndFalseYOLO(t *testing.T) 
 	assert.Equal(t, permission.ModeAllow, mode)
 }
 
-// TestStartCmd_Integration tests that the start command integrates properly with parent.
-func TestStartCmd_Integration(t *testing.T) {
+// TestStartCmd_Server tests that the start command integrates properly with parent.
+func TestStartCmd_Server(t *testing.T) {
 	// Verify the command is properly attached to mcpCmd.
 	parent := startCmd.Parent()
 	require.NotNil(t, parent)

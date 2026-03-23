@@ -119,7 +119,7 @@ func (t *BridgedTool) IsRestricted() bool {
 	return false
 }
 
-// ServerName returns the integration server name.
+// ServerName returns the server name.
 func (t *BridgedTool) ServerName() string {
 	return t.serverName
 }

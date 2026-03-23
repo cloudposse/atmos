@@ -14,8 +14,8 @@ import (
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List configured MCP integrations",
-	Long:  "List all external MCP server integrations configured in atmos.yaml.",
+	Short: "List configured MCP servers",
+	Long:  "List all external MCP servers configured in atmos.yaml.",
 	RunE:  executeMCPList,
 }
 
@@ -29,12 +29,12 @@ func executeMCPList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if len(atmosConfig.MCP.Integrations) == 0 {
-		fmt.Fprintln(os.Stdout, "No MCP integrations configured. Add integrations under 'mcp.integrations' in atmos.yaml.")
+	if len(atmosConfig.MCP.Servers) == 0 {
+		fmt.Fprintln(os.Stdout, "No MCP servers configured. Add servers under 'mcp.servers' in atmos.yaml.")
 		return nil
 	}
 
-	mgr, err := mcpclient.NewManager(atmosConfig.MCP.Integrations)
+	mgr, err := mcpclient.NewManager(atmosConfig.MCP.Servers)
 	if err != nil {
 		return err
 	}

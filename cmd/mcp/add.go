@@ -20,8 +20,8 @@ var addParser *flags.StandardParser
 
 var addCmd = &cobra.Command{
 	Use:   "add <name>",
-	Short: "Add an MCP integration to atmos.yaml",
-	Long: `Add an external MCP server integration to the mcp.integrations section of atmos.yaml.
+	Short: "Add an MCP server to atmos.yaml",
+	Long: `Add an external MCP server to the mcp.servers section of atmos.yaml.
 
 Example:
   atmos mcp add aws-eks --command uvx --args "awslabs.amazon-eks-mcp-server@latest" --description "Amazon EKS"
@@ -39,7 +39,7 @@ Example:
 
 		command := v.GetString("command")
 		if command == "" {
-			return errUtils.Build(errUtils.ErrMCPIntegrationCommandEmpty).
+			return errUtils.Build(errUtils.ErrMCPServerCommandEmpty).
 				WithHint("Use --command to specify the server command (e.g., --command uvx)").
 				Err()
 		}
@@ -49,25 +49,25 @@ Example:
 			return err
 		}
 
-		// Check if integration already exists.
-		if _, exists := atmosConfig.MCP.Integrations[name]; exists {
-			return errUtils.Build(errUtils.ErrMCPIntegrationAlreadyExists).
-				WithExplanationf("Integration %q is already configured in atmos.yaml", name).
+		// Check if server already exists.
+		if _, exists := atmosConfig.MCP.Servers[name]; exists {
+			return errUtils.Build(errUtils.ErrMCPServerAlreadyExists).
+				WithExplanationf("Server %q is already configured in atmos.yaml", name).
 				WithHintf("Use 'atmos mcp remove %s' first, or edit atmos.yaml directly", name).
 				Err()
 		}
 
-		// Build the integration config.
-		integration := map[string]any{
+		// Build the server config.
+		server := map[string]any{
 			"command": command,
 		}
 
 		if cmdArgs := v.GetStringSlice("args"); len(cmdArgs) > 0 {
-			integration["args"] = cmdArgs
+			server["args"] = cmdArgs
 		}
 
 		if desc := v.GetString("description"); desc != "" {
-			integration["description"] = desc
+			server["description"] = desc
 		}
 
 		if envVars := v.GetStringSlice("env"); len(envVars) > 0 {
@@ -80,7 +80,7 @@ Example:
 					}
 				}
 			}
-			integration["env"] = envMap
+			server["env"] = envMap
 		}
 
 		// Write to atmos.yaml.
@@ -90,11 +90,11 @@ Example:
 		}
 		configFile := findAtmosYAML(configPath)
 
-		if err := addIntegrationToConfig(configFile, name, integration); err != nil {
+		if err := addServerToConfig(configFile, name, server); err != nil {
 			return err
 		}
 
-		ui.Successf("Added MCP integration %q to %s", name, configFile)
+		ui.Successf("Added MCP server %q to %s", name, configFile)
 		return nil
 	},
 }
@@ -103,7 +103,7 @@ func init() {
 	addParser = flags.NewStandardParser(
 		flags.WithStringFlag("command", "c", "", "Command to run the MCP server (e.g., uvx, npx)"),
 		flags.WithStringSliceFlag("args", "a", nil, "Arguments for the server command"),
-		flags.WithStringFlag("description", "d", "", "Description of the integration"),
+		flags.WithStringFlag("description", "d", "", "Description of the server"),
 		flags.WithStringSliceFlag("env", "e", nil, "Environment variables (KEY=VALUE format)"),
 	)
 
@@ -132,8 +132,8 @@ func findAtmosYAML(configPath string) string {
 	return "atmos.yaml"
 }
 
-// addIntegrationToConfig adds an MCP integration to the atmos.yaml file.
-func addIntegrationToConfig(configFile, name string, integration map[string]any) error {
+// addServerToConfig adds an MCP server to the atmos.yaml file.
+func addServerToConfig(configFile, name string, server map[string]any) error {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", configFile, err)
@@ -151,15 +151,15 @@ func addIntegrationToConfig(configFile, name string, integration map[string]any)
 		config["mcp"] = mcpSection
 	}
 
-	// Ensure integrations section exists.
-	integrations, ok := mcpSection["integrations"].(map[string]any)
+	// Ensure servers section exists.
+	servers, ok := mcpSection["servers"].(map[string]any)
 	if !ok {
-		integrations = make(map[string]any)
-		mcpSection["integrations"] = integrations
+		servers = make(map[string]any)
+		mcpSection["servers"] = servers
 	}
 
-	// Add the new integration.
-	integrations[name] = integration
+	// Add the new server.
+	servers[name] = server
 
 	// Write back.
 	output, err := yaml.Marshal(config)

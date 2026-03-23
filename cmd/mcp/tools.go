@@ -15,8 +15,8 @@ import (
 
 var toolsCmd = &cobra.Command{
 	Use:   "tools <name>",
-	Short: "List tools from an MCP integration",
-	Long:  "Connect to an external MCP server integration and list its available tools.",
+	Short: "List tools from an MCP server",
+	Long:  "Connect to an external MCP server and list its available tools.",
 	Args:  cobra.ExactArgs(1),
 	RunE:  executeMCPTools,
 }
@@ -33,7 +33,7 @@ func executeMCPTools(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	mgr, err := mcpclient.NewManager(atmosConfig.MCP.Integrations)
+	mgr, err := mcpclient.NewManager(atmosConfig.MCP.Servers)
 	if err != nil {
 		return err
 	}

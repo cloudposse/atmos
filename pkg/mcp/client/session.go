@@ -48,7 +48,7 @@ func NewSession(config *ParsedConfig) *Session {
 	}
 }
 
-// Name returns the integration name.
+// Name returns the server name.
 func (s *Session) Name() string {
 	return s.name
 }
@@ -92,7 +92,7 @@ func (s *Session) Start(ctx context.Context, opts ...StartOption) error {
 	}
 
 	s.status = StatusStarting
-	log.Debug("Starting MCP integration", logFieldName, s.name, "command", s.config.Command)
+	log.Debug("Starting MCP server", logFieldName, s.name, "command", s.config.Command)
 
 	env := prepareEnv(ctx, s.config, opts)
 
@@ -100,7 +100,7 @@ func (s *Session) Start(ctx context.Context, opts ...StartOption) error {
 		return err
 	}
 
-	log.Debug("MCP integration started", logFieldName, s.name, "tools", len(s.tools))
+	log.Debug("MCP server started", logFieldName, s.name, "tools", len(s.tools))
 	return nil
 }
 
@@ -111,7 +111,7 @@ func prepareEnv(ctx context.Context, config *ParsedConfig, opts []StartOption) [
 		var err error
 		env, err = opt(ctx, config, env)
 		if err != nil {
-			log.Warnf("MCP integration %q: auth setup failed: %v", config.Name, err)
+			log.Warnf("MCP server %q: auth setup failed: %v", config.Name, err)
 		}
 	}
 	return env
@@ -131,7 +131,7 @@ func (s *Session) connectAndDiscover(ctx context.Context, env []string) error {
 	session, err := s.client.Connect(ctx, &mcpsdk.CommandTransport{Command: cmd}, nil)
 	if err != nil {
 		s.status = StatusError
-		s.lastError = fmt.Errorf("%w: %s: %w", errUtils.ErrMCPIntegrationStartFailed, s.name, err)
+		s.lastError = fmt.Errorf("%w: %s: %w", errUtils.ErrMCPServerStartFailed, s.name, err)
 		return s.lastError
 	}
 	s.session = session
@@ -161,7 +161,7 @@ func (s *Session) Stop() error {
 		return nil
 	}
 
-	log.Debug("Stopping MCP integration", logFieldName, s.name)
+	log.Debug("Stopping MCP server", logFieldName, s.name)
 	err := s.session.Close()
 	s.session = nil
 	s.client = nil
@@ -176,7 +176,7 @@ func (s *Session) CallTool(ctx context.Context, toolName string, args map[string
 	defer s.mu.RUnlock()
 
 	if s.status != StatusRunning || s.session == nil {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrMCPIntegrationNotRunning, s.name)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrMCPServerNotRunning, s.name)
 	}
 
 	return s.session.CallTool(ctx, &mcpsdk.CallToolParams{
@@ -191,7 +191,7 @@ func (s *Session) Ping(ctx context.Context) error {
 	defer s.mu.RUnlock()
 
 	if s.status != StatusRunning || s.session == nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrMCPIntegrationNotRunning, s.name)
+		return fmt.Errorf("%w: %s", errUtils.ErrMCPServerNotRunning, s.name)
 	}
 
 	return s.session.Ping(ctx, nil)
@@ -201,13 +201,13 @@ func (s *Session) Ping(ctx context.Context) error {
 type StartOption func(ctx context.Context, config *ParsedConfig, env []string) ([]string, error)
 
 // WithAuthManager returns a StartOption that injects auth credentials when
-// the integration has auth_identity configured.
+// the server has auth_identity configured.
 func WithAuthManager(authMgr AuthEnvProvider) StartOption {
 	return func(ctx context.Context, config *ParsedConfig, env []string) ([]string, error) {
 		if config.AuthIdentity == "" || authMgr == nil {
 			return env, nil
 		}
-		log.Debug("Injecting auth credentials for MCP integration",
+		log.Debug("Injecting auth credentials for MCP server",
 			logFieldName, config.Name, "identity", config.AuthIdentity)
 		return authMgr.PrepareShellEnvironment(ctx, config.AuthIdentity, env)
 	}

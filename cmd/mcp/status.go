@@ -16,8 +16,8 @@ import (
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show status of all MCP integrations",
-	Long:  "Start all configured MCP integrations and display their connection status, tool counts, and health.",
+	Short: "Show status of all MCP servers",
+	Long:  "Start all configured MCP servers and display their connection status, tool counts, and health.",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		defer perf.Track(nil, "cmd.mcpStatus")()
 
@@ -26,12 +26,12 @@ var statusCmd = &cobra.Command{
 			return err
 		}
 
-		if len(atmosConfig.MCP.Integrations) == 0 {
-			fmt.Fprintln(os.Stdout, "No MCP integrations configured.")
+		if len(atmosConfig.MCP.Servers) == 0 {
+			fmt.Fprintln(os.Stdout, "No MCP servers configured.")
 			return nil
 		}
 
-		mgr, err := mcpclient.NewManager(atmosConfig.MCP.Integrations)
+		mgr, err := mcpclient.NewManager(atmosConfig.MCP.Servers)
 		if err != nil {
 			return err
 		}

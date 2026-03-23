@@ -10,19 +10,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestAddIntegrationToConfig_NewSection(t *testing.T) {
+func TestAddServerToConfig_NewSection(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "atmos.yaml")
 
 	// Create a minimal atmos.yaml without mcp section.
 	require.NoError(t, os.WriteFile(configFile, []byte("base_path: .\n"), 0o644))
 
-	integration := map[string]any{
+	server := map[string]any{
 		"command":     "uvx",
 		"description": "Test server",
 	}
 
-	err := addIntegrationToConfig(configFile, "test-server", integration)
+	err := addServerToConfig(configFile, "test-server", server)
 	require.NoError(t, err)
 
 	// Read back and verify.
@@ -35,34 +35,34 @@ func TestAddIntegrationToConfig_NewSection(t *testing.T) {
 	mcpSection, ok := config["mcp"].(map[string]any)
 	require.True(t, ok, "mcp section should exist")
 
-	integrations, ok := mcpSection["integrations"].(map[string]any)
-	require.True(t, ok, "integrations section should exist")
+	servers, ok := mcpSection["servers"].(map[string]any)
+	require.True(t, ok, "servers section should exist")
 
-	server, ok := integrations["test-server"].(map[string]any)
+	testServer, ok := servers["test-server"].(map[string]any)
 	require.True(t, ok, "test-server should exist")
-	assert.Equal(t, "uvx", server["command"])
-	assert.Equal(t, "Test server", server["description"])
+	assert.Equal(t, "uvx", testServer["command"])
+	assert.Equal(t, "Test server", testServer["description"])
 }
 
-func TestAddIntegrationToConfig_ExistingSection(t *testing.T) {
+func TestAddServerToConfig_ExistingSection(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "atmos.yaml")
 
-	// Create atmos.yaml with existing mcp.integrations.
+	// Create atmos.yaml with existing mcp.servers.
 	initial := `base_path: .
 mcp:
   enabled: true
-  integrations:
+  servers:
     existing-server:
       command: echo
 `
 	require.NoError(t, os.WriteFile(configFile, []byte(initial), 0o644))
 
-	integration := map[string]any{
+	server := map[string]any{
 		"command": "uvx",
 	}
 
-	err := addIntegrationToConfig(configFile, "new-server", integration)
+	err := addServerToConfig(configFile, "new-server", server)
 	require.NoError(t, err)
 
 	// Verify both servers exist.
@@ -72,17 +72,17 @@ mcp:
 	var config map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &config))
 
-	integrations := config["mcp"].(map[string]any)["integrations"].(map[string]any)
-	assert.Contains(t, integrations, "existing-server")
-	assert.Contains(t, integrations, "new-server")
+	servers := config["mcp"].(map[string]any)["servers"].(map[string]any)
+	assert.Contains(t, servers, "existing-server")
+	assert.Contains(t, servers, "new-server")
 }
 
-func TestRemoveIntegrationFromConfig(t *testing.T) {
+func TestRemoveServerFromConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "atmos.yaml")
 
 	initial := `mcp:
-  integrations:
+  servers:
     server-a:
       command: echo
     server-b:
@@ -90,7 +90,7 @@ func TestRemoveIntegrationFromConfig(t *testing.T) {
 `
 	require.NoError(t, os.WriteFile(configFile, []byte(initial), 0o644))
 
-	err := removeIntegrationFromConfig(configFile, "server-a")
+	err := removeServerFromConfig(configFile, "server-a")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(configFile)
@@ -99,19 +99,19 @@ func TestRemoveIntegrationFromConfig(t *testing.T) {
 	var config map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &config))
 
-	integrations := config["mcp"].(map[string]any)["integrations"].(map[string]any)
-	assert.NotContains(t, integrations, "server-a")
-	assert.Contains(t, integrations, "server-b")
+	servers := config["mcp"].(map[string]any)["servers"].(map[string]any)
+	assert.NotContains(t, servers, "server-a")
+	assert.Contains(t, servers, "server-b")
 }
 
-func TestRemoveIntegrationFromConfig_NoMCPSection(t *testing.T) {
+func TestRemoveServerFromConfig_NoMCPSection(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "atmos.yaml")
 
 	require.NoError(t, os.WriteFile(configFile, []byte("base_path: .\n"), 0o644))
 
 	// Should not error when mcp section doesn't exist.
-	err := removeIntegrationFromConfig(configFile, "nonexistent")
+	err := removeServerFromConfig(configFile, "nonexistent")
 	require.NoError(t, err)
 }
 

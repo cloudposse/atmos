@@ -857,11 +857,11 @@ var (
 	ErrECRTokenExpired     = errors.New("ECR authorization token expired")
 	ErrECRRegistryNotFound = errors.New("ECR registry not found")
 	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
-	ErrECRLoginNoArgs      = errors.New("specify an integration name, --identity, or --registry")
+	ErrECRLoginNoArgs      = errors.New("specify an server name, --identity, or --registry")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
 
-	// EKS integration errors.
+	// EKS server errors.
 	ErrEKSDescribeCluster   = errors.New("failed to describe EKS cluster")
 	ErrEKSClusterNotFound   = errors.New("EKS cluster not found")
 	ErrEKSIntegrationFailed = errors.New("EKS integration failed")
@@ -875,7 +875,7 @@ var (
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
 	// CI-related errors.
-	ErrCIDisabled              = errors.New("CI integration is disabled")
+	ErrCIDisabled              = errors.New("CI server is disabled")
 	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
 	ErrCIProviderNotFound      = errors.New("CI provider not found")
 	ErrCIOperationNotSupported = errors.New("operation not supported by CI provider")
@@ -1003,22 +1003,22 @@ var (
 	ErrWebSearchNotEnabled  = errors.New("web search is not enabled in configuration")
 
 	// MCP errors.
-	ErrMCPNotEnabled                = errors.New("MCP server is not enabled: add 'mcp:\n  enabled: true' to atmos.yaml")
-	ErrMCPToolNotFound              = errors.New("MCP tool not found")
-	ErrMCPInvalidJSONRPCVersion     = errors.New("invalid JSON-RPC version")
-	ErrMCPInvalidTransport          = errors.New("invalid transport type")
-	ErrMCPUnsupportedTransport      = errors.New("unsupported transport")
-	ErrMCPIntegrationNotFound       = errors.New("MCP integration not found in configuration")
-	ErrMCPIntegrationNotRunning     = errors.New("MCP integration is not running")
-	ErrMCPIntegrationStartFailed    = errors.New("MCP integration failed to start")
-	ErrMCPIntegrationCommandEmpty   = errors.New("MCP integration command must not be empty")
-	ErrMCPIntegrationInvalidTimeout = errors.New("MCP integration timeout is invalid")
-	ErrMCPIntegrationAlreadyExists  = errors.New("MCP integration already exists")
-	ErrLSPInvalidTransport          = errors.New("invalid LSP transport type")
-	ErrLSPConfigNil                 = errors.New("LSP config is nil")
-	ErrLSPNoServerForFile           = errors.New("no LSP server found for file")
-	ErrLSPRPCError                  = errors.New("RPC error")
-	ErrLSPNoContentLengthHeader     = errors.New("no Content-Length header found")
+	ErrMCPNotEnabled            = errors.New("MCP server is not enabled: add 'mcp:\n  enabled: true' to atmos.yaml")
+	ErrMCPToolNotFound          = errors.New("MCP tool not found")
+	ErrMCPInvalidJSONRPCVersion = errors.New("invalid JSON-RPC version")
+	ErrMCPInvalidTransport      = errors.New("invalid transport type")
+	ErrMCPUnsupportedTransport  = errors.New("unsupported transport")
+	ErrMCPServerNotFound        = errors.New("MCP server not found in configuration")
+	ErrMCPServerNotRunning      = errors.New("MCP server is not running")
+	ErrMCPServerStartFailed     = errors.New("MCP server failed to start")
+	ErrMCPServerCommandEmpty    = errors.New("MCP server command must not be empty")
+	ErrMCPServerInvalidTimeout  = errors.New("MCP server timeout is invalid")
+	ErrMCPServerAlreadyExists   = errors.New("MCP server already exists")
+	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
+	ErrLSPConfigNil             = errors.New("LSP config is nil")
+	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
+	ErrLSPRPCError              = errors.New("RPC error")
+	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

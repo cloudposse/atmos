@@ -2235,9 +2235,9 @@ ai:
 	})
 }
 
-// TestAskCommand_StandardParserIntegration tests that the ask command uses StandardParser
+// TestAskCommand_StandardParserServer tests that the ask command uses StandardParser
 // with proper Viper binding for flag precedence (CLI > ENV > defaults).
-func TestAskCommand_StandardParserIntegration(t *testing.T) {
+func TestAskCommand_StandardParserServer(t *testing.T) {
 	t.Run("askParser is initialized", func(t *testing.T) {
 		require.NotNil(t, askParser, "askParser should be initialized by init()")
 	})

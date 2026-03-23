@@ -15,14 +15,14 @@ func TestParseConfig(t *testing.T) {
 	tests := []struct {
 		name      string
 		cfgName   string
-		cfg       schema.MCPIntegrationConfig
+		cfg       schema.MCPServerConfig
 		wantErr   error
 		checkFunc func(t *testing.T, pc *ParsedConfig)
 	}{
 		{
 			name:    "valid config with all fields",
 			cfgName: "aws-eks",
-			cfg: schema.MCPIntegrationConfig{
+			cfg: schema.MCPServerConfig{
 				Description: "Amazon EKS",
 				Command:     "uvx",
 				Args:        []string{"awslabs.amazon-eks-mcp-server@latest"},
@@ -44,7 +44,7 @@ func TestParseConfig(t *testing.T) {
 		{
 			name:    "default timeout when empty",
 			cfgName: "test",
-			cfg: schema.MCPIntegrationConfig{
+			cfg: schema.MCPServerConfig{
 				Command: "echo",
 			},
 			checkFunc: func(t *testing.T, pc *ParsedConfig) {
@@ -55,7 +55,7 @@ func TestParseConfig(t *testing.T) {
 		{
 			name:    "nil env becomes empty map",
 			cfgName: "test",
-			cfg: schema.MCPIntegrationConfig{
+			cfg: schema.MCPServerConfig{
 				Command: "echo",
 			},
 			checkFunc: func(t *testing.T, pc *ParsedConfig) {
@@ -67,17 +67,17 @@ func TestParseConfig(t *testing.T) {
 		{
 			name:    "empty command returns error",
 			cfgName: "bad",
-			cfg:     schema.MCPIntegrationConfig{},
-			wantErr: errUtils.ErrMCPIntegrationCommandEmpty,
+			cfg:     schema.MCPServerConfig{},
+			wantErr: errUtils.ErrMCPServerCommandEmpty,
 		},
 		{
 			name:    "invalid timeout returns error",
 			cfgName: "bad",
-			cfg: schema.MCPIntegrationConfig{
+			cfg: schema.MCPServerConfig{
 				Command: "echo",
 				Timeout: "not-a-duration",
 			},
-			wantErr: errUtils.ErrMCPIntegrationInvalidTimeout,
+			wantErr: errUtils.ErrMCPServerInvalidTimeout,
 		},
 	}
 

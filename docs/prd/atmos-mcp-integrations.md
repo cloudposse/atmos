@@ -1,4 +1,4 @@
-# Atmos MCP Integrations — External MCP Server Management
+# Atmos MCP Servers — External MCP Server Management
 
 **Status:** In Progress — Phases 1–4 (auth) Implemented
 **Version:** 4.0
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Atmos MCP Integrations extends the existing `atmos mcp` command to support installing,
+Atmos MCP Servers extends the existing `atmos mcp` command to support installing,
 managing, and consuming **external MCP servers** — bringing the same MCP client capability
 found in Claude Code, Gemini CLI, and AI IDEs directly into the Atmos CLI.
 
@@ -142,7 +142,7 @@ mcp:
   enabled: true
 
   # External MCP server integrations.
-  integrations:
+  servers:
     # AWS EKS MCP server.
     aws-eks:
         description: "Amazon EKS cluster management"
@@ -189,7 +189,7 @@ mcp:
 
 ### Stack-Level Overrides
 
-MCP integrations can be overridden per stack for environment-specific configuration:
+MCP servers can be overridden per stack for environment-specific configuration:
 
 ```yaml
 # stacks/prod.yaml
@@ -199,7 +199,7 @@ vars:
 
 settings:
   mcp:
-    integrations:
+    servers:
         aws-eks:
           env:
             AWS_PROFILE: production
@@ -235,19 +235,19 @@ Extend the existing `atmos mcp` command:
 
 ```
 atmos mcp start          # (existing) Start Atmos as an MCP server
-atmos mcp list           # List configured external MCP integrations and their status
-atmos mcp add <name>     # Add an MCP integration (interactive or from registry)
-atmos mcp remove <name>  # Remove an MCP integration
+atmos mcp list           # List configured external MCP servers and their status
+atmos mcp add <name>     # Add an MCP server (interactive or from registry)
+atmos mcp remove <name>  # Remove an MCP server
 atmos mcp status         # Show status of all running MCP server processes
 atmos mcp restart <name> # Restart an MCP server process
-atmos mcp tools [name]   # List tools exposed by an MCP integration
+atmos mcp tools [name]   # List tools exposed by an MCP server
 atmos mcp test <name>    # Test connectivity to an MCP server
 ```
 
 ### Examples
 
 ```bash
-# List all configured MCP integrations.
+# List all configured MCP servers.
 $ atmos mcp list
 NAME       STATUS    TOOLS  DESCRIPTION
 aws-eks    running   12     Amazon EKS cluster management
@@ -308,7 +308,7 @@ pkg/mcp/
 
 ```go
 // IntegrationConfig represents an external MCP server configuration
-// from atmos.yaml mcp.integrations.
+// from atmos.yaml mcp.servers.
 type IntegrationConfig struct {
     Description string            `yaml:"description" mapstructure:"description"`
     Command     string            `yaml:"command" mapstructure:"command"`
@@ -471,7 +471,7 @@ environment variables, and their boto3/AWS SDK picks up the credentials automati
 
 ```yaml
 mcp:
-  integrations:
+  servers:
       # Cost analysis across all accounts.
       aws-cost-explorer:
         description: "AWS Cost Explorer — cost analysis and forecasting"
@@ -537,14 +537,14 @@ Different environments can use different identities:
 # stacks/prod.yaml
 settings:
   mcp:
-    integrations:
+    servers:
         aws-security:
           auth_identity: "prod-security-audit"
 
 # stacks/staging.yaml
 settings:
   mcp:
-    integrations:
+    servers:
         aws-security:
           auth_identity: "staging-security-audit"
 ```
@@ -565,7 +565,7 @@ refresh credentials and restart the server process transparently.
 **Configuration:**
 ```yaml
 mcp:
-  integrations:
+  servers:
       aws-cost-explorer:
         command: "uvx"
         args: ["awslabs.cost-explorer-mcp-server@latest"]
@@ -632,7 +632,7 @@ mode to avoid surprise charges.
 **Configuration:**
 ```yaml
 mcp:
-  integrations:
+  servers:
       aws-security:
         command: "uvx"
         args:
@@ -755,7 +755,7 @@ Shall I generate an atmos workflow for this decommission sequence?
 
 | File | Lines | Purpose |
 |---|---|---|
-| `pkg/schema/mcp.go` | 20 | `MCPIntegrationConfig` type + `Integrations` map on `MCPSettings` |
+| `pkg/schema/mcp.go` | 20 | `MCPServerConfig` type + `Integrations` map on `MCPSettings` |
 | `pkg/mcp/client/config.go` | 50 | Config parsing with validation and timeout resolution |
 | `pkg/mcp/client/session.go` | 180 | Session lifecycle: Start (subprocess + MCP handshake + tool list), Stop, CallTool, Ping |
 | `pkg/mcp/client/manager.go` | 120 | Multi-session manager: NewManager, Start/Stop/StopAll, Get/List, Test |
@@ -763,11 +763,11 @@ Shall I generate an atmos workflow for this decommission sequence?
 | `cmd/mcp/list.go` | 50 | `atmos mcp list` — tabular output of configured integrations |
 | `cmd/mcp/tools.go` | 70 | `atmos mcp tools <name>` — connect, list tools, disconnect |
 | `cmd/mcp/test_cmd.go` | 70 | `atmos mcp test <name>` — start, handshake, list tools, ping |
-| `errors/errors.go` | +5 | `ErrMCPIntegrationNotFound/NotRunning/StartFailed/CommandEmpty/InvalidTimeout` |
+| `errors/errors.go` | +5 | `ErrMCPServerNotFound/NotRunning/StartFailed/CommandEmpty/InvalidTimeout` |
 
 **Tests:** 34 unit tests across 4 test files at 73% coverage.
 
-**Configuration path:** `mcp.integrations` in `atmos.yaml` (sibling to existing `mcp.enabled`).
+**Configuration path:** `mcp.servers` in `atmos.yaml` (sibling to existing `mcp.enabled`).
 
 **Key design decisions:**
 - Uses Go MCP SDK v1.4.1 `Client` + `CommandTransport` + `ClientSession` — no new dependencies.
@@ -822,7 +822,7 @@ Shall I generate an atmos workflow for this decommission sequence?
 | `cmd/mcp/status.go` | 80 | `atmos mcp status` — start all, display table (name, status, tools, description) |
 | `cmd/mcp/restart.go` | 60 | `atmos mcp restart <name>` — stop and restart integration |
 | `cmd/mcp/add_test.go` | 120 | Tests: add new section, add to existing, remove, findAtmosYAML |
-| `errors/errors.go` | +1 | `ErrMCPIntegrationAlreadyExists` sentinel |
+| `errors/errors.go` | +1 | `ErrMCPServerAlreadyExists` sentinel |
 
 **What shipped:**
 - ~~`atmos mcp add`~~ ✅ — uses StandardParser for flags, modifies atmos.yaml directly
@@ -834,12 +834,12 @@ Shall I generate an atmos workflow for this decommission sequence?
 ```
 atmos mcp start          # Start Atmos as MCP server
 atmos mcp list           # List configured integrations
-atmos mcp tools <name>   # List tools from an integration
+atmos mcp tools <name>   # List tools from a server
 atmos mcp test <name>    # Test connectivity
 atmos mcp add <name>     # Add integration to config
 atmos mcp remove <name>  # Remove integration from config
 atmos mcp status         # Show all integration statuses
-atmos mcp restart <name> # Restart an integration
+atmos mcp restart <name> # Restart a server
 ```
 
 **Remaining for future:**
@@ -850,17 +850,17 @@ atmos mcp restart <name> # Restart an integration
 
 **Shipped:**
 - ~~Atmos Auth integration for credential injection~~ ✅ — `auth_identity` field on
-  `MCPIntegrationConfig`, `AuthEnvProvider` interface, `WithAuthManager` start option,
+  `MCPServerConfig`, `AuthEnvProvider` interface, `WithAuthManager` start option,
   `PrepareShellEnvironment` integration. 8 tests.
 
 **Remaining:**
-- Stack-level MCP integration overrides
+- Stack-level MCP server overrides
 - Composite MCP server (expose external tools via Atmos MCP server)
 - Toolchain integration for prerequisite management (`uvx`, `npx`)
 - Go template support in env vars (`{{ .vars.region }}`)
 - Connection pooling and health checks
 - `tools/list_changed` notification handling
-- MCP integration registry (curated list of known servers with defaults)
+- MCP server registry (curated list of known servers with defaults)
 
 ---
 
