@@ -50,9 +50,17 @@ func ExecuteLintStacksCmd(cmd *cobra.Command, args []string) error {
 	if ruleFlag != "" {
 		for _, r := range strings.Split(ruleFlag, ",") {
 			id := strings.ToUpper(strings.TrimSpace(r))
-			if id != "" {
-				ruleIDs = append(ruleIDs, id)
+			if id == "" {
+				continue
 			}
+			// Normalize "L-7" → "L-07" so users don't need to zero-pad.
+			if len(id) > 2 && id[0] == 'L' && id[1] == '-' {
+				numPart := id[2:]
+				if isDigitOnly(numPart) && len(numPart) == 1 {
+					id = fmt.Sprintf("L-%02s", numPart)
+				}
+			}
+			ruleIDs = append(ruleIDs, id)
 		}
 	}
 
@@ -164,8 +172,19 @@ func LintStacks(
 	// reachable from the filtered root stack via the import graph.  This prevents
 	// L-07 from reporting orphaned files that belong to other stacks in the repo —
 	// which would be noise, not actionable findings for the targeted stack.
-	if stackFilter != "" && len(importGraph) > 0 {
-		allStackFiles = scopeStackFiles(allStackFiles, rawStackConfigs, importGraph, atmosConfig.StacksBaseAbsolutePath)
+	// Even when importGraph is empty (the root stack imports nothing), we still scope
+	// AllStackFiles to just the seed file(s) in rawStackConfigs so that L-07 does
+	// not produce findings for unrelated files.
+	if stackFilter != "" {
+		if len(importGraph) > 0 {
+			allStackFiles = scopeStackFiles(allStackFiles, rawStackConfigs, importGraph, atmosConfig.StacksBaseAbsolutePath)
+		} else {
+			// No imports — AllStackFiles is just the root manifests themselves.
+			allStackFiles = nil
+			for filePath := range rawStackConfigs {
+				allStackFiles = append(allStackFiles, filePath)
+			}
+		}
 	}
 
 	// Build basename → []file and stem → file indexes from RawStackConfigs so
@@ -264,6 +283,11 @@ func expandGlobImports(imports []string, basePath string) []string {
 			// Not a glob — resolve to absolute path so L-03 depth traversal can follow
 			// edges using consistent absolute keys that match the importGraph key space.
 			abs := resolveNonGlobImport(imp, basePath)
+			if abs == "" {
+				// resolveNonGlobImport returns "" when no file exists on disk — drop to
+				// prevent phantom edges that would inflate import-depth counts (L-03).
+				continue
+			}
 			result = append(result, abs)
 			continue
 		}
@@ -316,8 +340,8 @@ func expandGlobImports(imports []string, basePath string) []string {
 //
 // If the import is already absolute, it is returned unchanged. For relative imports,
 // basePath is joined and extension candidates are probed in order (.yaml, .yml, bare).
-// If no file exists at any candidate, the basePath-joined import is returned as a
-// best-effort fallback so callers still see the intended target.
+// If no file exists at any candidate, "" is returned so the caller can silently drop
+// the import rather than inflating depth counts with unresolvable references.
 func resolveNonGlobImport(importPath, basePath string) string {
 	if filepath.IsAbs(importPath) {
 		return importPath
@@ -337,8 +361,10 @@ func resolveNonGlobImport(importPath, basePath string) string {
 			return candidate
 		}
 	}
-	// No file found — return the bare joined path as a best-effort fallback.
-	return filepath.Join(basePath, importPath)
+	// No file found — return "" so the caller drops this import rather than
+	// keeping an unresolvable path that would inflate import-depth counts (L-03).
+	log.Debug("Non-glob import resolved to no file, dropping", "import", importPath)
+	return ""
 }
 
 // stackYAMLFiles returns all non-template YAML files under root as absolute paths,
@@ -615,4 +641,17 @@ func renderLintJSON(result *lint.LintResult) error {
 		return fmt.Errorf("rendering lint output as JSON: %w", err)
 	}
 	return nil
+}
+
+// isDigitOnly reports whether s consists entirely of ASCII decimal digits.
+func isDigitOnly(s string) bool {
+if s == "" {
+return false
+}
+for _, c := range s {
+if c < '0' || c > '9' {
+return false
+}
+}
+return true
 }

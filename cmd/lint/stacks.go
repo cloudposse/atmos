@@ -39,9 +39,9 @@ Rules:
   L-10  Env Var Shadowing            (warning)
 
 Controlling severity and silencing rules:
-  To run only specific rules (case-insensitive):
+  To run only specific rules (case-insensitive, single-digit numbers zero-padded):
     atmos lint stacks --rule L-02,L-07
-    atmos lint stacks --rule l-02,l-7   # normalized automatically
+    atmos lint stacks --rule l-02,l-7   # "l-7" is normalized to "L-07"
 
   To silence a rule without removing it, set its severity to 'info' in
   atmos.yaml and use --severity warning or --severity error:

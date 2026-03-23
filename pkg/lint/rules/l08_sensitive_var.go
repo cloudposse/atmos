@@ -125,9 +125,19 @@ func matchesSensitivePattern(varName string, patterns []string) bool {
 }
 
 // stackNameToFile attempts to derive a file path from a stack name.
+// Returns "" when the stack name cannot be interpreted as a file path, so that
+// callers can omit the File field rather than emit a misleading non-path value.
 func stackNameToFile(stackName, basePath string) string {
 	if basePath == "" {
-		return stackName
+		// Without a basePath we cannot construct a meaningful file path from a bare
+		// stack name (e.g. "prod").  Return "" so the finding omits File rather than
+		// emitting the raw stack name which is not a valid path.
+		if strings.ContainsAny(stackName, `/\`) ||
+			strings.HasSuffix(stackName, ".yaml") ||
+			strings.HasSuffix(stackName, ".yml") {
+			return stackName
+		}
+		return ""
 	}
 	// Stack name may already be a relative or absolute path (contains a path separator
 	// on either Unix '/' or Windows '\', or has a YAML file extension).

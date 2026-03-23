@@ -1600,13 +1600,17 @@ func TestRelNorm(t *testing.T) {
 func TestStackNameToFile(t *testing.T) {
 	t.Parallel()
 
-	// Empty basePath returns the name as-is.
-	assert.Equal(t, "my-stack", rules.ExportedStackNameToFile("my-stack", ""))
+	// Empty basePath and bare name (no slash/extension) → returns "" to avoid
+	// emitting the raw stack name as a misleading non-path File field.
+	assert.Equal(t, "", rules.ExportedStackNameToFile("my-stack", ""))
 
 	// basePath set but name has no slash/extension → returns "".
 	assert.Equal(t, "", rules.ExportedStackNameToFile("my-stack", "/stacks"))
 
-	// Name with slash returns name unchanged (already a path).
+	// Name with slash returns name unchanged (already a path), even with empty basePath.
+	assert.Equal(t, "us-east-1/prod", rules.ExportedStackNameToFile("us-east-1/prod", ""))
+
+	// Name with slash + non-empty basePath returns name unchanged.
 	assert.Equal(t, "us-east-1/prod", rules.ExportedStackNameToFile("us-east-1/prod", "/stacks"))
 
 	// Name with .yaml suffix returns name unchanged.
@@ -1614,6 +1618,9 @@ func TestStackNameToFile(t *testing.T) {
 
 	// Name with .yml suffix returns name unchanged.
 	assert.Equal(t, "prod.yml", rules.ExportedStackNameToFile("prod.yml", "/stacks"))
+
+	// Name with .yaml suffix and empty basePath returns name unchanged.
+	assert.Equal(t, "prod.yaml", rules.ExportedStackNameToFile("prod.yaml", ""))
 }
 
 // -- Non-map section guards (defensive branch coverage) --
@@ -2887,4 +2894,72 @@ func TestL03RelativePathOutput(t *testing.T) {
 		assert.NotContains(t, f.File, basePath,
 			"L-03 File must not contain the StacksBasePath prefix: %q", f.File)
 	}
+}
+
+// TestL08EmptyFileWhenUnresolved verifies Item 5: L-08 emits an empty File field
+// when the stack name cannot be attributed to a physical file (no indexes, empty basePath).
+func TestL08EmptyFileWhenUnresolved(t *testing.T) {
+t.Parallel()
+
+all := rules.All()
+var l08 lint.LintRule
+for _, r := range all {
+if r.ID() == "L-08" {
+l08 = r
+break
+}
+}
+require.NotNil(t, l08)
+
+stacksMap := map[string]any{
+"bare-stack": map[string]any{
+cfg.VarsSectionName: map[string]any{
+"api_password": "secret",
+},
+},
+}
+
+ctx := lint.LintContext{
+StacksMap:            stacksMap,
+RawStackConfigs:      make(map[string]map[string]any),
+ImportGraph:          make(map[string][]string),
+StacksBasePath:       "", // empty basePath
+StackNameToFileIndex: make(map[string][]string),
+StackStemToFile:      make(map[string]string),
+LintConfig: schema.LintStacksConfig{
+SensitiveVarPatterns: defaultSensitiveVarPatterns,
+},
+}
+
+findings, err := l08.Run(ctx)
+require.NoError(t, err)
+require.Len(t, findings, 1)
+assert.Equal(t, "", findings[0].File,
+"File must be empty when stack name cannot be attributed to a physical file")
+}
+
+// TestRulesRelNormParityWithExec verifies Item 4: the exec package's rulesRelNorm
+// function (visible via its golden test) uses the same logic as L-07's relNorm.
+// We test relNorm directly here since exec's internal function is not exported.
+func TestRelNormCorpusGolden(t *testing.T) {
+t.Parallel()
+
+corpus := []struct {
+path     string
+basePath string
+want     string
+}{
+{"/stacks/catalog/vpc.yaml", "/stacks", "catalog/vpc"},
+{"/stacks/deploy/prod.yaml", "/stacks", "deploy/prod"},
+{"catalog/vpc.yaml", "/stacks", "catalog/vpc"},
+{"/stacks/catalog/vpc", "/stacks", "catalog/vpc"},
+{"/stacks/catalog/vpc.yaml", "", "/stacks/catalog/vpc"},
+{"deploy/prod.yaml", "", "deploy/prod"},
+}
+
+for _, tc := range corpus {
+got := rules.ExportedRelNorm(tc.path, tc.basePath)
+assert.Equal(t, tc.want, got,
+"relNorm(%q, %q)", tc.path, tc.basePath)
+}
 }
