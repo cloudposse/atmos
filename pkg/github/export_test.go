@@ -1,6 +1,11 @@
 package github
 
-import "time"
+import (
+	"context"
+	"time"
+
+	ghpkg "github.com/google/go-github/v59/github"
+)
 
 // ArchivedCheckTimeoutForTest returns the current archived-check timeout for use in tests.
 //
@@ -27,4 +32,23 @@ func SetArchivedCheckTimeoutForTest(d time.Duration) func() {
 	prev := getArchivedCheckTimeout()
 	setArchivedCheckTimeout(d)
 	return func() { setArchivedCheckTimeout(prev) }
+}
+
+// SetNewGitHubClientHookForTest replaces the GitHub client creator used by IsRepoArchived
+// with a custom function, enabling tests to inject an httptest.NewServer-backed client
+// without making real network calls. Returns a cleanup function that restores the
+// original (nil) hook.
+//
+// Thread-safe: uses newGitHubClientHookMu so concurrent IsRepoArchived calls are safe.
+// Do not use in sub-tests that run in parallel with each other — the last writer wins.
+func SetNewGitHubClientHookForTest(fn func(ctx context.Context) *ghpkg.Client) func() {
+	newGitHubClientHookMu.Lock()
+	prev := newGitHubClientHook
+	newGitHubClientHook = fn
+	newGitHubClientHookMu.Unlock()
+	return func() {
+		newGitHubClientHookMu.Lock()
+		newGitHubClientHook = prev
+		newGitHubClientHookMu.Unlock()
+	}
 }

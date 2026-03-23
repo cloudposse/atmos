@@ -93,6 +93,22 @@ func TestNewAtmosLogger(t *testing.T) {
 		}
 		<-done
 	})
+
+	// Test that SetOutput(nil) is treated as "reset to os.Stderr".
+	t.Run("SetOutput nil resets to os.Stderr", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := New()
+		logger.SetOutput(&buf)
+		assert.Equal(t, &buf, logger.GetOutput(), "writer should be buf before nil reset")
+		logger.SetOutput(nil)
+		assert.Equal(t, os.Stderr, logger.GetOutput(), "SetOutput(nil) should reset writer to os.Stderr")
+	})
+
+	// Test that GetOutput returns os.Stderr when writer is nil (defensive guard).
+	t.Run("GetOutput nil writer returns os.Stderr", func(t *testing.T) {
+		logger := &AtmosLogger{charm: log.Default(), writer: nil}
+		assert.Equal(t, os.Stderr, logger.GetOutput(), "GetOutput on nil writer should return os.Stderr")
+	})
 }
 
 func TestAtmosLogger_AllLogMethods(t *testing.T) {

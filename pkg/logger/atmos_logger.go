@@ -120,7 +120,13 @@ func (l *AtmosLogger) GetLevel() Level {
 // The write lock is held for both the tracked writer update and the underlying
 // charm logger update so that any concurrent GetOutput call always observes a
 // fully consistent pair: l.writer and charm's internal writer are always equal.
+//
+// Passing nil is treated as "reset to os.Stderr": both the tracked writer and
+// charm's output are set to os.Stderr.
 func (l *AtmosLogger) SetOutput(w io.Writer) {
+	if w == nil {
+		w = os.Stderr
+	}
 	l.mu.Lock()
 	l.writer = w
 	l.charm.SetOutput(w)
@@ -128,9 +134,13 @@ func (l *AtmosLogger) SetOutput(w io.Writer) {
 }
 
 // GetOutput returns the current output writer.
+// If the writer has not been set (nil), os.Stderr is returned as the safe default.
 func (l *AtmosLogger) GetOutput() io.Writer {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
+	if l.writer == nil {
+		return os.Stderr
+	}
 	return l.writer
 }
 
@@ -145,25 +155,24 @@ func (l *AtmosLogger) SetColorProfile(profile termenv.Profile) {
 }
 
 // WithPrefix returns a new logger with the given prefix.
-// The output writer is propagated to the child logger so that GetOutput() on the
-// child returns the same writer as the parent, without requiring a SetOutput call.
-// l.charm is immutable after construction (no method replaces it), so it is safe
-// to access without a lock.
+// The read lock is held for the entire duration of the charm call so that no
+// concurrent SetOutput can update charm's writer between reading l.writer and
+// calling l.charm.WithPrefix(prefix). l.charm is immutable after construction
+// (no method replaces the pointer), so the read lock is sufficient.
 func (l *AtmosLogger) WithPrefix(prefix string) *AtmosLogger {
 	l.mu.RLock()
-	w := l.writer
-	l.mu.RUnlock()
-	return &AtmosLogger{charm: l.charm.WithPrefix(prefix), writer: w}
+	defer l.mu.RUnlock()
+	child := l.charm.WithPrefix(prefix)
+	return &AtmosLogger{charm: child, writer: l.writer}
 }
 
 // With returns a new logger with the given key-value pairs.
-// The output writer is propagated to the child logger (see WithPrefix).
-// l.charm is immutable after construction, so it is safe to access without a lock.
+// The read lock is held for the entire duration of the charm call (see WithPrefix).
 func (l *AtmosLogger) With(keyvals ...interface{}) *AtmosLogger {
 	l.mu.RLock()
-	w := l.writer
-	l.mu.RUnlock()
-	return &AtmosLogger{charm: l.charm.With(keyvals...), writer: w}
+	defer l.mu.RUnlock()
+	child := l.charm.With(keyvals...)
+	return &AtmosLogger{charm: child, writer: l.writer}
 }
 
 // GetLevelString returns the string representation of the current log level handling our custom levels appropriately.

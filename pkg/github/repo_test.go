@@ -126,6 +126,15 @@ func TestParseGitHubOwnerRepo(t *testing.T) {
 			wantRepo:  "terraform-null-label",
 			wantOK:    true,
 		},
+		// SCP-style with '+' in username — validates that [A-Za-z0-9_.+\-] does not
+		// treat '+-' as a character range (which would erroneously match ',' and '.').
+		{
+			name:      "SCP-style user+tag@github.com with plus in username",
+			uri:       "user+tag@github.com:owner/repo.git",
+			wantOwner: "owner",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
 
 		// Non-GitHub URIs (should return ok=false).
 		{
@@ -383,4 +392,48 @@ func TestArchivedCheckTimeoutOverride(t *testing.T) {
 		_, err = isRepoArchivedWithClient(cancelledCtx, client.Repositories, "org", "repo")
 		assert.Error(t, err, "expected error with already-cancelled context")
 	})
+}
+
+// TestIsRepoArchived_ViaHook exercises the full public IsRepoArchived code path:
+//
+//	IsRepoArchived → newGitHubClientHook → httptest.Server → archived=true
+//
+// This test uses SetNewGitHubClientHookForTest (from export_test.go) to inject a
+// mock HTTP server without going through the real GitHub API. It is the canonical
+// test that validates the hook mechanism added for cross-package test support.
+func TestIsRepoArchived_ViaHook(t *testing.T) {
+	const (
+		owner = "hook-test-owner"
+		repo  = "hook-test-repo"
+	)
+
+	t.Cleanup(ResetArchivedRepoCache)
+
+	// Ensure the timeout is non-zero so IsRepoArchived actually makes the call.
+	reset := SetArchivedCheckTimeoutForTest(5 * time.Second)
+	t.Cleanup(reset)
+
+	// Start a mock GitHub API server that returns {"archived": true}.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/"+owner+"/"+repo, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"archived": true, "full_name": "` + owner + `/` + repo + `"}`))
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	// Inject a GitHub client pointing at the mock server via the test hook.
+	cleanup := SetNewGitHubClientHookForTest(func(ctx context.Context) *github.Client {
+		client := github.NewClient(nil)
+		u, err := url.Parse(ts.URL + "/")
+		require.NoError(t, err)
+		client.BaseURL = u
+		return client
+	})
+	defer cleanup()
+
+	archived, err := IsRepoArchived(context.Background(), owner, repo)
+	require.NoError(t, err, "IsRepoArchived should not error with mock server")
+	assert.True(t, archived, "IsRepoArchived should return true when server responds archived=true")
 }

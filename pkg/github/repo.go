@@ -62,9 +62,11 @@ var newGitHubClientHook func(ctx context.Context) *ghpkg.Client
 
 // scpGitHubURLPattern matches SCP-style GitHub URLs (e.g., git@github.com:owner/repo.git).
 // Capture groups: (1) host, (2) owner, (3) repo.
-// In each character class the '-' is placed last (immediately before ']') so that it is
-// always treated as a literal hyphen, not as a range operator.
-var scpGitHubURLPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.+-]+@)?([A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?://.*)?$`)
+// In each character class the '-' is placed last (immediately before ']') or explicitly
+// escaped (\-) so that it is always treated as a literal hyphen, not as a range operator.
+// The user@ prefix uses [A-Za-z0-9_.+\-] — the '+' is literal and '\-' avoids the
+// "+-." range that would be created by the unescaped "+-" pair.
+var scpGitHubURLPattern = regexp.MustCompile(`^(?:[A-Za-z0-9_.+\-]+@)?([A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?(?://.*)?$`)
 
 func init() {
 	// Initialize with the default. The atomic is used instead of a plain var so that
@@ -239,28 +241,6 @@ func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 	}
 	client := creator(checkCtx)
 	return isRepoArchivedWithClient(checkCtx, client.Repositories, owner, repo)
-}
-
-// SetNewGitHubClientHookForTest sets a custom GitHub client creator for tests and
-// returns a cleanup function that restores the original (nil) hook. Use this to
-// inject an httptest.NewServer-backed client without making real network calls.
-//
-// NOTE: test utility — exported from the production package because it is needed from
-// tests in multiple packages; see SeedArchivedRepoCache for the full rationale.
-//
-// Thread-safe: uses a sync.RWMutex so it is safe to call concurrently with
-// IsRepoArchived. Do not use in sub-tests that run in parallel with each other —
-// the last writer wins and all parallel sub-tests share the same hook value.
-func SetNewGitHubClientHookForTest(fn func(ctx context.Context) *ghpkg.Client) func() {
-	newGitHubClientHookMu.Lock()
-	prev := newGitHubClientHook
-	newGitHubClientHook = fn
-	newGitHubClientHookMu.Unlock()
-	return func() {
-		newGitHubClientHookMu.Lock()
-		newGitHubClientHook = prev
-		newGitHubClientHookMu.Unlock()
-	}
 }
 
 // SeedArchivedRepoCache pre-populates the archived-repo cache for the given owner/repo
