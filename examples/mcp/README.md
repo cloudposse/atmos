@@ -1,19 +1,21 @@
 # Atmos MCP Integrations Example
 
-This example demonstrates how to connect Atmos to external MCP (Model Context Protocol) servers from the AWS ecosystem. Instead of reimplementing cloud provider functionality, Atmos installs and orchestrates existing MCP servers — their tools become available in `atmos ai chat` and `atmos ai exec` alongside native Atmos tools.
+This example demonstrates how to connect Atmos to external MCP (Model Context Protocol) servers from the AWS ecosystem.
+Instead of reimplementing cloud provider functionality, Atmos installs and orchestrates existing MCP servers — their
+tools become available in `atmos ai chat` and `atmos ai exec` alongside native Atmos tools.
 
 ## What's Included
 
 Six AWS MCP servers are pre-configured in `atmos.yaml`:
 
-| Server | What It Does | Credentials Required |
-|--------|-------------|---------------------|
-| **aws-api** | Direct AWS CLI access with security controls | Yes |
-| **aws-docs** | Search and fetch AWS documentation | No |
-| **aws-knowledge** | Managed AWS knowledge base (remote service) | No |
-| **aws-pricing** | Real-time AWS pricing and cost analysis | Yes (free API) |
-| **aws-security** | Well-Architected security posture assessment | Yes (read-only) |
-| **aws-diagram** | Architecture diagram generation | No (needs GraphViz) |
+| Server            | What It Does                                 | Credentials Required |
+|-------------------|----------------------------------------------|----------------------|
+| **aws-api**       | Direct AWS CLI access with security controls | Yes                  |
+| **aws-docs**      | Search and fetch AWS documentation           | No                   |
+| **aws-knowledge** | Managed AWS knowledge base (remote service)  | No                   |
+| **aws-pricing**   | Real-time AWS pricing and cost analysis      | Yes (free API)       |
+| **aws-security**  | Well-Architected security posture assessment | Yes (read-only)      |
+| **aws-diagram**   | Architecture diagram generation              | No (needs GraphViz)  |
 
 ## Prerequisites
 
@@ -141,8 +143,8 @@ mcp:
     <server-name>:
       # Standard MCP fields (compatible with Claude Code / Codex / Gemini CLI)
       command: "uvx"                              # Command to run
-      args: ["package-name@latest"]               # Arguments
-      env:                                         # Environment variables
+      args: [ "package-name@latest" ]               # Arguments
+      env: # Environment variables
         AWS_REGION: "us-east-1"
 
       # Atmos extensions
@@ -161,7 +163,7 @@ mcp:
   servers:
     my-server:
       command: uvx
-      args: ["my-mcp-server@latest"]
+      args: [ "my-mcp-server@latest" ]
       env:
         # Read from OS environment
         AWS_REGION: !env AWS_DEFAULT_REGION
@@ -179,7 +181,8 @@ mcp:
 
 ## Atmos Auth Integration
 
-For production use, configure Atmos Auth to automatically inject AWS credentials into MCP server subprocesses. This eliminates manual credential management:
+For production use, configure Atmos Auth to automatically inject AWS credentials into MCP server subprocesses. This
+eliminates manual credential management:
 
 ```yaml
 # atmos.yaml
@@ -207,16 +210,17 @@ mcp:
   servers:
     aws-security:
       command: uvx
-      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      args: [ "awslabs.well-architected-security-mcp-server@latest" ]
       auth_identity: "security-audit"   # ← Credentials injected automatically
 
     aws-pricing:
       command: uvx
-      args: ["awslabs.aws-pricing-mcp-server@latest"]
+      args: [ "awslabs.aws-pricing-mcp-server@latest" ]
       auth_identity: "pricing-reader"   # ← Credentials injected automatically
 ```
 
 When `auth_identity` is set, Atmos:
+
 1. Authenticates through the identity chain (SSO → role assumption)
 2. Writes isolated credential files to `~/.aws/atmos/<realm>/`
 3. Sets `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE` on the subprocess
@@ -234,7 +238,8 @@ toolchain:
       version: "0.7.x"
 ```
 
-Atmos will automatically install `uv` (and make `uvx` available) before starting any MCP server. This ensures the correct version is used across all team members and CI/CD.
+Atmos will automatically install `uv` (and make `uvx` available) before starting any MCP server. This ensures the
+correct version is used across all team members and CI/CD.
 
 ## Server Details
 
@@ -243,6 +248,7 @@ Atmos will automatically install `uv` (and make `uvx` available) before starting
 The most powerful server — enables AI to run any AWS CLI command. Use with caution.
 
 **Safety controls:**
+
 - `READ_OPERATIONS_ONLY=true` — Only allow read operations (default in this example)
 - `REQUIRE_MUTATION_CONSENT=true` — Require explicit approval before mutations
 
@@ -251,6 +257,7 @@ The most powerful server — enables AI to run any AWS CLI command. Use with cau
 ### aws-security — Security Posture Assessment
 
 Checks your AWS environment against the Well-Architected Security Pillar:
+
 - Security services enabled (GuardDuty, Inspector, SecurityHub, Access Analyzer)
 - Storage encryption (S3, EBS, RDS, DynamoDB, EFS)
 - Network security (ELB HTTPS, API Gateway WAF, CloudFront TLS)
@@ -269,13 +276,15 @@ Searches and fetches AWS documentation in markdown format. No credentials needed
 
 ### aws-knowledge — Managed Knowledge Base
 
-Remote MCP server operated by AWS. Provides documentation, code samples, and regional availability information. No credentials or local installation needed.
+Remote MCP server operated by AWS. Provides documentation, code samples, and regional availability information. No
+credentials or local installation needed.
 
 ### aws-diagram — Architecture Diagrams
 
 Creates AWS architecture diagrams using the Python `diagrams` package. Requires GraphViz.
 
-> **Note:** This server is deprecated by AWS. Consider using the diagram agent skill in the `deploy-on-aws` plugin instead.
+> **Note:** This server is deprecated by AWS. Consider using the diagram agent skill in the `deploy-on-aws` plugin
+> instead.
 
 ## Learn More
 
