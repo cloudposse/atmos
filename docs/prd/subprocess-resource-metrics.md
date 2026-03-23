@@ -106,7 +106,8 @@ AWS EKS   ─┘
 
 | Component | File | Call sites |
 |---|---|---|
-| Terraform | `internal/exec/terraform.go` | version, init, workspace select/new, main command (plan/apply/destroy/etc.) |
+| Terraform | `internal/exec/terraform_execute_helpers_exec.go` | main command (plan/apply/destroy/etc.) via `executeMainTerraformCommand()` |
+| Terraform | `internal/exec/terraform.go` | version, init, workspace select/new |
 | Helmfile | `internal/exec/helmfile.go` | version, kubeconfig update, main command (sync/diff/apply/etc.) |
 | Packer | `internal/exec/packer.go` | version, main command (build/validate/etc.) |
 | Workflows | `internal/exec/workflow_adapters.go` | nested atmos commands |
@@ -151,7 +152,7 @@ if cfg.metricsCallback != nil && metrics != nil {
 
 ### Integration Point 2: Local Display
 
-**Files:** `internal/exec/terraform.go`, `internal/exec/helmfile.go`, `internal/exec/packer.go`
+**Files:** `internal/exec/terraform_execute_helpers_exec.go`, `internal/exec/helmfile.go`, `internal/exec/packer.go`
 
 Each orchestrator passes `WithMetricsCallback` for its main command execution. The callback formats and displays via `ui.Info`:
 
@@ -163,13 +164,13 @@ Each orchestrator passes `WithMetricsCallback` for its main command execution. T
 
 | Component | Call site | Gets callback? |
 |---|---|---|
-| Terraform main command (plan/apply/destroy/init) | `terraform.go:736` | Yes |
-| Terraform workspace select/new | `terraform.go:682-712` | No |
-| Terraform version | `terraform.go:68` | No |
-| Helmfile main command (sync/diff/apply) | `helmfile.go:278` | Yes |
-| Helmfile version | `helmfile.go:49` | No |
-| Packer main command (build/validate) | `packer.go:198` | Yes |
-| Packer version | `packer.go:45` | No |
+| Terraform main command (plan/apply/destroy/init) | `terraform_execute_helpers_exec.go:291` via `executeMainTerraformCommand()` | Yes |
+| Terraform workspace select/new | `terraform_execute_helpers_exec.go` via `runWorkspaceSetup()` | No |
+| Terraform version | `terraform.go` | No |
+| Helmfile main command (sync/diff/apply) | `helmfile.go` | Yes |
+| Helmfile version | `helmfile.go` | No |
+| Packer main command (build/validate) | `packer.go` | Yes |
+| Packer version | `packer.go` | No |
 
 **Settings gate:**
 
@@ -185,21 +186,27 @@ When `settings.metrics.enabled` is `false`, the callback still fires (for Pro up
 
 **Files:** `pkg/pro/dtos/instances.go`, `internal/exec/pro.go`, `pkg/pro/api_client_instance_status.go`
 
-Extend `InstanceStatusUploadRequest` with all metrics fields:
+#### DTO Changes
+
+Extend `InstanceStatusUploadRequest` with metrics fields. Note that `AtmosVersion`, `AtmosOS`, and `AtmosArch` already exist from PR #2216:
 
 ```go
 type InstanceStatusUploadRequest struct {
-    // Existing fields (from PR #2216)
-    AtmosProRunID string `json:"atmos_pro_run_id"`
-    GitSHA        string `json:"git_sha"`
-    RepoURL       string `json:"repo_url"`
+    // Existing fields
+    AtmosProRunID string `json:"atmos_pro_run_id,omitempty"`
+    AtmosVersion  string `json:"atmos_version,omitempty"`
+    AtmosOS       string `json:"atmos_os,omitempty"`
+    AtmosArch     string `json:"atmos_arch,omitempty"`
+    GitSHA        string `json:"git_sha,omitempty"`
+    RepoURL       string `json:"repo_url,omitempty"`
     RepoName      string `json:"repo_name"`
     RepoOwner     string `json:"repo_owner"`
-    RepoHost      string `json:"repo_host"`
+    RepoHost      string `json:"repo_host,omitempty"`
     Component     string `json:"component"`
     Stack         string `json:"stack"`
     Command       string `json:"command"`
     ExitCode      int    `json:"exit_code"`
+    LastRun        string `json:"last_run,omitempty"`
 
     // New: timing
     WallTimeMs       *int64 `json:"wall_time_ms,omitempty"`
@@ -223,19 +230,58 @@ type InstanceStatusUploadRequest struct {
 }
 ```
 
-**Upload scope:** `plan` and `apply` only (same as PR #2216 status upload). Metrics are populated in `uploadStatus()` from the `ProcessMetrics` struct returned by `ExecuteShellCommand`.
+#### API Client: Switch to Full DTO Marshaling
 
-**All new fields use `omitempty`** so Windows clients (where Rusage is unavailable) send only timing metrics, and the API remains backward-compatible.
+The current `UploadInstanceStatus()` in `pkg/pro/api_client_instance_status.go` manually builds a `map[string]interface{}` with only `command`, `exit_code`, and `last_run`. This means `AtmosVersion`, `AtmosOS`, `AtmosArch` (added in PR #2216) are populated in the DTO but never sent to the server.
+
+**Fix:** Replace the manual map construction with direct DTO marshaling:
+
+```go
+// Before (current — lossy):
+payload := map[string]interface{}{
+    "command":   dto.Command,
+    "exit_code": dto.ExitCode,
+}
+
+// After (proposed — complete):
+data, err := json.Marshal(dto)
+```
+
+This sends all DTO fields automatically. The `omitempty` tags on optional fields ensure Windows clients (where Rusage metrics are zero-valued) and older CLIs (without metrics) produce clean payloads. The `last_run` field moves into the DTO itself (computed in `uploadStatus()`) so it's included in the marshaled output.
+
+**Benefits:**
+- Fixes the existing gap where version/OS/arch are collected but never sent.
+- New metrics fields are sent automatically — no manual map maintenance.
+- Adding future fields to the DTO automatically includes them in the payload.
+
+#### Upload Call Chain
+
+The metrics flow through the existing upload path:
+
+```
+executeMainTerraformCommand()          (terraform_execute_helpers_exec.go:278)
+  → ExecuteShellCommand() with WithMetricsCallback
+  → uploadCommandStatus()              (terraform_execute_helpers_exec.go:320)
+    → uploadStatus(info, exitCode, metrics, client, gitRepo)  (pro.go:218)
+      → client.UploadInstanceStatus(dto)
+```
+
+`uploadStatus()` gains a `*process.ProcessMetrics` parameter. When non-nil, it populates the DTO's timing/memory/IO fields before calling the API client.
+
+**Upload scope:** `plan` and `apply` only (same as PR #2216 status upload).
 
 ### API Contract Extension
 
-The existing PATCH to `/api/v1/repos/{owner}/{repo}/instances?stack={stack}&component={component}` gains optional fields:
+The existing PATCH to `/api/v1/repos/{owner}/{repo}/instances?stack={stack}&component={component}` gains optional fields. All new fields use `omitempty` for backward compatibility:
 
 ```json
 {
   "command": "plan",
   "exit_code": 0,
   "last_run": "2026-03-17T12:00:00Z",
+  "atmos_version": "1.234.0",
+  "atmos_os": "linux",
+  "atmos_arch": "amd64",
   "wall_time_ms": 45200,
   "user_cpu_time_ms": 12300,
   "sys_cpu_time_ms": 4100,
@@ -280,14 +326,18 @@ With these metrics, Atmos Pro can:
 |---|---|
 | `pkg/metrics/process/` (new) | New package with `ProcessMetrics` type and `Collect()` function |
 | `internal/exec/shell_utils.go` | Replace `cmd.Run()` with `process.Collect(cmd)`, add `WithMetricsCallback` option |
-| `internal/exec/terraform.go` | Pass `WithMetricsCallback` for main command, display via `ui.Info`, pass to `uploadStatus()` |
+| `internal/exec/terraform_execute_helpers_exec.go` | Pass `WithMetricsCallback` to `ExecuteShellCommand` in `executeMainTerraformCommand()`, pass metrics to `uploadCommandStatus()` |
 | `internal/exec/helmfile.go` | Pass `WithMetricsCallback` for main command, display via `ui.Info` |
 | `internal/exec/packer.go` | Pass `WithMetricsCallback` for main command, display via `ui.Info` |
-| `internal/exec/pro.go` | Accept and populate metrics in `uploadStatus()` |
-| `pkg/pro/dtos/instances.go` | Add metrics fields to `InstanceStatusUploadRequest` |
-| `pkg/pro/api_client_instance_status.go` | Include metrics fields in PATCH payload |
+| `internal/exec/pro.go` | `uploadStatus()` accepts `*ProcessMetrics`, populates DTO metrics fields, computes `LastRun` in DTO |
+| `pkg/pro/dtos/instances.go` | Add metrics fields + `LastRun` to DTO, add `omitempty` tags to optional existing fields |
+| `pkg/pro/api_client_instance_status.go` | Replace manual `map[string]interface{}` with `json.Marshal(dto)` — fixes version/OS/arch gap and sends metrics |
 | `pkg/schema/` | Add `settings.metrics.enabled` to config schema |
 
-## Predecessor
+## Predecessors
 
-- `docs/prd/instance-status-raw-upload.md` (PR #2216) — established raw `command` + `exit_code` upload pattern
+- `docs/prd/instance-status-raw-upload.md` (PR #2216) — established raw `command` + `exit_code` upload pattern.
+
+### Existing Gap: Version/OS/Arch Fields Not Sent
+
+PR #2216 added `AtmosVersion`, `AtmosOS`, and `AtmosArch` fields to the `InstanceStatusUploadRequest` DTO and populates them in `uploadStatus()` (`internal/exec/pro.go:242-244`). However, the API client (`pkg/pro/api_client_instance_status.go`) manually builds a `map[string]interface{}` payload containing only `command`, `exit_code`, and `last_run` — the version/OS/arch fields never reach the server. This PRD's implementation fixes this gap as a side effect (see Integration Point 3).
