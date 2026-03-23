@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,13 +14,23 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// validateStacksTestDataDir returns the absolute path to the validate-type-mismatch fixture
+// directory using runtime.Caller(0) so the path is source-file-relative (CWD-independent).
+func validateStacksTestDataDir(t *testing.T) string {
+	t.Helper()
+	_, callerFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller(0) must succeed")
+	// callerFile is the absolute path to this _test.go file.
+	// Resolve ../../tests/test-cases/validate-type-mismatch relative to it.
+	dir := filepath.Join(filepath.Dir(callerFile), "..", "..", "tests", "test-cases", "validate-type-mismatch")
+	absDir, err := filepath.Abs(dir)
+	require.NoError(t, err, "cannot resolve fixture path")
+	return absDir
+}
+
 func TestValidateStacksWithMergeContext(t *testing.T) {
-	// Get the base path for test cases
-	testCasesPath := "../../tests/test-cases/validate-type-mismatch"
-	absPath, err := filepath.Abs(testCasesPath)
-	if err != nil {
-		t.Skipf("Skipping test: cannot resolve test cases path: %v", err)
-	}
+	// Get the base path for test cases using source-file-relative lookup (CWD-independent).
+	absPath := validateStacksTestDataDir(t)
 
 	// Create a test configuration
 	atmosConfig := &schema.AtmosConfiguration{
@@ -138,11 +149,7 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 
 func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	// Test that ProcessYAMLConfigFileWithContext properly tracks import chain
-	testCasesPath := "../../tests/test-cases/validate-type-mismatch"
-	absPath, err := filepath.Abs(testCasesPath)
-	if err != nil {
-		t.Skipf("Skipping test: cannot resolve test cases path: %v", err)
-	}
+	absPath := validateStacksTestDataDir(t)
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath:               absPath,
@@ -160,7 +167,7 @@ func TestMergeContextInProcessYAMLConfigFile(t *testing.T) {
 	importsConfig := make(map[string]map[string]any)
 
 	// Process the YAML config file that imports conflicting configurations
-	_, _, _, _, _, _, _, err = ProcessYAMLConfigFile( //nolint:dogsled
+	_, _, _, _, _, _, _, err := ProcessYAMLConfigFile( //nolint:dogsled
 		atmosConfig,
 		basePath,
 		filePath,
@@ -205,8 +212,7 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 			name: "type mismatch error formatting",
 			setupFunc: func() error {
 				// Simulate what happens during validate stacks
-				testCasesPath := "../../tests/test-cases/validate-type-mismatch"
-				absPath, _ := filepath.Abs(testCasesPath)
+				absPath := validateStacksTestDataDir(t)
 
 				atmosConfig := &schema.AtmosConfiguration{
 					BasePath:               absPath,

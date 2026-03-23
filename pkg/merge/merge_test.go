@@ -760,3 +760,49 @@ func BenchmarkMerge(b *testing.B) {
 		_, _ = Merge(atmosConfig, inputs)
 	}
 }
+
+// TestMergeWithOptions_AppendSliceFlag verifies that the appendSlice flag in MergeWithOptions
+// threads through to deepMergeNative, causing list values to be appended rather than replaced.
+func TestMergeWithOptions_AppendSliceFlag(t *testing.T) {
+	inputs := []map[string]any{
+		{"tags": []any{"a", "b"}},
+		{"tags": []any{"c"}},
+	}
+	// appendSlice=true, sliceDeepCopy=false: src elements appended to dst.
+	result, err := MergeWithOptions(nil, inputs, true, false)
+	assert.NoError(t, err)
+	tags, ok := result["tags"].([]any)
+	assert.True(t, ok, "tags must be []any")
+	assert.Equal(t, []any{"a", "b", "c"}, tags,
+		"appendSlice=true must append src elements to dst slice")
+}
+
+// TestMergeWithOptions_SliceDeepCopyFlag verifies that the sliceDeepCopy flag in MergeWithOptions
+// threads through to deepMergeNative, producing element-wise merge with dst length preserved.
+func TestMergeWithOptions_SliceDeepCopyFlag(t *testing.T) {
+	inputs := []map[string]any{
+		{"tags": []any{"base-1", "base-2"}},
+		{"tags": []any{"override-1"}},
+	}
+	// sliceDeepCopy=true: result length = dst length; scalar src element does not override dst.
+	result, err := MergeWithOptions(nil, inputs, false, true)
+	assert.NoError(t, err)
+	tags, ok := result["tags"].([]any)
+	assert.True(t, ok, "tags must be []any")
+	assert.Equal(t, []any{"base-1", "base-2"}, tags,
+		"sliceDeepCopy=true must preserve dst length and scalar dst elements")
+}
+
+// TestMergeWithOptions_NoFlagsReplaceList verifies that with both appendSlice and sliceDeepCopy
+// false, list values in src fully replace those in dst (default replace-list semantics).
+func TestMergeWithOptions_NoFlagsReplaceList(t *testing.T) {
+	inputs := []map[string]any{
+		{"tags": []any{"a", "b"}},
+		{"tags": []any{"c"}},
+	}
+	result, err := MergeWithOptions(nil, inputs, false, false)
+	assert.NoError(t, err)
+	tags, ok := result["tags"].([]any)
+	assert.True(t, ok, "tags must be []any")
+	assert.Equal(t, []any{"c"}, tags, "no flags: src list replaces dst list")
+}

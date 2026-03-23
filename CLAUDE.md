@@ -214,7 +214,7 @@ ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, 
 - **Use absolute paths for fixture counting:** any `filepath.WalkDir` or file-count assertion must use an already-resolved absolute path (not a relative one) to be CWD-independent.
 - **Add compile-time sentinels for schema field references in tests:** when a test uses a specific struct field (e.g., `schema.Provider{Kind: "azure"}`), add `var _ = schema.Provider{Kind: "azure"}` as a compile guard so a field rename immediately fails the build.
 - **Add prerequisite sub-tests for subprocess behavior:** when a test depends on implicit env propagation (e.g., `ComponentEnvList` reaching a subprocess), add an explicit sub-test that confirms the behavior before the main test runs.
-- **Contract vs. legacy behavior:** if a test says "matches mergo" (or any other library), add an opt-in cross-validation test behind a build tag (e.g., `//go:build compare_mergo`); otherwise state "defined contract" explicitly so it's clear the native implementation owns the behavior.
+- **Contract vs. legacy behavior:** if a test says "matches mergo" (or any other library), add an opt-in cross-validation test behind a build tag (e.g., `//go:build compare_mergo`); otherwise state "defined contract" explicitly so it's clear the native implementation owns the behavior. Run cross-validation tests with: `go test -tags compare_mergo ./pkg/merge/... -run CrossValidate -v` (requires mergo v1.0.x installed).
 - **Include negative-path tests for recovery logic:** whenever a test verifies that a recovery/fallback triggers under condition X, add a corresponding test that verifies the recovery does NOT trigger when condition X is absent (e.g., mismatched workspace name).
 
 ### Follow-up Tracking (MANDATORY)

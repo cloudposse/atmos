@@ -91,10 +91,9 @@ still used in two lower-traffic call sites:
 - `pkg/merge/merge_yaml_functions.go` — YAML function merge helpers
 - `pkg/devcontainer/config_loader.go` — devcontainer config loading
 
-Migration of these remaining sites is tracked as a follow-up; the dependency will be
+Migration of these remaining sites is tracked in [issue #2242](https://github.com/cloudposse/atmos/issues/2242); the dependency will be
 removed once those two call sites are ported.  Until then, a future CVE in mergo could
-still affect atmos.  If you have concerns, please open or comment on an issue in the
-[cloudposse/atmos](https://github.com/cloudposse/atmos/issues) repository.
+still affect atmos.  Follow [#2242](https://github.com/cloudposse/atmos/issues/2242) for progress.
 
 ## How to Use It
 
