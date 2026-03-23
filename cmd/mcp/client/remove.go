@@ -61,12 +61,12 @@ func init() {
 func removeServerFromConfig(configFile, name string) error {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", configFile, err)
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigReadFailed, configFile, err)
 	}
 
 	var config map[string]any
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf("failed to parse %s: %w", configFile, err)
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigParseFailed, configFile, err)
 	}
 
 	mcpSection, ok := config["mcp"].(map[string]any)
@@ -83,7 +83,7 @@ func removeServerFromConfig(configFile, name string) error {
 
 	output, err := yaml.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrMCPConfigWriteFailed, err)
 	}
 
 	const configFilePerms = 0o644

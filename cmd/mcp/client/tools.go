@@ -12,7 +12,9 @@ import (
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_mcp_tools.md
@@ -31,6 +33,7 @@ func init() {
 }
 
 func executeMCPTools(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "cmd.mcpTools")()
 	name := args[0]
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -60,7 +63,7 @@ func executeMCPTools(cmd *cobra.Command, args []string) error {
 
 	tools := session.Tools()
 	if len(tools) == 0 {
-		fmt.Fprintln(os.Stdout, "No tools available from "+name)
+		ui.Info("No tools available from " + name)
 		return nil
 	}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -28,6 +29,7 @@ func RegisterMCPTools(
 	authProvider AuthEnvProvider,
 	toolchain ToolchainResolver,
 ) (*Manager, error) {
+	defer perf.Track(atmosConfig, "mcp.client.RegisterMCPTools")()
 	if len(atmosConfig.MCP.Servers) == 0 {
 		return nil, nil
 	}

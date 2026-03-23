@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -70,6 +71,7 @@ func (m *Manager) List() []*Session {
 
 // Start starts a specific server with optional start options (e.g., auth).
 func (m *Manager) Start(ctx context.Context, name string, opts ...StartOption) error {
+	defer perf.Track(nil, "mcp.client.Manager.Start")()
 	session, err := m.Get(name)
 	if err != nil {
 		return err
@@ -79,6 +81,7 @@ func (m *Manager) Start(ctx context.Context, name string, opts ...StartOption) e
 
 // Stop stops a specific server.
 func (m *Manager) Stop(name string) error {
+	defer perf.Track(nil, "mcp.client.Manager.Stop")()
 	session, err := m.Get(name)
 	if err != nil {
 		return err
@@ -88,6 +91,7 @@ func (m *Manager) Stop(name string) error {
 
 // StopAll stops all running servers.
 func (m *Manager) StopAll() error {
+	defer perf.Track(nil, "mcp.client.Manager.StopAll")()
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -105,6 +109,7 @@ func (m *Manager) StopAll() error {
 // Test tests connectivity to an MCP server by starting it,
 // listing tools, and pinging the server.
 func (m *Manager) Test(ctx context.Context, name string, opts ...StartOption) *TestResult {
+	defer perf.Track(nil, "mcp.client.Manager.Test")()
 	result := &TestResult{}
 
 	session, err := m.Get(name)

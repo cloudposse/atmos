@@ -11,7 +11,9 @@ import (
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_mcp_list.md
@@ -29,13 +31,14 @@ func init() {
 }
 
 func executeMCPList(_ *cobra.Command, _ []string) error {
+	defer perf.Track(nil, "cmd.mcpList")()
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return err
 	}
 
 	if len(atmosConfig.MCP.Servers) == 0 {
-		fmt.Fprintln(os.Stdout, "No MCP servers configured. Add servers under 'mcp.servers' in atmos.yaml.")
+		ui.Info("No MCP servers configured. Add servers under 'mcp.servers' in atmos.yaml.")
 		return nil
 	}
 

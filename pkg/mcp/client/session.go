@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -84,6 +85,7 @@ const logFieldName = "name"
 // Start connects to the external MCP server subprocess.
 // StartOptions (e.g., WithAuthManager) can modify the subprocess environment.
 func (s *Session) Start(ctx context.Context, opts ...StartOption) error {
+	defer perf.Track(nil, "mcp.client.Session.Start")()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -139,7 +141,7 @@ func (s *Session) connectAndDiscover(ctx context.Context, env []string) error {
 	toolsResult, err := s.session.ListTools(ctx, nil)
 	if err != nil {
 		s.status = StatusError
-		s.lastError = fmt.Errorf("failed to list tools from %q: %w", s.name, err)
+		s.lastError = fmt.Errorf("%w: %s: %w", errUtils.ErrMCPServerToolListFailed, s.name, err)
 		_ = s.session.Close()
 		s.session = nil
 		return s.lastError
@@ -153,6 +155,7 @@ func (s *Session) connectAndDiscover(ctx context.Context, env []string) error {
 
 // Stop gracefully shuts down the MCP server subprocess.
 func (s *Session) Stop() error {
+	defer perf.Track(nil, "mcp.client.Session.Stop")()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -172,6 +175,7 @@ func (s *Session) Stop() error {
 
 // CallTool calls a tool on the MCP server.
 func (s *Session) CallTool(ctx context.Context, toolName string, args map[string]any) (*mcpsdk.CallToolResult, error) {
+	defer perf.Track(nil, "mcp.client.Session.CallTool")()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -187,6 +191,7 @@ func (s *Session) CallTool(ctx context.Context, toolName string, args map[string
 
 // Ping checks connectivity to the MCP server.
 func (s *Session) Ping(ctx context.Context) error {
+	defer perf.Track(nil, "mcp.client.Session.Ping")()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -120,8 +121,8 @@ func init() {
 // findAtmosYAML returns the path to the atmos.yaml config file.
 func findAtmosYAML(configPath string) string {
 	candidates := []string{
-		configPath + "/atmos.yaml",
-		configPath + "/atmos.yml",
+		filepath.Join(configPath, "atmos.yaml"),
+		filepath.Join(configPath, "atmos.yml"),
 		"atmos.yaml",
 		"atmos.yml",
 	}
@@ -137,12 +138,12 @@ func findAtmosYAML(configPath string) string {
 func addServerToConfig(configFile, name string, server map[string]any) error {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", configFile, err)
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigReadFailed, configFile, err)
 	}
 
 	var config map[string]any
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf("failed to parse %s: %w", configFile, err)
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigParseFailed, configFile, err)
 	}
 
 	// Ensure mcp section exists.
@@ -165,7 +166,7 @@ func addServerToConfig(configFile, name string, server map[string]any) error {
 	// Write back.
 	output, err := yaml.Marshal(config)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrMCPConfigWriteFailed, err)
 	}
 
 	const configFilePerms = 0o644

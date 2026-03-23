@@ -14,6 +14,7 @@ import (
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_mcp_status.md
@@ -32,7 +33,7 @@ var statusCmd = &cobra.Command{
 		}
 
 		if len(atmosConfig.MCP.Servers) == 0 {
-			fmt.Fprintln(os.Stdout, "No MCP servers configured.")
+			ui.Info("No MCP servers configured.")
 			return nil
 		}
 
