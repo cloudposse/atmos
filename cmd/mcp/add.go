@@ -1,0 +1,172 @@
+package mcp
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+var addParser *flags.StandardParser
+
+var addCmd = &cobra.Command{
+	Use:   "add <name>",
+	Short: "Add an MCP integration to atmos.yaml",
+	Long: `Add an external MCP server integration to the mcp.integrations section of atmos.yaml.
+
+Example:
+  atmos mcp add aws-eks --command uvx --args "awslabs.amazon-eks-mcp-server@latest" --description "Amazon EKS"
+  atmos mcp add aws-s3 --command uvx --args "awslabs.s3-mcp-server@latest" --env AWS_REGION=us-east-1`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(nil, "cmd.mcpAdd")()
+
+		name := args[0]
+
+		v := viper.GetViper()
+		if err := addParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		command := v.GetString("command")
+		if command == "" {
+			return errUtils.Build(errUtils.ErrMCPIntegrationCommandEmpty).
+				WithHint("Use --command to specify the server command (e.g., --command uvx)").
+				Err()
+		}
+
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		if err != nil {
+			return err
+		}
+
+		// Check if integration already exists.
+		if _, exists := atmosConfig.MCP.Integrations[name]; exists {
+			return errUtils.Build(errUtils.ErrMCPIntegrationAlreadyExists).
+				WithExplanationf("Integration %q is already configured in atmos.yaml", name).
+				WithHintf("Use 'atmos mcp remove %s' first, or edit atmos.yaml directly", name).
+				Err()
+		}
+
+		// Build the integration config.
+		integration := map[string]any{
+			"command": command,
+		}
+
+		if cmdArgs := v.GetStringSlice("args"); len(cmdArgs) > 0 {
+			integration["args"] = cmdArgs
+		}
+
+		if desc := v.GetString("description"); desc != "" {
+			integration["description"] = desc
+		}
+
+		if envVars := v.GetStringSlice("env"); len(envVars) > 0 {
+			envMap := make(map[string]string)
+			for _, e := range envVars {
+				for i, c := range e {
+					if c == '=' {
+						envMap[e[:i]] = e[i+1:]
+						break
+					}
+				}
+			}
+			integration["env"] = envMap
+		}
+
+		// Write to atmos.yaml.
+		configPath := atmosConfig.CliConfigPath
+		if configPath == "" {
+			configPath = "atmos.yaml"
+		}
+		configFile := findAtmosYAML(configPath)
+
+		if err := addIntegrationToConfig(configFile, name, integration); err != nil {
+			return err
+		}
+
+		ui.Successf("Added MCP integration %q to %s", name, configFile)
+		return nil
+	},
+}
+
+func init() {
+	addParser = flags.NewStandardParser(
+		flags.WithStringFlag("command", "c", "", "Command to run the MCP server (e.g., uvx, npx)"),
+		flags.WithStringSliceFlag("args", "a", nil, "Arguments for the server command"),
+		flags.WithStringFlag("description", "d", "", "Description of the integration"),
+		flags.WithStringSliceFlag("env", "e", nil, "Environment variables (KEY=VALUE format)"),
+	)
+
+	addParser.RegisterFlags(addCmd)
+
+	if err := addParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	mcpCmd.AddCommand(addCmd)
+}
+
+// findAtmosYAML returns the path to the atmos.yaml config file.
+func findAtmosYAML(configPath string) string {
+	candidates := []string{
+		configPath + "/atmos.yaml",
+		configPath + "/atmos.yml",
+		"atmos.yaml",
+		"atmos.yml",
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return "atmos.yaml"
+}
+
+// addIntegrationToConfig adds an MCP integration to the atmos.yaml file.
+func addIntegrationToConfig(configFile, name string, integration map[string]any) error {
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", configFile, err)
+	}
+
+	var config map[string]any
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse %s: %w", configFile, err)
+	}
+
+	// Ensure mcp section exists.
+	mcpSection, ok := config["mcp"].(map[string]any)
+	if !ok {
+		mcpSection = make(map[string]any)
+		config["mcp"] = mcpSection
+	}
+
+	// Ensure integrations section exists.
+	integrations, ok := mcpSection["integrations"].(map[string]any)
+	if !ok {
+		integrations = make(map[string]any)
+		mcpSection["integrations"] = integrations
+	}
+
+	// Add the new integration.
+	integrations[name] = integration
+
+	// Write back.
+	output, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	const configFilePerms = 0o644
+	return os.WriteFile(configFile, output, configFilePerms)
+}

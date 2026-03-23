@@ -1013,6 +1013,7 @@ var (
 	ErrMCPIntegrationStartFailed    = errors.New("MCP integration failed to start")
 	ErrMCPIntegrationCommandEmpty   = errors.New("MCP integration command must not be empty")
 	ErrMCPIntegrationInvalidTimeout = errors.New("MCP integration timeout is invalid")
+	ErrMCPIntegrationAlreadyExists  = errors.New("MCP integration already exists")
 	ErrLSPInvalidTransport          = errors.New("invalid LSP transport type")
 	ErrLSPConfigNil                 = errors.New("LSP config is nil")
 	ErrLSPNoServerForFile           = errors.New("no LSP server found for file")
