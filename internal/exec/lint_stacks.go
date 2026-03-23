@@ -301,7 +301,7 @@ func expandGlobImports(imports []string, basePath string) []string {
 			// No files matched — silently drop this glob from results.
 			// Keeping the literal pattern would inflate import-depth counts (L-03)
 			// and create phantom references in the orphan-detection set (L-07).
-			log.Debug("Glob import matched no files, dropping pattern", "pattern", imp)
+			log.Debug("Glob import matched no files, dropping pattern", "import", imp)
 		} else {
 			result = append(result, matched...)
 		}
