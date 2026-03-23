@@ -1,0 +1,194 @@
+# Atmos MCP Integrations Example
+#
+# This configuration demonstrates how to connect Atmos to external MCP servers
+# from the AWS MCP ecosystem. Each server exposes domain-specific tools that
+# become available in `atmos ai chat` and `atmos ai exec`.
+#
+# Prerequisites:
+#   - Python 3.10+ with `uv` package manager (provides `uvx`)
+#   - AWS credentials configured (via `aws configure` or Atmos Auth)
+#   - GraphViz (for aws-diagram-mcp-server only)
+#
+# Quick start:
+#   atmos mcp list          # See configured servers
+#   atmos mcp test aws-docs # Test connectivity
+#   atmos mcp tools aws-api # List available tools
+
+base_path: "."
+
+# ---------------------------------------------------------------------------
+# MCP Server Configuration
+# ---------------------------------------------------------------------------
+# Each server follows the standard MCP format (command, args, env) used by
+# Claude Code, Codex CLI, and Gemini CLI. Atmos adds extensions like
+# `description` and `auth_identity` for enhanced functionality.
+#
+# YAML functions work in env values:
+#   !env VAR_NAME          - Read from OS environment
+#   !exec "command"        - Execute a shell command
+#   !repo-root             - Git repository root path
+# ---------------------------------------------------------------------------
+
+mcp:
+  # Enable the Atmos MCP server (for Claude Desktop, Claude Code, etc.).
+  enabled: true
+
+  servers:
+    # -----------------------------------------------------------------------
+    # AWS API Server — Direct AWS CLI access via AI
+    # -----------------------------------------------------------------------
+    # Enables AI assistants to interact with AWS services through AWS CLI
+    # commands with built-in security controls.
+    #
+    # Set READ_OPERATIONS_ONLY=true for safe read-only exploration.
+    # Set REQUIRE_MUTATION_CONSENT=true to require explicit approval for changes.
+    aws-api:
+      command: uvx
+      args:
+        - "awslabs.aws-api-mcp-server@latest"
+      env:
+        AWS_REGION: !env AWS_DEFAULT_REGION
+        AWS_API_MCP_PROFILE_NAME: !env AWS_PROFILE
+        # Safety: read-only mode by default. Set to "false" to allow mutations.
+        READ_OPERATIONS_ONLY: "true"
+        REQUIRE_MUTATION_CONSENT: "true"
+      description: "AWS API — direct AWS CLI access with security controls"
+
+    # -----------------------------------------------------------------------
+    # AWS Documentation Server — Search and fetch AWS docs
+    # -----------------------------------------------------------------------
+    # Searches, fetches, and recommends AWS documentation content in markdown.
+    # No AWS credentials required — accesses public documentation endpoints.
+    aws-docs:
+      command: uvx
+      args:
+        - "awslabs.aws-documentation-mcp-server@latest"
+      env:
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Documentation — search and fetch AWS docs"
+
+    # -----------------------------------------------------------------------
+    # AWS Knowledge Server — Managed AWS knowledge base
+    # -----------------------------------------------------------------------
+    # Fully managed remote MCP server providing up-to-date AWS documentation,
+    # code samples, agent SOPs, and regional availability information.
+    # No credentials or local installation needed — runs as a remote service.
+    aws-knowledge:
+      command: uvx
+      args:
+        - "fastmcp"
+        - "run"
+        - "https://knowledge-mcp.global.api.aws"
+      description: "AWS Knowledge — managed AWS knowledge base (remote)"
+
+    # -----------------------------------------------------------------------
+    # AWS Pricing Server — Real-time pricing and cost analysis
+    # -----------------------------------------------------------------------
+    # Accesses real-time AWS pricing information and provides cost analysis.
+    # All Pricing API calls are free of charge.
+    #
+    # IAM permissions required: pricing:*
+    aws-pricing:
+      command: uvx
+      args:
+        - "awslabs.aws-pricing-mcp-server@latest"
+      env:
+        AWS_REGION: !env AWS_DEFAULT_REGION
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Pricing — real-time pricing and cost analysis"
+
+    # -----------------------------------------------------------------------
+    # AWS Well-Architected Security Server — Security posture assessment
+    # -----------------------------------------------------------------------
+    # Monitors and assesses AWS environments against the Well-Architected
+    # Framework Security Pillar. Read-only — no remediation actions.
+    #
+    # IAM permissions required: GuardDuty, Inspector, SecurityHub, Access
+    # Analyzer read access, plus S3/EBS/RDS/ELB read for encryption/TLS checks.
+    aws-security:
+      command: uvx
+      args:
+        - "awslabs.well-architected-security-mcp-server@latest"
+      env:
+        AWS_REGION: !env AWS_DEFAULT_REGION
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Security — Well-Architected security posture assessment"
+
+    # -----------------------------------------------------------------------
+    # AWS Diagram Server — Architecture diagram generation
+    # -----------------------------------------------------------------------
+    # Creates AWS architecture diagrams using the Python diagrams package.
+    # Requires GraphViz to be installed: brew install graphviz
+    #
+    # Note: This server is deprecated by AWS. Consider using the diagram
+    # agent skill in the deploy-on-aws plugin instead.
+    aws-diagram:
+      command: uvx
+      args:
+        - "awslabs.aws-diagram-mcp-server@latest"
+      env:
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Diagram — architecture diagram generation (requires GraphViz)"
+
+# ---------------------------------------------------------------------------
+# Atmos Auth Integration (optional)
+# ---------------------------------------------------------------------------
+# Uncomment to use Atmos Auth for automatic credential injection.
+# When auth_identity is set on a server, Atmos resolves the identity
+# through the auth chain and injects AWS credentials into the subprocess.
+#
+# auth:
+#   enabled: true
+#   providers:
+#     aws-sso:
+#       type: aws-sso
+#       spec:
+#         start_url: "https://your-org.awsapps.com/start"
+#         region: "us-east-1"
+#   identities:
+#     security-audit:
+#       provider: aws-sso
+#       spec:
+#         role_name: "SecurityAuditRole"
+#         account_id: "123456789012"
+#
+# Then add to server config:
+#   aws-security:
+#     auth_identity: "security-audit"
+
+# ---------------------------------------------------------------------------
+# Atmos Toolchain Integration (optional)
+# ---------------------------------------------------------------------------
+# Uncomment to auto-install `uv` (Python package manager) via toolchain.
+# This ensures `uvx` is available before any MCP server starts.
+#
+# toolchain:
+#   tools:
+#     uv:
+#       version: "0.7.x"
+
+# ---------------------------------------------------------------------------
+# AI Configuration (required for atmos ai chat / atmos ai exec)
+# ---------------------------------------------------------------------------
+ai:
+  enabled: true
+  # Configure your preferred AI provider.
+  # default_provider: "anthropic"
+  # providers:
+  #   anthropic:
+  #     api_key_env_var: "ANTHROPIC_API_KEY"
+  #     model: "claude-sonnet-4-20250514"
+  tools:
+    enabled: true
+
+# Minimal stacks config (required for atmos to load).
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*.yaml"
+  excluded_paths: []
+  name_pattern: "{stage}"
+
+components:
+  terraform:
+    base_path: components/terraform
