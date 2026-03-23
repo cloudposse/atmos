@@ -2647,195 +2647,195 @@ func TestL08EmptyPatternsNoFindings(t *testing.T) {
 // positives when two different stacks each have an abstract component with the same
 // name but different vars (High #4 — key by "<stack>/<component>").
 func TestL02CrossStackAbstractNoCollision(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-all := rules.All()
-var l02 lint.LintRule
-for _, r := range all {
-if r.ID() == "L-02" {
-l02 = r
-break
-}
-}
-require.NotNil(t, l02, "L-02 rule must be present")
+	all := rules.All()
+	var l02 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-02" {
+			l02 = r
+			break
+		}
+	}
+	require.NotNil(t, l02, "L-02 rule must be present")
 
-// Two stacks each define an abstract component named "base" with different vars.
-// A concrete component in stack-a inherits from base with the same value as stack-a's abstract.
-// It must NOT match stack-b's abstract (which has a different value).
-stacksMap := map[string]any{
-"stack-a": map[string]any{
-cfg.ComponentsSectionName: map[string]any{
-cfg.TerraformSectionName: map[string]any{
-"base": map[string]any{
-cfg.MetadataSectionName: map[string]any{"type": "abstract"},
-cfg.VarsSectionName:     map[string]any{"region": "us-east-1"},
-},
-"concrete": map[string]any{
-cfg.MetadataSectionName: map[string]any{
-cfg.InheritsSectionName: []string{"base"},
-},
-// Same value as stack-a's abstract base → genuinely redundant
-cfg.VarsSectionName: map[string]any{"region": "us-east-1"},
-},
-},
-},
-},
-"stack-b": map[string]any{
-cfg.ComponentsSectionName: map[string]any{
-cfg.TerraformSectionName: map[string]any{
-"base": map[string]any{
-cfg.MetadataSectionName: map[string]any{"type": "abstract"},
-cfg.VarsSectionName:     map[string]any{"region": "eu-west-1"},
-},
-},
-},
-},
-}
+	// Two stacks each define an abstract component named "base" with different vars.
+	// A concrete component in stack-a inherits from base with the same value as stack-a's abstract.
+	// It must NOT match stack-b's abstract (which has a different value).
+	stacksMap := map[string]any{
+		"stack-a": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"base": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"type": "abstract"},
+						cfg.VarsSectionName:     map[string]any{"region": "us-east-1"},
+					},
+					"concrete": map[string]any{
+						cfg.MetadataSectionName: map[string]any{
+							cfg.InheritsSectionName: []string{"base"},
+						},
+						// Same value as stack-a's abstract base → genuinely redundant
+						cfg.VarsSectionName: map[string]any{"region": "us-east-1"},
+					},
+				},
+			},
+		},
+		"stack-b": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"base": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"type": "abstract"},
+						cfg.VarsSectionName:     map[string]any{"region": "eu-west-1"},
+					},
+				},
+			},
+		},
+	}
 
-ctx := lint.LintContext{
-StacksMap:       stacksMap,
-RawStackConfigs: make(map[string]map[string]any),
-ImportGraph:     make(map[string][]string),
-LintConfig:      schema.LintStacksConfig{},
-}
+	ctx := lint.LintContext{
+		StacksMap:       stacksMap,
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph:     make(map[string][]string),
+		LintConfig:      schema.LintStacksConfig{},
+	}
 
-findings, err := l02.Run(ctx)
-require.NoError(t, err)
-// The concrete component in stack-a redundantly overrides "region" to the same
-// value as stack-a's own abstract "base" — this IS a valid finding.
-var stackAFindings []lint.LintFinding
-for _, f := range findings {
-if f.Stack == "stack-a" {
-stackAFindings = append(stackAFindings, f)
-}
-}
-assert.NotEmpty(t, stackAFindings, "redundant override in stack-a must be reported")
-// No spurious finding for stack-b (no concrete component defined there).
-for _, f := range findings {
-assert.NotEqual(t, "stack-b", f.Stack,
-"stack-b has no concrete component — must produce no findings")
-}
+	findings, err := l02.Run(ctx)
+	require.NoError(t, err)
+	// The concrete component in stack-a redundantly overrides "region" to the same
+	// value as stack-a's own abstract "base" — this IS a valid finding.
+	var stackAFindings []lint.LintFinding
+	for _, f := range findings {
+		if f.Stack == "stack-a" {
+			stackAFindings = append(stackAFindings, f)
+		}
+	}
+	assert.NotEmpty(t, stackAFindings, "redundant override in stack-a must be reported")
+	// No spurious finding for stack-b (no concrete component defined there).
+	for _, f := range findings {
+		assert.NotEqual(t, "stack-b", f.Stack,
+			"stack-b has no concrete component — must produce no findings")
+	}
 }
 
 // TestL05CohesionMaxGroupsConfigurable verifies that L-05 respects the
 // CohesionMaxGroups setting from lint config (Medium #7).
 func TestL05CohesionMaxGroupsConfigurable(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-all := rules.All()
-var l05 lint.LintRule
-for _, r := range all {
-if r.ID() == "L-05" {
-l05 = r
-break
-}
-}
-require.NotNil(t, l05, "L-05 rule must be present")
+	all := rules.All()
+	var l05 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-05" {
+			l05 = r
+			break
+		}
+	}
+	require.NotNil(t, l05, "L-05 rule must be present")
 
-// Build a raw config with 4 concern groups (alpha-, beta-, gamma-, delta-).
-rawConfig := map[string]map[string]any{
-"/stacks/catalog/mixed.yaml": {
-cfg.ComponentsSectionName: map[string]any{
-cfg.TerraformSectionName: map[string]any{
-"alpha-vpc":   map[string]any{},
-"beta-rds":    map[string]any{},
-"gamma-cache": map[string]any{},
-"delta-queue": map[string]any{},
-},
-},
-},
-}
+	// Build a raw config with 4 concern groups (alpha-, beta-, gamma-, delta-).
+	rawConfig := map[string]map[string]any{
+		"/stacks/catalog/mixed.yaml": {
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"alpha-vpc":   map[string]any{},
+					"beta-rds":    map[string]any{},
+					"gamma-cache": map[string]any{},
+					"delta-queue": map[string]any{},
+				},
+			},
+		},
+	}
 
-t.Run("default threshold of 3 triggers finding for 4 groups", func(t *testing.T) {
-ctx := lint.LintContext{
-StacksMap:       make(map[string]any),
-RawStackConfigs: rawConfig,
-ImportGraph:     make(map[string][]string),
-LintConfig:      schema.LintStacksConfig{CohesionMaxGroups: 0}, // 0 → use default (3)
-}
-findings, err := l05.Run(ctx)
-require.NoError(t, err)
-assert.NotEmpty(t, findings, "4 groups must exceed default threshold of 3")
-})
+	t.Run("default threshold of 3 triggers finding for 4 groups", func(t *testing.T) {
+		ctx := lint.LintContext{
+			StacksMap:       make(map[string]any),
+			RawStackConfigs: rawConfig,
+			ImportGraph:     make(map[string][]string),
+			LintConfig:      schema.LintStacksConfig{CohesionMaxGroups: 0}, // 0 → use default (3)
+		}
+		findings, err := l05.Run(ctx)
+		require.NoError(t, err)
+		assert.NotEmpty(t, findings, "4 groups must exceed default threshold of 3")
+	})
 
-t.Run("custom threshold of 5 suppresses finding for 4 groups", func(t *testing.T) {
-ctx := lint.LintContext{
-StacksMap:       make(map[string]any),
-RawStackConfigs: rawConfig,
-ImportGraph:     make(map[string][]string),
-LintConfig:      schema.LintStacksConfig{CohesionMaxGroups: 5},
-}
-findings, err := l05.Run(ctx)
-require.NoError(t, err)
-assert.Empty(t, findings, "4 groups must NOT exceed custom threshold of 5")
-})
+	t.Run("custom threshold of 5 suppresses finding for 4 groups", func(t *testing.T) {
+		ctx := lint.LintContext{
+			StacksMap:       make(map[string]any),
+			RawStackConfigs: rawConfig,
+			ImportGraph:     make(map[string][]string),
+			LintConfig:      schema.LintStacksConfig{CohesionMaxGroups: 5},
+		}
+		findings, err := l05.Run(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, findings, "4 groups must NOT exceed custom threshold of 5")
+	})
 
-t.Run("custom threshold of 2 flags even 4 groups", func(t *testing.T) {
-ctx := lint.LintContext{
-StacksMap:       make(map[string]any),
-RawStackConfigs: rawConfig,
-ImportGraph:     make(map[string][]string),
-LintConfig:      schema.LintStacksConfig{CohesionMaxGroups: 2},
-}
-findings, err := l05.Run(ctx)
-require.NoError(t, err)
-assert.NotEmpty(t, findings, "4 groups must exceed custom threshold of 2")
-})
+	t.Run("custom threshold of 2 flags even 4 groups", func(t *testing.T) {
+		ctx := lint.LintContext{
+			StacksMap:       make(map[string]any),
+			RawStackConfigs: rawConfig,
+			ImportGraph:     make(map[string][]string),
+			LintConfig:      schema.LintStacksConfig{CohesionMaxGroups: 2},
+		}
+		findings, err := l05.Run(ctx)
+		require.NoError(t, err)
+		assert.NotEmpty(t, findings, "4 groups must exceed custom threshold of 2")
+	})
 }
 
 // TestL08FileAttributionWithIndex verifies that L-08 uses the StackNameToFileIndex
 // for reliable file attribution when a stack name resolves to a known manifest
 // path in the index (High #6).
 func TestL08FileAttributionWithIndex(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-all := rules.All()
-var l08 lint.LintRule
-for _, r := range all {
-if r.ID() == "L-08" {
-l08 = r
-break
-}
-}
-require.NotNil(t, l08, "L-08 rule must be present")
+	all := rules.All()
+	var l08 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-08" {
+			l08 = r
+			break
+		}
+	}
+	require.NotNil(t, l08, "L-08 rule must be present")
 
-stacksMap := map[string]any{
-"prod": map[string]any{
-cfg.VarsSectionName: map[string]any{
-"api_password": "super-secret",
-},
-},
-}
+	stacksMap := map[string]any{
+		"prod": map[string]any{
+			cfg.VarsSectionName: map[string]any{
+				"api_password": "super-secret",
+			},
+		},
+	}
 
-ctx := lint.LintContext{
-StacksMap:       stacksMap,
-RawStackConfigs: make(map[string]map[string]any),
-ImportGraph:     make(map[string][]string),
-// StacksBasePath alone would yield "" for "prod" (no path separator), but the
-// index provides the correct absolute path.
-StacksBasePath: "/stacks",
-StackNameToFileIndex: map[string]string{
-"prod": "/stacks/deploy/prod.yaml",
-},
-LintConfig: schema.LintStacksConfig{
-SensitiveVarPatterns: defaultSensitiveVarPatterns,
-},
-}
+	ctx := lint.LintContext{
+		StacksMap:       stacksMap,
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph:     make(map[string][]string),
+		// StacksBasePath alone would yield "" for "prod" (no path separator), but the
+		// index provides the correct absolute path.
+		StacksBasePath: "/stacks",
+		StackNameToFileIndex: map[string]string{
+			"prod": "/stacks/deploy/prod.yaml",
+		},
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
+		},
+	}
 
-findings, err := l08.Run(ctx)
-require.NoError(t, err)
-require.Len(t, findings, 1, "exactly one sensitive var finding expected")
-assert.Equal(t, "/stacks/deploy/prod.yaml", findings[0].File,
-"file must come from StackNameToFileIndex, not the heuristic fallback")
+	findings, err := l08.Run(ctx)
+	require.NoError(t, err)
+	require.Len(t, findings, 1, "exactly one sensitive var finding expected")
+	assert.Equal(t, "/stacks/deploy/prod.yaml", findings[0].File,
+		"file must come from StackNameToFileIndex, not the heuristic fallback")
 }
 
 // TestCfgSectionNamesExtended extends TestCfgSectionNameConstants to also lock
 // TerraformSectionName and HelmfileSectionName values (High #3 — L-05 constants).
 func TestCfgSectionNamesExtended(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-assert.Equal(t, "terraform", cfg.TerraformSectionName,
-"TerraformSectionName changed — update L-05 and all rules using it")
-assert.Equal(t, "helmfile", cfg.HelmfileSectionName,
-"HelmfileSectionName changed — update L-05 and all rules using it")
+	assert.Equal(t, "terraform", cfg.TerraformSectionName,
+		"TerraformSectionName changed — update L-05 and all rules using it")
+	assert.Equal(t, "helmfile", cfg.HelmfileSectionName,
+		"HelmfileSectionName changed — update L-05 and all rules using it")
 }

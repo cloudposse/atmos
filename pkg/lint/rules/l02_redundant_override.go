@@ -32,8 +32,8 @@ func (r *l02RedundantOverrideRule) Run(ctx lint.LintContext) ([]lint.LintFinding
 	// different stacks define abstract components with the same name but different vars.
 	// A secondary global index by component name alone is kept as a fallback for
 	// cross-stack inheritance where the parent stack is not the current stack.
-	baseVars := make(map[string]map[string]any)        // "<stack>/<comp>" → vars
-	globalBaseVars := make(map[string]map[string]any)  // "<comp>" → vars (fallback)
+	baseVars := make(map[string]map[string]any)       // "<stack>/<comp>" → vars
+	globalBaseVars := make(map[string]map[string]any) // "<comp>" → vars (fallback)
 
 	for stackName, stackSection := range ctx.StacksMap {
 		stackMap, ok := stackSection.(map[string]any)

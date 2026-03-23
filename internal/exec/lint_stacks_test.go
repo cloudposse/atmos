@@ -756,4 +756,3 @@ func TestRulesRelNormConsistencyWithL07(t *testing.T) {
 		})
 	}
 }
-
