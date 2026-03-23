@@ -14,7 +14,7 @@ func TestRegisterMCPTools_NoIntegrations(t *testing.T) {
 	registry := tools.NewRegistry()
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	mgr, err := RegisterMCPTools(registry, atmosConfig)
+	mgr, err := RegisterMCPTools(registry, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Nil(t, mgr, "no manager when no integrations configured")
 	assert.Equal(t, 0, registry.Count())
@@ -27,7 +27,7 @@ func TestRegisterMCPTools_InvalidConfig(t *testing.T) {
 		"bad": {Command: ""}, // Empty command.
 	}
 
-	_, err := RegisterMCPTools(registry, atmosConfig)
+	_, err := RegisterMCPTools(registry, atmosConfig, nil)
 	require.Error(t, err)
 }
 
@@ -39,7 +39,7 @@ func TestRegisterMCPTools_FailedStart_ContinuesOtherIntegrations(t *testing.T) {
 	}
 
 	// Should not return error — failed starts are logged as warnings.
-	mgr, err := RegisterMCPTools(registry, atmosConfig)
+	mgr, err := RegisterMCPTools(registry, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, mgr)
 	// No tools registered since the server failed to start.

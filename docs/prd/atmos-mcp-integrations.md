@@ -1,7 +1,7 @@
 # Atmos MCP Integrations — External MCP Server Management
 
-**Status:** In Progress — Phase 1 + Phase 2 Implemented
-**Version:** 2.0
+**Status:** In Progress — Phases 1–3 Implemented
+**Version:** 3.0
 **Last Updated:** 2026-03-22
 
 ---
@@ -811,12 +811,38 @@ Shall I generate an atmos workflow for this decommission sequence?
 - Lazy initialization (auto-start on first tool call instead of upfront)
 - `--ai` flag tool integration (requires executor in the analysis path)
 
-### Phase 3: Management Commands
+### Phase 3: Management Commands ✅ SHIPPED
 
-- `atmos mcp add` — interactive and from-registry installation
-- `atmos mcp remove` — uninstall and clean up
-- `atmos mcp restart` — restart server processes
-- `atmos mcp status` — health monitoring
+**Implemented files:**
+
+| File | Lines | Purpose |
+|---|---|---|
+| `cmd/mcp/add.go` | 170 | `atmos mcp add <name>` — add integration with `--command`, `--args`, `--env`, `--description` flags |
+| `cmd/mcp/remove.go` | 85 | `atmos mcp remove <name>` — remove integration from atmos.yaml |
+| `cmd/mcp/status.go` | 80 | `atmos mcp status` — start all, display table (name, status, tools, description) |
+| `cmd/mcp/restart.go` | 60 | `atmos mcp restart <name>` — stop and restart integration |
+| `cmd/mcp/add_test.go` | 120 | Tests: add new section, add to existing, remove, findAtmosYAML |
+| `errors/errors.go` | +1 | `ErrMCPIntegrationAlreadyExists` sentinel |
+
+**What shipped:**
+- ~~`atmos mcp add`~~ ✅ — uses StandardParser for flags, modifies atmos.yaml directly
+- ~~`atmos mcp remove`~~ ✅ — removes integration, uses error builder for messages
+- ~~`atmos mcp restart`~~ ✅ — stop + start cycle
+- ~~`atmos mcp status`~~ ✅ — health table with running/degraded/error status
+
+**Full command tree:**
+```
+atmos mcp start          # Start Atmos as MCP server
+atmos mcp list           # List configured integrations
+atmos mcp tools <name>   # List tools from an integration
+atmos mcp test <name>    # Test connectivity
+atmos mcp add <name>     # Add integration to config
+atmos mcp remove <name>  # Remove integration from config
+atmos mcp status         # Show all integration statuses
+atmos mcp restart <name> # Restart an integration
+```
+
+**Remaining for future:**
 - Toolchain integration for prerequisite management (`uvx`, `npx`)
 - Go template support in env vars (`{{ .vars.region }}`)
 
@@ -825,6 +851,8 @@ Shall I generate an atmos workflow for this decommission sequence?
 - Atmos Auth integration for credential injection
 - Stack-level MCP integration overrides
 - Composite MCP server (expose external tools via Atmos MCP server)
+- Toolchain integration for prerequisite management (`uvx`, `npx`)
+- Go template support in env vars (`{{ .vars.region }}`)
 - Connection pooling and health checks
 - `tools/list_changed` notification handling
 - MCP integration registry (curated list of known servers with defaults)

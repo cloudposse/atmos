@@ -15,12 +15,16 @@ const registrationTimeout = 60 * time.Second
 // in the Atmos AI tool registry. Returns the Manager so the caller can stop
 // all servers on exit.
 //
+// If authProvider is non-nil, integrations with auth_identity configured will
+// have credentials injected into their subprocess environment automatically.
+//
 // Integrations that fail to start are logged as warnings but do not prevent
 // other integrations from registering. This follows the principle of best-effort
 // availability — a broken AWS Cost Explorer server should not block EKS tools.
 func RegisterMCPTools(
 	registry *tools.Registry,
 	atmosConfig *schema.AtmosConfiguration,
+	authProvider AuthEnvProvider,
 ) (*Manager, error) {
 	if len(atmosConfig.MCP.Integrations) == 0 {
 		return nil, nil
@@ -34,10 +38,16 @@ func RegisterMCPTools(
 	ctx, cancel := context.WithTimeout(context.Background(), registrationTimeout)
 	defer cancel()
 
+	// Build start options.
+	var startOpts []StartOption
+	if authProvider != nil {
+		startOpts = append(startOpts, WithAuthManager(authProvider))
+	}
+
 	var totalTools int
 
 	for _, session := range mgr.List() {
-		if err := session.Start(ctx); err != nil {
+		if err := session.Start(ctx, startOpts...); err != nil {
 			log.Warnf("MCP integration %q failed to start: %v", session.Name(), err)
 			continue
 		}

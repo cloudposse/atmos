@@ -12,13 +12,14 @@ const defaultTimeout = 30 * time.Second
 
 // ParsedConfig holds a parsed integration config with resolved timeout.
 type ParsedConfig struct {
-	Name        string
-	Description string
-	Command     string
-	Args        []string
-	Env         map[string]string
-	AutoStart   bool
-	Timeout     time.Duration
+	Name         string
+	Description  string
+	Command      string
+	Args         []string
+	Env          map[string]string
+	AutoStart    bool
+	Timeout      time.Duration
+	AuthIdentity string
 }
 
 // ParseConfig validates and converts an MCPIntegrationConfig into a ParsedConfig.
@@ -42,12 +43,13 @@ func ParseConfig(name string, cfg schema.MCPIntegrationConfig) (*ParsedConfig, e
 	}
 
 	return &ParsedConfig{
-		Name:        name,
-		Description: cfg.Description,
-		Command:     cfg.Command,
-		Args:        cfg.Args,
-		Env:         env,
-		AutoStart:   cfg.AutoStart,
-		Timeout:     timeout,
+		Name:         name,
+		Description:  cfg.Description,
+		Command:      cfg.Command,
+		Args:         cfg.Args,
+		Env:          env,
+		AutoStart:    cfg.AutoStart,
+		Timeout:      timeout,
+		AuthIdentity: cfg.AuthIdentity,
 	}, nil
 }

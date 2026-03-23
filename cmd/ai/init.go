@@ -39,7 +39,7 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiTo
 	var mcpMgr *mcpclient.Manager
 	if len(atmosConfig.MCP.Integrations) > 0 {
 		var mcpErr error
-		mcpMgr, mcpErr = mcpclient.RegisterMCPTools(registry, atmosConfig)
+		mcpMgr, mcpErr = mcpclient.RegisterMCPTools(registry, atmosConfig, nil)
 		if mcpErr != nil {
 			log.Warnf("Failed to initialize MCP integrations: %v", mcpErr)
 		}

@@ -10,10 +10,11 @@ type MCPSettings struct {
 // MCPIntegrationConfig represents an external MCP server integration
 // configured in atmos.yaml under mcp.integrations.
 type MCPIntegrationConfig struct {
-	Description string            `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
-	Command     string            `yaml:"command" json:"command" mapstructure:"command"`
-	Args        []string          `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
-	Env         map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
-	AutoStart   bool              `yaml:"auto_start,omitempty" json:"auto_start,omitempty" mapstructure:"auto_start"`
-	Timeout     string            `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
+	Description  string            `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
+	Command      string            `yaml:"command" json:"command" mapstructure:"command"`
+	Args         []string          `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
+	Env          map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	AutoStart    bool              `yaml:"auto_start,omitempty" json:"auto_start,omitempty" mapstructure:"auto_start"`
+	Timeout      string            `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
+	AuthIdentity string            `yaml:"auth_identity,omitempty" json:"auth_identity,omitempty" mapstructure:"auth_identity"`
 }

@@ -68,13 +68,13 @@ func (m *Manager) List() []*Session {
 	return result
 }
 
-// Start starts a specific integration.
-func (m *Manager) Start(ctx context.Context, name string) error {
+// Start starts a specific integration with optional start options (e.g., auth).
+func (m *Manager) Start(ctx context.Context, name string, opts ...StartOption) error {
 	session, err := m.Get(name)
 	if err != nil {
 		return err
 	}
-	return session.Start(ctx)
+	return session.Start(ctx, opts...)
 }
 
 // Stop stops a specific integration.
@@ -104,7 +104,7 @@ func (m *Manager) StopAll() error {
 
 // Test tests connectivity to an MCP integration by starting it,
 // listing tools, and pinging the server.
-func (m *Manager) Test(ctx context.Context, name string) *TestResult {
+func (m *Manager) Test(ctx context.Context, name string, opts ...StartOption) *TestResult {
 	result := &TestResult{}
 
 	session, err := m.Get(name)
@@ -114,7 +114,7 @@ func (m *Manager) Test(ctx context.Context, name string) *TestResult {
 	}
 
 	// Start the server.
-	if err := session.Start(ctx); err != nil {
+	if err := session.Start(ctx, opts...); err != nil {
 		result.Error = err
 		return result
 	}

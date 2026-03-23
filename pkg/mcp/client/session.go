@@ -79,8 +79,11 @@ func (s *Session) Tools() []*mcpsdk.Tool {
 	return s.tools
 }
 
+const logFieldName = "name"
+
 // Start connects to the external MCP server subprocess.
-func (s *Session) Start(ctx context.Context) error {
+// StartOptions (e.g., WithAuthManager) can modify the subprocess environment.
+func (s *Session) Start(ctx context.Context, opts ...StartOption) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -89,25 +92,43 @@ func (s *Session) Start(ctx context.Context) error {
 	}
 
 	s.status = StatusStarting
-	log.Debug("Starting MCP integration", "name", s.name, "command", s.config.Command)
+	log.Debug("Starting MCP integration", logFieldName, s.name, "command", s.config.Command)
 
-	// Build the subprocess command.
-	cmd := exec.CommandContext(ctx, s.config.Command, s.config.Args...) //nolint:gosec // Command comes from atmos.yaml config, not user input.
-	cmd.Env = buildEnv(s.config.Env)
+	env := prepareEnv(ctx, s.config, opts)
+
+	if err := s.connectAndDiscover(ctx, env); err != nil {
+		return err
+	}
+
+	log.Debug("MCP integration started", logFieldName, s.name, "tools", len(s.tools))
+	return nil
+}
+
+// prepareEnv builds the subprocess environment with optional auth credential injection.
+func prepareEnv(ctx context.Context, config *ParsedConfig, opts []StartOption) []string {
+	env := buildEnv(config.Env)
+	for _, opt := range opts {
+		var err error
+		env, err = opt(ctx, config, env)
+		if err != nil {
+			log.Warnf("MCP integration %q: auth setup failed: %v", config.Name, err)
+		}
+	}
+	return env
+}
+
+// connectAndDiscover spawns the MCP server, performs the handshake, and lists tools.
+func (s *Session) connectAndDiscover(ctx context.Context, env []string) error {
+	cmd := exec.CommandContext(ctx, s.config.Command, s.config.Args...) //nolint:gosec // Command from atmos.yaml config.
+	cmd.Env = env
 	cmd.Stderr = os.Stderr
 
-	// Create the MCP client and transport.
 	s.client = mcpsdk.NewClient(&mcpsdk.Implementation{
 		Name:    "atmos",
 		Version: version.Version,
 	}, nil)
 
-	transport := &mcpsdk.CommandTransport{
-		Command: cmd,
-	}
-
-	// Connect to the server (performs initialization handshake).
-	session, err := s.client.Connect(ctx, transport, nil)
+	session, err := s.client.Connect(ctx, &mcpsdk.CommandTransport{Command: cmd}, nil)
 	if err != nil {
 		s.status = StatusError
 		s.lastError = fmt.Errorf("%w: %s: %w", errUtils.ErrMCPIntegrationStartFailed, s.name, err)
@@ -115,12 +136,10 @@ func (s *Session) Start(ctx context.Context) error {
 	}
 	s.session = session
 
-	// List available tools.
 	toolsResult, err := s.session.ListTools(ctx, nil)
 	if err != nil {
 		s.status = StatusError
 		s.lastError = fmt.Errorf("failed to list tools from %q: %w", s.name, err)
-		// Clean up the session.
 		_ = s.session.Close()
 		s.session = nil
 		return s.lastError
@@ -129,8 +148,6 @@ func (s *Session) Start(ctx context.Context) error {
 	s.tools = toolsResult.Tools
 	s.status = StatusRunning
 	s.lastError = nil
-
-	log.Debug("MCP integration started", "name", s.name, "tools", len(s.tools))
 	return nil
 }
 
@@ -144,7 +161,7 @@ func (s *Session) Stop() error {
 		return nil
 	}
 
-	log.Debug("Stopping MCP integration", "name", s.name)
+	log.Debug("Stopping MCP integration", logFieldName, s.name)
 	err := s.session.Close()
 	s.session = nil
 	s.client = nil
@@ -178,6 +195,27 @@ func (s *Session) Ping(ctx context.Context) error {
 	}
 
 	return s.session.Ping(ctx, nil)
+}
+
+// StartOption is a function that modifies the subprocess environment before starting.
+type StartOption func(ctx context.Context, config *ParsedConfig, env []string) ([]string, error)
+
+// WithAuthManager returns a StartOption that injects auth credentials when
+// the integration has auth_identity configured.
+func WithAuthManager(authMgr AuthEnvProvider) StartOption {
+	return func(ctx context.Context, config *ParsedConfig, env []string) ([]string, error) {
+		if config.AuthIdentity == "" || authMgr == nil {
+			return env, nil
+		}
+		log.Debug("Injecting auth credentials for MCP integration",
+			logFieldName, config.Name, "identity", config.AuthIdentity)
+		return authMgr.PrepareShellEnvironment(ctx, config.AuthIdentity, env)
+	}
+}
+
+// AuthEnvProvider is the subset of auth.AuthManager needed for MCP credential injection.
+type AuthEnvProvider interface {
+	PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error)
 }
 
 // buildEnv creates the environment variable list for the subprocess.
