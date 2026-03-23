@@ -187,7 +187,7 @@ stacks:
   included_paths:
     - "**/*.yaml"
   excluded_paths: []
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
 components:
   terraform:
