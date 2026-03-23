@@ -1552,7 +1552,6 @@ func TestBrowserWebflow_Interactive(t *testing.T) {
 	assert.Equal(t, "AKID_BW", creds.AccessKeyID)
 }
 
-
 func TestDisplayWebflowDialog(t *testing.T) {
 	// Just verify it doesn't panic.
 	displayWebflowDialog("https://example.com/auth")
