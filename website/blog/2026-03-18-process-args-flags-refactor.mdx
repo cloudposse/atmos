@@ -1,0 +1,211 @@
+---
+slug: process-args-flags-refactor
+title: "Taming the Beast: Refactoring processArgsAndFlags to 100% Test Coverage"
+sidebar_label: processArgsAndFlags Refactor
+authors:
+  - nitrocode
+tags:
+  - dx
+  - core
+date: 2026-03-18T00:00:00.000Z
+---
+
+What do you do when you find a 490-line function with ~67 cyclomatic complexity and 0% test coverage on its
+critical paths? You refactor it. This post covers how we eliminated the highest-complexity function in
+Atmos and replaced it with a clean, table-driven design — achieving **100% unit test coverage** along the way.
+
+<!-- truncate -->
+
+## What is `processArgsAndFlags`?
+
+`processArgsAndFlags` is the internal workhorse that parses CLI arguments for every `atmos terraform`,
+`atmos helmfile`, and `atmos packer` invocation. It extracts structured information from raw argument
+slices: which component to deploy, which stack, which flags to pass through, and which to consume
+internally.
+
+Before this refactor, the function contained **25+ repetitive if/else chains** like this:
+
+```go
+if arg == cfg.TerraformCommandFlag {
+    if len(inputArgsAndFlags) <= (i + 1) {
+        return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
+    }
+    info.TerraformCommand = inputArgsAndFlags[i+1]
+} else if strings.HasPrefix(arg+"=", cfg.TerraformCommandFlag) {
+    terraformCommandFlagParts := strings.Split(arg, "=")
+    if len(terraformCommandFlagParts) != 2 {
+        return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
+    }
+    info.TerraformCommand = terraformCommandFlagParts[1]
+}
+// ... repeated 24 more times for other flags
+```
+
+This pattern appeared **26 times** — once for each string-valued flag. Adding a new flag required copying
+and adapting 7–8 lines of boilerplate. Missing a case was easy and hard to detect without coverage.
+
+## The Refactor: DRY Table-Driven Design
+
+### 1. `parseFlagValue` — One Helper for All Forms
+
+We extracted a single helper that handles both `--flag value` (space-separated) and `--flag=value`
+(equals-separated) forms:
+
+```go
+func parseFlagValue(flag, arg string, args []string, index int) (string, bool, error) {
+    if arg == flag {
+        if index+1 >= len(args) {
+            return "", false, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
+        }
+        return args[index+1], true, nil
+    }
+    if strings.HasPrefix(arg, flag+"=") {
+        // SplitN(..., 2) keeps any additional "=" in the value intact.
+        // e.g., --query=.tags[?env==prod] correctly returns ".tags[?env==prod]"
+        parts := strings.SplitN(arg, "=", 2)
+        return parts[1], true, nil
+    }
+    return "", false, nil
+}
+```
+
+This fixes two latent bugs in the original code:
+
+1. **Prefix collision**: the old code used `strings.HasPrefix(arg+"=", flag)` which produced false
+   positives for flags sharing a common prefix (e.g., `--terraform-command-extra` matching
+   `--terraform-command`). The new `strings.HasPrefix(arg, flag+"=")` is correct and unambiguous.
+
+2. **Values containing `=`**: the old code used `strings.Split(arg, "=")` and rejected anything with
+   more than one `=` sign. This meant `--query=.tags[?env==prod]` or `--append-user-agent=Key=Value`
+   would error. Using `strings.SplitN(arg, "=", 2)` limits the split to the first `=`, preserving
+   the rest of the value intact.
+
+### 2. `stringFlagDefs` — The Table That Replaces 200+ Lines
+
+All 26 string-valued flags now live in a single declaration:
+
+```go
+var stringFlagDefs = []stringFlagDef{
+    {cfg.TerraformCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformCommand = v }},
+    {cfg.TerraformDirFlag,     func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformDir = v }},
+    // ... 24 more entries
+    // --planfile sets two fields:
+    {cfg.PlanFileFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.PlanFile = v; info.UseTerraformPlan = true }},
+}
+```
+
+Adding a new CLI flag is now a **single line**. The loop in `processArgsAndFlags` becomes:
+
+```go
+for _, def := range stringFlagDefs {
+    val, found, err := parseFlagValue(def.flag, arg, inputArgsAndFlags, i)
+    if err != nil {
+        return info, err
+    }
+    if found {
+        def.setFunc(&info, val)
+        break
+    }
+}
+```
+
+### 3. Specialized Helpers for Complex Flags
+
+Two flags have non-standard semantics and get their own focused helpers:
+
+**`parseIdentityFlag`** handles `--identity`'s optional-value behavior:
+- `--identity` → `__SELECT__` (prompts for interactive selection)
+- `--identity value` → uses `value`
+- `--identity=` → `__SELECT__` (empty value triggers selection)
+- `--identity=value` → uses `value`
+
+**`parseFromPlanFlag`** handles `--from-plan`'s optional path:
+- `--from-plan` → enables plan mode, no specific file
+- `--from-plan path` → enables plan mode, uses `path`
+- `--from-plan=path` → enables plan mode, uses `path`
+
+### 4. Boolean Flags Consolidated
+
+Five separate `if` statements became one `switch`:
+
+```go
+switch arg {
+case cfg.DryRunFlag:    info.DryRun = true
+case cfg.SkipInitFlag:  info.SkipInit = true
+case cfg.HelpFlag1, cfg.HelpFlag2: info.NeedHelp = true
+case cfg.AffectedFlag:  info.Affected = true
+case cfg.AllFlag:       info.All = true
+}
+```
+
+### 5. Boolean Flag Stripping Bug Fixed
+
+This was the most insidious bug: every entry in `commonFlags` — including purely boolean flags like
+`--dry-run`, `--skip-init`, `--affected`, and `--all` — was unconditionally stripping both the flag
+at index `i` **and** the next argument at index `i+1` from the pass-through list. The result:
+
+```sh
+# --refresh=false was silently dropped before reaching terraform
+atmos terraform plan vpc --stack dev --dry-run --refresh=false
+
+# --parallelism=10 was silently dropped
+atmos terraform apply vpc --stack prod --affected --parallelism=10
+```
+
+The fix introduces `valueTakingCommonFlags` — a set built from `stringFlagDefs` plus explicitly
+enumerated value-taking entries (`--stack`, `-s`, `--global-options`, `--kubeconfig-path`, profiler
+string flags). The stripping loop now only advances to `i+1` for flags that actually consume a value:
+
+```go
+if f == cfg.FromPlanFlag || f == cfg.IdentityFlag {
+    // Optional-value: only strip i+1 if next arg isn't a flag.
+    if len(inputArgsAndFlags) > i+1 && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+        indexesToRemove = append(indexesToRemove, i+1)
+    }
+} else if valueTakingCommonFlags[f] {
+    // Value-taking: always strip i+1 (the value was consumed during parsing).
+    indexesToRemove = append(indexesToRemove, i+1)
+}
+// Boolean-only flags: do nothing — i+1 passes through to the underlying tool.
+```
+
+This was a silent data-loss bug: users who combined an Atmos boolean flag with a Terraform flag in
+the same command line were silently losing their Terraform flag. The bug had existed since the feature
+was first introduced.
+
+## Coverage: From Patchwork to 100%
+
+All functions in the refactored code now have **100% unit test coverage**:
+
+| Function | Before | After |
+|---|---|---|
+| `processArgsAndFlags` | 78.8% | **100%** |
+| `parseQuotedCompoundSubcommand` | 92.9% | **100%** |
+| `parseFlagValue` | N/A (new) | **100%** |
+| `parseIdentityFlag` | N/A (new) | **100%** |
+| `parseFromPlanFlag` | N/A (new) | **100%** |
+
+The new test suite adds 12 focused test functions covering:
+
+- Every string flag in both space-separated and equals-separated forms
+- All boolean flags (`--dry-run`, `--skip-init`, `-h`, `--help`, `--affected`, `--all`)
+- Global options in both `--global-options value` and `--global-options=value` forms
+- `NeedHelp` handling with and without a subsequent subcommand
+- `--from-plan` in all four forms (alone, with path, with `=path`, with `=`)
+- Boolean flags NOT stripping adjacent pass-through flags (regression suite for the stripping bug)
+- Error paths: missing values, invalid options
+- Flag value stripping from `AdditionalArgsAndFlags` (both flag and value removed, not just the flag)
+
+## Why This Matters
+
+Every CLI invocation of `atmos terraform`, `atmos helmfile`, or `atmos packer` goes through this code.
+Confidence in its correctness directly translates to confidence in Atmos as a whole.
+
+With 100% coverage and a table-driven design:
+- **Adding a new flag** is a one-line change
+- **Bugs are caught immediately** by the test suite
+- **The code is readable** — flag definitions are declarations, not imperative code
+- **Maintenance burden drops** — no more copy-paste archaeology
+
+This work is part of Atmos's commitment to pushing test coverage from 74% toward 80%+ while making the
+codebase increasingly approachable for contributors.

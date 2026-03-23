@@ -684,6 +684,7 @@ var (
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
 	ErrUserAborted                  = errors.New("user aborted")
 
 	// AWS SSO specific errors.
@@ -859,6 +860,15 @@ var (
 	ErrECRLoginNoArgs      = errors.New("specify an integration name, --identity, or --registry")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
+
+	// EKS integration errors.
+	ErrEKSDescribeCluster   = errors.New("failed to describe EKS cluster")
+	ErrEKSClusterNotFound   = errors.New("EKS cluster not found")
+	ErrEKSIntegrationFailed = errors.New("EKS integration failed")
+	ErrEKSTokenGeneration   = errors.New("failed to generate EKS token")
+	ErrKubeconfigPath       = errors.New("failed to determine kubeconfig path")
+	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
+	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
 
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")

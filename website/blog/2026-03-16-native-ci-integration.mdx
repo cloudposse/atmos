@@ -54,11 +54,14 @@ Now, Atmos handles everything natively. The CLI detects when it's running in CI 
 
 ## What You Get
 
-- **Rich job summaries** with resource badges and collapsible diffs
-- **Live status checks** showing "Plan in progress" / "Plan complete"
-- **PR comments** with plan summaries
-- **Terraform outputs** exported to `$GITHUB_OUTPUT`
+- **Rich job summaries** — resource badges, collapsible diffs, plan/apply templates (written to `$GITHUB_STEP_SUMMARY`)
+- **Live status checks** — real-time progress ("Plan in progress" → "3 to add, 1 to change, 0 to destroy")
+- **Output variables** — plan/apply results exported to `$GITHUB_OUTPUT` for downstream jobs
+- **Planfile storage** — store planfiles in S3, GitHub Artifacts, or local filesystem with SHA256 integrity verification
+- **Custom templates** — Go template syntax for full control over summaries and comments
+- **Auto-detection** — CI mode enabled automatically from `CI=true` or `GITHUB_ACTIONS=true`
 - **Same command** works locally and in CI
+- **PR comments** *(coming soon)* — auto-updated plan summaries on pull requests
 
 ## Quick Start
 
@@ -113,34 +116,144 @@ auth:
 ```
 
 </TabItem>
+<TabItem value="atmos-config" label="atmos.yaml">
+
+```yaml
+ci:
+  # Auto-enabled when CI detected, or set explicitly
+  enabled: true
+
+  # Output variables for downstream jobs
+  output:
+    enabled: true
+    variables:
+      - has_changes
+      - has_additions
+      - has_destructions
+      - artifact_key
+      - plan_summary
+
+  # Job summary with plan/apply results
+  summary:
+    enabled: true
+
+  # Commit status checks
+  checks:
+    enabled: true
+    context_prefix: "atmos"
+
+  # Template overrides
+  templates:
+    base_path: ".atmos/ci/templates"
+    terraform:
+      plan: "plan.md"
+      apply: "apply.md"
+
+# To store planfiles across CI pipeline stages, add:
+components:
+  terraform:
+    planfiles:
+      # Stores are tried in priority order
+      priority:
+        - "github"
+
+      # Named stores
+      stores:
+        github:
+          type: github/artifacts
+          options:
+            retention_days: 7
+
+```
+</TabItem>
 </Tabs>
 
 That's it. Atmos detects GitHub Actions automatically and writes the plan summary to `$GITHUB_STEP_SUMMARY`.
 
 ## Example Output
 
-```markdown
-## 🔄 Plan: `vpc` in `dev-us-east-1`
+<div style={{border: '1px solid var(--ifm-color-emphasis-300)', borderRadius: '8px', padding: '1.5rem', backgroundColor: 'var(--ifm-background-surface-color)'}}>
 
-[![create](https://shields.io/badge/CREATE-3-success?style=for-the-badge)](#)
-[![destroy](https://shields.io/badge/DESTROY-1-critical?style=for-the-badge)](#)
+### Changes Found for `vpc` in `dev-us-east-1`
 
-> [!CAUTION]
-> **Terraform will delete resources!**
+<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
 
-<details><summary>Plan: 3 to add, 0 to change, 1 to destroy</summary>
+[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#) [![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#)
 
-### Create
+:::danger[Caution]
+**Terraform will delete resources!**
+This plan contains resource delete operations. Please check the plan result very carefully.
+:::
+
+<details>
+<summary>Resources: 3 to add, 0 to change, 1 to destroy.</summary>
+
+<br/>
+
+To reproduce this locally, run:
+
+```shell
+atmos terraform plan vpc -s dev-us-east-1
+```
+
+---
+
+#### Create
+```diff
 + aws_vpc.main
 + aws_subnet.public[0]
 + aws_subnet.public[1]
+```
 
-### Destroy
+#### Destroy
+```diff
 - aws_security_group.deprecated
+```
 
 </details>
+
+<details>
+<summary>Terraform <strong>Plan</strong> Summary</summary>
+
+```hcl
+# random_id.id2 will be created
+  + resource "random_id" "id2" {
+      + b64_std     = (known after apply)
+      + b64_url     = (known after apply)
+      + byte_length = 8
+      + dec         = (known after apply)
+      + hex         = (known after apply)
+      + id          = (known after apply)
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+cluster_id = "cluster-754a1c6160064d0b"
+lb_id = "load-balancer-763d296bbfc8ccc6"
+vpc_id = "vpc-69e5cf6a55e1eb81"
 ```
+
+</details>
+
+<details>
+<summary>Terraform Outputs</summary>
+
+| Output | Value |
+|--------|-------|
+| `cluster_id` | `cluster-754a1c6160064d0b` |
+| `lb_id` | `load-balancer-763d296bbfc8ccc6` |
+| `vpc_id` | `vpc-69e5cf6a55e1eb81` |
+
+</details>
+
+</div>
 
 ## Learn More
 
-For complete configuration options, permissions reference, and advanced workflows, see the [CI Integration documentation](/cli/configuration/ci).
+- [CI Configuration](/cli/configuration/ci) — complete configuration options and permissions reference
+- [Native CI Overview](/ci) — feature overview and architecture
+- [Planfile Storage](/ci/planfile-storage) — store and verify planfiles across CI pipeline stages
