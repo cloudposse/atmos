@@ -477,6 +477,9 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "")
 		t.Setenv("HOMEPATH", "")
+		// Clear SystemDrive so toDriveAbsolute does not promote the drive-relative
+		// path produced by filepath.FromSlash on Windows.
+		t.Setenv("SystemDrive", "")
 		dir, err := dirWindows()
 		require.NoError(t, err)
 		assert.Equal(t, filepath.FromSlash("/my/home"), dir)
@@ -487,6 +490,9 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("USERPROFILE", "/user/profile")
 		t.Setenv("HOMEDRIVE", "")
 		t.Setenv("HOMEPATH", "")
+		// Clear SystemDrive so toDriveAbsolute does not promote the drive-relative
+		// path produced by filepath.FromSlash on Windows.
+		t.Setenv("SystemDrive", "")
 		dir, err := dirWindows()
 		require.NoError(t, err)
 		// Whitespace HOME must be ignored; USERPROFILE should be used instead.
@@ -498,6 +504,9 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("USERPROFILE", "/user/profile")
 		t.Setenv("HOMEDRIVE", "")
 		t.Setenv("HOMEPATH", "")
+		// Clear SystemDrive so toDriveAbsolute does not promote the drive-relative
+		// path produced by filepath.FromSlash on Windows.
+		t.Setenv("SystemDrive", "")
 		dir, err := dirWindows()
 		require.NoError(t, err)
 		assert.Equal(t, filepath.FromSlash("/user/profile"), dir)
@@ -1261,6 +1270,10 @@ func TestExpand(t *testing.T) {
 	DisableCache = true
 	defer func() { DisableCache = false }()
 	t.Setenv("HOME", "/custom/path/")
+	// Clear SystemDrive so toDriveAbsolute does not promote the drive-relative
+	// path produced by filepath.FromSlash on Windows.
+	t.Setenv("SystemDrive", "")
+	t.Setenv("HOMEDRIVE", "")
 	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", "bar")
 	actual, err := Expand("~/foo/bar")
 	require.NoError(t, err)
