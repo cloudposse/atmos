@@ -368,6 +368,14 @@ atmos ai chat
 # Then: "What's the difference between IRSA and EKS Pod Identity?"
 ```
 
+The AI calls the MCP server's tools (like `search_documentation`, `get_documentation`)
+behind the scenes and renders the markdown response directly in the terminal. You can also
+see the raw tool list without AI:
+
+```bash
+atmos mcp tools aws-docs
+```
+
 **Configuration:** No `env` variables needed. Optionally set `AWS_DOCUMENTATION_PARTITION`
 to `"aws-cn"` for China partition docs.
 
