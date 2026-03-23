@@ -5,15 +5,17 @@
 // implementation against dario.cat/mergo.  These tests are opt-in (behind the
 // "compare_mergo" build tag) and are NOT run in CI.
 //
-// To run locally:
+// To run locally (requires dario.cat/mergo v1.0.2):
 //
-//	go test -tags compare_mergo ./pkg/merge/... -run TestCompareMergo -v
+//	go test -tags compare_mergo ./pkg/merge/... -run CrossValidate -v
 //
 // The purpose of these tests is to document where native behavior MATCHES mergo
 // and where it intentionally DIVERGES (defined contract).
 // If they fail, it means either:
 //   - A regression in the native implementation (unintentional divergence), or
 //   - An expected divergence that should be explicitly annotated as "defined contract".
+//
+// mergo version used for cross-validation: dario.cat/mergo v1.0.2 (go.mod).
 package merge
 
 import (

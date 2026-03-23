@@ -4,9 +4,10 @@ package exec
 // and TTY-gating helpers extracted from ExecuteTerraform:
 //   - runWorkspaceSetup (all early-return paths + wsOpts branch)
 //   - checkTTYRequirement (nil-stdin paths)
-//   - executeMainTerraformCommand (bare-workspace short-circuit)
+//   - executeMainTerraformCommand (bare-workspace short-circuit + error propagation)
 
 import (
+	"errors"
 	"os"
 	"testing"
 
@@ -173,4 +174,42 @@ func TestExecuteMainTerraformCommand_BareWorkspace_ReturnsNil(t *testing.T) {
 	}
 	err := executeMainTerraformCommand(&atmosConfig, &info, []string{"workspace"}, "/tmp/component", false)
 	assert.NoError(t, err)
+}
+
+// TestExecuteMainTerraformCommand_Error_Propagates verifies that when the underlying
+// ExecuteShellCommand returns an error (non-zero exit from the terraform binary), that
+// error is propagated to the caller rather than being swallowed.
+//
+// Cross-platform approach: uses the test binary itself (os.Executable) with
+// _ATMOS_TEST_EXIT_ONE=1 to produce a portable exit-1 without depending on Unix-only
+// binaries like "false".  TestMain in testmain_test.go intercepts this env var.
+//
+// This test also acts as a contract test that ExecuteShellCommand correctly wraps
+// subprocess exit codes in errUtils.ExitCodeError: errors.As must succeed.
+func TestExecuteMainTerraformCommand_Error_Propagates(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
+		DryRun:           false,
+	}
+
+	execErr := executeMainTerraformCommand(&atmosConfig, &info,
+		[]string{"-test.run=^$"}, // no test matches → exits 0 normally, but env overrides
+		"",    // component path: current dir
+		false, // uploadStatusFlag
+	)
+	require.Error(t, execErr, "executeMainTerraformCommand must propagate non-zero exit from subprocess")
+
+	// Verify the error is wrapped as ExitCodeError (the contract of ExecuteShellCommand).
+	var exitCodeErr errUtils.ExitCodeError
+	require.True(t,
+		errors.As(execErr, &exitCodeErr),
+		"error must be wrapped as ExitCodeError, got: %T (%v)", execErr, execErr,
+	)
+	assert.Equal(t, 1, exitCodeErr.Code, "ExitCodeError.Code must be 1")
 }

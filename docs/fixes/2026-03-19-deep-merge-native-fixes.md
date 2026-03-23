@@ -186,6 +186,7 @@ func safeCap(a, b int) int {
 | `internal/exec/terraform_utils_test.go` | Tests for default workspace variants; absolute TF_DATA_DIR path |
 | `internal/exec/terraform_execute_helpers_exec.go` | Debug → Warn for workspace recovery |
 | `internal/exec/terraform_execute_helpers_pipeline_test.go` | Recovery path test; env propagation verification; negative-path logger assertion |
+| `internal/exec/terraform_execute_helpers_workspace_test.go` | `TestExecuteMainTerraformCommand_Error_Propagates`: contract test that error from terraform binary is wrapped as `ExitCodeError` |
 | `internal/exec/testmain_test.go` | Cross-platform subprocess helper: `TestMain` intercepts `_ATMOS_TEST_EXIT_ONE=1` to provide a platform-agnostic "exit 1" binary |
 | `internal/exec/validate_stacks_test.go` | Independent fixture YAML count to self-validate block counter |
 | `internal/exec/terraform_test.go` | Use `tests.RequireTerraform(t)` for `TestExecuteTerraform_DeploymentStatus`; remove unused `os/exec` import |

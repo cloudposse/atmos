@@ -907,7 +907,10 @@ func BenchmarkMergeNative_TenInputs(b *testing.B) {
 }
 
 // BenchmarkMerge_ProductionScale simulates a realistic large-stack merge:
-// 10 inheritance layers, 24 top-level sections, nested maps, and mixed lists.
+// 10 inheritance layers, 25 top-level sections, nested maps, mixed lists, and
+// nested list-of-map-of-list (node_groups with per-group subnet lists) — the
+// last pattern exercises the full sliceDeepCopy and appendSlice code paths
+// with deeply nested structures representative of real Atmos stacks.
 // This supplements BenchmarkMergeNative_TenInputs which uses only 3 top-level keys.
 // Production Atmos stacks typically have 10–30 sections and 5–15 inheritance levels.
 //
@@ -992,6 +995,17 @@ func BenchmarkMerge_ProductionScale(b *testing.B) {
 			"single_nat":         false,
 			"outputs":            map[string]any{"vpc_id": fmt.Sprintf("vpc-layer-%d", layer)},
 			"interfaces":         []any{fmt.Sprintf("iface-%d-a", layer), fmt.Sprintf("iface-%d-b", layer)},
+			// Nested list-of-map-of-list: exercises the full sliceDeepCopy path for
+			// real-world structures like worker groups with per-group subnet lists.
+			"node_groups": []any{
+				map[string]any{
+					"name":              fmt.Sprintf("workers-%d", layer),
+					"instance_type":     "t3.medium",
+					"desired_capacity":  layer + 2,
+					"subnets":           []any{fmt.Sprintf("10.%d.1.0/24", layer), fmt.Sprintf("10.%d.2.0/24", layer)},
+					"labels":            map[string]any{"team": "platform", "layer": fmt.Sprintf("%d", layer)},
+				},
+			},
 		}
 		inputs = append(inputs, input)
 	}

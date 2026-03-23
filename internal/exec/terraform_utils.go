@@ -103,9 +103,10 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 // code 1 even though we are already in the right workspace, so we should not treat the failure
 // as a fatal error.
 //
-// TF_DATA_DIR is resolved relative to componentPath (not the atmos process CWD) because
-// Terraform itself is invoked with componentPath as its working directory, so the two
-// paths are always consistent.
+// TF_DATA_DIR parity with Terraform: if TF_DATA_DIR is set, Terraform resolves it relative to
+// the working directory of the terraform process (i.e. componentPath).  This function applies
+// the identical resolution: a relative TF_DATA_DIR is joined to componentPath so both paths
+// are always consistent, regardless of the atmos process CWD.
 func isTerraformCurrentWorkspace(componentPath, workspace string) bool {
 	tfDataDir := os.Getenv("TF_DATA_DIR")
 	if tfDataDir == "" {
