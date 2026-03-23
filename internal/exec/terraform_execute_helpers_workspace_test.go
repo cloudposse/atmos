@@ -181,8 +181,10 @@ func TestExecuteMainTerraformCommand_BareWorkspace_ReturnsNil(t *testing.T) {
 // error is propagated to the caller rather than being swallowed.
 //
 // Cross-platform approach: uses the test binary itself (os.Executable) with
-// _ATMOS_TEST_EXIT_ONE=1 to produce a portable exit-1 without depending on Unix-only
-// binaries like "false".  TestMain in testmain_test.go intercepts this env var.
+// _ATMOS_TEST_EXIT_ONE=1 as the "terraform" command.  TestMain in testmain_test.go
+// intercepts this env var and calls os.Exit(1) immediately — before the test runner
+// starts.  The -test.run argument is irrelevant since TestMain exits before any test
+// selection happens, but it is included for documentation clarity.
 //
 // This test also acts as a contract test that ExecuteShellCommand correctly wraps
 // subprocess exit codes in errUtils.ExitCodeError: errors.As must succeed.

@@ -908,9 +908,10 @@ func BenchmarkMergeNative_TenInputs(b *testing.B) {
 
 // BenchmarkMerge_ProductionScale simulates a realistic large-stack merge:
 // 10 inheritance layers, 25 top-level sections, nested maps, mixed lists, and
-// nested list-of-map-of-list (node_groups with per-group subnet lists) — the
-// last pattern exercises the full sliceDeepCopy and appendSlice code paths
-// with deeply nested structures representative of real Atmos stacks.
+// the nested list-of-map-of-list pattern (`node_groups` with per-group subnet lists).
+// The `node_groups` structure exercises the full sliceDeepCopy and appendSlice code
+// paths with deeply nested structures representative of real Atmos stacks (e.g.
+// EKS node groups with per-group subnet, label, and tag lists).
 // This supplements BenchmarkMergeNative_TenInputs which uses only 3 top-level keys.
 // Production Atmos stacks typically have 10–30 sections and 5–15 inheritance levels.
 //
