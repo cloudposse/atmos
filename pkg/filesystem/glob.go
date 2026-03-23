@@ -55,6 +55,9 @@ var (
 	// globCacheTTL is the active TTL, configurable via ATMOS_FS_GLOB_CACHE_TTL.
 	globCacheTTL = defaultGlobCacheTTL
 
+	// globCacheMaxEntries is the active LRU capacity, configurable via ATMOS_FS_GLOB_CACHE_MAX_ENTRIES.
+	globCacheMaxEntries = defaultGlobCacheMaxEntries
+
 	// globCacheEmptyEnabled controls whether empty-result sets are stored in the cache.
 	// Default true. Set ATMOS_FS_GLOB_CACHE_EMPTY=0 to disable.
 	globCacheEmptyEnabled = true
@@ -111,6 +114,7 @@ func applyGlobCacheConfig() {
 	globMatchesLRU = newLRU
 	globMatchesLRUErr = err
 	globCacheTTL = ttl
+	globCacheMaxEntries = maxEntries
 	globCacheEmptyEnabled = emptyEnabled
 	globMatchesLRUMu.Unlock()
 }

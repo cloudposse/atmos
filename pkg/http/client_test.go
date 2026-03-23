@@ -1080,3 +1080,58 @@ func TestGitHubAuthenticatedTransport_CrossHostRedirect(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
+
+// TestGitHubAuthenticatedTransport_AllRedirectStatusCodes verifies that Authorization
+// is stripped when the http.Client follows any of the standard redirect status codes
+// (301 MovedPermanently, 302 Found, 303 SeeOther, 307 TemporaryRedirect, 308 PermanentRedirect)
+// to a different host.
+func TestGitHubAuthenticatedTransport_AllRedirectStatusCodes(t *testing.T) {
+	t.Parallel()
+
+	redirectCases := []struct {
+		code int
+		name string
+	}{
+		{http.StatusMovedPermanently, "301_MovedPermanently"},
+		{http.StatusFound, "302_Found"},
+		{http.StatusSeeOther, "303_SeeOther"},
+		{http.StatusTemporaryRedirect, "307_TemporaryRedirect"},
+		{http.StatusPermanentRedirect, "308_PermanentRedirect"},
+	}
+
+	for _, rc := range redirectCases {
+		t.Run(rc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Target: a different host that must NOT receive Authorization.
+			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Empty(t, r.Header.Get("Authorization"),
+					"Authorization must not be forwarded after %d redirect", rc.code)
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer target.Close()
+
+			// 307 and 308 require the same method and body so we use a GET to keep it simple.
+			origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL+"/landed", rc.code)
+			}))
+			defer origin.Close()
+
+			client := NewDefaultClient(
+				WithGitHubToken("redir-test-token"),
+			)
+
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, origin.URL+"/start", nil)
+			require.NoError(t, err)
+			// Pre-set Authorization to simulate a caller that added it manually.
+			req.Header.Set("Authorization", "Bearer manual-token")
+
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, resp.StatusCode,
+				"final response after %d redirect must be 200 OK", rc.code)
+		})
+	}
+}

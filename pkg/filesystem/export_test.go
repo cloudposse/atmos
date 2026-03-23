@@ -84,3 +84,17 @@ func GlobCacheEmptyEnabled() bool {
 func ResetGlobExpvarOnce() {
 	globExpvarOnce = sync.Once{}
 }
+
+// GlobCacheTTL returns the currently active cache TTL for test introspection.
+func GlobCacheTTL() time.Duration {
+	globMatchesLRUMu.RLock()
+	defer globMatchesLRUMu.RUnlock()
+	return globCacheTTL
+}
+
+// GlobCacheMaxEntries returns the currently configured LRU capacity for test introspection.
+func GlobCacheMaxEntries() int {
+	globMatchesLRUMu.RLock()
+	defer globMatchesLRUMu.RUnlock()
+	return globCacheMaxEntries
+}

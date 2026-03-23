@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -538,4 +539,99 @@ func TestRegisterGlobCacheExpvars(t *testing.T) {
 	lenVar := expvar.Get("atmos_glob_cache_len")
 	require.NotNil(t, lenVar)
 	assert.Equal(t, "1", lenVar.String(), "cache len must be 1 after one unique pattern")
+}
+
+// TestApplyGlobCacheConfig_InvalidInputsClamped verifies that invalid or out-of-range
+// values for ATMOS_FS_GLOB_CACHE_TTL and ATMOS_FS_GLOB_CACHE_MAX_ENTRIES are rejected
+// and that the defaults are preserved.
+func TestApplyGlobCacheConfig_InvalidInputsClamped(t *testing.T) {
+	// Cannot use t.Parallel() here because subtests call t.Setenv which modifies
+	// process-wide environment variables.
+
+	type testCase struct {
+		name           string
+		ttlEnv         string
+		maxEntriesEnv  string
+		wantTTL        time.Duration
+		wantMaxEntries int
+	}
+
+	const (
+		defaultTTL        = 5 * time.Minute
+		defaultMaxEntries = 1024
+	)
+
+	cases := []testCase{
+		// Zero values should fall back to defaults.
+		{
+			name:           "zero_TTL_falls_back_to_default",
+			ttlEnv:         "0s",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		{
+			name:           "zero_maxEntries_falls_back_to_default",
+			maxEntriesEnv:  "0",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		// Negative values should fall back to defaults.
+		{
+			name:           "negative_TTL_falls_back_to_default",
+			ttlEnv:         "-1m",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		{
+			name:           "negative_maxEntries_falls_back_to_default",
+			maxEntriesEnv:  "-5",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		// Unparseable values should fall back to defaults.
+		{
+			name:           "invalid_TTL_string_falls_back_to_default",
+			ttlEnv:         "not-a-duration",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		{
+			name:           "invalid_maxEntries_string_falls_back_to_default",
+			maxEntriesEnv:  "not-a-number",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		// Valid values should be accepted.
+		{
+			name:           "valid_TTL_accepted",
+			ttlEnv:         "10m",
+			wantTTL:        10 * time.Minute,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		{
+			name:           "valid_maxEntries_accepted",
+			maxEntriesEnv:  "256",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: 256,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.ttlEnv != "" {
+				t.Setenv("ATMOS_FS_GLOB_CACHE_TTL", tc.ttlEnv)
+			}
+			if tc.maxEntriesEnv != "" {
+				t.Setenv("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES", tc.maxEntriesEnv)
+			}
+			ApplyGlobCacheConfigForTest()
+			t.Cleanup(func() {
+				ApplyGlobCacheConfigForTest()
+				ResetGlobMatchesCache()
+			})
+
+			assert.Equal(t, tc.wantTTL, GlobCacheTTL(), "TTL mismatch for env TTL=%q", tc.ttlEnv)
+			assert.Equal(t, tc.wantMaxEntries, GlobCacheMaxEntries(), "MaxEntries mismatch for env MAX=%q", tc.maxEntriesEnv)
+		})
+	}
 }
