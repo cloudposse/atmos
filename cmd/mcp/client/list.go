@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 //go:embed markdown/atmos_mcp_list.md
@@ -47,16 +47,16 @@ func executeMCPList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSTATUS\tDESCRIPTION")
-
+	headers := []string{"NAME", "STATUS", "DESCRIPTION"}
+	var rows [][]string
 	for _, session := range mgr.List() {
-		fmt.Fprintf(w, "%s\t%s\t%s\n",
+		rows = append(rows, []string{
 			session.Name(),
-			session.Status(),
+			string(session.Status()),
 			session.Config().Description,
-		)
+		})
 	}
 
-	return w.Flush()
+	fmt.Fprintln(os.Stderr, theme.CreateMinimalTable(headers, rows))
+	return nil
 }

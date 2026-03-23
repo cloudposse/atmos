@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 //go:embed markdown/atmos_mcp_tools.md
@@ -67,18 +67,18 @@ func executeMCPTools(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "TOOL\tDESCRIPTION")
-
 	const maxDescLen = 80
 
+	headers := []string{"TOOL", "DESCRIPTION"}
+	var rows [][]string
 	for _, tool := range tools {
 		desc := tool.Description
 		if len(desc) > maxDescLen {
 			desc = desc[:maxDescLen-3] + "..."
 		}
-		fmt.Fprintf(w, "%s\t%s\n", tool.Name, desc)
+		rows = append(rows, []string{tool.Name, desc})
 	}
 
-	return w.Flush()
+	fmt.Fprintln(os.Stderr, theme.CreateMinimalTable(headers, rows))
+	return nil
 }

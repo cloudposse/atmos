@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 //go:embed markdown/atmos_mcp_status.md
@@ -48,8 +48,8 @@ var statusCmd = &cobra.Command{
 			ctx = context.Background()
 		}
 
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(w, "NAME\tSTATUS\tTOOLS\tDESCRIPTION")
+		headers := []string{"NAME", "STATUS", "TOOLS", "DESCRIPTION"}
+		var rows [][]string
 
 		for _, session := range mgr.List() {
 			result := mgr.Test(ctx, session.Name())
@@ -66,25 +66,21 @@ var statusCmd = &cobra.Command{
 				toolCount = fmt.Sprintf("%d", result.ToolCount)
 			}
 
-			errSuffix := ""
+			desc := session.Config().Description
 			if result.Error != nil {
-				errSuffix = fmt.Sprintf(" (%s)", result.Error)
 				const maxErrLen = 50
-				if len(errSuffix) > maxErrLen {
-					errSuffix = errSuffix[:47] + "...)"
+				errMsg := result.Error.Error()
+				if len(errMsg) > maxErrLen {
+					errMsg = errMsg[:maxErrLen-3] + "..."
 				}
+				desc += " (" + errMsg + ")"
 			}
 
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s%s\n",
-				session.Name(),
-				status,
-				toolCount,
-				session.Config().Description,
-				errSuffix,
-			)
+			rows = append(rows, []string{session.Name(), status, toolCount, desc})
 		}
 
-		return w.Flush()
+		fmt.Fprintln(os.Stderr, theme.CreateMinimalTable(headers, rows))
+		return nil
 	},
 }
 

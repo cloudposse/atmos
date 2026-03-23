@@ -13,6 +13,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -20,6 +21,7 @@ import (
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -59,11 +61,18 @@ var startCmd = &cobra.Command{
 	RunE: executeMCPServer,
 }
 
+var startParser *flags.StandardParser
+
 func init() {
-	// Add flags.
-	startCmd.Flags().String("transport", transportStdio, "Transport type: stdio or http")
-	startCmd.Flags().String("host", defaultHTTPHost, "Host to bind HTTP server (only for http transport)")
-	startCmd.Flags().Int("port", defaultHTTPPort, "Port to bind HTTP server (only for http transport)")
+	startParser = flags.NewStandardParser(
+		flags.WithStringFlag("transport", "", transportStdio, "Transport type: stdio or http"),
+		flags.WithStringFlag("host", "", defaultHTTPHost, "Host to bind HTTP server (only for http transport)"),
+		flags.WithIntFlag("port", "", defaultHTTPPort, "Port to bind HTTP server (only for http transport)"),
+	)
+	startParser.RegisterFlags(startCmd)
+	if err := startParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	mcpcmd.McpCmd.AddCommand(startCmd)
 }
