@@ -1,0 +1,45 @@
+---
+title: atmos mcp tools
+sidebar_label: tools
+sidebar_class_name: command
+id: tools
+description: List tools exposed by an external MCP server
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to connect to an external MCP server and list the tools it exposes. This starts the server, performs the MCP initialization handshake, retrieves the tool list, then shuts down the server.
+</Intro>
+
+<Experimental />
+
+## Usage
+
+```shell
+atmos mcp tools <name>
+```
+
+### Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>The name of the MCP server (as shown in `atmos mcp list`).</dd>
+</dl>
+
+### Examples
+
+```shell
+# List tools from the AWS documentation server
+atmos mcp tools aws-docs
+
+# List tools from the AWS security server
+atmos mcp tools aws-security
+# Example output:
+# TOOL                      DESCRIPTION
+# CheckSecurityServices     Verify security services are enabled
+# GetSecurityFindings       Retrieve security findings with severity filtering
+# CheckStorageEncryption    Check encryption on S3, EBS, RDS, DynamoDB, EFS
+# CheckNetworkSecurity      Check TLS/HTTPS on ELB, VPC, API Gateway
+# ListServicesInRegion      List active AWS services in a region
+```

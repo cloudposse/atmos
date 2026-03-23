@@ -1,0 +1,38 @@
+---
+title: atmos mcp remove
+sidebar_label: remove
+sidebar_class_name: command
+id: remove
+description: Remove an external MCP server from atmos.yaml
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to remove an external MCP server from the `mcp.servers` section of `atmos.yaml`.
+</Intro>
+
+<Experimental />
+
+## Usage
+
+```shell
+atmos mcp remove <name>
+```
+
+### Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>The name of the MCP server to remove (as shown in `atmos mcp list`).</dd>
+</dl>
+
+### Examples
+
+```shell
+# Remove a server
+atmos mcp remove aws-docs
+
+# Verify it was removed
+atmos mcp list
+```

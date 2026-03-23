@@ -1,0 +1,44 @@
+---
+title: atmos mcp test
+sidebar_label: test
+sidebar_class_name: command
+id: test
+description: Test connectivity to an external MCP server
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to test connectivity to an external MCP server. It performs a full connectivity check: starts the server, verifies the initialization handshake, lists available tools, and pings the server.
+</Intro>
+
+<Experimental />
+
+## Usage
+
+```shell
+atmos mcp test <name>
+```
+
+### Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>The name of the MCP server (as shown in `atmos mcp list`).</dd>
+</dl>
+
+### Examples
+
+```shell
+# Test the AWS documentation server (no credentials needed)
+atmos mcp test aws-docs
+
+# Example output:
+# ✓ Server started successfully
+# ✓ Initialization handshake complete
+# ✓ 4 tools available
+# ✓ Server responds to ping
+
+# Test a server that requires credentials
+atmos mcp test aws-security
+```

@@ -1,0 +1,38 @@
+---
+title: atmos mcp restart
+sidebar_label: restart
+sidebar_class_name: command
+id: restart
+description: Restart an external MCP server
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to stop and restart an external MCP server. This is useful for picking up configuration changes or recovering from server errors.
+</Intro>
+
+<Experimental />
+
+## Usage
+
+```shell
+atmos mcp restart <name>
+```
+
+### Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>The name of the MCP server to restart (as shown in `atmos mcp list`).</dd>
+</dl>
+
+### Examples
+
+```shell
+# Restart a server
+atmos mcp restart aws-docs
+
+# Example output:
+# ✓ Restarted MCP server "aws-docs" (4 tools available)
+```
