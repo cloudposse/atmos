@@ -1,4 +1,4 @@
-package mcp
+package client
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -113,7 +114,7 @@ func init() {
 		panic(err)
 	}
 
-	mcpCmd.AddCommand(addCmd)
+	mcpcmd.McpCmd.AddCommand(addCmd)
 }
 
 // findAtmosYAML returns the path to the atmos.yaml config file.

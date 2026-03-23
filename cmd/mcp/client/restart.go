@@ -1,10 +1,11 @@
-package mcp
+package client
 
 import (
 	"context"
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -60,5 +61,5 @@ var restartCmd = &cobra.Command{
 }
 
 func init() {
-	mcpCmd.AddCommand(restartCmd)
+	mcpcmd.McpCmd.AddCommand(restartCmd)
 }

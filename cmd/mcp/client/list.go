@@ -1,4 +1,4 @@
-package mcp
+package client
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -20,7 +21,7 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	mcpCmd.AddCommand(listCmd)
+	mcpcmd.McpCmd.AddCommand(listCmd)
 }
 
 func executeMCPList(_ *cobra.Command, _ []string) error {

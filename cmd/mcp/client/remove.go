@@ -1,4 +1,4 @@
-package mcp
+package client
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -49,7 +50,7 @@ var removeCmd = &cobra.Command{
 }
 
 func init() {
-	mcpCmd.AddCommand(removeCmd)
+	mcpcmd.McpCmd.AddCommand(removeCmd)
 }
 
 // removeServerFromConfig removes an MCP server from the atmos.yaml file.

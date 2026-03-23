@@ -1,4 +1,4 @@
-package mcp
+package client
 
 import (
 	"testing"

@@ -1,5 +1,5 @@
 //nolint:dupl // Test files contain similar setup code by design for isolation and clarity.
-package mcp
+package server
 
 import (
 	"context"

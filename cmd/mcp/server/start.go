@@ -1,4 +1,4 @@
-package mcp
+package server
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
@@ -83,7 +84,7 @@ func init() {
 	startCmd.Flags().String("host", defaultHTTPHost, "Host to bind HTTP server (only for http transport)")
 	startCmd.Flags().Int("port", defaultHTTPPort, "Port to bind HTTP server (only for http transport)")
 
-	mcpCmd.AddCommand(startCmd)
+	mcpcmd.McpCmd.AddCommand(startCmd)
 }
 
 func executeMCPServer(cmd *cobra.Command, args []string) error {
