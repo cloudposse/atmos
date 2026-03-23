@@ -187,25 +187,6 @@ mcp:
           DB_HOST: "localhost"
 ```
 
-### Stack-Level Overrides
-
-MCP servers can be overridden per stack for environment-specific configuration:
-
-```yaml
-# stacks/prod.yaml
-vars:
-  aws_profile: production
-  region: us-east-1
-
-settings:
-  mcp:
-    servers:
-        aws-eks:
-          env:
-            AWS_PROFILE: production
-            AWS_REGION: us-east-1
-```
-
 ### Toolchain Integration for Prerequisites
 
 External MCP servers often require runtime dependencies (Python's `uvx`, Node.js `npx`,
@@ -529,26 +510,6 @@ User runs: atmos ai chat
    → Credentials are isolated per-realm (no cross-project leaking)
 ```
 
-#### Per-Stack Auth Override
-
-Different environments can use different identities:
-
-```yaml
-# stacks/prod.yaml
-settings:
-  mcp:
-    servers:
-        aws-security:
-          auth_identity: "prod-security-audit"
-
-# stacks/staging.yaml
-settings:
-  mcp:
-    servers:
-        aws-security:
-          auth_identity: "staging-security-audit"
-```
-
 #### Credential Caching
 
 Atmos Auth caches credentials in the system keyring with 15-minute validity buffer.
@@ -854,13 +815,16 @@ atmos mcp restart <name> # Restart a server
   `PrepareShellEnvironment` integration. 8 tests.
 
 **Remaining:**
-- Stack-level MCP server overrides
-- Composite MCP server (expose external tools via Atmos MCP server)
 - Toolchain integration for prerequisite management (`uvx`, `npx`)
 - Go template support in env vars (`{{ .vars.region }}`)
 - Connection pooling and health checks
 - `tools/list_changed` notification handling
 - MCP server registry (curated list of known servers with defaults)
+
+### Future Considerations
+
+- Stack-level MCP server overrides (per-stack `settings.mcp.servers` config)
+- Composite MCP server (expose external tools via Atmos MCP server)
 
 ---
 
@@ -887,7 +851,7 @@ atmos mcp restart <name> # Restart a server
 | List servers | `claude mcp list` | `atmos mcp list` |
 | Remove server | `claude mcp remove` | `atmos mcp remove` |
 | Config location | `.mcp.json` / `~/.claude.json` | `atmos.yaml` |
-| Config scopes | local / project / user | global (atmos.yaml) + stack overrides |
+| Config scopes | local / project / user | global (atmos.yaml) |
 | Transport | stdio / HTTP / SSE | stdio (Phase 1), HTTP (Phase 4) |
 | Tool namespacing | Flat (server-level) | `server.tool_name` |
 | Auth integration | None | Atmos Auth identities |
