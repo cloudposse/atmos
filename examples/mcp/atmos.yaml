@@ -5,9 +5,12 @@
 # become available in `atmos ai chat` and `atmos ai exec`.
 #
 # Prerequisites:
-#   - Python 3.10+ with `uv` package manager (provides `uvx`)
-#   - AWS credentials configured (via `aws configure` or Atmos Auth)
-#   - GraphViz (for aws-diagram-mcp-server only)
+#   - Python 3.10+ (required by all AWS MCP servers)
+#   - `uv` package manager is auto-installed by Atmos toolchain (see toolchain section below)
+#   - AWS credentials (for servers that need them):
+#       Option A: `aws configure` or `export AWS_PROFILE=...`
+#       Option B: Atmos Auth with `auth_identity` on each server (see auth section below)
+#   - GraphViz (for aws-diagram-mcp-server only): `brew install graphviz`
 #
 # Quick start:
 #   atmos mcp list          # See configured servers
@@ -131,6 +134,16 @@ mcp:
       description: "AWS Diagram — architecture diagram generation (requires GraphViz)"
 
 # ---------------------------------------------------------------------------
+# Atmos Toolchain Integration
+# ---------------------------------------------------------------------------
+# Auto-install `uv` (Python package manager) via Atmos toolchain.
+# This ensures `uvx` is available before any MCP server starts.
+toolchain:
+  tools:
+    uv:
+      version: ">=0.7"
+
+# ---------------------------------------------------------------------------
 # Atmos Auth Integration (optional)
 # ---------------------------------------------------------------------------
 # Uncomment to use Atmos Auth for automatic credential injection.
@@ -155,16 +168,6 @@ mcp:
 # Then add to server config:
 #   aws-security:
 #     auth_identity: "security-audit"
-
-# ---------------------------------------------------------------------------
-# Atmos Toolchain Integration
-# ---------------------------------------------------------------------------
-# Auto-install `uv` (Python package manager) via Atmos toolchain.
-# This ensures `uvx` is available before any MCP server starts.
-toolchain:
-  tools:
-    uv:
-      version: ">=0.7"
 
 # ---------------------------------------------------------------------------
 # AI Configuration (required for atmos ai chat / atmos ai exec)
