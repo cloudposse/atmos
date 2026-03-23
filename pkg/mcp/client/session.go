@@ -218,6 +218,42 @@ type AuthEnvProvider interface {
 	PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error)
 }
 
+// ToolchainResolver resolves command binary paths and provides toolchain PATH.
+type ToolchainResolver interface {
+	Resolve(command string) string
+	EnvVars() []string
+}
+
+// WithToolchain returns a StartOption that resolves the MCP server command
+// binary via the Atmos toolchain and prepends toolchain PATH to the subprocess
+// environment. This ensures prerequisites like uvx/npx are available even if
+// not on the system PATH.
+func WithToolchain(resolver ToolchainResolver) StartOption {
+	return func(_ context.Context, config *ParsedConfig, env []string) ([]string, error) {
+		if resolver == nil {
+			return env, nil
+		}
+
+		// Resolve the command binary (auto-installs if managed by toolchain).
+		resolved := resolver.Resolve(config.Command)
+		if resolved != config.Command {
+			log.Debug("Resolved MCP server command via toolchain",
+				logFieldName, config.Name,
+				"original", config.Command,
+				"resolved", resolved)
+			config.Command = resolved
+		}
+
+		// Prepend toolchain PATH so the subprocess can find toolchain binaries.
+		toolchainEnv := resolver.EnvVars()
+		if len(toolchainEnv) > 0 {
+			env = append(env, toolchainEnv...)
+		}
+
+		return env, nil
+	}
+}
+
 // buildEnv creates the environment variable list for the subprocess.
 // It starts with the current process environment and appends the configured vars.
 func buildEnv(env map[string]string) []string {

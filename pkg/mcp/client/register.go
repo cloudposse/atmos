@@ -15,16 +15,18 @@ const registrationTimeout = 60 * time.Second
 // in the Atmos AI tool registry. Returns the Manager so the caller can stop
 // all servers on exit.
 //
-// If authProvider is non-nil, servers with auth_identity configured will
-// have credentials injected into their subprocess environment automatically.
+// Optional providers:
+//   - authProvider: injects credentials for servers with auth_identity configured.
+//   - toolchain: resolves command binaries and provides toolchain PATH for
+//     prerequisites like uvx/npx that may be managed by Atmos toolchain.
 //
 // Servers that fail to start are logged as warnings but do not prevent
-// other servers from registering. This follows the principle of best-effort
-// availability — a broken AWS Cost Explorer server should not block EKS tools.
+// other servers from registering.
 func RegisterMCPTools(
 	registry *tools.Registry,
 	atmosConfig *schema.AtmosConfiguration,
 	authProvider AuthEnvProvider,
+	toolchain ToolchainResolver,
 ) (*Manager, error) {
 	if len(atmosConfig.MCP.Servers) == 0 {
 		return nil, nil
@@ -40,6 +42,9 @@ func RegisterMCPTools(
 
 	// Build start options.
 	var startOpts []StartOption
+	if toolchain != nil {
+		startOpts = append(startOpts, WithToolchain(toolchain))
+	}
 	if authProvider != nil {
 		startOpts = append(startOpts, WithAuthManager(authProvider))
 	}

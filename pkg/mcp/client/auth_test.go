@@ -117,3 +117,81 @@ func TestParseConfig_EmptyAuthIdentity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, parsed.AuthIdentity)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// WithToolchain tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+// mockToolchain implements ToolchainResolver for testing.
+type mockToolchain struct {
+	resolvedPaths map[string]string
+	envVars       []string
+}
+
+func (m *mockToolchain) Resolve(command string) string {
+	if p, ok := m.resolvedPaths[command]; ok {
+		return p
+	}
+	return command
+}
+
+func (m *mockToolchain) EnvVars() []string {
+	return m.envVars
+}
+
+func TestWithToolchain_ResolvesCommand(t *testing.T) {
+	tc := &mockToolchain{
+		resolvedPaths: map[string]string{"uvx": "/opt/toolchain/bin/uvx"},
+		envVars:       []string{"PATH=/opt/toolchain/bin:/usr/bin"},
+	}
+	opt := WithToolchain(tc)
+
+	config := &ParsedConfig{
+		Name:    "aws-eks",
+		Command: "uvx",
+	}
+	env := []string{"HOME=/home/user"}
+
+	result, err := opt(context.Background(), config, env)
+	require.NoError(t, err)
+
+	// Command should be resolved to absolute path.
+	assert.Equal(t, "/opt/toolchain/bin/uvx", config.Command)
+
+	// Toolchain PATH should be appended to env.
+	assert.Contains(t, result, "PATH=/opt/toolchain/bin:/usr/bin")
+	assert.Contains(t, result, "HOME=/home/user")
+}
+
+func TestWithToolchain_CommandNotInToolchain(t *testing.T) {
+	tc := &mockToolchain{
+		resolvedPaths: map[string]string{}, // Empty — command not managed.
+	}
+	opt := WithToolchain(tc)
+
+	config := &ParsedConfig{
+		Name:    "custom",
+		Command: "my-server",
+	}
+	env := []string{"PATH=/usr/bin"}
+
+	result, err := opt(context.Background(), config, env)
+	require.NoError(t, err)
+
+	// Command unchanged.
+	assert.Equal(t, "my-server", config.Command)
+	// Env unchanged (no toolchain PATH).
+	assert.Equal(t, []string{"PATH=/usr/bin"}, result)
+}
+
+func TestWithToolchain_NilResolver(t *testing.T) {
+	opt := WithToolchain(nil)
+
+	config := &ParsedConfig{Command: "uvx"}
+	env := []string{"PATH=/usr/bin"}
+
+	result, err := opt(context.Background(), config, env)
+	require.NoError(t, err)
+	assert.Equal(t, env, result)
+	assert.Equal(t, "uvx", config.Command)
+}

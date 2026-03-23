@@ -5,6 +5,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,14 +37,7 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiTo
 	}
 
 	// Register external MCP server tools (if configured).
-	var mcpMgr *mcpclient.Manager
-	if len(atmosConfig.MCP.Servers) > 0 {
-		var mcpErr error
-		mcpMgr, mcpErr = mcpclient.RegisterMCPTools(registry, atmosConfig, nil)
-		if mcpErr != nil {
-			log.Warnf("Failed to initialize MCP servers: %v", mcpErr)
-		}
-	}
+	mcpMgr := registerMCPServerTools(registry, atmosConfig)
 
 	log.Debugf("Registered %d tools", registry.Count())
 
@@ -110,4 +104,23 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 	log.Debug("Read-only tool executor initialized")
 
 	return registry, executor, nil
+}
+
+// registerMCPServerTools registers external MCP server tools with toolchain resolution.
+func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) *mcpclient.Manager {
+	if len(atmosConfig.MCP.Servers) == 0 {
+		return nil
+	}
+
+	var toolchain mcpclient.ToolchainResolver
+	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
+	if tenvErr == nil && tenv != nil {
+		toolchain = tenv
+	}
+
+	mgr, err := mcpclient.RegisterMCPTools(registry, atmosConfig, nil, toolchain)
+	if err != nil {
+		log.Warnf("Failed to initialize MCP servers: %v", err)
+	}
+	return mgr
 }
