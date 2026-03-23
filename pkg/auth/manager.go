@@ -55,6 +55,13 @@ const (
 	skipIntegrationsKey contextKey = "skipIntegrations"
 )
 
+// ContextWithSkipIntegrations returns a context that skips auto-triggered integrations
+// during authentication. Use this when calling Authenticate() for token generation
+// or other operations that should not re-provision integrations (e.g., rewriting kubeconfig).
+func ContextWithSkipIntegrations(ctx context.Context) context.Context {
+	return context.WithValue(ctx, skipIntegrationsKey, true)
+}
+
 // isInteractive checks if interactive prompts should be shown.
 // Interactive mode requires:
 // 1. --interactive flag is true (or ATMOS_INTERACTIVE env var).

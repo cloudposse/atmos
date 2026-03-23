@@ -141,6 +141,18 @@ export const roadmapConfig = {
       pr: 1891,
       prd: 'native-ci-integration',
     },
+    {
+      id: 'instance-status-upload',
+      icon: 'RiUploadCloudLine',
+      title: 'Push Instance Status to Atmos Pro',
+      tagline: 'Raw exit codes, server-side interpretation',
+      description: 'CLI sends raw command and exit code to Atmos Pro after plan and apply. Includes configurable CI exit code mapping so detailed-exitcode does not break workflows.',
+      benefits: 'Instance status updates in real-time without waiting for webhooks. Status logic evolves server-side without CLI releases.',
+      status: 'shipped',
+      quarter: 'q1-2026',
+      pr: 2216,
+      changelog: 'instance-status-upload',
+    },
   ],
 
   initiatives: [
@@ -151,7 +163,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 80,
+      progress: 85,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.', category: 'featured', priority: 'high' },
@@ -169,8 +181,8 @@ export const roadmapConfig = {
         { label: 'Zero-config AWS SSO identity management', status: 'shipped', quarter: 'q4-2025', changelog: 'aws-sso-identity-auto-provisioning', version: 'v1.200.0', description: 'Automatic SSO identity provisioning without manual configuration—Atmos detects and configures SSO settings.', benefits: 'Get started with AWS SSO instantly. No manual identity configuration required.', experimental: true, category: 'featured', priority: 'high' },
         { label: 'Identity flag for describe commands', status: 'shipped', quarter: 'q4-2025', changelog: 'describe-commands-identity-flag', version: 'v1.197.0', description: 'Use --identity flag with describe commands to see configuration as it would appear under a specific identity.', benefits: 'Debug identity-specific configurations without switching credentials.' },
         { label: 'Seamless first login with provider fallback', status: 'shipped', quarter: 'q4-2025', pr: 1918, changelog: 'auth-login-provider-fallback', description: 'Automatic provider fallback when no identities are configured, enabling seamless first-time login with auto_provision_identities.', benefits: 'Just run atmos auth login on first use. No need to know about --provider flag.' },
-        { label: 'Automatic EKS kubeconfig tied to identities', status: 'in-progress', quarter: 'q4-2025', pr: 1903, changelog: 'helmfile-eks-modernization', description: 'Automatic kubeconfig generation for EKS clusters using Atmos-managed AWS credentials with flexible cluster name configuration.', benefits: 'No aws eks update-kubeconfig commands. Kubectl works immediately after Atmos auth.' },
-        { label: 'Flexible EKS cluster name configuration', status: 'in-progress', quarter: 'q4-2025', pr: 1903, changelog: 'helmfile-eks-modernization', description: 'Four-level precedence for EKS cluster names: --cluster-name flag, cluster_name config, cluster_name_template (Go templates), or legacy cluster_name_pattern. EKS integration is now opt-in with use_eks setting.', benefits: 'Use Go templates for dynamic cluster names. Non-EKS Kubernetes clusters work without EKS configuration.' },
+        { label: 'Automatic EKS kubeconfig tied to identities', status: 'shipped', quarter: 'q1-2026', pr: 2149, changelog: 'eks-kubeconfig-authentication', docs: '/tutorials/eks-kubeconfig-authentication', description: 'Automatic kubeconfig generation for EKS clusters using Atmos-managed AWS credentials. Integrations link clusters to identities for auto-provisioning on login.', benefits: 'No aws eks update-kubeconfig commands. Kubectl works immediately after Atmos auth login.', category: 'featured', priority: 'high' },
+        { label: 'EKS exec credential plugin (atmos aws eks token)', status: 'shipped', quarter: 'q1-2026', pr: 2149, changelog: 'eks-kubeconfig-authentication', docs: '/cli/commands/aws/eks-token', description: 'Short-lived EKS token generation via STS pre-signed URLs without the AWS CLI. Automatically called by kubectl.', benefits: 'kubectl authentication is seamless. Tokens refresh automatically without manual intervention.' },
         { label: 'Automatic ECR authentication tied to identities', status: 'shipped', quarter: 'q4-2025', pr: 1859, docs: '/tutorials/ecr-authentication', changelog: 'ecr-authentication-integration', description: 'Native ECR login for container image operations without external tooling.', benefits: 'Docker push/pull to ECR works without aws ecr get-login-password or external credential helpers.', category: 'featured', priority: 'high' },
         { label: 'AWS_REGION and AWS_DEFAULT_REGION export from `atmos auth env`', status: 'shipped', quarter: 'q1-2026', pr: 1955, docs: '/cli/commands/auth/env', changelog: 'auth-env-region-export', description: 'Export AWS_REGION and AWS_DEFAULT_REGION environment variables from atmos auth env when region is configured in the identity.', benefits: 'External tools like Terraform and AWS CLI automatically use the correct region without additional configuration.' },
         { label: 'GCP Authentication Support', status: 'shipped', quarter: 'q1-2026', changelog: 'gcp-authentication-support', pr: 2051, description: 'Google Cloud authentication with ADC, Workload Identity Federation, and service account impersonation.', benefits: 'GCP deployments use the same auth workflows as AWS and Azure, with provider-scoped credential isolation.' },
@@ -179,6 +191,7 @@ export const roadmapConfig = {
         { label: 'Native Okta Authentication (Device Code Flow)', status: 'planned', quarter: 'q1-2026', prd: 'okta-auth-identity', description: 'Native Okta authentication using OAuth 2.0 Device Authorization Grant. Enables Okta as a central IdP for AWS, Azure, and GCP federation, plus direct Okta API access for Terraform.', benefits: 'Use Okta as your single identity hub. Authenticate once with Okta and federate to any cloud. No browser automation or SAML complexity.' },
         { label: 'Support for `atmos auth` with GitHub Apps', status: 'planned', quarter: 'q1-2026', pr: 1683, description: 'GitHub App authentication for fine-grained repository access and elevated rate limits.', benefits: 'Higher API rate limits and granular permissions for automation that interacts with GitHub.' },
         { label: 'Identity selection for stores', status: 'shipped', quarter: 'q1-2026', pr: 2099, changelog: 'store-identity-support', description: 'Stores can authenticate using atmos auth identities instead of default credential chains.', benefits: 'Use the same identity system for stores as for Terraform. No separate credential management for secrets access.' },
+        { label: 'Isolated browser sessions for multi-account console access', status: 'shipped', quarter: 'q1-2026', pr: 2229, changelog: 'auth-console-isolated-sessions', prd: 'auth-console-isolated-sessions', description: 'Open multiple cloud provider consoles simultaneously in isolated Chrome browser contexts, one per identity, without logout conflicts.', benefits: 'Work in multiple AWS accounts at the same time. No more logging out to switch between consoles.' },
       ],
       issues: [],
       prs: [
@@ -187,6 +200,7 @@ export const roadmapConfig = {
         { number: 1884, title: 'Add EKS kubeconfig authentication integration PRD' },
         { number: 1887, title: 'Browser-based authentication for aws/user' },
         { number: 1683, title: 'Update auth docs and implement GitHub providers' },
+        { number: 2229, title: 'Isolated browser sessions for multi-account console access' },
       ],
     },
     {
@@ -418,7 +432,7 @@ export const roadmapConfig = {
       title: 'Code Quality and Test Coverage',
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
-        '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. Embracing AI-assisted development while maintaining high standards.',
+        '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. In 2026, critical high-complexity functions are being refactored with 100% coverage. Embracing AI-assisted development while maintaining high standards.',
       progress: 80,
       status: 'in-progress',
       milestones: [
@@ -432,6 +446,9 @@ export const roadmapConfig = {
         { label: 'Terraform command registry', status: 'in-progress', quarter: 'q4-2025', pr: 1891, changelog: 'terraform-command-registry-pattern', description: 'Centralized Terraform command configuration for consistent behavior across CI and local.', benefits: 'Terraform commands behave identically everywhere. CI matches local exactly.' },
         { label: 'Multiple terraform output formats', status: 'shipped', quarter: 'q4-2025', description: 'Export terraform outputs in multiple formats (JSON, YAML, HCL, env, dotenv, bash, CSV, TSV) with options for uppercase keys and nested value flattening.', benefits: 'Integrate terraform outputs directly into CI workflows. Export to GitHub Actions env format, source as bash exports, or pipe as CSV without jq gymnastics.' },
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.', category: 'featured', priority: 'high', benefits: 'Even more confidence in changes. Edge cases are covered before users hit them.' },
+        { label: 'processArgsAndFlags refactored: 100% coverage', status: 'shipped', quarter: 'q1-2026', pr: 2225, changelog: 'process-args-flags-refactor', description: 'The highest-cyclomatic-complexity function refactored using a table-driven DRY pattern (26 flag definitions in a single table). All helper functions — parseFlagValue, parseIdentityFlag, parseFromPlanFlag — achieve 100% unit test coverage.', benefits: 'Flag parsing is now fully tested and maintainable. Adding a new CLI flag is a single table entry instead of 7-8 lines of copy-paste code.' },
+        { label: 'Refactor ExecuteTerraform (cyclomatic complexity 160→26)', status: 'shipped', quarter: 'q1-2026', pr: 2226, changelog: 'refactoring-executeterraform-for-testability', category: 'featured', description: 'Extracted 26 focused helper functions from the ExecuteTerraform monolith, reducing cyclomatic complexity from 160 to 26 and adding 100+ unit tests with zero infrastructure required.', benefits: 'Safer changes to the core terraform execution pipeline. Bugs in auth, workspace, or plan-file handling are caught by pure unit tests before they reach users.' },
+        { label: 'Reduce ExecuteDescribeStacks complexity 98%', status: 'shipped', quarter: 'q1-2026', pr: 2204, changelog: 'describe-stacks-complexity-reduction', description: 'Broke down ExecuteDescribeStacks (cyclomatic 247 → 10, cognitive 1252 → 22) into 19 focused helper functions with 47 unit tests at 100% coverage for all pure helpers.', benefits: 'Easier to read, test, and extend the core stack processing pipeline. New component types can be added in one line.' },
       ],
       issues: [],
       prs: [],

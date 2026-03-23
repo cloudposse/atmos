@@ -312,13 +312,11 @@ const config = {
                     // Terraform generate command reorganization
                     {from: '/cli/commands/terraform/terraform-generate-backend', to: '/cli/commands/terraform/generate/backend'},
                     {from: '/cli/commands/terraform/terraform-generate-backends', to: '/cli/commands/terraform/generate/backends'},
-                    {from: '/cli/commands/terraform/terraform-generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
                     {from: '/cli/commands/terraform/terraform-generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/terraform-generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
                     // Legacy generate command paths (without terraform- prefix)
                     {from: '/cli/commands/terraform/generate-backend', to: '/cli/commands/terraform/generate/backend'},
                     {from: '/cli/commands/terraform/generate-backends', to: '/cli/commands/terraform/generate/backends'},
-                    {from: '/cli/commands/terraform/generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
                     {from: '/cli/commands/terraform/generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
                 ],
@@ -569,14 +567,6 @@ const config = {
                         dark: 'rgb(50, 50, 50)'
                     }
                 }
-            },
-            announcementBar: {
-                id: 'refarch-announcement',
-                content:
-                  'Try Cloud Posse\'s <a href="https://docs.cloudposse.com">Reference Architecture for AWS, Datadog & GitHub Actions</a> using Atmos',
-                backgroundColor: 'var(--announcement-bar-background)',
-                textColor: 'var(--announcement-bar-text-color)',
-                isCloseable: true,
             },
             colorMode: {
                 // "light" | "dark"

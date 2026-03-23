@@ -133,7 +133,7 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 				tt.component,
 				tt.stack,
 				tt.baseComponent,
-				"/dummy/path",
+				filepath.Join("dummy", "path"),
 				true,
 				&baseComponents,
 			)
@@ -174,6 +174,797 @@ func TestProcessBaseComponentConfig(t *testing.T) {
 			assert.ElementsMatch(t, expectedComponents, baseComponents)
 		})
 	}
+}
+
+// TestProcessBaseComponentConfig_CycleDetection verifies that circular component
+// inheritance is detected and reported instead of causing a stack overflow.
+func TestProcessBaseComponentConfig_CycleDetection(t *testing.T) {
+	tests := []struct {
+		name             string
+		allComponentsMap map[string]any
+		component        string
+		baseComponent    string
+		expectedError    string
+	}{
+		{
+			name: "direct-cycle-via-component-key",
+			allComponentsMap: map[string]any{
+				"comp-a": map[string]any{
+					"component": "comp-b",
+					"vars":      map[string]any{"key": "a"},
+				},
+				"comp-b": map[string]any{
+					"component": "comp-a",
+					"vars":      map[string]any{"key": "b"},
+				},
+			},
+			component:     "my-component",
+			baseComponent: "comp-a",
+			expectedError: "circular component inheritance detected",
+		},
+		{
+			name: "cycle-via-inherits",
+			allComponentsMap: map[string]any{
+				"comp-a": map[string]any{
+					"metadata": map[string]any{
+						"inherits": []any{"comp-b"},
+					},
+					"vars": map[string]any{"key": "a"},
+				},
+				"comp-b": map[string]any{
+					"metadata": map[string]any{
+						"inherits": []any{"comp-a"},
+					},
+					"vars": map[string]any{"key": "b"},
+				},
+			},
+			component:     "my-component",
+			baseComponent: "comp-a",
+			expectedError: "circular component inheritance detected",
+		},
+		{
+			name: "three-component-cycle",
+			// A -> B -> C -> A creates a true 3-way cycle that the simple
+			// component == baseComponent guard cannot catch.
+			allComponentsMap: map[string]any{
+				"comp-a": map[string]any{
+					"component": "comp-b",
+					"vars":      map[string]any{"key": "a"},
+				},
+				"comp-b": map[string]any{
+					"component": "comp-c",
+					"vars":      map[string]any{"key": "b"},
+				},
+				"comp-c": map[string]any{
+					"component": "comp-a",
+					"vars":      map[string]any{"key": "c"},
+				},
+			},
+			component:     "my-component",
+			baseComponent: "comp-a",
+			expectedError: "circular component inheritance detected",
+		},
+		{
+			name: "no-cycle-valid-chain",
+			allComponentsMap: map[string]any{
+				"base": map[string]any{
+					"vars": map[string]any{"key": "base"},
+				},
+				"mid": map[string]any{
+					"component": "base",
+					"vars":      map[string]any{"key": "mid"},
+				},
+			},
+			component:     "child",
+			baseComponent: "mid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ClearBaseComponentConfigCache()
+
+			atmosConfig := &schema.AtmosConfiguration{}
+			baseComponentConfig := &schema.BaseComponentConfig{
+				BaseComponentVars:     map[string]any{},
+				BaseComponentSettings: map[string]any{},
+				BaseComponentEnv:      map[string]any{},
+			}
+			baseComponents := []string{}
+
+			err := ProcessBaseComponentConfig(
+				atmosConfig,
+				baseComponentConfig,
+				tt.allComponentsMap,
+				tt.component,
+				"test-stack",
+				tt.baseComponent,
+				filepath.Join("dummy", "path"),
+				false,
+				&baseComponents,
+			)
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestProcessBaseComponentConfig_AbstractComponentSkip verifies that abstract components
+// skip component chain resolution to prevent circular references.
+func TestProcessBaseComponentConfig_AbstractComponentSkip(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	// This simulates the user's pattern: abstract component with metadata.component
+	// pointing to the same Terraform directory as the real component.
+	// In raw (unprocessed) data, abstract components have metadata.component but no
+	// top-level "component" key. After processing, mergeComponentConfigurations
+	// promotes metadata.component to a top-level key. The abstract check prevents
+	// following this promoted key.
+	allComponentsMap := map[string]any{
+		"iam-delegated-roles-defaults": map[string]any{
+			"component": "iam-delegated-roles", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "iam-delegated-roles",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"namespace": "acme",
+			},
+		},
+		"iam-delegated-roles": map[string]any{
+			"component": "iam-delegated-roles",
+			"metadata": map[string]any{
+				"component": "iam-delegated-roles",
+				"type":      "real",
+				"inherits":  []any{"iam-delegated-roles-defaults"},
+			},
+			"vars": map[string]any{
+				"extra_var": "value1",
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// This call should NOT stack overflow or return a cycle error.
+	// The abstract component's top-level "component" key is skipped.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"iam-delegated-roles",
+		"test-stack",
+		"iam-delegated-roles-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+
+	require.NoError(t, err, "Should not error when abstract component has metadata.component")
+	assert.Equal(t, map[string]any{"namespace": "acme"}, baseComponentConfig.BaseComponentVars)
+	assert.Contains(t, baseComponents, "iam-delegated-roles-defaults")
+}
+
+// TestProcessBaseComponentConfig_DeepChainNoFalsePositive verifies that deep inheritance
+// chains (3+ levels) work correctly without triggering false cycle detection.
+func TestProcessBaseComponentConfig_DeepChainNoFalsePositive(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"level0": map[string]any{
+			"vars": map[string]any{"from": "level0"},
+		},
+		"level1": map[string]any{
+			"component": "level0",
+			"vars":      map[string]any{"from": "level1"},
+		},
+		"level2": map[string]any{
+			"component": "level1",
+			"vars":      map[string]any{"from": "level2"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"child",
+		"test-stack",
+		"level2",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+
+	require.NoError(t, err, "Deep chain should not trigger false cycle detection")
+	// Vars should be merged from all levels.
+	assert.Equal(t, "level2", baseComponentConfig.BaseComponentVars["from"])
+	assert.ElementsMatch(t, []string{"level2", "level1", "level0"}, baseComponents)
+}
+
+// TestProcessBaseComponentConfig_DiamondInheritance verifies that a diamond inheritance pattern
+// (shared ancestor reached via sibling branches) does not trigger a false cycle detection error.
+//
+//	   base
+//	  /    \
+//	left   right
+//	  \    /
+//	   child (inherits: [left, right])
+func TestProcessBaseComponentConfig_DiamondInheritance(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"base": map[string]any{
+			"vars": map[string]any{"from_base": "base-value"},
+		},
+		"left": map[string]any{
+			"metadata": map[string]any{
+				"inherits": []any{"base"},
+			},
+			"vars": map[string]any{"from_left": "left-value"},
+		},
+		"right": map[string]any{
+			"metadata": map[string]any{
+				"inherits": []any{"base"},
+			},
+			"vars": map[string]any{"from_right": "right-value"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+
+	// Process "left" first.
+	baseComponents := []string{}
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"child",
+		"test-stack",
+		"left",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	require.NoError(t, err, "Left branch of diamond should not error")
+
+	// Process "right" — this reaches "base" again via a sibling branch.
+	// Without defer delete in the visited set, this would falsely trigger cycle detection.
+	ClearBaseComponentConfigCache()
+	baseComponentConfig2 := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents2 := []string{}
+	err = ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig2,
+		allComponentsMap,
+		"child",
+		"test-stack",
+		"right",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents2,
+	)
+	require.NoError(t, err, "Right branch of diamond should not error")
+	assert.Equal(t, "base-value", baseComponentConfig2.BaseComponentVars["from_base"],
+		"Base vars should be inherited through right branch")
+}
+
+// TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle reproduces the user's
+// scenario where multiple abstract components with metadata.component cause a stack overflow.
+// The user reported: "I had to do this on 2 iam-delegated-roles, and eks. I think there are
+// some dependencies between the two."
+//
+// This test simulates processed data (Phase 2) where two abstract components both have
+// metadata.component set, and their real counterparts cross-reference through inheritance.
+// The isAbstract check should prevent following the promoted "component" key on both.
+func TestProcessBaseComponentConfig_MultipleAbstractComponentsCycle(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	// Simulate processed data with two abstract/real component pairs that have
+	// cross-dependencies. The real components inherit from their respective abstract
+	// defaults, and eks also inherits from iam-delegated-roles-defaults to exercise
+	// coupled dependency traversal paths.
+	// Both abstract components have metadata.component promoted to top-level.
+	allComponentsMap := map[string]any{
+		"iam-delegated-roles-defaults": map[string]any{
+			"component": "iam-delegated-roles", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "iam-delegated-roles",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"namespace": "acme",
+			},
+		},
+		"iam-delegated-roles": map[string]any{
+			"component": "iam-delegated-roles",
+			"metadata": map[string]any{
+				"component": "iam-delegated-roles",
+				"type":      "real",
+				"inherits":  []any{"iam-delegated-roles-defaults"},
+			},
+			"vars": map[string]any{
+				"role_name": "admin",
+			},
+		},
+		"eks-defaults": map[string]any{
+			"component": "eks", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "eks",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"cluster_name": "main",
+			},
+		},
+		"eks": map[string]any{
+			"component": "eks",
+			"metadata": map[string]any{
+				"component": "eks",
+				"type":      "real",
+				"inherits":  []any{"eks-defaults", "iam-delegated-roles-defaults"}, // Cross-dependency.
+			},
+			"vars": map[string]any{
+				"node_count": 3,
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Process iam-delegated-roles.
+	baseComponentConfig1 := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents1 := []string{}
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig1,
+		allComponentsMap,
+		"iam-delegated-roles",
+		"test-stack",
+		"iam-delegated-roles-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents1,
+	)
+	require.NoError(t, err, "Should not stack overflow with multiple abstract components")
+
+	// Process eks.
+	ClearBaseComponentConfigCache()
+	baseComponentConfig2 := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents2 := []string{}
+	err = ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig2,
+		allComponentsMap,
+		"eks",
+		"test-stack",
+		"eks-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents2,
+	)
+	require.NoError(t, err, "Should not stack overflow with eks abstract component")
+}
+
+// TestProcessBaseComponentConfig_AbstractWithInheritsCycle tests the scenario where
+// an abstract component has BOTH metadata.component AND metadata.inherits, creating
+// a potential cycle through the inherits chain. The cycle detection must catch this
+// even with defer delete on the visited set.
+//
+// Pattern: A-defaults (abstract, component: A, inherits: [A])
+// This creates: A → inherits A-defaults → inherits A → inherits A-defaults → ...
+func TestProcessBaseComponentConfig_AbstractWithInheritsCycle(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"vpc-defaults": map[string]any{
+			"component": "vpc", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "vpc",
+				"type":      "abstract",
+				"inherits":  []any{"vpc"}, // Abstract inherits from real — creates cycle.
+			},
+			"vars": map[string]any{
+				"cidr": "10.0.0.0/16",
+			},
+		},
+		"vpc": map[string]any{
+			"component": "vpc",
+			"metadata": map[string]any{
+				"component": "vpc",
+				"type":      "real",
+				"inherits":  []any{"vpc-defaults"},
+			},
+			"vars": map[string]any{
+				"name": "main",
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// This MUST NOT cause a stack overflow. It should either:
+	// 1. Return a cycle detection error, OR
+	// 2. Complete successfully by skipping the abstract component chain.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"vpc",
+		"test-stack",
+		"vpc-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	// We accept either no error (skip abstract chain) or a cycle error.
+	// The only unacceptable outcome is a stack overflow (crash).
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance,
+			"If error, should be a circular inheritance error, not a stack overflow")
+	}
+}
+
+// TestProcessBaseComponentConfig_RealComponentSelfReferenceViaAbstract tests a
+// more complex cycle where a real component's inheritance chain leads back to
+// itself through an abstract component's inherits list.
+//
+// Pattern (processed data):
+//
+//	comp-A (real, inherits: [comp-B-defaults])
+//	comp-B-defaults (abstract, component: comp-B, inherits: [comp-A])
+//	comp-B (real, inherits: [comp-B-defaults])
+//
+// When processing comp-A → comp-B-defaults → (skip component key, abstract) → inherits comp-A → CYCLE.
+func TestProcessBaseComponentConfig_RealComponentSelfReferenceViaAbstract(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"comp-A": map[string]any{
+			"component": "comp-A",
+			"metadata": map[string]any{
+				"type":     "real",
+				"inherits": []any{"comp-B-defaults"},
+			},
+			"vars": map[string]any{"from": "A"},
+		},
+		"comp-B-defaults": map[string]any{
+			"component": "comp-B", // Promoted.
+			"metadata": map[string]any{
+				"component": "comp-B",
+				"type":      "abstract",
+				"inherits":  []any{"comp-A"}, // Abstract inherits from real A — creates cross-cycle.
+			},
+			"vars": map[string]any{"from": "B-defaults"},
+		},
+		"comp-B": map[string]any{
+			"component": "comp-B",
+			"metadata": map[string]any{
+				"component": "comp-B",
+				"type":      "real",
+				"inherits":  []any{"comp-B-defaults"},
+			},
+			"vars": map[string]any{"from": "B"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// Processing comp-A → comp-B-defaults → (abstract, skip component) → inherits comp-A → cycle.
+	// This MUST NOT stack overflow.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"comp-A",
+		"test-stack",
+		"comp-B-defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance,
+			"If error, should be a circular inheritance error, not a stack overflow")
+	}
+}
+
+// TestProcessBaseComponentConfig_DeferDeleteCycleReentry tests whether the
+// defer delete(visited, visitKey) in processBaseComponentConfigInternal allows
+// cycle re-entry after backtracking. This is the suspected mechanism behind
+// the user's persistent stack overflow.
+//
+// Pattern (processed Phase 2 data):
+//
+//	real-A (component: real-A, inherits: [abstract-A])
+//	abstract-A (abstract, component: real-A, inherits: [shared-base])
+//	shared-base (component: real-A)  ← non-abstract, creates chain back
+//
+// Flow:
+//
+//	real-A → abstract-A → (skip component, abstract) → inherits shared-base
+//	→ shared-base["component"] = "real-A" → follows → real-A
+//	→ real-A["inherits"] = [abstract-A] → BUT abstract-A was already visited
+//	  on the SAME DFS path → cycle detected ✓
+//
+// If defer delete incorrectly removes the entry, the cycle would not be detected.
+func TestProcessBaseComponentConfig_DeferDeleteCycleReentry(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"abstract-A": map[string]any{
+			"component": "real-A", // Promoted.
+			"metadata": map[string]any{
+				"component": "real-A",
+				"type":      "abstract",
+				"inherits":  []any{"shared-base"},
+			},
+			"vars": map[string]any{"from": "abstract-A"},
+		},
+		"shared-base": map[string]any{
+			"component": "real-A", // Points back to real-A — non-abstract!
+			"vars":      map[string]any{"from": "shared-base"},
+		},
+		"real-A": map[string]any{
+			"component": "real-A",
+			"metadata": map[string]any{
+				"component": "real-A",
+				"type":      "real",
+				"inherits":  []any{"abstract-A"},
+			},
+			"vars": map[string]any{"from": "real-A"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// This MUST NOT stack overflow. The cycle detection should catch the re-entry.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"real-A",
+		"test-stack",
+		"abstract-A",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrCircularComponentInheritance,
+			"If error, should be a circular inheritance error, not a stack overflow")
+	}
+}
+
+// TestProcessBaseComponentConfig_AbstractMetadataComponentInherited verifies that metadata.component
+// on an abstract component is properly inherited by real components through metadata inheritance.
+// This is the scenario Erik described: metadata.component on abstract components should "do something"
+// — it should populate the default component for the inheriting real component.
+func TestProcessBaseComponentConfig_AbstractMetadataComponentInherited(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	// Simulate processed data where an abstract component defines metadata.component
+	// and a real component inherits from it.
+	// The abstract component's metadata.component should be inherited as metadata,
+	// even though its top-level "component" key is skipped for chain resolution.
+	allComponentsMap := map[string]any{
+		"eks/service/defaults": map[string]any{
+			"component": "eks-service", // Promoted by mergeComponentConfigurations.
+			"metadata": map[string]any{
+				"component": "eks-service",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"namespace": "acme",
+				"enabled":   true,
+			},
+			"backend_type": "s3",
+			"backend": map[string]any{
+				"s3": map[string]any{
+					"workspace_key_prefix": "eks-service",
+				},
+			},
+		},
+		"eks/service/app1": map[string]any{
+			"component": "eks-service",
+			"metadata": map[string]any{
+				"component": "eks-service",
+				"type":      "real",
+				"inherits":  []any{"eks/service/defaults"},
+			},
+			"vars": map[string]any{
+				"name": "app1",
+			},
+		},
+	}
+
+	// Enable metadata inheritance (default behavior).
+	metadataEnabled := true
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			Inherit: schema.StacksInherit{
+				Metadata: &metadataEnabled,
+			},
+		},
+	}
+
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:                      map[string]any{},
+		BaseComponentSettings:                  map[string]any{},
+		BaseComponentEnv:                       map[string]any{},
+		BaseComponentAuth:                      map[string]any{},
+		BaseComponentMetadata:                  map[string]any{},
+		BaseComponentProviders:                 map[string]any{},
+		BaseComponentHooks:                     map[string]any{},
+		BaseComponentDependencies:              map[string]any{},
+		BaseComponentLocals:                    map[string]any{},
+		BaseComponentBackendSection:            map[string]any{},
+		BaseComponentRemoteStateBackendSection: map[string]any{},
+		BaseComponentGenerate:                  map[string]any{},
+	}
+	baseComponents := []string{}
+
+	// Process: eks/service/app1 inherits from eks/service/defaults.
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"eks/service/app1",
+		"test-stack",
+		"eks/service/defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+
+	require.NoError(t, err, "Should not error when abstract component has metadata.component")
+
+	// Key assertion: metadata.component is inherited from the abstract base component.
+	// This is what Erik described — abstract components' metadata.component should populate
+	// the default component for the inheriting real component.
+	assert.Equal(t, "eks-service", baseComponentConfig.BaseComponentMetadata["component"],
+		"metadata.component should be inherited from abstract base component")
+
+	// Verify vars are inherited.
+	assert.Equal(t, "acme", baseComponentConfig.BaseComponentVars["namespace"],
+		"vars should be inherited from abstract base component")
+	assert.Equal(t, true, baseComponentConfig.BaseComponentVars["enabled"],
+		"vars should be inherited from abstract base component")
+
+	// Verify backend is inherited.
+	assert.Equal(t, "s3", baseComponentConfig.BaseComponentBackendType,
+		"backend_type should be inherited from abstract base component")
+
+	// Verify metadata.type is NOT inherited (it's excluded from metadata inheritance).
+	_, hasType := baseComponentConfig.BaseComponentMetadata["type"]
+	assert.False(t, hasType, "metadata.type should NOT be inherited from base component")
+
+	// Verify the base component was tracked.
+	assert.Contains(t, baseComponents, "eks/service/defaults")
+}
+
+// TestProcessBaseComponentConfig_AbstractMetadataComponentNotInherited_WhenDisabled verifies that
+// metadata.component is NOT inherited when metadata inheritance is disabled.
+func TestProcessBaseComponentConfig_AbstractMetadataComponentNotInherited_WhenDisabled(t *testing.T) {
+	ClearBaseComponentConfigCache()
+
+	allComponentsMap := map[string]any{
+		"eks/service/defaults": map[string]any{
+			"component": "eks-service",
+			"metadata": map[string]any{
+				"component": "eks-service",
+				"type":      "abstract",
+			},
+			"vars": map[string]any{
+				"namespace": "acme",
+			},
+		},
+		"eks/service/app1": map[string]any{
+			"component": "eks-service",
+			"metadata": map[string]any{
+				"component": "eks-service",
+				"type":      "real",
+				"inherits":  []any{"eks/service/defaults"},
+			},
+			"vars": map[string]any{
+				"name": "app1",
+			},
+		},
+	}
+
+	// Disable metadata inheritance.
+	metadataDisabled := false
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			Inherit: schema.StacksInherit{
+				Metadata: &metadataDisabled,
+			},
+		},
+	}
+
+	baseComponentConfig := &schema.BaseComponentConfig{
+		BaseComponentVars:     map[string]any{},
+		BaseComponentSettings: map[string]any{},
+		BaseComponentEnv:      map[string]any{},
+		BaseComponentMetadata: map[string]any{},
+	}
+	baseComponents := []string{}
+
+	err := ProcessBaseComponentConfig(
+		atmosConfig,
+		baseComponentConfig,
+		allComponentsMap,
+		"eks/service/app1",
+		"test-stack",
+		"eks/service/defaults",
+		filepath.Join("dummy", "path"),
+		false,
+		&baseComponents,
+	)
+
+	require.NoError(t, err)
+
+	// When metadata inheritance is disabled, metadata.component should NOT be inherited.
+	_, hasComponent := baseComponentConfig.BaseComponentMetadata["component"]
+	assert.False(t, hasComponent, "metadata.component should NOT be inherited when metadata inheritance is disabled")
+
+	// Vars should still be inherited (that's regular inheritance, not metadata inheritance).
+	assert.Equal(t, "acme", baseComponentConfig.BaseComponentVars["namespace"],
+		"vars should still be inherited even with metadata inheritance disabled")
 }
 
 func TestProcessYAMLConfigFile(t *testing.T) {
