@@ -312,18 +312,18 @@ func dirWindows() (string, error) {
 	// before the separator conversion so filepath.IsAbs remains correct.
 	// Apply filepath.FromSlash before filepath.Clean so that forward-slash
 	// paths set by Cygwin, Git Bash, or WSL1 (e.g., "/home/user") are
-	// converted to native Windows separators. Note: POSIX-style absolute
-	// paths become drive-relative after the separator conversion on Windows
-	// (e.g., "/home/user" → "\home\user"). Callers that need a guaranteed
-	// absolute path should set HOME to a drive-absolute value (e.g.,
-	// "C:\Users\user").
+	// converted to native Windows separators. POSIX-style absolute paths
+	// (e.g., "/cygwin/home/user") become drive-relative after conversion
+	// ("\cygwin\home\user"). When HOMEDRIVE or SystemDrive is available it is
+	// prepended automatically to produce a drive-absolute path so that callers
+	// always receive a fully-qualified path.
 	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
-		return cleanWindowsPath(strings.Trim(home, `"'`)), nil
+		return toDriveAbsolute(cleanWindowsPath(strings.Trim(home, `"'`))), nil
 	}
 
 	// Prefer standard environment variable USERPROFILE
 	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
-		return cleanWindowsPath(strings.Trim(home, `"'`)), nil
+		return toDriveAbsolute(cleanWindowsPath(strings.Trim(home, `"'`))), nil
 	}
 
 	drive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
@@ -342,12 +342,34 @@ func dirWindows() (string, error) {
 	return filepath.Clean(drive + path), nil
 }
 
+// toDriveAbsolute promotes a drive-relative Windows path (one that starts with
+// a backslash but has no drive letter, e.g. "\cygwin\home\user") to a
+// drive-absolute path by prepending HOMEDRIVE or SystemDrive when available.
+// Paths that already contain a drive letter (e.g. "C:\Users\me") or that do
+// not start with a backslash are returned unchanged. This is called only on
+// Windows.
+func toDriveAbsolute(path string) string {
+	// Only act on paths that are drive-relative: they start with a backslash
+	// but have no drive letter (i.e. the second character is not ':').
+	if !strings.HasPrefix(path, `\`) {
+		return path
+	}
+	// If the path is "X:\..." the first character would not be '\', so
+	// HasPrefix already excluded those. The only remaining edge case is a
+	// path like "\:" (len == 2) where path[1] happens to be ':'; treat
+	// that as drive-relative too and let HOMEDRIVE fix it.
+	for _, envKey := range []string{"HOMEDRIVE", "SystemDrive"} {
+		if d := strings.TrimSpace(os.Getenv(envKey)); d != "" {
+			return filepath.Clean(d + path)
+		}
+	}
+	return path
+}
+
 // cleanWindowsPath converts forward slashes to the native Windows separator and
-// applies filepath.Clean. Note: POSIX-style paths like "/home/user" become
-// drive-relative ("\\home\\user") after separator conversion on Windows because
-// no drive letter is prepended. Callers that need a guaranteed drive-absolute
-// path should supply a Windows drive-absolute value in HOME or USERPROFILE
-// (e.g., "C:\\Users\\user").
+// applies filepath.Clean. A caller that wants a guaranteed drive-absolute result
+// should pass the output through toDriveAbsolute(), which prepends HOMEDRIVE or
+// SystemDrive when the cleaned path is still drive-relative ("\…").
 func cleanWindowsPath(path string) string {
 	return filepath.Clean(filepath.FromSlash(path))
 }

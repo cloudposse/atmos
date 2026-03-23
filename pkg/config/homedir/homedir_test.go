@@ -552,7 +552,7 @@ func TestDirWindows(t *testing.T) {
 			"HOMEPATH without leading backslash must be normalised to absolute path.")
 	})
 
-	t.Run("forward-slash HOME converted to native separators (Cygwin/WSL/Git Bash)", func(t *testing.T) {
+	t.Run("forward-slash HOME converted to native separators (Cygwin/WSL/Git Bash) - no HOMEDRIVE", func(t *testing.T) {
 		if runtime.GOOS != "windows" {
 			// filepath.FromSlash is a no-op on non-Windows, so this subtest
 			// only proves the conversion logic on the target platform.
@@ -561,16 +561,33 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("HOME", "/cygwin/home/user")
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("SystemDrive", "")
 		t.Setenv("HOMEPATH", "")
 		dir, err := dirWindows()
 		require.NoError(t, err)
-		// filepath.FromSlash converts / → \; filepath.Clean then normalises.
-		// Note: forward-slash paths without a drive letter (e.g., "/cygwin/home/user")
-		// become drive-relative ("\cygwin\home\user") on Windows because no drive
-		// letter is prepended. Use drive-absolute paths (e.g., "C:\cygwin\home\user")
-		// for results that are guaranteed to be absolute.
+		// When neither HOMEDRIVE nor SystemDrive is available, the result is
+		// drive-relative ("\cygwin\home\user") — the best we can do without a
+		// drive letter available. This case is uncommon in real Cygwin
+		// environments because Windows always sets HOMEDRIVE.
 		assert.Equal(t, filepath.Clean(filepath.FromSlash("/cygwin/home/user")), dir,
 			"forward-slash HOME must be converted to native separators.")
+	})
+
+	t.Run("forward-slash HOME with HOMEDRIVE produces drive-absolute path (Cygwin)", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("Windows drive-absolute path semantics only apply on Windows.")
+		}
+		t.Setenv("HOME", "/cygwin/home/user")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("HOMEDRIVE", "C:")
+		t.Setenv("SystemDrive", "")
+		t.Setenv("HOMEPATH", "")
+		dir, err := dirWindows()
+		require.NoError(t, err)
+		// HOMEDRIVE is prepended to the drive-relative path, yielding a
+		// drive-absolute result (C:\cygwin\home\user).
+		assert.Equal(t, filepath.Clean(`C:\cygwin\home\user`), dir,
+			"HOMEDRIVE must be prepended to drive-relative HOME to produce a drive-absolute path.")
 	})
 
 	t.Run("quoted HOME has wrapping quotes stripped (Cygwin legacy scripts)", func(t *testing.T) {
@@ -590,7 +607,62 @@ func TestDirWindows(t *testing.T) {
 	})
 }
 
-// TestGetHomeFromEnv tests the HOME env-var lookup (plan9 branch is not reachable
+// TestToDriveAbsolute covers the drive-relative-to-absolute promotion helper.
+// This function is compiled on all platforms but only meaningful on Windows;
+// the unit tests are written for cross-platform execution so that coverage is
+// gathered on Linux CI while Windows-only subtests guard real path semantics.
+func TestToDriveAbsolute(t *testing.T) {
+	t.Run("already drive-absolute path is returned unchanged", func(t *testing.T) {
+		t.Setenv("HOMEDRIVE", "D:")
+		// A path with a drive letter must never be modified.
+		in := `C:\Users\me`
+		if runtime.GOOS != "windows" {
+			in = "/Users/me"
+		}
+		assert.Equal(t, in, toDriveAbsolute(in))
+	})
+
+	t.Run("non-backslash-prefixed path is returned unchanged", func(t *testing.T) {
+		t.Setenv("HOMEDRIVE", "C:")
+		in := "relative/path"
+		assert.Equal(t, in, toDriveAbsolute(in))
+	})
+
+	t.Run("drive-relative path with HOMEDRIVE gets drive letter prepended", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("backslash-prefixed paths are only drive-relative on Windows.")
+		}
+		t.Setenv("HOMEDRIVE", "C:")
+		t.Setenv("SystemDrive", "")
+		result := toDriveAbsolute(`\cygwin\home\user`)
+		assert.Equal(t, filepath.Clean(`C:\cygwin\home\user`), result,
+			"HOMEDRIVE must be prepended to turn a drive-relative path into a drive-absolute path.")
+	})
+
+	t.Run("drive-relative path with SystemDrive fallback", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("backslash-prefixed paths are only drive-relative on Windows.")
+		}
+		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("SystemDrive", "D:")
+		result := toDriveAbsolute(`\cygwin\home\user`)
+		assert.Equal(t, filepath.Clean(`D:\cygwin\home\user`), result,
+			"SystemDrive must be used when HOMEDRIVE is empty.")
+	})
+
+	t.Run("drive-relative path without any drive env returns unchanged", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("backslash-prefixed paths are only drive-relative on Windows.")
+		}
+		t.Setenv("HOMEDRIVE", "")
+		t.Setenv("SystemDrive", "")
+		in := `\cygwin\home\user`
+		assert.Equal(t, in, toDriveAbsolute(in),
+			"path should remain unchanged when no drive env is available.")
+	})
+}
+
+
 // in unit tests, but the common path is fully exercised here).
 func TestGetHomeFromEnv(t *testing.T) {
 	t.Run("returns HOME when set", func(t *testing.T) {
