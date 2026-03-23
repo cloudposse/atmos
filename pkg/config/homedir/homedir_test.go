@@ -662,7 +662,6 @@ func TestToDriveAbsolute(t *testing.T) {
 	})
 }
 
-
 // in unit tests, but the common path is fully exercised here).
 func TestGetHomeFromEnv(t *testing.T) {
 	t.Run("returns HOME when set", func(t *testing.T) {
