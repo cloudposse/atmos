@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -180,10 +181,12 @@ func LintStacks(
 			allStackFiles = scopeStackFiles(allStackFiles, rawStackConfigs, importGraph, atmosConfig.StacksBaseAbsolutePath)
 		} else {
 			// No imports — AllStackFiles is just the root manifests themselves.
-			allStackFiles = nil
+			// Sort for deterministic output.
+			allStackFiles = make([]string, 0, len(rawStackConfigs))
 			for filePath := range rawStackConfigs {
 				allStackFiles = append(allStackFiles, filePath)
 			}
+			sort.Strings(allStackFiles)
 		}
 	}
 
@@ -644,6 +647,9 @@ func renderLintJSON(result *lint.LintResult) error {
 }
 
 // isDigitOnly reports whether s consists entirely of ASCII decimal digits.
+// We use a custom implementation (rather than strconv.Atoi) because we only need
+// to check for digit characters, not parse a number, and we want to reject strings
+// that Atoi would accept but that are not purely digit strings (e.g. leading "+"/"-").
 func isDigitOnly(s string) bool {
 if s == "" {
 return false

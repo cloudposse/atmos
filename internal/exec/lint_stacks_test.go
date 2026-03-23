@@ -951,13 +951,14 @@ assert.Empty(t, importGraph, "empty raw stack has no import edges")
 
 // Simulate the scoping logic that LintStacks applies when stackFilter != "".
 // When importGraph is empty, AllStackFiles should be just the rawStackConfigs keys.
-var allStackFiles []string
+allStackFiles := make([]string, 0, len(raw))
 for filePath := range raw {
 allStackFiles = append(allStackFiles, filePath)
 }
 
 // Verify that allStackFiles contains only the root file, not the unrelated dev.yaml.
-assert.Equal(t, []string{rootFile}, allStackFiles)
+assert.ElementsMatch(t, []string{rootFile}, allStackFiles,
+"scoped AllStackFiles must contain exactly the root manifest")
 assert.NotContains(t, allStackFiles, otherFile,
 "unrelated dev.yaml must not appear in scoped AllStackFiles")
 }
