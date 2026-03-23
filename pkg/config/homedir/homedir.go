@@ -54,8 +54,11 @@ var (
 	// ErrShellUnavailable is returned when the shell (sh) binary cannot be found.
 	// This can happen in minimal containers (e.g., distroless) that lack a shell.
 	ErrShellUnavailable = errors.New("shell (sh) not available")
-	// ErrIDUnavailable is returned when id is not found and USER env var is empty.
-	ErrIDUnavailable = errors.New("id binary not found and USER env var is empty")
+	// ErrIDUnavailable is returned when all username-lookup methods fail: id
+	// exited non-zero or was unavailable, $USER is empty, and whoami also
+	// failed or timed out. Ensure that 'id' or 'whoami' are on PATH, or set
+	// the USER environment variable.
+	ErrIDUnavailable = errors.New("unable to determine user: 'id' failed, $USER is empty, and 'whoami' also failed — ensure 'id' or 'whoami' are available, or set USER")
 	// ErrInvalidUsername is returned when the username contains characters outside
 	// the allowed whitelist. Using a sentinel avoids embedding the raw username
 	// (PII) in error messages or logs.
@@ -166,10 +169,12 @@ var shellHomeDirFunc = shellHomeDir
 // This uses an OS-specific method for discovering the home directory.
 // An error is returned if a home directory cannot be detected.
 //
-// Thread safety: Dir is safe for concurrent use. The DisableCache variable is
-// read under cacheLock to avoid data races. However, writing DisableCache from
-// multiple goroutines concurrently is still unsafe — it must be set before any
-// concurrent calls to Dir.
+// Thread safety: Dir is safe for concurrent use. DisableCache is read under
+// cacheLock (an internal sync.RWMutex), so concurrent reads are safe. Direct
+// writes to the DisableCache package variable are unsafe when called concurrently
+// with Dir — use the exported SetDisableCache helper instead, which acquires
+// cacheLock before writing, ensuring the write is serialized with any concurrent
+// readers inside Dir.
 func Dir() (string, error) {
 	cacheLock.RLock()
 	disableCache := DisableCache
@@ -408,12 +413,10 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 	}
 
 	// Guard against path traversal and shell injection: dscl path is
-	// /Users/<username>. Use a strict whitelist that accepts only letters,
-	// digits, dots, underscores, and hyphens. This implicitly rejects path
-	// separators, control characters, shell operators (|, &, >, <, (, )),
-	// quotes, backticks, dollar signs, semicolons, spaces, and tabs.
-	if !usernameRe.MatchString(username) {
-		return "", fmt.Errorf("getDarwinHomeDir: %w", ErrInvalidUsername)
+	// /Users/<username>. validateUsername applies a strict whitelist and
+	// rejects dot-segments ("." and "..") that would allow path traversal.
+	if err := validateUsername(username); err != nil {
+		return "", fmt.Errorf("getDarwinHomeDir: %w", err)
 	}
 
 	// Query the directory service without a shell pipeline or sed.
@@ -459,6 +462,22 @@ func getUnixHomeDir() (string, error) {
 
 func getHomeFromShell() (string, error) {
 	return shellHomeDirFunc()
+}
+
+// validateUsername checks that the given username is safe to use in subprocess
+// arguments and path construction. It rejects dot-segments ("." and "..") that
+// could allow path traversal when constructing paths like /Users/<username>, and
+// then applies the usernameRe whitelist to block all other unsafe characters.
+func validateUsername(username string) error {
+	// "." and ".." satisfy usernameRe but must be rejected explicitly: they are
+	// not valid Unix usernames and could allow path traversal.
+	if username == "." || username == ".." {
+		return ErrInvalidUsername
+	}
+	if !usernameRe.MatchString(username) {
+		return ErrInvalidUsername
+	}
+	return nil
 }
 
 // redactStderr returns a sanitized version of a stderr string with any
@@ -558,12 +577,11 @@ func shellHomeDir() (string, error) {
 	}
 
 	// Step 2: validate the username to prevent injection in the shell command.
-	// Use a strict whitelist that accepts only letters, digits, dots,
-	// underscores, and hyphens. This implicitly rejects path separators,
-	// control characters, shell operators (|, &, >, <, (, )), quotes,
-	// backticks, dollar signs, semicolons, spaces, and tabs.
-	if !usernameRe.MatchString(username) {
-		return "", fmt.Errorf("getHomeFromShell: %w", ErrInvalidUsername)
+	// validateUsername applies a strict whitelist and explicitly rejects "."
+	// and ".." (dot-segments that satisfy the regex but must not be passed to
+	// `printf '%s\n' ~.` or `~..` in the shell).
+	if err := validateUsername(username); err != nil {
+		return "", fmt.Errorf("getHomeFromShell: %w", err)
 	}
 
 	// Step 3: expand ~username in the shell.

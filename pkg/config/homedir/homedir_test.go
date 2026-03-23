@@ -196,6 +196,22 @@ func TestShellHomeDir(t *testing.T) {
 		}
 	})
 
+	t.Run("dot-segment username rejected (prevents path traversal)", func(t *testing.T) {
+		// "." and ".." satisfy the usernameRe pattern (single/double dot) but
+		// must be rejected explicitly before constructing `printf '%s\n' ~.`
+		// or `~..` in the shell, which could produce unexpected behavior.
+		orig := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = orig }()
+		for _, name := range []string{".", ".."} {
+			nameCopy := name // capture for closure
+			shellGetUsernameFunc = func() (string, error) { return nameCopy, nil }
+			_, err := shellHomeDir()
+			require.Error(t, err, "username %q must be rejected", name)
+			assert.ErrorIs(t, err, ErrInvalidUsername,
+				"dot-segment username %q must be rejected with ErrInvalidUsername", name)
+		}
+	})
+
 	t.Run("non-absolute shell output returns ErrBlankOutput", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell expansion is not used on Windows.")
@@ -662,6 +678,7 @@ func TestToDriveAbsolute(t *testing.T) {
 	})
 }
 
+// TestGetHomeFromEnv tests the HOME env-var lookup (plan9 branch is not reachable
 // in unit tests, but the common path is fully exercised here).
 func TestGetHomeFromEnv(t *testing.T) {
 	t.Run("returns HOME when set", func(t *testing.T) {
@@ -1411,6 +1428,10 @@ func TestGetDarwinHomeDir_PathTraversalGuard(t *testing.T) {
 		// Leading '-'/'+'  cause tilde-special expansion (~- = $OLDPWD, ~+ = $PWD).
 		"-hyphenleading",
 		"+plusleading",
+		// Dot-segments satisfy usernameRe but must be rejected to prevent
+		// path traversal when constructing /Users/<username>.
+		".",
+		"..",
 	}
 	for i, name := range maliciousNames {
 		t.Run(fmt.Sprintf("rejects_malicious_%d", i), func(t *testing.T) {
