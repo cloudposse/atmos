@@ -202,8 +202,8 @@ func TestExecuteMainTerraformCommand_Error_Propagates(t *testing.T) {
 
 	execErr := executeMainTerraformCommand(&atmosConfig, &info,
 		[]string{"-test.run=^$"}, // no test matches → exits 0 normally, but env overrides
-		"",    // component path: current dir
-		false, // uploadStatusFlag
+		"",                       // component path: current dir
+		false,                    // uploadStatusFlag
 	)
 	require.Error(t, execErr, "executeMainTerraformCommand must propagate non-zero exit from subprocess")
 

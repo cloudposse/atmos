@@ -1000,11 +1000,11 @@ func BenchmarkMerge_ProductionScale(b *testing.B) {
 			// real-world structures like worker groups with per-group subnet lists.
 			"node_groups": []any{
 				map[string]any{
-					"name":              fmt.Sprintf("workers-%d", layer),
-					"instance_type":     "t3.medium",
-					"desired_capacity":  layer + 2,
-					"subnets":           []any{fmt.Sprintf("10.%d.1.0/24", layer), fmt.Sprintf("10.%d.2.0/24", layer)},
-					"labels":            map[string]any{"team": "platform", "layer": fmt.Sprintf("%d", layer)},
+					"name":             fmt.Sprintf("workers-%d", layer),
+					"instance_type":    "t3.medium",
+					"desired_capacity": layer + 2,
+					"subnets":          []any{fmt.Sprintf("10.%d.1.0/24", layer), fmt.Sprintf("10.%d.2.0/24", layer)},
+					"labels":           map[string]any{"team": "platform", "layer": fmt.Sprintf("%d", layer)},
 				},
 			},
 		}
