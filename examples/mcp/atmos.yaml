@@ -157,15 +157,14 @@ mcp:
 #     auth_identity: "security-audit"
 
 # ---------------------------------------------------------------------------
-# Atmos Toolchain Integration (optional)
+# Atmos Toolchain Integration
 # ---------------------------------------------------------------------------
-# Uncomment to auto-install `uv` (Python package manager) via toolchain.
+# Auto-install `uv` (Python package manager) via Atmos toolchain.
 # This ensures `uvx` is available before any MCP server starts.
-#
-# toolchain:
-#   tools:
-#     uv:
-#       version: "0.7.x"
+toolchain:
+  tools:
+    uv:
+      version: ">=0.7"
 
 # ---------------------------------------------------------------------------
 # AI Configuration (required for atmos ai chat / atmos ai exec)
