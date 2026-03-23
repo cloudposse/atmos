@@ -84,6 +84,8 @@ func List() []string {
 // Reset clears all registered providers. Intended for use in tests to ensure
 // clean state between subtests that register providers.
 func Reset() {
+	defer perf.Track(nil, "ci.Reset")()
+
 	providersMu.Lock()
 	defer providersMu.Unlock()
 	providers = make(map[string]provider.Provider)
