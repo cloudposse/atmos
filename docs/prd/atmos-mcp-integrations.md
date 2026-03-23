@@ -1,7 +1,7 @@
 # Atmos MCP Integrations — External MCP Server Management
 
-**Status:** In Progress — Phases 1–3 Implemented
-**Version:** 3.0
+**Status:** In Progress — Phases 1–4 (auth) Implemented
+**Version:** 4.0
 **Last Updated:** 2026-03-22
 
 ---
@@ -846,9 +846,14 @@ atmos mcp restart <name> # Restart an integration
 - Toolchain integration for prerequisite management (`uvx`, `npx`)
 - Go template support in env vars (`{{ .vars.region }}`)
 
-### Phase 4: Advanced Features
+### Phase 4: Advanced Features (Partial)
 
-- Atmos Auth integration for credential injection
+**Shipped:**
+- ~~Atmos Auth integration for credential injection~~ ✅ — `auth_identity` field on
+  `MCPIntegrationConfig`, `AuthEnvProvider` interface, `WithAuthManager` start option,
+  `PrepareShellEnvironment` integration. 8 tests.
+
+**Remaining:**
 - Stack-level MCP integration overrides
 - Composite MCP server (expose external tools via Atmos MCP server)
 - Toolchain integration for prerequisite management (`uvx`, `npx`)
