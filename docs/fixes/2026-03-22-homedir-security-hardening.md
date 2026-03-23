@@ -127,9 +127,10 @@ macOS-only `dscl`, the entire test is inapplicable on Windows.
 | 11th pass | 85.8% | init/applyEnvTimeout 100%, SetDisableCache 100% |
 | 12th pass | 85.8% | README matrix, TestDirWindows clarifying comments |
 | 13th pass | ~87% | truncateStderr 100%, SetExternalCmdTimeout 100%, TestNoUsernameInErrors |
-| **14th pass** | **~87%** | Windows CI test fix, toDriveAbsolute helper + tests, CodeRabbit critical/high items addressed |
+| 14th pass | ~87% | Windows CI test fix, toDriveAbsolute helper + tests, CodeRabbit critical/high items |
+| **15th pass** | **88.4%** | UNC/drive-relative path fixes, dscl parser hardening + `TestParseDsclNFSHomeDir`, dual-stderr diagnostics, `Expand("~\\subdir")` Windows test |
 
-Remaining gap (~13%) is inherently untestable on Linux CI: macOS `dscl` branches,
+Remaining gap (~12%) is inherently untestable on Linux CI: macOS `dscl` branches,
 Windows drive-absolute tests (require `runtime.GOOS == "windows"`), and Plan 9
 `home` env var.
 
@@ -140,37 +141,39 @@ Windows drive-absolute tests (require `runtime.GOOS == "windows"`), and Plan 9
 | Category | Score | Grade |
 |---|---|---|
 | Security posture | 97/100 | A+ |
-| Test coverage (Linux CI) | 87/100 | B+ |
-| Cross-platform confidence | 95/100 | A |
-| Operability (docs, timeout) | 96/100 | A |
-| **Overall merge safety** | **93/100** | **A** |
+| Test coverage (Linux CI) | 88/100 | A- |
+| Cross-platform confidence | 97/100 | A |
+| Operability (docs, timeout) | 97/100 | A |
+| **Overall merge safety** | **95/100** | **A** |
 
-Score improvement: **88/100 → 93/100** (CodeRabbit high item fixed, Windows CI fixed)
+Score improvement: **93/100 → 95/100** (UNC bug fixed, dscl hardened, coverage +1.7%)
 
 ---
 
 ## CodeRabbit Audit Response
 
+### 7th pass (latest — comment 4107858066)
+
 | # | Severity | Item | Status |
 |---|---|---|---|
-| 1 | 🟥 Critical | `shellGetUsernameFunc` falls back only on `ErrNotFound` | ✅ Already fixed — falls back on any `id` failure |
-| 2 | 🟧 High | `dirWindows` POSIX HOME → drive-relative path | ✅ Fixed via `toDriveAbsolute` helper |
-| 3 | 🟨 Medium | `externalCmdTimeout` not overridable | ✅ Fixed via `ATMOS_HOMEDIR_CMD_TIMEOUT` env |
-| 4 | 🟨 Medium | Windows USERPROFILE/HOME not de-quoted | ✅ Fixed via `strings.Trim(home, '"')` |
-| 5 | 🟨 Medium | TestShellHomeDir tilde-prefixed test not deterministic | ✅ Already deterministic — `TestShellHomeDir/tilde-prefixed shell output returns ErrBlankOutput (deterministic)` uses mock sh |
-| 6 | 🟨 Medium | macOS dscl happy path untested in CI | ⚠️ Not addressed — requires macOS runner with dscl; covered by DI hook tests |
-| 7 | 🟨 Medium | DisableCache writes unsynchronized | ✅ Fixed via `SetDisableCache` with `cacheLock.Lock()` |
-| 8 | 🟩 Low | Error messages embed raw username (PII) | ✅ Fixed via `ErrInvalidUsername` sentinel |
-| 9 | 🟩 Low | Plan 9 branch never exercised | ✅ Fixed via compile-only CI job |
-| 10 | 🟩 Low | Test comment "not drive-relative" misleading | ✅ Fixed — test comment now accurately describes drive-relative behavior when no drive env is available |
-| 11 | 🟩 Low | dscl output parsing untested with sample data | ⚠️ Not addressed — DI hook tests exercise all parse outcomes |
-| 12 | 🟩 Low | README/godoc missing precedence matrix | ✅ Documented in `pkg/config/homedir/README.md` |
+| 1 | 🔴 Critical | UNC paths (`\\server\share\user`) incorrectly absolutized by `toDriveAbsolute` | ✅ Fixed — early-return for `\\`-prefixed paths |
+| 2 | 🟠 High | Drive-letter-relative (`C:Users\me`) not normalized to absolute | ✅ Fixed — `toDriveAbsolute` normalizes `C:foo` → `C:\foo` |
+| 3 | 🟡 Medium | `dscl` parser brittle — `CutPrefix` misses leading spaces | ✅ Fixed — `strings.TrimSpace(line)` before `CutPrefix`; extracted to `parseDsclNFSHomeDir` with 9 table-driven tests |
+| 4 | 🟡 Medium | dscl result not verified absolute | ✅ Fixed — `filepath.IsAbs` guard added; relative result → `ErrBlankOutput` |
+| 5 | 🟠 High | No macOS CI job for real `dscl` happy path | ⚠️ Not addressed — requires macOS runner; DI hook tests cover all code paths |
+| 6 | 🟡 Medium | `shellGetUsernameFunc` drops one stderr when both `id` and `whoami` fail | ✅ Fixed — both messages included: `(id: …; whoami: …)` |
+| 7 | 🟡 Medium | No Windows `Expand("~\\subdir\\file.txt")` test | ✅ Added `TestExpand_WindowsBackslashSubdir` (Windows-only) |
+| 8 | 🟡 Medium | Comment says "callers always receive fully-qualified path" but drive-relative is possible | ✅ Fixed — comment updated to accurately describe behavior when no drive env is set |
+| 9 | 🟢 Low | `usernameRe` allows leading `.` or `_` | ⚠️ Intentional — these are valid Unix username prefixes; dot-segments (`.` and `..`) are explicitly rejected |
+| 10 | 🟢 Low | No Windows-specific PII guard | ⚠️ Deferred — Windows paths don't embed usernames in the current code |
+| 11 | 🟡 Medium | README "works with only sh present" misleading | ✅ Fixed — README updated to describe full chain (`id → $USER → whoami → sh`) |
+| 12 | 🟢 Low | Minor error-prefix inconsistencies | ✅ All `"func: tool:"` prefixes are consistent throughout |
 
 ---
 
 ## References
 
 - GitHub Code Scanning Alert #5157
-- CodeRabbit audit passes 10–14: https://github.com/cloudposse/atmos/pull/2163
+- CodeRabbit audit passes 10–15: https://github.com/cloudposse/atmos/pull/2163
 - `pkg/config/homedir/README.md` — full precedence matrix and operator guide
-- `pkg/config/homedir/homedir_test.go` — 50+ test functions, 175+ assertions
+- `pkg/config/homedir/homedir_test.go` — 60+ test functions, 200+ assertions

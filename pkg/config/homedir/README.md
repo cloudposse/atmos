@@ -27,20 +27,23 @@ It includes important enhancements for test compatibility:
 | 1 | `$HOME` env var | Checked first; whitespace-only values are skipped. Wrapping single/double quotes are stripped (e.g., `HOME="/home/user"` works). |
 | 2 | `os/user.Current().HomeDir` | Pure-Go `/etc/passwd` reader in CGO=0 builds; may not find NSS/LDAP-only users. |
 | 3 | `dscl` (macOS only) | Reads `NFSHomeDirectory` from the macOS Directory Service. |
-| 4 | Shell tilde expansion | `sh -c 'printf "%s\n" ~username'` — works in distroless/Alpine with only `sh` present. |
+| 4 | Shell tilde expansion | Fetches the username via `id -un` → falls back to `$USER` → then `whoami`. Expands `~username` via `sh -c 'printf "%s\n" ~username'`. All three of `id`, `$USER`, and `whoami` may be absent in distroless/scratch containers; in that case `ErrIDUnavailable` is returned. `ErrShellUnavailable` is returned when `sh` itself is absent. |
 
 ### Windows
 
 | Priority | Source | Notes |
 |---|---|---|
-| 1 | `%HOME%` | Wrapping quotes are stripped; forward slashes are converted to backslashes. **POSIX-style paths** (e.g., `/cygwin/home/user`) become **drive-relative** (`\cygwin\home\user`) because no drive letter is prepended — use a fully qualified drive path such as `C:\cygwin\home\user` for an absolute result. |
-| 2 | `%USERPROFILE%` | Same quoting and slash conversion as `HOME`. |
+| 1 | `%HOME%` | Wrapping quotes are stripped; forward slashes are converted to backslashes. **POSIX-style paths** (e.g., `/cygwin/home/user`) become **drive-relative** (`\cygwin\home\user`) unless `HOMEDRIVE` or `SystemDrive` is set. **UNC paths** (e.g., `\\server\share\user`) are returned unchanged. **Drive-letter-relative paths** (e.g., `C:Users\me`) are normalized to drive-absolute (`C:\Users\me`). |
+| 2 | `%USERPROFILE%` | Same quoting, slash conversion, UNC, and drive-relative handling as `HOME`. |
 | 3 | `%HOMEDRIVE%` + `%HOMEPATH%` | `HOMEPATH` is required to start with `\`. If it is missing, `\` is prepended automatically (e.g., `Users\foo` → `C:\Users\foo`). |
 
 > **Windows note:** If `HOME` or `USERPROFILE` contain a POSIX-style path without a drive letter
 > (e.g., `/home/user` from Cygwin, Git Bash, or WSL1), the result will be **drive-relative**
-> (`\home\user`) rather than absolute. To guarantee an absolute path, set `HOME` to a
-> Windows drive-absolute value such as `C:\Users\username`.
+> (`\home\user`) when neither `HOMEDRIVE` nor `SystemDrive` is set, and **drive-absolute**
+> (`C:\home\user`) when one of those env vars is set. Standard Windows environments always
+> have at least `SystemDrive` set, so this is only an issue in containers or unusual setups.
+> To guarantee an absolute path regardless, set `HOME` to a Windows drive-absolute value
+> such as `C:\Users\username`.
 
 ## Environment Variable Support
 

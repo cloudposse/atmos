@@ -318,10 +318,13 @@ func dirWindows() (string, error) {
 	// Apply filepath.FromSlash before filepath.Clean so that forward-slash
 	// paths set by Cygwin, Git Bash, or WSL1 (e.g., "/home/user") are
 	// converted to native Windows separators. POSIX-style absolute paths
-	// (e.g., "/cygwin/home/user") become drive-relative after conversion
-	// ("\cygwin\home\user"). When HOMEDRIVE or SystemDrive is available it is
-	// prepended automatically to produce a drive-absolute path so that callers
-	// always receive a fully-qualified path.
+	// (e.g., "/cygwin/home/user") become drive-relative ("\cygwin\home\user")
+	// after conversion. toDriveAbsolute then prepends HOMEDRIVE (or
+	// SystemDrive) when available, producing a fully-qualified path
+	// ("C:\cygwin\home\user"). When neither HOMEDRIVE nor SystemDrive is set
+	// the result remains drive-relative — the best we can do without a drive
+	// letter; callers in standard Windows environments will always have at
+	// least SystemDrive available.
 	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
 		return toDriveAbsolute(cleanWindowsPath(strings.Trim(home, `"'`))), nil
 	}
@@ -347,22 +350,41 @@ func dirWindows() (string, error) {
 	return filepath.Clean(drive + path), nil
 }
 
-// toDriveAbsolute promotes a drive-relative Windows path (one that starts with
-// a backslash but has no drive letter, e.g. "\cygwin\home\user") to a
-// drive-absolute path by prepending HOMEDRIVE or SystemDrive when available.
-// Paths that already contain a drive letter (e.g. "C:\Users\me") or that do
-// not start with a backslash are returned unchanged. This is called only on
-// Windows.
+// toDriveAbsolute promotes a drive-relative Windows path to a drive-absolute
+// path. It handles three distinct cases:
+//
+//  1. UNC/device paths ("\\server\share\..." or "\\?\...", "\\.\...")  — returned unchanged;
+//     they are already fully-qualified network paths.
+//  2. Drive-letter-relative paths ("C:Users\foo") — normalized to "C:\Users\foo"
+//     by inserting a root backslash after the colon.
+//  3. Root-relative paths ("\path") — HOMEDRIVE (or SystemDrive) is prepended
+//     when available to produce a drive-absolute path ("C:\path").
+//
+// Paths that are already drive-absolute (e.g. "C:\Users\me") and paths that do
+// not start with a backslash or drive letter are returned unchanged.
+// This is called only on Windows.
 func toDriveAbsolute(path string) string {
-	// Only act on paths that are drive-relative: they start with a backslash
-	// but have no drive letter (i.e. the second character is not ':').
+	// Case 1: UNC paths ("\\server\share\...") and Win32 device paths
+	// ("\\?\" or "\\.\" ) are already fully-qualified; return them unchanged.
+	if strings.HasPrefix(path, `\\`) {
+		return path
+	}
+
+	// Case 2: Drive-letter-relative paths such as "C:Users\foo" have a drive
+	// letter and colon at positions 0-1, but no root backslash at position 2.
+	// Normalize them to "C:\Users\foo" so callers always receive a drive-absolute
+	// path. This pattern is produced when HOME or USERPROFILE is set to a
+	// relative value like "C:subdir\path" (uncommon but valid Windows env usage).
+	if len(path) >= 2 && path[1] == ':' && (len(path) == 2 || path[2] != '\\') {
+		return filepath.Clean(path[:2] + `\` + path[2:])
+	}
+
+	// Case 3: Root-relative paths start with a single backslash but have no
+	// drive letter (e.g. "\cygwin\home\user"). Prepend HOMEDRIVE or SystemDrive
+	// when available to produce a drive-absolute path ("C:\cygwin\home\user").
 	if !strings.HasPrefix(path, `\`) {
 		return path
 	}
-	// If the path is "X:\..." the first character would not be '\', so
-	// HasPrefix already excluded those. The only remaining edge case is a
-	// path like "\:" (len == 2) where path[1] happens to be ':'; treat
-	// that as drive-relative too and let HOMEDRIVE fix it.
 	for _, envKey := range []string{"HOMEDRIVE", "SystemDrive"} {
 		if d := strings.TrimSpace(os.Getenv(envKey)); d != "" {
 			return filepath.Clean(d + path)
@@ -432,14 +454,33 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 		return "", fmt.Errorf("getDarwinHomeDir: dscl: %w", err)
 	}
 
-	// dscl output format: "NFSHomeDirectory: /Users/username"
-	for _, line := range strings.Split(out.String(), "\n") {
-		if after, ok := strings.CutPrefix(line, "NFSHomeDirectory:"); ok {
-			home := filepath.Clean(strings.TrimSpace(after))
-			if home != "" && home != "." {
-				return home, nil
-			}
+	// parseDsclNFSHomeDir parses the home directory path from dscl output.
+	// Call site returns the result directly.
+	return parseDsclNFSHomeDir(out.String())
+}
+
+// parseDsclNFSHomeDir extracts the home directory from dscl output.
+// It accepts leading/trailing whitespace around the key and multiple spaces
+// after the colon (defensive against dscl output variants). The returned path
+// is filepath.Clean'd. Returns ErrBlankOutput when the key is absent or the
+// parsed value is empty, ".", or a non-absolute path (malformed record).
+func parseDsclNFSHomeDir(output string) (string, error) {
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		after, ok := strings.CutPrefix(trimmed, "NFSHomeDirectory:")
+		if !ok {
+			continue
 		}
+		home := filepath.Clean(strings.TrimSpace(after))
+		if home == "" || home == "." {
+			continue
+		}
+		// Require an absolute path: a relative result from dscl would be
+		// a malformed record and must not be returned to callers.
+		if !filepath.IsAbs(home) {
+			return "", ErrBlankOutput
+		}
+		return home, nil
 	}
 	return "", ErrBlankOutput
 }
@@ -547,11 +588,17 @@ var shellGetUsernameFunc = func() (string, error) {
 	// Include any diagnostic stderr from id/whoami (no username available yet,
 	// so no redaction needed). These messages typically describe NSS/LDAP errors
 	// and do not include PII. Truncate to prevent log spam from verbose backends.
-	if msg := truncateStderr(strings.TrimSpace(idErr.String())); msg != "" {
-		return "", fmt.Errorf("shellGetUsernameFunc: %w (id: %s)", ErrIDUnavailable, msg)
-	}
-	if msg := truncateStderr(strings.TrimSpace(whoErr.String())); msg != "" {
-		return "", fmt.Errorf("shellGetUsernameFunc: %w (whoami: %s)", ErrIDUnavailable, msg)
+	// Include both stderr snippets when both commands failed, for maximum
+	// diagnosability without requiring operators to run each command manually.
+	idMsg := truncateStderr(strings.TrimSpace(idErr.String()))
+	whoMsg := truncateStderr(strings.TrimSpace(whoErr.String()))
+	switch {
+	case idMsg != "" && whoMsg != "":
+		return "", fmt.Errorf("shellGetUsernameFunc: %w (id: %s; whoami: %s)", ErrIDUnavailable, idMsg, whoMsg)
+	case idMsg != "":
+		return "", fmt.Errorf("shellGetUsernameFunc: %w (id: %s)", ErrIDUnavailable, idMsg)
+	case whoMsg != "":
+		return "", fmt.Errorf("shellGetUsernameFunc: %w (whoami: %s)", ErrIDUnavailable, whoMsg)
 	}
 	return "", ErrIDUnavailable
 }
