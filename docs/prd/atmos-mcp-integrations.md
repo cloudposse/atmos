@@ -1,7 +1,7 @@
 # Atmos MCP Integrations — External MCP Server Management
 
-**Status:** In Progress — Phase 1 Implemented
-**Version:** 1.0
+**Status:** In Progress — Phase 1 + Phase 2 Implemented
+**Version:** 2.0
 **Last Updated:** 2026-03-22
 
 ---
@@ -776,14 +776,40 @@ Shall I generate an atmos workflow for this decommission sequence?
 - Tool bridge uses `server.tool_name` namespacing to avoid conflicts between servers.
 - Manager.Test performs full lifecycle: start → handshake → list tools → ping → report.
 
-### Phase 2: Tool Bridge + AI Integration
+### Phase 2: Tool Bridge + AI Integration ✅ SHIPPED
 
-- ~~Tool bridge: external MCP tools → Atmos AI tool registry~~ (BridgedTool implemented in Phase 1)
-- ~~Namespaced tool names (`server.tool_name`)~~ (implemented in Phase 1)
-- `atmos ai chat` integration — register bridged tools in the AI executor
-- `--ai` flag integration — external tools available during analysis
-- Process auto-start on first tool call (lazy initialization)
-- Graceful shutdown on CLI exit
+**Implemented files:**
+
+| File | Lines | Purpose |
+|---|---|---|
+| `pkg/mcp/client/register.go` | 60 | `RegisterMCPTools` — starts integrations, bridges tools into AI registry |
+| `pkg/mcp/client/register_test.go` | 45 | Tests: no integrations, invalid config, failed start continues |
+| `pkg/mcp/client/bridge.go` | 170 | `BridgedTool` implements `tools.Tool` interface with JSON Schema parameter extraction |
+| `pkg/mcp/client/bridge_test.go` | 170 | Tests: interface compliance, parameters, schema types, content extraction |
+| `cmd/ai/init.go` | modified | `aiToolsResult` struct, calls `RegisterMCPTools` after native tools |
+| `cmd/ai/chat.go` | modified | `defer MCPMgr.StopAll()` for subprocess cleanup |
+| `cmd/ai/exec.go` | modified | `defer MCPMgr.StopAll()` for subprocess cleanup |
+
+**What shipped:**
+- ~~Tool bridge: external MCP tools → Atmos AI tool registry~~ ✅
+- ~~Namespaced tool names (`server.tool_name`)~~ ✅
+- ~~`atmos ai chat` integration~~ ✅ — MCP tools registered in AI executor
+- ~~`atmos ai exec` integration~~ ✅ — MCP tools available in non-interactive mode
+- ~~Graceful shutdown on CLI exit~~ ✅ — `defer MCPMgr.StopAll()` in chat and exec
+
+**Key design decisions:**
+- `BridgedTool` implements `tools.Tool` interface (compile-time `var _ tools.Tool = (*BridgedTool)(nil)` check).
+- `Execute()` returns `*tools.Result` with `Success`, `Output`, and `Error` fields.
+- `Parameters()` extracts from MCP `InputSchema` JSON Schema — maps `string`, `integer`,
+  `number`, `boolean`, `array`, `object` to Atmos `ParamType`.
+- `RegisterMCPTools` is best-effort: failed servers log warnings but don't block other tools.
+- `aiToolsResult` struct avoids 4-return-value lint error (`function-result-limit: max 3`).
+- `--ai` flag analysis (output capture) does not use tools — MCP tools are available only
+  in `atmos ai chat` and `atmos ai exec`.
+
+**Remaining for future:**
+- Lazy initialization (auto-start on first tool call instead of upfront)
+- `--ai` flag tool integration (requires executor in the analysis path)
 
 ### Phase 3: Management Commands
 
