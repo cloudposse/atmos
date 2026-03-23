@@ -115,7 +115,16 @@ ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc 
   <dd>Add `--ai` flag to any command for AI-powered output analysis. Use `--skill` flag for domain-specific expertise (supports multiple skills via commas or repeated flag).</dd>
 
   <dt>[`atmos mcp start`](/cli/commands/mcp/start)</dt>
-  <dd>Start the MCP server with stdio (default) or HTTP transport.</dd>
+  <dd>Start the Atmos MCP server for external AI clients.</dd>
+
+  <dt>[`atmos mcp list`](/cli/commands/mcp/list)</dt>
+  <dd>List configured external MCP servers.</dd>
+
+  <dt>[`atmos mcp tools`](/cli/commands/mcp/tools)</dt>
+  <dd>List tools from an external MCP server.</dd>
+
+  <dt>[`atmos mcp test`](/cli/commands/mcp/test)</dt>
+  <dd>Test connectivity to an external MCP server.</dd>
 
   <dt>[`atmos lsp start`](/cli/commands/lsp/start)</dt>
   <dd>Start the LSP server with stdio, TCP, or WebSocket transport.</dd>
@@ -157,17 +166,57 @@ Install and share community skills from GitHub.
 
 Configure skills in `atmos.yaml`.
 
-## MCP Server
+## MCP
 
-The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server exposes Atmos AI tools
-to any compatible client -- Claude Desktop, Claude Code, VS Code, Cursor, Gemini CLI, and
-[many others](https://modelcontextprotocol.io/clients). This lets you use Atmos tools inside your
-preferred AI assistant without custom integrations.
+Atmos supports the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) in both directions:
 
-<ActionCard title="MCP Setup">
-    Configure MCP clients and manage tool permissions.
+**Atmos as MCP Server** — Exposes Atmos AI tools to external clients (Claude Desktop, Claude Code,
+VS Code, Cursor, Gemini CLI). Use Atmos tools inside your preferred AI assistant.
+
+**External MCP Servers** — Connect to AWS, GCP, and custom MCP servers. Their tools become available
+in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos tools.
+
+```bash
+# Manage external MCP servers
+atmos mcp list                    # See configured servers
+atmos mcp test aws-docs           # Test connectivity
+atmos mcp tools aws-security      # List available tools
+atmos mcp add aws-pricing \       # Add a new server
+  --command uvx --args "awslabs.aws-pricing-mcp-server@latest"
+
+# External MCP tools are available in AI commands
+atmos ai ask "What's the price of m7i.xlarge in us-east-1?"
+atmos ai chat   # Then: "Check our security posture in us-east-1"
+```
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  servers:
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation"
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+      auth_identity: "security-audit"  # Atmos Auth credential injection
+```
+</File>
+
+<ActionCard title="MCP Configuration">
+    Configure the Atmos MCP server and external MCP server connections.
     <div>
-        <PrimaryCTA to="/ai/mcp-server">MCP Server Setup</PrimaryCTA>
+        <PrimaryCTA to="/cli/configuration/mcp">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<ActionCard title="Try the MCP Example">
+    Explore a complete example with 5 pre-configured AWS MCP servers.
+    <div>
+        <PrimaryCTA to="/examples/mcp">Browse Example</PrimaryCTA>
     </div>
 </ActionCard>
 
