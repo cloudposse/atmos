@@ -1102,7 +1102,10 @@ func processYAMLConfigFileWithContextInternal(
 							err,
 						)
 						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
-					} else if importMatches == nil {
+					} else {
+						// err == nil but importMatches is an empty slice (not nil): pkg/filesystem.GetGlobMatches
+						// guarantees a non-nil result, so the old "else if importMatches == nil" check was dead
+						// code. We reach this branch when no files matched and the call returned ([]string{}, nil).
 						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
 							imp,
 							relativeFilePath,

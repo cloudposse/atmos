@@ -34,9 +34,13 @@ var (
 //
 // Note: unlike pkg/filesystem.GetGlobMatches, this function returns an error when no files match the pattern
 // (consistent with its use as an import-path resolver). The returned slice may be nil when an error is returned.
+// See pkg/filesystem.GetGlobMatches for the variant that returns ([]string{}, nil) instead of an error
+// when no files match.
 //
 // Caching contract: only non-empty result sets are cached. The cache stores []string directly (not a
 // comma-joined string) so that paths containing commas are preserved correctly on cache hits.
+// Cached slices are cloned before being returned, so callers may safely mutate the returned slice without
+// affecting the cache.
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "utils.GetGlobMatches")()
 

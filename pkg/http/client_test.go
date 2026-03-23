@@ -135,6 +135,33 @@ func TestGitHubAuthenticatedTransport_RoundTrip(t *testing.T) {
 			expectUserAgent: false,
 		},
 		{
+			// github.example.com looks like it has "github" in it but is NOT an allowed host.
+			// Authorization must NOT be leaked to arbitrary subdomains.
+			name:            "github.example.com does not set auth header",
+			url:             "https://github.example.com/api",
+			token:           "test-token",
+			expectAuth:      false,
+			expectUserAgent: false,
+		},
+		{
+			// example.github.com is a GitHub-owned subdomain but NOT in the explicit allowlist.
+			// Authorization must NOT be set for unlisted GitHub subdomains.
+			name:            "example.github.com does not set auth header",
+			url:             "https://example.github.com/api",
+			token:           "test-token",
+			expectAuth:      false,
+			expectUserAgent: false,
+		},
+		{
+			// Plain HTTP (not HTTPS) api.github.com — ensure auth is still gated on the hostname,
+			// not the scheme (real GitHub rejects HTTP anyway, but the guard must not be bypassed).
+			name:            "http scheme api.github.com sets auth header",
+			url:             "http://api.github.com/repos/test/repo",
+			token:           "test-token",
+			expectAuth:      true,
+			expectUserAgent: true,
+		},
+		{
 			name:            "empty token does not set auth header",
 			url:             "https://api.github.com/repos/test/repo",
 			token:           "",
