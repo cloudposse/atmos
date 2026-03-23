@@ -39,8 +39,8 @@ func TestExecuteShellCommand_ExitOneWrappedAsExitCodeError(t *testing.T) {
 	execErr := ExecuteShellCommand(
 		atmosConfig,
 		exePath,
-		[]string{"-test.run=^$"}, // no test matches; TestMain exits before any test
-		"",                       // dir: current working directory
+		[]string{"-test.run=^$"},           // no test matches; TestMain exits before any test
+		"",                                 // dir: current working directory
 		[]string{"_ATMOS_TEST_EXIT_ONE=1"}, // env: makes TestMain call os.Exit(1)
 		false,                              // dryRun: false — actually run the subprocess
 		"",                                 // redirectStdErr
