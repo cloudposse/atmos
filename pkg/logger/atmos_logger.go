@@ -25,9 +25,16 @@ type AtmosLogger struct {
 // If charmLogger was initialized with a non-stderr writer (e.g., charm.New(&buf)),
 // pass that same writer so that GetOutput() returns the correct value immediately
 // without requiring a follow-up SetOutput call.
+//
+// If charmLogger is nil, charm.Default() is used as a fallback. When w is non-nil in
+// that case, charm.Default().SetOutput(w) is called so that the charm logger and the
+// tracked writer (GetOutput) are consistent from the moment of construction.
 func NewAtmosLogger(charmLogger *charm.Logger, w io.Writer) *AtmosLogger {
 	if charmLogger == nil {
 		charmLogger = charm.Default()
+		if w != nil {
+			charmLogger.SetOutput(w) // keep charm and tracked writer in sync
+		}
 	}
 	if w == nil {
 		w = os.Stderr

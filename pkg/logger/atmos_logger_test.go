@@ -41,6 +41,19 @@ func TestNewAtmosLogger(t *testing.T) {
 		})
 	})
 
+	// Test that NewAtmosLogger(nil, &buf) routes charm output to &buf.
+	// When charmLogger is nil and a non-nil writer is provided, charm.Default()
+	// must be redirected to that writer so GetOutput() and charm's output are
+	// consistent immediately after construction.
+	t.Run("nil logger with custom writer routes charm output to writer", func(t *testing.T) {
+		var buf bytes.Buffer
+		var nilLogger *log.Logger
+		logger := NewAtmosLogger(nilLogger, &buf)
+		assert.Equal(t, &buf, logger.GetOutput(), "GetOutput should return the custom writer")
+		logger.Info("hello")
+		assert.NotEmpty(t, buf.String(), "charm should write to the custom writer, not stderr")
+	})
+
 	// Test that GetOutput returns os.Stderr when no writer is provided.
 	t.Run("default writer is os.Stderr", func(t *testing.T) {
 		baseLogger := log.New(os.Stderr)
