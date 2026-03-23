@@ -3,7 +3,7 @@ title: MCP Configuration
 sidebar_label: mcp
 sidebar_class_name: command
 id: mcp
-description: Configure the Atmos MCP server and AI tool settings in your `atmos.yaml`.
+description: Configure the Atmos MCP server and external MCP server connections in your `atmos.yaml`.
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -11,18 +11,35 @@ import Experimental from '@site/src/components/Experimental'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-The Atmos MCP server exposes Atmos AI tools via the Model Context Protocol. It must be **explicitly enabled**
-separately from AI features, since it opens a communication channel that external clients can connect to.
+Configure MCP (Model Context Protocol) in Atmos — both the Atmos MCP **server** (for external AI clients to connect to Atmos) and external MCP **server connections** (for Atmos to connect to external servers like AWS MCP).
 </Intro>
 
 <Experimental />
+
+## Overview
+
+Atmos MCP has two sides:
+
+| Feature | What It Does | Config Key |
+|---------|-------------|------------|
+| **MCP Server** | Exposes Atmos AI tools to external clients (Claude Desktop, Claude Code, VS Code) | `mcp.enabled` |
+| **MCP Server Connections** | Connects Atmos to external MCP servers (AWS, GCP, custom) | `mcp.servers` |
 
 ## Quick Start
 
 <File title="atmos.yaml">
 ```yaml
 mcp:
-  enabled: true       # Required — MCP is off by default
+  # Enable the Atmos MCP server (for external AI clients).
+  enabled: true
+
+  # Connect to external MCP servers.
+  servers:
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation"
+
 ai:
   enabled: true
   tools:
@@ -30,126 +47,209 @@ ai:
 ```
 </File>
 
-:::info Opt-In Only
-The MCP server is **disabled by default** and must be explicitly enabled with `mcp.enabled: true`.
-Enabling AI features (`ai.enabled: true`) does **not** enable MCP. The default **stdio** transport
-runs as a local subprocess with no network exposure.
-:::
+---
 
-## Configuration Reference
+## MCP Server Configuration
 
-### Minimal Setup
+The Atmos MCP server exposes Atmos AI tools via the Model Context Protocol. It must be **explicitly enabled** separately from AI features, since it opens a communication channel that external clients can connect to.
 
-Three settings are required to start the MCP server:
-
-<File title="atmos.yaml">
-```yaml
-mcp:
-  enabled: true       # Enable the MCP server
-ai:
-  enabled: true       # Enable AI features
-  tools:
-    enabled: true     # Enable tool execution
-```
-</File>
-
-### Full Configuration
-
-For more control, you can specify providers, tool restrictions, and confirmation behavior:
-
-<File title="atmos.yaml">
-```yaml
-mcp:
-  enabled: true
-ai:
-  enabled: true
-  default_provider: "anthropic"
-  providers:
-    anthropic:
-      model: "claude-sonnet-4-6"
-      api_key: !env "ANTHROPIC_API_KEY"
-
-  tools:
-    enabled: true
-    require_confirmation: true
-    allowed_tools:
-      - atmos_describe_component
-      - atmos_list_stacks
-      - atmos_validate_stacks
-    blocked_tools:
-      - execute_bash_command
-```
-</File>
-
-### MCP Settings
+### Settings
 
 <dl>
   <dt>`mcp.enabled`</dt>
-  <dd>Enable the MCP server (default: `false`). Must be explicitly set to `true` before `atmos mcp start` will work.</dd>
+  <dd>Enable the Atmos MCP server (default: `false`). Must be set to `true` before `atmos mcp start` will work.</dd>
 </dl>
 
-:::note
-The MCP server itself does not require an API key. The tools it exposes use your configured AI provider settings.
-Provider configuration is only needed if you also use `atmos ai chat` or `atmos ai ask`.
+:::info Opt-In Only
+The MCP server is **disabled by default**. Enabling AI features (`ai.enabled: true`) does **not** enable MCP. The default **stdio** transport runs as a local subprocess with no network exposure.
 :::
 
 ### Tool Settings
 
-The MCP server exposes all tools configured in `ai.tools`. See [AI Tools Configuration](/cli/configuration/ai/tools) for the full reference of tool settings including:
+The MCP server exposes all tools configured in `ai.tools`. See [AI Tools Configuration](/cli/configuration/ai/tools) for the full reference including `allowed_tools`, `blocked_tools`, and `require_confirmation`.
+
+---
+
+## External MCP Server Connections
+
+Connect Atmos to external MCP servers so their tools are available in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec`.
+
+### Server Configuration
+
+Each server under `mcp.servers` follows the standard MCP server format used by Claude Code, Codex CLI, and Gemini CLI. Atmos adds extensions for descriptions, auth, and timeouts.
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  servers:
+    <server-name>:
+      # Standard MCP fields
+      command: "uvx"                    # Command to run the server
+      args:                             # Command arguments
+        - "package-name@latest"
+      env:                              # Environment variables
+        AWS_REGION: "us-east-1"
+
+      # Atmos extensions
+      description: "Human-readable description"
+      auth_identity: "my-identity"      # Atmos Auth credential injection
+      auto_start: false                 # Start server automatically
+      timeout: "30s"                    # Connection timeout
+```
+</File>
+
+### Standard Fields
+
+These fields are compatible with the `mcpServers` JSON format used by Claude Code, Codex CLI, and Gemini CLI:
 
 <dl>
-  <dt>`tools.enabled`</dt>
-  <dd>Enable or disable tool execution (default: `false`). Must be `true` for the MCP server to expose any tools.</dd>
+  <dt>`command`</dt>
+  <dd>**Required.** The command to run the MCP server (e.g., `uvx`, `npx`, or an absolute path to a binary).</dd>
 
-  <dt>`tools.require_confirmation`</dt>
-  <dd>When accessed via MCP, tools execute without interactive confirmation prompts. Use `allowed_tools` and `blocked_tools` to control access.</dd>
+  <dt>`args`</dt>
+  <dd>Arguments passed to the command. Typically the package name and version (e.g., `awslabs.aws-pricing-mcp-server@latest`).</dd>
 
-  <dt>`tools.allowed_tools`</dt>
-  <dd>Tools available for execution. Supports wildcards like `atmos_describe_*` (default: `[]` = all tools).</dd>
-
-  <dt>`tools.blocked_tools`</dt>
-  <dd>Tools completely blocked from execution (default: `[]`).</dd>
+  <dt>`env`</dt>
+  <dd>Environment variables passed to the server subprocess. Supports [YAML functions](#yaml-functions-in-env-values) like `!env` and `!exec`.</dd>
 </dl>
 
-### Available Tools
-
-When connected, the MCP server exposes all enabled Atmos AI tools:
+### Atmos Extensions
 
 <dl>
-  <dt>`atmos_describe_component`</dt>
-  <dd>Get detailed component configuration for a stack.</dd>
+  <dt>`description`</dt>
+  <dd>Human-readable description shown in `atmos mcp list` and `atmos mcp status`.</dd>
 
-  <dt>`atmos_list_stacks`</dt>
-  <dd>List and filter stacks.</dd>
+  <dt>`auth_identity`</dt>
+  <dd>Name of an [Atmos Auth identity](/cli/configuration/auth) to use for credential injection. When set, Atmos authenticates through the identity chain and injects `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, and `AWS_REGION` into the subprocess environment.</dd>
 
-  <dt>`atmos_validate_stacks`</dt>
-  <dd>Validate stack configurations.</dd>
+  <dt>`auto_start`</dt>
+  <dd>Start the server automatically when Atmos starts (default: `false`).</dd>
 
-  <dt>`describe_affected`</dt>
-  <dd>Show components affected by git changes.</dd>
-
-  <dt>`read_component_file`</dt>
-  <dd>Read a component source file.</dd>
-
-  <dt>`read_stack_file`</dt>
-  <dd>Read a stack configuration file.</dd>
-
-  <dt>`write_component_file`</dt>
-  <dd>Modify a component file.</dd>
-
-  <dt>`write_stack_file`</dt>
-  <dd>Modify a stack file.</dd>
+  <dt>`timeout`</dt>
+  <dd>Connection timeout as a Go duration string (default: `30s`). Examples: `10s`, `1m`, `5m`.</dd>
 </dl>
 
-All tools respect your configured [permission settings](/cli/configuration/ai/tools).
+### YAML Functions in Env Values
 
-## Guides
+Atmos YAML functions work in `env` values, processed during config loading:
 
-- **[MCP Server Integration](/ai/mcp-server)** — Client setup guides for Claude Desktop, VS Code, Cursor, and other MCP clients
-- **[AI Tools](/cli/configuration/ai/tools)** — Full tool configuration reference
+<File title="atmos.yaml">
+```yaml
+mcp:
+  servers:
+    my-server:
+      command: uvx
+      args: ["my-mcp-server@latest"]
+      env:
+        # Read from OS environment variable
+        AWS_REGION: !env AWS_DEFAULT_REGION
+        AWS_PROFILE: !env AWS_PROFILE
+
+        # Execute a shell command
+        API_KEY: !exec "vault kv get -field=key secret/mcp"
+
+        # Git repository root path
+        PROJECT_ROOT: !repo-root
+
+        # Current working directory
+        WORK_DIR: !cwd
+```
+</File>
+
+### Auth Integration
+
+For production use, configure [Atmos Auth](/cli/configuration/auth) to automatically inject AWS credentials:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  enabled: true
+  providers:
+    aws-sso:
+      type: aws-sso
+      spec:
+        start_url: "https://your-org.awsapps.com/start"
+        region: "us-east-1"
+  identities:
+    security-audit:
+      provider: aws-sso
+      spec:
+        role_name: "SecurityAuditRole"
+        account_id: "123456789012"
+
+mcp:
+  servers:
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      auth_identity: "security-audit"
+```
+</File>
+
+When `auth_identity` is set, Atmos:
+1. Authenticates through the identity chain (SSO → role assumption)
+2. Writes isolated credential files to `~/.aws/atmos/<realm>/`
+3. Injects `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE` into the subprocess
+4. The MCP server's AWS SDK picks up credentials automatically
+
+### Toolchain Integration
+
+Auto-install prerequisites like `uv` (which provides `uvx` for AWS MCP servers) via the [Atmos Toolchain](/cli/configuration/toolchain):
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  tools:
+    uv:
+      version: ">=0.7"
+```
+</File>
+
+### Example: AWS MCP Servers
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  servers:
+    # No credentials needed
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      env:
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Documentation"
+
+    # Requires AWS credentials
+    aws-pricing:
+      command: uvx
+      args: ["awslabs.aws-pricing-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Pricing"
+
+    # Security assessment (read-only)
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Security"
+```
+</File>
+
+---
 
 ## Related Commands
 
 <DocCardList items={[
-  {type: 'link', href: '/cli/commands/mcp/start', label: 'atmos mcp start', description: 'Start the Atmos MCP server for AI client integration'},
+  {type: 'link', href: '/cli/commands/mcp/start', label: 'atmos mcp start', description: 'Start the Atmos MCP server'},
+  {type: 'link', href: '/cli/commands/mcp/list', label: 'atmos mcp list', description: 'List configured external MCP servers'},
+  {type: 'link', href: '/cli/commands/mcp/add', label: 'atmos mcp add', description: 'Add an MCP server to atmos.yaml'},
+  {type: 'link', href: '/cli/commands/mcp/remove', label: 'atmos mcp remove', description: 'Remove an MCP server'},
+  {type: 'link', href: '/cli/commands/mcp/tools', label: 'atmos mcp tools', description: 'List tools from an MCP server'},
+  {type: 'link', href: '/cli/commands/mcp/test', label: 'atmos mcp test', description: 'Test MCP server connectivity'},
+  {type: 'link', href: '/cli/commands/mcp/status', label: 'atmos mcp status', description: 'Show all server statuses'},
+  {type: 'link', href: '/cli/commands/mcp/restart', label: 'atmos mcp restart', description: 'Restart an MCP server'},
 ]} />
