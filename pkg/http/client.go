@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -57,6 +58,8 @@ func WithTimeout(timeout time.Duration) ClientOption {
 
 // WithGitHubToken sets the GitHub token for authenticated requests.
 // Wraps the existing transport instead of replacing it to allow composition with WithTransport.
+// It also installs a CheckRedirect handler that strips the managed Authorization header
+// when a redirect crosses to a different host, preventing token leakage.
 //
 // Triple-composition caveat: if a second WithTransport call follows this option, the
 // earlier base transport is silently replaced. See WithTransport for details.
@@ -74,8 +77,30 @@ func WithGitHubToken(token string) ClientOption {
 				Base:        base,
 				GitHubToken: token,
 			}
+
+			// Install a redirect policy that strips Authorization on cross-host redirects.
+			// The transport adds Authorization per-hop (only for allowed hosts), but the
+			// http.Client may also forward headers from the original request on redirects.
+			// This ensures no stale Authorization header leaks to an unexpected host.
+			if c.client.CheckRedirect == nil {
+				c.client.CheckRedirect = stripAuthOnCrossHostRedirect
+			}
 		}
 	}
+}
+
+// stripAuthOnCrossHostRedirect removes the Authorization header from a redirect request
+// when the target host (host:port) differs from the originating host.
+// Using req.URL.Host (not Hostname) preserves port information so that same-IP
+// different-port redirects are treated as cross-host, matching Go's own redirect policy.
+func stripAuthOnCrossHostRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if len(via) > 0 && req.URL.Host != via[0].URL.Host {
+		req.Header.Del("Authorization")
+	}
+	return nil
 }
 
 // WithGitHubHostMatcher sets a custom host-matching predicate on the GitHub authenticated
@@ -160,15 +185,33 @@ type GitHubAuthenticatedTransport struct {
 	hostMatcher func(string) bool
 }
 
+// normalizeHost canonicalizes a hostname for allowlist comparison:
+// it lower-cases the string and strips a trailing dot (FQDN form).
+// Port stripping is explicitly NOT performed here; callers should pass
+// the result of url.URL.Hostname() (which already has the port removed)
+// rather than the raw url.URL.Host field.  This avoids incorrectly
+// truncating IPv6 literals (e.g., [::1]) which contain colons.
+func normalizeHost(host string) string {
+	host = strings.ToLower(host)
+	host = strings.TrimSuffix(host, ".")
+	return host
+}
+
 // isGitHubHost is the default host allowlist.
 // It is also used as the fallback when GitHubAuthenticatedTransport.hostMatcher is nil.
+//
+// Precedence: WithGitHubHostMatcher (explicit custom predicate) takes full precedence over
+// this default allowlist, including the GITHUB_API_URL lookup.  If you need GHES support
+// together with a custom matcher, include the GHES host in your custom predicate.
 func isGitHubHost(host string) bool {
+	host = normalizeHost(host)
+
 	// Respect GITHUB_API_URL for GitHub Enterprise Server (GHES) and similar deployments.
 	// When set, the hostname of GITHUB_API_URL is treated as an allowed GitHub API host.
 	//nolint:forbidigo // Direct env lookup required for GHES configuration.
 	if apiURL := os.Getenv("GITHUB_API_URL"); apiURL != "" {
 		parsed, err := url.ParseRequestURI(apiURL)
-		if err == nil && parsed.Hostname() == host {
+		if err == nil && normalizeHost(parsed.Hostname()) == host {
 			return true
 		}
 	}
@@ -183,10 +226,14 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 	// Clone request to avoid mutating caller's request.
 	reqClone := req.Clone(req.Context())
 
-	host := reqClone.URL.Hostname()
+	// Normalize the hostname to ensure consistent matching regardless of case,
+	// trailing dots (FQDN form), or port remnants.
+	host := normalizeHost(reqClone.URL.Hostname())
 	scheme := reqClone.URL.Scheme
 
 	// Determine whether the host is allowed to receive authentication headers.
+	// WithGitHubHostMatcher (t.hostMatcher) takes full precedence; the default
+	// allowlist (isGitHubHost, including GITHUB_API_URL lookup) is used as fallback.
 	matcher := t.hostMatcher
 	if matcher == nil {
 		matcher = isGitHubHost

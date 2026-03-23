@@ -73,12 +73,37 @@
 //
 // Alternatively, use [WithGitHubHostMatcher] for programmatic control.
 //
+// # Host-matcher precedence
+//
+// The host predicate used to decide whether to inject Authorization follows this
+// precedence order (highest to lowest):
+//
+//  1. [WithGitHubHostMatcher] — an explicit custom predicate always wins.
+//  2. GITHUB_API_URL — when set and [WithGitHubHostMatcher] was NOT applied,
+//     the GHES hostname from the environment variable is added to the allowlist.
+//  3. Built-in allowlist — api.github.com, raw.githubusercontent.com, uploads.github.com.
+//
+// If you need GHES support together with a custom matcher, include the GHES host
+// in your custom predicate; [WithGitHubHostMatcher] bypasses the GITHUB_API_URL lookup:
+//
+//	ghesHost := "github.mycorp.example.com"
+//	client := http.NewDefaultClient(
+//	    http.WithGitHubToken("mytoken"),
+//	    http.WithGitHubHostMatcher(func(host string) bool {
+//	        return host == "api.github.com" || host == ghesHost
+//	    }),
+//	)
+//
 // # Security notes
 //
 // Authorization headers are only injected when ALL of the following are true:
 //   - The request URL scheme is "https".
 //   - The request hostname matches the host predicate.
 //   - The Authorization header is not already set on the request.
+//
+// Cross-host redirects: [WithGitHubToken] installs a CheckRedirect handler that
+// strips the Authorization header from redirect requests that target a different
+// host:port, preventing token leakage via open redirects.
 //
 // This prevents accidental token leakage over unencrypted HTTP and ensures
 // that caller-supplied Authorization headers are never overwritten.

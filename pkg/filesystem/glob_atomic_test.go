@@ -273,7 +273,7 @@ func TestOSFileSystem_WriteFileAtomic_Overwrite(t *testing.T) {
 }
 
 // TestGetGlobMatches_LRU_Eviction verifies that the LRU cache evicts the least-recently-used
-// entry when the cache reaches its capacity (globCacheMaxEntries).
+// entry when the cache reaches its capacity (defaultGlobCacheMaxEntries).
 // This test uses a small in-process simulation: it fills the cache to capacity + 1 and
 // then checks that the first entry was evicted (i.e., a fresh filesystem read is triggered).
 // It also verifies that the eviction counter increments as expected.
@@ -283,7 +283,7 @@ func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	// Populate the LRU cache with globCacheMaxEntries unique patterns (all non-matching
+	// Populate the LRU cache with defaultGlobCacheMaxEntries unique patterns (all non-matching
 	// since we only need entries in the cache, not actual files).
 	// Use sub-directories that don't exist — GetGlobMatches returns an error for
 	// non-existent base directories, so instead write empty-match YAML patterns.
@@ -295,10 +295,10 @@ func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 	initialLen := GlobCacheLen()
 	require.Equal(t, 1, initialLen, "seed entry should be in cache")
 
-	// Fill the cache to globCacheMaxEntries by using unique patterns that each match
+	// Fill the cache to defaultGlobCacheMaxEntries by using unique patterns that each match
 	// the same seed file (pattern variation, not file variation).
-	// We create globCacheMaxEntries additional real files so all patterns resolve.
-	for i := range globCacheMaxEntries {
+	// We create defaultGlobCacheMaxEntries additional real files so all patterns resolve.
+	for i := range defaultGlobCacheMaxEntries {
 		// Use fmt.Sprintf to guarantee unique filenames for all i values (i > 26 would
 		// cycle single-character names and produce duplicates).
 		name := filepath.Join(tmpDir, fmt.Sprintf("file_evict_%d.yaml", i))
@@ -307,11 +307,11 @@ func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// After inserting globCacheMaxEntries more entries, the LRU should have evicted the
+	// After inserting defaultGlobCacheMaxEntries more entries, the LRU should have evicted the
 	// seed entry (it was the oldest / least recently used).
-	// We verify this by checking the cache size is bounded at globCacheMaxEntries.
+	// We verify this by checking the cache size is bounded at defaultGlobCacheMaxEntries.
 	afterLen := GlobCacheLen()
-	assert.LessOrEqual(t, afterLen, globCacheMaxEntries, "LRU cache must not exceed max capacity")
+	assert.LessOrEqual(t, afterLen, defaultGlobCacheMaxEntries, "LRU cache must not exceed max capacity")
 
 	// The eviction counter must have incremented at least once.
 	evictions := GlobCacheEvictions()
@@ -372,4 +372,128 @@ func TestGetGlobMatches_EmptyResultCached(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, res2, "second call should return empty result from cache")
 	assert.NotNil(t, res2, "cached empty result must be non-nil (contract)")
+}
+
+// TestGetGlobMatches_HitMissCounters verifies that the hit and miss counters
+// are incremented correctly across cache hits and misses.
+func TestGetGlobMatches_HitMissCounters(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.yaml"), []byte(""), 0o644))
+
+	pattern := filepath.Join(tmpDir, "*.yaml")
+
+	// First call is always a miss.
+	_, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), GlobCacheHits(), "no hits yet")
+	assert.Equal(t, int64(1), GlobCacheMisses(), "first call is a miss")
+
+	// Second call should be a hit.
+	_, err = GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), GlobCacheHits(), "second call is a hit")
+	assert.Equal(t, int64(1), GlobCacheMisses(), "miss count must not change")
+}
+
+// TestGetGlobMatches_EmptyResultCachingDisabled verifies that when
+// ATMOS_FS_GLOB_CACHE_EMPTY=0 is set, empty results are not cached.
+func TestGetGlobMatches_EmptyResultCachingDisabled(t *testing.T) {
+	// Set the env var BEFORE applying config.
+	t.Setenv("ATMOS_FS_GLOB_CACHE_EMPTY", "0")
+	ApplyGlobCacheConfigForTest()
+	t.Cleanup(func() {
+		// Restore default behavior after the test.
+		ApplyGlobCacheConfigForTest()
+		ResetGlobMatchesCache()
+	})
+
+	assert.False(t, GlobCacheEmptyEnabled(), "empty caching must be disabled when env var is 0")
+
+	tmpDir := t.TempDir()
+	// Use a wildcard that initially matches nothing.
+	pattern := filepath.Join(tmpDir, "*.yaml")
+
+	// First call — cache miss, empty result; must NOT be stored.
+	res1, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Empty(t, res1, "should return empty result")
+	assert.NotNil(t, res1, "must be non-nil per contract")
+	assert.Equal(t, 0, GlobCacheLen(), "empty result must not be cached when disabled")
+
+	// Create a file so the next call returns a non-empty result.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "found.yaml"), []byte(""), 0o644))
+
+	// Second call — since the empty result was NOT cached, the filesystem is re-read
+	// and the newly-created file should be discovered.
+	res2, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Len(t, res2, 1, "new file should be found after cache bypass")
+}
+
+// TestGetGlobMatches_RaceStress hammers the glob cache from many goroutines to
+// surface data races.  Run with -race to exercise the race detector.
+func TestGetGlobMatches_RaceStress(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "stress.yaml"), []byte(""), 0o644))
+
+	const numGoroutines = 32
+	const callsPerGoroutine = 50
+
+	done := make(chan struct{})
+	for g := range numGoroutines {
+		g := g
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for i := range callsPerGoroutine {
+				// Use a mix of unique and shared patterns to exercise both cache hits
+				// and cache misses concurrently.
+				var pattern string
+				if i%2 == 0 {
+					pattern = filepath.Join(tmpDir, "*.yaml")
+				} else {
+					pattern = filepath.Join(tmpDir, fmt.Sprintf("unique_%d_%d_*.yaml", g, i))
+				}
+				_, _ = GetGlobMatches(pattern)
+			}
+		}()
+	}
+
+	for range numGoroutines {
+		<-done
+	}
+}
+
+// TestGetGlobMatches_EnvTTL verifies that ATMOS_FS_GLOB_CACHE_TTL is honoured.
+// A very short TTL means entries expire immediately, so every call is a miss.
+func TestGetGlobMatches_EnvTTL(t *testing.T) {
+	t.Setenv("ATMOS_FS_GLOB_CACHE_TTL", "1ns")
+	ApplyGlobCacheConfigForTest()
+	t.Cleanup(func() {
+		ApplyGlobCacheConfigForTest()
+		ResetGlobMatchesCache()
+	})
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ttl.yaml"), []byte(""), 0o644))
+
+	pattern := filepath.Join(tmpDir, "*.yaml")
+
+	_, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+
+	// With 1ns TTL the entry will already be stale.  Force it expired just to be safe.
+	SetGlobCacheEntryExpired(pattern)
+
+	// Add a second file to prove the second call re-reads the filesystem.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ttl2.yaml"), []byte(""), 0o644))
+
+	res, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Len(t, res, 2, "short TTL should cause re-read and find both files")
 }

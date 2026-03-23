@@ -991,3 +991,92 @@ func TestIsGitHubHost_InvalidGITHUB_API_URL(t *testing.T) {
 	assert.True(t, isGitHubHost("api.github.com"))
 	assert.False(t, isGitHubHost("example.com"))
 }
+
+// TestNormalizeHost verifies that normalizeHost canonicalises hostnames correctly.
+func TestNormalizeHost(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"api.github.com", "api.github.com"},
+		{"API.GITHUB.COM", "api.github.com"},
+		{"Api.GitHub.Com", "api.github.com"},
+		// Trailing dot (FQDN form).
+		{"api.github.com.", "api.github.com"},
+		// Upper-case + trailing dot.
+		{"API.GITHUB.COM.", "api.github.com"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.want, normalizeHost(tt.input))
+		})
+	}
+}
+
+// TestIsGitHubHost_CaseAndTrailingDot verifies that isGitHubHost tolerates case
+// variations and trailing dots in the host parameter.
+func TestIsGitHubHost_CaseAndTrailingDot(t *testing.T) {
+	t.Setenv("GITHUB_API_URL", "")
+
+	positives := []string{
+		"API.GITHUB.COM",
+		"api.github.com.",
+		"API.GITHUB.COM.",
+		"Raw.GitHubUserContent.com",
+		"UPLOADS.GITHUB.COM",
+	}
+	for _, h := range positives {
+		assert.True(t, isGitHubHost(h), "expected %q to be allowed", h)
+	}
+
+	negatives := []string{
+		"GITHUB.EXAMPLE.COM",
+		"EXAMPLE.GITHUB.COM",
+		"github.com",
+	}
+	for _, h := range negatives {
+		assert.False(t, isGitHubHost(h), "expected %q to be denied", h)
+	}
+}
+
+// TestGitHubAuthenticatedTransport_CrossHostRedirect verifies that Authorization is
+// NOT forwarded when the http.Client follows a redirect to a different host.
+// The transport only adds auth per-hop for allowed hosts; this test also verifies
+// that the CheckRedirect installed by WithGitHubToken strips any stale Authorization.
+func TestGitHubAuthenticatedTransport_CrossHostRedirect(t *testing.T) {
+	// Target server — asserts Authorization is NOT present.
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Empty(t, r.Header.Get("Authorization"),
+			"Authorization must not be forwarded to the redirect target host")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	// Origin server — redirects to target (different host).
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/landed", http.StatusFound)
+	}))
+	defer origin.Close()
+
+	// Build a client with a GitHub token.  The origin and target are both plain HTTP
+	// httptest servers, so Authorization will NOT be added by the transport anyway
+	// (HTTPS-only rule).  But we still verify that CheckRedirect is wired up and
+	// does not add the header on the redirect leg.
+	client := NewDefaultClient(
+		WithGitHubToken("test-redir-token"),
+	)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, origin.URL+"/start", nil)
+	require.NoError(t, err)
+
+	// Manually add an Authorization header to simulate a caller that pre-set it.
+	req.Header.Set("Authorization", "Bearer manual-token")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}

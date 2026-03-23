@@ -6,13 +6,15 @@ import (
 	"time"
 )
 
-// ResetGlobMatchesCache clears the glob matches LRU cache and resets the eviction counter.
+// ResetGlobMatchesCache clears the glob matches LRU cache and resets all counters.
 // This is exported only for testing to avoid data races from direct struct assignment.
 func ResetGlobMatchesCache() {
 	globMatchesLRUMu.Lock()
 	globMatchesLRU.Purge()
 	globMatchesLRUMu.Unlock()
 	atomic.StoreInt64(&globMatchesEvictions, 0)
+	atomic.StoreInt64(&globMatchesHits, 0)
+	atomic.StoreInt64(&globMatchesMisses, 0)
 }
 
 // ResetPathMatchCache clears the path match cache.
@@ -46,4 +48,31 @@ func GlobCacheLen() int {
 // This counter is incremented atomically by the LRU eviction callback.
 func GlobCacheEvictions() int64 {
 	return atomic.LoadInt64(&globMatchesEvictions)
+}
+
+// GlobCacheHits returns the total number of cache hits since the last cache reset.
+func GlobCacheHits() int64 {
+	return atomic.LoadInt64(&globMatchesHits)
+}
+
+// GlobCacheMisses returns the total number of cache misses since the last cache reset.
+func GlobCacheMisses() int64 {
+	return atomic.LoadInt64(&globMatchesMisses)
+}
+
+// ApplyGlobCacheConfigForTest re-reads ATMOS_FS_GLOB_CACHE_* env vars and reinitializes
+// the glob LRU cache.  Tests should call this after setting env vars via t.Setenv.
+// It also resets all counters so tests start from a clean baseline.
+func ApplyGlobCacheConfigForTest() {
+	applyGlobCacheConfig()
+	atomic.StoreInt64(&globMatchesEvictions, 0)
+	atomic.StoreInt64(&globMatchesHits, 0)
+	atomic.StoreInt64(&globMatchesMisses, 0)
+}
+
+// GlobCacheEmptyEnabled returns the current empty-result caching setting.
+func GlobCacheEmptyEnabled() bool {
+	globMatchesLRUMu.RLock()
+	defer globMatchesLRUMu.RUnlock()
+	return globCacheEmptyEnabled
 }

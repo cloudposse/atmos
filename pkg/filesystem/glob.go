@@ -3,6 +3,7 @@ package filesystem
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,13 +17,13 @@ import (
 )
 
 const (
-	// globCacheMaxEntries is the maximum number of entries in the glob matches LRU cache.
-	// Once this limit is reached the least-recently-used entry is evicted automatically.
-	globCacheMaxEntries = 1024
+	// defaultGlobCacheMaxEntries is the default maximum number of entries in the glob LRU cache.
+	// Override at startup with ATMOS_FS_GLOB_CACHE_MAX_ENTRIES.
+	defaultGlobCacheMaxEntries = 1024
 
-	// globCacheTTL is the time-to-live for each cache entry.
-	// After this duration a stale entry is treated as a cache miss.
-	globCacheTTL = 5 * time.Minute
+	// defaultGlobCacheTTL is the default time-to-live for each cache entry.
+	// Override at startup with ATMOS_FS_GLOB_CACHE_TTL (e.g. "10m", "30s").
+	defaultGlobCacheTTL = 5 * time.Minute
 )
 
 // globCacheEntry holds a cached glob result together with its expiry timestamp.
@@ -48,6 +49,15 @@ var (
 	globMatchesLRUMu     sync.RWMutex
 	globMatchesLRUErr    error // non-nil only if lru.New fails (should never happen at runtime)
 	globMatchesEvictions int64 // incremented atomically by the LRU eviction callback
+	globMatchesHits      int64 // incremented atomically on each cache hit
+	globMatchesMisses    int64 // incremented atomically on each cache miss
+
+	// globCacheTTL is the active TTL, configurable via ATMOS_FS_GLOB_CACHE_TTL.
+	globCacheTTL = defaultGlobCacheTTL
+
+	// globCacheEmptyEnabled controls whether empty-result sets are stored in the cache.
+	// Default true. Set ATMOS_FS_GLOB_CACHE_EMPTY=0 to disable.
+	globCacheEmptyEnabled = true
 
 	// PathMatchCache stores PathMatch results to avoid redundant pattern matching.
 	// Cache key: pathMatchKey{pattern, name} -> match result (bool).
@@ -57,13 +67,56 @@ var (
 	pathMatchCacheMu sync.RWMutex
 )
 
-func init() {
-	globMatchesLRU, globMatchesLRUErr = lru.NewWithEvict[string, globCacheEntry](
-		globCacheMaxEntries,
+// applyGlobCacheConfig reads ATMOS_FS_GLOB_CACHE_* environment variables and
+// (re-)initializes the glob LRU cache accordingly.  It is called once from
+// init() and may be called again from tests to pick up env changes.
+func applyGlobCacheConfig() {
+	maxEntries := defaultGlobCacheMaxEntries
+	//nolint:forbidigo // Direct env lookup required for cache configuration.
+	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxEntries = n
+		}
+	}
+
+	ttl := defaultGlobCacheTTL
+	//nolint:forbidigo // Direct env lookup required for cache configuration.
+	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			ttl = d
+		}
+	}
+
+	emptyEnabled := true
+	//nolint:forbidigo // Direct env lookup required for cache configuration.
+	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_EMPTY"); v != "" {
+		// Only "1" or "true" explicitly enables; "0" or "false" disables.
+		// Any other value is treated as disabled for safety.
+		switch v {
+		case "1", "true":
+			emptyEnabled = true
+		default:
+			emptyEnabled = false
+		}
+	}
+
+	newLRU, err := lru.NewWithEvict[string, globCacheEntry](
+		maxEntries,
 		func(_ string, _ globCacheEntry) {
 			atomic.AddInt64(&globMatchesEvictions, 1)
 		},
 	)
+
+	globMatchesLRUMu.Lock()
+	globMatchesLRU = newLRU
+	globMatchesLRUErr = err
+	globCacheTTL = ttl
+	globCacheEmptyEnabled = emptyEnabled
+	globMatchesLRUMu.Unlock()
+}
+
+func init() {
+	applyGlobCacheConfig()
 }
 
 // GetGlobMatches tries to read and return the Glob matches content from the cache if it exists,
@@ -76,9 +129,9 @@ func init() {
 // Callers should always use len(result) == 0 to detect no matches, not a nil comparison.
 //
 // Caching policy:
-//   - All results (including empty matches) are cached.
-//   - Cache is bounded to globCacheMaxEntries (1024) entries; LRU eviction applies.
-//   - Each entry expires after globCacheTTL (5 minutes); a stale entry is treated as a cache miss.
+//   - Results are bounded to a configurable LRU (default 1024 entries, ATMOS_FS_GLOB_CACHE_MAX_ENTRIES).
+//   - Each entry expires after a configurable TTL (default 5 minutes, ATMOS_FS_GLOB_CACHE_TTL).
+//   - Empty results are cached by default; set ATMOS_FS_GLOB_CACHE_EMPTY=0 to disable.
 //   - Cached slices are cloned on read, so callers may safely mutate the returned slice.
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "filesystem.GetGlobMatches")()
@@ -89,14 +142,18 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	// Try cache lookup (read lock on the LRU wrapper).
 	globMatchesLRUMu.RLock()
 	entry, found := globMatchesLRU.Get(normalizedPattern)
+	ttl := globCacheTTL
 	globMatchesLRUMu.RUnlock()
 
 	if found && time.Now().Before(entry.expiry) {
+		atomic.AddInt64(&globMatchesHits, 1)
 		// Return a clone to prevent callers from mutating the cached slice.
 		result := make([]string, len(entry.matches))
 		copy(result, entry.matches)
 		return result, nil
 	}
+
+	atomic.AddInt64(&globMatchesMisses, 1)
 
 	base, cleanPattern := doublestar.SplitPattern(normalizedPattern)
 
@@ -129,17 +186,24 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		fullMatches = append(fullMatches, filepath.Join(base, match))
 	}
 
-	// Store a copy of the slice in the cache (not the shared backing slice).
-	// This prevents callers from mutating cached data and preserves empty results.
-	cachedCopy := make([]string, len(fullMatches))
-	copy(cachedCopy, fullMatches)
+	// Only store in cache when: (a) there are matches, or (b) empty caching is enabled.
+	globMatchesLRUMu.RLock()
+	cacheEmpty := globCacheEmptyEnabled
+	globMatchesLRUMu.RUnlock()
 
-	globMatchesLRUMu.Lock()
-	globMatchesLRU.Add(normalizedPattern, globCacheEntry{
-		matches: cachedCopy,
-		expiry:  time.Now().Add(globCacheTTL),
-	})
-	globMatchesLRUMu.Unlock()
+	if len(fullMatches) > 0 || cacheEmpty {
+		// Store a copy of the slice in the cache (not the shared backing slice).
+		// This prevents callers from mutating cached data and preserves empty results.
+		cachedCopy := make([]string, len(fullMatches))
+		copy(cachedCopy, fullMatches)
+
+		globMatchesLRUMu.Lock()
+		globMatchesLRU.Add(normalizedPattern, globCacheEntry{
+			matches: cachedCopy,
+			expiry:  time.Now().Add(ttl),
+		})
+		globMatchesLRUMu.Unlock()
+	}
 
 	return fullMatches, nil
 }
