@@ -1,7 +1,7 @@
 # Atmos MCP Servers — External MCP Server Management
 
-**Status:** In Progress — Phases 1–4 (auth) Implemented
-**Version:** 4.0
+**Status:** Complete — All 4 Phases Shipped
+**Version:** 5.0
 **Last Updated:** 2026-03-22
 
 ---
@@ -803,28 +803,25 @@ atmos mcp status         # Show all integration statuses
 atmos mcp restart <name> # Restart a server
 ```
 
-**Remaining for future:**
-- Toolchain integration for prerequisite management (`uvx`, `npx`)
-- Go template support in env vars (`{{ .vars.region }}`)
-
-### Phase 4: Advanced Features (Partial)
+### Phase 4: Advanced Features ✅ SHIPPED
 
 **Shipped:**
 - ~~Atmos Auth integration for credential injection~~ ✅ — `auth_identity` field on
   `MCPServerConfig`, `AuthEnvProvider` interface, `WithAuthManager` start option,
   `PrepareShellEnvironment` integration. 8 tests.
-
-**Remaining:**
-- Toolchain integration for prerequisite management (`uvx`, `npx`)
-- Go template support in env vars (`{{ .vars.region }}`)
-- Connection pooling and health checks
-- `tools/list_changed` notification handling
-- MCP server registry (curated list of known servers with defaults)
+- ~~Toolchain integration for prerequisite management~~ ✅ — `WithToolchain` start option,
+  `ToolchainResolver` interface, command binary resolution via `ForComponent`, toolchain
+  PATH prepended to subprocess environment. 3 tests.
+- ~~YAML functions in env vars~~ ✅ — `!env`, `!exec`, `!repo-root`, `!cwd`, `!random`
+  work out of the box in `atmos.yaml` via `preprocessAtmosYamlFunc`. No code needed.
 
 ### Future Considerations
 
 - Stack-level MCP server overrides (per-stack `settings.mcp.servers` config)
 - Composite MCP server (expose external tools via Atmos MCP server)
+- Connection pooling and health checks with auto-restart on failure
+- `tools/list_changed` notification handling for dynamic tool updates
+- MCP server registry (curated list of known servers with default configs)
 
 ---
 
@@ -852,7 +849,7 @@ atmos mcp restart <name> # Restart a server
 | Remove server | `claude mcp remove` | `atmos mcp remove` |
 | Config location | `.mcp.json` / `~/.claude.json` | `atmos.yaml` |
 | Config scopes | local / project / user | global (atmos.yaml) |
-| Transport | stdio / HTTP / SSE | stdio (Phase 1), HTTP (Phase 4) |
+| Transport | stdio / HTTP / SSE | stdio |
 | Tool namespacing | Flat (server-level) | `server.tool_name` |
 | Auth integration | None | Atmos Auth identities |
 | Prerequisite mgmt | Manual | Atmos Toolchain (automatic) |
