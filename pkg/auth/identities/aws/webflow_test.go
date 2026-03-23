@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -739,6 +741,984 @@ func TestCacheFilePermissions(t *testing.T) {
 	require.NoError(t, err)
 	// File should be readable/writable only by owner.
 	assert.Equal(t, os.FileMode(webflowCacheFilePerms), info.Mode().Perm())
+}
+
+func TestProcessTokenResponse_WithRefreshToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	tokenResp := &webflowTokenResponse{
+		AccessToken: webflowAccessToken{
+			AccessKeyID:     "AKID",
+			SecretAccessKey: "SECRET",
+			SessionToken:    "TOKEN",
+		},
+		ExpiresIn:    900,
+		RefreshToken: "my-refresh-token",
+	}
+
+	creds, err := identity.processTokenResponse(tokenResp, "us-west-2")
+	require.NoError(t, err)
+	assert.Equal(t, "AKID", creds.AccessKeyID)
+	assert.Equal(t, "SECRET", creds.SecretAccessKey)
+	assert.Equal(t, "TOKEN", creds.SessionToken)
+	assert.Equal(t, "us-west-2", creds.Region)
+
+	// Verify refresh token was cached.
+	cache, cacheErr := identity.loadRefreshCache()
+	require.NoError(t, cacheErr)
+	assert.Equal(t, "my-refresh-token", cache.RefreshToken)
+	assert.Equal(t, "us-west-2", cache.Region)
+	assert.WithinDuration(t, time.Now().Add(webflowSessionDuration), cache.ExpiresAt, 5*time.Second)
+}
+
+func TestProcessTokenResponse_WithoutRefreshToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	tokenResp := &webflowTokenResponse{
+		AccessToken: webflowAccessToken{
+			AccessKeyID:     "AKID",
+			SecretAccessKey: "SECRET",
+			SessionToken:    "TOKEN",
+		},
+		ExpiresIn: 900,
+		// No RefreshToken.
+	}
+
+	creds, err := identity.processTokenResponse(tokenResp, "eu-west-1")
+	require.NoError(t, err)
+	assert.Equal(t, "AKID", creds.AccessKeyID)
+	assert.Equal(t, "eu-west-1", creds.Region)
+
+	// No cache should exist.
+	_, cacheErr := identity.loadRefreshCache()
+	assert.Error(t, cacheErr)
+}
+
+func TestResolveCredentialsViaWebflow_RefreshSuccess(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+			Credentials: map[string]interface{}{
+				"region": "us-east-2",
+			},
+		},
+	}
+
+	// Save a valid refresh cache.
+	identity.saveRefreshCache(&webflowRefreshCache{
+		RefreshToken: "valid-token",
+		Region:       "us-east-2",
+		ExpiresAt:    time.Now().Add(10 * time.Hour),
+	})
+
+	// Mock token endpoint.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "REFRESHED_AKID",
+				"secretAccessKey": "REFRESHED_SECRET",
+				"sessionToken":    "REFRESHED_TOKEN",
+			},
+			"expiresIn":    900,
+			"refreshToken": "new-refresh-token",
+		})
+	}))
+	defer server.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	creds, err := identity.resolveCredentialsViaWebflow(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "REFRESHED_AKID", creds.AccessKeyID)
+	assert.Equal(t, "REFRESHED_SECRET", creds.SecretAccessKey)
+	assert.Equal(t, "REFRESHED_TOKEN", creds.SessionToken)
+	assert.Equal(t, "us-east-2", creds.Region)
+}
+
+func TestBrowserWebflow_NoPrompts(t *testing.T) {
+	identity := &userIdentity{
+		name: "test",
+		config: &schema.Identity{
+			Kind:        "aws/user",
+			Credentials: map[string]interface{}{},
+		},
+	}
+
+	// Context with prompts disallowed.
+	ctx := types.WithAllowPrompts(context.Background(), false)
+
+	creds, err := identity.browserWebflow(ctx, "us-east-1")
+	assert.Nil(t, creds)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowAuthFailed)
+}
+
+func TestWaitForCallbackSimple_Success(t *testing.T) {
+	identity := &userIdentity{
+		name: "test",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	// Mock token server.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_SIMPLE",
+				"secretAccessKey": "SECRET_SIMPLE",
+				"sessionToken":    "TOKEN_SIMPLE",
+			},
+			"expiresIn":    900,
+			"refreshToken": "refresh",
+		})
+	}))
+	defer server.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	resultCh := make(chan webflowResult, 1)
+	resultCh <- webflowResult{code: "auth-code", state: "state-123"}
+
+	resp, err := identity.waitForCallbackSimple(context.Background(), resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "AKID_SIMPLE", resp.AccessToken.AccessKeyID)
+}
+
+func TestWaitForCallbackSimple_Error(t *testing.T) {
+	identity := &userIdentity{
+		name: "test",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	resultCh := make(chan webflowResult, 1)
+	resultCh <- webflowResult{err: fmt.Errorf("callback failed")}
+
+	resp, err := identity.waitForCallbackSimple(context.Background(), resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowAuthFailed)
+}
+
+func TestWaitForCallbackSimple_ContextCancelled(t *testing.T) {
+	identity := &userIdentity{
+		name: "test",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Immediately cancel.
+
+	resultCh := make(chan webflowResult) // Unbuffered, will never receive.
+
+	resp, err := identity.waitForCallbackSimple(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTimeout)
+}
+
+func TestCallTokenEndpoint_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("not valid json")) //nolint:errcheck // Test code.
+	}))
+	defer server.Close()
+
+	mockClient := &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+
+	body := map[string]string{
+		"clientId":  webflowOAuthClientID,
+		"grantType": webflowGrantTypeAuthCode,
+		"code":      "code",
+	}
+
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+	assert.Contains(t, err.Error(), "parse token response")
+}
+
+func TestCallTokenEndpoint_NonOK_NoErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal server error")) //nolint:errcheck // Test code.
+	}))
+	defer server.Close()
+
+	mockClient := &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+
+	body := map[string]string{
+		"clientId":  webflowOAuthClientID,
+		"grantType": webflowGrantTypeAuthCode,
+		"code":      "code",
+	}
+
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+}
+
+func TestCallTokenEndpoint_NonOK_WithErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":             "invalid_grant",
+			"error_description": "Authorization code expired",
+		})
+	}))
+	defer server.Close()
+
+	mockClient := &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+
+	body := map[string]string{
+		"clientId":  webflowOAuthClientID,
+		"grantType": webflowGrantTypeAuthCode,
+		"code":      "expired-code",
+	}
+
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+}
+
+func TestCallTokenEndpoint_HTTPClientError(t *testing.T) {
+	mockClient := &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("network unreachable")
+		},
+	}
+
+	body := map[string]string{
+		"clientId":  webflowOAuthClientID,
+		"grantType": webflowGrantTypeAuthCode,
+		"code":      "code",
+	}
+
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+}
+
+func TestCallTokenEndpoint_MissingCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "",
+				"secretAccessKey": "",
+			},
+			"expiresIn": 900,
+		})
+	}))
+	defer server.Close()
+
+	mockClient := &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+
+	body := map[string]string{
+		"clientId":  webflowOAuthClientID,
+		"grantType": webflowGrantTypeAuthCode,
+		"code":      "code",
+	}
+
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+	assert.Contains(t, err.Error(), "missing credentials")
+}
+
+func TestRefreshWebflowCredentials_ExchangeFailureClearsCache(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	// Save a valid (non-expired) refresh cache.
+	identity.saveRefreshCache(&webflowRefreshCache{
+		RefreshToken: "valid-but-rejected-token",
+		Region:       "us-east-2",
+		ExpiresAt:    time.Now().Add(10 * time.Hour),
+	})
+
+	// Mock endpoint that rejects the refresh token.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":             "invalid_grant",
+			"error_description": "Refresh token is invalid",
+		})
+	}))
+	defer server.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	creds, err := identity.refreshWebflowCredentials(context.Background(), "us-east-2")
+	assert.Nil(t, creds)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowRefreshFailed)
+
+	// Cache should have been deleted.
+	cache, cacheErr := identity.loadRefreshCache()
+	assert.Nil(t, cache)
+	assert.Error(t, cacheErr)
+}
+
+func TestRefreshWebflowCredentials_UpdatesRefreshToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	originalExpiresAt := time.Now().Add(10 * time.Hour).Truncate(time.Second)
+
+	// Save initial refresh cache.
+	identity.saveRefreshCache(&webflowRefreshCache{
+		RefreshToken: "old-token",
+		Region:       "us-east-2",
+		ExpiresAt:    originalExpiresAt,
+	})
+
+	// Mock endpoint returns new refresh token.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID",
+				"secretAccessKey": "SECRET",
+				"sessionToken":    "TOKEN",
+			},
+			"expiresIn":    900,
+			"refreshToken": "rotated-token",
+		})
+	}))
+	defer server.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	creds, err := identity.refreshWebflowCredentials(context.Background(), "us-east-2")
+	require.NoError(t, err)
+	assert.Equal(t, "AKID", creds.AccessKeyID)
+
+	// Verify cache was updated with new refresh token but same expiry.
+	cache, cacheErr := identity.loadRefreshCache()
+	require.NoError(t, cacheErr)
+	assert.Equal(t, "rotated-token", cache.RefreshToken)
+	// ExpiresAt should not change (session end time is fixed).
+	assert.WithinDuration(t, originalExpiresAt, cache.ExpiresAt, time.Second)
+}
+
+func TestLoadRefreshCache_InvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	// Write invalid JSON to the cache file.
+	cachePath, err := identity.getRefreshCachePath()
+	require.NoError(t, err)
+	err = os.WriteFile(cachePath, []byte("not-json"), webflowCacheFilePerms)
+	require.NoError(t, err)
+
+	cache, loadErr := identity.loadRefreshCache()
+	assert.Nil(t, cache)
+	assert.Error(t, loadErr)
+	assert.Contains(t, loadErr.Error(), "parse refresh cache")
+}
+
+func TestLoadRefreshCache_EmptyRefreshToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	// Write cache with empty refresh token.
+	cachePath, err := identity.getRefreshCachePath()
+	require.NoError(t, err)
+	data, _ := json.Marshal(&webflowRefreshCache{
+		RefreshToken: "",
+		Region:       "us-east-1",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	})
+	err = os.WriteFile(cachePath, data, webflowCacheFilePerms)
+	require.NoError(t, err)
+
+	cache, loadErr := identity.loadRefreshCache()
+	assert.Nil(t, cache)
+	assert.Error(t, loadErr)
+	assert.Contains(t, loadErr.Error(), "empty")
+}
+
+func TestWebflowSpinnerModel_View(t *testing.T) {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+
+	tests := []struct {
+		name     string
+		model    webflowSpinnerModel
+		contains string
+	}{
+		{
+			name: "in progress",
+			model: webflowSpinnerModel{
+				spinner: s,
+				message: "Waiting for auth",
+				done:    false,
+			},
+			contains: "Waiting for auth",
+		},
+		{
+			name: "done with error",
+			model: webflowSpinnerModel{
+				spinner: s,
+				done:    true,
+				result:  &webflowSpinnerTokenResult{err: fmt.Errorf("failed")},
+			},
+			contains: "Authentication failed",
+		},
+		{
+			name: "done success",
+			model: webflowSpinnerModel{
+				spinner: s,
+				done:    true,
+				result:  &webflowSpinnerTokenResult{resp: &webflowTokenResponse{}},
+			},
+			contains: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			view := tt.model.View()
+			if tt.contains != "" {
+				assert.Contains(t, view, tt.contains)
+			}
+		})
+	}
+}
+
+func TestWebflowSpinnerModel_Update_CtrlC(t *testing.T) {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+
+	cancelled := false
+	model := webflowSpinnerModel{
+		spinner: s,
+		message: "Waiting",
+		tokenCh: make(<-chan webflowSpinnerTokenResult),
+		cancel:  func() { cancelled = true },
+	}
+
+	msg := tea.KeyMsg{Type: tea.KeyCtrlC}
+	updated, _ := model.Update(msg)
+	m := updated.(webflowSpinnerModel)
+
+	assert.True(t, m.done)
+	assert.NotNil(t, m.result)
+	assert.ErrorIs(t, m.result.err, errUtils.ErrUserAborted)
+	assert.True(t, cancelled)
+}
+
+func TestWebflowSpinnerModel_Update_TokenResult(t *testing.T) {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+
+	cancelled := false
+	model := webflowSpinnerModel{
+		spinner: s,
+		message: "Waiting",
+		tokenCh: make(<-chan webflowSpinnerTokenResult),
+		cancel:  func() { cancelled = true },
+	}
+
+	tokenResult := webflowSpinnerTokenResult{
+		resp: &webflowTokenResponse{
+			AccessToken: webflowAccessToken{
+				AccessKeyID:     "AKID",
+				SecretAccessKey: "SECRET",
+				SessionToken:    "TOKEN",
+			},
+		},
+	}
+
+	updated, _ := model.Update(tokenResult)
+	m := updated.(webflowSpinnerModel)
+
+	assert.True(t, m.done)
+	assert.NotNil(t, m.result)
+	assert.NoError(t, m.result.err)
+	assert.Equal(t, "AKID", m.result.resp.AccessToken.AccessKeyID)
+	assert.True(t, cancelled)
+}
+
+func TestBrowserWebflowInteractive_EndToEnd(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+			Credentials: map[string]interface{}{
+				"region": "us-east-2",
+			},
+		},
+	}
+
+	// Mock token endpoint.
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_INTERACTIVE",
+				"secretAccessKey": "SECRET_INTERACTIVE",
+				"sessionToken":    "TOKEN_INTERACTIVE",
+			},
+			"expiresIn":    900,
+			"refreshToken": "refresh-interactive",
+		})
+	}))
+	defer tokenServer.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(tokenServer.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	// Non-TTY so waitForCallbackWithSpinner takes the simple path (avoids bubbletea in test).
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return false }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	// Mock display dialog to capture the auth URL and simulate callback.
+	origDisplay := displayWebflowDialogFunc
+	displayWebflowDialogFunc = func(authURL string) {
+		parsed, _ := url.Parse(authURL)
+		redirectURI := parsed.Query().Get("redirect_uri")
+		state := parsed.Query().Get("state")
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			callbackURL := fmt.Sprintf("%s?code=test-auth-code&state=%s", redirectURI, state)
+			resp, err := http.Get(callbackURL) //nolint:gosec // Test code.
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
+	}
+	defer func() { displayWebflowDialogFunc = origDisplay }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ctx = types.WithAllowPrompts(ctx, true)
+
+	creds, err := identity.browserWebflowInteractive(ctx, "us-east-2")
+	require.NoError(t, err)
+	assert.Equal(t, "AKID_INTERACTIVE", creds.AccessKeyID)
+	assert.Equal(t, "SECRET_INTERACTIVE", creds.SecretAccessKey)
+	assert.Equal(t, "TOKEN_INTERACTIVE", creds.SessionToken)
+}
+
+func TestWaitForCallbackWithSpinner_NonTTY(t *testing.T) {
+	identity := &userIdentity{
+		name: "test",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	// Mock token endpoint.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_SPINNER",
+				"secretAccessKey": "SECRET_SPINNER",
+				"sessionToken":    "TOKEN_SPINNER",
+			},
+			"expiresIn": 900,
+		})
+	}))
+	defer server.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	// Ensure non-TTY so it falls back to waitForCallbackSimple.
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return false }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	resultCh := make(chan webflowResult, 1)
+	resultCh <- webflowResult{code: "callback-code", state: "state"}
+
+	resp, err := identity.waitForCallbackWithSpinner(context.Background(), resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	require.NoError(t, err)
+	assert.Equal(t, "AKID_SPINNER", resp.AccessToken.AccessKeyID)
+}
+
+func TestBrowserWebflow_Interactive(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+			Credentials: map[string]interface{}{
+				"region": "us-east-2",
+			},
+		},
+	}
+
+	// Mock token endpoint.
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_BW",
+				"secretAccessKey": "SECRET_BW",
+				"sessionToken":    "TOKEN_BW",
+			},
+			"expiresIn":    900,
+			"refreshToken": "refresh-bw",
+		})
+	}))
+	defer tokenServer.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(tokenServer.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	// Mock TTY: true for browserWebflow's dispatch to interactive, but non-TTY
+	// for waitForCallbackWithSpinner to avoid bubbletea in tests.
+	ttyCallCount := 0
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool {
+		ttyCallCount++
+		// First call: browserWebflow checks TTY -> true (enters interactive path).
+		// Second call: waitForCallbackWithSpinner checks TTY -> false (uses simple path).
+		return ttyCallCount == 1
+	}
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	// Mock display dialog to simulate callback (works regardless of IsCI).
+	origDisplay := displayWebflowDialogFunc
+	displayWebflowDialogFunc = func(authURL string) {
+		parsed, _ := url.Parse(authURL)
+		redirectURI := parsed.Query().Get("redirect_uri")
+		state := parsed.Query().Get("state")
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			callbackURL := fmt.Sprintf("%s?code=bw-code&state=%s", redirectURI, state)
+			resp, err := http.Get(callbackURL) //nolint:gosec // Test code.
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
+	}
+	defer func() { displayWebflowDialogFunc = origDisplay }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ctx = types.WithAllowPrompts(ctx, true)
+
+	creds, err := identity.browserWebflow(ctx, "us-east-2")
+	require.NoError(t, err)
+	assert.Equal(t, "AKID_BW", creds.AccessKeyID)
+}
+
+
+func TestDisplayWebflowDialog(t *testing.T) {
+	// Just verify it doesn't panic.
+	displayWebflowDialog("https://example.com/auth")
+}
+
+func TestDisplayWebflowDialogPlainText(t *testing.T) {
+	// Just verify it doesn't panic.
+	displayWebflowDialogPlainText("https://example.com/auth")
+}
+
+func TestWebflowIsTTY(t *testing.T) {
+	// In test environment, stderr is typically not a TTY.
+	result := webflowIsTTY()
+	assert.False(t, result)
+}
+
+func TestWebflowIsInteractive(t *testing.T) {
+	// Without force-tty, in test env this should return false.
+	result := webflowIsInteractive()
+	assert.False(t, result)
+}
+
+func TestWebflowSpinnerModel_Init(t *testing.T) {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	tokenCh := make(chan webflowSpinnerTokenResult)
+
+	model := webflowSpinnerModel{
+		spinner: s,
+		message: "Test",
+		tokenCh: tokenCh,
+		cancel:  func() {},
+	}
+
+	cmd := model.Init()
+	assert.NotNil(t, cmd)
+}
+
+func TestWebflowSpinnerModel_CheckResult(t *testing.T) {
+	tokenCh := make(chan webflowSpinnerTokenResult, 1)
+	tokenCh <- webflowSpinnerTokenResult{
+		resp: &webflowTokenResponse{
+			AccessToken: webflowAccessToken{AccessKeyID: "AKID_CHECK"},
+		},
+	}
+
+	s := spinner.New()
+	model := webflowSpinnerModel{
+		spinner: s,
+		tokenCh: tokenCh,
+	}
+
+	cmd := model.checkResult()
+	require.NotNil(t, cmd)
+
+	// Execute the command to get the result.
+	msg := cmd()
+	result, ok := msg.(webflowSpinnerTokenResult)
+	require.True(t, ok)
+	assert.Equal(t, "AKID_CHECK", result.resp.AccessToken.AccessKeyID)
+}
+
+func TestExchangeRefreshToken_HTTPError(t *testing.T) {
+	mockClient := &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("connection reset")
+		},
+	}
+
+	resp, err := exchangeRefreshToken(context.Background(), mockClient, "us-east-2", "token")
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowTokenExchange)
+}
+
+func TestDeleteRefreshCache_NonExistent(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	// Should not panic when deleting non-existent cache.
+	identity.deleteRefreshCache()
+}
+
+func TestGetSigninEndpoint_Regions(t *testing.T) {
+	tests := []struct {
+		region   string
+		expected string
+	}{
+		{"us-east-1", "https://signin.aws.amazon.com"},
+		{"us-west-1", "https://us-west-1.signin.aws.amazon.com"},
+		{"cn-north-1", "https://cn-north-1.signin.aws.amazon.com"},
+		{"us-gov-west-1", "https://us-gov-west-1.signin.aws.amazon.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.region, func(t *testing.T) {
+			assert.Equal(t, tt.expected, getSigninEndpoint(tt.region))
+		})
+	}
+}
+
+func TestCallTokenEndpoint_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_DIRECT",
+				"secretAccessKey": "SECRET_DIRECT",
+				"sessionToken":    "TOKEN_DIRECT",
+			},
+			"expiresIn":    900,
+			"refreshToken": "refresh-direct",
+			"tokenType":    "urn:aws:params:oauth:token-type:access_token_sigv4",
+		})
+	}))
+	defer server.Close()
+
+	mockClient := &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(server.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+
+	body := map[string]string{
+		"clientId":  webflowOAuthClientID,
+		"grantType": webflowGrantTypeAuthCode,
+		"code":      "auth-code",
+	}
+
+	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
+	require.NoError(t, err)
+	assert.Equal(t, "AKID_DIRECT", resp.AccessToken.AccessKeyID)
+	assert.Equal(t, "SECRET_DIRECT", resp.AccessToken.SecretAccessKey)
+	assert.Equal(t, "TOKEN_DIRECT", resp.AccessToken.SessionToken)
+	assert.Equal(t, 900, resp.ExpiresIn)
+	assert.Equal(t, "refresh-direct", resp.RefreshToken)
+}
+
+func TestGetRefreshCachePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "my-identity",
+		realm: "my-realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	path, err := identity.getRefreshCachePath()
+	require.NoError(t, err)
+	assert.Contains(t, path, filepath.Join("aws-webflow", "my-identity-my-realm", "refresh.json"))
 }
 
 // mockHTTPClient is a test helper for mocking HTTP requests.

@@ -25,6 +25,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -97,6 +98,17 @@ type webflowTokenErrorResponse struct {
 // defaultHTTPClient is the default HTTP client for token exchange.
 var defaultHTTPClient HTTPClient = &http.Client{Timeout: 30 * time.Second}
 
+// openURLFunc opens a URL in the default browser. Overridable for testing.
+var openURLFunc = func(url string) error {
+	return browser.New().Open(url)
+}
+
+// webflowIsTTYFunc checks if the terminal is a TTY. Overridable for testing.
+var webflowIsTTYFunc = webflowIsTTY
+
+// displayWebflowDialogFunc shows the authentication URL. Overridable for testing.
+var displayWebflowDialogFunc = displayWebflowDialog
+
 // resolveCredentialsViaWebflow attempts to obtain AWS credentials via the OAuth2 browser flow.
 // It first tries to refresh using a cached refresh token, then falls back to a full browser flow.
 func (i *userIdentity) resolveCredentialsViaWebflow(ctx context.Context) (*types.AWSCredentials, error) {
@@ -162,7 +174,7 @@ func (i *userIdentity) browserWebflow(ctx context.Context, region string) (*type
 
 	allowPrompts := types.AllowPrompts(ctx)
 
-	if allowPrompts && webflowIsInteractive() {
+	if allowPrompts && webflowIsTTYFunc() {
 		return i.browserWebflowInteractive(ctx, region)
 	}
 
@@ -207,10 +219,10 @@ func (i *userIdentity) browserWebflowInteractive(ctx context.Context, region str
 	redirectURI := fmt.Sprintf("http://127.0.0.1:%d%s", port, webflowCallbackPath)
 
 	// Display UI and open browser.
-	displayWebflowDialog(authURL)
+	displayWebflowDialogFunc(authURL)
 
 	if !telemetry.IsCI() {
-		if err := utils.OpenUrl(authURL); err != nil {
+		if err := openURLFunc(authURL); err != nil {
 			log.Debug("Failed to open browser automatically", "error", err)
 		}
 	}
@@ -306,7 +318,7 @@ func (i *userIdentity) browserWebflowNonInteractive(ctx context.Context, region 
 
 // waitForCallbackWithSpinner waits for the OAuth2 callback with a spinner UI.
 func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh <-chan webflowResult, region, verifier, redirectURI string) (*webflowTokenResponse, error) {
-	if !webflowIsTTY() || telemetry.IsCI() {
+	if !webflowIsTTYFunc() || telemetry.IsCI() {
 		return i.waitForCallbackSimple(ctx, resultCh, region, verifier, redirectURI)
 	}
 
