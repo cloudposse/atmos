@@ -2,7 +2,14 @@
 
 This example demonstrates how to connect Atmos to external MCP (Model Context Protocol) servers from the AWS ecosystem.
 Instead of reimplementing cloud provider functionality, Atmos installs and orchestrates existing MCP servers — their
-tools become available in `atmos ai chat` and `atmos ai exec` alongside native Atmos tools.
+tools become available across the Atmos AI surface:
+
+- **`atmos ai chat`** — interactive conversations with MCP tools
+- **`atmos ai ask`** — one-shot questions using MCP tools
+- **`atmos ai exec`** — execute AI-driven tasks with MCP tools
+- **`atmos terraform plan --ai`** — AI analysis of command output with MCP context
+- **`atmos mcp tools <name>`** — directly list tools from any MCP server
+- **`atmos mcp test <name>`** — verify server connectivity and available tools
 
 ## What's Included
 
@@ -91,40 +98,111 @@ atmos mcp remove my-server
 
 ### Using MCP Tools in AI Chat
 
-Once configured, MCP server tools appear alongside native Atmos tools in AI conversations:
+Interactive chat sessions with full access to all MCP server tools:
 
 ```bash
 # Start an AI chat session — MCP tools are automatically available
 atmos ai chat
 
-# Example prompts that use MCP tools:
-#
+# Example prompts:
 # "What's the current pricing for m7i.xlarge instances in us-east-1?"
-#   → Uses aws-pricing tools
-#
 # "Check the security posture of our production account"
-#   → Uses aws-security tools (CheckSecurityServices, CheckStorageEncryption)
-#
 # "Search AWS docs for how to set up VPC peering"
-#   → Uses aws-docs tools
-#
 # "List all EC2 instances in us-west-2"
-#   → Uses aws-api tools (with READ_OPERATIONS_ONLY=true)
-#
 # "What AWS services are available in the af-south-1 region?"
-#   → Uses aws-knowledge tools
 ```
 
-### Using with the --ai Flag
+### Using MCP Tools with `atmos ai ask`
 
-MCP tools are also available when using the `--ai` flag on Terraform commands:
+One-shot questions — get an answer and exit. No interactive session:
 
 ```bash
-# After a terraform plan, AI can use MCP tools for context
-atmos terraform plan vpc -s prod --ai
+# Pricing questions
+atmos ai ask "What's the on-demand price for an m7i.xlarge in us-east-1?"
 
-# The AI might use aws-pricing to estimate cost impact,
-# or aws-docs to reference best practices for the resources being created.
+# Documentation lookups
+atmos ai ask "How do I configure S3 bucket versioning?"
+
+# Security checks
+atmos ai ask "Is GuardDuty enabled in us-east-1?"
+
+# AWS knowledge
+atmos ai ask "Which AWS regions support Amazon Bedrock?"
+
+# Cost comparison
+atmos ai ask "Compare the pricing of t3.medium vs t3.large in us-west-2"
+```
+
+### Using MCP Tools with `atmos ai exec`
+
+Execute multi-step AI tasks with tool access:
+
+```bash
+# Generate a security report
+atmos ai exec "Check security services, storage encryption, and network \
+  security in us-east-1, then summarize the findings as a markdown report"
+
+# Research pricing for a migration
+atmos ai exec "Look up pricing for m7i.xlarge, r7i.2xlarge, and c7i.xlarge \
+  in us-east-1 and us-west-2, then create a comparison table"
+
+# Documentation research
+atmos ai exec "Find AWS best practices for EKS cluster security, \
+  then list the top 5 recommendations with links"
+```
+
+### Using MCP Tools with the `--ai` Flag
+
+When you add `--ai` to any Atmos command, the output is sent to AI for analysis.
+MCP tools provide additional context for the analysis:
+
+```bash
+# Analyze a terraform plan with pricing context
+atmos terraform plan vpc -s prod --ai
+# AI can use aws-pricing to estimate cost impact of the planned changes
+
+# Analyze terraform output with security context
+atmos terraform plan eks -s prod --ai
+# AI can use aws-security to check if the EKS config follows best practices
+
+# Analyze stack configuration with documentation context
+atmos describe stacks -s prod --ai
+# AI can use aws-docs to reference relevant AWS documentation
+
+# Combine with skills for deeper analysis
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform
+```
+
+### Directly Exploring MCP Servers
+
+Use `atmos mcp` commands to explore what each server offers without AI:
+
+```bash
+# List all tools from the AWS API server
+atmos mcp tools aws-api
+
+# List tools from the security server
+atmos mcp tools aws-security
+# Example output:
+#   TOOL                      DESCRIPTION
+#   CheckSecurityServices     Verify security services are enabled
+#   GetSecurityFindings       Retrieve security findings with severity filtering
+#   CheckStorageEncryption    Check encryption on S3, EBS, RDS, DynamoDB, EFS
+#   CheckNetworkSecurity      Check TLS/HTTPS on ELB, VPC, API Gateway
+#   ListServicesInRegion      List active AWS services in a region
+
+# List tools from the pricing server
+atmos mcp tools aws-pricing
+
+# Test all servers at once
+atmos mcp status
+# Example output:
+#   NAME            STATUS    TOOLS   DESCRIPTION
+#   aws-api         running   3       AWS API — direct AWS CLI access
+#   aws-docs        running   4       AWS Documentation — search and fetch
+#   aws-knowledge   running   2       AWS Knowledge — managed knowledge base
+#   aws-pricing     running   7       AWS Pricing — real-time pricing
+#   aws-security    running   6       AWS Security — posture assessment
 ```
 
 ## Configuration Reference
@@ -266,7 +344,7 @@ Real-time pricing lookups and cost comparisons. All Pricing API calls are free.
 
 ### aws-docs — Documentation Search
 
-Searches and fetches AWS documentation in markdown format. No credentials needed.
+Searches and fetches AWS documentation in Markdown format. No credentials needed.
 
 ### aws-knowledge — Managed Knowledge Base
 
