@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -71,6 +72,34 @@ func WithGitHubToken(token string) ClientOption {
 	}
 }
 
+// WithGitHubHostMatcher sets a custom host-matching predicate on the GitHub authenticated
+// transport. The predicate receives the request hostname (without port) and returns true
+// when the host should receive GitHub authentication headers.
+//
+// This is useful for GitHub Enterprise Server (GHES) deployments or custom GitHub proxies
+// where the API is hosted on a non-standard domain.
+//
+// Example usage:
+//
+//	client := NewDefaultClient(
+//	    WithGitHubToken("token"),
+//	    WithGitHubHostMatcher(func(host string) bool {
+//	        return host == "github.mycorp.example.com"
+//	    }),
+//	)
+//
+// If this option is applied before WithGitHubToken, it has no effect because there is no
+// transport to configure yet. Apply it after WithGitHubToken.
+func WithGitHubHostMatcher(matcher func(string) bool) ClientOption {
+	defer perf.Track(nil, "http.WithGitHubHostMatcher")()
+
+	return func(c *DefaultClient) {
+		if authTransport, ok := c.client.Transport.(*GitHubAuthenticatedTransport); ok {
+			authTransport.hostMatcher = matcher
+		}
+	}
+}
+
 // WithTransport sets a custom HTTP transport.
 // If a GitHubAuthenticatedTransport has already been applied (e.g., via WithGitHubToken),
 // the provided transport is set as its Base rather than replacing the auth wrapper.
@@ -118,6 +147,27 @@ func NewDefaultClient(opts ...ClientOption) *DefaultClient {
 type GitHubAuthenticatedTransport struct {
 	Base        http.RoundTripper
 	GitHubToken string
+
+	// hostMatcher is an optional custom predicate that decides whether a given hostname
+	// should receive GitHub authentication headers. If nil, the default allowlist is used.
+	// See WithGitHubHostMatcher for details.
+	hostMatcher func(string) bool
+}
+
+// isGitHubHost is the default host allowlist.
+// It is also used as the fallback when GitHubAuthenticatedTransport.hostMatcher is nil.
+func isGitHubHost(host string) bool {
+	// Respect GITHUB_API_URL for GitHub Enterprise Server (GHES) and similar deployments.
+	// When set, the hostname of GITHUB_API_URL is treated as an allowed GitHub API host.
+	//nolint:forbidigo // Direct env lookup required for GHES configuration.
+	if apiURL := os.Getenv("GITHUB_API_URL"); apiURL != "" {
+		parsed, err := url.ParseRequestURI(apiURL)
+		if err == nil && parsed.Hostname() == host {
+			return true
+		}
+	}
+
+	return host == "api.github.com" || host == "raw.githubusercontent.com"
 }
 
 // RoundTrip implements http.RoundTripper interface.
@@ -128,10 +178,19 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 	reqClone := req.Clone(req.Context())
 
 	host := reqClone.URL.Hostname()
-	if (host == "api.github.com" || host == "raw.githubusercontent.com") && t.GitHubToken != "" {
-		// Only set Authorization if not already set, so the outermost (last-applied)
-		// GitHubAuthenticatedTransport layer wins when multiple WithGitHubToken calls
-		// are composed. Inner (earlier-applied) layers must not overwrite the outer token.
+	scheme := reqClone.URL.Scheme
+
+	// Determine whether the host is allowed to receive authentication headers.
+	matcher := t.hostMatcher
+	if matcher == nil {
+		matcher = isGitHubHost
+	}
+
+	// Only inject Authorization when ALL of the following are true:
+	//   1. The scheme is "https" (prevent token leakage over plain HTTP).
+	//   2. The host is in the allowed list.
+	//   3. The header is not already set (outermost transport wins on multi-layer composition).
+	if scheme == "https" && matcher(host) && t.GitHubToken != "" {
 		if reqClone.Header.Get("Authorization") == "" {
 			reqClone.Header.Set("Authorization", "Bearer "+t.GitHubToken)
 		}

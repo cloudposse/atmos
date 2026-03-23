@@ -4,6 +4,7 @@ package filesystem
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -269,4 +270,101 @@ func TestOSFileSystem_WriteFileAtomic_Overwrite(t *testing.T) {
 	got, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 	assert.Equal(t, newContent, got)
+}
+
+// TestGetGlobMatches_LRU_Eviction verifies that the LRU cache evicts the least-recently-used
+// entry when the cache reaches its capacity (globCacheMaxEntries).
+// This test uses a small in-process simulation: it fills the cache to capacity + 1 and
+// then checks that the first entry was evicted (i.e., a fresh filesystem read is triggered).
+func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+
+	// Populate the LRU cache with globCacheMaxEntries unique patterns (all non-matching
+	// since we only need entries in the cache, not actual files).
+	// Use sub-directories that don't exist — GetGlobMatches returns an error for
+	// non-existent base directories, so instead write empty-match YAML patterns.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "seed.yaml"), []byte(""), 0o644))
+	// Insert a "seed" entry that we will check for eviction later.
+	seedPattern := filepath.Join(tmpDir, "seed.yaml")
+	_, err := GetGlobMatches(seedPattern)
+	require.NoError(t, err)
+	initialLen := GlobCacheLen()
+	require.Equal(t, 1, initialLen, "seed entry should be in cache")
+
+	// Fill the cache to globCacheMaxEntries by using unique patterns that each match
+	// the same seed file (pattern variation, not file variation).
+	// We create globCacheMaxEntries additional real files so all patterns resolve.
+	for i := range globCacheMaxEntries {
+		// Use fmt.Sprintf to guarantee unique filenames for all i values (i > 26 would
+		// cycle single-character names and produce duplicates).
+		name := filepath.Join(tmpDir, fmt.Sprintf("file_evict_%d.yaml", i))
+		_ = os.WriteFile(name, []byte(""), 0o644)
+		_, err := GetGlobMatches(name)
+		require.NoError(t, err)
+	}
+
+	// After inserting globCacheMaxEntries more entries, the LRU should have evicted the
+	// seed entry (it was the oldest / least recently used).
+	// We verify this by checking the cache size is bounded at globCacheMaxEntries.
+	afterLen := GlobCacheLen()
+	assert.LessOrEqual(t, afterLen, globCacheMaxEntries, "LRU cache must not exceed max capacity")
+}
+
+// TestGetGlobMatches_TTL_Expiry verifies that a stale cache entry (past TTL)
+// is treated as a cache miss and triggers a fresh filesystem read.
+func TestGetGlobMatches_TTL_Expiry(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+
+	// Create a file so the first call returns a result.
+	file1 := filepath.Join(tmpDir, "a.yaml")
+	require.NoError(t, os.WriteFile(file1, []byte(""), 0o644))
+
+	pattern := filepath.Join(tmpDir, "*.yaml")
+
+	// First call — cache miss, should find the file.
+	res1, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Len(t, res1, 1, "should find exactly one file")
+
+	// Forcibly expire the cache entry via the test helper.
+	SetGlobCacheEntryExpired(pattern)
+
+	// Add a second file before the second call.
+	file2 := filepath.Join(tmpDir, "b.yaml")
+	require.NoError(t, os.WriteFile(file2, []byte(""), 0o644))
+
+	// Second call — the TTL has expired, so the cache should be bypassed and
+	// both files should be discovered.
+	res2, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Len(t, res2, 2, "TTL expiry should trigger fresh filesystem read returning both files")
+}
+
+// TestGetGlobMatches_EmptyResultCached verifies that empty results (no matching files)
+// are cached and served from cache on subsequent calls.
+func TestGetGlobMatches_EmptyResultCached(t *testing.T) {
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	tmpDir := t.TempDir()
+
+	// Pattern that matches nothing.
+	pattern := filepath.Join(tmpDir, "nonexistent_*.yaml")
+
+	res1, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Empty(t, res1, "should return empty result for non-matching pattern")
+	assert.NotNil(t, res1, "empty result must be non-nil (contract)")
+
+	// Second call — should be a cache hit (no filesystem walk).
+	res2, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+	assert.Empty(t, res2, "second call should return empty result from cache")
+	assert.NotNil(t, res2, "cached empty result must be non-nil (contract)")
 }

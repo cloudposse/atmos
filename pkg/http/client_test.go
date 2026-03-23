@@ -153,13 +153,13 @@ func TestGitHubAuthenticatedTransport_RoundTrip(t *testing.T) {
 			expectUserAgent: false,
 		},
 		{
-			// Plain HTTP (not HTTPS) api.github.com — ensure auth is still gated on the hostname,
-			// not the scheme (real GitHub rejects HTTP anyway, but the guard must not be bypassed).
-			name:            "http scheme api.github.com sets auth header",
+			// Plain HTTP (not HTTPS) api.github.com — Authorization MUST NOT be set.
+			// Sending tokens over unencrypted HTTP would leak credentials.
+			name:            "http scheme api.github.com does not set auth header",
 			url:             "http://api.github.com/repos/test/repo",
 			token:           "test-token",
-			expectAuth:      true,
-			expectUserAgent: true,
+			expectAuth:      false,
+			expectUserAgent: false,
 		},
 		{
 			name:            "empty token does not set auth header",
@@ -781,4 +781,205 @@ func TestGitHubAuthenticatedTransport_PresetAuthorizationNotClobbered(t *testing
 	require.NotNil(t, capturedReq, "mock transport must be reached")
 	assert.Equal(t, "Bearer preset-token", capturedReq.Header.Get("Authorization"),
 		"transport must not overwrite a pre-set Authorization header on the request")
+}
+
+// TestGitHubAuthenticatedTransport_GHES verifies that a GitHub Enterprise Server host
+// (specified via GITHUB_API_URL) receives authentication headers.
+func TestGitHubAuthenticatedTransport_GHES(t *testing.T) {
+	ghesHost := "github.mycorp.example.com"
+	ghesURL := "https://" + ghesHost
+
+	// Set GITHUB_API_URL so isGitHubHost recognises the GHES host.
+	t.Setenv("GITHUB_API_URL", ghesURL)
+
+	var capturedReq *http.Request
+	mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		capturedReq = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("OK")),
+		}, nil
+	})
+
+	transport := &GitHubAuthenticatedTransport{
+		Base:        mockTransport,
+		GitHubToken: "ghes-token",
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ghesURL+"/api/v3/repos/org/repo", nil)
+	require.NoError(t, err)
+
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	defer resp.Body.Close()
+
+	require.NotNil(t, capturedReq, "mock transport must be reached")
+	assert.Equal(t, "Bearer ghes-token", capturedReq.Header.Get("Authorization"),
+		"GHES host from GITHUB_API_URL must receive Authorization header")
+	assert.Equal(t, userAgent, capturedReq.Header.Get("User-Agent"))
+}
+
+// TestGitHubAuthenticatedTransport_GHES_NegativeSubdomain verifies that a host that
+// contains the GHES hostname as a substring (e.g. attacker.github.mycorp.example.com)
+// does NOT receive the Authorization header.
+func TestGitHubAuthenticatedTransport_GHES_NegativeSubdomain(t *testing.T) {
+	// Set GITHUB_API_URL for a specific GHES host.
+	t.Setenv("GITHUB_API_URL", "https://github.mycorp.example.com")
+
+	var capturedReq *http.Request
+	mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		capturedReq = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("OK")),
+		}, nil
+	})
+
+	transport := &GitHubAuthenticatedTransport{
+		Base:        mockTransport,
+		GitHubToken: "ghes-token",
+	}
+
+	// This host is a superdomain of the GHES host — must NOT get auth headers.
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://attacker.github.mycorp.example.com/evil", nil)
+	require.NoError(t, err)
+
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.NotNil(t, capturedReq)
+	assert.Empty(t, capturedReq.Header.Get("Authorization"),
+		"superdomain of GHES host must NOT receive Authorization header")
+}
+
+// TestWithGitHubHostMatcher verifies that WithGitHubHostMatcher allows configuring
+// a custom host predicate on the GitHubAuthenticatedTransport.
+func TestWithGitHubHostMatcher(t *testing.T) {
+	var capturedReq *http.Request
+	mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		capturedReq = req
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("OK")),
+		}, nil
+	})
+
+	// Create a client with a custom host matcher that allows only our test host.
+	client := NewDefaultClient(
+		WithTransport(mockTransport),
+		WithGitHubToken("custom-token"),
+		WithGitHubHostMatcher(func(host string) bool {
+			return host == "custom-git.example.com"
+		}),
+	)
+
+	// Allowed custom host — should get auth headers.
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://custom-git.example.com/api/v1/repos", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.NotNil(t, capturedReq)
+	assert.Equal(t, "Bearer custom-token", capturedReq.Header.Get("Authorization"),
+		"custom host matcher must allow the configured host")
+
+	// Default allowed host (api.github.com) — should NOT get auth with a custom matcher
+	// that only allows custom-git.example.com.
+	req2, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.github.com/repos", nil)
+	require.NoError(t, err)
+
+	resp2, err := client.Do(req2)
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+
+	assert.Empty(t, capturedReq.Header.Get("Authorization"),
+		"custom host matcher must override the default allowlist")
+}
+
+// TestGet_LargeErrorBodyTruncation verifies that when an HTTP server returns a non-2xx
+// response with a body larger than maxErrorBodySize, the error message:
+//   - contains the "[truncated]" marker
+//   - contains the content-type from the response
+//   - wraps ErrHTTPRequestFailed
+func TestGet_LargeErrorBodyTruncation(t *testing.T) {
+	// Build a response body that is one byte larger than the limit.
+	// We use a mix of characters to make it identifiable.
+	oversizeBody := strings.Repeat("x", maxErrorBodySize+1)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = fmt.Fprint(w, oversizeBody)
+	}))
+	defer server.Close()
+
+	client := NewDefaultClient(WithTimeout(10 * time.Second))
+	_, err := Get(context.Background(), server.URL, client)
+
+	require.Error(t, err, "a non-2xx response should return an error")
+	assert.True(t, errors.Is(err, errUtils.ErrHTTPRequestFailed), "error must wrap ErrHTTPRequestFailed")
+	assert.Contains(t, err.Error(), "[truncated]", "error message must contain truncation marker")
+	assert.Contains(t, err.Error(), "text/plain", "error message must contain content-type from response")
+	assert.Contains(t, err.Error(), "returned status 502", "error message must contain the status code")
+}
+
+// TestGet_ErrorBodyContentType verifies that the content-type header value from a
+// non-2xx response is correctly reported in the error message when the body fits within
+// the truncation limit.
+func TestGet_ErrorBodyContentType(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = fmt.Fprint(w, `{"error":"forbidden"}`)
+	}))
+	defer server.Close()
+
+	client := NewDefaultClient(WithTimeout(10 * time.Second))
+	_, err := Get(context.Background(), server.URL, client)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "application/json", "error must contain the Content-Type header value")
+	assert.NotContains(t, err.Error(), "[truncated]", "short body must not be truncated")
+}
+
+// TestIsGitHubHost_DefaultAllowlist verifies the default isGitHubHost allowlist
+// without any GITHUB_API_URL override.
+func TestIsGitHubHost_DefaultAllowlist(t *testing.T) {
+	// Ensure GITHUB_API_URL is not set so we test default behavior.
+	t.Setenv("GITHUB_API_URL", "")
+
+	assert.True(t, isGitHubHost("api.github.com"))
+	assert.True(t, isGitHubHost("raw.githubusercontent.com"))
+
+	assert.False(t, isGitHubHost("github.com"))
+	assert.False(t, isGitHubHost("example.com"))
+	assert.False(t, isGitHubHost("github.example.com"))
+	assert.False(t, isGitHubHost("example.github.com"))
+	assert.False(t, isGitHubHost(""))
+}
+
+// TestIsGitHubHost_GITHUB_API_URL verifies that GITHUB_API_URL adds a GHES host.
+func TestIsGitHubHost_GITHUB_API_URL(t *testing.T) {
+	t.Setenv("GITHUB_API_URL", "https://github.mycorp.example.com")
+
+	assert.True(t, isGitHubHost("github.mycorp.example.com"), "GITHUB_API_URL hostname should be allowed")
+	assert.True(t, isGitHubHost("api.github.com"), "default allowlist still applies")
+
+	// Only exact hostname match, not substring.
+	assert.False(t, isGitHubHost("evil.github.mycorp.example.com"))
+	assert.False(t, isGitHubHost("github.mycorp.example.com.evil.tld"))
+}
+
+// TestIsGitHubHost_InvalidGITHUB_API_URL verifies that an unparsable GITHUB_API_URL
+// does not panic and falls back to the default allowlist.
+func TestIsGitHubHost_InvalidGITHUB_API_URL(t *testing.T) {
+	t.Setenv("GITHUB_API_URL", "://not-a-valid-url")
+
+	// Default allowlist still applies even when GITHUB_API_URL is invalid.
+	assert.True(t, isGitHubHost("api.github.com"))
+	assert.False(t, isGitHubHost("example.com"))
 }

@@ -4,12 +4,31 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
+
+	lru "github.com/hashicorp/golang-lru/v2"
 
 	"github.com/bmatcuk/doublestar/v4"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+const (
+	// globCacheMaxEntries is the maximum number of entries in the glob matches LRU cache.
+	// Once this limit is reached the least-recently-used entry is evicted automatically.
+	globCacheMaxEntries = 1024
+
+	// globCacheTTL is the time-to-live for each cache entry.
+	// After this duration a stale entry is treated as a cache miss.
+	globCacheTTL = 5 * time.Minute
+)
+
+// globCacheEntry holds a cached glob result together with its expiry timestamp.
+type globCacheEntry struct {
+	matches []string
+	expiry  time.Time
+}
 
 // pathMatchKey is a composite key for PathMatch cache to avoid collisions.
 // Using a struct prevents issues when pattern or name contains delimiter characters.
@@ -19,7 +38,14 @@ type pathMatchKey struct {
 }
 
 var (
-	getGlobMatchesSyncMap = sync.Map{}
+	// globMatchesLRU is a bounded LRU cache for GetGlobMatches results.
+	// It replaces the unbounded sync.Map to prevent unbounded memory growth.
+	// Access is mediated by a mutex so that the LRU's internal state is not
+	// corrupted under concurrent use (hashicorp/golang-lru/v2 is thread-safe,
+	// but we still need the mutex for atomic load+check+store sequences in our TTL logic).
+	globMatchesLRU    *lru.Cache[string, globCacheEntry]
+	globMatchesLRUMu  sync.RWMutex
+	globMatchesLRUErr error // non-nil only if lru.New fails (should never happen at runtime)
 
 	// PathMatchCache stores PathMatch results to avoid redundant pattern matching.
 	// Cache key: pathMatchKey{pattern, name} -> match result (bool).
@@ -29,8 +55,12 @@ var (
 	pathMatchCacheMu sync.RWMutex
 )
 
-// GetGlobMatches tries to read and return the Glob matches content from the sync map if it exists in the map,
-// otherwise it finds and returns all files matching the pattern, stores the files in the map and returns the files.
+func init() {
+	globMatchesLRU, globMatchesLRUErr = lru.New[string, globCacheEntry](globCacheMaxEntries)
+}
+
+// GetGlobMatches tries to read and return the Glob matches content from the cache if it exists,
+// otherwise it finds and returns all files matching the pattern, stores the files in the cache and returns the files.
 //
 // Contract: the returned slice is always non-nil (never nil). An empty result is returned as []string{}, not nil.
 // This guarantee holds for both cache hits and misses, allowing callers to safely use len(result) without a nil check.
@@ -38,29 +68,27 @@ var (
 // Migration note: if your code uses "if result == nil" to detect no matches, update it to "if len(result) == 0".
 // Callers should always use len(result) == 0 to detect no matches, not a nil comparison.
 //
-// Empty results are cached: patterns that match no files return []string{} on the first call and on all
-// subsequent cache hits. This avoids repeated filesystem scans for known-empty patterns but means each
-// unique non-matching pattern permanently occupies one cache entry for the process lifetime.
+// Caching policy:
+//   - All results (including empty matches) are cached.
+//   - Cache is bounded to globCacheMaxEntries (1024) entries; LRU eviction applies.
+//   - Each entry expires after globCacheTTL (5 minutes); a stale entry is treated as a cache miss.
+//   - Cached slices are cloned on read, so callers may safely mutate the returned slice.
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "filesystem.GetGlobMatches")()
 
 	// Normalize pattern for cache lookup to ensure consistent keys across platforms.
 	normalizedPattern := filepath.ToSlash(pattern)
 
-	existingMatches, found := getGlobMatchesSyncMap.Load(normalizedPattern)
-	if found && existingMatches != nil {
-		// Assert to []string and return a cloned copy so callers can't mutate cached data.
-		cached, ok := existingMatches.([]string)
-		if !ok {
-			// If assertion fails, invalidate cache and fall through to recompute.
-			getGlobMatchesSyncMap.Delete(normalizedPattern)
-		}
-		if ok {
-			// Return a clone to prevent callers from mutating the cached slice.
-			result := make([]string, len(cached))
-			copy(result, cached)
-			return result, nil
-		}
+	// Try cache lookup (read lock on the LRU wrapper).
+	globMatchesLRUMu.RLock()
+	entry, found := globMatchesLRU.Get(normalizedPattern)
+	globMatchesLRUMu.RUnlock()
+
+	if found && time.Now().Before(entry.expiry) {
+		// Return a clone to prevent callers from mutating the cached slice.
+		result := make([]string, len(entry.matches))
+		copy(result, entry.matches)
+		return result, nil
 	}
 
 	base, cleanPattern := doublestar.SplitPattern(normalizedPattern)
@@ -98,7 +126,13 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	// This prevents callers from mutating cached data and preserves empty results.
 	cachedCopy := make([]string, len(fullMatches))
 	copy(cachedCopy, fullMatches)
-	getGlobMatchesSyncMap.Store(normalizedPattern, cachedCopy)
+
+	globMatchesLRUMu.Lock()
+	globMatchesLRU.Add(normalizedPattern, globCacheEntry{
+		matches: cachedCopy,
+		expiry:  time.Now().Add(globCacheTTL),
+	})
+	globMatchesLRUMu.Unlock()
 
 	return fullMatches, nil
 }
