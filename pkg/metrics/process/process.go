@@ -2,8 +2,6 @@ package process
 
 import (
 	"os/exec"
-	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -47,10 +45,7 @@ func Collect(cmd *exec.Cmd) (*ProcessMetrics, error) {
 		m.ExitCode = ps.ExitCode()
 		m.UserCPUTime = ps.UserTime()
 		m.SystemCPUTime = ps.SystemTime()
-
-		if ru, ok := ps.SysUsage().(*syscall.Rusage); ok {
-			populateRusage(m, ru)
-		}
+		collectPlatformMetrics(m, ps)
 	}
 
 	return m, err
@@ -70,33 +65,8 @@ func CollectFromProcessState(cmd *exec.Cmd, wallTime time.Duration) *ProcessMetr
 		m.ExitCode = cmd.ProcessState.ExitCode()
 		m.UserCPUTime = cmd.ProcessState.UserTime()
 		m.SystemCPUTime = cmd.ProcessState.SystemTime()
-
-		if ru, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage); ok {
-			populateRusage(m, ru)
-		}
+		collectPlatformMetrics(m, cmd.ProcessState)
 	}
 
 	return m
-}
-
-// bytesPerKiB is used to convert Linux's KiB-based ru_maxrss to bytes.
-const bytesPerKiB = 1024
-
-// populateRusage fills the Rusage-derived fields, normalizing MaxRSS to bytes.
-func populateRusage(m *ProcessMetrics, ru *syscall.Rusage) {
-	switch runtime.GOOS {
-	case "linux":
-		m.MaxRSSBytes = ru.Maxrss * bytesPerKiB // Linux reports KiB.
-	case "darwin":
-		m.MaxRSSBytes = ru.Maxrss // macOS reports bytes.
-	default:
-		m.MaxRSSBytes = ru.Maxrss
-	}
-
-	m.MinorPageFaults = ru.Minflt
-	m.MajorPageFaults = ru.Majflt
-	m.InBlockOps = ru.Inblock
-	m.OutBlockOps = ru.Oublock
-	m.VolCtxSwitches = ru.Nvcsw
-	m.InvolCtxSwitches = ru.Nivcsw
 }
