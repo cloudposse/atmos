@@ -1,8 +1,27 @@
 package merge
 
 import (
+	"reflect"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+// isMapValue reports whether v is a map kind (including typed maps like map[string]T)
+// without allocating a copy. Used to detect slice→map shape conflicts in deepMergeNative.
+// Performance note: the fast-path type assertion (map[string]any) handles the common case
+// without reflection; reflection is only used for rare typed maps (e.g., map[string]T where
+// T is a struct). The guard only runs when dstVal is already []any, so it is invoked
+// infrequently in typical atmos stack configs.
+func isMapValue(v any) bool {
+	if v == nil {
+		return false
+	}
+	if _, ok := v.(map[string]any); ok {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	return rv.IsValid() && rv.Kind() == reflect.Map
+}
 
 // safeCap returns a capacity hint of a+b, clamped to maxCapHint to prevent
 // OOM panics from oversize make() calls.
@@ -49,6 +68,17 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		}
 
 		// Key exists in both dst and src.
+
+		// Guard: reject map src overriding a dst slice — shape changes (slice→map) are
+		// disallowed (defined contract; matches mergo WithTypeCheck behavior).
+		// This check must run before the map-handling branches so that when dstVal is
+		// []any the map branches never silently replace the slice with a map.
+		// isMapValue is used here to avoid the allocation overhead of deepCopyValue.
+		if _, dstIsSlice := dstVal.([]any); dstIsSlice {
+			if isMapValue(srcVal) {
+				return errUtils.ErrMergeTypeMismatch
+			}
+		}
 
 		// Fast path: both are maps — recurse without allocating a new container.
 		if srcMap, srcIsMap := srcVal.(map[string]any); srcIsMap {

@@ -74,8 +74,12 @@ differs, the tests document it as a **defined contract** (see below).
 
 When `sliceDeepCopy` is active and the source list is **longer** than the destination list,
 extra source elements beyond `len(dst)` are silently dropped (the result length equals
-`len(dst)`).  This is the **defined contract** for this implementation — it was also the
-observed mergo behavior, but the native implementation owns this contract independently.
+`len(dst)`).  This is an **intentional divergence** from mergo — the native implementation
+adopts this as a defined contract that it owns independently.  The behavior is verified in
+[`merge_native.go`](https://github.com/cloudposse/atmos/blob/main/pkg/merge/merge_native.go)
+and cross-validated against mergo in
+[`merge_compare_mergo_test.go`](https://github.com/cloudposse/atmos/blob/main/pkg/merge/merge_compare_mergo_test.go)
+(run with `go test -tags compare_mergo ./pkg/merge/...`).
 See [`docs/fixes/2026-03-19-deep-merge-native-fixes.md`](https://github.com/cloudposse/atmos/blob/main/docs/fixes/2026-03-19-deep-merge-native-fixes.md)
 for full edge-case documentation.
 
@@ -87,11 +91,10 @@ still used in two lower-traffic call sites:
 - `pkg/merge/merge_yaml_functions.go` — YAML function merge helpers
 - `pkg/devcontainer/config_loader.go` — devcontainer config loading
 
-Migration of these remaining sites is tracked as a follow-up work item (see
-[PR #2201 description](https://github.com/cloudposse/atmos/pull/2201) for status).
-Once the follow-up issue is opened, this sentence will be updated with its `#number`.
-Until then, a future CVE in mergo still affects atmos — and the dependency will be
-removed as part of the tracked follow-up.
+Migration of these remaining sites is tracked as a follow-up; the dependency will be
+removed once those two call sites are ported.  Until then, a future CVE in mergo could
+still affect atmos.  If you have concerns, please open or comment on an issue in the
+[cloudposse/atmos](https://github.com/cloudposse/atmos/issues) repository.
 
 ## How to Use It
 

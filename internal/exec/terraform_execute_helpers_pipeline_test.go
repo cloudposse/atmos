@@ -196,8 +196,20 @@ func TestRunWorkspaceSetup_RecoveryPath(t *testing.T) {
 
 	// Recovery path: both select and new fail with exit 1, environment file names the
 	// workspace → runWorkspaceSetup must return nil (proceed with warning).
+	//
+	// Capture log output so we can verify the expected recovery warning is emitted.
+	var logBuf bytes.Buffer
+	log.Default().SetOutput(&logBuf)
+	defer log.Default().SetOutput(os.Stderr)
+
 	wsErr := runWorkspaceSetup(&atmosConfig, &info, tmpDir)
 	assert.NoError(t, wsErr, "runWorkspaceSetup must succeed when environment file confirms active workspace")
+
+	// Assert the recovery warning was emitted.
+	logOutput := logBuf.String()
+	assert.True(t,
+		strings.Contains(logOutput, "Workspace is already active"),
+		"recovery warn log must be emitted when environment file confirms active workspace; got log output: %q", logOutput)
 }
 
 // TestRunWorkspaceSetup_NoRecoveryOnMismatchedEnv verifies the negative recovery case:

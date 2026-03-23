@@ -433,7 +433,7 @@ export const roadmapConfig = {
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. In 2026, critical high-complexity functions are being refactored with 100% coverage. Embracing AI-assisted development while maintaining high standards.',
-      progress: 80,
+      progress: 86,
       status: 'in-progress',
       milestones: [
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Test coverage improved from less than 20% to 74% over the course of 2025.', category: 'featured', priority: 'high', benefits: 'Fewer regressions reach users. Changes can be made confidently knowing tests catch issues.' },

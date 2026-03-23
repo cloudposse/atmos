@@ -436,8 +436,10 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template in lists
 	t.Run("template in lists", func(t *testing.T) {
-		if _, err := exec.LookPath("tofu"); err != nil {
-			t.Skip("skipping: 'tofu' binary not found in PATH (required for atmos.Component integration test)")
+		_, tofuErr := exec.LookPath("tofu")
+		_, tfErr := exec.LookPath("terraform")
+		if tofuErr != nil && tfErr != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for atmos.Component integration test)")
 		}
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-in-lists",
@@ -463,8 +465,10 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template in maps
 	t.Run("template in maps", func(t *testing.T) {
-		if _, err := exec.LookPath("tofu"); err != nil {
-			t.Skip("skipping: 'tofu' binary not found in PATH (required for atmos.Component integration test)")
+		_, tofuErr := exec.LookPath("tofu")
+		_, tfErr := exec.LookPath("terraform")
+		if tofuErr != nil && tfErr != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for atmos.Component integration test)")
 		}
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-in-maps",

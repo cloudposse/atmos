@@ -92,7 +92,13 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 		// maxOccurrences too large and letting doubled contextToken occurrences slip through.
 		// Use absPath (already resolved above) for CWD-independent counting.
 		var fixtureFileCount int
-		_ = filepath.WalkDir(filepath.Join(absPath, "stacks"), func(_ string, d os.DirEntry, _ error) error {
+		_ = filepath.WalkDir(filepath.Join(absPath, "stacks"), func(_ string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d == nil {
+				return nil
+			}
 			if !d.IsDir() && strings.HasSuffix(d.Name(), ".yaml") {
 				fixtureFileCount++
 			}

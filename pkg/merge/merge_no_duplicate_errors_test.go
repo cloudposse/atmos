@@ -2,12 +2,14 @@ package merge
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -90,8 +92,9 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 	os.Stderr = oldStderr
 	stderrOutput := <-stderrChan
 
-	// The error must be returned, not swallowed
-	assert.Error(t, err, "type-mismatch must return an error")
+	// The error must be returned, not swallowed, and must wrap ErrMergeTypeMismatch.
+	assert.True(t, errors.Is(err, errUtils.ErrMergeTypeMismatch),
+		"type-mismatch must return an error wrapping ErrMergeTypeMismatch, got: %v", err)
 
 	// The error must be returned to caller, not printed to stderr
 	assert.Empty(t, stderrOutput, "Merge should not print to stderr")

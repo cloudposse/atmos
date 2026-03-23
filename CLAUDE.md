@@ -404,13 +404,20 @@ Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
 
 **Subprocess helpers in tests (cross-platform):**
-Instead of `exec.LookPath("false")` or other Unix-only binaries, use the test binary itself:
+Instead of `exec.LookPath("false")` or other Unix-only binaries, use the test binary itself.
+**Important:** If your package already has a `TestMain`, add the env-gate check **inside the existing `TestMain`** — do not add a second `TestMain` function (Go does not allow two in the same package).
+
 ```go
-// In testmain_test.go — intercepts before any test runs:
+// In testmain_test.go — merge this check into the existing TestMain:
 func TestMain(m *testing.M) {
+    // If _ATMOS_TEST_EXIT_ONE is set, exit immediately with code 1.
+    // This lets tests use the test binary itself as a cross-platform "exit 1" command.
     if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" { os.Exit(1) }
     os.Exit(m.Run())
 }
+// NOTE: If your package already defines TestMain, insert the _ATMOS_TEST_EXIT_ONE
+// check at the top of the existing function rather than copying the whole snippet.
+
 // In the test itself:
 exePath, _ := os.Executable()
 info.Command = exePath

@@ -1834,6 +1834,20 @@ func TestIsTerraformCurrentWorkspace(t *testing.T) {
 		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod"))
 	})
 
+	t.Run("respects relative TF_DATA_DIR env var", func(t *testing.T) {
+		// Terraform resolves TF_DATA_DIR relative to the component path (the process CWD
+		// at invocation time, which atmos sets to componentPath).  Verify that
+		// isTerraformCurrentWorkspace applies the same resolution.
+		dir := t.TempDir()
+		relDir := "custom-tf-dir"
+		customDir := filepath.Join(dir, relDir)
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		t.Setenv("TF_DATA_DIR", relDir)
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod"))
+	})
+
 	// Default workspace: Terraform never writes the environment file for "default".
 	// Absence of the file (or an empty file) must be treated as the default workspace.
 	t.Run("returns true for default workspace when environment file is absent", func(t *testing.T) {

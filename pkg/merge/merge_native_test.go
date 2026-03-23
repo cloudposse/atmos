@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -177,8 +178,26 @@ func TestAppendSlices_DstElementsDeepCopied(t *testing.T) {
 // instead of panicking on the first map assignment.
 func TestDeepMergeNative_NilDstReturnsError(t *testing.T) {
 	err := deepMergeNative(nil, map[string]any{"k": "v"}, false, false)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must not be nil")
+	require.ErrorIs(t, err, errUtils.ErrMergeNilDst, "nil dst must return ErrMergeNilDst sentinel")
+}
+
+// TestDeepMergeNative_SliceMapMismatch verifies that the slice→map shape-change guard runs
+// before the map-handling branches: when dst holds a []any and src provides a map for the
+// same key, deepMergeNative must return ErrMergeTypeMismatch instead of silently replacing
+// the slice with the map value.
+func TestDeepMergeNative_SliceMapMismatch(t *testing.T) {
+	// plain map[string]any → should be rejected
+	dst := map[string]any{"net": []any{"10.0.0.0/8"}}
+	err := deepMergeNative(dst, map[string]any{"net": map[string]any{"cidr": "10.0.0.0/8"}}, false, false)
+	require.ErrorIs(t, err, errUtils.ErrMergeTypeMismatch, "dst=slice, src=map must return ErrMergeTypeMismatch")
+	// dst must be unchanged — the guard must reject before any mutation.
+	require.Equal(t, []any{"10.0.0.0/8"}, dst["net"], "dst must be unchanged after type-mismatch rejection")
+
+	// typed map (e.g. map[string]struct{}) → should also be rejected via the reflect path in isMapValue.
+	type cidr struct{ Cidr string }
+	dst2 := map[string]any{"net": []any{"10.0.0.0/8"}}
+	err2 := deepMergeNative(dst2, map[string]any{"net": map[string]cidr{"primary": {"10.0.0.0/8"}}}, false, false)
+	require.ErrorIs(t, err2, errUtils.ErrMergeTypeMismatch, "dst=slice, src=typed-map must return ErrMergeTypeMismatch")
 }
 
 // TestDeepMergeNative_NilSrcIsNoOp verifies the documented invariant:
