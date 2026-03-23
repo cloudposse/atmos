@@ -3,6 +3,7 @@ package rules
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -44,12 +45,11 @@ func (r *l08SensitiveVarRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 
 		for varKey := range globalVars {
 			if matchesSensitivePattern(varKey, patterns) {
-				// Use the pre-built index for reliable file attribution; fall back to
-				// the heuristic for stack names that don't match any known manifest stem.
-				file := ctx.StackNameToFileIndex[stackName]
-				if file == "" {
-					file = stackNameToFile(stackName, ctx.StacksBasePath)
-				}
+				// Resolve file attribution using the indexed maps in priority order:
+				// 1. StackStemToFile: unambiguous full-stem lookup (e.g. "deploy/prod")
+				// 2. StackNameToFileIndex: basename lookup with disambiguation heuristic
+				// 3. stackNameToFile: heuristic fallback (handles path-separator names)
+				file := resolveFileForStack(stackName, ctx)
 				findings = append(findings, lint.LintFinding{
 					RuleID:   r.ID(),
 					Severity: r.Severity(),
@@ -65,7 +65,48 @@ func (r *l08SensitiveVarRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 	return findings, nil
 }
 
-// matchesSensitivePattern returns true if the var name matches any sensitive glob pattern.
+// resolveFileForStack determines the best physical file path for a logical stack name
+// using a priority cascade:
+//  1. StackStemToFile: unambiguous lookup by full relative stem (e.g. "deploy/prod")
+//  2. StackNameToFileIndex: basename lookup — if exactly one file matches, use it;
+//     if multiple files match, prefer the one under a "deploy" directory, else omit File
+//     to avoid attributing the finding to the wrong manifest.
+//  3. stackNameToFile: heuristic fallback for names that contain path separators.
+func resolveFileForStack(stackName string, ctx lint.LintContext) string {
+	// 1. Try the full-stem index (unambiguous).
+	if f, ok := ctx.StackStemToFile[stackName]; ok && f != "" {
+		return f
+	}
+
+	// 2. Try the basename index with disambiguation.
+	if files, ok := ctx.StackNameToFileIndex[stackName]; ok {
+		switch len(files) {
+		case 0:
+			// nothing
+		case 1:
+			return files[0]
+		default:
+			// Multiple manifests share the basename — prefer one under a "deploy" or
+			// "stacks" sub-directory to maximise relevance; if there is no clear winner,
+			// return "" so the finding is not attributed to a potentially wrong file.
+			var preferred string
+			for _, f := range files {
+				lower := strings.ToLower(filepath.ToSlash(f))
+				if strings.Contains(lower, "/deploy/") || strings.Contains(lower, "/stacks/") {
+					if preferred == "" {
+						preferred = f
+					}
+				}
+			}
+			return preferred // "" when no heuristic winner; caller should handle empty File
+		}
+	}
+
+	// 3. Heuristic fallback.
+	return stackNameToFile(stackName, ctx.StacksBasePath)
+}
+
+
 // Returns false immediately when patterns is empty, making the no-patterns contract explicit.
 // Uses path.Match (not filepath.Match) so that pattern matching is OS-agnostic — variable
 // names are not file-system paths and must not be interpreted with the OS path separator.

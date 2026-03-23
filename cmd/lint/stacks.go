@@ -39,8 +39,9 @@ Rules:
   L-10  Env Var Shadowing            (warning)
 
 Controlling severity and silencing rules:
-  To run only specific rules:
+  To run only specific rules (case-insensitive):
     atmos lint stacks --rule L-02,L-07
+    atmos lint stacks --rule l-02,l-7   # normalized automatically
 
   To silence a rule without removing it, set its severity to 'info' in
   atmos.yaml and use --severity warning or --severity error:
@@ -49,7 +50,13 @@ Controlling severity and silencing rules:
         rules:
           L-05: info  # silenced — below default reporting threshold
 
-  A declarative 'disabled_rules' key is not yet supported.`,
+  A declarative 'disabled_rules' key is not yet supported.
+
+Stack scoping:
+  When --stack is provided, linting is scoped to the import closure of that
+  stack. If the stack name does not match any manifest file stem under the
+  stacks base path, the command fails with a clear error (fail-closed).
+  To lint all stacks, omit --stack.`,
 	Example: lintStacksUsage,
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

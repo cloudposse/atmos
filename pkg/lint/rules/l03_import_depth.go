@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/lint"
 )
@@ -40,11 +41,19 @@ func (r *l03ImportDepthRule) Run(ctx lint.LintContext) ([]lint.LintFinding, erro
 		}
 		depth := maxImportDepth(rootFile, ctx.ImportGraph)
 		if depth > threshold {
+			// Convert to a path relative to StacksBasePath for portable, readable output
+			// (mirrors L-07's displayPath convention so findings are consistent).
+			displayFile := rootFile
+			if ctx.StacksBasePath != "" {
+				if rel, err := filepath.Rel(ctx.StacksBasePath, rootFile); err == nil {
+					displayFile = filepath.ToSlash(rel)
+				}
+			}
 			findings = append(findings, lint.LintFinding{
 				RuleID:   r.ID(),
 				Severity: r.Severity(),
-				File:     rootFile,
-				Message:  fmt.Sprintf("Stack file '%s' has import depth %d which exceeds the configured threshold of %d", rootFile, depth, threshold),
+				File:     displayFile,
+				Message:  fmt.Sprintf("Stack file '%s' has import depth %d which exceeds the configured threshold of %d", displayFile, depth, threshold),
 				FixHint:  fmt.Sprintf("Reduce nesting by flattening imports or increasing max_import_depth in the lint config"),
 			})
 		}

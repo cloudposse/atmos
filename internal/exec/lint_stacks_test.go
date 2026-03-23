@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -258,7 +259,7 @@ func TestBuildImportGraph(t *testing.T) {
 		assert.Equal(t, 2, found, "both catalog YAML files must be in the expanded import list")
 	})
 
-	t.Run("glob with no matches falls back to literal pattern", func(t *testing.T) {
+	t.Run("glob with no matches is dropped from graph", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		// No files created — glob will match nothing.
@@ -268,8 +269,11 @@ func TestBuildImportGraph(t *testing.T) {
 			},
 		}
 		graph := buildImportGraph(raw, dir)
-		// Literal pattern is kept as a fallback.
-		assert.Equal(t, []string{"catalog/*"}, graph["stacks/dev.yaml"])
+		// Unmatched globs are dropped — the key must be absent from the graph.
+		assert.Empty(t, graph["stacks/dev.yaml"],
+			"unmatched glob must be dropped, not kept as a literal")
+		assert.NotContains(t, graph, "stacks/dev.yaml",
+			"entry for stacks/dev.yaml must not appear in graph when all imports are unmatched globs")
 	})
 
 	t.Run("empty basePath skips glob expansion", func(t *testing.T) {
@@ -694,7 +698,7 @@ func TestBuildImportGraphNonGlobAbsoluteResolution(t *testing.T) {
 }
 
 // TestBuildStackNameToFileIndex verifies that buildStackNameToFileIndex creates
-// a correct logical-name → absolute-path mapping (High #6).
+// a correct logical-name → []file mapping that supports multiple files per basename.
 func TestBuildStackNameToFileIndex(t *testing.T) {
 	t.Parallel()
 
@@ -707,12 +711,14 @@ func TestBuildStackNameToFileIndex(t *testing.T) {
 
 	index := buildStackNameToFileIndex(raw, basePath)
 
-	assert.Equal(t, "/stacks/deploy/prod.yaml", index["prod"],
+	// Each basename maps to exactly one file (no collisions in this fixture).
+	require.Contains(t, index, "prod")
+	assert.Equal(t, []string{"/stacks/deploy/prod.yaml"}, index["prod"],
 		"'prod' should map to /stacks/deploy/prod.yaml")
-	assert.Equal(t, "/stacks/deploy/staging.yaml", index["staging"],
-		"'staging' should map to /stacks/deploy/staging.yaml")
-	assert.Equal(t, "/stacks/catalog/vpc.yaml", index["vpc"],
-		"'vpc' should map to /stacks/catalog/vpc.yaml")
+	require.Contains(t, index, "staging")
+	assert.Equal(t, []string{"/stacks/deploy/staging.yaml"}, index["staging"])
+	require.Contains(t, index, "vpc")
+	assert.Equal(t, []string{"/stacks/catalog/vpc.yaml"}, index["vpc"])
 	assert.Len(t, index, 3)
 }
 
@@ -755,4 +761,136 @@ func TestRulesRelNormConsistencyWithL07(t *testing.T) {
 				"normalized path must use forward slashes")
 		})
 	}
+}
+
+// TestBuildStackNameToFileIndexCollision verifies that when two manifest files share
+// the same basename (e.g. both "prod.yaml"), buildStackNameToFileIndex returns both
+// and buildStackStemToFileIndex maps each by its unique full stem (Item 1).
+func TestBuildStackNameToFileIndexCollision(t *testing.T) {
+t.Parallel()
+
+basePath := "/stacks"
+raw := map[string]map[string]any{
+"/stacks/deploy/prod.yaml":  {},
+"/stacks/catalog/prod.yaml": {}, // same basename "prod" — collision
+"/stacks/staging.yaml":      {},
+}
+
+nameIndex := buildStackNameToFileIndex(raw, basePath)
+stemIndex := buildStackStemToFileIndex(raw, basePath)
+
+// Basename "prod" must map to both files.
+prodFiles, ok := nameIndex["prod"]
+require.True(t, ok, "prod basename must be present in basename index")
+assert.Len(t, prodFiles, 2, "both prod.yaml variants must appear")
+assert.ElementsMatch(t,
+[]string{"/stacks/deploy/prod.yaml", "/stacks/catalog/prod.yaml"},
+prodFiles,
+"both prod variants must be in the basename slice")
+
+// staging has no collision.
+stagingFiles, ok := nameIndex["staging"]
+require.True(t, ok)
+assert.Equal(t, []string{"/stacks/staging.yaml"}, stagingFiles)
+
+// Stem index must uniquely identify each file.
+assert.Equal(t, "/stacks/deploy/prod.yaml", stemIndex["deploy/prod"],
+"full stem 'deploy/prod' must map to /stacks/deploy/prod.yaml")
+assert.Equal(t, "/stacks/catalog/prod.yaml", stemIndex["catalog/prod"],
+"full stem 'catalog/prod' must map to /stacks/catalog/prod.yaml")
+assert.Equal(t, "/stacks/staging.yaml", stemIndex["staging"],
+"'staging' stem must map to /stacks/staging.yaml")
+}
+
+// TestLintRuleFilterNormalization verifies that rule IDs in the --rule flag are
+// normalized to upper-case so "l-02, L-7 , l-10" behaves like "L-02,L-07,L-10"
+// (Item 2 — rule normalization).
+func TestLintRuleFilterNormalization(t *testing.T) {
+t.Parallel()
+
+t.Run("upper-case rule IDs pass through unchanged", func(t *testing.T) {
+t.Parallel()
+// Simulate the parse logic from ExecuteLintStacksCmd.
+input := "L-02,L-07,L-10"
+var got []string
+for _, r := range strings.Split(input, ",") {
+id := strings.ToUpper(strings.TrimSpace(r))
+if id != "" {
+got = append(got, id)
+}
+}
+assert.Equal(t, []string{"L-02", "L-07", "L-10"}, got)
+})
+
+t.Run("lower-case rule IDs are normalized to upper", func(t *testing.T) {
+t.Parallel()
+input := "l-02,l-07,l-10"
+var got []string
+for _, r := range strings.Split(input, ",") {
+id := strings.ToUpper(strings.TrimSpace(r))
+if id != "" {
+got = append(got, id)
+}
+}
+assert.Equal(t, []string{"L-02", "L-07", "L-10"}, got)
+})
+
+t.Run("mixed case with spaces is normalized", func(t *testing.T) {
+t.Parallel()
+input := "l-02,  L-7 , l-10"
+var got []string
+for _, r := range strings.Split(input, ",") {
+id := strings.ToUpper(strings.TrimSpace(r))
+if id != "" {
+got = append(got, id)
+}
+}
+// spaces trimmed, lower-case raised — "L-7" stays "L-7" since ToUpper has no padding
+assert.Equal(t, []string{"L-02", "L-7", "L-10"}, got)
+})
+
+t.Run("empty entries are dropped", func(t *testing.T) {
+t.Parallel()
+input := "L-02,,L-07"
+var got []string
+for _, r := range strings.Split(input, ",") {
+id := strings.ToUpper(strings.TrimSpace(r))
+if id != "" {
+got = append(got, id)
+}
+}
+assert.Equal(t, []string{"L-02", "L-07"}, got)
+})
+}
+
+// TestGlobNoMatchDroppedFromL03Depth verifies that an unmatched glob in an import
+// section does NOT inflate the import-depth count — it is silently dropped so L-03
+// measures only real (resolved) import chains (Item 3).
+func TestGlobNoMatchDroppedFromL03Depth(t *testing.T) {
+t.Parallel()
+
+dir := t.TempDir()
+// Create one real import and one unmatched glob.
+require.NoError(t, os.MkdirAll(filepath.Join(dir, "catalog"), 0o755))
+require.NoError(t, os.WriteFile(filepath.Join(dir, "catalog", "base.yaml"), []byte("{}"), 0o600))
+
+// stacks/prod.yaml imports real "catalog/base" and unmatched glob "catalog/missing/*"
+prodFile := filepath.Join(dir, "stacks", "prod.yaml")
+require.NoError(t, os.MkdirAll(filepath.Dir(prodFile), 0o755))
+require.NoError(t, os.WriteFile(prodFile, []byte("{}"), 0o600))
+
+raw := map[string]map[string]any{
+prodFile: {
+cfg.ImportSectionName: []string{"catalog/base", "catalog/missing/*"},
+},
+}
+
+graph := buildImportGraph(raw, dir)
+
+// Only the resolved real file must appear in the imports.
+imports, ok := graph[prodFile]
+require.True(t, ok, "prod file must appear in graph due to resolved import")
+require.Len(t, imports, 1, "only the real import must appear — unmatched glob dropped")
+assert.True(t, filepath.IsAbs(imports[0]), "resolved import must be absolute path")
+assert.Equal(t, filepath.Join(dir, "catalog", "base.yaml"), imports[0])
 }

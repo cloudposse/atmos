@@ -2811,11 +2811,14 @@ func TestL08FileAttributionWithIndex(t *testing.T) {
 		StacksMap:       stacksMap,
 		RawStackConfigs: make(map[string]map[string]any),
 		ImportGraph:     make(map[string][]string),
-		// StacksBasePath alone would yield "" for "prod" (no path separator), but the
-		// index provides the correct absolute path.
+		// StackStemToFile is preferred by resolveFileForStack when the stack name
+		// matches a known full-stem entry. Use it to verify unambiguous attribution.
 		StacksBasePath: "/stacks",
-		StackNameToFileIndex: map[string]string{
-			"prod": "/stacks/deploy/prod.yaml",
+		StackStemToFile: map[string]string{
+			"deploy/prod": "/stacks/deploy/prod.yaml",
+		},
+		StackNameToFileIndex: map[string][]string{
+			"prod": {"/stacks/deploy/prod.yaml"},
 		},
 		LintConfig: schema.LintStacksConfig{
 			SensitiveVarPatterns: defaultSensitiveVarPatterns,
@@ -2826,7 +2829,7 @@ func TestL08FileAttributionWithIndex(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, findings, 1, "exactly one sensitive var finding expected")
 	assert.Equal(t, "/stacks/deploy/prod.yaml", findings[0].File,
-		"file must come from StackNameToFileIndex, not the heuristic fallback")
+		"file must come from StackStemToFile/StackNameToFileIndex, not the heuristic fallback")
 }
 
 // TestCfgSectionNamesExtended extends TestCfgSectionNameConstants to also lock
@@ -2838,4 +2841,50 @@ func TestCfgSectionNamesExtended(t *testing.T) {
 		"TerraformSectionName changed — update L-05 and all rules using it")
 	assert.Equal(t, "helmfile", cfg.HelmfileSectionName,
 		"HelmfileSectionName changed — update L-05 and all rules using it")
+}
+
+// TestL03RelativePathOutput verifies that L-03 emits relative paths in the File field
+// when ctx.StacksBasePath is set, and does not leak absolute prefixes (Item 4).
+func TestL03RelativePathOutput(t *testing.T) {
+t.Parallel()
+
+all := rules.All()
+var l03 lint.LintRule
+for _, r := range all {
+if r.ID() == "L-03" {
+l03 = r
+break
+}
+}
+require.NotNil(t, l03, "L-03 rule must be present")
+
+basePath := "/repo/stacks"
+
+// Build a graph where /repo/stacks/deploy/prod.yaml imports 4 levels deep.
+importGraph := map[string][]string{
+"/repo/stacks/deploy/prod.yaml": {"/repo/stacks/catalog/a.yaml"},
+"/repo/stacks/catalog/a.yaml":   {"/repo/stacks/catalog/b.yaml"},
+"/repo/stacks/catalog/b.yaml":   {"/repo/stacks/catalog/c.yaml"},
+}
+
+ctx := lint.LintContext{
+StacksMap:       make(map[string]any),
+RawStackConfigs: make(map[string]map[string]any),
+ImportGraph:     importGraph,
+StacksBasePath:  basePath,
+LintConfig: schema.LintStacksConfig{
+MaxImportDepth: 3, // threshold 3 → depth 4 should trigger
+},
+}
+
+findings, err := l03.Run(ctx)
+require.NoError(t, err)
+require.NotEmpty(t, findings, "L-03 must produce at least one finding for depth 4 > threshold 3")
+
+for _, f := range findings {
+assert.False(t, strings.HasPrefix(f.File, "/"),
+"L-03 File field must be relative (no absolute prefix), got: %q", f.File)
+assert.NotContains(t, f.File, basePath,
+"L-03 File must not contain the StacksBasePath prefix: %q", f.File)
+}
 }

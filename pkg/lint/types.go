@@ -72,11 +72,15 @@ type LintContext struct {
 	// AllStackFiles contains all YAML files found under the stacks base path.
 	AllStackFiles []string
 
-	// StackNameToFileIndex maps logical stack names to their physical manifest path.
-	// This index is built from RawStackConfigs by stripping the stacks base path and
-	// YAML extension from the file path key. It is used by rules (e.g. L-08) that need
-	// to attribute a finding to a specific file but only know the logical stack name.
-	StackNameToFileIndex map[string]string
+	// StackNameToFileIndex maps logical stack basenames (e.g. "prod") to one or more
+	// physical manifest paths. A single name may map to multiple files when two manifests
+	// share the same stem under different sub-directories (e.g. "deploy/prod.yaml" and
+	// "catalog/prod.yaml"). Callers should prefer StackStemToFile for unambiguous lookups.
+	StackNameToFileIndex map[string][]string
+
+	// StackStemToFile maps the full relative stem (e.g. "deploy/prod", "catalog/vpc")
+	// to an absolute manifest file path for unambiguous, collision-free file attribution.
+	StackStemToFile map[string]string
 
 	// AtmosConfig is the loaded Atmos configuration.
 	AtmosConfig schema.AtmosConfiguration

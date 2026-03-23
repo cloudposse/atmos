@@ -49,7 +49,10 @@ func ExecuteLintStacksCmd(cmd *cobra.Command, args []string) error {
 	var ruleIDs []string
 	if ruleFlag != "" {
 		for _, r := range strings.Split(ruleFlag, ",") {
-			ruleIDs = append(ruleIDs, strings.TrimSpace(r))
+			id := strings.ToUpper(strings.TrimSpace(r))
+			if id != "" {
+				ruleIDs = append(ruleIDs, id)
+			}
 		}
 	}
 
@@ -165,11 +168,12 @@ func LintStacks(
 		allStackFiles = scopeStackFiles(allStackFiles, rawStackConfigs, importGraph, atmosConfig.StacksBaseAbsolutePath)
 	}
 
-	// Build a logical-stack-name → manifest-file-path index from RawStackConfigs so
+	// Build basename → []file and stem → file indexes from RawStackConfigs so
 	// that rules (e.g. L-08) can attribute findings to a physical file when they only
-	// know the logical stack name.  The key is derived by stripping the stacks base
-	// path prefix and YAML extension from the raw manifest path.
-	stackNameToFile := buildStackNameToFileIndex(rawStackConfigs, atmosConfig.StacksBaseAbsolutePath)
+	// know the logical stack name. The basename index supports disambiguation when
+	// multiple manifests share the same stem under different sub-directories.
+	stackNameToFiles := buildStackNameToFileIndex(rawStackConfigs, atmosConfig.StacksBaseAbsolutePath)
+	stackStemToFile := buildStackStemToFileIndex(rawStackConfigs, atmosConfig.StacksBaseAbsolutePath)
 
 	// Merge lint config defaults, passing the full atmos config so sensitive_key_patterns
 	// from settings.terminal.mask can serve as the single source of truth.
@@ -181,7 +185,8 @@ func LintStacks(
 		ImportGraph:          importGraph,
 		StacksBasePath:       atmosConfig.StacksBaseAbsolutePath,
 		AllStackFiles:        allStackFiles,
-		StackNameToFileIndex: stackNameToFile,
+		StackNameToFileIndex: stackNameToFiles,
+		StackStemToFile:      stackStemToFile,
 		AtmosConfig:          *atmosConfig,
 		LintConfig:           lintConfig,
 	}
@@ -194,8 +199,8 @@ func LintStacks(
 // basePath is the absolute stacks base path used to expand glob import patterns.
 // Glob patterns (e.g. "catalog/**/*") are expanded to the matching YAML files so
 // that L-03 (import depth) and L-07 (orphan detection) produce accurate results.
-// If basePath is empty or a glob cannot be expanded, the literal pattern string is
-// retained as a best-effort fallback so callers still see partial import data.
+// Globs that match no files are silently dropped (not retained as literals) so that
+// unresolvable patterns do not inflate depth counts or phantom-reference sets.
 func buildImportGraph(rawStackConfigs map[string]map[string]any, basePath string) map[string][]string {
 	graph := make(map[string][]string)
 	for filePath, rawConfig := range rawStackConfigs {
@@ -226,7 +231,10 @@ func buildImportGraph(rawStackConfigs map[string]map[string]any, basePath string
 			}
 		}
 		if len(imports) > 0 {
-			graph[filePath] = expandGlobImports(imports, basePath)
+			expanded := expandGlobImports(imports, basePath)
+			if len(expanded) > 0 {
+				graph[filePath] = expanded
+			}
 		}
 	}
 	return graph
@@ -236,8 +244,8 @@ func buildImportGraph(rawStackConfigs map[string]map[string]any, basePath string
 // and resolves non-glob relative imports to absolute paths.
 // Non-glob strings are resolved against basePath (with .yaml/.yml extension inference)
 // so that L-03 depth traversal can follow edges consistently using absolute path keys.
-// If basePath is empty or a glob yields no matches, the original pattern is kept so
-// callers retain partial data.
+// Globs that match no files are silently dropped from the result (not kept as literals)
+// so that unresolvable patterns do not inflate import-depth counts or L-07 references.
 // Duplicate results from overlapping patterns (e.g. "catalog/*" and "catalog/*.yaml"
 // both matching the same file) are automatically deduplicated.
 func expandGlobImports(imports []string, basePath string) []string {
@@ -290,10 +298,10 @@ func expandGlobImports(imports []string, basePath string) []string {
 			}
 		}
 		if len(matched) == 0 {
-			// No expansion — keep the literal so callers see the original intent.
-			// Note: literal globs with no matches are NOT added to the seen map so
-			// they don't prevent a later real file from being recorded.
-			result = append(result, imp)
+			// No files matched — silently drop this glob from results.
+			// Keeping the literal pattern would inflate import-depth counts (L-03)
+			// and create phantom references in the orphan-detection set (L-07).
+			log.Debug("Glob import matched no files, dropping pattern", "pattern", imp)
 		} else {
 			result = append(result, matched...)
 		}
@@ -426,13 +434,12 @@ func rulesRelNorm(path, basePath string) string {
 	return filepath.ToSlash(filepath.Clean(path))
 }
 
-// buildStackNameToFileIndex creates a map from logical stack name to absolute manifest
-// file path, derived from RawStackConfigs. The logical name is computed by stripping
-// basePath prefix and YAML extension from the file path key — mirroring how Atmos
-// derives stack names. This index is used by L-08 and other rules that need to attribute
-// a finding to a physical file when only a logical stack name is known.
-func buildStackNameToFileIndex(rawStackConfigs map[string]map[string]any, basePath string) map[string]string {
-	index := make(map[string]string, len(rawStackConfigs))
+// buildStackNameToFileIndex creates a map from logical stack basename (e.g. "prod") to
+// the list of absolute manifest file paths that share that basename. When multiple
+// files share the same stem under different sub-directories, all are included so that
+// callers can apply disambiguation logic (e.g. prefer "deploy/" over "catalog/").
+func buildStackNameToFileIndex(rawStackConfigs map[string]map[string]any, basePath string) map[string][]string {
+	index := make(map[string][]string, len(rawStackConfigs))
 	for filePath := range rawStackConfigs {
 		name := rulesRelNorm(filePath, basePath)
 		// rulesRelNorm strips basePath and extension, leaving a slash-separated stem.
@@ -441,7 +448,20 @@ func buildStackNameToFileIndex(rawStackConfigs map[string]map[string]any, basePa
 		if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
 			name = name[idx+1:]
 		}
-		index[name] = filePath
+		index[name] = append(index[name], filePath)
+	}
+	return index
+}
+
+// buildStackStemToFileIndex creates a map from the full relative stem
+// (e.g. "deploy/prod") to an absolute manifest file path for unambiguous,
+// collision-free file attribution. When two manifests share the same basename,
+// this index still uniquely identifies each by its full path-relative stem.
+func buildStackStemToFileIndex(rawStackConfigs map[string]map[string]any, basePath string) map[string]string {
+	index := make(map[string]string, len(rawStackConfigs))
+	for filePath := range rawStackConfigs {
+		stem := rulesRelNorm(filePath, basePath)
+		index[stem] = filePath
 	}
 	return index
 }
