@@ -104,11 +104,15 @@ var execCmd = &cobra.Command{
 		var toolExecutor *tools.Executor
 		if !noTools && atmosConfig.AI.Tools.Enabled {
 			// Use shared initialization function.
-			_, toolExecutor, err = initializeAIToolsAndExecutor(&atmosConfig)
-			if err != nil {
-				log.Warn("Failed to initialize tools", "error", err)
-				// Continue without tools rather than failing.
-				toolExecutor = nil
+			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig)
+			if toolsErr != nil {
+				log.Warn("Failed to initialize tools", "error", toolsErr)
+			}
+			if toolsResult != nil {
+				toolExecutor = toolsResult.Executor
+				if toolsResult.MCPMgr != nil {
+					defer toolsResult.MCPMgr.StopAll() //nolint:errcheck // Best-effort MCP server cleanup.
+				}
 			}
 		}
 

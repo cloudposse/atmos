@@ -23,12 +23,12 @@ func TestInitializeAIToolsAndExecutor_ToolsDisabled(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrAIToolsDisabled))
-	assert.Nil(t, registry)
-	assert.Nil(t, executor)
+	assert.Nil(t, toolsResult)
+	// executor is nil when result is nil
 }
 
 func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
@@ -47,13 +47,13 @@ func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 	// Registry should have registered tools.
-	assert.Greater(t, registry.Count(), 0)
+	assert.Greater(t, toolsResult.Registry.Count(), 0)
 }
 
 func TestInitializeAIToolsAndExecutor_YOLOMode(t *testing.T) {
@@ -68,11 +68,11 @@ func TestInitializeAIToolsAndExecutor_YOLOMode(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 }
 
 func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
@@ -128,14 +128,14 @@ func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
 				},
 			}
 
-			registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 			if tt.shouldError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.NotNil(t, registry)
-				assert.NotNil(t, executor)
+				assert.NotNil(t, toolsResult)
+				assert.NotNil(t, toolsResult.Executor)
 			}
 		})
 	}
@@ -174,11 +174,11 @@ func TestInitializeAIToolsAndExecutor_RequireConfirmation(t *testing.T) {
 				},
 			}
 
-			registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 			assert.NoError(t, err)
-			assert.NotNil(t, registry)
-			assert.NotNil(t, executor)
+			assert.NotNil(t, toolsResult)
+			assert.NotNil(t, toolsResult.Executor)
 		})
 	}
 }
@@ -208,12 +208,12 @@ func TestInitializeAIToolsAndExecutor_PermissionCacheFailure(t *testing.T) {
 
 	// The function should still succeed, but use NewCLIPrompter instead of
 	// NewCLIPrompterWithCache due to the permission cache failure.
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
-	assert.Greater(t, registry.Count(), 0)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
+	assert.Greater(t, toolsResult.Registry.Count(), 0)
 }
 
 // TestInitializeAIToolsAndExecutor_EmptyBasePath tests with an empty base path.
@@ -229,11 +229,11 @@ func TestInitializeAIToolsAndExecutor_EmptyBasePath(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 }
 
 // TestInitializeAIToolsAndExecutor_PermissionModes tests different permission mode configurations.
@@ -297,11 +297,11 @@ func TestInitializeAIToolsAndExecutor_PermissionModes(t *testing.T) {
 				},
 			}
 
-			registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 			assert.NoError(t, err, tt.description)
-			assert.NotNil(t, registry)
-			assert.NotNil(t, executor)
+			assert.NotNil(t, toolsResult)
+			assert.NotNil(t, toolsResult.Executor)
 		})
 	}
 }
@@ -318,14 +318,14 @@ func TestInitializeAIToolsAndExecutor_ToolRegistration(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 
 	// Verify multiple tools were registered.
-	toolCount := registry.Count()
+	toolCount := toolsResult.Registry.Count()
 	assert.Greater(t, toolCount, 5, "Expected more than 5 tools to be registered")
 }
 
@@ -354,9 +354,9 @@ func TestInitializeAIToolsAndExecutor_NilPermCacheUsesSimplePrompter(t *testing.
 
 	// The function should still succeed because it handles permCache failure gracefully
 	// by using NewCLIPrompter() instead of NewCLIPrompterWithCache().
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 }

@@ -6,14 +6,22 @@ import (
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// aiToolsResult holds the result of AI tools initialization.
+type aiToolsResult struct {
+	Registry *tools.Registry
+	Executor *tools.Executor
+	MCPMgr   *mcpclient.Manager
+}
+
 // initializeAIToolsAndExecutor initializes the AI tool registry and executor.
 // This is shared by both 'atmos ai chat' and 'atmos mcp start' commands.
-func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tools.Registry, *tools.Executor, error) {
+func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiToolsResult, error) {
 	if !atmosConfig.AI.Tools.Enabled {
-		return nil, nil, errUtils.ErrAIToolsDisabled
+		return nil, errUtils.ErrAIToolsDisabled
 	}
 
 	log.Debug("Initializing AI tools")
@@ -25,6 +33,16 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 	// Pass nil for LSP manager as it's not initialized in the command layer.
 	if err := atmosTools.RegisterTools(registry, atmosConfig, nil); err != nil {
 		log.Warnf("Failed to register Atmos tools: %v", err)
+	}
+
+	// Register external MCP integration tools (if configured).
+	var mcpMgr *mcpclient.Manager
+	if len(atmosConfig.MCP.Integrations) > 0 {
+		var mcpErr error
+		mcpMgr, mcpErr = mcpclient.RegisterMCPTools(registry, atmosConfig)
+		if mcpErr != nil {
+			log.Warnf("Failed to initialize MCP integrations: %v", mcpErr)
+		}
 	}
 
 	log.Debugf("Registered %d tools", registry.Count())
@@ -57,7 +75,11 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 	executor := tools.NewExecutor(registry, permChecker, tools.DefaultTimeout)
 	log.Debug("Tool executor initialized")
 
-	return registry, executor, nil
+	return &aiToolsResult{
+		Registry: registry,
+		Executor: executor,
+		MCPMgr:   mcpMgr,
+	}, nil
 }
 
 // initializeAIReadOnlyTools initializes a tool executor with only read-only, in-process tools.

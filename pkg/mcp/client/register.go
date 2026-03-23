@@ -1,0 +1,60 @@
+package client
+
+import (
+	"context"
+	"time"
+
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const registrationTimeout = 60 * time.Second
+
+// RegisterMCPTools starts configured MCP integrations and registers their tools
+// in the Atmos AI tool registry. Returns the Manager so the caller can stop
+// all servers on exit.
+//
+// Integrations that fail to start are logged as warnings but do not prevent
+// other integrations from registering. This follows the principle of best-effort
+// availability — a broken AWS Cost Explorer server should not block EKS tools.
+func RegisterMCPTools(
+	registry *tools.Registry,
+	atmosConfig *schema.AtmosConfiguration,
+) (*Manager, error) {
+	if len(atmosConfig.MCP.Integrations) == 0 {
+		return nil, nil
+	}
+
+	mgr, err := NewManager(atmosConfig.MCP.Integrations)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), registrationTimeout)
+	defer cancel()
+
+	var totalTools int
+
+	for _, session := range mgr.List() {
+		if err := session.Start(ctx); err != nil {
+			log.Warnf("MCP integration %q failed to start: %v", session.Name(), err)
+			continue
+		}
+
+		bridged := BridgeTools(session)
+		for _, bt := range bridged {
+			if regErr := registry.Register(bt); regErr != nil {
+				log.Warnf("Failed to register MCP tool %q: %v", bt.Name(), regErr)
+				continue
+			}
+			totalTools++
+		}
+	}
+
+	if totalTools > 0 {
+		log.Debugf("Registered %d MCP integration tools", totalTools)
+	}
+
+	return mgr, nil
+}
