@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -75,4 +76,11 @@ func GlobCacheEmptyEnabled() bool {
 	globMatchesLRUMu.RLock()
 	defer globMatchesLRUMu.RUnlock()
 	return globCacheEmptyEnabled
+}
+
+// ResetGlobExpvarOnce resets the sync.Once guard so RegisterGlobCacheExpvars
+// can be called again in the same test binary.  Only for use in tests that
+// need to verify expvar registration after a cache reset.
+func ResetGlobExpvarOnce() {
+	globExpvarOnce = sync.Once{}
 }

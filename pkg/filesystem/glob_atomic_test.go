@@ -4,6 +4,7 @@ package filesystem
 
 import (
 	"errors"
+	"expvar"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -404,11 +405,9 @@ func TestGetGlobMatches_EmptyResultCachingDisabled(t *testing.T) {
 	// Set the env var BEFORE applying config.
 	t.Setenv("ATMOS_FS_GLOB_CACHE_EMPTY", "0")
 	ApplyGlobCacheConfigForTest()
-	t.Cleanup(func() {
-		// Restore default behavior after the test.
-		ApplyGlobCacheConfigForTest()
-		ResetGlobMatchesCache()
-	})
+	// Only reset cache in cleanup; t.Setenv restores the env var (LIFO) so subsequent
+	// tests that call ApplyGlobCacheConfigForTest() will see the restored unset value.
+	t.Cleanup(ResetGlobMatchesCache)
 
 	assert.False(t, GlobCacheEmptyEnabled(), "empty caching must be disabled when env var is 0")
 
@@ -474,10 +473,10 @@ func TestGetGlobMatches_RaceStress(t *testing.T) {
 func TestGetGlobMatches_EnvTTL(t *testing.T) {
 	t.Setenv("ATMOS_FS_GLOB_CACHE_TTL", "1ns")
 	ApplyGlobCacheConfigForTest()
-	t.Cleanup(func() {
-		ApplyGlobCacheConfigForTest()
-		ResetGlobMatchesCache()
-	})
+	// Only reset the cache (not the config) in cleanup; the env restore from
+	// t.Setenv runs after this cleanup (LIFO), so ApplyGlobCacheConfigForTest
+	// in another test's setup will pick up the restored (empty) value.
+	t.Cleanup(ResetGlobMatchesCache)
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ttl.yaml"), []byte(""), 0o644))
@@ -496,4 +495,47 @@ func TestGetGlobMatches_EnvTTL(t *testing.T) {
 	res, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
 	assert.Len(t, res, 2, "short TTL should cause re-read and find both files")
+}
+
+// TestRegisterGlobCacheExpvars verifies that RegisterGlobCacheExpvars publishes
+// counters that reflect actual cache activity.
+func TestRegisterGlobCacheExpvars(t *testing.T) {
+	// ApplyGlobCacheConfigForTest re-reads env vars and reinitializes the LRU.
+	// This is essential when a prior test (e.g. TestGetGlobMatches_EnvTTL) left
+	// the in-package globCacheTTL at 1ns due to cleanup ordering.
+	ApplyGlobCacheConfigForTest()
+	ResetGlobMatchesCache()
+	ResetGlobExpvarOnce()
+	t.Cleanup(func() {
+		ApplyGlobCacheConfigForTest()
+		ResetGlobMatchesCache()
+		ResetGlobExpvarOnce()
+	})
+
+	RegisterGlobCacheExpvars()
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ev.yaml"), []byte(""), 0o644))
+	pattern := filepath.Join(tmpDir, "*.yaml")
+
+	// First call is a miss.
+	_, err := GetGlobMatches(pattern)
+	require.NoError(t, err)
+
+	// Second call is a hit.
+	_, err = GetGlobMatches(pattern)
+	require.NoError(t, err)
+
+	// Verify expvar values match atomic counters.
+	hitsVar := expvar.Get("atmos_glob_cache_hits")
+	require.NotNil(t, hitsVar, "atmos_glob_cache_hits expvar must be registered")
+	assert.Equal(t, "1", hitsVar.String(), "hit counter must be 1 after second call")
+
+	missesVar := expvar.Get("atmos_glob_cache_misses")
+	require.NotNil(t, missesVar)
+	assert.Equal(t, "1", missesVar.String(), "miss counter must be 1 after first call")
+
+	lenVar := expvar.Get("atmos_glob_cache_len")
+	require.NotNil(t, lenVar)
+	assert.Equal(t, "1", lenVar.String(), "cache len must be 1 after one unique pattern")
 }
