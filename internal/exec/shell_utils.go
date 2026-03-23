@@ -21,6 +21,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -38,9 +39,10 @@ type ShellCommandOption func(*shellCommandConfig)
 
 // shellCommandConfig holds optional configuration for shell command execution.
 type shellCommandConfig struct {
-	stdoutCapture  io.Writer
-	stderrCapture  io.Writer
-	stdoutOverride io.Writer
+	stdoutCapture   io.Writer
+	stderrCapture   io.Writer
+	stdoutOverride  io.Writer
+	metricsCallback func(*process.ProcessMetrics)
 }
 
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
@@ -65,6 +67,17 @@ func WithStderrCapture(w io.Writer) ShellCommandOption {
 func WithStdoutOverride(w io.Writer) ShellCommandOption {
 	return func(c *shellCommandConfig) {
 		c.stdoutOverride = w
+	}
+}
+
+// WithMetricsCallback returns a ShellCommandOption that receives process resource
+// metrics (CPU, memory, I/O, context switches) after the command completes.
+// The callback is invoked even when the command fails, as long as the process started.
+func WithMetricsCallback(fn func(*process.ProcessMetrics)) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithMetricsCallback")()
+
+	return func(c *shellCommandConfig) {
+		c.metricsCallback = fn
 	}
 }
 
@@ -173,12 +186,19 @@ func ExecuteShellCommand(
 		return nil
 	}
 
-	err = cmd.Run()
-	if err != nil {
+	metrics, runErr := process.Collect(cmd)
+
+	// Invoke metrics callback if provided — even on error, metrics may be useful.
+	if cfg.metricsCallback != nil && metrics != nil {
+		cfg.metricsCallback(metrics)
+	}
+
+	if runErr != nil {
 		// Extract exit code from error to preserve it.
 		// This is critical for commands like `terraform plan -detailed-exitcode`
 		// which use exit code 2 to indicate changes detected.
-		if exitError, ok := err.(*exec.ExitError); ok {
+		var exitError *exec.ExitError
+		if errors.As(runErr, &exitError) {
 			exitCode := exitError.ExitCode()
 			log.Debug("Command exited with non-zero code", "code", exitCode)
 
@@ -187,7 +207,7 @@ func ExecuteShellCommand(
 			return errUtils.ExitCodeError{Code: exitCode}
 		}
 		// If we can't extract exit code, return the original error.
-		return err
+		return runErr
 	}
 	return nil
 }
