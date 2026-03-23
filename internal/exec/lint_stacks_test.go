@@ -767,130 +767,130 @@ func TestRulesRelNormConsistencyWithL07(t *testing.T) {
 // the same basename (e.g. both "prod.yaml"), buildStackNameToFileIndex returns both
 // and buildStackStemToFileIndex maps each by its unique full stem (Item 1).
 func TestBuildStackNameToFileIndexCollision(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-basePath := "/stacks"
-raw := map[string]map[string]any{
-"/stacks/deploy/prod.yaml":  {},
-"/stacks/catalog/prod.yaml": {}, // same basename "prod" — collision
-"/stacks/staging.yaml":      {},
-}
+	basePath := "/stacks"
+	raw := map[string]map[string]any{
+		"/stacks/deploy/prod.yaml":  {},
+		"/stacks/catalog/prod.yaml": {}, // same basename "prod" — collision
+		"/stacks/staging.yaml":      {},
+	}
 
-nameIndex := buildStackNameToFileIndex(raw, basePath)
-stemIndex := buildStackStemToFileIndex(raw, basePath)
+	nameIndex := buildStackNameToFileIndex(raw, basePath)
+	stemIndex := buildStackStemToFileIndex(raw, basePath)
 
-// Basename "prod" must map to both files.
-prodFiles, ok := nameIndex["prod"]
-require.True(t, ok, "prod basename must be present in basename index")
-assert.Len(t, prodFiles, 2, "both prod.yaml variants must appear")
-assert.ElementsMatch(t,
-[]string{"/stacks/deploy/prod.yaml", "/stacks/catalog/prod.yaml"},
-prodFiles,
-"both prod variants must be in the basename slice")
+	// Basename "prod" must map to both files.
+	prodFiles, ok := nameIndex["prod"]
+	require.True(t, ok, "prod basename must be present in basename index")
+	assert.Len(t, prodFiles, 2, "both prod.yaml variants must appear")
+	assert.ElementsMatch(t,
+		[]string{"/stacks/deploy/prod.yaml", "/stacks/catalog/prod.yaml"},
+		prodFiles,
+		"both prod variants must be in the basename slice")
 
-// staging has no collision.
-stagingFiles, ok := nameIndex["staging"]
-require.True(t, ok)
-assert.Equal(t, []string{"/stacks/staging.yaml"}, stagingFiles)
+	// staging has no collision.
+	stagingFiles, ok := nameIndex["staging"]
+	require.True(t, ok)
+	assert.Equal(t, []string{"/stacks/staging.yaml"}, stagingFiles)
 
-// Stem index must uniquely identify each file.
-assert.Equal(t, "/stacks/deploy/prod.yaml", stemIndex["deploy/prod"],
-"full stem 'deploy/prod' must map to /stacks/deploy/prod.yaml")
-assert.Equal(t, "/stacks/catalog/prod.yaml", stemIndex["catalog/prod"],
-"full stem 'catalog/prod' must map to /stacks/catalog/prod.yaml")
-assert.Equal(t, "/stacks/staging.yaml", stemIndex["staging"],
-"'staging' stem must map to /stacks/staging.yaml")
+	// Stem index must uniquely identify each file.
+	assert.Equal(t, "/stacks/deploy/prod.yaml", stemIndex["deploy/prod"],
+		"full stem 'deploy/prod' must map to /stacks/deploy/prod.yaml")
+	assert.Equal(t, "/stacks/catalog/prod.yaml", stemIndex["catalog/prod"],
+		"full stem 'catalog/prod' must map to /stacks/catalog/prod.yaml")
+	assert.Equal(t, "/stacks/staging.yaml", stemIndex["staging"],
+		"'staging' stem must map to /stacks/staging.yaml")
 }
 
 // TestLintRuleFilterNormalization verifies that rule IDs in the --rule flag are
 // normalized to upper-case so "l-02, L-7 , l-10" behaves like "L-02,L-07,L-10"
 // (Item 2 — rule normalization).
 func TestLintRuleFilterNormalization(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-t.Run("upper-case rule IDs pass through unchanged", func(t *testing.T) {
-t.Parallel()
-// Simulate the parse logic from ExecuteLintStacksCmd.
-input := "L-02,L-07,L-10"
-var got []string
-for _, r := range strings.Split(input, ",") {
-id := strings.ToUpper(strings.TrimSpace(r))
-if id != "" {
-got = append(got, id)
-}
-}
-assert.Equal(t, []string{"L-02", "L-07", "L-10"}, got)
-})
+	t.Run("upper-case rule IDs pass through unchanged", func(t *testing.T) {
+		t.Parallel()
+		// Simulate the parse logic from ExecuteLintStacksCmd.
+		input := "L-02,L-07,L-10"
+		var got []string
+		for _, r := range strings.Split(input, ",") {
+			id := strings.ToUpper(strings.TrimSpace(r))
+			if id != "" {
+				got = append(got, id)
+			}
+		}
+		assert.Equal(t, []string{"L-02", "L-07", "L-10"}, got)
+	})
 
-t.Run("lower-case rule IDs are normalized to upper", func(t *testing.T) {
-t.Parallel()
-input := "l-02,l-07,l-10"
-var got []string
-for _, r := range strings.Split(input, ",") {
-id := strings.ToUpper(strings.TrimSpace(r))
-if id != "" {
-got = append(got, id)
-}
-}
-assert.Equal(t, []string{"L-02", "L-07", "L-10"}, got)
-})
+	t.Run("lower-case rule IDs are normalized to upper", func(t *testing.T) {
+		t.Parallel()
+		input := "l-02,l-07,l-10"
+		var got []string
+		for _, r := range strings.Split(input, ",") {
+			id := strings.ToUpper(strings.TrimSpace(r))
+			if id != "" {
+				got = append(got, id)
+			}
+		}
+		assert.Equal(t, []string{"L-02", "L-07", "L-10"}, got)
+	})
 
-t.Run("mixed case with spaces is normalized", func(t *testing.T) {
-t.Parallel()
-input := "l-02,  L-7 , l-10"
-var got []string
-for _, r := range strings.Split(input, ",") {
-id := strings.ToUpper(strings.TrimSpace(r))
-if id != "" {
-got = append(got, id)
-}
-}
-// spaces trimmed, lower-case raised — "L-7" stays "L-7" since ToUpper has no padding
-assert.Equal(t, []string{"L-02", "L-7", "L-10"}, got)
-})
+	t.Run("mixed case with spaces is normalized", func(t *testing.T) {
+		t.Parallel()
+		input := "l-02,  L-7 , l-10"
+		var got []string
+		for _, r := range strings.Split(input, ",") {
+			id := strings.ToUpper(strings.TrimSpace(r))
+			if id != "" {
+				got = append(got, id)
+			}
+		}
+		// spaces trimmed, lower-case raised — "L-7" stays "L-7" since ToUpper has no padding
+		assert.Equal(t, []string{"L-02", "L-7", "L-10"}, got)
+	})
 
-t.Run("empty entries are dropped", func(t *testing.T) {
-t.Parallel()
-input := "L-02,,L-07"
-var got []string
-for _, r := range strings.Split(input, ",") {
-id := strings.ToUpper(strings.TrimSpace(r))
-if id != "" {
-got = append(got, id)
-}
-}
-assert.Equal(t, []string{"L-02", "L-07"}, got)
-})
+	t.Run("empty entries are dropped", func(t *testing.T) {
+		t.Parallel()
+		input := "L-02,,L-07"
+		var got []string
+		for _, r := range strings.Split(input, ",") {
+			id := strings.ToUpper(strings.TrimSpace(r))
+			if id != "" {
+				got = append(got, id)
+			}
+		}
+		assert.Equal(t, []string{"L-02", "L-07"}, got)
+	})
 }
 
 // TestGlobNoMatchDroppedFromL03Depth verifies that an unmatched glob in an import
 // section does NOT inflate the import-depth count — it is silently dropped so L-03
 // measures only real (resolved) import chains (Item 3).
 func TestGlobNoMatchDroppedFromL03Depth(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-dir := t.TempDir()
-// Create one real import and one unmatched glob.
-require.NoError(t, os.MkdirAll(filepath.Join(dir, "catalog"), 0o755))
-require.NoError(t, os.WriteFile(filepath.Join(dir, "catalog", "base.yaml"), []byte("{}"), 0o600))
+	dir := t.TempDir()
+	// Create one real import and one unmatched glob.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "catalog"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "catalog", "base.yaml"), []byte("{}"), 0o600))
 
-// stacks/prod.yaml imports real "catalog/base" and unmatched glob "catalog/missing/*"
-prodFile := filepath.Join(dir, "stacks", "prod.yaml")
-require.NoError(t, os.MkdirAll(filepath.Dir(prodFile), 0o755))
-require.NoError(t, os.WriteFile(prodFile, []byte("{}"), 0o600))
+	// stacks/prod.yaml imports real "catalog/base" and unmatched glob "catalog/missing/*"
+	prodFile := filepath.Join(dir, "stacks", "prod.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(prodFile), 0o755))
+	require.NoError(t, os.WriteFile(prodFile, []byte("{}"), 0o600))
 
-raw := map[string]map[string]any{
-prodFile: {
-cfg.ImportSectionName: []string{"catalog/base", "catalog/missing/*"},
-},
-}
+	raw := map[string]map[string]any{
+		prodFile: {
+			cfg.ImportSectionName: []string{"catalog/base", "catalog/missing/*"},
+		},
+	}
 
-graph := buildImportGraph(raw, dir)
+	graph := buildImportGraph(raw, dir)
 
-// Only the resolved real file must appear in the imports.
-imports, ok := graph[prodFile]
-require.True(t, ok, "prod file must appear in graph due to resolved import")
-require.Len(t, imports, 1, "only the real import must appear — unmatched glob dropped")
-assert.True(t, filepath.IsAbs(imports[0]), "resolved import must be absolute path")
-assert.Equal(t, filepath.Join(dir, "catalog", "base.yaml"), imports[0])
+	// Only the resolved real file must appear in the imports.
+	imports, ok := graph[prodFile]
+	require.True(t, ok, "prod file must appear in graph due to resolved import")
+	require.Len(t, imports, 1, "only the real import must appear — unmatched glob dropped")
+	assert.True(t, filepath.IsAbs(imports[0]), "resolved import must be absolute path")
+	assert.Equal(t, filepath.Join(dir, "catalog", "base.yaml"), imports[0])
 }

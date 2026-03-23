@@ -2846,45 +2846,45 @@ func TestCfgSectionNamesExtended(t *testing.T) {
 // TestL03RelativePathOutput verifies that L-03 emits relative paths in the File field
 // when ctx.StacksBasePath is set, and does not leak absolute prefixes (Item 4).
 func TestL03RelativePathOutput(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-all := rules.All()
-var l03 lint.LintRule
-for _, r := range all {
-if r.ID() == "L-03" {
-l03 = r
-break
-}
-}
-require.NotNil(t, l03, "L-03 rule must be present")
+	all := rules.All()
+	var l03 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-03" {
+			l03 = r
+			break
+		}
+	}
+	require.NotNil(t, l03, "L-03 rule must be present")
 
-basePath := "/repo/stacks"
+	basePath := "/repo/stacks"
 
-// Build a graph where /repo/stacks/deploy/prod.yaml imports 4 levels deep.
-importGraph := map[string][]string{
-"/repo/stacks/deploy/prod.yaml": {"/repo/stacks/catalog/a.yaml"},
-"/repo/stacks/catalog/a.yaml":   {"/repo/stacks/catalog/b.yaml"},
-"/repo/stacks/catalog/b.yaml":   {"/repo/stacks/catalog/c.yaml"},
-}
+	// Build a graph where /repo/stacks/deploy/prod.yaml imports 4 levels deep.
+	importGraph := map[string][]string{
+		"/repo/stacks/deploy/prod.yaml": {"/repo/stacks/catalog/a.yaml"},
+		"/repo/stacks/catalog/a.yaml":   {"/repo/stacks/catalog/b.yaml"},
+		"/repo/stacks/catalog/b.yaml":   {"/repo/stacks/catalog/c.yaml"},
+	}
 
-ctx := lint.LintContext{
-StacksMap:       make(map[string]any),
-RawStackConfigs: make(map[string]map[string]any),
-ImportGraph:     importGraph,
-StacksBasePath:  basePath,
-LintConfig: schema.LintStacksConfig{
-MaxImportDepth: 3, // threshold 3 → depth 4 should trigger
-},
-}
+	ctx := lint.LintContext{
+		StacksMap:       make(map[string]any),
+		RawStackConfigs: make(map[string]map[string]any),
+		ImportGraph:     importGraph,
+		StacksBasePath:  basePath,
+		LintConfig: schema.LintStacksConfig{
+			MaxImportDepth: 3, // threshold 3 → depth 4 should trigger
+		},
+	}
 
-findings, err := l03.Run(ctx)
-require.NoError(t, err)
-require.NotEmpty(t, findings, "L-03 must produce at least one finding for depth 4 > threshold 3")
+	findings, err := l03.Run(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, findings, "L-03 must produce at least one finding for depth 4 > threshold 3")
 
-for _, f := range findings {
-assert.False(t, strings.HasPrefix(f.File, "/"),
-"L-03 File field must be relative (no absolute prefix), got: %q", f.File)
-assert.NotContains(t, f.File, basePath,
-"L-03 File must not contain the StacksBasePath prefix: %q", f.File)
-}
+	for _, f := range findings {
+		assert.False(t, strings.HasPrefix(f.File, "/"),
+			"L-03 File field must be relative (no absolute prefix), got: %q", f.File)
+		assert.NotContains(t, f.File, basePath,
+			"L-03 File must not contain the StacksBasePath prefix: %q", f.File)
+	}
 }
