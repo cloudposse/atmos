@@ -109,6 +109,41 @@ func TestBridgedTool_Parameters_NoProperties(t *testing.T) {
 	assert.Nil(t, params)
 }
 
+func TestBridgedTool_Parameters_NonMapProperty(t *testing.T) {
+	tool := &mcpsdk.Tool{
+		Name: "test",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"valid":   map[string]any{"type": "string"},
+				"invalid": "not-a-map", // Non-map property — should be skipped.
+			},
+		},
+	}
+	bt := NewBridgedTool("test", tool, nil)
+
+	params := bt.Parameters()
+	assert.Len(t, params, 1, "non-map properties should be skipped")
+	assert.Equal(t, "valid", params[0].Name)
+}
+
+func TestBridgedTool_Parameters_NoTypeField(t *testing.T) {
+	tool := &mcpsdk.Tool{
+		Name: "test",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"untyped": map[string]any{"description": "No type field"},
+			},
+		},
+	}
+	bt := NewBridgedTool("test", tool, nil)
+
+	params := bt.Parameters()
+	assert.Len(t, params, 1)
+	assert.Equal(t, tools.ParamTypeString, params[0].Type, "missing type should default to string")
+}
+
 func TestExtractTextContent_Nil(t *testing.T) {
 	assert.Equal(t, "", ExtractTextContent(nil))
 }

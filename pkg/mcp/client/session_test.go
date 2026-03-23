@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestNewSession_InitialState(t *testing.T) {
@@ -126,4 +127,106 @@ func TestBuildEnv_EmptyMap(t *testing.T) {
 	result := buildEnv(map[string]string{})
 	// Should just be the OS environment.
 	assert.NotEmpty(t, result)
+}
+
+func TestPrepareEnv_NoOpts(t *testing.T) {
+	config := &ParsedConfig{
+		Name:    "test",
+		Command: "echo",
+		Env:     map[string]string{"KEY": "VALUE"},
+	}
+	env := prepareEnv(context.Background(), config, nil)
+
+	// Should contain the configured env var.
+	found := false
+	for _, e := range env {
+		if e == "KEY=VALUE" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "configured env var should be present")
+}
+
+func TestPrepareEnv_WithFailingOpt(t *testing.T) {
+	config := &ParsedConfig{
+		Name:    "test",
+		Command: "echo",
+		Env:     map[string]string{},
+	}
+	// An opt that returns an error — should be logged but not fail.
+	failingOpt := func(_ context.Context, _ *ParsedConfig, env []string) ([]string, error) {
+		return env, assert.AnError
+	}
+	env := prepareEnv(context.Background(), config, []StartOption{failingOpt})
+	assert.NotEmpty(t, env, "env should still be populated despite opt error")
+}
+
+func TestPrepareEnv_WithSuccessOpt(t *testing.T) {
+	config := &ParsedConfig{
+		Name:    "test",
+		Command: "echo",
+		Env:     map[string]string{},
+	}
+	appendOpt := func(_ context.Context, _ *ParsedConfig, env []string) ([]string, error) {
+		return append(env, "INJECTED=true"), nil
+	}
+	env := prepareEnv(context.Background(), config, []StartOption{appendOpt})
+
+	found := false
+	for _, e := range env {
+		if e == "INJECTED=true" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "opt-injected var should be present")
+}
+
+func TestSession_Start_WithOpts(t *testing.T) {
+	// Start with a non-existent binary but verify opts are called.
+	optCalled := false
+	opt := func(_ context.Context, _ *ParsedConfig, env []string) ([]string, error) {
+		optCalled = true
+		return env, nil
+	}
+
+	cfg := &ParsedConfig{
+		Name:    "test",
+		Command: "nonexistent-binary-xyz-456",
+	}
+	session := NewSession(cfg)
+
+	// Will fail due to bad command, but opts should have been called.
+	_ = session.Start(context.Background(), opt)
+	assert.True(t, optCalled, "start option should have been called even if server fails")
+}
+
+func TestManager_Start_WithOpts(t *testing.T) {
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{
+		"test": {Command: "nonexistent-binary-xyz-789"},
+	})
+	require.NoError(t, err)
+
+	optCalled := false
+	opt := func(_ context.Context, _ *ParsedConfig, env []string) ([]string, error) {
+		optCalled = true
+		return env, nil
+	}
+
+	// Will fail but opt should be called.
+	_ = mgr.Start(context.Background(), "test", opt)
+	assert.True(t, optCalled)
+}
+
+func TestManager_Test_WithFailedStart(t *testing.T) {
+	mgr, err := NewManager(map[string]schema.MCPServerConfig{
+		"bad": {Command: "nonexistent-binary-xyz-000"},
+	})
+	require.NoError(t, err)
+
+	result := mgr.Test(context.Background(), "bad")
+	assert.False(t, result.ServerStarted)
+	assert.Error(t, result.Error)
+	assert.ErrorIs(t, result.Error, errUtils.ErrMCPServerStartFailed)
 }
