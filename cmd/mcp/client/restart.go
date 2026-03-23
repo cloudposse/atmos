@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	_ "embed"
 
 	"github.com/spf13/cobra"
 
@@ -13,10 +14,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+//go:embed markdown/atmos_mcp_restart.md
+var restartLongMarkdown string
+
 var restartCmd = &cobra.Command{
 	Use:   "restart <name>",
 	Short: "Restart an MCP server",
-	Long:  "Stop and restart an external MCP server.",
+	Long:  restartLongMarkdown,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "cmd.mcpRestart")()

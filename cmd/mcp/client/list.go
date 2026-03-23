@@ -1,6 +1,7 @@
 package client
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -13,10 +14,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+//go:embed markdown/atmos_mcp_list.md
+var listLongMarkdown string
+
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List configured MCP servers",
-	Long:  "List all external MCP servers configured in atmos.yaml.",
+	Long:  listLongMarkdown,
 	RunE:  executeMCPList,
 }
 

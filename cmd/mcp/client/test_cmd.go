@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	_ "embed"
 
 	"github.com/spf13/cobra"
 
@@ -12,10 +13,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+//go:embed markdown/atmos_mcp_test.md
+var testLongMarkdown string
+
 var testCmd = &cobra.Command{
 	Use:   "test <name>",
 	Short: "Test connectivity to an MCP server",
-	Long:  "Start an external MCP server, verify the initialization handshake, list tools, and ping the server.",
+	Long:  testLongMarkdown,
 	Args:  cobra.ExactArgs(1),
 	RunE:  executeMCPTest,
 }

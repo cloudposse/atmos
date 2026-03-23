@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -14,10 +15,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+//go:embed markdown/atmos_mcp_tools.md
+var toolsLongMarkdown string
+
 var toolsCmd = &cobra.Command{
 	Use:   "tools <name>",
 	Short: "List tools from an MCP server",
-	Long:  "Connect to an external MCP server and list its available tools.",
+	Long:  toolsLongMarkdown,
 	Args:  cobra.ExactArgs(1),
 	RunE:  executeMCPTools,
 }

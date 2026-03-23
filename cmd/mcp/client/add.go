@@ -1,6 +1,7 @@
 package client
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 
@@ -19,15 +20,14 @@ import (
 
 var addParser *flags.StandardParser
 
+//go:embed markdown/atmos_mcp_add.md
+var addLongMarkdown string
+
 var addCmd = &cobra.Command{
 	Use:   "add <name>",
 	Short: "Add an MCP server to atmos.yaml",
-	Long: `Add an external MCP server to the mcp.servers section of atmos.yaml.
-
-Example:
-  atmos mcp add aws-eks --command uvx --args "awslabs.amazon-eks-mcp-server@latest" --description "Amazon EKS"
-  atmos mcp add aws-s3 --command uvx --args "awslabs.s3-mcp-server@latest" --env AWS_REGION=us-east-1`,
-	Args: cobra.ExactArgs(1),
+	Long:  addLongMarkdown,
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "cmd.mcpAdd")()
 

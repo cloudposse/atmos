@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -15,10 +16,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+//go:embed markdown/atmos_mcp_status.md
+var statusLongMarkdown string
+
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show status of all MCP servers",
-	Long:  "Start all configured MCP servers and display their connection status, tool counts, and health.",
+	Long:  statusLongMarkdown,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		defer perf.Track(nil, "cmd.mcpStatus")()
 

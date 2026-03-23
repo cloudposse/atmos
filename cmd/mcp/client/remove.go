@@ -1,6 +1,7 @@
 package client
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 
@@ -15,10 +16,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+//go:embed markdown/atmos_mcp_remove.md
+var removeLongMarkdown string
+
 var removeCmd = &cobra.Command{
 	Use:   "remove <name>",
 	Short: "Remove an MCP server from atmos.yaml",
-	Long:  "Remove an external MCP server from the mcp.servers section of atmos.yaml.",
+	Long:  removeLongMarkdown,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "cmd.mcpRemove")()

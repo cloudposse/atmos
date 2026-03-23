@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"net/http"
@@ -40,33 +41,13 @@ type transportConfig struct {
 	port          int
 }
 
+//go:embed markdown/atmos_mcp_start.md
+var startLongMarkdown string
+
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start Atmos MCP server",
-	Long: `Start an MCP server that exposes Atmos AI tools via the Model Context Protocol.
-
-The MCP server allows AI assistants (Claude Desktop, Claude Code, VSCode, etc.) to access
-Atmos infrastructure management capabilities through a standardized protocol.
-
-The server supports two transport modes:
-- stdio: Standard input/output for local desktop applications (default)
-- http: HTTP with Server-Sent Events (SSE) for remote/cloud clients
-
-Example usage with Claude Desktop (stdio):
-  Add to ~/.config/claude/claude_desktop_config.json:
-  {
-    "mcpServers": {
-      "atmos": {
-        "command": "atmos",
-        "args": ["mcp", "start"]
-      }
-    }
-  }
-
-Example usage with HTTP transport:
-  atmos mcp start --transport http --port 8080
-
-The server runs until interrupted (Ctrl+C) or the client disconnects.`,
+	Long:  startLongMarkdown,
 	Example: `  # Start MCP server with stdio transport (default, for desktop clients)
   atmos mcp start
 
