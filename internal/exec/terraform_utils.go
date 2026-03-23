@@ -108,6 +108,7 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 // the identical resolution: a relative TF_DATA_DIR is joined to componentPath so both paths
 // are always consistent, regardless of the atmos process CWD.
 func isTerraformCurrentWorkspace(componentPath, workspace string) bool {
+	//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos config var.
 	tfDataDir := os.Getenv("TF_DATA_DIR")
 	if tfDataDir == "" {
 		tfDataDir = ".terraform"
@@ -116,7 +117,7 @@ func isTerraformCurrentWorkspace(componentPath, workspace string) bool {
 		tfDataDir = filepath.Join(componentPath, tfDataDir)
 	}
 	envFile := filepath.Join(filepath.Clean(tfDataDir), "environment")
-	data, err := os.ReadFile(envFile)
+	data, err := os.ReadFile(envFile) //nolint:gosec // Path is constructed from componentPath + TF_DATA_DIR, not user input.
 	if err != nil {
 		// Only treat a missing file as "default workspace active".
 		// Other errors (permission denied, I/O error) are not equivalent

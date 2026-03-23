@@ -425,7 +425,7 @@ func RequireOCIAuthentication(t *testing.T) {
 		t.Logf("Warning: Could not create ghcr.io request: %v", err)
 	} else {
 		req.Header.Set("Authorization", "Bearer "+githubToken)
-		resp, reqErr := client.Do(req)
+		resp, reqErr := client.Do(req) //nolint:gosec // URL is a hardcoded constant (ghcr.io), not user input.
 		if reqErr != nil {
 			t.Skipf("Cannot reach ghcr.io: %v. OCI registry access required. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to skip.", reqErr)
 		}

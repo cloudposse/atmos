@@ -54,8 +54,8 @@ func safeCap(a, b int) int {
 //   - Otherwise: src value overrides dst value (deep-copied to isolate src from dst).
 //
 // A nil src is safe: ranging over a nil map is a no-op in Go, so no keys are visited.
-// dst must not be nil; the function returns an error if it is.
-func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) error {
+// Dst must not be nil; the function returns an error if it is.
+func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) error { //nolint:gocognit,revive,cyclop,funlen // Core merge function with unavoidable branching.
 	if dst == nil {
 		return errUtils.ErrMergeNilDst
 	}
@@ -110,7 +110,7 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		// Slice strategies when both sides are slices.
 		// sliceDeepCopy takes precedence over appendSlice, matching the old mergo behavior where
 		// WithSliceDeepCopy was checked before WithAppendSlice.
-		if sliceDeepCopy || appendSlice {
+		if sliceDeepCopy || appendSlice { //nolint:nestif // Slice strategy dispatch requires nested type checks.
 			if dstSlice, dstIsSlice := dstVal.([]any); dstIsSlice {
 				if srcSlice, ok := toAnySlice(srcVal); ok {
 					if sliceDeepCopy {
@@ -180,27 +180,28 @@ func appendSlices(dst, src []any) []any {
 
 // mergeSlicesNative performs an element-wise deep merge of src into dst.
 //
-// This is the **defined contract** for native slice merging.  The behavior
-// intentionally diverges from mergo.WithSliceDeepCopy in one key area: extra
-// src elements beyond the dst length are silently dropped (result length always
-// equals dst length).  This is not an accidental omission — it matches the
-// semantics previously relied on by callers and verified by the opt-in
-// cross-validation tests (go test -tags compare_mergo ./pkg/merge -run TestCompareMergo).
-//
 // Rules:
-//   - The result length equals the dst length (extra src elements are ignored).
 //   - For each position i that exists in both dst and src: if both elements are
 //     map[string]any they are deep-merged (propagating appendSlice/sliceDeepCopy);
 //     otherwise the dst element is deep-copied (kept).
-//   - Positions that exist only in dst are deep-copied (preserved as-is).
+//   - Positions that exist only in dst (dst longer than src) are deep-copied (preserved).
+//   - Positions that exist only in src (src longer than dst) are deep-copied and appended.
+//     This matches mergo's WithSliceDeepCopy behavior, which extends the result slice
+//     when src has more elements than dst.
 func mergeSlicesNative(dst, src []any, appendSlice, sliceDeepCopy bool) ([]any, error) {
-	result := make([]any, len(dst))
-	// Do NOT shallow-copy dst into result here; every position is overwritten by
-	// the two loops below, so the copy() call would only create transient shallow
-	// aliases that are immediately replaced — latent aliasing risk with no benefit.
+	// Result length is max(len(dst), len(src)) — src can extend the slice.
+	resultLen := len(dst)
+	if len(src) > resultLen {
+		resultLen = len(src)
+	}
+	result := make([]any, resultLen)
 
-	// Merge src elements into the result up to the length of dst.
-	for i := 0; i < len(src) && i < len(dst); i++ {
+	// Merge overlapping positions (both dst and src have elements).
+	overlap := len(dst)
+	if len(src) < overlap {
+		overlap = len(src)
+	}
+	for i := 0; i < overlap; i++ {
 		srcMap, srcIsMap := src[i].(map[string]any)
 		if !srcIsMap {
 			// Non-map src element: dst[i] is preserved (mergo keeps dst for scalars).
@@ -216,9 +217,6 @@ func mergeSlicesNative(dst, src []any, appendSlice, sliceDeepCopy bool) ([]any, 
 			continue
 		}
 		// Both are maps: deep-merge into a new container so neither src nor dst is aliased.
-		// Use combined length as capacity hint to avoid reallocations when src adds new keys.
-		// Deep-copy dstMap values so that deepMergeNative cannot mutate shared inner maps
-		// (which would corrupt the accumulator in multi-input merges).
 		merged := make(map[string]any, safeCap(len(dstMap), len(srcMap)))
 		for k, v := range dstMap {
 			merged[k] = deepCopyValue(v)
@@ -229,11 +227,16 @@ func mergeSlicesNative(dst, src []any, appendSlice, sliceDeepCopy bool) ([]any, 
 		result[i] = merged
 	}
 
-	// Deep-copy tail elements (positions beyond src length) to fully isolate the result
-	// from the accumulator.  Without this, result[i] and the accumulator's slice element
-	// alias the same map, so a later merge pass could mutate data visible to callers.
+	// Deep-copy dst tail elements (positions beyond src length).
 	for i := len(src); i < len(dst); i++ {
 		result[i] = deepCopyValue(dst[i])
+	}
+
+	// Deep-copy src tail elements (positions beyond dst length).
+	// This ensures src can extend the result slice — e.g., an overlay stack
+	// adding new node_groups beyond what the base stack defines.
+	for i := len(dst); i < len(src); i++ {
+		result[i] = deepCopyValue(src[i])
 	}
 
 	return result, nil

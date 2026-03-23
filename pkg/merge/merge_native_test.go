@@ -261,13 +261,17 @@ func TestDeepMergeNative_SliceDeepCopy_MapsMerged(t *testing.T) {
 	assert.Equal(t, "new", item["extra"])
 }
 
-func TestDeepMergeNative_SliceDeepCopy_ExtraSrcElementsIgnored(t *testing.T) {
-	// sliceDeepCopy: extra src elements beyond dst length are ignored.
+func TestDeepMergeNative_SliceDeepCopy_ExtraSrcElementsAppended(t *testing.T) {
+	// sliceDeepCopy: extra src elements beyond dst length are appended (deep-copied).
 	dst := map[string]any{"list": []any{1}}
 	src := map[string]any{"list": []any{10, 20, 30}}
 	require.NoError(t, deepMergeNative(dst, src, false, true))
-	// Result has dst length (1); extra src elements are dropped.
-	assert.Equal(t, []any{1}, dst["list"])
+	// Result includes all src elements: dst[0] is kept (scalar), src[1] and src[2] appended.
+	list := dst["list"].([]any)
+	assert.Len(t, list, 3, "sliceDeepCopy should extend result when src is longer")
+	assert.Equal(t, 1, list[0], "overlapping scalar: dst is preserved")
+	assert.Equal(t, 20, list[1], "extra src element appended")
+	assert.Equal(t, 30, list[2], "extra src element appended")
 }
 
 // TestDeepMergeNative_SliceDeepCopyPrecedenceOverAppend verifies that sliceDeepCopy takes
@@ -283,12 +287,15 @@ func TestDeepMergeNative_SliceDeepCopyPrecedenceOverAppend(t *testing.T) {
 	// Both flags set: sliceDeepCopy must win → element-wise merge, not append.
 	require.NoError(t, deepMergeNative(dst, src, true, true))
 	items := dst["items"].([]any)
-	// sliceDeepCopy: result length = dst length (1), not dst+src length (3).
-	assert.Len(t, items, 1, "sliceDeepCopy must not append when both flags are true")
+	// sliceDeepCopy: result has max(len(dst), len(src)) = 2, not dst+src (3 from append).
+	assert.Len(t, items, 2, "sliceDeepCopy must not append when both flags are true")
 	item := items[0].(map[string]any)
 	assert.Equal(t, 2, item["id"])
 	assert.Equal(t, "base", item["name"])
 	assert.Equal(t, "new", item["extra"])
+	// Extra src element is appended (not via append mode — via sliceDeepCopy extension).
+	item1 := items[1].(map[string]any)
+	assert.Equal(t, 3, item1["id"])
 }
 
 // TestDeepMergeNative_SliceDeepCopy_NestedListOfMapOfList verifies that slice strategy flags
@@ -654,7 +661,7 @@ func BenchmarkMergeNative_FiveInputs(b *testing.B) {
 // Compile guard: package-level so it fires even if this test is skipped via -run.
 // If schema.Provider ever renames the Kind field, this sentinel fails to compile,
 // immediately catching a schema-incompatible merge behavior before any test runs.
-var _ = schema.Provider{Kind: "azure"} // nolint:gochecknoglobals // compile-time sentinel only
+var _ = schema.Provider{Kind: "azure"} //nolint:gochecknoglobals // compile-time sentinel only.
 func TestDeepMergeNative_TypedMapMergesWithMapDst(t *testing.T) {
 	dst := map[string]any{
 		"providers": map[string]any{
@@ -719,7 +726,7 @@ func TestDeepMergeNative_SliceDeepCopy_TypeMismatch_PropagatesError(t *testing.T
 	src := map[string]any{
 		"items": []any{map[string]any{"subnets": "10.0.100.0/24"}}, // type mismatch inside slice
 	}
-	err := deepMergeNative(dst, src, false, true) // sliceDeepCopy=true
+	err := deepMergeNative(dst, src, false, true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot override two slices with different type")
 }
@@ -835,10 +842,10 @@ func TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ScalarKeptAtDst(t *testi
 		"sliceDeepCopy with scalar elements must preserve all dst elements")
 }
 
-// TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ExtraSrcDropped verifies that
-// when src is longer than dst in sliceDeepCopy mode, extra src elements are silently
-// dropped (result length == len(dst)).  This matches the observed mergo behaviour.
-func TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ExtraSrcDropped(t *testing.T) {
+// TestMergeNative_SliceDeepCopy_SrcExtendsResult verifies that when src is longer
+// than dst in sliceDeepCopy mode, extra src elements are appended to the result.
+// This matches mergo's WithSliceDeepCopy behavior.
+func TestMergeNative_SliceDeepCopy_SrcExtendsResult(t *testing.T) {
 	inputs := []map[string]any{
 		{"list": []any{map[string]any{"id": 1}}},
 		{"list": []any{map[string]any{"id": 2}, map[string]any{"id": 3}, map[string]any{"id": 4}}},
@@ -848,9 +855,15 @@ func TestMergeNative_CrossValidateVsMergo_SliceDeepCopy_ExtraSrcDropped(t *testi
 
 	list, ok := nativeResult["list"].([]any)
 	require.True(t, ok)
-	assert.Len(t, list, 1, "sliceDeepCopy result length must equal dst length (extra src elements dropped)")
-	item := list[0].(map[string]any)
-	assert.Equal(t, 2, item["id"], "first element must be merged (src id overrides dst id)")
+	assert.Len(t, list, 3, "sliceDeepCopy should extend result when src is longer")
+	// First element: map merged (src id overrides dst id).
+	item0 := list[0].(map[string]any)
+	assert.Equal(t, 2, item0["id"], "first element must be merged (src id overrides dst id)")
+	// Extra elements from src appended.
+	item1 := list[1].(map[string]any)
+	assert.Equal(t, 3, item1["id"])
+	item2 := list[2].(map[string]any)
+	assert.Equal(t, 4, item2["id"])
 }
 
 // TestMergeNative_CrossValidateVsMergo_NestedMaps verifies that nested map merges

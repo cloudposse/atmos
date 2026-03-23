@@ -57,7 +57,7 @@ func TestCompareMergo_NestedMapsMerge(t *testing.T) {
 			},
 		},
 		{
-			name: "nil value in src map entry is skipped",
+			name: "nil value in src map entry overrides dst",
 			inputs: []map[string]any{
 				{"key": "original"},
 				{"key": nil},
@@ -87,25 +87,101 @@ func TestCompareMergo_NestedMapsMerge(t *testing.T) {
 	}
 }
 
-// TestCompareMergo_DefinedContractDivergences documents cases where native behavior
-// intentionally DIFFERS from mergo.  These are our "defined contracts" — the expected
-// behavior is the native implementation, not mergo.
-func TestCompareMergo_DefinedContractDivergences(t *testing.T) {
-	t.Run("sliceDeepCopy extra src elements are dropped (defined contract)", func(t *testing.T) {
-		// Defined contract: when sliceDeepCopy=true, extra src elements beyond dst length
-		// are ignored.  This differs from mergo.WithSliceDeepCopy which may extend the slice.
-		// See: TestDeepMergeNative_SliceDeepCopy_ExtraSrcElementsIgnored
+// TestCompareMergo_SliceModes tests equivalence for appendSlice and sliceDeepCopy modes.
+func TestCompareMergo_SliceModes(t *testing.T) {
+	t.Run("appendSlice concatenates slices", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{}
 		inputs := []map[string]any{
-			{"list": []any{map[string]any{"id": 1}}},
-			{"list": []any{map[string]any{"id": 2}, map[string]any{"id": 3}}},
+			{"tags": []any{"a", "b"}},
+			{"tags": []any{"c", "d"}},
+		}
+		result, err := MergeWithOptions(cfg, inputs, true, false)
+		require.NoError(t, err)
+		tags, ok := result["tags"].([]any)
+		require.True(t, ok)
+		assert.Equal(t, []any{"a", "b", "c", "d"}, tags,
+			"appendSlice should concatenate both slices")
+	})
+
+	t.Run("appendSlice with nested maps", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		inputs := []map[string]any{
+			{"items": []any{map[string]any{"name": "first"}}},
+			{"items": []any{map[string]any{"name": "second"}}},
+		}
+		result, err := MergeWithOptions(cfg, inputs, true, false)
+		require.NoError(t, err)
+		items, ok := result["items"].([]any)
+		require.True(t, ok)
+		assert.Len(t, items, 2, "appendSlice should produce 2 elements")
+	})
+
+	t.Run("sliceDeepCopy merges overlapping map elements", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		inputs := []map[string]any{
+			{"groups": []any{
+				map[string]any{"name": "web", "size": "small"},
+				map[string]any{"name": "api", "size": "medium"},
+			}},
+			{"groups": []any{
+				map[string]any{"name": "web", "size": "large"},
+				map[string]any{"name": "api", "replicas": 3},
+			}},
 		}
 		result, err := MergeWithOptions(cfg, inputs, false, true)
 		require.NoError(t, err)
-		list, ok := result["list"].([]any)
+		groups, ok := result["groups"].([]any)
 		require.True(t, ok)
-		assert.Len(t, list, 1,
-			"defined contract: extra src elements are dropped in sliceDeepCopy mode")
-		t.Logf("Defined contract: sliceDeepCopy drops extra src elements beyond dst len=%d", len(list))
+		assert.Len(t, groups, 2)
+
+		// First element: size overridden by dst (scalar kept from dst).
+		g0, ok := groups[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "web", g0["name"])
+
+		// Second element: replicas not present in dst, so dst is kept.
+		g1, ok := groups[1].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "api", g1["name"])
+	})
+
+	t.Run("sliceDeepCopy src extends beyond dst length", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		inputs := []map[string]any{
+			{"node_groups": []any{
+				map[string]any{"name": "general", "instance_type": "m5.large"},
+			}},
+			{"node_groups": []any{
+				map[string]any{"name": "general", "instance_type": "m5.2xlarge"},
+				map[string]any{"name": "gpu", "instance_type": "g5.xlarge"},
+			}},
+		}
+		result, err := MergeWithOptions(cfg, inputs, false, true)
+		require.NoError(t, err)
+		groups, ok := result["node_groups"].([]any)
+		require.True(t, ok)
+		assert.Len(t, groups, 2,
+			"sliceDeepCopy should extend result when src has more elements than dst")
+
+		// Second element is the new gpu group from src.
+		g1, ok := groups[1].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "gpu", g1["name"])
+		assert.Equal(t, "g5.xlarge", g1["instance_type"])
+	})
+
+	t.Run("sliceDeepCopy with three inputs extending progressively", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		inputs := []map[string]any{
+			{"items": []any{map[string]any{"id": 1}}},
+			{"items": []any{map[string]any{"id": 1}, map[string]any{"id": 2}}},
+			{"items": []any{map[string]any{"id": 1}, map[string]any{"id": 2}, map[string]any{"id": 3}}},
+		}
+		result, err := MergeWithOptions(cfg, inputs, false, true)
+		require.NoError(t, err)
+		items, ok := result["items"].([]any)
+		require.True(t, ok)
+		assert.Len(t, items, 3,
+			"three progressive inputs should produce 3 elements")
 	})
 }

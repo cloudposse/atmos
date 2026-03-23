@@ -1,200 +1,241 @@
 # Deep-Merge Native & Terraform Workspace Fixes
 
-**Date:** 2026-03-19
+**Date:** 2026-03-19 (updated 2026-03-23)
 **PR:** #2201 (perf: replace mergo with native deep merge)
-**Reviewer findings:** CodeRabbit audit + GitHub Advanced Security alerts
+**Reviewer findings:** CodeRabbit audit + GitHub Advanced Security alerts + independent deep analysis
 
 ---
 
-## Issues addressed
+## What the PR Does
 
-### 1. `sliceDeepCopy` vs `appendSlice` precedence flip (behavioral regression)
+Replaces the pre-merge deep-copy loop (which called `mergo.Merge` after copying each input)
+with a native Go implementation that deep-copies only the first input and merges subsequent
+inputs in-place with leaf-level copying. This reduces N full `DeepCopyMap` calls to 1,
+achieving ~3.5× speedup on the ~118k+ merge calls per stack resolution run.
+
+**This is the core of Atmos.** Every stack resolution passes through this code. Any bug
+here affects every single `atmos` command that processes stacks.
+
+### Architecture Change
+
+**Before:**
+```
+for each input:
+  copy = DeepCopyMap(input)     // Full deep copy of every input
+  mergo.Merge(result, copy)     // mergo merge (uses reflection internally)
+```
+
+**After:**
+```
+result = DeepCopyMap(inputs[0])   // Deep copy only the first input
+for each remaining input:
+  deepMergeNative(result, input)  // Native merge with leaf-level copying (no reflection)
+```
+
+---
+
+## Native Merge Semantics
+
+### Merge Rules (merge_native.go)
+
+| Scenario | Behavior | Correct? |
+|---|---|---|
+| Both map | Recursive merge | ✅ |
+| Src map, dst not map | Src overrides dst | ✅ (matches mergo WithOverride) |
+| Src not map, dst map | Src overrides dst | ✅ (matches mergo WithOverride) |
+| Src slice, dst map | **Error** — `ErrMergeTypeMismatch` | ⚠️ Asymmetric but intentional |
+| Src nil | Override dst with nil | ✅ (matches mergo WithOverride) |
+| Src typed map | Normalize to `map[string]any` via reflection | ✅ |
+| Src typed slice | Normalize to `[]any` via reflection | ✅ |
+
+### Slice Merge Modes
+
+| Mode | Behavior | Notes |
+|---|---|---|
+| Default | Src slice replaces dst slice | Standard |
+| `appendSlice` | Dst + src elements concatenated | Both deep-copied |
+| `sliceDeepCopy` | Element-wise merge, src extends result | Fixed (was truncating) |
+
+### Type Handling
+
+| Type | Deep Copy Method | Correct? |
+|---|---|---|
+| Primitives (string, int, float, bool) | Pass-through (immutable) | ✅ |
+| `map[string]any` | Recursive `deepCopyMap` | ✅ |
+| `[]any` | Recursive `deepCopySlice` | ✅ |
+| Typed maps (`map[string]string`) | Reflection-based iteration | ✅ |
+| Typed slices (`[]string`) | Reflection-based iteration | ✅ |
+| Pointers | Pass-through (**aliased**) | ⚠️ Safe for YAML data |
+| `nil` | Pass-through | ✅ |
+
+---
+
+## Issues Addressed
+
+### 1. `sliceDeepCopy` truncation — silent data loss (CRITICAL, fixed)
+
+**File:** `pkg/merge/merge_native.go`
+
+**Problem:** When `sliceDeepCopy=true` and src had more elements than dst, extra src elements
+were **silently dropped**. This was a data loss bug for users with `list_merge_strategy: deep`
+whose overlay stacks add new list elements beyond the base.
+
+**Example:** A base stack with 2 EKS node groups + an overlay adding a 3rd `gpu` group would
+silently lose the gpu group:
+
+```yaml
+# base: 2 node groups
+node_groups:
+  - name: general
+    instance_type: m5.large
+  - name: compute
+    instance_type: c5.xlarge
+
+# overlay: adds 3rd group
+node_groups:
+  - name: general
+    instance_type: m5.2xlarge
+  - name: compute
+    instance_type: c5.2xlarge
+  - name: gpu                    # ← SILENTLY DROPPED
+    instance_type: g5.xlarge
+```
+
+**Fix:** `mergeSlicesNative` now uses `max(len(dst), len(src))` for result length. Extra src
+elements are deep-copied and appended, matching mergo's `WithSliceDeepCopy` behavior.
+
+**Tests:** 3 existing tests updated from expecting truncation to expecting extension.
+5 new cross-validation tests added for `appendSlice` and `sliceDeepCopy` modes.
+
+### 2. `sliceDeepCopy` vs `appendSlice` precedence flip (behavioral regression, fixed)
 
 **File:** `pkg/merge/merge_native.go`
 
 **Problem:** The new `deepMergeNative` checked `appendSlice` before `sliceDeepCopy`, but the
-old mergo code checked `WithSliceDeepCopy` first (`if sliceDeepCopy … else if appendSlice …`).
-When a caller passes both flags as `true`, the old code applied element-wise merging (deep-copy),
-the new code appended — an undocumented behavioral change.
+old mergo code checked `WithSliceDeepCopy` first. When both flags are `true`, the old code
+applied element-wise merging, the new code appended.
 
-**Fix:** Reordered the condition: `if sliceDeepCopy { … } else { /* appendSlice */ }`.
-Note: the public `Merge()` and `MergeWithContext()` APIs are strategy-enum-guarded and never
-set both flags simultaneously. The fix matters only for direct callers of the internal
-`deepMergeNative` or `MergeWithOptions`.
+**Fix:** Reordered: `if sliceDeepCopy { … } else { /* appendSlice */ }`.
 
----
-
-### 2. `mergeSlicesNative` aliased dst maps and tail elements
+### 3. `mergeSlicesNative` aliased dst maps and tail elements (fixed)
 
 **File:** `pkg/merge/merge_native.go`
 
-**Problem (inner maps):** When building the `merged` map from `dstMap` values, we used a
-shallow copy (`merged[k] = v`). When `deepMergeNative` then recursed into `merged`, it
-mutated the shared inner maps of both `merged` and `dstMap`. Since `dstMap` was part of
-the accumulator, this silently corrupted earlier data in multi-input merges.
+**Problem (inner maps):** Shallow copy of dstMap values into merged map caused silent
+corruption in multi-input merges.
 
-**Fix:** Deep-copy each `dstMap` value before inserting into `merged`:
-```go
-merged[k] = deepCopyValue(v)
-```
+**Fix:** `merged[k] = deepCopyValue(v)` for every dstMap value.
 
-**Problem (tail elements):** `copy(result, dst)` shallow-copied all positions, including
-positions `i >= len(src)` (the "tail"). Those tail elements of `result` aliased the
-accumulator's slice elements. A subsequent merge pass over the same key would find the same
-map pointer in two places, and `deepMergeNative`'s in-place recursion could corrupt both.
+**Problem (tail elements):** `copy(result, dst)` shallow-copied tail positions, creating
+aliases that could corrupt the accumulator in subsequent merge passes.
 
-**Fix:** After the src-range loop, deep-copy tail positions:
-```go
-for i := len(src); i < len(dst); i++ {
-    result[i] = deepCopyValue(dst[i])
-}
-```
+**Fix:** Deep-copy tail positions explicitly.
 
----
+### 4. Misleading test name (fixed)
 
-### 3. `isTerraformCurrentWorkspace` did not handle the "default" workspace
+**File:** `pkg/merge/merge_compare_mergo_test.go`
+
+**Problem:** Case named `"nil value in src map entry is skipped"` but nil actually overrides.
+
+**Fix:** Renamed to `"nil value in src map entry overrides dst"`.
+
+### 5. Cross-validation test coverage too narrow (fixed)
+
+**File:** `pkg/merge/merge_compare_mergo_test.go`
+
+**Problem:** Only 4 equivalence cases tested against mergo. No coverage for `appendSlice`
+or `sliceDeepCopy` modes.
+
+**Fix:** Added 5 new cross-validation tests:
+- `appendSlice concatenates slices`
+- `appendSlice with nested maps`
+- `sliceDeepCopy merges overlapping map elements`
+- `sliceDeepCopy src extends beyond dst length`
+- `sliceDeepCopy with three inputs extending progressively`
+
+### 6. `isTerraformCurrentWorkspace` default workspace handling (fixed)
 
 **File:** `internal/exec/terraform_utils.go`
 
-**Problem:** Terraform never writes the `.terraform/environment` file for the `default`
-workspace (or writes an empty file). The helper always returned `false` when the file was
-absent, so the workspace-recovery logic never triggered for `default`. If a Windows cleanup
-left the `.terraform/environment` file missing while the `default` workspace was active,
-both `workspace select default` and `workspace new default` would fail (code 1) and atmos
-would bubble up the error instead of proceeding.
+**Problem:** Terraform never writes `.terraform/environment` for the `default` workspace.
+The helper always returned `false` when the file was absent, so workspace recovery never
+triggered for `default`.
 
-**Fix:**
-```go
-data, err := os.ReadFile(envFile)
-if err != nil {
-    // File missing (ENOENT) → default workspace is active; permission errors propagate.
-    if errors.Is(err, os.ErrNotExist) && workspace == "default" {
-        return true
-    }
-    return false
-}
-recorded := strings.TrimSpace(string(data))
-if recorded == "" {
-    return workspace == "default"
-}
-return recorded == workspace
-```
+**Fix:** Return `true` when file is missing AND workspace is `"default"`. Return `true`
+when file is empty AND workspace is `"default"`.
 
-The fix also wires the `isTerraformCurrentWorkspace` check into `runWorkspaceSetup` — the function that is actually called during terraform execution:
-
-```go
-// runWorkspaceSetup — recovery path (internal/exec/terraform_execute_helpers_exec.go)
-newErr := ExecuteShellCommand(
-    *atmosConfig, info.Command,
-    []string{"workspace", "new", info.TerraformWorkspace},
-    componentPath, info.ComponentEnvList, info.DryRun, info.RedirectStdErr,
-)
-if newErr == nil {
-    return nil
-}
-var newExitCodeErr errUtils.ExitCodeError
-if errors.As(newErr, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
-    isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace) {
-    log.Warn("Workspace is already active but its state directory is missing; "+
-        "proceeding — subsequent terraform commands may report missing state",
-        "workspace", info.TerraformWorkspace)
-    return nil
-}
-return newErr
-```
-
----
-
-### 4. Workspace recovery log level too low
+### 7. Workspace recovery log level too low (fixed)
 
 **File:** `internal/exec/terraform_execute_helpers_exec.go`
 
-**Problem:** When both `workspace select` and `workspace new` fail with exit code 1 but the
-environment file already names the target workspace (corrupted state), atmos silently
-proceeded with a `log.Debug`. In production, this message would be invisible, making it
-hard to diagnose later plan/apply failures caused by the missing state directory.
+**Fix:** Upgraded `log.Debug` to `log.Warn` for workspace recovery messages.
 
-**Fix:** Upgraded to `log.Warn` with a clearer message:
-> "Workspace is already active but its state directory is missing; proceeding — subsequent
-> terraform commands may report missing state"
-
----
-
-### 5. `TF_DATA_DIR` relative path resolution (CodeRabbit concern, no change needed)
-
-**File:** `internal/exec/terraform_utils.go`
-
-**Concern:** CodeRabbit noted that Terraform resolves `TF_DATA_DIR` relative to the
-_process CWD_ at invocation time, which may differ from `componentPath`.
-
-**Why componentPath is correct here:** Atmos invokes `terraform` with `componentPath` as
-its working directory (via `ExecuteShellCommand`'s `dir` parameter). Therefore, when
-terraform resolves a relative `TF_DATA_DIR`, its CWD _is_ `componentPath`. Using
-`os.Getwd()` (the atmos process CWD) would be wrong. Added an explicit comment to the
-`isTerraformCurrentWorkspace` docstring documenting this invariant.
-
----
-
-### 6. `mergo` dependency partially remaining (documentation clarification)
-
-**Concern:** The PR description implied mergo was fully replaced, but it is still used in
-`pkg/merge/merge_yaml_functions.go` and `pkg/devcontainer/config_loader.go`.
-
-**Status:** The hot-path in `MergeWithOptions` / `MergeWithContext` (called ~118k times per
-production run) is fully migrated to the native implementation. The remaining mergo usages
-are for non-performance-critical paths (YAML function merging and devcontainer config).
-A follow-up task should migrate those to eliminate the mergo dependency entirely.
-
----
-
-### 7. Integer overflow in size computations (GitHub Advanced Security alerts 5236–5239)
+### 8. Integer overflow in size computations (fixed)
 
 **File:** `pkg/merge/merge_native.go`
 
-**Problem:** `len(dst)+len(src)` in `appendSlices` and `mergeSlicesNative` could overflow
-`int` if both slices are very large (e.g., `math.MaxInt/2 + 1` each).
-
-**Fix (already applied in a prior commit):** Introduced `safeCap(a, b int) int` which
-clamps the result to `1<<24` (16 M entries) — a practical upper bound that prevents
-oversized `make()` calls without triggering OOM panics, then replaced direct additions.
-
-The implementation uses a single overflow guard (the redundant second `if sum > maxCapHint`
-check was removed as dead code — the first guard `b > maxCapHint-a` already covers every
-case where the sum would exceed `maxCapHint`):
-
-```go
-const maxCapHint = 1 << 24 // 16 M entries — practical upper bound to prevent OOM
-
-func safeCap(a, b int) int {
-    // Guard against integer overflow: if b > maxCapHint-a, then a+b > maxCapHint.
-    if b > maxCapHint-a {
-        return maxCapHint
-    }
-    return a + b
-}
-```
+**Fix:** `safeCap(a, b)` clamps to `1<<24` (16M entries) to prevent OOM.
 
 ---
 
-## Summary of files changed
+## Remaining Items
+
+### Fixed
+
+1. ~~**Document the mergo/native split**~~ ✅ — Added comments to all three remaining
+   mergo call sites explaining why they still use mergo:
+   - `pkg/merge/merge_yaml_functions.go:177` — YAML function slice merging has different
+     semantics (operates on individual elements during `!include`/`!merge`, not full stacks).
+   - `pkg/merge/merge_yaml_functions.go:265` — Cross-references the first comment.
+   - `pkg/devcontainer/config_loader.go:350` — Devcontainer uses typed structs, not
+     `map[string]any`. Not on the hot path.
+   - All three have `TODO: migrate to native merge` markers.
+
+### Future TODOs (post-merge)
+
+2. **Run cross-validation in CI** — Add `compare_mergo` tests to a CI job. Currently
+   behind `//go:build compare_mergo` build tag and only run manually.
+3. **Migrate `merge_yaml_functions.go` to native merge** — Eliminate the dual mergo/native
+   split. Requires adapting YAML function slice semantics to the native merge API.
+4. **Migrate `devcontainer/config_loader.go` to native merge** — Lower priority since
+   devcontainer config merging is not performance-critical and uses typed structs.
+5. **Add concurrent-contract test** — Document that `deepMergeNative` is not safe for
+   concurrent use on the same dst (callers must synchronize).
+
+### No Action Needed
+
+5. `safeCap` max hint — unlikely to be hit in practice.
+6. Pointer aliasing — safe for YAML-parsed data.
+7. `TF_DATA_DIR` relative path — `componentPath` is correct (matches Terraform's CWD).
+8. Workspace recovery dual guard — correct and well-tested.
+
+---
+
+## Summary of Files Changed
 
 | File | Change |
 |------|--------|
-| `pkg/merge/merge_native.go` | Precedence fix; tail deep-copy; inner map deep-copy |
-| `pkg/merge/merge_native_test.go` | Tests for precedence, tail isolation, dstMap isolation, nil-src invariant |
-| `internal/exec/terraform_utils.go` | Default-workspace handling; docstring clarification |
-| `internal/exec/terraform_utils_test.go` | Tests for default workspace variants; absolute TF_DATA_DIR path |
-| `internal/exec/terraform_execute_helpers_exec.go` | Debug → Warn for workspace recovery |
-| `internal/exec/terraform_execute_helpers_pipeline_test.go` | Recovery path test; env propagation verification; negative-path logger assertion |
-| `internal/exec/terraform_execute_helpers_workspace_test.go` | `TestExecuteMainTerraformCommand_Error_Propagates`: contract test that error from terraform binary is wrapped as `ExitCodeError` |
-| `internal/exec/testmain_test.go` | Cross-platform subprocess helper: `TestMain` intercepts `_ATMOS_TEST_EXIT_ONE=1` to provide a platform-agnostic "exit 1" binary |
-| `internal/exec/validate_stacks_test.go` | Independent fixture YAML count to self-validate block counter |
-| `internal/exec/terraform_test.go` | Use `tests.RequireTerraform(t)` for `TestExecuteTerraform_DeploymentStatus`; remove unused `os/exec` import |
-| `internal/exec/terraform_clean_test.go` | Use `tests.RequireTerraform(t)` for `TestCLITerraformClean`; add `tests` import |
-| `internal/exec/yaml_func_utils_test.go` | Make `RemoveAll` cleanup non-fatal (use `t.Logf` instead of `assert.NoError`) |
-| `internal/exec/yaml_func_template_test.go` | Fall back to terraform if tofu binary not found; skip only when both are absent |
-| `tests/preconditions.go` | Handle `http.NewRequestWithContext` error with `t.Logf` warning branch |
-| `pkg/merge/merge_compare_mergo_test.go` | Use `t.Fatalf` (not `t.Logf`) for `dmergo.Merge` errors in baseline construction |
-| `pkg/merge/merge_native_test.go` | Capture error in all 4 benchmark loops (`b.Fatalf` on failure) |
-| `errors/errors.go` | Add `ErrMergeNilDst` and `ErrMergeTypeMismatch` sentinel errors |
-| `website/src/data/roadmap.js` | Add `pr: 2201` to faster-deep-merge milestone |
+| `pkg/merge/merge_native.go` | sliceDeepCopy extension fix; precedence fix; aliasing fixes |
+| `pkg/merge/merge_native_test.go` | 3 tests updated for extension; new precedence/aliasing tests |
+| `pkg/merge/merge_compare_mergo_test.go` | Fix test name; add 5 cross-validation tests |
+| `pkg/merge/merge.go` | Replace mergo pre-copy loop with native merge |
+| `internal/exec/terraform_utils.go` | `isTerraformCurrentWorkspace` with default handling |
+| `internal/exec/terraform_utils_test.go` | 11 sub-tests for workspace detection |
+| `internal/exec/terraform_execute_helpers_exec.go` | Workspace recovery with log.Warn |
+| `internal/exec/terraform_execute_helpers_pipeline_test.go` | Recovery path tests |
+| `internal/exec/terraform_execute_helpers_workspace_test.go` | Error propagation test |
+| `internal/exec/testmain_test.go` | Cross-platform subprocess helper |
+| `errors/errors.go` | `ErrMergeNilDst`, `ErrMergeTypeMismatch` sentinels |
+
+## Audit Summary
+
+| Category | Count | Key Items |
+|---|---|---|
+| **Critical** | 1 (fixed) | sliceDeepCopy truncation — silent data loss |
+| **High** | 2 (fixed) | Cross-validation expanded, precedence regression fixed |
+| **Medium** | 2 (fixed) | Misleading test name, aliasing in mergeSlicesNative |
+| **Low** | 2 | safeCap hint, pointer aliasing (both acceptable) |
+| **Positive** | 7 | Sound architecture, thorough aliasing prevention, type handling |
+
+The core merge implementation is well-engineered. All critical and high issues have been
+fixed. Cross-validation coverage expanded from 4 to 9 equivalence tests.
