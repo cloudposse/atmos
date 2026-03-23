@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -43,9 +44,10 @@ var (
 	// Access is mediated by a mutex so that the LRU's internal state is not
 	// corrupted under concurrent use (hashicorp/golang-lru/v2 is thread-safe,
 	// but we still need the mutex for atomic load+check+store sequences in our TTL logic).
-	globMatchesLRU    *lru.Cache[string, globCacheEntry]
-	globMatchesLRUMu  sync.RWMutex
-	globMatchesLRUErr error // non-nil only if lru.New fails (should never happen at runtime)
+	globMatchesLRU       *lru.Cache[string, globCacheEntry]
+	globMatchesLRUMu     sync.RWMutex
+	globMatchesLRUErr    error // non-nil only if lru.New fails (should never happen at runtime)
+	globMatchesEvictions int64 // incremented atomically by the LRU eviction callback
 
 	// PathMatchCache stores PathMatch results to avoid redundant pattern matching.
 	// Cache key: pathMatchKey{pattern, name} -> match result (bool).
@@ -56,7 +58,12 @@ var (
 )
 
 func init() {
-	globMatchesLRU, globMatchesLRUErr = lru.New[string, globCacheEntry](globCacheMaxEntries)
+	globMatchesLRU, globMatchesLRUErr = lru.NewWithEvict[string, globCacheEntry](
+		globCacheMaxEntries,
+		func(_ string, _ globCacheEntry) {
+			atomic.AddInt64(&globMatchesEvictions, 1)
+		},
+	)
 }
 
 // GetGlobMatches tries to read and return the Glob matches content from the cache if it exists,

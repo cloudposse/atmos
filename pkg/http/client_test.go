@@ -135,6 +135,13 @@ func TestGitHubAuthenticatedTransport_RoundTrip(t *testing.T) {
 			expectUserAgent: false,
 		},
 		{
+			name:            "uploads.github.com sets headers",
+			url:             "https://uploads.github.com/repos/test/repo/releases/1/assets",
+			token:           "test-token",
+			expectAuth:      true,
+			expectUserAgent: true,
+		},
+		{
 			// github.example.com looks like it has "github" in it but is NOT an allowed host.
 			// Authorization must NOT be leaked to arbitrary subdomains.
 			name:            "github.example.com does not set auth header",
@@ -954,6 +961,7 @@ func TestIsGitHubHost_DefaultAllowlist(t *testing.T) {
 
 	assert.True(t, isGitHubHost("api.github.com"))
 	assert.True(t, isGitHubHost("raw.githubusercontent.com"))
+	assert.True(t, isGitHubHost("uploads.github.com"), "uploads.github.com must be in the default allowlist")
 
 	assert.False(t, isGitHubHost("github.com"))
 	assert.False(t, isGitHubHost("example.com"))

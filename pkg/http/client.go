@@ -32,12 +32,18 @@ const (
 
 // Client defines the interface for making HTTP requests.
 // This interface allows for easy mocking in tests.
+//
+// See the package documentation (doc.go) for guidance on option ordering
+// when composing [ClientOption] values such as [WithTransport] and [WithGitHubToken].
 type Client interface {
 	// Do performs an HTTP request and returns the response.
 	Do(req *http.Request) (*http.Response, error)
 }
 
 // ClientOption is a functional option for configuring the DefaultClient.
+// Options are applied in the order they are passed to [NewDefaultClient].
+// For composition rules when mixing [WithTransport] and [WithGitHubToken], see the
+// "Option ordering" section in the package documentation (doc.go).
 type ClientOption func(*DefaultClient)
 
 // WithTimeout sets the HTTP client timeout.
@@ -167,7 +173,7 @@ func isGitHubHost(host string) bool {
 		}
 	}
 
-	return host == "api.github.com" || host == "raw.githubusercontent.com"
+	return host == "api.github.com" || host == "raw.githubusercontent.com" || host == "uploads.github.com"
 }
 
 // RoundTrip implements http.RoundTripper interface.

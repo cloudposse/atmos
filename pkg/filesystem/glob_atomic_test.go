@@ -276,6 +276,7 @@ func TestOSFileSystem_WriteFileAtomic_Overwrite(t *testing.T) {
 // entry when the cache reaches its capacity (globCacheMaxEntries).
 // This test uses a small in-process simulation: it fills the cache to capacity + 1 and
 // then checks that the first entry was evicted (i.e., a fresh filesystem read is triggered).
+// It also verifies that the eviction counter increments as expected.
 func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 	ResetGlobMatchesCache()
 	t.Cleanup(ResetGlobMatchesCache)
@@ -311,6 +312,10 @@ func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 	// We verify this by checking the cache size is bounded at globCacheMaxEntries.
 	afterLen := GlobCacheLen()
 	assert.LessOrEqual(t, afterLen, globCacheMaxEntries, "LRU cache must not exceed max capacity")
+
+	// The eviction counter must have incremented at least once.
+	evictions := GlobCacheEvictions()
+	assert.Positive(t, evictions, "eviction counter must increment when LRU capacity is exceeded")
 }
 
 // TestGetGlobMatches_TTL_Expiry verifies that a stale cache entry (past TTL)

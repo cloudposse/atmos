@@ -2,15 +2,17 @@ package filesystem
 
 import (
 	"path/filepath"
+	"sync/atomic"
 	"time"
 )
 
-// ResetGlobMatchesCache clears the glob matches LRU cache.
+// ResetGlobMatchesCache clears the glob matches LRU cache and resets the eviction counter.
 // This is exported only for testing to avoid data races from direct struct assignment.
 func ResetGlobMatchesCache() {
 	globMatchesLRUMu.Lock()
 	globMatchesLRU.Purge()
 	globMatchesLRUMu.Unlock()
+	atomic.StoreInt64(&globMatchesEvictions, 0)
 }
 
 // ResetPathMatchCache clears the path match cache.
@@ -38,4 +40,10 @@ func GlobCacheLen() int {
 	globMatchesLRUMu.RLock()
 	defer globMatchesLRUMu.RUnlock()
 	return globMatchesLRU.Len()
+}
+
+// GlobCacheEvictions returns the total number of LRU evictions since the last cache reset.
+// This counter is incremented atomically by the LRU eviction callback.
+func GlobCacheEvictions() int64 {
+	return atomic.LoadInt64(&globMatchesEvictions)
 }
