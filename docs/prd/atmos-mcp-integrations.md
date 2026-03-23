@@ -217,8 +217,6 @@ Extend the existing `atmos mcp` command:
 ```
 atmos mcp start          # (existing) Start Atmos as an MCP server
 atmos mcp list           # List configured external MCP servers and their status
-atmos mcp add <name>     # Add an MCP server (interactive or from registry)
-atmos mcp remove <name>  # Remove an MCP server
 atmos mcp status         # Show status of all running MCP server processes
 atmos mcp restart <name> # Restart an MCP server process
 atmos mcp tools [name]   # List tools exposed by an MCP server
@@ -235,19 +233,6 @@ aws-eks    running   12     Amazon EKS cluster management
 aws-iac    stopped    8     AWS Infrastructure as Code
 aws-s3     running    6     Amazon S3 bucket operations
 custom-db  error      0     Internal database query server
-
-# Add an AWS MCP server interactively.
-$ atmos mcp add aws-eks
-? Command: uvx
-? Arguments: awslabs.amazon-eks-mcp-server@latest
-? Environment variables:
-  AWS_PROFILE=production
-  AWS_REGION=us-east-1
-Added aws-eks to atmos.yaml
-
-# Add from a known registry (shorthand).
-$ atmos mcp add aws-eks --from awslabs/amazon-eks-mcp-server
-Added aws-eks with default configuration
 
 # List tools from a specific server.
 $ atmos mcp tools aws-eks
@@ -778,16 +763,12 @@ Shall I generate an atmos workflow for this decommission sequence?
 
 | File | Lines | Purpose |
 |---|---|---|
-| `cmd/mcp/add.go` | 170 | `atmos mcp add <name>` — add integration with `--command`, `--args`, `--env`, `--description` flags |
-| `cmd/mcp/remove.go` | 85 | `atmos mcp remove <name>` — remove integration from atmos.yaml |
 | `cmd/mcp/status.go` | 80 | `atmos mcp status` — start all, display table (name, status, tools, description) |
 | `cmd/mcp/restart.go` | 60 | `atmos mcp restart <name>` — stop and restart integration |
 | `cmd/mcp/add_test.go` | 120 | Tests: add new section, add to existing, remove, findAtmosYAML |
 | `errors/errors.go` | +1 | `ErrMCPServerAlreadyExists` sentinel |
 
 **What shipped:**
-- ~~`atmos mcp add`~~ ✅ — uses StandardParser for flags, modifies atmos.yaml directly
-- ~~`atmos mcp remove`~~ ✅ — removes integration, uses error builder for messages
 - ~~`atmos mcp restart`~~ ✅ — stop + start cycle
 - ~~`atmos mcp status`~~ ✅ — health table with running/degraded/error status
 
@@ -797,8 +778,6 @@ atmos mcp start          # Start Atmos as MCP server
 atmos mcp list           # List configured integrations
 atmos mcp tools <name>   # List tools from a server
 atmos mcp test <name>    # Test connectivity
-atmos mcp add <name>     # Add integration to config
-atmos mcp remove <name>  # Remove integration from config
 atmos mcp status         # Show all integration statuses
 atmos mcp restart <name> # Restart a server
 ```
@@ -844,9 +823,7 @@ atmos mcp restart <name> # Restart a server
 
 | Feature | Claude Code | Atmos (Proposed) |
 |---------|-------------|------------------|
-| Add MCP server | `claude mcp add` | `atmos mcp add` |
 | List servers | `claude mcp list` | `atmos mcp list` |
-| Remove server | `claude mcp remove` | `atmos mcp remove` |
 | Config location | `.mcp.json` / `~/.claude.json` | `atmos.yaml` |
 | Config scopes | local / project / user | global (atmos.yaml) |
 | Transport | stdio / HTTP / SSE | stdio |

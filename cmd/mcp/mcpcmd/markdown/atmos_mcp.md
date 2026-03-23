@@ -14,8 +14,6 @@ and `atmos ai exec` alongside native Atmos tools.
 
 **Client commands:**
 - `atmos mcp list` — List configured external MCP servers
-- `atmos mcp add` — Add an MCP server to atmos.yaml
-- `atmos mcp remove` — Remove an MCP server from atmos.yaml
 - `atmos mcp tools` — List tools exposed by an MCP server
 - `atmos mcp test` — Test connectivity to an MCP server
 - `atmos mcp status` — Show status of all MCP servers

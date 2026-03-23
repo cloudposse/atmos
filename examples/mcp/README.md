@@ -84,16 +84,6 @@ atmos mcp tools aws-security
 
 # Restart a server
 atmos mcp restart aws-api
-
-# Add a new server
-atmos mcp add my-server \
-  --command uvx \
-  --args "awslabs.some-mcp-server@latest" \
-  --description "My custom server" \
-  --env AWS_REGION=us-east-1
-
-# Remove a server
-atmos mcp remove my-server
 ```
 
 ### Using MCP Tools in AI Chat

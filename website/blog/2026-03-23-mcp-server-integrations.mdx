@@ -104,17 +104,15 @@ atmos ai ask "Compare t3.medium vs t3.large pricing in us-west-2"
 atmos terraform plan vpc -s prod --ai --skill atmos-terraform
 ```
 
-## 8 CLI Commands
+## CLI Commands
 
 ```bash
-atmos mcp start          # Start Atmos as an MCP server (existing)
-atmos mcp list           # List configured external servers
-atmos mcp add <name>     # Add a server to atmos.yaml
-atmos mcp remove <name>  # Remove a server
-atmos mcp tools <name>   # List tools from a server
-atmos mcp test <name>    # Test server connectivity
-atmos mcp status         # Show all server statuses
-atmos mcp restart <name> # Restart a server
+atmos mcp start           # Start Atmos as an MCP server
+atmos mcp list            # List configured external servers
+atmos mcp tools <name>    # List tools from a server
+atmos mcp test <name>     # Test server connectivity
+atmos mcp status          # Show all server statuses
+atmos mcp restart <name>  # Restart a server
 ```
 
 ## Standard Config Format
@@ -128,7 +126,7 @@ mcp:
     my-server:
       command: "uvx"                          # Standard
       args: ["package@latest"]                # Standard
-      env:                                     # Standard
+      env:                                    # Standard
         AWS_REGION: "us-east-1"
       description: "What this server does"    # Atmos extension
       auth_identity: "my-identity"            # Atmos Auth integration

@@ -173,7 +173,7 @@ Atmos supports the [Model Context Protocol](https://modelcontextprotocol.io) (MC
 **Atmos as MCP Server** — Exposes Atmos AI tools to external clients (Claude Desktop, Claude Code,
 VS Code, Cursor, Gemini CLI). Use Atmos tools inside your preferred AI assistant.
 
-**External MCP Servers** — Connect to AWS, GCP, and custom MCP servers. Their tools become available
+**External MCP Servers** — Connect to AWS, GCP, Azure, and custom MCP servers. Their tools become available
 in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos tools.
 
 ```bash
@@ -181,9 +181,6 @@ in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos t
 atmos mcp list                    # See configured servers
 atmos mcp test aws-docs           # Test connectivity
 atmos mcp tools aws-security      # List available tools
-atmos mcp add aws-pricing \       # Add a new server
-  --command uvx --args "awslabs.aws-pricing-mcp-server@latest"
-
 # External MCP tools are available in AI commands
 atmos ai ask "What's the price of m7i.xlarge in us-east-1?"
 atmos ai chat   # Then: "Check our security posture in us-east-1"
