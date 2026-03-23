@@ -20,6 +20,7 @@ package exec
 // executeMainTerraformCommand.
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -74,9 +76,16 @@ func TestExecuteCommandPipeline_SingleInvocation(t *testing.T) {
 		workingDir:    t.TempDir(),
 	}
 
-	// We expect an error because the subprocess exits 1.  The key assertion is
-	// the counter file — not the error value itself.
-	_ = executeCommandPipeline(&atmosConfig, &info, execCtx)
+	// We expect an error because the subprocess exits 1.
+	pipelineErr := executeCommandPipeline(&atmosConfig, &info, execCtx)
+	require.Error(t, pipelineErr, "subprocess exits 1 so pipeline must return an error")
+
+	// Verify the exit code is preserved through the pipeline as ExitCodeError.
+	var exitErr errUtils.ExitCodeError
+	require.True(t, errors.As(pipelineErr, &exitErr),
+		"main command failure must be wrapped as ExitCodeError, got: %v", pipelineErr)
+	assert.Equal(t, 1, exitErr.Code,
+		"ExitCodeError must preserve the subprocess exit code")
 
 	// Read the counter file.  Each byte written represents one subprocess invocation.
 	data, readErr := os.ReadFile(counterFile)

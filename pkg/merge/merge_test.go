@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -761,48 +762,62 @@ func BenchmarkMerge(b *testing.B) {
 	}
 }
 
-// TestMergeWithOptions_AppendSliceFlag verifies that the appendSlice flag in MergeWithOptions
-// threads through to deepMergeNative, causing list values to be appended rather than replaced.
-func TestMergeWithOptions_AppendSliceFlag(t *testing.T) {
-	inputs := []map[string]any{
-		{"tags": []any{"a", "b"}},
-		{"tags": []any{"c"}},
+// TestMergeWithOptions_SliceFlags verifies that appendSlice and sliceDeepCopy flags
+// wire through to deepMergeNative correctly for all three list merge strategies.
+func TestMergeWithOptions_SliceFlags(t *testing.T) {
+	tests := []struct {
+		name          string
+		inputs        []map[string]any
+		appendSlice   bool
+		sliceDeepCopy bool
+		wantTags      []any
+	}{
+		{
+			name:        "appendSlice appends src to dst",
+			inputs:      []map[string]any{{"tags": []any{"a", "b"}}, {"tags": []any{"c"}}},
+			appendSlice: true,
+			wantTags:    []any{"a", "b", "c"},
+		},
+		{
+			name:          "sliceDeepCopy preserves dst scalars",
+			inputs:        []map[string]any{{"tags": []any{"base-1", "base-2"}}, {"tags": []any{"override-1"}}},
+			sliceDeepCopy: true,
+			wantTags:      []any{"base-1", "base-2"},
+		},
+		{
+			name:     "no flags replaces list",
+			inputs:   []map[string]any{{"tags": []any{"a", "b"}}, {"tags": []any{"c"}}},
+			wantTags: []any{"c"},
+		},
+		{
+			name: "sliceDeepCopy with nested maps merges element-wise",
+			inputs: []map[string]any{
+				{"items": []any{map[string]any{"id": 1, "name": "base"}}},
+				{"items": []any{map[string]any{"id": 2, "extra": "new"}}},
+			},
+			sliceDeepCopy: true,
+			wantTags:      nil, // checked separately below.
+		},
 	}
-	// appendSlice=true, sliceDeepCopy=false: src elements appended to dst.
-	result, err := MergeWithOptions(nil, inputs, true, false)
-	assert.NoError(t, err)
-	tags, ok := result["tags"].([]any)
-	assert.True(t, ok, "tags must be []any")
-	assert.Equal(t, []any{"a", "b", "c"}, tags,
-		"appendSlice=true must append src elements to dst slice")
-}
-
-// TestMergeWithOptions_SliceDeepCopyFlag verifies that the sliceDeepCopy flag in MergeWithOptions
-// threads through to deepMergeNative, producing element-wise merge with dst length preserved.
-func TestMergeWithOptions_SliceDeepCopyFlag(t *testing.T) {
-	inputs := []map[string]any{
-		{"tags": []any{"base-1", "base-2"}},
-		{"tags": []any{"override-1"}},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := MergeWithOptions(nil, tt.inputs, tt.appendSlice, tt.sliceDeepCopy)
+			require.NoError(t, err)
+			if tt.wantTags != nil {
+				tags, ok := result["tags"].([]any)
+				require.True(t, ok, "tags must be []any")
+				assert.Equal(t, tt.wantTags, tags)
+			}
+			// Nested map case: verify element-wise merge.
+			if tt.name == "sliceDeepCopy with nested maps merges element-wise" {
+				items, ok := result["items"].([]any)
+				require.True(t, ok)
+				require.Len(t, items, 1)
+				item := items[0].(map[string]any)
+				assert.Equal(t, 2, item["id"], "src id overrides dst")
+				assert.Equal(t, "base", item["name"], "dst name preserved")
+				assert.Equal(t, "new", item["extra"], "src extra merged in")
+			}
+		})
 	}
-	// sliceDeepCopy=true: result length = dst length; scalar src element does not override dst.
-	result, err := MergeWithOptions(nil, inputs, false, true)
-	assert.NoError(t, err)
-	tags, ok := result["tags"].([]any)
-	assert.True(t, ok, "tags must be []any")
-	assert.Equal(t, []any{"base-1", "base-2"}, tags,
-		"sliceDeepCopy=true must preserve dst length and scalar dst elements")
-}
-
-// TestMergeWithOptions_NoFlagsReplaceList verifies that with both appendSlice and sliceDeepCopy
-// false, list values in src fully replace those in dst (default replace-list semantics).
-func TestMergeWithOptions_NoFlagsReplaceList(t *testing.T) {
-	inputs := []map[string]any{
-		{"tags": []any{"a", "b"}},
-		{"tags": []any{"c"}},
-	}
-	result, err := MergeWithOptions(nil, inputs, false, false)
-	assert.NoError(t, err)
-	tags, ok := result["tags"].([]any)
-	assert.True(t, ok, "tags must be []any")
-	assert.Equal(t, []any{"c"}, tags, "no flags: src list replaces dst list")
 }

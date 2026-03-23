@@ -1,6 +1,7 @@
 package merge
 
 import (
+	"fmt"
 	"reflect"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -84,7 +85,7 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		if srcMap, srcIsMap := srcVal.(map[string]any); srcIsMap {
 			if dstMap, dstIsMap := dstVal.(map[string]any); dstIsMap {
 				if err := deepMergeNative(dstMap, srcMap, appendSlice, sliceDeepCopy); err != nil {
-					return err
+					return fmt.Errorf("merge key %q: %w", k, err)
 				}
 				continue
 			}
@@ -98,7 +99,7 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		if normalizedSrcMap, ok := deepCopyValue(srcVal).(map[string]any); ok {
 			if dstMap, dstIsMap := dstVal.(map[string]any); dstIsMap {
 				if err := deepMergeNative(dstMap, normalizedSrcMap, appendSlice, sliceDeepCopy); err != nil {
-					return err
+					return fmt.Errorf("merge key %q: %w", k, err)
 				}
 				continue
 			}
@@ -222,7 +223,7 @@ func mergeSlicesNative(dst, src []any, appendSlice, sliceDeepCopy bool) ([]any, 
 			merged[k] = deepCopyValue(v)
 		}
 		if err := deepMergeNative(merged, srcMap, appendSlice, sliceDeepCopy); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("merge slice index %d: %w", i, err)
 		}
 		result[i] = merged
 	}

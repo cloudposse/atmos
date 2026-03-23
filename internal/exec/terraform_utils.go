@@ -103,13 +103,17 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 // code 1 even though we are already in the right workspace, so we should not treat the failure
 // as a fatal error.
 //
-// TF_DATA_DIR parity with Terraform: if TF_DATA_DIR is set, Terraform resolves it relative to
-// the working directory of the terraform process (i.e. componentPath).  This function applies
-// the identical resolution: a relative TF_DATA_DIR is joined to componentPath so both paths
-// are always consistent, regardless of the atmos process CWD.
-func isTerraformCurrentWorkspace(componentPath, workspace string) bool {
-	//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos config var.
-	tfDataDir := os.Getenv("TF_DATA_DIR")
+// TF_DATA_DIR resolution: the envList parameter carries the subprocess env vars (typically
+// info.ComponentEnvList).  If TF_DATA_DIR is set there, it takes precedence over the parent
+// process env, ensuring this helper reads the same data directory that the terraform subprocess
+// would use.  A relative TF_DATA_DIR is joined to componentPath, matching Terraform's own
+// resolution relative to the process working directory.
+func isTerraformCurrentWorkspace(componentPath, workspace string, envList []string) bool {
+	tfDataDir := envVarFromList(envList, "TF_DATA_DIR")
+	if tfDataDir == "" {
+		//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos config var.
+		tfDataDir = os.Getenv("TF_DATA_DIR")
+	}
 	if tfDataDir == "" {
 		tfDataDir = ".terraform"
 	}

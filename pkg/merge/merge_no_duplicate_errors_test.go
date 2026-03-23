@@ -92,9 +92,13 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 	os.Stderr = oldStderr
 	stderrOutput := <-stderrChan
 
-	// The error must be returned, not swallowed, and must wrap ErrMergeTypeMismatch.
-	assert.True(t, errors.Is(err, errUtils.ErrMergeTypeMismatch),
-		"type-mismatch must return an error wrapping ErrMergeTypeMismatch, got: %v", err)
+	// The error must be returned, not swallowed, and must keep the full merge error chain.
+	if assert.Error(t, err, "type-mismatch must return an error") {
+		assert.True(t, errors.Is(err, errUtils.ErrMerge),
+			"error must wrap ErrMerge (outer sentinel), got: %v", err)
+		assert.True(t, errors.Is(err, errUtils.ErrMergeTypeMismatch),
+			"error must wrap ErrMergeTypeMismatch (inner sentinel), got: %v", err)
+	}
 
 	// The error must be returned to caller, not printed to stderr
 	assert.Empty(t, stderrOutput, "Merge should not print to stderr")

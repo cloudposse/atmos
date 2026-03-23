@@ -72,14 +72,12 @@ Cross-validation tests (opt-in via `go test -tags compare_mergo ./pkg/merge/...`
 the native implementation matches mergo for the core cases.  Where behavior intentionally
 differs, the tests document it as a **defined contract** (see below).
 
-### Edge case: `sliceDeepCopy` result length (defined contract)
+### Edge case: `sliceDeepCopy` result length
 
 When `sliceDeepCopy` is active and the source list is **longer** than the destination list,
-extra source elements beyond `len(dst)` are silently dropped (the result length equals
-`len(dst)`).  This is an **intentional divergence** from mergo — the native implementation
-adopts this as a defined contract that it owns independently.  The behavior is verified in
-[`merge_native.go`](https://github.com/cloudposse/atmos/blob/main/pkg/merge/merge_native.go)
-and cross-validated against mergo in
+the merged result keeps the overlapping merged positions and appends deep-copied source tail
+elements, so the result length grows to `max(len(dst), len(src))`.  This matches mergo's
+`WithSliceDeepCopy` behavior and is cross-validated against mergo in
 [`merge_compare_mergo_test.go`](https://github.com/cloudposse/atmos/blob/main/pkg/merge/merge_compare_mergo_test.go)
 (run with `go test -tags compare_mergo ./pkg/merge/...`).
 See [`docs/fixes/2026-03-19-deep-merge-native-fixes.md`](https://github.com/cloudposse/atmos/blob/main/docs/fixes/2026-03-19-deep-merge-native-fixes.md)

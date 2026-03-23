@@ -4,7 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
@@ -163,19 +165,14 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 	require.NoError(t, err)
 
 	defer func() {
-		// Clean up terraform state files.
-		err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform"))
-		assert.NoError(t, err)
+		// Clean up terraform state files from the shared fixture directory.
+		// Failing to remove these would leak state into subsequent test runs.
+		assert.NoError(t, os.RemoveAll(filepath.Join(mockComponentPath, ".terraform")))
+		assert.NoError(t, os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d")))
 
-		err = os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d"))
-		assert.NoError(t, err)
-
-		if err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate")); err != nil && !os.IsNotExist(err) {
-			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
-		}
-
-		if err = os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup")); err != nil && !os.IsNotExist(err) {
-			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		// Single files may be locked briefly on Windows; retry before failing.
+		for _, name := range []string{"terraform.tfstate", "terraform.tfstate.backup"} {
+			removeWithRetry(t, filepath.Join(mockComponentPath, name))
 		}
 	}()
 
@@ -209,4 +206,24 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 	// State should NOT exist at the wrong location.
 	_, err = os.Stat(wrongStatePath)
 	assert.True(t, os.IsNotExist(err), "State file should NOT exist at %s when workspaces are disabled", wrongStatePath)
+}
+
+// removeWithRetry removes a file, retrying on Windows where brief file locks
+// can cause transient failures.  Missing files are not an error.  If the file
+// still exists after all retries the test is failed so stale state is never
+// silently left in a shared fixture.
+func removeWithRetry(t *testing.T, path string) {
+	t.Helper()
+	const maxAttempts = 3
+	for i := range maxAttempts {
+		err := os.Remove(path)
+		if err == nil || os.IsNotExist(err) {
+			return
+		}
+		if i < maxAttempts-1 && runtime.GOOS == "windows" {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		assert.NoError(t, err, "failed to remove %s after %d attempt(s)", path, i+1)
+	}
 }

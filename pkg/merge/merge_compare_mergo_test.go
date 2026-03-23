@@ -7,7 +7,7 @@
 //
 // To run locally (requires dario.cat/mergo v1.0.2):
 //
-//	go test -tags compare_mergo ./pkg/merge/... -run CrossValidate -v
+//	go test -tags compare_mergo ./pkg/merge/... -run CompareMergo -v
 //
 // The purpose of these tests is to document where native behavior MATCHES mergo
 // and where it intentionally DIVERGES (defined contract).
@@ -134,15 +134,18 @@ func TestCompareMergo_SliceModes(t *testing.T) {
 		require.True(t, ok)
 		assert.Len(t, groups, 2)
 
-		// First element: size overridden by dst (scalar kept from dst).
+		// First element: scalar fields from src override dst within the merged map.
 		g0, ok := groups[0].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "web", g0["name"])
+		assert.Equal(t, "large", g0["size"])
 
-		// Second element: replicas not present in dst, so dst is kept.
+		// Second element: dst-only fields are preserved and src-only fields are added.
 		g1, ok := groups[1].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "api", g1["name"])
+		assert.Equal(t, "medium", g1["size"])
+		assert.Equal(t, 3, g1["replicas"])
 	})
 
 	t.Run("sliceDeepCopy src extends beyond dst length", func(t *testing.T) {

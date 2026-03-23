@@ -233,7 +233,7 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	// was deleted.  In that case we are already in the correct workspace and can proceed.
 	var newExitCodeErr errUtils.ExitCodeError
 	if errors.As(newErr, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
-		isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace) {
+		isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace, info.ComponentEnvList) {
 		log.Warn("Workspace is already active but its state directory is missing; proceeding — subsequent terraform commands may report missing state",
 			"workspace", info.TerraformWorkspace)
 		return nil

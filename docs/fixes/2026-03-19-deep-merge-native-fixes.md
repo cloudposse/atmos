@@ -19,14 +19,14 @@ here affects every single `atmos` command that processes stacks.
 ### Architecture Change
 
 **Before:**
-```
+```text
 for each input:
   copy = DeepCopyMap(input)     // Full deep copy of every input
   mergo.Merge(result, copy)     // mergo merge (uses reflection internally)
 ```
 
 **After:**
-```
+```text
 result = DeepCopyMap(inputs[0])   // Deep copy only the first input
 for each remaining input:
   deepMergeNative(result, input)  // Native merge with leaf-level copying (no reflection)

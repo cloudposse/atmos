@@ -103,7 +103,7 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 		// maxOccurrences too large and letting doubled contextToken occurrences slip through.
 		// Use absPath (already resolved above) for CWD-independent counting.
 		var fixtureFileCount int
-		_ = filepath.WalkDir(filepath.Join(absPath, "stacks"), func(_ string, d os.DirEntry, err error) error {
+		walkErr := filepath.WalkDir(filepath.Join(absPath, "stacks"), func(_ string, d os.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
@@ -115,6 +115,7 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 			}
 			return nil
 		})
+		require.NoError(t, walkErr, "failed to scan stacks fixture at %s", filepath.Join(absPath, "stacks"))
 		// Fail loudly if the fixture is empty or the path is wrong — a silent 0 would
 		// disable the independence check and make it a no-op.
 		require.Positive(t, fixtureFileCount, "stacks fixture must contain YAML files — check absPath: %s", filepath.Join(absPath, "stacks"))
