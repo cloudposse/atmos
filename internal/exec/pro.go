@@ -23,18 +23,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// ProLockUnlockCmdArgs holds the common arguments for pro lock and unlock commands.
 type ProLockUnlockCmdArgs struct {
 	Component   string
 	Stack       string
 	AtmosConfig schema.AtmosConfiguration
 }
 
+// ProLockCmdArgs holds the arguments for the pro lock command.
 type ProLockCmdArgs struct {
 	ProLockUnlockCmdArgs
 	LockMessage string
 	LockTTL     int32
 }
 
+// ProUnlockCmdArgs holds the arguments for the pro unlock command.
 type ProUnlockCmdArgs struct {
 	ProLockUnlockCmdArgs
 }

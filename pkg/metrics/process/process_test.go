@@ -24,6 +24,9 @@ func TestCollect_SuccessfulCommand(t *testing.T) {
 }
 
 func TestCollect_FailingCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("false command not available on Windows")
+	}
 	cmd := exec.Command("false")
 	metrics, err := Collect(cmd)
 	require.Error(t, err)
@@ -59,6 +62,9 @@ func TestCollect_RusageFields(t *testing.T) {
 }
 
 func TestCollect_WallTimeAccuracy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sleep command not available on Windows")
+	}
 	cmd := exec.Command("sleep", "0.1")
 	metrics, err := Collect(cmd)
 	require.NoError(t, err)
