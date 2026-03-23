@@ -10,7 +10,6 @@
 #   - AWS credentials (for servers that need them):
 #       Option A: `aws configure` or `export AWS_PROFILE=...`
 #       Option B: Atmos Auth with `auth_identity` on each server (see auth section below)
-#   - GraphViz (for aws-diagram-mcp-server only): `brew install graphviz`
 #
 # Quick start:
 #   atmos mcp list          # See configured servers
@@ -117,21 +116,6 @@ mcp:
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Security — Well-Architected security posture assessment"
 
-    # -----------------------------------------------------------------------
-    # AWS Diagram Server — Architecture diagram generation
-    # -----------------------------------------------------------------------
-    # Creates AWS architecture diagrams using the Python diagrams package.
-    # Requires GraphViz to be installed: brew install graphviz
-    #
-    # Note: This server is deprecated by AWS. Consider using the diagram
-    # agent skill in the deploy-on-aws plugin instead.
-    aws-diagram:
-      command: uvx
-      args:
-        - "awslabs.aws-diagram-mcp-server@latest"
-      env:
-        FASTMCP_LOG_LEVEL: "ERROR"
-      description: "AWS Diagram — architecture diagram generation (requires GraphViz)"
 
 # ---------------------------------------------------------------------------
 # Atmos Toolchain Integration

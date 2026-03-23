@@ -6,7 +6,7 @@ tools become available in `atmos ai chat` and `atmos ai exec` alongside native A
 
 ## What's Included
 
-Six AWS MCP servers are pre-configured in `atmos.yaml`:
+Five AWS MCP servers are pre-configured in `atmos.yaml`:
 
 | Server            | What It Does                                 | Credentials Required |
 |-------------------|----------------------------------------------|----------------------|
@@ -15,7 +15,6 @@ Six AWS MCP servers are pre-configured in `atmos.yaml`:
 | **aws-knowledge** | Managed AWS knowledge base (remote service)  | No                   |
 | **aws-pricing**   | Real-time AWS pricing and cost analysis      | Yes (free API)       |
 | **aws-security**  | Well-Architected security posture assessment | Yes (read-only)      |
-| **aws-diagram**   | Architecture diagram generation              | No (needs GraphViz)  |
 
 ## Prerequisites
 
@@ -37,11 +36,6 @@ Six AWS MCP servers are pre-configured in `atmos.yaml`:
    export AWS_ACCESS_KEY_ID=...
    export AWS_SECRET_ACCESS_KEY=...
    export AWS_DEFAULT_REGION=us-east-1
-   ```
-
-3. **GraphViz** (only for aws-diagram server):
-   ```bash
-   brew install graphviz
    ```
 
 ## Quick Start
@@ -278,13 +272,6 @@ Searches and fetches AWS documentation in markdown format. No credentials needed
 
 Remote MCP server operated by AWS. Provides documentation, code samples, and regional availability information. No
 credentials or local installation needed.
-
-### aws-diagram — Architecture Diagrams
-
-Creates AWS architecture diagrams using the Python `diagrams` package. Requires GraphViz.
-
-> **Note:** This server is deprecated by AWS. Consider using the diagram agent skill in the `deploy-on-aws` plugin
-> instead.
 
 ## Learn More
 
