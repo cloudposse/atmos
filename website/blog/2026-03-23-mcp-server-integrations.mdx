@@ -1,0 +1,193 @@
+---
+slug: mcp-server-integrations
+title: "Connect Atmos to AWS MCP Servers — Use Cloud Tools Without Reimplementing Them"
+authors: [aknysh]
+tags: [feature]
+---
+
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+Atmos can now connect to external MCP servers and use their tools directly in AI conversations.
+Configure an AWS MCP server in `atmos.yaml`, and its tools appear alongside native Atmos tools
+in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` — no custom integration code needed.
+
+<!--truncate-->
+
+## Why This Matters
+
+AWS publishes [20+ MCP servers](https://github.com/awslabs/mcp) for pricing, security, documentation,
+and direct API access. Instead of reimplementing any of that in Atmos, you can now install them and
+use them from the Atmos CLI. One `atmos.yaml` section, zero glue code.
+
+## Quick Start
+
+Add servers to your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  servers:
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation"
+    aws-pricing:
+      command: uvx
+      args: ["awslabs.aws-pricing-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+      description: "AWS Pricing"
+```
+</File>
+
+Then use them:
+
+```bash
+# Check what you've configured
+atmos mcp list
+
+# Verify a server works
+atmos mcp test aws-docs
+
+# See what tools a server exposes
+atmos mcp tools aws-pricing
+
+# Ask questions using the server tools
+atmos ai ask "What's the on-demand price for m7i.xlarge in us-east-1?"
+```
+
+## What You Can Do
+
+### Search AWS Documentation
+
+No credentials needed — try this first:
+
+<Terminal title="shell">
+```bash
+$ atmos mcp test aws-docs
+✓ Server started successfully
+✓ Initialization handshake complete
+✓ 4 tools available
+✓ Server responds to ping
+
+$ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
+```
+</Terminal>
+
+### Check Security Posture
+
+```bash
+atmos ai ask "Is GuardDuty enabled in us-east-1?"
+
+atmos ai exec "Check security services, storage encryption, and \
+  network security in us-east-1, then summarize as a markdown report"
+```
+
+### Look Up Pricing
+
+```bash
+atmos ai ask "Compare t3.medium vs t3.large pricing in us-west-2"
+```
+
+### Analyze Terraform Plans with Cloud Context
+
+```bash
+# AI can use MCP tools to enrich its analysis
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform
+```
+
+## 8 CLI Commands
+
+```bash
+atmos mcp start          # Start Atmos as an MCP server (existing)
+atmos mcp list           # List configured external servers
+atmos mcp add <name>     # Add a server to atmos.yaml
+atmos mcp remove <name>  # Remove a server
+atmos mcp tools <name>   # List tools from a server
+atmos mcp test <name>    # Test server connectivity
+atmos mcp status         # Show all server statuses
+atmos mcp restart <name> # Restart a server
+```
+
+## Standard Config Format
+
+The `command`, `args`, `env` fields follow the same format used by Claude Code, Codex CLI, and
+Gemini CLI. Atmos adds `description`, `auth_identity`, and `timeout` as extensions:
+
+```yaml
+mcp:
+  servers:
+    my-server:
+      command: "uvx"                          # Standard
+      args: ["package@latest"]                # Standard
+      env:                                     # Standard
+        AWS_REGION: "us-east-1"
+      description: "What this server does"    # Atmos extension
+      auth_identity: "my-identity"            # Atmos Auth integration
+      timeout: "30s"                          # Connection timeout
+```
+
+## Atmos Auth Integration
+
+Use [Atmos Auth](/cli/configuration/auth) to inject credentials automatically — no manual
+`AWS_PROFILE` setup:
+
+```yaml
+mcp:
+  servers:
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      auth_identity: "security-audit"  # Credentials injected automatically
+```
+
+Atmos authenticates through the identity chain, writes isolated credential files, and sets
+`AWS_SHARED_CREDENTIALS_FILE` + `AWS_PROFILE` on the subprocess.
+
+## Toolchain Integration
+
+Auto-install `uvx` (the Python package runner used by all AWS MCP servers) via the
+[Atmos Toolchain](/cli/configuration/toolchain):
+
+```yaml
+toolchain:
+  tools:
+    uv:
+      version: ">=0.7"
+```
+
+## YAML Functions
+
+Atmos YAML functions work in env values:
+
+```yaml
+mcp:
+  servers:
+    my-server:
+      command: uvx
+      args: ["my-server@latest"]
+      env:
+        AWS_REGION: !env AWS_DEFAULT_REGION    # Read OS env var
+        API_KEY: !exec "vault kv get -field=key secret/mcp"  # Run command
+        PROJECT_ROOT: !repo-root               # Git root path
+```
+
+## Try It
+
+<ActionCard title="Explore the MCP Example">
+    Try a complete example with 5 pre-configured AWS MCP servers — documentation, knowledge base,
+    pricing, API access, and security assessment.
+    <div>
+      <PrimaryCTA to="/examples/mcp">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Learn More
+
+- [MCP Configuration](/cli/configuration/mcp) — Full configuration reference
+- [MCP Commands](/cli/commands/mcp/list) — CLI command reference
+- [AWS MCP Servers](https://github.com/awslabs/mcp) — All available AWS servers
+- [Atmos AI](/ai) — AI features overview
