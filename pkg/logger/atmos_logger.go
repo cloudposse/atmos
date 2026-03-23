@@ -18,22 +18,21 @@ type AtmosLogger struct {
 }
 
 // NewAtmosLogger creates a new AtmosLogger instance wrapping the given charm logger.
-// An optional io.Writer may be provided as the second argument to initialize the
-// tracked output writer. When omitted, os.Stderr is used as the default, which
-// matches the default writer of both charm.Default() and charm.New(os.Stderr).
+// Pass the same io.Writer that was used to construct charmLogger so that GetOutput()
+// returns the correct writer immediately after construction. Pass nil to use os.Stderr,
+// which matches the default writer of charm.Default() and charm.New(os.Stderr).
 //
 // If charmLogger was initialized with a non-stderr writer (e.g., charm.New(&buf)),
-// pass that same writer as the second argument so that GetOutput() returns the
-// correct value immediately without requiring a follow-up SetOutput call.
-func NewAtmosLogger(charmLogger *charm.Logger, w ...io.Writer) *AtmosLogger {
+// pass that same writer so that GetOutput() returns the correct value immediately
+// without requiring a follow-up SetOutput call.
+func NewAtmosLogger(charmLogger *charm.Logger, w io.Writer) *AtmosLogger {
 	if charmLogger == nil {
 		charmLogger = charm.Default()
 	}
-	writer := io.Writer(os.Stderr)
-	if len(w) > 0 && w[0] != nil {
-		writer = w[0]
+	if w == nil {
+		w = os.Stderr
 	}
-	return &AtmosLogger{charm: charmLogger, writer: writer}
+	return &AtmosLogger{charm: charmLogger, writer: w}
 }
 
 // Trace logs a trace message.
@@ -159,6 +158,10 @@ func (l *AtmosLogger) SetColorProfile(profile termenv.Profile) {
 // concurrent SetOutput can update charm's writer between reading l.writer and
 // calling l.charm.WithPrefix(prefix). l.charm is immutable after construction
 // (no method replaces the pointer), so the read lock is sufficient.
+//
+// Writer snapshot: the returned logger captures the parent's output writer at
+// the time of this call. Subsequent SetOutput calls on the parent do not
+// propagate to the child.
 func (l *AtmosLogger) WithPrefix(prefix string) *AtmosLogger {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -168,6 +171,10 @@ func (l *AtmosLogger) WithPrefix(prefix string) *AtmosLogger {
 
 // With returns a new logger with the given key-value pairs.
 // The read lock is held for the entire duration of the charm call (see WithPrefix).
+//
+// Writer snapshot: the returned logger captures the parent's output writer at
+// the time of this call. Subsequent SetOutput calls on the parent do not
+// propagate to the child.
 func (l *AtmosLogger) With(keyvals ...interface{}) *AtmosLogger {
 	l.mu.RLock()
 	defer l.mu.RUnlock()

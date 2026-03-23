@@ -49,6 +49,12 @@ var archivedRepoSFGroup singleflight.Group
 
 // newGitHubClientHookMu guards newGitHubClientHook to prevent data races when tests
 // call SetNewGitHubClientHookForTest while IsRepoArchived reads the hook.
+//
+// NOTE: test utility — cannot move to export_test.go because IsRepoArchived (production
+// code in this file) reads newGitHubClientHook at lines below. Variables referenced by
+// production code must be in production files; export_test.go is only compiled during
+// `go test ./pkg/github/...` and its declarations are invisible to production functions
+// in the same package.
 var newGitHubClientHookMu sync.RWMutex
 
 // newGitHubClientHook can be set in tests to replace newGitHubClient with a custom
@@ -56,8 +62,10 @@ var newGitHubClientHookMu sync.RWMutex
 // default), newGitHubClient is used. This is a test-only hook; production code must
 // never assign this variable. Access only via newGitHubClientHookMu.
 //
-// NOTE: test utility — see SeedArchivedRepoCache for the rationale on why this is
-// exported from the production package.
+// NOTE: test utility — cannot move to export_test.go for the same reason as
+// newGitHubClientHookMu: the production IsRepoArchived function reads this variable.
+// SetNewGitHubClientHookForTest (the public setter used by tests) lives in
+// pkg/github/export_test.go and is only compiled into test binaries.
 var newGitHubClientHook func(ctx context.Context) *ghpkg.Client
 
 // scpGitHubURLPattern matches SCP-style GitHub URLs (e.g., git@github.com:owner/repo.git).
@@ -247,9 +255,14 @@ func IsRepoArchived(ctx context.Context, owner, repo string) (bool, error) {
 // pair. This is primarily intended for tests to exercise callers of IsRepoArchived
 // (e.g., warnIfArchivedGitHubRepo) without making real GitHub API calls.
 //
-// NOTE: This is a test utility. It is exported because it is needed from tests in
-// multiple packages (e.g., internal/exec), which Go's export_test.go mechanism cannot
-// satisfy across package boundaries. Do not rely on this function in production code.
+// NOTE: test utility — exported from the production package because tests in multiple
+// packages (e.g., internal/exec) need to call it. Go's export_test.go mechanism is
+// limited to the package under test: a function defined in pkg/github/export_test.go
+// (package github) is invisible to test binaries in other packages that import
+// pkg/github. Since this function manipulates unexported package-level state
+// (archivedRepoCache), it also cannot be re-implemented in internal/exec/export_test.go
+// without re-exporting it here. Therefore it must remain in the production package with
+// this documentation. Do not call this function from non-test code.
 //
 // CONCURRENCY: Must only be called before any IsRepoArchived calls are in progress
 // for the seeded key. If isRepoArchivedWithClient is actively in-flight for owner/repo
@@ -263,7 +276,10 @@ func SeedArchivedRepoCache(owner, repo string, archived bool) {
 // singleflight group. It is intended for use in tests to prevent cache entries from
 // one sub-test leaking into subsequent sub-tests.
 //
-// NOTE: This is a test utility — see SeedArchivedRepoCache for the rationale.
+// NOTE: test utility — see SeedArchivedRepoCache for the full rationale. This function
+// must remain in the production package for the same reason: it manipulates unexported
+// package state (archivedRepoCache, archivedRepoSFGroup) and is needed from tests in
+// multiple packages. Do not call this function from non-test code.
 //
 // CONCURRENCY: Must only be called when no concurrent IsRepoArchived or
 // isRepoArchivedWithClient calls are in progress. Resetting the singleflight group

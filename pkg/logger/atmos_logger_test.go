@@ -17,7 +17,7 @@ func TestNewAtmosLogger(t *testing.T) {
 	t.Run("valid logger", func(t *testing.T) {
 		baseLogger := log.New(os.Stderr)
 		assert.NotPanics(t, func() {
-			logger := NewAtmosLogger(baseLogger)
+			logger := NewAtmosLogger(baseLogger, nil)
 			assert.NotNil(t, logger)
 		})
 	})
@@ -25,7 +25,7 @@ func TestNewAtmosLogger(t *testing.T) {
 	// Test with log.Default()
 	t.Run("default logger", func(t *testing.T) {
 		assert.NotPanics(t, func() {
-			logger := NewAtmosLogger(log.Default())
+			logger := NewAtmosLogger(log.Default(), nil)
 			assert.NotNil(t, logger)
 		})
 	})
@@ -34,7 +34,7 @@ func TestNewAtmosLogger(t *testing.T) {
 	t.Run("nil logger", func(t *testing.T) {
 		assert.NotPanics(t, func() {
 			var nilLogger *log.Logger
-			logger := NewAtmosLogger(nilLogger)
+			logger := NewAtmosLogger(nilLogger, nil)
 			assert.NotNil(t, logger)
 			// Should use default logger
 			assert.NotNil(t, logger.charm)
@@ -44,7 +44,7 @@ func TestNewAtmosLogger(t *testing.T) {
 	// Test that GetOutput returns os.Stderr when no writer is provided.
 	t.Run("default writer is os.Stderr", func(t *testing.T) {
 		baseLogger := log.New(os.Stderr)
-		logger := NewAtmosLogger(baseLogger)
+		logger := NewAtmosLogger(baseLogger, nil)
 		assert.Equal(t, os.Stderr, logger.GetOutput(), "GetOutput should return os.Stderr by default")
 	})
 
@@ -519,7 +519,7 @@ func TestAtmosLogger_Integration(t *testing.T) {
 	baseLogger := log.New(&buf)
 	baseLogger.SetLevel(log.DebugLevel)
 
-	atmosLogger := NewAtmosLogger(baseLogger)
+	atmosLogger := NewAtmosLogger(baseLogger, &buf)
 	require.NotNil(t, atmosLogger)
 
 	// Verify that our wrapper properly delegates

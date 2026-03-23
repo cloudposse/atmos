@@ -185,6 +185,23 @@ Atmos prioritizes authentication credentials based on predefined environment var
 
  <dt>`GITHUB_TOKEN`</dt>
  <dd>Used as a fallback if `ATMOS_GITHUB_TOKEN` is not set.</dd>
+
+ <dt>`ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT`</dt>
+ <dd>
+   Maximum time Atmos will wait for the GitHub API archived-status check before giving up and
+   proceeding with vendoring. The check is best-effort: a timeout or network error is logged at
+   `TRACE` level and does not abort the vendor operation.
+
+   - **Default:** `5s`
+   - **Opt-out (skip check entirely):** `0s` — recommended for air-gapped or offline environments
+   - **Format:** Any Go duration string, e.g. `2s`, `500ms`, `10s`
+
+   :::note
+   This value is read **once** when Atmos starts. Setting `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT`
+   via `os.Setenv` after the process starts has no effect. Use this variable in the process environment
+   before launching Atmos.
+   :::
+ </dd>
 </dl>
 
 **Default Username for HTTPS:** `x-access-token`
