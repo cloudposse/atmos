@@ -2,7 +2,7 @@
 
 **Status:** Complete — All 4 Phases Shipped
 **Version:** 5.0
-**Last Updated:** 2026-03-22
+**Last Updated:** 2026-03-23
 
 ---
 
@@ -706,9 +706,9 @@ Shall I generate an atmos workflow for this decommission sequence?
 | `pkg/mcp/client/session.go` | 180 | Session lifecycle: Start (subprocess + MCP handshake + tool list), Stop, CallTool, Ping |
 | `pkg/mcp/client/manager.go` | 120 | Multi-session manager: NewManager, Start/Stop/StopAll, Get/List, Test |
 | `pkg/mcp/client/bridge.go` | 90 | BridgedTool wrapping external MCP tools with namespaced names |
-| `cmd/mcp/list.go` | 50 | `atmos mcp list` — tabular output of configured integrations |
-| `cmd/mcp/tools.go` | 70 | `atmos mcp tools <name>` — connect, list tools, disconnect |
-| `cmd/mcp/test_cmd.go` | 70 | `atmos mcp test <name>` — start, handshake, list tools, ping |
+| `cmd/mcp/client/list.go` | 50 | `atmos mcp list` — themed table of configured servers |
+| `cmd/mcp/client/tools.go` | 70 | `atmos mcp tools <name>` — connect, list tools, disconnect |
+| `cmd/mcp/client/test_cmd.go` | 70 | `atmos mcp test <name>` — start, handshake, list tools, ping |
 | `errors/errors.go` | +5 | `ErrMCPServerNotFound/NotRunning/StartFailed/CommandEmpty/InvalidTimeout` |
 
 **Tests:** 34 unit tests across 4 test files at 73% coverage.
@@ -763,22 +763,23 @@ Shall I generate an atmos workflow for this decommission sequence?
 
 | File | Lines | Purpose |
 |---|---|---|
-| `cmd/mcp/status.go` | 80 | `atmos mcp status` — start all, display table (name, status, tools, description) |
-| `cmd/mcp/restart.go` | 60 | `atmos mcp restart <name>` — stop and restart integration |
-| `cmd/mcp/add_test.go` | 120 | Tests: add new section, add to existing, remove, findAtmosYAML |
-| `errors/errors.go` | +1 | `ErrMCPServerAlreadyExists` sentinel |
+| `cmd/mcp/client/status.go` | 80 | `atmos mcp status` — start all, display table (name, status, tools, description) |
+| `cmd/mcp/client/restart.go` | 60 | `atmos mcp restart <name>` — stop and restart server |
 
 **What shipped:**
 - ~~`atmos mcp restart`~~ ✅ — stop + start cycle
 - ~~`atmos mcp status`~~ ✅ — health table with running/degraded/error status
 
+**Note:** `atmos mcp add` and `atmos mcp remove` were initially implemented but later
+removed — users edit `atmos.yaml` directly to configure servers.
+
 **Full command tree:**
 ```
 atmos mcp start          # Start Atmos as MCP server
-atmos mcp list           # List configured integrations
+atmos mcp list           # List configured servers
 atmos mcp tools <name>   # List tools from a server
 atmos mcp test <name>    # Test connectivity
-atmos mcp status         # Show all integration statuses
+atmos mcp status         # Show all server statuses
 atmos mcp restart <name> # Restart a server
 ```
 
