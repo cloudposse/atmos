@@ -810,17 +810,17 @@ func stackHasNonEmptyComponents(componentsSection map[string]any) bool {
 // if description is non-empty and the sections filter allows it.
 // The first non-empty description found wins (idempotent: existing values are not overwritten).
 func setStackDescription(finalStacksMap map[string]any, stackName string, description string, sections []string) {
-if len(sections) > 0 && !u.SliceContainsString(sections, cfg.DescriptionSectionName) {
-return
-}
-if description == "" {
-return
-}
-stackEntry, ok := finalStacksMap[stackName].(map[string]any)
-if !ok {
-return
-}
-if _, exists := stackEntry[cfg.DescriptionSectionName]; !exists {
-stackEntry[cfg.DescriptionSectionName] = description
-}
+	if len(sections) > 0 && !u.SliceContainsString(sections, cfg.DescriptionSectionName) {
+		return
+	}
+	if description == "" {
+		return
+	}
+	stackEntry, ok := finalStacksMap[stackName].(map[string]any)
+	if !ok {
+		return
+	}
+	if _, exists := stackEntry[cfg.DescriptionSectionName]; !exists {
+		stackEntry[cfg.DescriptionSectionName] = description
+	}
 }

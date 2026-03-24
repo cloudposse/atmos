@@ -750,63 +750,63 @@ func TestProcessStackFile_NoGhostEntry_FilterByStack(t *testing.T) {
 
 // TestSetStackDescription covers all branches of the setStackDescription helper.
 func TestSetStackDescription(t *testing.T) {
-t.Run("sections filter excludes description – no-op", func(t *testing.T) {
-finalMap := map[string]any{
-"my-stack": map[string]any{},
-}
-// sections is non-empty but does not include "description", so the early return should fire.
-setStackDescription(finalMap, "my-stack", "some description", []string{"vars"})
-stackEntry := finalMap["my-stack"].(map[string]any)
-_, exists := stackEntry[cfg.DescriptionSectionName]
-assert.False(t, exists, "description should not be set when it is absent from the sections filter")
-})
+	t.Run("sections filter excludes description – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		// sections is non-empty but does not include "description", so the early return should fire.
+		setStackDescription(finalMap, "my-stack", "some description", []string{"vars"})
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		_, exists := stackEntry[cfg.DescriptionSectionName]
+		assert.False(t, exists, "description should not be set when it is absent from the sections filter")
+	})
 
-t.Run("empty description – no-op", func(t *testing.T) {
-finalMap := map[string]any{
-"my-stack": map[string]any{},
-}
-setStackDescription(finalMap, "my-stack", "", nil)
-stackEntry := finalMap["my-stack"].(map[string]any)
-_, exists := stackEntry[cfg.DescriptionSectionName]
-assert.False(t, exists, "description should not be set when value is empty string")
-})
+	t.Run("empty description – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		setStackDescription(finalMap, "my-stack", "", nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		_, exists := stackEntry[cfg.DescriptionSectionName]
+		assert.False(t, exists, "description should not be set when value is empty string")
+	})
 
-t.Run("finalStacksMap entry not a map – no-op", func(t *testing.T) {
-finalMap := map[string]any{
-"my-stack": "not-a-map",
-}
-// Should not panic; the non-map stack entry triggers the guard and returns.
-setStackDescription(finalMap, "my-stack", "some description", nil)
-// Entry remains unchanged.
-assert.Equal(t, "not-a-map", finalMap["my-stack"])
-})
+	t.Run("finalStacksMap entry not a map – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": "not-a-map",
+		}
+		// Should not panic; the non-map stack entry triggers the guard and returns.
+		setStackDescription(finalMap, "my-stack", "some description", nil)
+		// Entry remains unchanged.
+		assert.Equal(t, "not-a-map", finalMap["my-stack"])
+	})
 
-t.Run("description set on first call", func(t *testing.T) {
-finalMap := map[string]any{
-"my-stack": map[string]any{},
-}
-setStackDescription(finalMap, "my-stack", "hello world", nil)
-stackEntry := finalMap["my-stack"].(map[string]any)
-assert.Equal(t, "hello world", stackEntry[cfg.DescriptionSectionName])
-})
+	t.Run("description set on first call", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		setStackDescription(finalMap, "my-stack", "hello world", nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "hello world", stackEntry[cfg.DescriptionSectionName])
+	})
 
-t.Run("idempotent – second call does not overwrite", func(t *testing.T) {
-finalMap := map[string]any{
-"my-stack": map[string]any{
-cfg.DescriptionSectionName: "original",
-},
-}
-setStackDescription(finalMap, "my-stack", "overwrite-attempt", nil)
-stackEntry := finalMap["my-stack"].(map[string]any)
-assert.Equal(t, "original", stackEntry[cfg.DescriptionSectionName], "existing description should not be overwritten")
-})
+	t.Run("idempotent – second call does not overwrite", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{
+				cfg.DescriptionSectionName: "original",
+			},
+		}
+		setStackDescription(finalMap, "my-stack", "overwrite-attempt", nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "original", stackEntry[cfg.DescriptionSectionName], "existing description should not be overwritten")
+	})
 
-t.Run("sections filter includes description – description is set", func(t *testing.T) {
-finalMap := map[string]any{
-"my-stack": map[string]any{},
-}
-setStackDescription(finalMap, "my-stack", "filtered in", []string{cfg.DescriptionSectionName})
-stackEntry := finalMap["my-stack"].(map[string]any)
-assert.Equal(t, "filtered in", stackEntry[cfg.DescriptionSectionName])
-})
+	t.Run("sections filter includes description – description is set", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		setStackDescription(finalMap, "my-stack", "filtered in", []string{cfg.DescriptionSectionName})
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "filtered in", stackEntry[cfg.DescriptionSectionName])
+	})
 }
