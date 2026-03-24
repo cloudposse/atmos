@@ -11,6 +11,11 @@ import (
 )
 
 // AtmosLogger wraps the Charm Bracelet logger to provide a consistent interface for Atmos while maintaining full compatibility.
+//
+// Thread safety: AtmosLogger.mu guards only the l.writer field (used by SetOutput,
+// GetOutput, WithPrefix, With). Log-emission methods (Trace, Debug, Info, Warn, Error,
+// Fatal, Log, Print, SetLevel, GetLevel) call charm.Logger directly without holding mu;
+// charm.Logger uses its own internal synchronization for concurrent log calls.
 type AtmosLogger struct {
 	charm  *charm.Logger
 	mu     sync.RWMutex

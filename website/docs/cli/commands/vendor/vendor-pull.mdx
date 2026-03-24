@@ -197,9 +197,8 @@ Atmos prioritizes authentication credentials based on predefined environment var
    - **Format:** Any Go duration string, e.g. `2s`, `500ms`, `10s`
 
    :::note
-   This value is read **once** when Atmos starts. Setting `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT`
-   via `os.Setenv` after the process starts has no effect. Use this variable in the process environment
-   before launching Atmos.
+   This value is read once when Atmos starts. Set it in your shell environment
+   before running Atmos.
    :::
  </dd>
 </dl>

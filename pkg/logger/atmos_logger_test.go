@@ -87,6 +87,32 @@ func TestNewAtmosLogger(t *testing.T) {
 		assert.Equal(t, &buf, child.GetOutput(), "With child should propagate parent's writer")
 	})
 
+	// Test that a child created by WithPrefix holds a snapshot of the parent's writer at
+	// creation time. A subsequent parent.SetOutput must not change the child's writer.
+	t.Run("WithPrefix writer snapshot is isolated from later parent SetOutput", func(t *testing.T) {
+		var buf1, buf2 bytes.Buffer
+		parent := NewAtmosLogger(log.New(&buf1), &buf1)
+		child := parent.WithPrefix("x")
+		parent.SetOutput(&buf2)
+		assert.Equal(t, &buf1, child.GetOutput(),
+			"child writer must be the snapshot from creation time")
+		assert.Equal(t, &buf2, parent.GetOutput(),
+			"parent writer must reflect the SetOutput call")
+	})
+
+	// Test that a child created by With holds a snapshot of the parent's writer at
+	// creation time. A subsequent parent.SetOutput must not change the child's writer.
+	t.Run("With writer snapshot is isolated from later parent SetOutput", func(t *testing.T) {
+		var buf1, buf2 bytes.Buffer
+		parent := NewAtmosLogger(log.New(&buf1), &buf1)
+		child := parent.With("k", "v")
+		parent.SetOutput(&buf2)
+		assert.Equal(t, &buf1, child.GetOutput(),
+			"child writer must be the snapshot from creation time")
+		assert.Equal(t, &buf2, parent.GetOutput(),
+			"parent writer must reflect the SetOutput call")
+	})
+
 	// Test that SetOutput is consistent: GetOutput returns the new writer immediately,
 	// with no window where the tracked writer is updated but charm's writer is not.
 	t.Run("SetOutput is consistent under concurrent reads", func(t *testing.T) {
