@@ -1105,71 +1105,71 @@ func TestRulesRelNormParityWithL07(t *testing.T) {
 // extension that doesn't exist on disk is dropped as a phantom edge, so it does not
 // inflate the import depth reported by L-03.
 func TestL03DepthIgnoresMissingExtImport(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-dir := t.TempDir()
-require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
-rootFile := filepath.Join(dir, "stacks", "prod.yaml")
-require.NoError(t, os.WriteFile(rootFile, []byte("{}"), 0o600))
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	rootFile := filepath.Join(dir, "stacks", "prod.yaml")
+	require.NoError(t, os.WriteFile(rootFile, []byte("{}"), 0o600))
 
-// Import references a .yaml file that does not exist on disk.
-raw := map[string]map[string]any{
-rootFile: {
-cfg.ImportSectionName: []string{"catalog/phantom.yaml"},
-},
-}
+	// Import references a .yaml file that does not exist on disk.
+	raw := map[string]map[string]any{
+		rootFile: {
+			cfg.ImportSectionName: []string{"catalog/phantom.yaml"},
+		},
+	}
 
-graph := buildImportGraph(raw, dir)
+	graph := buildImportGraph(raw, dir)
 
-// The phantom import must be absent — prod.yaml has no real children.
-imports, ok := graph[rootFile]
-if ok {
-assert.Empty(t, imports,
-"explicit-.yaml import that doesn't exist must be dropped to avoid L-03 depth inflation")
-}
+	// The phantom import must be absent — prod.yaml has no real children.
+	imports, ok := graph[rootFile]
+	if ok {
+		assert.Empty(t, imports,
+			"explicit-.yaml import that doesn't exist must be dropped to avoid L-03 depth inflation")
+	}
 }
 
 // TestNormalizeRuleID verifies that normalizeRuleID handles all documented input forms.
 func TestNormalizeRuleID(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-tests := []struct {
-input string
-want  string
-}{
-// Already canonical.
-{"L-07", "L-07"},
-{"L-02", "L-02"},
-{"L-10", "L-10"},
-// Lower-case.
-{"l-7", "L-07"},
-{"l-02", "L-02"},
-// Single digit without dash.
-{"L7", "L-07"},
-{"L2", "L-02"},
-// Bare digit.
-{"7", "L-07"},
-{"2", "L-02"},
-// Multi-digit bare.
-{"10", "L-10"},
-// Spaces trimmed.
-{" l-7 ", "L-07"},
-{"  7  ", "L-07"},
-// Empty → empty.
-{"", ""},
-{"   ", ""},
-// Non-matching passthrough (custom rules).
-{"CUSTOM", "CUSTOM"},
-{"L-CUSTOM", "L-CUSTOM"},
-}
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Already canonical.
+		{"L-07", "L-07"},
+		{"L-02", "L-02"},
+		{"L-10", "L-10"},
+		// Lower-case.
+		{"l-7", "L-07"},
+		{"l-02", "L-02"},
+		// Single digit without dash.
+		{"L7", "L-07"},
+		{"L2", "L-02"},
+		// Bare digit.
+		{"7", "L-07"},
+		{"2", "L-02"},
+		// Multi-digit bare.
+		{"10", "L-10"},
+		// Spaces trimmed.
+		{" l-7 ", "L-07"},
+		{"  7  ", "L-07"},
+		// Empty → empty.
+		{"", ""},
+		{"   ", ""},
+		// Non-matching passthrough (custom rules).
+		{"CUSTOM", "CUSTOM"},
+		{"L-CUSTOM", "L-CUSTOM"},
+	}
 
-for _, tc := range tests {
-tc := tc
-t.Run(tc.input, func(t *testing.T) {
-t.Parallel()
-got := normalizeRuleID(tc.input)
-assert.Equal(t, tc.want, got,
-"normalizeRuleID(%q)", tc.input)
-})
-}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			got := normalizeRuleID(tc.input)
+			assert.Equal(t, tc.want, got,
+				"normalizeRuleID(%q)", tc.input)
+		})
+	}
 }
