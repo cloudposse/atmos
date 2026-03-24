@@ -248,9 +248,10 @@ var (
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
-	ErrInvalidFilePath     = errors.New("invalid file path")
-	ErrRelPath             = errors.New("error determining relative path")
-	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
+	ErrInvalidFilePath       = errors.New("invalid file path")
+	ErrRelPath               = errors.New("error determining relative path")
+	ErrHTTPRequestFailed     = errors.New("HTTP request failed")
+	ErrRedirectLimitExceeded = errors.New("stopped after 10 redirects")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")

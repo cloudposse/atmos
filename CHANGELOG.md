@@ -14,7 +14,7 @@ See [Conventional Commits](https://www.conventionalcommits.org/) for commit mess
   The cache is now bounded and configurable via three environment variables:
   - `ATMOS_FS_GLOB_CACHE_MAX_ENTRIES` (default `1024`, minimum `16`) — maximum number of cached glob patterns.
   - `ATMOS_FS_GLOB_CACHE_TTL` (default `5m`, minimum `1s`) — time-to-live for each cache entry.
-    Values below the respective minimums are clamped up rather than rejected.
+    See `applyGlobCacheConfig` in `pkg/filesystem/glob.go` for the exact logic: only positive values below the minimums are clamped up to the floor; zero or negative values cause the code to fall back to the default values.
   - `ATMOS_FS_GLOB_CACHE_EMPTY` (default `1`) — set to `0` to skip caching patterns that match no files.
 - **`pkg/http.normalizeHost`**: now strips default ports (`:443`, `:80`) in addition to
   lower-casing and removing trailing dots, so that `api.github.com:443` is treated

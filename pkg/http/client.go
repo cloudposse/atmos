@@ -96,7 +96,7 @@ func WithGitHubToken(token string) ClientOption {
 // different-port redirects are treated as cross-host, matching Go's own redirect policy.
 func stripAuthOnCrossHostRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {
-		return errors.New("stopped after 10 redirects")
+		return errUtils.ErrRedirectLimitExceeded
 	}
 	if len(via) > 0 && req.URL.Host != via[0].URL.Host {
 		req.Header.Del("Authorization")
