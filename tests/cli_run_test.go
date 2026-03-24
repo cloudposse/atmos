@@ -112,7 +112,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
 			tc.Env["GIT_CONFIG_VALUE_0"] = ""
 			tc.Env["GIT_CONFIG_KEY_1"] = "http.https://github.com/.extraheader"
-			tc.Env["GIT_CONFIG_VALUE_1"] = "AUTHORIZATION: basic " + basicAuth
+			tc.Env["GIT_CONFIG_VALUE_1"] = "Authorization: Basic " + basicAuth
 		} else {
 			// No token available — just disable the credential helper to prevent hangs/popups.
 			tc.Env["GIT_CONFIG_COUNT"] = "1"
@@ -314,21 +314,19 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		existingEnv = []string{}
 	}
 
-	// Filter CI environment variables from the inherited (process) environment BEFORE
-	// merging test-specific vars.  This mirrors the old PreserveCIEnvVars() approach:
-	// CI vars are stripped from what the runner inherits from the shell, but test cases
-	// that explicitly set a CI var (e.g. "CI: true") will have it restored below via the
-	// tc.Env override loop.  Using a pure-function filter instead of mutating the process
-	// environment makes this approach safe for parallel tests.
+	// Filter CI environment variables from the inherited env before merging.
+	// CI vars stripped here are restored by explicit tc.Env overrides below.
 	existingEnv = telemetry.FilterCIEnvVars(existingEnv)
 
 	// Preserve all environment variables from AtmosRunner (including PATH and GOCOVERDIR)
-	// and add/override with test-specific environment variables
+	// and add/override with test-specific environment variables.
+	// For non-atmos commands (cmd.Env nil/empty), seed from os.Environ() so
+	// the subprocess inherits PATH and other required system variables.
 	var envVars []string
-
-	// Start with the environment from AtmosRunner if available
 	if len(existingEnv) > 0 {
 		envVars = append(envVars, existingEnv...)
+	} else {
+		envVars = append(envVars, os.Environ()...)
 	}
 
 	// Add/override test-specific environment variables.
@@ -489,6 +487,8 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
+	// Stabilize the env slice order for deterministic logs and diagnostics.
+	sort.Strings(envVars)
 	cmd.Env = envVars
 
 	var stdout, stderr bytes.Buffer

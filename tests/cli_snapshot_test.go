@@ -150,8 +150,8 @@ Run the following command to create it:
 $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 	}
 
-	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
-	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
+	filteredActual := applyIgnorePatterns(t, combinedOutput, tc.Expect.Diff)
+	filteredExpected := applyIgnorePatterns(t, readSnapshot(t, ttyPath), tc.Expect.Diff)
 
 	// Strip trailing whitespace if requested.
 	if tc.Expect.IgnoreTrailingWhitespace {
@@ -230,8 +230,8 @@ Run the following command to create it:
 $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
 
-	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
-	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
+	filteredStdoutActual := applyIgnorePatterns(t, stdoutOutput, tc.Expect.Diff)
+	filteredStdoutExpected := applyIgnorePatterns(t, readSnapshot(t, stdoutPath), tc.Expect.Diff)
 
 	// Strip trailing whitespace if requested.
 	if tc.Expect.IgnoreTrailingWhitespace {
@@ -257,8 +257,8 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 Run the following command to create it:
 $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
-	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
-	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
+	filteredStderrActual := applyIgnorePatterns(t, stderrOutput, tc.Expect.Diff)
+	filteredStderrExpected := applyIgnorePatterns(t, readSnapshot(t, stderrPath), tc.Expect.Diff)
 
 	// Strip trailing whitespace if requested.
 	if tc.Expect.IgnoreTrailingWhitespace {
@@ -420,8 +420,8 @@ func TestSnapshotComparisonSymmetry(t *testing.T) {
 	readContent := readSnapshot(t, snapshotPath)
 
 	// Apply the same ignore patterns (empty in this test)
-	actualFiltered := applyIgnorePatterns(normalized, nil)
-	expectedFiltered := applyIgnorePatterns(readContent, nil)
+	actualFiltered := applyIgnorePatterns(t, normalized, nil)
+	expectedFiltered := applyIgnorePatterns(t, readContent, nil)
 
 	if actualFiltered != expectedFiltered {
 		t.Errorf("Symmetry broken:\nActual (normalized before write): %q\nExpected (read from file): %q",

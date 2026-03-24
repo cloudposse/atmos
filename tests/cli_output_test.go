@@ -403,15 +403,19 @@ func stripTrailingWhitespace(input string) string {
 // applyIgnorePatterns removes lines that match any of the given regex patterns.
 // Patterns are compiled once per call (not per line) to avoid O(N_lines × N_patterns)
 // regex recompilation overhead.
-func applyIgnorePatterns(input string, patterns []string) string {
+func applyIgnorePatterns(t *testing.T, input string, patterns []string) string {
 	if len(patterns) == 0 {
 		return input
 	}
 
-	// Precompile all patterns once.
+	// Precompile all patterns once; fail the test immediately on bad pattern syntax.
 	compiled := make([]*regexp.Regexp, 0, len(patterns))
 	for _, pattern := range patterns {
-		compiled = append(compiled, regexp.MustCompile(pattern))
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			t.Fatalf("invalid ignore pattern %q: %v", pattern, err)
+		}
+		compiled = append(compiled, re)
 	}
 
 	lines := strings.Split(input, "\n")

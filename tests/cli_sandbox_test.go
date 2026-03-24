@@ -1,11 +1,13 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
@@ -85,9 +87,12 @@ func cleanDirectory(t *testing.T, workdir string) error {
 	// -f: force, -d: recurse into untracked directories.
 	// The pathspec `-- <relWorkdir>` limits the clean to the specified subtree only.
 	// Note: the '-x' flag is deliberately omitted so .gitignore-matched files are preserved.
-	cmd := exec.Command("git", "-C", repoRoot, "clean", "-fd", "--", relWorkdir) //nolint:gosec
+	// A 30-second timeout guards against hung git processes (e.g. network filesystem stalls).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", repoRoot, "clean", "-fd", "--", relWorkdir) //nolint:gosec
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git clean failed in %q: %w\n%s", workdir, err, out)
+		return fmt.Errorf("git clean failed (repoRoot=%q relWorkdir=%q): %w\n%s", repoRoot, relWorkdir, err, out)
 	}
 
 	t.Logf("Cleaned untracked files in %q", workdir)
