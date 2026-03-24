@@ -351,9 +351,9 @@ Overlay injection into the workdir is performed atomically to prevent partial in
 
 1. All resolved overlay files are **staged** into a temporary directory (`.atmos/workdir/.overlay-staging-<uuid>/`).
 2. Once all files are staged successfully, the staged files are **moved** as a batch into the workdir.
-3. If any staging failure occurs (e.g., file read error, HCL validation failure, disk full), the staging directory is removed and the workdir is **not modified**. The terraform execution then proceeds without any overlays.
+3. If any staging failure occurs (e.g., file read error, HCL validation failure, disk full), the staging directory is removed and the workdir is **not modified**. **Atmos aborts with a non-zero exit code**, printing the name of the failed file and the reason. The terraform execution **does not proceed**. Silent skipping is explicitly prohibited: for `import {}` and `removed {}` migration use cases, silently skipping an overlay would mean terraform runs without the required migration blocks, potentially leaving state inconsistent or re-importing already-managed resources.
 
-This ensures the workdir is never left in a partially-injected state, which could cause confusing terraform errors or partial state changes.
+This ensures the workdir is never left in a partially-injected state, and operators are never surprised by a terraform run that was missing its required overlays.
 
 ---
 
@@ -861,11 +861,16 @@ The [Code Generation PRD](code-generation.md) proposes a `generate:` section tha
 - Overlay files absent after plan.
 - `overlays:` in stack YAML with inline content → file created, terraform runs, file removed.
 - Dry-run logs overlay files without executing terraform.
+- **Injection failure aborts execution:** staging a file that triggers an HCL validation error → Atmos exits non-zero with the file name in the error message; terraform is not invoked; workdir contains no injected files.
+- **Concurrent workdir isolation:** run `atmos terraform plan vpc -s prod-us-east-1` and `atmos terraform plan vpc -s dev-us-east-1` concurrently (via goroutines in test). Assert that:
+  - `.atmos/workdir/prod-us-east-1-vpc/` contains `prod-us-east-1-vpc`-specific overlay files and does **not** contain `dev-us-east-1-vpc`-specific overlay files.
+  - `.atmos/workdir/dev-us-east-1-vpc/` contains `dev`-specific overlay files and does **not** contain `prod-us-east-1-vpc`-specific overlay files.
+  - After both plans complete, all injected overlay files are removed from both workdirs.
 
 ### Test Fixtures
 
 ```
-tests/test-cases/overlays/
+tests/fixtures/scenarios/overlays/
 ├── atmos.yaml
 ├── stacks/
 │   ├── prod-us-east-1.yaml
@@ -880,6 +885,59 @@ tests/test-cases/overlays/
                 └── dev/
                     └── import-dev.tf
 ```
+
+---
+
+## CI/CD Integration
+
+Stack Overlays are designed to work transparently in CI/CD pipelines. The following guidance covers common pipeline patterns.
+
+### Recommended Pipeline Flow
+
+```
+PR opened/updated
+        ↓
+atmos terraform plan <component> -s <stack>
+        ↓  (overlays resolved and injected; plan includes import/removed blocks)
+Plan output reviewed in PR (Atlantis / GitHub Actions native CI summary)
+        ↓
+PR approved and merged
+        ↓
+atmos terraform apply <component> -s <stack>
+        ↓  (overlays re-injected; apply executes; overlays cleaned up)
+Migration complete → remove overlay from git in follow-up PR
+```
+
+### Drift Detection (`plan` in CI)
+
+When running scheduled drift-detection plans, overlays are injected normally. This is intentional: if an overlay defining an `import {}` block is present, the plan will show a pending import. This is a useful signal that a migration has been staged but not yet applied.
+
+### Overlay Hash Verification in Plan→Apply Pipelines
+
+When using a saved plan file (e.g., `atmos terraform plan -out=tfplan.bin`), the overlay sidecar (`tfplan.bin.overlays.json`) must be preserved alongside the plan file between the plan and apply jobs. Store both artifacts together:
+
+```yaml
+# GitHub Actions example
+- name: Plan
+  run: atmos terraform plan vpc -s prod-us-east-1 -- -out=tfplan.bin
+- name: Upload plan artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: tfplan
+    path: |
+      tfplan.bin
+      tfplan.bin.overlays.json   # must travel with the plan
+```
+
+If the sidecar is absent at apply time, Atmos logs a warning and skips hash verification (backward compatibility). If the sidecar is present and the hash does not match the current overlays, Atmos aborts with a non-zero exit code.
+
+### Overlay Cleanup in CI
+
+Overlay cleanup runs unconditionally via `defer`, including when terraform returns a non-zero exit code. CI jobs therefore do not need a cleanup step; injected overlay files are never left in the runner's workspace.
+
+### `--no-cleanup-overlays` Flag
+
+For debugging failed CI runs, setting `--no-cleanup-overlays` (or `overlays_cleanup: false` in `atmos.yaml`) preserves injected files in the workdir after execution. This is useful for inspecting exactly which overlay files were present when a plan or apply failed. **This flag should never be set permanently in CI**; it is intended for one-off debugging only.
 
 ---
 
