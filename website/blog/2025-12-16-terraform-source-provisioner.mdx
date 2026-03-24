@@ -18,7 +18,7 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
         included_paths:
           - "*.tf"
@@ -107,7 +107,7 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
       vars:
         cidr_block: "10.0.0.0/16"
@@ -140,7 +140,7 @@ components:
   terraform:
     vpc/defaults:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
 
 # stacks/dev.yaml - use latest
@@ -195,7 +195,7 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
       provision:
         workdir:

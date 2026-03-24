@@ -61,7 +61,7 @@ For simple cases, specify a go-getter-compatible URI:
 components:
   terraform:
     vpc:
-      source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+      source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=1.450.0"
       vars:
         cidr_block: "10.0.0.0/16"
 ```
@@ -77,7 +77,7 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
         included_paths:
           - "*.tf"
@@ -100,7 +100,7 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
         retry:
           max_attempts: 5
@@ -175,7 +175,7 @@ components:
       metadata:
         type: abstract
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0  # Default version
         included_paths:
           - "*.tf"

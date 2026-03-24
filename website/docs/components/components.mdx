@@ -37,7 +37,7 @@ Atmos natively supports four kinds of components:
 
 1. [Terraform](/components/terraform): These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
    EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find
-   the [full library of SweetOps Terraform components on GitHub](https://github.com/cloudposse/terraform-aws-components). By convention, we store
+   the [full library of SweetOps Terraform components on GitHub](https://github.com/cloudposse-terraform-components). By convention, we store
    components in the `components/terraform/` directory within the infrastructure repository.
 
 2. [Helmfiles](/components/helmfile): These are stand-alone applications deployed using [`helmfile`](https://github.com/helmfile) to Kubernetes. For example, typical
@@ -49,4 +49,4 @@ Atmos natively supports four kinds of components:
 
 ## Terraform Components
 
-One important distinction about components that is worth noting about Terraform components is they should be opinionated Terraform "root" modules that typically call other child modules. Components are the building blocks of your infrastructure. This is where you define all the business logic for provisioning some common piece of infrastructure like ECR repos (with the [ecr](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/ecr) component) or EKS clusters (with the [eks/cluster](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/eks/cluster) component). Our convention is to stick Terraform components in the `components/terraform/` directory.
+One important distinction about components that is worth noting about Terraform components is they should be opinionated Terraform "root" modules that typically call other child modules. Components are the building blocks of your infrastructure. This is where you define all the business logic for provisioning some common piece of infrastructure like ECR repos (with the [ecr](https://github.com/cloudposse-terraform-components/aws-ecr) component) or EKS clusters (with the [eks/cluster](https://github.com/cloudposse-terraform-components/aws-eks-cluster) component). Our convention is to stick Terraform components in the `components/terraform/` directory.

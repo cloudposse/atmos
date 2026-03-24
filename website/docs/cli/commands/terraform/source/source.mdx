@@ -69,7 +69,7 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
         included_paths:
           - "*.tf"
@@ -98,7 +98,7 @@ The `source` field supports two formats:
 For simple cases, use a go-getter URI string:
 
 ```yaml
-source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=1.450.0"
 ```
 
 ### Map Format (Full Control)
@@ -107,7 +107,7 @@ For more control, use a map with explicit fields:
 
 ```yaml
 source:
-  uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+  uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
   version: 1.450.0
   included_paths:
     - "*.tf"
@@ -172,7 +172,7 @@ atmos terraform source pull vpc --stack dev
 Output:
 ```
 Vendoring component 'vpc' from source...
-Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0
+Downloading from github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=1.450.0
 ✓ Successfully vendored component to components/terraform/vpc
 ```
 
@@ -198,7 +198,7 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
         included_paths:
           - "*.tf"
@@ -290,7 +290,7 @@ components:
   terraform:
     vpc/defaults:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
         version: 1.450.0
 
 # stacks/dev.yaml
@@ -337,7 +337,7 @@ The source provisioner uses go-getter and supports multiple protocols:
 Shortened GitHub syntax (recommended):
 ```yaml
 source:
-  uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+  uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
   version: 1.450.0
 ```
 
@@ -390,7 +390,7 @@ Example:
     terraform:
       vpc:
         source:
-          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
           version: 1.450.0
 ```
 
