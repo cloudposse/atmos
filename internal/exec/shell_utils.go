@@ -440,14 +440,15 @@ func ExecAuthShellCommand(
 
 	// Append shell-specific env vars to the sanitized environment.
 	// The sanitizedEnv already includes os.Environ() (sanitized) + auth vars.
-	shellEnv := make([]string, 0, len(sanitizedEnv)+2)
-	shellEnv = append(shellEnv, sanitizedEnv...)
-	shellEnv = append(shellEnv, fmt.Sprintf("ATMOS_IDENTITY=%s", identityName))
-	shellEnv = append(shellEnv, fmt.Sprintf("%s=%d", atmosShellLevelEnvVar, atmosShellVal))
+	// Use UpdateEnvVar to replace-or-append each key, because os.StartProcess
+	// does not deduplicate — the first occurrence wins if duplicates exist.
+	shellEnv := append([]string{}, sanitizedEnv...)
+	shellEnv = envpkg.UpdateEnvVar(shellEnv, "ATMOS_IDENTITY", identityName)
+	shellEnv = envpkg.UpdateEnvVar(shellEnv, atmosShellLevelEnvVar, strconv.Itoa(atmosShellVal))
 
 	// Append global env from atmos.yaml.
 	for k, v := range atmosConfig.Env {
-		shellEnv = append(shellEnv, fmt.Sprintf("%s=%s", k, v))
+		shellEnv = envpkg.UpdateEnvVar(shellEnv, k, v)
 	}
 
 	log.Debug("Starting a new interactive shell with authentication environment variables (type 'exit' to go back)",
