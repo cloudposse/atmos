@@ -17,6 +17,8 @@ Terraform supports [import blocks](https://developer.hashicorp.com/terraform/lan
 
 This PRD proposes **Stack Overlays**: a mechanism to define extra `.tf` files that are injected into a component's working directory for a specific stack, environment, stage, or workspace before terraform execution, and cleaned up afterward. This enables developers to write import/removed blocks (or any ephemeral terraform code) in version-controlled YAML or `.tf` files scoped to exactly the stacks they need to affect.
 
+> **Scope note:** The existing Atmos tutorial [Component Migrations in YAML](https://atmos.tools/tutorials/atmos-component-migrations-in-yaml/) covers workspace rename and state-move operations executed via the Atmos CLI (imperative `terraform state mv` wrappers). This PRD is complementary but distinct: it addresses *declarative* `import {}`, `removed {}`, and `moved {}` block injection scoped per stack, without running imperative CLI state commands.
+
 ---
 
 ## Problem Statement
@@ -207,7 +209,7 @@ components:
             }
 ```
 
-To **replace** the entire inherited list (opt out of append semantics), set `_override: true` on the `overlays:` list:
+To **replace** the entire inherited list (opt out of append semantics), set `_override: true` on the `overlays:` list. `_override: true` discards **all inherited overlays from all ancestor levels** — not just the immediate parent — before appending the current list.
 
 ```yaml
 components:
@@ -216,10 +218,43 @@ components:
       metadata:
         inherits: [vpc-base]
       overlays:
-        _override: true                                # discards inherited overlays
+        _override: true                                # discards ALL inherited overlays (from every ancestor)
         - name: "fresh-import.tf"
           content: |
             import { id = "vpc-new123", to = aws_vpc.main }
+```
+
+**Three-level inheritance example** (global catalog → environment catalog → stack):
+
+```yaml
+# catalog/global.yaml — Level 1 (global)
+components:
+  terraform:
+    vpc:
+      overlays:
+        - path: "migrations/global/audit-tags.tf"      # injected for all stacks
+
+# catalog/envs/prod.yaml — Level 2 (environment)
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc]                                # inherits global
+      overlays:
+        - path: "migrations/prod/compliance-tags.tf"  # appended; final list: [audit-tags, compliance-tags]
+
+# stacks/prod-us-east-1.yaml — Level 3 (stack)
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc-prod]                           # inherits env → inherits global
+      overlays:
+        _override: true                                # discard ALL ancestors (audit-tags AND compliance-tags)
+        - name: "import-this-stack-only.tf"
+          content: |
+            import { id = "vpc-abc123", to = aws_vpc.main }
+            # Only this import runs for prod-us-east-1; global and env overlays are discarded
 ```
 
 ### `atmos.yaml` Global Configuration
@@ -310,6 +345,16 @@ Stack B: vpc -s dev-us-east-1   →  .atmos/workdir/dev-us-east-1-vpc/   (overla
 Source:  components/terraform/vpc/                                       (NEVER modified)
 ```
 
+### Injection Atomicity
+
+Overlay injection into the workdir is performed atomically to prevent partial injection states:
+
+1. All resolved overlay files are **staged** into a temporary directory (`.atmos/workdir/.overlay-staging-<uuid>/`).
+2. Once all files are staged successfully, the staged files are **moved** as a batch into the workdir.
+3. If any staging failure occurs (e.g., file read error, HCL validation failure, disk full), the staging directory is removed and the workdir is **not modified**. The terraform execution then proceeds without any overlays.
+
+This ensures the workdir is never left in a partially-injected state, which could cause confusing terraform errors or partial state changes.
+
 ---
 
 ## Plan/Apply Lifecycle
@@ -348,6 +393,38 @@ When applying from a previously saved plan file, the overlay files that were pre
 
 > **Note:** For most destroy operations, no overlays will be present (migrations are typically one-shot). However, `removed { lifecycle { destroy = false } }` blocks are an exception and may be injected to prevent accidental destruction.
 
+### `atmos terraform shell`
+
+When `atmos terraform shell` drops the user into an interactive shell within the component working directory:
+
+1. Resolve and inject overlay files into the working directory before handing control to the shell.
+2. Log injected overlay files so the user knows which files are present.
+3. Clean up overlay files on shell exit (via defer, triggered when the shell process exits).
+
+This ensures that any interactive `terraform plan` or `terraform apply` commands run inside the shell see the same overlays as automated execution.
+
+### `atmos terraform test`
+
+When `atmos terraform test` runs Terraform's built-in test framework:
+
+1. Resolve and inject overlay files into the working directory before `terraform test` runs.
+2. Run `terraform test`.
+3. Clean up overlay files (defer).
+
+Overlay injection for tests ensures that test assertions about import blocks, moved blocks, or removed blocks are exercised with the same overlays that production executions use, maintaining test fidelity.
+
+### Command Coverage Summary
+
+| Command | Inject before | Clean up after |
+|---|---|---|
+| `atmos terraform plan` | ✅ | ✅ (defer) |
+| `atmos terraform apply` (direct) | ✅ | ✅ (defer) |
+| `atmos terraform apply --from-plan` | ✅ + hash check | ✅ (defer) |
+| `atmos terraform destroy` | ✅ | ✅ (defer) |
+| `atmos terraform shell` | ✅ on entry | ✅ on exit |
+| `atmos terraform test` | ✅ | ✅ (defer) |
+| `atmos terraform init` (standalone) | ❌ no-op | ❌ no-op |
+
 ---
 
 ## OpenTofu Compatibility
@@ -357,6 +434,47 @@ Stack Overlays work with both the `terraform` (HashiCorp Terraform 1.5+) and `to
 The binary used for execution is determined by the component's `command` field (defaults to `terraform`). Overlay injection is binary-agnostic—files are copied before `init` regardless of which binary runs them.
 
 **Phase 1 acceptance criterion:** All overlay tests pass when `command: tofu` is configured for the component.
+
+---
+
+## Path Resolution
+
+### Convention-Based Overlay Directory
+
+The `overlays/` directory is resolved **relative to the component source directory** — the same directory that contains `main.tf`, `variables.tf`, and the component's other `.tf` files.
+
+```
+<base_path>/
+└── components/terraform/vpc/      ← component source directory
+    ├── main.tf
+    ├── variables.tf
+    └── overlays/                  ← resolved here, relative to component source
+        └── prod-us-east-1-vpc/
+            └── import-legacy.tf
+```
+
+The `overlays/` directory name is configurable via `components.terraform.overlays_dir` in `atmos.yaml` (default: `"overlays"`).
+
+### Injection Target
+
+The **source directory is never the injection target.** Atmos reads overlay files from the source directory and writes copies into the per-execution working directory:
+
+```
+Read from:   <base_path>/components/terraform/vpc/overlays/prod-us-east-1-vpc/import-legacy.tf
+Written to:  <workdir>/import-legacy.tf
+```
+
+The workdir path is resolved as described in the Concurrent Execution Safety section. After execution, only the injected copies in the workdir are removed; the source overlay files in `overlays/` are untouched.
+
+### YAML `path:` and `dir:` Resolution
+
+Paths specified via the YAML `overlays:` section are resolved relative to `atmos.yaml`'s `base_path`:
+
+```yaml
+overlays:
+  - path: "migrations/vpc/import-legacy.tf"  # resolved as <base_path>/migrations/vpc/import-legacy.tf
+  - dir:  "migrations/vpc/"                  # all .tf files in <base_path>/migrations/vpc/
+```
 
 ---
 
@@ -520,8 +638,43 @@ components:
 **Implementation:**
 
 1. **`atmos terraform plan --dry-run`** — Log which overlay files would be injected without running terraform.
-2. **Plan-time hash storage** — Store SHA-256 of overlay contents alongside the plan file.
+2. **Plan-time hash storage** — Store SHA-256 of overlay contents alongside the plan file as a JSON sidecar.
 3. **Apply-time hash comparison** — Verify overlay contents match plan-time hash before injecting for `--from-plan` apply.
+
+**Hash Sidecar Format:**
+
+The sidecar file is written to `<planfile>.overlays.json` adjacent to the saved plan file (e.g., `tfplan.bin.overlays.json`). It contains a JSON object with the following schema:
+
+```json
+{
+  "schema_version": 1,
+  "atmos_version": "1.x.y",
+  "created_at": "2026-03-24T05:11:22Z",
+  "stack": "prod-us-east-1",
+  "component": "vpc",
+  "overlays_hash": "sha256:<hex>",
+  "overlays": [
+    {
+      "name": "import-legacy.tf",
+      "source_type": "convention",
+      "source_path": "components/terraform/vpc/overlays/prod-us-east-1-vpc/import-legacy.tf",
+      "sha256": "<hex>"
+    },
+    {
+      "name": "compliance-tags.tf",
+      "source_type": "yaml",
+      "source_path": "stack:prod-us-east-1:vpc:inline",
+      "sha256": "<hex>"
+    }
+  ]
+}
+```
+
+- `overlays_hash`: SHA-256 of the concatenation of all per-file `sha256` values (sorted by `name` for stability). This is the value compared at apply time.
+- `overlays[].sha256`: SHA-256 of the file content at plan time.
+- If no overlays are present at plan time, `overlays` is an empty array and `overlays_hash` is the SHA-256 of an empty string.
+
+The sidecar file is only written when `atmos terraform plan -out=<planfile>` is used. It is ignored for direct applies. If the sidecar file is absent at apply-from-plan time, Atmos logs a warning and proceeds (for backward compatibility with plans generated before this feature was introduced).
 
 **Files Changed:**
 - `internal/exec/terraform_execute_helpers_exec.go`
@@ -529,8 +682,10 @@ components:
 
 **Acceptance Criteria:**
 - ✅ Dry-run logs list of overlay files without executing terraform
-- ✅ `terraform apply --from-plan` with changed overlays since plan → abort with descriptive error
+- ✅ `atmos terraform plan -out=tfplan.bin` writes `tfplan.bin.overlays.json` with correct SHA-256 values
+- ✅ `terraform apply --from-plan` with changed overlays since plan → abort with descriptive error listing which overlays differ
 - ✅ `terraform apply --from-plan` with matching overlays → proceeds normally
+- ✅ `terraform apply --from-plan` with missing sidecar file → warning logged, proceeds without hash check
 
 ---
 
@@ -567,19 +722,55 @@ The `settings.experimental.stack_overlays` key must also be added to the `settin
 
 4. **Overlay files do not modify the component source directory.** Files are injected into the per-execution working directory (see Concurrent Execution Safety above).
 
-5. **Denied HCL block types in inline `content:`.** Inline overlay content is parsed before injection. The following top-level HCL block types are **denied** and cause injection to abort with an error:
+5. **Denied HCL block types in inline `content:`.** Before any overlay file is written to the staging directory, Atmos performs a full AST parse using the Go [`github.com/hashicorp/hcl/v2`](https://pkg.go.dev/github.com/hashicorp/hcl/v2) package. Denied block types produce an **Atmos error at overlay validation time** — before any file is written to the workdir and before Terraform is invoked. This gives the user a clear, actionable Atmos-level error message rather than a confusing Terraform parse error.
 
-   | Denied block type | Reason |
+   The denied block types are classified into two categories:
+
+   **Category 1 — Denied top-level block types:**
+
+   | Block type | Reason |
    |---|---|
-   | `terraform {}` | Could override backend, required_providers, or required_version globally |
-   | `provider {}` | Provider configuration must be managed at the component level, not per-stack |
-   | `data "terraform_remote_state"` | Remote state access must be explicit in component code, not injected |
+   | `terraform` | Could override backend, `required_providers`, or `required_version` for the entire execution |
+   | `provider` | Provider configuration must live in the component source, not in per-stack overlays |
 
-   Allowed block types include: `import`, `removed`, `moved`, `resource`, `locals`, `variable`, `output`. This list may be tightened in future versions.
+   **Category 2 — Denied data source types:**
+
+   | Data source | Reason |
+   |---|---|
+   | `data "terraform_remote_state"` | Remote state access must be explicit in component code, not injected per-stack |
+
+   All other `data {}` source types (e.g., `data "aws_ami"`, `data "aws_caller_identity"`) are **explicitly allowed** in inline overlay content.
+
+   Allowed top-level block types include: `import`, `removed`, `moved`, `resource`, `locals`, `variable`, `output`, and all `data {}` sources not on the denied list. This list may be tightened in future versions.
 
 ---
 
-## Backward Compatibility
+## Observability and Audit Logging
+
+Overlay injection and cleanup events are emitted as structured log entries at the `INFO` level using Atmos's standard structured log format.
+
+### Log Fields
+
+| Field | Type | Values / Description |
+|---|---|---|
+| `overlay_name` | string | Filename of the overlay as it appears in the workdir (e.g., `import-legacy.tf`) |
+| `source_type` | enum | `convention` (from `overlays/` directory) or `yaml` (from stack YAML `overlays:` section) |
+| `source_path` | string | Absolute path to the source file or inline identifier (e.g., `components/terraform/vpc/overlays/prod-us-east-1-vpc/import-legacy.tf` or `stack:prod-us-east-1:vpc:inline`) |
+| `stack` | string | Atmos stack slug (e.g., `prod-us-east-1`) |
+| `component` | string | Component name (e.g., `vpc`) |
+| `event` | enum | `inject` (file written to workdir) or `cleanup` (file removed from workdir) |
+| `timestamp` | string | RFC 3339 timestamp |
+
+### Example Log Output
+
+```
+INFO  overlay inject  overlay_name=import-legacy.tf  source_type=convention  source_path=components/terraform/vpc/overlays/prod-us-east-1-vpc/import-legacy.tf  stack=prod-us-east-1  component=vpc
+INFO  overlay inject  overlay_name=compliance-tags.tf  source_type=yaml  source_path=stack:prod-us-east-1:vpc:inline  stack=prod-us-east-1  component=vpc
+INFO  overlay cleanup  overlay_name=import-legacy.tf  event=cleanup  stack=prod-us-east-1  component=vpc
+INFO  overlay cleanup  overlay_name=compliance-tags.tf  event=cleanup  stack=prod-us-east-1  component=vpc
+```
+
+These log entries allow operators to audit which overlays were injected for each execution, correlate overlay injection with terraform plan/apply outcomes, and detect unexpected overlay presence or absence in CI logs.
 
 - No breaking changes. Existing components without an `overlays/` directory behave identically.
 - The `overlays` YAML key is new and ignored by older versions of Atmos.
@@ -709,7 +900,7 @@ tests/test-cases/overlays/
 
 2. **Should `overlays_cleanup: false` be supported for debugging?** Yes — when debugging a migration, it is useful to inspect the injected files. A global config flag (`overlays_cleanup: false`) and a per-invocation `--no-cleanup-overlays` CLI flag should both be supported.
 
-3. **Should overlay injection be logged at the INFO level?** Yes — users should see a message like `Injecting overlay: overlays/prod-us-east-1-vpc/import-legacy.tf → <workdir>/import-legacy.tf` so they know the overlay was applied.
+3. **Overlay injection logging is defined in the Observability and Audit Logging section.** The structured log format, fields, and example output are specified there. The format follows Atmos's existing structured log conventions.
 
 4. **Should glob patterns be supported in `overlays_dir` lookup?** Future consideration — for MVP, exact directory name matching is sufficient.
 
