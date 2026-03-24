@@ -12,6 +12,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/lint"
+	"github.com/cloudposse/atmos/pkg/lint/pathnorm"
 	"github.com/cloudposse/atmos/pkg/lint/rules"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -404,7 +405,7 @@ func scopeStackFiles(allStackFiles []string, rawStackConfigs map[string]map[stri
 
 	queue := make([]string, 0, len(rawStackConfigs))
 	for k := range rawStackConfigs {
-		rn := rulesRelNorm(k, basePath)
+		rn := pathnorm.NormalizeRelNoExt(k, basePath)
 		if !reachable[rn] {
 			reachable[rn] = true
 			queue = append(queue, k) // use absolute path for importGraph lookup
@@ -416,7 +417,7 @@ func scopeStackFiles(allStackFiles []string, rawStackConfigs map[string]map[stri
 		queue = queue[1:]
 
 		for _, imp := range importGraph[cur] {
-			rn := rulesRelNorm(imp, basePath)
+			rn := pathnorm.NormalizeRelNoExt(imp, basePath)
 			if !reachable[rn] {
 				reachable[rn] = true
 				// Reconstruct the absolute path so we can look it up in importGraph.
@@ -432,35 +433,11 @@ func scopeStackFiles(allStackFiles []string, rawStackConfigs map[string]map[stri
 	// Keep only files whose normalized name is in the reachable set.
 	result := make([]string, 0, len(allStackFiles))
 	for _, f := range allStackFiles {
-		if reachable[rulesRelNorm(f, basePath)] {
+		if reachable[pathnorm.NormalizeRelNoExt(f, basePath)] {
 			result = append(result, f)
 		}
 	}
 	return result
-}
-
-// rulesRelNorm mirrors the relNorm logic used in L-07 (pkg/lint/rules/l07_orphaned_file.go)
-// so that paths are compared consistently in the exec package without importing the rules package.
-// It strips the base path prefix and YAML extension for uniform comparison.
-//
-// Note: this function intentionally duplicates the normalization logic from l07_orphaned_file.go
-// to avoid a circular import dependency between internal/exec and pkg/lint/rules. If the
-// normalization logic changes, both this function and relNorm/normalizeForComparison in
-// l07_orphaned_file.go must be updated together.
-func rulesRelNorm(path, basePath string) string {
-	if filepath.IsAbs(path) && basePath != "" {
-		if rel, err := filepath.Rel(basePath, path); err == nil {
-			path = rel
-		}
-	}
-	// Strip YAML extensions (same as normalizeForComparison in l07).
-	for _, ext := range []string{".yaml", ".yml"} {
-		if len(path) > len(ext) && strings.HasSuffix(path, ext) {
-			path = path[:len(path)-len(ext)]
-			break
-		}
-	}
-	return filepath.ToSlash(filepath.Clean(path))
 }
 
 // buildStackNameToFileIndex creates a map from logical stack basename (e.g. "prod") to
@@ -470,7 +447,7 @@ func rulesRelNorm(path, basePath string) string {
 func buildStackNameToFileIndex(rawStackConfigs map[string]map[string]any, basePath string) map[string][]string {
 	index := make(map[string][]string, len(rawStackConfigs))
 	for filePath := range rawStackConfigs {
-		name := rulesRelNorm(filePath, basePath)
+		name := pathnorm.NormalizeRelNoExt(filePath, basePath)
 		// rulesRelNorm strips basePath and extension, leaving a slash-separated stem.
 		// Use only the final segment (basename) as the logical name since that is what
 		// Atmos exposes as the stack name in StacksMap entries.
@@ -489,7 +466,7 @@ func buildStackNameToFileIndex(rawStackConfigs map[string]map[string]any, basePa
 func buildStackStemToFileIndex(rawStackConfigs map[string]map[string]any, basePath string) map[string]string {
 	index := make(map[string]string, len(rawStackConfigs))
 	for filePath := range rawStackConfigs {
-		stem := rulesRelNorm(filePath, basePath)
+		stem := pathnorm.NormalizeRelNoExt(filePath, basePath)
 		index[stem] = filePath
 	}
 	return index
@@ -504,6 +481,12 @@ func mergedLintConfig(cfg schema.LintStacksConfig, maskKeyPatterns []string) sch
 	}
 	if cfg.DRYThresholdPct <= 0 {
 		cfg.DRYThresholdPct = 80
+	}
+	// CohesionMaxGroups default (3) is set here so that L-05 does not need its own
+	// private constant. L-05 reads ctx.LintConfig.CohesionMaxGroups and can rely on
+	// it always being a positive value after mergedLintConfig has run.
+	if cfg.CohesionMaxGroups <= 0 {
+		cfg.CohesionMaxGroups = 3
 	}
 
 	// Build the effective sensitive var patterns using a three-way merge:

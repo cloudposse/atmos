@@ -14,6 +14,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/lint"
+	"github.com/cloudposse/atmos/pkg/lint/pathnorm"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -27,6 +28,7 @@ func TestMergedLintConfig(t *testing.T) {
 		cfg := mergedLintConfig(schema.LintStacksConfig{}, nil)
 		assert.Equal(t, 3, cfg.MaxImportDepth)
 		assert.Equal(t, 80, cfg.DRYThresholdPct)
+		assert.Equal(t, 3, cfg.CohesionMaxGroups, "mergedLintConfig must set CohesionMaxGroups default to 3")
 		assert.NotEmpty(t, cfg.SensitiveVarPatterns)
 		// Verify the built-in defaults are applied when both lint patterns and mask key patterns are empty.
 		assert.Contains(t, cfg.SensitiveVarPatterns, "*password*")
@@ -51,6 +53,12 @@ func TestMergedLintConfig(t *testing.T) {
 		t.Parallel()
 		cfg := mergedLintConfig(schema.LintStacksConfig{DRYThresholdPct: 90}, nil)
 		assert.Equal(t, 90, cfg.DRYThresholdPct)
+	})
+
+	t.Run("does not override CohesionMaxGroups when set", func(t *testing.T) {
+		t.Parallel()
+		cfg := mergedLintConfig(schema.LintStacksConfig{CohesionMaxGroups: 5}, nil)
+		assert.Equal(t, 5, cfg.CohesionMaxGroups)
 	})
 
 	t.Run("merges user SensitiveVarPatterns with defaults", func(t *testing.T) {
@@ -654,12 +662,15 @@ func TestResolveNonGlobImport(t *testing.T) {
 		assert.Equal(t, filepath.Join(dir, "catalog", "base.yml"), got)
 	})
 
-	t.Run("relative import with no matching file returns fallback bare join", func(t *testing.T) {
+	t.Run("relative import with no matching file returns empty string", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		// No files created.
+		// No files created — resolveNonGlobImport returns "" for missing files so
+		// that the caller can drop the import rather than keeping a phantom edge
+		// that would inflate L-03 depth counts (Item 3).
 		got := resolveNonGlobImport("catalog/missing", dir)
-		assert.Equal(t, filepath.Join(dir, "catalog", "missing"), got)
+		assert.Equal(t, "", got,
+			"missing file must return empty string so the caller can drop the phantom import")
 	})
 }
 
@@ -749,8 +760,8 @@ func TestRulesRelNormConsistencyWithL07(t *testing.T) {
 		tc := tc
 		t.Run(tc.path, func(t *testing.T) {
 			t.Parallel()
-			// rulesRelNorm is the exec-side normalization.
-			execNorm := rulesRelNorm(tc.path, tc.basePath)
+			// pathnorm.NormalizeRelNoExt is the shared normalization.
+			execNorm := pathnorm.NormalizeRelNoExt(tc.path, tc.basePath)
 			// Verify it is not empty (basic sanity) and does not contain YAML extensions.
 			assert.NotEmpty(t, execNorm)
 			assert.NotContains(t, execNorm, ".yaml",
@@ -1023,7 +1034,7 @@ func TestMissingNonGlobDroppedFromGraph(t *testing.T) {
 	}
 }
 
-// TestRulesRelNormParityWithL07 verifies Item 4: rulesRelNorm in exec produces
+// TestRulesRelNormParityWithL07 verifies Item 4: pathnorm.NormalizeRelNoExt in exec produces
 // consistent output across a corpus of path inputs, ensuring no regressions in
 // the normalization logic used by buildStackNameToFileIndex and scopeStackFiles.
 // The authoritative parity check against L-07's relNorm lives in pkg/lint/rules/rules_test.go.
@@ -1044,8 +1055,8 @@ func TestRulesRelNormParityWithL07(t *testing.T) {
 	}
 
 	for _, tc := range corpus {
-		got := rulesRelNorm(tc.path, tc.basePath)
+		got := pathnorm.NormalizeRelNoExt(tc.path, tc.basePath)
 		assert.Equal(t, tc.want, got,
-			"rulesRelNorm(%q, %q)", tc.path, tc.basePath)
+			"pathnorm.NormalizeRelNoExt(%q, %q)", tc.path, tc.basePath)
 	}
 }

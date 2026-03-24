@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/lint"
+	"github.com/cloudposse/atmos/pkg/lint/pathnorm"
 )
 
 // l07OrphanedFileRule detects YAML files under the stacks base path that are
@@ -72,32 +73,19 @@ func (r *l07OrphanedFileRule) Run(ctx lint.LintContext) ([]lint.LintFinding, err
 }
 
 // relNorm converts path to a normalized form relative to basePath for consistent
-// cross-platform comparison. Absolute paths are first made relative to basePath;
-// relative paths are used as-is. YAML extensions are stripped so that import
-// values (which often omit extensions) match physical file names.
-// When basePath is empty, absolute paths remain absolute after normalization.
+// cross-platform comparison. It delegates to pathnorm.NormalizeRelNoExt, which is
+// the single authoritative implementation shared with the exec package.
+//
+// Keeping this thin wrapper avoids having to update every call-site in this file
+// while still eliminating the duplicate implementation.
 func relNorm(path, basePath string) string {
-	if filepath.IsAbs(path) && basePath != "" {
-		if rel, err := filepath.Rel(basePath, path); err == nil {
-			path = rel
-		}
-	}
-	return normalizeForComparison(filepath.ToSlash(path))
+	return pathnorm.NormalizeRelNoExt(path, basePath)
 }
 
-// normalizeForComparison strips common path variations for robust comparison.
-// It removes YAML extensions so that import keys (which often omit extensions)
-// match physical file names. Uses forward slashes for OS-agnostic comparison.
-// Trailing slashes are removed by filepath.Clean.
+// normalizeForComparison is kept for backward compatibility with tests that call
+// ExportedNormalizeForComparison. It delegates to pathnorm.NormalizeRelNoExt with
+// an empty basePath (i.e. it only strips extensions and cleans the path).
 func normalizeForComparison(path string) string {
-	// Remove common YAML extensions for comparison since import keys may omit them.
-	base := path
-	for _, ext := range []string{".yaml", ".yml"} {
-		if len(base) > len(ext) && base[len(base)-len(ext):] == ext {
-			base = base[:len(base)-len(ext)]
-			break
-		}
-	}
-	// Clean with forward slashes for OS-agnostic comparison.
-	return filepath.ToSlash(filepath.Clean(base))
+	return pathnorm.NormalizeRelNoExt(path, "")
 }
+

@@ -9,8 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/lint"
 )
 
-const defaultCohesionThreshold = 3
-
 // l05CohesionRule flags catalog files that define components spanning more than a
 // configurable number of inferred concern groups (based on component name prefixes).
 type l05CohesionRule struct{}
@@ -28,10 +26,14 @@ func (r *l05CohesionRule) Severity() lint.Severity { return lint.SeverityInfo }
 func (r *l05CohesionRule) AutoFixable() bool       { return false }
 
 func (r *l05CohesionRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
-	threshold := defaultCohesionThreshold
-	// Allow the threshold to be configured via lint.stacks.cohesion_max_groups.
-	if ctx.LintConfig.CohesionMaxGroups > 0 {
-		threshold = ctx.LintConfig.CohesionMaxGroups
+	// The threshold is always set by mergedLintConfig (default 3) so we can use it
+	// directly without a local fallback constant.
+	threshold := ctx.LintConfig.CohesionMaxGroups
+	if threshold <= 0 {
+		// Safety guard: mergedLintConfig should always set a positive value, but
+		// guard here for callers that construct LintContext without going through
+		// the standard path (e.g. unit tests that build LintContext directly).
+		threshold = 3
 	}
 
 	// Map: file -> set of concern groups (component name prefixes).
@@ -80,12 +82,31 @@ func (r *l05CohesionRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) 
 	return findings, nil
 }
 
-// concernGroup returns the concern group for a component name by extracting its prefix.
+// concernGroup returns the concern group for a component name by extracting its first
+// meaningful prefix segment. The function handles the three common naming conventions
+// used in Atmos component catalogs:
+//
+//   - Hyphen-separated:    "vpc-endpoints"   → "vpc"
+//   - Underscore-separated: "vpc_endpoints"  → "vpc"
+//   - Path-separated:      "network/vpc"     → "network"
+//
+// When the component name contains a path separator (/), the first path segment is
+// used. Otherwise the first segment before a hyphen or underscore is used.
+// If the name contains none of these separators it is returned unchanged.
 func concernGroup(name string) string {
-	// Use the first segment of a hyphen-separated name or path segment.
-	parts := strings.SplitN(name, "-", 2)
-	if len(parts) > 0 && parts[0] != "" {
-		return parts[0]
+	// Path separator takes highest priority: "network/vpc" → "network".
+	if idx := strings.IndexByte(name, '/'); idx > 0 {
+		return name[:idx]
+	}
+	// Split on hyphen or underscore — whichever appears first.
+	first := len(name)
+	for _, sep := range []byte{'-', '_'} {
+		if idx := strings.IndexByte(name, sep); idx > 0 && idx < first {
+			first = idx
+		}
+	}
+	if first < len(name) {
+		return name[:first]
 	}
 	return name
 }
