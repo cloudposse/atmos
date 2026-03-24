@@ -907,6 +907,147 @@ func TestWithGitHubHostMatcher(t *testing.T) {
 		"custom host matcher must override the default allowlist")
 }
 
+// TestWithGitHubHostMatcher_Precedence is a table-driven test that validates the
+// three-level host-matcher precedence documented in pkg/http/doc.go:
+//
+//  1. [WithGitHubHostMatcher] — an explicit custom predicate always wins.
+//  2. GITHUB_API_URL — when set and [WithGitHubHostMatcher] was NOT applied.
+//  3. Built-in allowlist — api.github.com, raw.githubusercontent.com, uploads.github.com.
+func TestWithGitHubHostMatcher_Precedence(t *testing.T) {
+	// Cannot use t.Parallel() here because subtests call t.Setenv which modifies
+	// the process-wide GITHUB_API_URL environment variable.
+
+	cases := []struct {
+		name          string
+		gitHubAPIURL  string               // GITHUB_API_URL env value ("" = not set)
+		customMatcher func(string) bool    // nil = don't call WithGitHubHostMatcher
+		requestURL    string               // HTTPS URL to test
+		wantAuth      bool                 // whether Authorization should be injected
+	}{
+		// ── Level 3: built-in allowlist ──────────────────────────────────────────
+		{
+			name:         "builtin_api_github_com",
+			requestURL:   "https://api.github.com/repos",
+			wantAuth:     true,
+		},
+		{
+			name:         "builtin_raw_githubusercontent_com",
+			requestURL:   "https://raw.githubusercontent.com/owner/repo/main/file.go",
+			wantAuth:     true,
+		},
+		{
+			name:         "builtin_uploads_github_com",
+			requestURL:   "https://uploads.github.com/releases/assets",
+			wantAuth:     true,
+		},
+		{
+			name:         "builtin_negative_example_com",
+			requestURL:   "https://example.com/api",
+			wantAuth:     false,
+		},
+		{
+			name:         "builtin_negative_github_example_com",
+			requestURL:   "https://github.example.com/api",
+			wantAuth:     false,
+		},
+		// ── Level 2: GITHUB_API_URL overrides the default allowlist ──────────────
+		{
+			name:         "github_api_url_adds_ghes_host",
+			gitHubAPIURL: "https://github.mycorp.example.com",
+			requestURL:   "https://github.mycorp.example.com/api/v3/repos",
+			wantAuth:     true,
+		},
+		{
+			name:         "github_api_url_still_allows_builtin",
+			gitHubAPIURL: "https://github.mycorp.example.com",
+			requestURL:   "https://api.github.com/repos",
+			wantAuth:     true,
+		},
+		{
+			name:         "github_api_url_does_not_allow_unrelated_host",
+			gitHubAPIURL: "https://github.mycorp.example.com",
+			requestURL:   "https://other.example.com/api",
+			wantAuth:     false,
+		},
+		// ── Level 1: WithGitHubHostMatcher overrides GITHUB_API_URL ──────────────
+		{
+			// Custom matcher for "custom-git.example.com" — GHES host set via env
+			// must NOT receive auth because the custom matcher doesn't include it.
+			name:         "custom_matcher_overrides_github_api_url",
+			gitHubAPIURL: "https://ghes.mycorp.example.com",
+			customMatcher: func(host string) bool {
+				return host == "custom-git.example.com"
+			},
+			requestURL: "https://ghes.mycorp.example.com/api/v3/repos",
+			wantAuth:   false, // custom matcher wins — GHES host is excluded
+		},
+		{
+			// Custom matcher — host included in custom predicate gets auth.
+			name:         "custom_matcher_allows_its_own_host",
+			gitHubAPIURL: "https://ghes.mycorp.example.com",
+			customMatcher: func(host string) bool {
+				return host == "custom-git.example.com"
+			},
+			requestURL: "https://custom-git.example.com/api",
+			wantAuth:   true,
+		},
+		{
+			// Custom matcher replaces the default allowlist too.
+			name:         "custom_matcher_overrides_builtin_allowlist",
+			customMatcher: func(host string) bool {
+				return host == "custom-git.example.com"
+			},
+			requestURL: "https://api.github.com/repos",
+			wantAuth:   false, // api.github.com is NOT in the custom matcher
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// No t.Parallel() — subtests may call t.Setenv.
+
+			var capturedReq *http.Request
+			mockTransport := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				capturedReq = req.Clone(req.Context())
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader("OK")),
+				}, nil
+			})
+
+			if tc.gitHubAPIURL != "" {
+				t.Setenv("GITHUB_API_URL", tc.gitHubAPIURL)
+			}
+
+			opts := []ClientOption{
+				WithTransport(mockTransport),
+				WithGitHubToken("precedence-test-token"),
+			}
+			if tc.customMatcher != nil {
+				opts = append(opts, WithGitHubHostMatcher(tc.customMatcher))
+			}
+			client := NewDefaultClient(opts...)
+
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, tc.requestURL, nil)
+			require.NoError(t, err)
+
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			require.NotNil(t, capturedReq, "transport must have been invoked")
+			got := capturedReq.Header.Get("Authorization")
+			if tc.wantAuth {
+				assert.Equal(t, "Bearer precedence-test-token", got,
+					"[%s] expected Authorization to be set on %s", tc.name, tc.requestURL)
+			} else {
+				assert.Empty(t, got,
+					"[%s] expected Authorization to be absent on %s", tc.name, tc.requestURL)
+			}
+		})
+	}
+}
+
 // TestGet_LargeErrorBodyTruncation verifies that when an HTTP server returns a non-2xx
 // response with a body larger than maxErrorBodySize, the error message:
 //   - contains the "[truncated]" marker
