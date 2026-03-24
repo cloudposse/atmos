@@ -2,12 +2,14 @@ package merge
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -27,9 +29,9 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 		stderrChan <- buf.String()
 	}()
 
-	// Create a scenario that would trigger an error in mergo
-	// Note: With current mergo behavior, type mismatches don't always error,
-	// but we're testing that IF an error occurs, it's not printed directly
+	// Create a scenario that would trigger a validation error (invalid strategy).
+	// We verify that if an error occurs, it's not printed directly to stderr
+	// but returned to the caller.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "invalid-strategy", // This will cause an error
@@ -56,29 +58,19 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 	assert.Empty(t, stderrOutput, "No output should be printed to stderr directly from merge.go")
 }
 
-// TestMergeErrorsAreWrappedNotPrinted ensures that when mergo returns an error,
-// we wrap it and return it rather than printing it..
+// TestMergeErrorsAreWrappedNotPrinted ensures that when deepMergeNative returns an error,
+// we wrap it and return it rather than printing it.
 func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
-	// This test verifies that our code properly wraps errors
-	// without printing them directly
-
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
 		},
 	}
 
-	// Create maps that are valid (mergo won't error on these)
-	map1 := map[string]any{
-		"config": map[string]any{
-			"value": []string{"a", "b"},
-		},
-	}
-	map2 := map[string]any{
-		"config": map[string]any{
-			"value": "string", // Different type, but mergo will just replace
-		},
-	}
+	// Use type-mismatched inputs to force deepMergeNative to return an error:
+	// dst has a []any slice, src provides a scalar string for the same key.
+	map1 := map[string]any{"subnets": []any{"10.0.1.0/24"}}
+	map2 := map[string]any{"subnets": "not-a-slice"} // triggers "cannot override two slices with different type"
 
 	// Capture any direct prints to stderr
 	oldStderr := os.Stderr
@@ -92,19 +84,23 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 		stderrChan <- buf.String()
 	}()
 
-	// Perform the merge
-	result, err := Merge(atmosConfig, []map[string]any{map1, map2})
+	// Perform the merge — must error
+	_, err := Merge(atmosConfig, []map[string]any{map1, map2})
 
 	// Close and restore stderr
 	w.Close()
 	os.Stderr = oldStderr
 	stderrOutput := <-stderrChan
 
-	// With replace strategy, this should succeed (no error)
-	assert.Nil(t, err)
-	assert.NotNil(t, result)
+	// The error must be returned, not swallowed, and must keep the full merge error chain.
+	if assert.Error(t, err, "type-mismatch must return an error") {
+		assert.True(t, errors.Is(err, errUtils.ErrMerge),
+			"error must wrap ErrMerge (outer sentinel), got: %v", err)
+		assert.True(t, errors.Is(err, errUtils.ErrMergeTypeMismatch),
+			"error must wrap ErrMergeTypeMismatch (inner sentinel), got: %v", err)
+	}
 
-	// Verify nothing was printed to stderr
+	// The error must be returned to caller, not printed to stderr
 	assert.Empty(t, stderrOutput, "Merge should not print to stderr")
 }
 
