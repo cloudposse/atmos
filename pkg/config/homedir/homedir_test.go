@@ -1025,14 +1025,19 @@ func TestShellGetUsernameFunc_StderrContext(t *testing.T) {
 	_, err := shellGetUsernameFunc()
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrIDUnavailable)
-	// The error should mention NSS/LDAP context, not be a bare sentinel.
+	// The error should mention NSS/LDAP context from both commands, not be a
+	// bare sentinel. Both id and whoami fail, so both stderr snippets must appear.
 	assert.Contains(t, err.Error(), "NSS lookup failed",
 		"id stderr should be included in the error for diagnostics.")
-	// Verify the function prefix and command prefix are both present.
+	assert.Contains(t, err.Error(), "service unavailable",
+		"whoami stderr should be included in the error for diagnostics.")
+	// Verify the function prefix and both command prefixes are present.
 	assert.Contains(t, err.Error(), "shellGetUsernameFunc:",
 		"error should include the function name prefix for tracing.")
 	assert.Contains(t, err.Error(), "id:",
 		"error should include the id command prefix.")
+	assert.Contains(t, err.Error(), "whoami:",
+		"error should include the whoami command prefix.")
 }
 
 // TestDir_Cache verifies that Dir() caches its result and returns it on
