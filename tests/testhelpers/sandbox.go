@@ -179,7 +179,10 @@ func copyDirWithCp(src, dst string) error {
 	return cmd.Run()
 }
 
-// copyDir copies a directory recursively using native Go, excluding terraform artifacts.
+// copyDir copies the directory tree rooted at src to dst, creating dst with mode 0755,
+// preserving file modes, and skipping files or directories identified as Terraform artifacts.
+// Entries whose info cannot be obtained are skipped. Symbolic links are not copied.
+// Returns an error if creating dst, reading src, or copying any file or subdirectory fails.
 func copyDir(src, dst string) error {
 	const dirPerm = 0o755
 	// Create destination directory if it doesn't exist.
@@ -224,7 +227,9 @@ func copyDir(src, dst string) error {
 }
 
 // copyFile copies a single file preserving permissions using streaming I/O to
-// avoid loading the entire file into memory.
+// copyFile copies the file at src to dst and preserves the source file's permission bits.
+// It skips symbolic links and creates or truncates the destination file using the source's mode.
+// Returns an error if the source cannot be accessed or read, or if the destination cannot be created or written; otherwise nil.
 func copyFile(src, dst string) (retErr error) {
 	// Get source file info using Lstat to detect symlinks.
 	srcInfo, err := os.Lstat(src)
