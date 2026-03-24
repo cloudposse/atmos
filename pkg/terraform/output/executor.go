@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -96,6 +97,10 @@ type OutputOptions struct {
 	// Use this when formatting output for scripts to avoid polluting stdout/stderr.
 	// If an error occurs, captured stderr is included in the error message.
 	QuietMode bool
+	// SkipInit skips terraform init, workspace select, and workspace cleanup.
+	// Use this when the component was just applied and .terraform/ state is already correct.
+	// Only terraform output is executed.
+	SkipInit bool
 }
 
 // quietModeWriter captures output during quiet mode operations.
@@ -196,11 +201,8 @@ func (e *Executor) GetAllOutputs(
 	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
 	defer stopSpinner()
 
-	// Note: skipInit is currently ignored - terraform init is always run to ensure correct state.
-	_ = skipInit
-
 	// Use quiet mode to suppress terraform init/workspace output.
-	opts := &OutputOptions{QuietMode: true}
+	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
 	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts, authManager)
 	if err != nil {
 		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
@@ -325,12 +327,21 @@ func (e *Executor) fetchAndCacheOutputs(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.fetchAndCacheOutputs")()
 
+	// When skipInit is set and no authManager is provided, skip YAML function
+	// processing. YAML functions like !terraform.state need credentials that
+	// may not be available in PostRunE context. We only need the component path
+	// and workspace info to run terraform output.
+	processYamlFunctions := true
+	if opts != nil && opts.SkipInit && authManager == nil {
+		processYamlFunctions = false
+	}
+
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
-		ProcessYamlFunctions: true,
+		ProcessYamlFunctions: processYamlFunctions,
 		AuthManager:          authManager,
 	})
 	if err != nil {
@@ -386,24 +397,34 @@ func (e *Executor) execute(
 		return nil, err
 	}
 
-	// Step 3: Generate backend file if needed.
+	// Step 3: Resolve toolchain dependencies and executable path.
+	// This ensures that toolchain-installed executables (e.g., tofu via `atmos toolchain install`)
+	// are found even when they are not on the system PATH. Without this, template functions like
+	// atmos.Component() and YAML functions like !terraform.output fail with "executable not found".
+	tenv, err := dependencies.ForSections(atmosConfig, sections)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve toolchain for %s in %s: %w", component, stack, err)
+	}
+	config.Executable = tenv.Resolve(config.Executable)
+
+	// Step 4: Generate backend file if needed.
 	backendGen := &defaultBackendGenerator{}
 	if err := backendGen.GenerateBackendIfNeeded(config, component, stack, authContext); err != nil {
 		return nil, err
 	}
 
-	// Step 4: Generate provider overrides if needed.
+	// Step 5: Generate provider overrides if needed.
 	if err := backendGen.GenerateProvidersIfNeeded(config, authContext); err != nil {
 		return nil, err
 	}
 
-	// Step 5: Create terraform runner.
+	// Step 6: Create terraform runner.
 	runner, err := e.runnerFactory(config.ComponentPath, config.Executable)
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 6: Configure quiet mode if requested.
+	// Step 7: Configure quiet mode if requested.
 	var stderrCapture *quietModeWriter
 	if opts != nil && opts.QuietMode {
 		runner.SetStdout(io.Discard)
@@ -411,11 +432,17 @@ func (e *Executor) execute(
 		runner.SetStderr(stderrCapture)
 	}
 
-	// Step 7: Setup environment variables.
+	// Step 8: Setup environment variables.
 	envSetup := &defaultEnvironmentSetup{}
 	environMap, err := envSetup.SetupEnvironment(config, authContext)
 	if err != nil {
 		return nil, err
+	}
+	// Prepend toolchain bin dirs to subprocess PATH so terraform/tofu subprocesses
+	// can also find toolchain-installed binaries. Uses PrependToPath to preserve
+	// any PATH overrides from the component's env section.
+	if len(tenv.ToolchainDirs()) > 0 {
+		environMap["PATH"] = tenv.PrependToPath(environMap["PATH"])
 	}
 	if len(environMap) > 0 {
 		if err := runner.SetEnv(environMap); err != nil {
@@ -423,26 +450,32 @@ func (e *Executor) execute(
 		}
 	}
 
-	// Step 8: Clean workspace and run terraform init.
-	workspaceMgr := &defaultWorkspaceManager{}
-	workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
+	// Step 8: Clean workspace and run terraform init (skipped when SkipInit is set).
+	// SkipInit is used when the component was just applied and .terraform/ state
+	// is already correct — re-initializing would require auth credentials that
+	// may not be available in PostRunE context.
+	skipInit := opts != nil && opts.SkipInit
+	if !skipInit {
+		workspaceMgr := &defaultWorkspaceManager{}
+		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
 
-	if err := e.runInit(ctx, runner, config, component, stack, stderrCapture); err != nil {
-		return nil, err
+		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture); err != nil {
+			return nil, err
+		}
+
+		// Step 9: Ensure workspace exists and is selected.
+		if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
+			return nil, err
+		}
 	}
 
-	// Step 9: Ensure workspace exists and is selected.
-	if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
-		return nil, err
-	}
-
-	// Step 10: Execute terraform output.
+	// Step 11: Execute terraform output.
 	outputMeta, err := e.runOutput(ctx, runner, component, stack, stderrCapture)
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 11: Process and convert output values.
+	// Step 12: Process and convert output values.
 	return processOutputs(outputMeta, atmosConfig), nil
 }
 

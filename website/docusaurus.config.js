@@ -191,7 +191,7 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/dependencies',
-                        to: '/stacks/settings/depends_on'
+                        to: '/stacks/dependencies/components'
                     },
                     {
                         from: '/core-concepts/stacks/hooks',
@@ -312,13 +312,11 @@ const config = {
                     // Terraform generate command reorganization
                     {from: '/cli/commands/terraform/terraform-generate-backend', to: '/cli/commands/terraform/generate/backend'},
                     {from: '/cli/commands/terraform/terraform-generate-backends', to: '/cli/commands/terraform/generate/backends'},
-                    {from: '/cli/commands/terraform/terraform-generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
                     {from: '/cli/commands/terraform/terraform-generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/terraform-generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
                     // Legacy generate command paths (without terraform- prefix)
                     {from: '/cli/commands/terraform/generate-backend', to: '/cli/commands/terraform/generate/backend'},
                     {from: '/cli/commands/terraform/generate-backends', to: '/cli/commands/terraform/generate/backends'},
-                    {from: '/cli/commands/terraform/generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
                     {from: '/cli/commands/terraform/generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
                 ],
@@ -409,6 +407,26 @@ const config = {
                 docs: {
                     routeBasePath: '/',
                     sidebarPath: require.resolve('./sidebars.js'),
+                    async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
+                        const items = await defaultSidebarItemsGenerator(args);
+                        // Sort all sidebar items alphabetically by label,
+                        // treating categories and docs equally so they interleave correctly.
+                        const sortItems = (sidebarItems) => {
+                            return sidebarItems
+                                .map((item) => {
+                                    if (item.type === 'category' && item.items) {
+                                        return {...item, items: sortItems(item.items)};
+                                    }
+                                    return item;
+                                })
+                                .sort((a, b) => {
+                                    const labelA = (a.label || '').toLowerCase();
+                                    const labelB = (b.label || '').toLowerCase();
+                                    return labelA.localeCompare(labelB);
+                                });
+                        };
+                        return sortItems(items);
+                    },
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
@@ -549,14 +567,6 @@ const config = {
                         dark: 'rgb(50, 50, 50)'
                     }
                 }
-            },
-            announcementBar: {
-                id: 'refarch-announcement',
-                content:
-                  'Try Cloud Posse\'s <a href="https://docs.cloudposse.com">Reference Architecture for AWS, Datadog & GitHub Actions</a> using Atmos',
-                backgroundColor: 'var(--announcement-bar-background)',
-                textColor: 'var(--announcement-bar-text-color)',
-                isCloseable: true,
             },
             colorMode: {
                 // "light" | "dark"

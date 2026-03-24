@@ -435,6 +435,101 @@ func TestParsePagerFlag_FallbackToEnv(t *testing.T) {
 	assert.True(t, result.IsEnabled(), "Should be enabled")
 }
 
+// TestParseGlobalFlags_AIFlag tests that the --ai flag is correctly parsed.
+func TestParseGlobalFlags_AIFlag(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.False(t, flags.AI, "AI should default to false")
+	})
+
+	t.Run("CLI flag enables AI", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("ai", true)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.True(t, flags.AI, "AI should be true when set via CLI flag")
+	})
+
+	t.Run("environment variable enables AI", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_AI", "true")
+		_ = v.BindEnv("ai", "ATMOS_AI")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.True(t, flags.AI, "AI should be true when ATMOS_AI is set")
+	})
+}
+
+// TestParseGlobalFlags_SkillFlag tests that the --skill flag is correctly parsed as a string slice.
+func TestParseGlobalFlags_SkillFlag(t *testing.T) {
+	t.Run("defaults to empty", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Empty(t, flags.Skill, "Skill should default to empty slice")
+	})
+
+	t.Run("CLI flag sets single skill", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("skill", []string{"atmos-terraform"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"atmos-terraform"}, flags.Skill, "Skill should be set via CLI flag")
+	})
+
+	t.Run("CLI flag sets multiple skills", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		v.Set("skill", []string{"atmos-terraform", "atmos-stacks"})
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Equal(t, []string{"atmos-terraform", "atmos-stacks"}, flags.Skill, "Skill should support multiple values")
+	})
+
+	t.Run("environment variable sets skill", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		_ = parser.BindToViper(v)
+
+		t.Setenv("ATMOS_SKILL", "atmos-terraform")
+		_ = v.BindEnv("skill", "ATMOS_SKILL")
+
+		flags := ParseGlobalFlags(cmd, v)
+		assert.Contains(t, flags.Skill, "atmos-terraform", "Skill should be set when ATMOS_SKILL is set")
+	})
+}
+
 // TestParsePagerFlag_NoFlagRegistered tests behavior when pager flag is not registered.
 func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	// Create command WITHOUT pager flag.

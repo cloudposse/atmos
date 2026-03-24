@@ -8,8 +8,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/realm"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 )
 
 func TestCheckRealmMismatchFiles_NonEmptyRealm_FindsNoRealmCreds(t *testing.T) {
@@ -289,6 +291,169 @@ func TestCheckNoRealmCredentials(t *testing.T) {
 		baseDir := t.TempDir()
 		assert.Empty(t, checkNoRealmCredentials(baseDir))
 	})
+}
+
+func TestDeleteLegacyKeyringEntry_CleansUpEmptyRealm(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := types.NewMockCredentialStore(ctrl)
+
+	// Expect Delete to be called with the alias and empty realm (legacy entry).
+	store.EXPECT().Delete("my-identity", "").Return(nil)
+
+	m := &manager{
+		credentialStore: store,
+		realm:           realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+
+	m.deleteLegacyKeyringEntry("my-identity")
+}
+
+func TestDeleteLegacyKeyringEntry_NoOpForEmptyRealm(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := types.NewMockCredentialStore(ctrl)
+
+	// No Delete call expected — realm is empty, so no cleanup should happen.
+
+	m := &manager{
+		credentialStore: store,
+		realm:           realm.RealmInfo{Value: "", Source: "auto"},
+	}
+
+	m.deleteLegacyKeyringEntry("my-identity")
+}
+
+func TestDeleteLegacyKeyringEntry_NilStore(t *testing.T) {
+	m := &manager{
+		credentialStore: nil,
+		realm:           realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+	// Should not panic.
+	m.deleteLegacyKeyringEntry("my-identity")
+}
+
+func TestDeleteLegacyCredentialFiles_CleansUpNoRealmFiles(t *testing.T) {
+	// Setup: credential files at {baseDir}/aws/{provider}/credentials (no realm).
+	parent := t.TempDir()
+	atmosDir := filepath.Join(parent, "atmos")
+	providerDir := filepath.Join(atmosDir, "aws", "my-provider")
+	require.NoError(t, os.MkdirAll(providerDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "credentials"), []byte("test"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "config"), []byte("test"), 0o600))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", parent)
+
+	m := &manager{
+		realm: realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+
+	m.deleteLegacyCredentialFiles()
+
+	// Legacy files should be deleted.
+	_, err := os.Stat(filepath.Join(providerDir, "credentials"))
+	assert.True(t, os.IsNotExist(err), "legacy credentials file should be deleted")
+	_, err = os.Stat(filepath.Join(providerDir, "config"))
+	assert.True(t, os.IsNotExist(err), "legacy config file should be deleted")
+}
+
+func TestDeleteLegacyCredentialFiles_NoOpForEmptyRealm(t *testing.T) {
+	parent := t.TempDir()
+	atmosDir := filepath.Join(parent, "atmos")
+	providerDir := filepath.Join(atmosDir, "aws", "my-provider")
+	require.NoError(t, os.MkdirAll(providerDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "credentials"), []byte("test"), 0o600))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", parent)
+
+	m := &manager{
+		realm: realm.RealmInfo{Value: "", Source: "auto"},
+	}
+
+	m.deleteLegacyCredentialFiles()
+
+	// Files should NOT be deleted when realm is empty.
+	_, err := os.Stat(filepath.Join(providerDir, "credentials"))
+	assert.NoError(t, err, "files should not be deleted when realm is empty")
+}
+
+func TestDeleteLegacyKeyringEntry_DeleteFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	store := types.NewMockCredentialStore(ctrl)
+
+	// Expect Delete to be called but return an error.
+	store.EXPECT().Delete("my-identity", "").Return(assert.AnError)
+
+	m := &manager{
+		credentialStore: store,
+		realm:           realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+
+	// Should not panic even when Delete fails.
+	m.deleteLegacyKeyringEntry("my-identity")
+}
+
+func TestDeleteLegacyCredentialFiles_CleansUpLockFilesAndEmptyDirs(t *testing.T) {
+	// Setup: credential files including lock files at {baseDir}/aws/{provider}/.
+	parent := t.TempDir()
+	atmosDir := filepath.Join(parent, "atmos")
+	providerDir := filepath.Join(atmosDir, "aws", "my-provider")
+	require.NoError(t, os.MkdirAll(providerDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "credentials"), []byte("test"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "credentials.lock"), []byte("test"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "config"), []byte("test"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(providerDir, "config.lock"), []byte("test"), 0o600))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", parent)
+
+	m := &manager{
+		realm: realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+
+	m.deleteLegacyCredentialFiles()
+
+	// All legacy files should be deleted.
+	for _, filename := range []string{"credentials", "credentials.lock", "config", "config.lock"} {
+		_, err := os.Stat(filepath.Join(providerDir, filename))
+		assert.True(t, os.IsNotExist(err), "legacy %s file should be deleted", filename)
+	}
+
+	// Provider and aws directories should be cleaned up since they're empty.
+	_, err := os.Stat(providerDir)
+	assert.True(t, os.IsNotExist(err), "empty provider dir should be removed")
+	_, err = os.Stat(filepath.Join(atmosDir, "aws"))
+	assert.True(t, os.IsNotExist(err), "empty aws dir should be removed")
+}
+
+func TestDeleteLegacyCredentialFiles_SkipsNonDirectoryEntries(t *testing.T) {
+	// Setup: aws dir with a regular file (not a provider directory).
+	parent := t.TempDir()
+	atmosDir := filepath.Join(parent, "atmos")
+	awsDir := filepath.Join(atmosDir, "aws")
+	require.NoError(t, os.MkdirAll(awsDir, 0o700))
+	// Create a stray file in the aws dir (should be skipped).
+	require.NoError(t, os.WriteFile(filepath.Join(awsDir, "stray-file.txt"), []byte("not a dir"), 0o600))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", parent)
+
+	m := &manager{
+		realm: realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+
+	// Should not panic, stray file should remain.
+	m.deleteLegacyCredentialFiles()
+
+	_, err := os.Stat(filepath.Join(awsDir, "stray-file.txt"))
+	assert.NoError(t, err, "non-directory entries should not be removed")
+}
+
+func TestDeleteLegacyCredentialFiles_NoAwsDir(t *testing.T) {
+	// Setup: base dir exists but no aws subdirectory.
+	parent := t.TempDir()
+	atmosDir := filepath.Join(parent, "atmos")
+	require.NoError(t, os.MkdirAll(atmosDir, 0o700))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", parent)
+
+	m := &manager{
+		realm: realm.RealmInfo{Value: "my-realm", Source: "config"},
+	}
+
+	// Should not panic.
+	m.deleteLegacyCredentialFiles()
 }
 
 func TestLogRealmMismatchWarning_NonEmptyToEmpty(t *testing.T) {

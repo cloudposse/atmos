@@ -106,6 +106,9 @@ var (
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
+	// ErrPlanVerificationFailed is returned when a stored planfile differs from the current state during --verify-plan.
+	ErrPlanVerificationFailed = errors.New("plan verification failed: stored plan differs from current state")
+
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
@@ -315,6 +318,8 @@ var (
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
+	ErrMergeNilDst                   = errors.New("merge destination must not be nil")
+	ErrMergeTypeMismatch             = errors.New("cannot override two slices with different type")
 	ErrEncode                        = errors.New("encoding error")
 	ErrDecode                        = errors.New("decoding error")
 
@@ -434,6 +439,7 @@ var (
 	ErrInvalidTerraformOverridesSection = errors.New("invalid terraform overrides section")
 	ErrInvalidHelmfileOverridesSection  = errors.New("invalid helmfile overrides section")
 	ErrInvalidBaseComponentConfig       = errors.New("invalid base component config")
+	ErrCircularComponentInheritance     = ErrStackCircularInheritance
 
 	// Terraform-specific subsection errors.
 	ErrInvalidTerraformCommand            = errors.New("invalid terraform command")
@@ -573,6 +579,24 @@ var (
 	ErrStackNotFound             = errors.New("stack not found")
 	ErrProcessStack              = errors.New("error processing stack")
 
+	// Dependency errors.
+	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
+	ErrMissingDependencyField    = errors.New("dependency missing required field")
+	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
+
+	// Terraform --all flag errors.
+	ErrStackRequiredWithAllFlag     = errors.New("stack is required when using --all flag")
+	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
+
+	// Terraform execution errors.
+	ErrTerraformExecFailed = errors.New("terraform execution failed")
+	ErrDescribeAffected    = errors.New("describe affected failed")
+	ErrDescribeStacks      = errors.New("describe stacks failed")
+	ErrBuildDepGraph       = errors.New("build dependency graph failed")
+	ErrTopologicalOrder    = errors.New("topological sort failed")
+	ErrFormatForLogging    = errors.New("format affected for logging failed")
+	ErrQueryEvaluation     = errors.New("query evaluation failed")
+
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
 	ErrCacheRead      = errors.New("cache read failed")
@@ -662,6 +686,7 @@ var (
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
 	ErrUserAborted                  = errors.New("user aborted")
 
 	// AWS SSO specific errors.
@@ -838,9 +863,158 @@ var (
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
 
+	// EKS integration errors.
+	ErrEKSDescribeCluster   = errors.New("failed to describe EKS cluster")
+	ErrEKSClusterNotFound   = errors.New("EKS cluster not found")
+	ErrEKSIntegrationFailed = errors.New("EKS integration failed")
+	ErrEKSTokenGeneration   = errors.New("failed to generate EKS token")
+	ErrKubeconfigPath       = errors.New("failed to determine kubeconfig path")
+	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
+	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
+
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
+
+	// CI-related errors.
+	ErrCIDisabled              = errors.New("CI integration is disabled")
+	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
+	ErrCIProviderNotFound      = errors.New("CI provider not found")
+	ErrCIOperationNotSupported = errors.New("operation not supported by CI provider")
+	ErrCICheckRunCreateFailed  = errors.New("failed to create check run")
+	ErrCICheckRunUpdateFailed  = errors.New("failed to update check run")
+	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
+	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
+	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
+
+	// Planfile storage errors.
+	ErrPlanfileNotFound           = errors.New("planfile not found")
+	ErrPlanfileUploadFailed       = errors.New("failed to upload planfile")
+	ErrPlanfileDownloadFailed     = errors.New("failed to download planfile")
+	ErrPlanfileDeleteFailed       = errors.New("failed to delete planfile")
+	ErrPlanfileListFailed         = errors.New("failed to list planfiles")
+	ErrPlanfileStoreNotFound      = errors.New("planfile store not found")
+	ErrPlanfileKeyInvalid         = errors.New("planfile key generation failed: stack, component, and SHA are required")
+	ErrPlanfileStatFailed         = errors.New("failed to check planfile status")
+	ErrPlanfileMetadataFailed     = errors.New("failed to load planfile metadata")
+	ErrPlanfileMetadataInvalid    = errors.New("planfile metadata validation failed: stack, component, and SHA are required")
+	ErrArtifactMetadataInvalid    = errors.New("artifact metadata validation failed: stack, component, and SHA are required")
+	ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
+	ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
+	ErrAWSConfigLoadFailed        = errors.New("failed to load AWS configuration")
+
+	// Artifact storage errors.
+	ErrArtifactNotFound         = errors.New("artifact not found")
+	ErrArtifactUploadFailed     = errors.New("failed to upload artifact")
+	ErrArtifactDownloadFailed   = errors.New("failed to download artifact")
+	ErrArtifactDeleteFailed     = errors.New("failed to delete artifact")
+	ErrArtifactListFailed       = errors.New("failed to list artifacts")
+	ErrArtifactStoreNotFound    = errors.New("artifact store not found")
+	ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
+	ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
+	ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
+	// AI-related errors.
+	ErrAINotEnabled                 = errors.New("AI features are not enabled")
+	ErrAIDisabledInConfiguration    = errors.New("AI features are disabled in configuration")
+	ErrAIAPIKeyNotFound             = errors.New("API key not found in environment variable")
+	ErrAINoStackFilesFound          = errors.New("no stack files found")
+	ErrAIUnsupportedProvider        = errors.New("unsupported AI provider")
+	ErrAIClientNil                  = errors.New("AI client cannot be nil")
+	ErrAINoResponseCandidates       = errors.New("no response candidates returned")
+	ErrAINoResponseContent          = errors.New("no content in response")
+	ErrAIResponseNotText            = errors.New("response part does not contain text")
+	ErrAINoResponseChoices          = errors.New("no response choices returned")
+	ErrAISessionNotFound            = errors.New("AI session not found")
+	ErrAISessionAlreadyExists       = errors.New("AI session already exists")
+	ErrAIToolNotFound               = errors.New("AI tool not found")
+	ErrAIToolExecutionDenied        = errors.New("AI tool execution denied by user")
+	ErrAIToolExecutionFailed        = errors.New("AI tool execution failed")
+	ErrAIToolParameterRequired      = errors.New("tool parameter is required")
+	ErrAIToolNameEmpty              = errors.New("tool name cannot be empty")
+	ErrAIToolAlreadyRegistered      = errors.New("tool already registered")
+	ErrAIToolBlocked                = errors.New("tool is blocked")
+	ErrAIToolsDisabled              = errors.New("tools are disabled")
+	ErrAINoPrompter                 = errors.New("no prompter available")
+	ErrAISessionsNotEnabled         = errors.New("sessions are not enabled in configuration")
+	ErrAIInvalidDurationFormat      = errors.New("invalid duration format")
+	ErrAIUnsupportedDurationUnit    = errors.New("unsupported duration unit")
+	ErrAIUnsupportedComponentType   = errors.New("unsupported component type")
+	ErrAIFileAccessDeniedComponents = errors.New("access denied: file path must be within components directory")
+	ErrAIFileAccessDeniedStacks     = errors.New("access denied: file path must be within stacks directory")
+	ErrAIInvalidConfiguration       = errors.New("invalid AI configuration")
+	ErrAINotInitialized             = errors.New("AI client not initialized")
+	ErrAIFileNotFound               = errors.New("file not found")
+	ErrAIPathIsDirectory            = errors.New("path is a directory, not a file")
+	ErrAISessionManagerNotAvailable = errors.New("session manager not available")
+	ErrAISessionNameEmpty           = errors.New("session name cannot be empty")
+	ErrAISQLitePragmaFailed         = errors.New("failed to set SQLite pragma")
+	ErrAIAgentNil                   = errors.New("AI agent cannot be nil")
+	ErrAIAgentNameEmpty             = errors.New("AI agent name cannot be empty")
+	ErrAIAgentNotFound              = errors.New("AI agent not found")
+	ErrAIAgentAlreadyRegistered     = errors.New("AI agent already registered")
+	ErrAISkillNil                   = errors.New("AI skill cannot be nil")
+	ErrAISkillNameEmpty             = errors.New("AI skill name cannot be empty")
+	ErrAISkillNotFound              = errors.New("AI skill not found")
+	ErrAISkillAlreadyRegistered     = errors.New("AI skill already registered")
+	ErrAISkillRequiresAIFlag        = errors.New("--skill flag requires --ai")
+	ErrAISkillLoadFailed            = errors.New("failed to load AI skills")
+	ErrAIPromptRequired             = errors.New("prompt is required")
+	ErrAIExecutionFailed            = errors.New("AI execution failed")
+	ErrAISendMessage                = errors.New("failed to send message to AI provider")
+	ErrAIClientCreation             = errors.New("failed to create AI client")
+	ErrAIMarshalRequest             = errors.New("failed to marshal AI request")
+	ErrAIUnmarshalResponse          = errors.New("failed to unmarshal AI response")
+	ErrAIParseToolInput             = errors.New("failed to parse tool input")
+	ErrAILoadAWSConfig              = errors.New("failed to load AWS configuration for AI")
+	ErrAIBaseURLRequired            = errors.New("base URL is required for AI provider")
+	ErrAIAccessDeniedBasePath       = errors.New("access denied: file must be within Atmos base path")
+	ErrAIAccessDeniedSearchPath     = errors.New("access denied: search path must be within Atmos base path")
+	ErrAIUnknownOperation           = errors.New("unknown operation")
+	ErrAISearchTextNotFound         = errors.New("search text not found in file")
+	ErrAILineNumberOutOfRange       = errors.New("line number out of range")
+	ErrAIInvalidLineRange           = errors.New("invalid line range")
+	ErrAICommandEmpty               = errors.New("command cannot be empty")
+	ErrAICommandBlacklisted         = errors.New("command is blacklisted for security reasons")
+	ErrAICommandRmNotAllowed        = errors.New("rm with recursive or force flags is not allowed")
+	ErrAILSPNotEnabled              = errors.New("LSP is not enabled")
+	ErrAIFileDoesNotExist           = errors.New("file does not exist")
+	ErrAIConfigNil                  = errors.New("cannot switch provider: atmosConfig is nil")
+	ErrAIInvalidProviderSelection   = errors.New("invalid provider selection")
+
+	// AI session checkpoint/compaction errors.
+	ErrAICompactPlanNil               = errors.New("compact plan is nil")
+	ErrAIUnsupportedExportFormat      = errors.New("unsupported export format")
+	ErrAICheckpointNil                = errors.New("checkpoint is nil")
+	ErrAICheckpointVersionMissing     = errors.New("checkpoint version is missing")
+	ErrAIUnsupportedCheckpointVersion = errors.New("unsupported checkpoint version")
+	ErrAISessionNameRequired          = errors.New("session name is required")
+	ErrAISessionProviderRequired      = errors.New("session provider is required")
+	ErrAISessionModelRequired         = errors.New("session model is required")
+	ErrAICheckpointNoMessages         = errors.New("checkpoint must contain at least one message")
+	ErrAIMessageRoleRequired          = errors.New("message role is required")
+	ErrAIMessageInvalidRole           = errors.New("invalid message role")
+	ErrAIStatisticsMismatch           = errors.New("statistics message count does not match actual messages")
+	ErrAIUnsupportedCheckpointFormat  = errors.New("unsupported checkpoint format")
+	ErrAIComponentPathNotFound        = errors.New("component path not found")
+	ErrAIComponentPathNotDirectory    = errors.New("component path is not a directory")
+
+	// Web search errors.
+	ErrWebSearchFailed      = errors.New("web search request failed")
+	ErrWebSearchParseFailed = errors.New("failed to parse web search results")
+	ErrWebSearchNotEnabled  = errors.New("web search is not enabled in configuration")
+
+	// MCP errors.
+	ErrMCPNotEnabled            = errors.New("MCP server is not enabled: add 'mcp:\n  enabled: true' to atmos.yaml")
+	ErrMCPToolNotFound          = errors.New("MCP tool not found")
+	ErrMCPInvalidJSONRPCVersion = errors.New("invalid JSON-RPC version")
+	ErrMCPInvalidTransport      = errors.New("invalid transport type")
+	ErrMCPUnsupportedTransport  = errors.New("unsupported transport")
+	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
+	ErrLSPConfigNil             = errors.New("LSP config is nil")
+	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
+	ErrLSPRPCError              = errors.New("RPC error")
+	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

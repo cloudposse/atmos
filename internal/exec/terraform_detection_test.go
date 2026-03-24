@@ -69,7 +69,7 @@ func TestIsOpenTofu_FastPath(t *testing.T) {
 				},
 			}
 
-			result := IsOpenTofu(atmosConfig)
+			result := IsOpenTofu(atmosConfig, nil)
 			assert.Equal(t, tt.expected, result, "Detection result should match expected for command: %s", tt.command)
 		})
 	}
@@ -91,7 +91,7 @@ func TestIsOpenTofu_Caching(t *testing.T) {
 	}
 
 	// First call should detect and cache.
-	result1 := IsOpenTofu(atmosConfig)
+	result1 := IsOpenTofu(atmosConfig, nil)
 	assert.True(t, result1, "First call should detect OpenTofu")
 
 	// Check cache was populated.
@@ -104,7 +104,7 @@ func TestIsOpenTofu_Caching(t *testing.T) {
 
 	// Second call should use cache (we can't directly verify this,
 	// but we can verify the result is consistent).
-	result2 := IsOpenTofu(atmosConfig)
+	result2 := IsOpenTofu(atmosConfig, nil)
 	assert.Equal(t, result1, result2, "Cached result should match first result")
 }
 
@@ -123,7 +123,7 @@ func TestIsOpenTofu_DefaultCommand(t *testing.T) {
 		},
 	}
 
-	result := IsOpenTofu(atmosConfig)
+	result := IsOpenTofu(atmosConfig, nil)
 
 	// With empty command, should default to "terraform" which is not OpenTofu.
 	// This will try to execute "terraform version" which may fail in test environment,
@@ -151,7 +151,7 @@ func TestIsOpenTofu_SlowPath(t *testing.T) {
 
 		// This will use fast path (basename contains "tofu"), but we're
 		// verifying that the detection logic works end-to-end.
-		result := IsOpenTofu(atmosConfig)
+		result := IsOpenTofu(atmosConfig, nil)
 		assert.True(t, result, "Should detect OpenTofu")
 	})
 
@@ -166,7 +166,7 @@ func TestIsOpenTofu_SlowPath(t *testing.T) {
 		}
 
 		// This will use slow path (execute version command).
-		result := IsOpenTofu(atmosConfig)
+		result := IsOpenTofu(atmosConfig, nil)
 
 		// Result depends on whether terraform is available.
 		// If terraform is available and responds, should be false.
@@ -352,7 +352,7 @@ func TestIsOpenTofu_ConcurrentAccess(t *testing.T) {
 
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
-			result := IsOpenTofu(atmosConfig)
+			result := IsOpenTofu(atmosConfig, nil)
 			assert.True(t, result, "Concurrent detection should return true")
 			done <- true
 		}()
@@ -469,7 +469,7 @@ func TestIsOpenTofu_Integration(t *testing.T) {
 				},
 			}
 
-			result := IsOpenTofu(atmosConfig)
+			result := IsOpenTofu(atmosConfig, nil)
 			assert.Equal(t, tc.expectedTofu, result, tc.description)
 		})
 	}
@@ -492,7 +492,7 @@ func BenchmarkIsOpenTofu_FastPath(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		IsOpenTofu(atmosConfig)
+		IsOpenTofu(atmosConfig, nil)
 	}
 }
 
@@ -514,7 +514,7 @@ func BenchmarkIsOpenTofu_Cached(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		IsOpenTofu(atmosConfig)
+		IsOpenTofu(atmosConfig, nil)
 	}
 }
 

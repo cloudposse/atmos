@@ -285,6 +285,57 @@ These flags are available for every Atmos command:
         - Example: `--redirect-stderr=/dev/null` to suppress error output
     </dd>
 
+    <dt>`--ai`</dt>
+    <dd>
+        Enable AI-powered analysis of command output.
+        - Default: `false`
+        - When enabled, command output is automatically sent to the configured AI provider for analysis
+        - Requires AI configuration in `atmos.yaml` (provider, model, API key)
+        - Can also use `ATMOS_AI` environment variable
+        - Works with any command that produces output (e.g., `terraform plan`, `describe stacks`)
+        - See [AI Configuration](/cli/configuration/ai) for setup instructions
+
+        **Examples:**
+        ```bash
+        # Analyze terraform plan output with AI
+        atmos terraform plan vpc -s prod --ai
+
+        # Use environment variable
+        ATMOS_AI=true atmos terraform plan vpc -s prod
+
+        # Combine with other flags
+        atmos terraform apply vpc -s prod --ai --logs-level=Debug
+        ```
+    </dd>
+
+    <dt>`--skill`</dt>
+    <dd>
+        Specify one or more AI skills for domain-specific analysis context (requires `--ai`).
+        - Default: empty (no skills)
+        - Accepts comma-separated values (`--skill a,b`) or repeated flags (`--skill a --skill b`)
+        - Loads each skill's system prompt and prepends them to the AI analysis prompt
+        - The AI gains deep knowledge of the specified Atmos subsystems for more accurate analysis
+        - Skills are loaded from marketplace installations (`~/.atmos/skills/`) and custom skills in `atmos.yaml`
+        - Can also use `ATMOS_SKILL` environment variable (comma-separated)
+        - Requires `--ai` flag — using `--skill` without `--ai` produces a helpful error
+        - See [AI Skills](/cli/configuration/ai/skills) for available skills
+
+        **Examples:**
+        ```bash
+        # Use Terraform expertise for plan analysis
+        atmos terraform plan vpc -s prod --ai --skill atmos-terraform
+
+        # Combine multiple skills (comma-separated)
+        atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks
+
+        # Combine multiple skills (repeated flag)
+        atmos terraform plan vpc -s prod --ai --skill atmos-terraform --skill atmos-stacks
+
+        # Use environment variables
+        ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s prod
+        ```
+    </dd>
+
     <dt>`--version`</dt>
     <dd>
         Print a minimal single-line Atmos CLI version and exit.
@@ -519,6 +570,66 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_PROFILE_TYPE`</dt>
     <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
+
+    <dt>`ATMOS_AI`</dt>
+    <dd>
+        Enable AI-powered analysis of command output.
+        - Equivalent to the `--ai` flag
+        - Set to `true` to enable AI analysis globally
+        - CLI flag takes precedence over this environment variable
+        - Example: `ATMOS_AI=true atmos terraform plan vpc -s prod`
+    </dd>
+
+    <dt>`ATMOS_SKILL`</dt>
+    <dd>
+        Specify one or more AI skills for domain-specific analysis context (comma-separated).
+        - Equivalent to the `--skill` flag
+        - Requires `ATMOS_AI=true` or `--ai` flag
+        - CLI flag takes precedence over this environment variable
+        - Example: `ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s prod`
+    </dd>
+</dl>
+
+### AI Assistant Environment Variables
+
+<dl>
+    <dt>`ANTHROPIC_API_KEY` / `ATMOS_ANTHROPIC_API_KEY`</dt>
+    <dd>
+        API key for Anthropic Claude AI provider.
+        - Both standard and Atmos-prefixed versions are supported
+        - Used when `default_provider: "anthropic"` is configured
+    </dd>
+
+    <dt>`OPENAI_API_KEY` / `ATMOS_OPENAI_API_KEY`</dt>
+    <dd>
+        API key for OpenAI GPT AI provider.
+        - Both standard and Atmos-prefixed versions are supported
+        - Used when `default_provider: "openai"` is configured
+    </dd>
+
+    <dt>`GEMINI_API_KEY` / `ATMOS_GEMINI_API_KEY`</dt>
+    <dd>
+        API key for Google Gemini AI provider.
+        - Both standard and Atmos-prefixed versions are supported
+        - Used when `default_provider: "gemini"` is configured
+    </dd>
+
+    <dt>`XAI_API_KEY` / `ATMOS_XAI_API_KEY`</dt>
+    <dd>
+        API key for xAI Grok AI provider.
+        - Both standard and Atmos-prefixed versions are supported
+        - Used when `default_provider: "grok"` is configured
+    </dd>
+
+    <dt>`ATMOS_AI_SEND_CONTEXT`</dt>
+    <dd>
+        Control whether stack configurations are sent to AI provider for context-aware answers.
+        - Options: `true` or `false`
+        - Default: `false` (context not sent)
+        - When `true`, stack YAML files are read and included in AI prompts
+        - **Privacy Note**: Enables sending repository configuration to external AI services
+        - Takes precedence over `send_context` setting in `atmos.yaml`
+    </dd>
 </dl>
 
 ### XDG Base Directory Environment Variables
@@ -688,6 +799,32 @@ atmos describe stacks
 atmos terraform plan vpc -s prod --profile-file=cpu.prof --profile-type=cpu
 atmos terraform plan vpc -s prod --profile-file=heap.prof --profile-type=heap
 atmos terraform plan vpc -s prod --profile-file=trace.out --profile-type=trace
+```
+
+### AI-Powered Analysis Examples
+
+```bash
+# Analyze terraform plan output with AI
+atmos terraform plan vpc -s prod --ai
+
+# Enable AI via environment variable
+export ATMOS_AI=true
+atmos terraform plan vpc -s prod
+
+# One-off AI analysis
+ATMOS_AI=true atmos terraform apply vpc -s prod
+
+# Use a skill for domain-specific analysis
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform
+
+# Combine multiple skills (comma-separated)
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks
+
+# Combine multiple skills (repeated flag)
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform --skill atmos-stacks
+
+# Skills via environment variables
+ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s prod
 ```
 
 ### CI/CD Portability Example

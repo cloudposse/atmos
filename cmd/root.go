@@ -58,13 +58,19 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/ai"
+	aisetup "github.com/cloudposse/atmos/cmd/ai/setup"
+	_ "github.com/cloudposse/atmos/cmd/ai/skill"
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/aws"
+	_ "github.com/cloudposse/atmos/cmd/ci"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
+	_ "github.com/cloudposse/atmos/cmd/lsp"
+	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
@@ -1439,7 +1445,7 @@ func Execute() error {
 	// Skip processing for version command to ensure it always works, even if aliases
 	// reference commands that don't exist in this version of Atmos.
 	if initErr == nil && !isVersionCommand() {
-		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 		if err != nil {
 			return err
 		}
@@ -1457,11 +1463,24 @@ func Execute() error {
 	// This separates Atmos flags from pass-through flags BEFORE Cobra parses.
 	preprocessCompatibilityFlags()
 
+	// Set up AI output capture if --ai flag is present (flag parsing in cmd/ai,
+	// orchestration in pkg/ai/analyze, skill loading in pkg/ai/skills).
+	aiCtx, aiErr := aisetup.InitAI(&atmosConfig)
+	if aiErr != nil {
+		return aiErr
+	}
+	defer aiCtx.Cleanup()
+
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := internal.Execute(RootCmd)
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Run AI analysis on captured output unless this is an "atmos ai" subcommand.
+	if !aisetup.IsAISubcommand(cmd) && aiCtx.RunAnalysis(err) {
+		return nil
+	}
 
 	// Handle sentinel errors with errors.Is().
 	if err != nil {
@@ -1470,6 +1489,7 @@ func Execute() error {
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
+
 	return err
 }
 

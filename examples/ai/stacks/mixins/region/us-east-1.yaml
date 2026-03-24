@@ -1,0 +1,4 @@
+# Region mixin for us-east-1
+vars:
+  region: us-east-1
+  environment: ue1

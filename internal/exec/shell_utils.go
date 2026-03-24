@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,24 +33,52 @@ const (
 	osWindows             = "windows"
 )
 
-// ShellOption configures shell command execution.
-type ShellOption func(*shellExecConfig)
+// ShellCommandOption is a functional option for ExecuteShellCommand.
+type ShellCommandOption func(*shellCommandConfig)
 
-// shellExecConfig holds optional configuration for ExecuteShellCommand.
-type shellExecConfig struct {
+// shellCommandConfig holds optional configuration for shell command execution.
+type shellCommandConfig struct {
+	stdoutCapture  io.Writer
+	stderrCapture  io.Writer
+	stdoutOverride io.Writer
 	// processEnv replaces os.Environ() as the process environment.
 	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
 	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
 	processEnv []string
 }
 
+// WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
+// The captured output includes secret masking (post-MaskWriter).
+func WithStdoutCapture(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stdoutCapture = w
+	}
+}
+
+// WithStderrCapture returns a ShellCommandOption that tees stderr to the provided writer.
+// The captured output includes secret masking (post-MaskWriter).
+func WithStderrCapture(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stderrCapture = w
+	}
+}
+
+// WithStdoutOverride returns a ShellCommandOption that replaces the default stdout
+// (os.Stdout) with a different writer. Used to redirect noisy commands (e.g.,
+// workspace select) to stderr so they don't pollute data-producing commands like output.
+func WithStdoutOverride(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stdoutOverride = w
+	}
+}
+
 // WithEnvironment provides a pre-sanitized process environment for subprocess execution.
 // When provided, ExecuteShellCommand uses this instead of re-reading os.Environ().
 // Pass nil to fall back to the default os.Environ() behavior.
-func WithEnvironment(env []string) ShellOption {
+func WithEnvironment(env []string) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithEnvironment")()
 
-	return func(c *shellExecConfig) {
+	return func(c *shellCommandConfig) {
 		c.processEnv = env
 	}
 }
@@ -63,13 +92,14 @@ func ExecuteShellCommand(
 	env []string,
 	dryRun bool,
 	redirectStdError string,
-	opts ...ShellOption,
+	opts ...ShellCommandOption,
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
 
-	execCfg := &shellExecConfig{}
+	// Apply functional options.
+	var cfg shellCommandConfig
 	for _, opt := range opts {
-		opt(execCfg)
+		opt(&cfg)
 	}
 
 	newShellLevel, err := u.GetNextShellLevel()
@@ -79,11 +109,11 @@ func ExecuteShellCommand(
 
 	cmd := exec.Command(command, args...)
 	// Build environment: process env + global env (atmos.yaml) + command-specific env.
-	// When auth has sanitized the environment, execCfg.processEnv is used instead of
+	// When auth has sanitized the environment, cfg.processEnv is used instead of
 	// os.Environ() to avoid reintroducing problematic vars (e.g., IRSA credentials).
 	baseEnv := os.Environ()
-	if execCfg.processEnv != nil {
-		baseEnv = execCfg.processEnv
+	if cfg.processEnv != nil {
+		baseEnv = cfg.processEnv
 	}
 	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.Env)
 	cmdEnv = append(cmdEnv, env...)
@@ -101,18 +131,46 @@ func ExecuteShellCommand(
 	cmd.Env = cmdEnv
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = ioLayer.MaskWriter(os.Stdout)
+
+	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
+	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
+	// for workspace select so it doesn't pollute data-producing commands like output).
+	var stdoutTarget io.Writer = os.Stdout
+	if cfg.stdoutOverride != nil {
+		stdoutTarget = cfg.stdoutOverride
+	}
+	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
+	if cfg.stdoutCapture != nil {
+		cmd.Stdout = io.MultiWriter(maskedStdout, cfg.stdoutCapture)
+	} else {
+		cmd.Stdout = maskedStdout
+	}
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
 	}
 
 	if redirectStdError == "/dev/stderr" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else if redirectStdError == "/dev/stdout" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stdout)
+		maskedStderr := ioLayer.MaskWriter(os.Stdout)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else if redirectStdError == "" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
@@ -598,4 +656,18 @@ func envKeyIsSet(env []string, key string) bool {
 		}
 	}
 	return false
+}
+
+// envVarFromList returns the value of the last "KEY=value" entry in env, or ""
+// if the key is not present.  The last entry wins, matching how exec.Cmd.Env
+// and os.Environ() resolve duplicates.
+func envVarFromList(env []string, key string) string {
+	prefix := key + "="
+	result := ""
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			result = e[len(prefix):]
+		}
+	}
+	return result
 }

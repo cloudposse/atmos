@@ -5,10 +5,12 @@
 Valid subcommands are:
 
   • about
+  • ai
   • ansible
   • atlantis
   • auth
   • aws
+  • ci
   • completion
   • describe
   • devcontainer
@@ -17,6 +19,8 @@ Valid subcommands are:
   • helmfile
   • help
   • list
+  • lsp
+  • mcp
   • packer
   • pro
   • profile
