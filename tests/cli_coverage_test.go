@@ -45,7 +45,7 @@ func mergeIntoCoverDir(src, dst string) {
 				continue // EEXIST — another goroutine already wrote this file; skip.
 			}
 			if copyErr := copyToFile(srcPath, claimed); copyErr != nil {
-				claimed.Close() //nolint:errcheck
+				claimed.Close()    //nolint:errcheck
 				os.Remove(dstPath) //nolint:errcheck // remove empty claim on error
 				continue
 			}

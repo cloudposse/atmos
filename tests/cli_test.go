@@ -321,7 +321,6 @@ func prepareAtmosCommand(t *testing.T, ctx context.Context, args ...string) *exe
 	return atmosRunner.CommandContext(ctx, args...)
 }
 
-
 func TestCLICommands(t *testing.T) {
 	if skipReason != "" {
 		t.Skipf("%s", skipReason)
