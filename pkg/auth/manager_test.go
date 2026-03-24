@@ -701,11 +701,14 @@ func TestManager_findFirstValidCachedCredentials(t *testing.T) {
 	expiredExp := now.Add(-1 * time.Hour) // Expired: expired 1 hour ago.
 	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 
-	// Both id1 and id2 have valid credentials -> should return id2 (last in chain).
+	// Both id1 and id2 have valid credentials -> should return id1 (second-to-last).
+	// The target identity (last in chain) is always skipped to force re-authentication
+	// via its Authenticate() method, preventing stale cached credentials from being
+	// returned without performing the actual API call (e.g., AssumeRole).
 	s.data["id2"] = &testCreds{exp: &validExp}
 	s.data["id1"] = &testCreds{exp: &validExp}
 	idx := m.findFirstValidCachedCredentials()
-	require.Equal(t, 2, idx)
+	require.Equal(t, 1, idx)
 
 	// id2 expired, id1 still valid -> should pick id1.
 	s.data["id2"] = &testCreds{exp: &expiredExp}
