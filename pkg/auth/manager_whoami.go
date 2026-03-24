@@ -46,6 +46,8 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 			// Note: We keep info.Credentials populated for validation purposes.
 			// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
 			// accidental serialization, so there's no security risk in keeping it.
+			// Clean up legacy (pre-realm) keyring entry to prevent realm mismatch warnings.
+			m.deleteLegacyKeyringEntry(identityName)
 		}
 	} else {
 		log.Debug("Skipping keyring cache for session tokens in WhoamiInfo", logKeyIdentity, identityName)

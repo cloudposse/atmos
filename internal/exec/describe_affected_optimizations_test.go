@@ -539,6 +539,23 @@ module "remote_module" {
 		require.NoError(t, err)
 		assert.Empty(t, patterns)
 	})
+
+	t.Run("invalid HCL includes component name and location in error", func(t *testing.T) {
+		badPath := filepath.Join(tempDir, "components", "terraform", "broken")
+		err := os.MkdirAll(badPath, 0o755)
+		require.NoError(t, err)
+
+		invalidHCL := `variable "name" { default = var.other }`
+		err = os.WriteFile(filepath.Join(badPath, "main.tf"), []byte(invalidHCL), 0o644)
+		require.NoError(t, err)
+
+		freshCache := newComponentPathPatternCache()
+		_, err = freshCache.getTerraformModulePatterns("broken", atmosConfig)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+		assert.Contains(t, err.Error(), "'broken'", "error should include the component name")
+		assert.Contains(t, err.Error(), "main.tf:", "error should include the file name")
+	})
 }
 
 func TestComponentPathPatternCache_ModulePatternsThreadSafety(t *testing.T) {
@@ -1193,8 +1210,8 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		// Dependencies use absolute paths.
-		deps := schema.DependsOn{
-			"dep1": schema.Context{File: depFile},
+		deps := []schema.ComponentDependency{
+			{Kind: "file", Path: depFile},
 		}
 
 		// Should match when both are absolute.
@@ -1466,8 +1483,8 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		changedFiles := []string{depFile}
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
-		deps := schema.DependsOn{
-			"dep1": schema.Context{File: depFile},
+		deps := []schema.ComponentDependency{
+			{Kind: "file", Path: depFile},
 		}
 
 		changed, changedType, changedPath, err := isComponentDependentFolderOrFileChangedIndexed(filesIndex, deps)
@@ -1488,8 +1505,8 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		changedFiles := []string{depFile}
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
-		deps := schema.DependsOn{
-			"dep1": schema.Context{Folder: depFolder},
+		deps := []schema.ComponentDependency{
+			{Kind: "folder", Path: depFolder},
 		}
 
 		changed, changedType, changedPath, err := isComponentDependentFolderOrFileChangedIndexed(filesIndex, deps)
@@ -1505,9 +1522,9 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		}
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
-		deps := schema.DependsOn{
-			"dep1": schema.Context{File: filepath.Join(tempDir, "config/settings.yaml")},
-			"dep2": schema.Context{Folder: filepath.Join(tempDir, "modules/vpc")},
+		deps := []schema.ComponentDependency{
+			{Kind: "file", Path: filepath.Join(tempDir, "config/settings.yaml")},
+			{Kind: "folder", Path: filepath.Join(tempDir, "modules/vpc")},
 		}
 
 		changed, _, _, err := isComponentDependentFolderOrFileChangedIndexed(filesIndex, deps)
@@ -1525,10 +1542,10 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		changedFiles := []string{depFile1}
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
-		deps := schema.DependsOn{
-			"dep1": schema.Context{File: depFile1},
-			"dep2": schema.Context{File: filepath.Join(tempDir, "config/second.yaml")},
-			"dep3": schema.Context{Folder: filepath.Join(tempDir, "modules/vpc")},
+		deps := []schema.ComponentDependency{
+			{Kind: "file", Path: depFile1},
+			{Kind: "file", Path: filepath.Join(tempDir, "config/second.yaml")},
+			{Kind: "folder", Path: filepath.Join(tempDir, "modules/vpc")},
 		}
 
 		changed, changedType, changedPath, err := isComponentDependentFolderOrFileChangedIndexed(filesIndex, deps)
@@ -1544,17 +1561,15 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		}
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
-		deps := schema.DependsOn{}
+		deps := []schema.ComponentDependency{}
 
 		changed, _, _, err := isComponentDependentFolderOrFileChangedIndexed(filesIndex, deps)
 		require.NoError(t, err)
 		assert.False(t, changed)
 	})
 
-	t.Run("mixed valid and empty dependencies", func(t *testing.T) {
-		// This test verifies the bug fix where hasDependencies flag was not reset per iteration.
-		// Previously, if a dependency had File/Folder set, and a later dependency had neither,
-		// the code would process the empty dependency with stale values from the previous one.
+	t.Run("mixed file/folder and component dependencies", func(t *testing.T) {
+		// This test verifies that component dependencies (without kind=file/folder) are skipped.
 		depFile := filepath.Join(tempDir, "config/settings.yaml")
 		err := os.MkdirAll(filepath.Dir(depFile), 0o755)
 		require.NoError(t, err)
@@ -1564,13 +1579,13 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		changedFiles := []string{depFile}
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
-		// Create dependencies with both valid and empty entries.
-		deps := schema.DependsOn{
-			"dep1": schema.Context{File: depFile},
-			// Empty dependency - has neither File nor Folder.
-			"dep2": schema.Context{},
-			// Another valid one after the empty one.
-			"dep3": schema.Context{Folder: filepath.Join(tempDir, "modules/vpc")},
+		// Create dependencies with both file/folder and component entries.
+		deps := []schema.ComponentDependency{
+			{Kind: "file", Path: depFile},
+			// Component dependency - should be skipped.
+			{Component: "vpc"},
+			// Another file/folder one after the component one.
+			{Kind: "folder", Path: filepath.Join(tempDir, "modules/vpc")},
 		}
 
 		changed, changedType, changedPath, err := isComponentDependentFolderOrFileChangedIndexed(filesIndex, deps)
@@ -2223,6 +2238,25 @@ module "security" {
 		changed, err := areTerraformComponentModulesChanged("multi", atmosConfig, changedFiles)
 		require.NoError(t, err)
 		assert.True(t, changed)
+	})
+
+	t.Run("invalid HCL includes component name and location in error", func(t *testing.T) {
+		componentPath := filepath.Join(tempDir, "components", "terraform", "bad-hcl")
+		err := os.MkdirAll(componentPath, 0o755)
+		require.NoError(t, err)
+
+		// Write syntactically invalid HCL.
+		invalidHCL := `variable "name" { default = var.other }`
+		err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte(invalidHCL), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{filepath.Join(componentPath, "main.tf")}
+
+		_, err = areTerraformComponentModulesChanged("bad-hcl", atmosConfig, changedFiles)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent)
+		assert.Contains(t, err.Error(), "'bad-hcl'", "error should include the component name")
+		assert.Contains(t, err.Error(), "main.tf:", "error should include the file name")
 	})
 }
 

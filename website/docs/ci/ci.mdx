@@ -1,0 +1,136 @@
+---
+title: Native CI
+sidebar_position: 1
+sidebar_label: Native CI
+description: Native CI/CD integration for GitHub Actions and other CI providers
+id: ci
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Atmos brings first-class CI/CD support directly into the CLI. Run Atmos commands in
+GitHub Actions and get rich job summaries, status checks, output variables, and stored planfile
+verification — no extra actions required.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  enabled: true
+  summary:
+    enabled: true
+  output:
+    enabled: true
+    variables:
+      - has_changes
+      - has_additions
+      - has_destructions
+      - plan_summary
+  checks:
+    enabled: true
+```
+</File>
+
+<Terminal title="GitHub Actions">
+```yaml
+- name: Plan
+  run: atmos terraform plan vpc -s prod
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+- name: Deploy
+  run: atmos terraform deploy vpc -s prod
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+</Terminal>
+
+<ActionCard title="CI Configuration">
+    Configure CI providers, job summaries, output variables, status checks, planfile storage, and templates in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Features
+
+### [Job Summaries](/ci/job-summaries)
+
+Rich Markdown summaries with resource counts, inline badges, and collapsible diffs written
+to `$GITHUB_STEP_SUMMARY`. Includes separate templates for plan and apply results. Templates
+are fully customizable with Go template syntax.
+
+### [Outputs](/cli/configuration/ci/output)
+
+Terraform plan and apply results exported as CI output variables for use in downstream jobs.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`.
+
+### [Checks](/cli/configuration/ci/checks)
+
+Live commit status checks showing real-time operation progress — "Plan in progress" while
+running and "3 to add, 1 to change, 0 to destroy" when complete.
+
+### [Planfile Storage](/ci/planfile-storage)
+
+Store and retrieve planfiles across CI pipeline stages using S3, GitHub Artifacts, or local
+filesystem. The `deploy` command downloads stored planfiles, generates a fresh plan, and
+performs a semantic comparison to detect drift before applying.
+
+## Commands
+
+CI features are activated with the `--ci` flag on existing Terraform commands or automatically when running in a CI environment (e.g. GitHub Actions):
+
+<dl>
+  <dt>[`atmos terraform plan [--ci]`](/cli/commands/terraform/plan)</dt>
+  <dd>Run plan with job summary, output variables, status checks, and planfile upload.</dd>
+
+  <dt>[`atmos terraform apply [--ci]`](/cli/commands/terraform/apply)</dt>
+  <dd>Run apply with job summary, output variables, and status checks.</dd>
+
+  <dt>[`atmos terraform deploy [--ci]`](/cli/commands/terraform/deploy)</dt>
+  <dd>Deploy with stored planfile verification, drift detection, and full CI reporting.</dd>
+
+  <dt>[`atmos terraform planfile`](/cli/commands/terraform/planfile)</dt>
+  <dd>Manage stored planfiles: upload, download, list, delete, and show.</dd>
+
+  <dt>[`atmos describe affected --format=matrix`](/cli/commands/describe/affected)</dt>
+  <dd>Generate GitHub Actions matrix strategy from affected components.</dd>
+</dl>
+
+## Providers
+
+Atmos auto-detects the CI environment and selects the appropriate provider:
+
+<dl>
+  <dt>**GitHub Actions**</dt>
+  <dd>Integrates with GitHub job summaries, commit status checks, and output variables. Requires `GITHUB_TOKEN` for checks and PR features.</dd>
+
+  <dt>**Generic CI**</dt>
+  <dd>Prints summaries, checks, and outputs to stdout. Useful for local development and testing, or any CI provider without native integration.</dd>
+</dl>
+
+## Legacy GitHub Actions
+
+<ActionCard title="GitHub Actions (Legacy)">
+    Community-maintained GitHub Actions for Atmos Terraform operations. These still work but native CI integration is the recommended approach for new projects.
+    <div>
+      <PrimaryCTA to="/integrations/github-actions">GitHub Actions Guide</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Configure CI integration in `atmos.yaml`
+- [CI Commands](/cli/commands/ci) - CI command reference
+- [Profiles](/cli/configuration/profiles) - Configure CI-specific profiles
+- [Auth](/stacks/auth) - Configure OIDC authentication for CI

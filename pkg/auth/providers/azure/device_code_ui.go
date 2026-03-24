@@ -13,9 +13,9 @@ import (
 	"github.com/mattn/go-isatty"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // waitForAuthWithSpinner waits for device code authentication to complete with a spinner.
@@ -90,7 +90,7 @@ func displayDeviceCodePrompt(userCode, verificationURL string) {
 	// Azure supports pre-filling the code with ?otc=CODE parameter.
 	if isTTY() && verificationURL != "" {
 		urlToOpen := fmt.Sprintf("%s?otc=%s", verificationURL, userCode)
-		if err := utils.OpenUrl(urlToOpen); err != nil {
+		if err := browser.New().Open(urlToOpen); err != nil {
 			log.Debug("Failed to open browser automatically", "error", err)
 		} else {
 			log.Debug("Browser opened successfully", "url", urlToOpen)

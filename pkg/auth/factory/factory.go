@@ -158,6 +158,9 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	case "mock/aws":
 		return mockawsProviders.NewIdentity(name, config), nil
 	default:
+		if config.Kind == "" {
+			return nil, fmt.Errorf("%w: identity is not configured", errUtils.ErrInvalidIdentityKind)
+		}
 		return nil, fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}
 }
