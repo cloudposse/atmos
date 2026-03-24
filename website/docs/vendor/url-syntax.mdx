@@ -48,15 +48,15 @@ The double-slash (`//`) is a special delimiter (not a path separator) that separ
 <Tabs>
   <TabItem value="subdir" label="With Subdirectory" default>
     ```yaml
-    source: "github.com/cloudposse-terraform-components/aws-vpc.git//modules/public-subnets?ref=1.398.0"
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
     ```
 
-    **Result:** Clones the repository and extracts only the `modules/public-subnets` subdirectory.
+    **Result:** Clones the repository and extracts only the `src` subdirectory.
   </TabItem>
 
   <TabItem value="root" label="Root Directory">
     ```yaml
-    source: "github.com/cloudposse-terraform-components/aws-s3-bucket.git//.?ref=v5.7.0"
+    source: "github.com/cloudposse-terraform-components/aws-s3-bucket.git//.?ref=v1.541.1"
     ```
 
     **Result:** Clones the repository and uses the root directory (`.` means current directory).
@@ -64,7 +64,7 @@ The double-slash (`//`) is a special delimiter (not a path separator) that separ
 
   <TabItem value="no-delimiter" label="Without Delimiter">
     ```yaml
-    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.0"
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.539.0"
     ```
 
     **Result:** For Git URLs without a subdirectory, Atmos automatically adds `//.` for you (root of repository).
@@ -114,7 +114,7 @@ Atmos automatically adds `depth=1` to Git clones for faster downloads. You can o
 <Tabs>
   <TabItem value="tag" label="Git Tag" default>
     ```yaml
-    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
     ```
   </TabItem>
 
@@ -145,13 +145,13 @@ Atmos automatically adds `depth=1` to Git clones for faster downloads. You can o
 ### Implicit HTTPS (recommended)
 ```yaml
 # Simple - implicit HTTPS, root directory
-source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
 ```
 
 ### With Subdirectory
 ```yaml
 # Clone and extract specific subdirectory
-source: "github.com/cloudposse-terraform-components/aws-vpc.git//modules/public-subnets?ref=v1.398.0"
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
 ```
 
 ### Explicit git:: Protocol
@@ -163,10 +163,10 @@ source: "git::https://github.com/cloudposse/atmos.git//examples?ref=main"
 ### SSH Authentication
 ```yaml
 # SSH protocol (requires SSH key setup)
-source: "git::ssh://git@github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.0.0"
+source: "git::ssh://git@github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.539.0"
 
 # Or SCP-style shorthand
-source: "git@github.com:cloudposse-terraform-components/aws-vpc.git?ref=v1.0.0"
+source: "git@github.com:cloudposse-terraform-components/aws-vpc.git?ref=v1.539.0"
 ```
 
 ### With Credentials (Not Recommended)
@@ -364,13 +364,13 @@ Atmos supports Go templates in vendor URLs for dynamic configuration.
 ```yaml
 sources:
   - component: "vpc"
-    source: "github.com/cloudposse-terraform-components/aws-{{.Component}}.git?ref={{.Version}}"
-    version: "1.398.0"
+    source: "github.com/cloudposse-terraform-components/aws-{{.Component}}.git//src?ref={{.Version}}"
+    version: "v1.539.0"
     targets:
       - "components/terraform/{{.Component}}"
 ```
 
-**Result:** Downloads from `aws-vpc` repository at version `1.398.0` to `components/terraform/vpc`.
+**Result:** Downloads from `aws-vpc` repository at version `v1.539.0` to `components/terraform/vpc`.
 
 ## Authentication
 
@@ -446,7 +446,7 @@ Embedding credentials in URLs is **not recommended**. Use environment variables 
   <TabItem value="good" label="✅ Good" default>
     ```yaml
     # Pin to specific version
-    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
     ```
   </TabItem>
 
@@ -461,11 +461,11 @@ Embedding credentials in URLs is **not recommended**. Use environment variables 
 ### 2. Use Subdirectories When Needed
 
 ```yaml
-# ✅ Extract specific subdirectory from a repository
-source: "github.com/cloudposse-terraform-components/aws-vpc.git//modules/public-subnets?ref=v1.398.0"
+# ✅ Extract src subdirectory from a cloudposse-terraform-components repo
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
 
-# ✅ Use root directory (no subdirectory needed)
-source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+# ✅ Use root directory (no subdirectory needed for repos where TF files are at root)
+source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.539.0"
 ```
 
 ### 3. Use Token Authentication
@@ -487,7 +487,7 @@ export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 source: "oci://ghcr.io/cloudposse/components/terraform/stable/aws/vpc:v1.0.0"
 
 # ✅ Git for source code
-source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
 ```
 
 ## Troubleshooting

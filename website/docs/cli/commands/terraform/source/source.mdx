@@ -70,7 +70,7 @@ components:
     vpc:
       source:
         uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
-        version: 1.450.0
+        version: v1.539.0
         included_paths:
           - "*.tf"
           - "modules/**"
@@ -98,7 +98,7 @@ The `source` field supports two formats:
 For simple cases, use a go-getter URI string:
 
 ```yaml
-source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=1.450.0"
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
 ```
 
 ### Map Format (Full Control)
@@ -108,7 +108,7 @@ For more control, use a map with explicit fields:
 ```yaml
 source:
   uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
-  version: 1.450.0
+  version: v1.539.0
   included_paths:
     - "*.tf"
     - "*.tfvars"
@@ -172,7 +172,7 @@ atmos terraform source pull vpc --stack dev
 Output:
 ```
 Vendoring component 'vpc' from source...
-Downloading from github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=1.450.0
+Downloading from github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0
 ✓ Successfully vendored component to components/terraform/vpc
 ```
 
@@ -199,7 +199,7 @@ components:
     vpc:
       source:
         uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
-        version: 1.450.0
+        version: v1.539.0
         included_paths:
           - "*.tf"
           - "modules/**"
@@ -291,7 +291,7 @@ components:
     vpc/defaults:
       source:
         uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
-        version: 1.450.0
+        version: v1.539.0
 
 # stacks/dev.yaml
 components:
@@ -316,7 +316,7 @@ components:
       metadata:
         inherits: [vpc/defaults]
       source:
-        version: 1.451.0  # Override version for dev
+        version: v1.539.1  # Override version for dev
 
 # stacks/prod.yaml
 components:
@@ -325,7 +325,7 @@ components:
       metadata:
         inherits: [vpc/defaults]
       source:
-        version: 1.450.0  # Pin to stable version for prod
+        version: v1.539.0  # Pin to stable version for prod
 ```
 
 ## Supported Source Types
@@ -338,7 +338,7 @@ Shortened GitHub syntax (recommended):
 ```yaml
 source:
   uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
-  version: 1.450.0
+  version: v1.539.0
 ```
 
 Explicit HTTPS:
@@ -391,7 +391,7 @@ Example:
       vpc:
         source:
           uri: github.com/cloudposse-terraform-components/aws-vpc.git//src
-          version: 1.450.0
+          version: v1.539.0
 ```
 
 ### Component Directory Exists

@@ -72,11 +72,11 @@ atmos list sources
 Example output:
 ```
 STACK              TYPE        COMPONENT    URI                                                           VERSION
-plat-ue2-dev       terraform   eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   1.450.0
-plat-ue2-dev       terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
+plat-ue2-dev       terraform   eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   v1.539.0
+plat-ue2-dev       terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
 plat-ue2-dev       helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx               1.0.0
-plat-ue2-prod      terraform   eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   1.451.0
-plat-ue2-prod      terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.451.0
+plat-ue2-prod      terraform   eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   v1.539.1
+plat-ue2-prod      terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.1
 ```
 
 ### List Sources in a Specific Stack
@@ -88,8 +88,8 @@ atmos list sources --stack plat-ue2-dev
 When filtering by stack, the Stack column is omitted:
 ```
 TYPE        COMPONENT    URI                                                           VERSION
-terraform   eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   1.450.0
-terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
+terraform   eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   v1.539.0
+terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
 helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx               1.0.0
 ```
 
@@ -102,9 +102,9 @@ atmos list sources vpc
 Shows the component across all stacks where it has source configured:
 ```
 STACK              TYPE        COMPONENT    URI                                                           VERSION
-plat-ue2-dev       terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
-plat-ue2-prod      terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.451.0
-plat-ue2-staging   terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
+plat-ue2-dev       terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
+plat-ue2-prod      terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.1
+plat-ue2-staging   terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
 ```
 
 ### Output in Different Formats

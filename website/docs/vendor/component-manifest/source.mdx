@@ -17,7 +17,7 @@ The `source` key in `component.yaml` defines where to download the component fro
 spec:
   source:
     uri: github.com/cloudposse-terraform-components/aws-vpc.git//src?ref={{.Version}}
-    version: 1.398.0
+    version: v1.539.0
     included_paths:
       - "**/*.tf"
       - "**/*.tfvars"
@@ -39,7 +39,7 @@ spec:
 
     To vendor a module from a Git repo, use the following format:
     ```
-    github.com/cloudposse/terraform-aws-ec2-instance.git//modules/name?ref={{.Version}}
+    github.com/cloudposse-terraform-components/aws-vpc.git//src?ref={{.Version}}
     ```
   </dd>
 
@@ -116,7 +116,7 @@ metadata:
 spec:
   source:
     uri: github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git//src?ref={{.Version}}
-    version: 1.398.0
+    version: v1.537.0
     included_paths:
       - "**/*.tf"
       - "**/*.tfvars"
@@ -134,7 +134,7 @@ If the component's folder has sub-folders, and you need to vendor them, they hav
 spec:
   source:
     uri: github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git//src?ref={{.Version}}
-    version: 1.398.0
+    version: v1.537.0
     included_paths:
       - "**/**"
       # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined

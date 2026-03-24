@@ -41,25 +41,25 @@ The output adapts to your query:
 
 ```
 STACK        COMPONENT    URI                                                           VERSION
-plat-dev     vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
-plat-prod    vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
+plat-dev     vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
+plat-prod    vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
 ```
 
 **Filtering by --stack** - Omits Stack column since it's redundant:
 
 ```
 COMPONENT    URI                                                           VERSION
-eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   1.450.0
-rds          github.com/cloudposse-terraform-components/aws-rds.git//src   1.449.0
-vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
+eks          github.com/cloudposse-terraform-components/aws-eks-cluster.git//src   v1.539.0
+rds          github.com/cloudposse-terraform-components/aws-rds.git//src   v1.535.9
+vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
 ```
 
 **With derived components** - Shows Folder column when component names differ from their base component:
 
 ```
 COMPONENT        FOLDER    URI                                                           VERSION
-vpc/production   vpc       github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
-vpc/staging      vpc       github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
+vpc/production   vpc       github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
+vpc/staging      vpc       github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
 ```
 
 The Folder column only appears when there's a difference to show, keeping output clean for simple cases.
@@ -71,8 +71,8 @@ The `atmos list sources` command includes a Type column since it lists sources a
 ```
 STACK        TYPE        COMPONENT    URI                                                           VERSION
 plat-dev     helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx       1.0.0
-plat-dev     terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
-plat-prod    terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   1.450.0
+plat-dev     terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
+plat-prod    terraform   vpc          github.com/cloudposse-terraform-components/aws-vpc.git//src   v1.539.0
 ```
 
 ## Why This Matters
