@@ -51,16 +51,9 @@ func ExecuteLintStacksCmd(cmd *cobra.Command, args []string) error {
 	var ruleIDs []string
 	if ruleFlag != "" {
 		for _, r := range strings.Split(ruleFlag, ",") {
-			id := strings.ToUpper(strings.TrimSpace(r))
+			id := normalizeRuleID(r)
 			if id == "" {
 				continue
-			}
-			// Normalize "L-7" → "L-07" so users don't need to zero-pad.
-			if len(id) > 2 && id[0] == 'L' && id[1] == '-' {
-				numPart := id[2:]
-				if isDigitOnly(numPart) && len(numPart) == 1 {
-					id = fmt.Sprintf("L-%02s", numPart)
-				}
 			}
 			ruleIDs = append(ruleIDs, id)
 		}
@@ -354,9 +347,17 @@ func resolveNonGlobImport(importPath, basePath string) string {
 		return importPath
 	}
 	ext := strings.ToLower(filepath.Ext(importPath))
-	// If the import already carries a YAML extension, just join and return.
+	// If the import already carries a YAML extension, probe the disk to confirm
+	// the file actually exists before returning it. An import like "catalog/missing.yaml"
+	// that does not exist on disk must be dropped (returns "") so the caller avoids
+	// creating a phantom edge that inflates L-03 depth counts.
 	if ext == ".yaml" || ext == ".yml" {
-		return filepath.Join(basePath, importPath)
+		candidate := filepath.Join(basePath, importPath)
+		if _, err := os.Stat(candidate); err != nil {
+			log.Debug("Non-glob import with explicit extension not found, dropping", "import", importPath)
+			return ""
+		}
+		return candidate
 	}
 	// Try extension candidates in order: .yaml first, then .yml, then bare.
 	for _, suffix := range []string{".yaml", ".yml", ""} {
@@ -643,4 +644,48 @@ func isDigitOnly(s string) bool {
 		}
 	}
 	return true
+}
+
+// normalizeRuleID canonicalizes a user-supplied rule ID token so that all of the
+// following forms produce the same canonical output (e.g. "L-07"):
+//
+//   - "L-07"  → "L-07"  (already canonical)
+//   - "l-7"   → "L-07"  (lower-case + single digit)
+//   - "L7"    → "L-07"  (letter without dash)
+//   - "7"     → "L-07"  (bare digit)
+//
+// The function returns "" for empty or unrecognized tokens (caller skips them).
+func normalizeRuleID(raw string) string {
+	id := strings.ToUpper(strings.TrimSpace(raw))
+	if id == "" {
+		return ""
+	}
+
+	// Extract the digit portion from any of the recognized forms:
+	//   "L-<N>" | "L<N>" | "<N>"  (where <N> is one or more digits)
+	var numPart string
+	switch {
+	case len(id) > 2 && id[0] == 'L' && id[1] == '-' && isDigitOnly(id[2:]):
+		// "L-7" or "L-07"
+		numPart = id[2:]
+	case len(id) > 1 && id[0] == 'L' && isDigitOnly(id[1:]):
+		// "L7"
+		numPart = id[1:]
+	case isDigitOnly(id):
+		// bare "7"
+		numPart = id
+	}
+
+	if numPart != "" {
+		// Zero-pad to at least 2 digits and reconstruct canonical form.
+		n := 0
+		for _, c := range numPart {
+			n = n*10 + int(c-'0')
+		}
+		return fmt.Sprintf("L-%02d", n)
+	}
+
+	// Not a recognised short form — return as-is (upper-case) to allow
+	// future or custom rule IDs to pass through unchanged.
+	return id
 }

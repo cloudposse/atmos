@@ -636,10 +636,30 @@ func TestResolveNonGlobImport(t *testing.T) {
 		assert.Equal(t, "catalog/base", got)
 	})
 
-	t.Run("relative import with .yaml extension is joined to basePath", func(t *testing.T) {
+	t.Run("relative import with .yaml extension is joined to basePath when file exists", func(t *testing.T) {
 		t.Parallel()
-		got := resolveNonGlobImport("catalog/base.yaml", "/stacks")
-		assert.Equal(t, filepath.Join("/stacks", "catalog", "base.yaml"), got)
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "catalog"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "catalog", "base.yaml"), []byte("{}"), 0o600))
+		got := resolveNonGlobImport("catalog/base.yaml", dir)
+		assert.Equal(t, filepath.Join(dir, "catalog", "base.yaml"), got)
+	})
+
+	t.Run("relative import with .yaml extension returns empty string when file is missing", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		// No files created — explicit extension but file doesn't exist must return "".
+		got := resolveNonGlobImport("catalog/missing.yaml", dir)
+		assert.Equal(t, "", got,
+			"missing explicit-.yaml import must return empty string to prevent phantom edges")
+	})
+
+	t.Run("relative import with .yml extension returns empty string when file is missing", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		got := resolveNonGlobImport("catalog/missing.yml", dir)
+		assert.Equal(t, "", got,
+			"missing explicit-.yml import must return empty string to prevent phantom edges")
 	})
 
 	t.Run("relative import without extension resolves to .yaml when file exists", func(t *testing.T) {
@@ -902,6 +922,26 @@ func TestLintRuleFilterNormalization(t *testing.T) {
 		}
 		assert.Equal(t, []string{"L-02", "L-07"}, got)
 	})
+
+	t.Run("normalizeRuleID handles 7/L7/l-7 patterns", func(t *testing.T) {
+		t.Parallel()
+		// Verify the normalizeRuleID helper (used by ExecuteLintStacksCmd) handles
+		// all the shorthand forms documented in the --rule flag help text.
+		cases := []struct{ in, want string }{
+			{"7", "L-07"},
+			{"L7", "L-07"},
+			{"l-7", "L-07"},
+			{"L-7", "L-07"},
+			{"L-07", "L-07"},
+			{" l-7 ", "L-07"},
+			{"2", "L-02"},
+			{"10", "L-10"},
+		}
+		for _, c := range cases {
+			got := normalizeRuleID(c.in)
+			assert.Equal(t, c.want, got, "normalizeRuleID(%q)", c.in)
+		}
+	})
 }
 
 // TestGlobNoMatchDroppedFromL03Depth verifies that an unmatched glob in an import
@@ -1059,4 +1099,77 @@ func TestRulesRelNormParityWithL07(t *testing.T) {
 		assert.Equal(t, tc.want, got,
 			"pathnorm.NormalizeRelNoExt(%q, %q)", tc.path, tc.basePath)
 	}
+}
+
+// TestL03DepthIgnoresMissingExtImport verifies that an import with an explicit .yaml
+// extension that doesn't exist on disk is dropped as a phantom edge, so it does not
+// inflate the import depth reported by L-03.
+func TestL03DepthIgnoresMissingExtImport(t *testing.T) {
+t.Parallel()
+
+dir := t.TempDir()
+require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+rootFile := filepath.Join(dir, "stacks", "prod.yaml")
+require.NoError(t, os.WriteFile(rootFile, []byte("{}"), 0o600))
+
+// Import references a .yaml file that does not exist on disk.
+raw := map[string]map[string]any{
+rootFile: {
+cfg.ImportSectionName: []string{"catalog/phantom.yaml"},
+},
+}
+
+graph := buildImportGraph(raw, dir)
+
+// The phantom import must be absent — prod.yaml has no real children.
+imports, ok := graph[rootFile]
+if ok {
+assert.Empty(t, imports,
+"explicit-.yaml import that doesn't exist must be dropped to avoid L-03 depth inflation")
+}
+}
+
+// TestNormalizeRuleID verifies that normalizeRuleID handles all documented input forms.
+func TestNormalizeRuleID(t *testing.T) {
+t.Parallel()
+
+tests := []struct {
+input string
+want  string
+}{
+// Already canonical.
+{"L-07", "L-07"},
+{"L-02", "L-02"},
+{"L-10", "L-10"},
+// Lower-case.
+{"l-7", "L-07"},
+{"l-02", "L-02"},
+// Single digit without dash.
+{"L7", "L-07"},
+{"L2", "L-02"},
+// Bare digit.
+{"7", "L-07"},
+{"2", "L-02"},
+// Multi-digit bare.
+{"10", "L-10"},
+// Spaces trimmed.
+{" l-7 ", "L-07"},
+{"  7  ", "L-07"},
+// Empty → empty.
+{"", ""},
+{"   ", ""},
+// Non-matching passthrough (custom rules).
+{"CUSTOM", "CUSTOM"},
+{"L-CUSTOM", "L-CUSTOM"},
+}
+
+for _, tc := range tests {
+tc := tc
+t.Run(tc.input, func(t *testing.T) {
+t.Parallel()
+got := normalizeRuleID(tc.input)
+assert.Equal(t, tc.want, got,
+"normalizeRuleID(%q)", tc.input)
+})
+}
 }
