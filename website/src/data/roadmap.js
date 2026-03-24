@@ -153,6 +153,18 @@ export const roadmapConfig = {
       pr: 2216,
       changelog: 'instance-status-upload',
     },
+    {
+      id: 'subprocess-resource-metrics',
+      icon: 'RiDashboardLine',
+      title: 'Subprocess Resource Metrics',
+      tagline: 'CPU, memory, and I/O visibility for every run',
+      description: 'Captures wall time, CPU usage, peak memory, page faults, I/O operations, and context switches from every Terraform subprocess. Metrics are displayed locally and uploaded to Atmos Pro.',
+      benefits: 'Identify slow plans, detect performance regressions, and right-size CI runners with real resource data from every Terraform run.',
+      status: 'shipped',
+      quarter: 'q1-2026',
+      pr: 2217,
+      changelog: 'subprocess-resource-metrics',
+    },
   ],
 
   initiatives: [
