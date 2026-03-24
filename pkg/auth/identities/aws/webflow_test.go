@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -717,6 +718,10 @@ func TestWebflowIntegration_AuthenticateFallback(t *testing.T) {
 }
 
 func TestCacheFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not support Unix file permissions")
+	}
+
 	tmpDir := t.TempDir()
 	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
 
