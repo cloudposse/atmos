@@ -112,7 +112,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	}
 
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
-	return executeCommandPipeline(&atmosConfig, &info, execCtx, WithEnvironment(info.SanitizedEnv))
+	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
+	opts = append(opts, WithEnvironment(info.SanitizedEnv))
+	return executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
 }
 
 // configurePluginCache returns environment variables for Terraform plugin caching.
