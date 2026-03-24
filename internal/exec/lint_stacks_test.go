@@ -929,98 +929,98 @@ func TestGlobNoMatchDroppedFromL03Depth(t *testing.T) {
 // the root manifest has no imports, AllStackFiles is scoped to just the seed files
 // so that L-07 does not produce orphan findings for unrelated files.
 func TestScopeStackFilesNoImports(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-dir := t.TempDir()
-// Single root stack file, no imports.
-require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
-rootFile := filepath.Join(dir, "stacks", "prod.yaml")
-require.NoError(t, os.WriteFile(rootFile, []byte("{}"), 0o600))
+	dir := t.TempDir()
+	// Single root stack file, no imports.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	rootFile := filepath.Join(dir, "stacks", "prod.yaml")
+	require.NoError(t, os.WriteFile(rootFile, []byte("{}"), 0o600))
 
-// An unrelated file that must NOT appear after scoping.
-otherFile := filepath.Join(dir, "stacks", "dev.yaml")
-require.NoError(t, os.WriteFile(otherFile, []byte("{}"), 0o600))
+	// An unrelated file that must NOT appear after scoping.
+	otherFile := filepath.Join(dir, "stacks", "dev.yaml")
+	require.NoError(t, os.WriteFile(otherFile, []byte("{}"), 0o600))
 
-raw := map[string]map[string]any{
-rootFile: {}, // no import section
-}
+	raw := map[string]map[string]any{
+		rootFile: {}, // no import section
+	}
 
-// importGraph is empty (no imports in root).
-importGraph := buildImportGraph(raw, dir)
-assert.Empty(t, importGraph, "empty raw stack has no import edges")
+	// importGraph is empty (no imports in root).
+	importGraph := buildImportGraph(raw, dir)
+	assert.Empty(t, importGraph, "empty raw stack has no import edges")
 
-// Simulate the scoping logic that LintStacks applies when stackFilter != "".
-// When importGraph is empty, AllStackFiles should be just the rawStackConfigs keys.
-allStackFiles := make([]string, 0, len(raw))
-for filePath := range raw {
-allStackFiles = append(allStackFiles, filePath)
-}
+	// Simulate the scoping logic that LintStacks applies when stackFilter != "".
+	// When importGraph is empty, AllStackFiles should be just the rawStackConfigs keys.
+	allStackFiles := make([]string, 0, len(raw))
+	for filePath := range raw {
+		allStackFiles = append(allStackFiles, filePath)
+	}
 
-// Verify that allStackFiles contains only the root file, not the unrelated dev.yaml.
-assert.ElementsMatch(t, []string{rootFile}, allStackFiles,
-"scoped AllStackFiles must contain exactly the root manifest")
-assert.NotContains(t, allStackFiles, otherFile,
-"unrelated dev.yaml must not appear in scoped AllStackFiles")
+	// Verify that allStackFiles contains only the root file, not the unrelated dev.yaml.
+	assert.ElementsMatch(t, []string{rootFile}, allStackFiles,
+		"scoped AllStackFiles must contain exactly the root manifest")
+	assert.NotContains(t, allStackFiles, otherFile,
+		"unrelated dev.yaml must not appear in scoped AllStackFiles")
 }
 
 // TestRuleIDZeroPadNormalization verifies Item 2: single-digit rule IDs like "l-7"
 // are zero-padded to canonical form "L-07" so users can pass either form.
 func TestRuleIDZeroPadNormalization(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-normalize := func(input string) []string {
-var ids []string
-for _, r := range strings.Split(input, ",") {
-id := strings.ToUpper(strings.TrimSpace(r))
-if id == "" {
-continue
-}
-if len(id) > 2 && id[0] == 'L' && id[1] == '-' {
-numPart := id[2:]
-if isDigitOnly(numPart) && len(numPart) == 1 {
-id = fmt.Sprintf("L-%02s", numPart)
-}
-}
-ids = append(ids, id)
-}
-return ids
-}
+	normalize := func(input string) []string {
+		var ids []string
+		for _, r := range strings.Split(input, ",") {
+			id := strings.ToUpper(strings.TrimSpace(r))
+			if id == "" {
+				continue
+			}
+			if len(id) > 2 && id[0] == 'L' && id[1] == '-' {
+				numPart := id[2:]
+				if isDigitOnly(numPart) && len(numPart) == 1 {
+					id = fmt.Sprintf("L-%02s", numPart)
+				}
+			}
+			ids = append(ids, id)
+		}
+		return ids
+	}
 
-assert.Equal(t, []string{"L-07"}, normalize("l-7"), "l-7 should become L-07")
-assert.Equal(t, []string{"L-07"}, normalize("L-7"), "L-7 should become L-07")
-assert.Equal(t, []string{"L-07", "L-02", "L-10"}, normalize("l-7,l-2,l-10"))
-// Two-digit IDs are already canonical and pass through unchanged.
-assert.Equal(t, []string{"L-07"}, normalize("L-07"))
-assert.Equal(t, []string{"L-10"}, normalize("L-10"))
+	assert.Equal(t, []string{"L-07"}, normalize("l-7"), "l-7 should become L-07")
+	assert.Equal(t, []string{"L-07"}, normalize("L-7"), "L-7 should become L-07")
+	assert.Equal(t, []string{"L-07", "L-02", "L-10"}, normalize("l-7,l-2,l-10"))
+	// Two-digit IDs are already canonical and pass through unchanged.
+	assert.Equal(t, []string{"L-07"}, normalize("L-07"))
+	assert.Equal(t, []string{"L-10"}, normalize("L-10"))
 }
 
 // TestMissingNonGlobDroppedFromGraph verifies Item 3: a non-glob import that resolves
 // to no file on disk is dropped from the import graph rather than kept as a phantom
 // edge that would inflate L-03 depth counts.
 func TestMissingNonGlobDroppedFromGraph(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-dir := t.TempDir()
-require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
-rootFile := filepath.Join(dir, "stacks", "prod.yaml")
-require.NoError(t, os.WriteFile(rootFile, []byte("{}"), 0o600))
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	rootFile := filepath.Join(dir, "stacks", "prod.yaml")
+	require.NoError(t, os.WriteFile(rootFile, []byte("{}"), 0o600))
 
-// Import references a file that does not exist.
-raw := map[string]map[string]any{
-rootFile: {
-cfg.ImportSectionName: []string{"catalog/does-not-exist"},
-},
-}
+	// Import references a file that does not exist.
+	raw := map[string]map[string]any{
+		rootFile: {
+			cfg.ImportSectionName: []string{"catalog/does-not-exist"},
+		},
+	}
 
-graph := buildImportGraph(raw, dir)
+	graph := buildImportGraph(raw, dir)
 
-// The phantom import must be absent — the prod.yaml key must either be
-// absent from the graph or have an empty imports list.
-imports, ok := graph[rootFile]
-if ok {
-assert.Empty(t, imports,
-"missing non-glob import must be dropped, not kept as phantom edge")
-}
+	// The phantom import must be absent — the prod.yaml key must either be
+	// absent from the graph or have an empty imports list.
+	imports, ok := graph[rootFile]
+	if ok {
+		assert.Empty(t, imports,
+			"missing non-glob import must be dropped, not kept as phantom edge")
+	}
 }
 
 // TestRulesRelNormParityWithL07 verifies Item 4: rulesRelNorm in exec produces

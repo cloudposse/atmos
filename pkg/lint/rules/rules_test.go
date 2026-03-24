@@ -2899,67 +2899,67 @@ func TestL03RelativePathOutput(t *testing.T) {
 // TestL08EmptyFileWhenUnresolved verifies Item 5: L-08 emits an empty File field
 // when the stack name cannot be attributed to a physical file (no indexes, empty basePath).
 func TestL08EmptyFileWhenUnresolved(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-all := rules.All()
-var l08 lint.LintRule
-for _, r := range all {
-if r.ID() == "L-08" {
-l08 = r
-break
-}
-}
-require.NotNil(t, l08)
+	all := rules.All()
+	var l08 lint.LintRule
+	for _, r := range all {
+		if r.ID() == "L-08" {
+			l08 = r
+			break
+		}
+	}
+	require.NotNil(t, l08)
 
-stacksMap := map[string]any{
-"bare-stack": map[string]any{
-cfg.VarsSectionName: map[string]any{
-"api_password": "secret",
-},
-},
-}
+	stacksMap := map[string]any{
+		"bare-stack": map[string]any{
+			cfg.VarsSectionName: map[string]any{
+				"api_password": "secret",
+			},
+		},
+	}
 
-ctx := lint.LintContext{
-StacksMap:            stacksMap,
-RawStackConfigs:      make(map[string]map[string]any),
-ImportGraph:          make(map[string][]string),
-StacksBasePath:       "", // empty basePath
-StackNameToFileIndex: make(map[string][]string),
-StackStemToFile:      make(map[string]string),
-LintConfig: schema.LintStacksConfig{
-SensitiveVarPatterns: defaultSensitiveVarPatterns,
-},
-}
+	ctx := lint.LintContext{
+		StacksMap:            stacksMap,
+		RawStackConfigs:      make(map[string]map[string]any),
+		ImportGraph:          make(map[string][]string),
+		StacksBasePath:       "", // empty basePath
+		StackNameToFileIndex: make(map[string][]string),
+		StackStemToFile:      make(map[string]string),
+		LintConfig: schema.LintStacksConfig{
+			SensitiveVarPatterns: defaultSensitiveVarPatterns,
+		},
+	}
 
-findings, err := l08.Run(ctx)
-require.NoError(t, err)
-require.Len(t, findings, 1)
-assert.Equal(t, "", findings[0].File,
-"File must be empty when stack name cannot be attributed to a physical file")
+	findings, err := l08.Run(ctx)
+	require.NoError(t, err)
+	require.Len(t, findings, 1)
+	assert.Equal(t, "", findings[0].File,
+		"File must be empty when stack name cannot be attributed to a physical file")
 }
 
 // TestRulesRelNormParityWithExec verifies Item 4: the exec package's rulesRelNorm
 // function (visible via its golden test) uses the same logic as L-07's relNorm.
 // We test relNorm directly here since exec's internal function is not exported.
 func TestRelNormCorpusGolden(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-corpus := []struct {
-path     string
-basePath string
-want     string
-}{
-{"/stacks/catalog/vpc.yaml", "/stacks", "catalog/vpc"},
-{"/stacks/deploy/prod.yaml", "/stacks", "deploy/prod"},
-{"catalog/vpc.yaml", "/stacks", "catalog/vpc"},
-{"/stacks/catalog/vpc", "/stacks", "catalog/vpc"},
-{"/stacks/catalog/vpc.yaml", "", "/stacks/catalog/vpc"},
-{"deploy/prod.yaml", "", "deploy/prod"},
-}
+	corpus := []struct {
+		path     string
+		basePath string
+		want     string
+	}{
+		{"/stacks/catalog/vpc.yaml", "/stacks", "catalog/vpc"},
+		{"/stacks/deploy/prod.yaml", "/stacks", "deploy/prod"},
+		{"catalog/vpc.yaml", "/stacks", "catalog/vpc"},
+		{"/stacks/catalog/vpc", "/stacks", "catalog/vpc"},
+		{"/stacks/catalog/vpc.yaml", "", "/stacks/catalog/vpc"},
+		{"deploy/prod.yaml", "", "deploy/prod"},
+	}
 
-for _, tc := range corpus {
-got := rules.ExportedRelNorm(tc.path, tc.basePath)
-assert.Equal(t, tc.want, got,
-"relNorm(%q, %q)", tc.path, tc.basePath)
-}
+	for _, tc := range corpus {
+		got := rules.ExportedRelNorm(tc.path, tc.basePath)
+		assert.Equal(t, tc.want, got,
+			"relNorm(%q, %q)", tc.path, tc.basePath)
+	}
 }

@@ -651,13 +651,13 @@ func renderLintJSON(result *lint.LintResult) error {
 // to check for digit characters, not parse a number, and we want to reject strings
 // that Atoi would accept but that are not purely digit strings (e.g. leading "+"/"-").
 func isDigitOnly(s string) bool {
-if s == "" {
-return false
-}
-for _, c := range s {
-if c < '0' || c > '9' {
-return false
-}
-}
-return true
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
