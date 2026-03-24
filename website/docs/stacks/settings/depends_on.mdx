@@ -1,5 +1,5 @@
 ---
-title: Configure Dependencies Between Components
+title: Configure Dependencies Between Components (Legacy)
 sidebar_position: 2
 sidebar_label: depends_on
 sidebar_class_name: command
@@ -9,6 +9,24 @@ id: depends_on
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
+
+:::warning Deprecated
+
+`settings.depends_on` is deprecated. Use [`dependencies.components`](/stacks/dependencies/components) instead.
+
+The new format uses a simpler list syntax with append merge behavior:
+
+```yaml
+dependencies:
+  components:
+    - component: vpc
+    - component: rds
+      stack: tenant1-ue1-prod
+```
+
+See [Component Dependencies](/stacks/dependencies/components) for the recommended approach.
+
+:::
 
 <Intro>
     Atmos supports configuring the relationships between components in the same or different stacks. You can define

@@ -25,8 +25,10 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "copies all fields",
+			name: "copies all fields including realm",
 			globalAuth: &schema.AuthConfig{
+				Realm:       "my-project",
+				RealmSource: "config",
 				Providers: map[string]schema.Provider{
 					"test-provider": {
 						Kind:   "aws/iam-identity-center",
@@ -50,6 +52,8 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 				},
 			},
 			verify: func(t *testing.T, result *schema.AuthConfig) {
+				assert.Equal(t, "my-project", result.Realm)
+				assert.Equal(t, "config", result.RealmSource)
 				assert.Len(t, result.Providers, 1)
 				assert.Contains(t, result.Providers, "test-provider")
 				assert.Len(t, result.Identities, 1)
@@ -57,6 +61,28 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 				assert.Equal(t, "Info", result.Logs.Level)
 				assert.Equal(t, "system", result.Keyring.Type)
 				assert.Len(t, result.IdentityCaseMap, 1)
+			},
+		},
+		{
+			name: "copies realm from env source",
+			globalAuth: &schema.AuthConfig{
+				Realm:       "env-realm",
+				RealmSource: "env",
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig) {
+				assert.Equal(t, "env-realm", result.Realm)
+				assert.Equal(t, "env", result.RealmSource)
+			},
+		},
+		{
+			name: "empty realm is preserved",
+			globalAuth: &schema.AuthConfig{
+				Realm:       "",
+				RealmSource: "",
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig) {
+				assert.Empty(t, result.Realm)
+				assert.Empty(t, result.RealmSource)
 			},
 		},
 		{
@@ -91,6 +117,8 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	// Test that modifying the copy doesn't mutate the original.
 	original := &schema.AuthConfig{
+		Realm:       "original-realm",
+		RealmSource: "config",
 		Keyring: schema.KeyringConfig{
 			Type: "file",
 			Spec: map[string]interface{}{
@@ -106,12 +134,16 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	copy := CopyGlobalAuthConfig(original)
 
 	// Modify the copy.
+	copy.Realm = "modified-realm"
+	copy.RealmSource = "env"
 	copy.Keyring.Spec["path"] = "/modified/path"
 	copy.Keyring.Spec["new_key"] = "new_value"
 	copy.IdentityCaseMap["original"] = "Modified"
 	copy.IdentityCaseMap["new"] = "New"
 
 	// Verify original is unchanged.
+	assert.Equal(t, "original-realm", original.Realm)
+	assert.Equal(t, "config", original.RealmSource)
 	assert.Equal(t, "/original/path", original.Keyring.Spec["path"])
 	assert.Len(t, original.Keyring.Spec, 1)
 	assert.NotContains(t, original.Keyring.Spec, "new_key")
@@ -315,6 +347,117 @@ func TestMergeComponentAuthFromConfig_NilGlobalAuth(t *testing.T) {
 			tt.verify(t, result, err)
 		})
 	}
+}
+
+func TestMergeComponentAuthFromConfig_RealmSurvivesMapstructureRoundTrip(t *testing.T) {
+	// Realm has mapstructure:"realm" so it must survive the struct→map→merge→map→struct round-trip.
+	// RealmSource has mapstructure:"-" so it is lost — this is expected because GetRealm() recomputes it.
+	globalAuth := &schema.AuthConfig{
+		Realm:       "my-project",
+		RealmSource: "config",
+		Providers: map[string]schema.Provider{
+			"aws": {Kind: "aws/iam-identity-center", Region: "us-east-1"},
+		},
+		Identities: map[string]schema.Identity{
+			"global-id": {Kind: "aws/user", Default: true},
+		},
+		IdentityCaseMap: map[string]string{
+			"global-id": "global-id",
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+
+	// Component with its own auth section that overrides some fields.
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"component-id": map[string]any{
+					"kind": "aws/assume-role",
+				},
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, atmosConfig, cfg.AuthSectionName)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Realm must survive the merge round-trip.
+	assert.Equal(t, "my-project", result.Realm)
+
+	// RealmSource is lost (mapstructure:"-") — this is expected.
+	// GetRealm() recomputes it from the Realm value when creating the manager.
+	assert.Empty(t, result.RealmSource)
+
+	// Other fields still work.
+	assert.Len(t, result.Identities, 2)
+	assert.Contains(t, result.Identities, "global-id")
+	assert.Contains(t, result.Identities, "component-id")
+}
+
+func TestMergeComponentAuthFromConfig_NoRealmConfigured(t *testing.T) {
+	// When no realm is configured, everything should work as before — no realm in result.
+	globalAuth := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"aws": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"dev": {Kind: "aws/user", Default: true},
+		},
+		IdentityCaseMap: map[string]string{
+			"dev": "dev",
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"staging": map[string]any{
+					"kind": "aws/assume-role",
+				},
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, atmosConfig, cfg.AuthSectionName)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Realm)
+	assert.Empty(t, result.RealmSource)
+	assert.Len(t, result.Identities, 2)
+}
+
+func TestCopyGlobalAuthConfig_NoRealmConfigured(t *testing.T) {
+	// When no realm is configured at all, CopyGlobalAuthConfig should produce a valid config
+	// with empty realm fields — same as before this fix was applied.
+	globalAuth := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"aws": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"dev": {Kind: "aws/user", Default: true},
+		},
+		Logs: schema.Logs{Level: "Info"},
+	}
+
+	result := CopyGlobalAuthConfig(globalAuth)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Realm)
+	assert.Empty(t, result.RealmSource)
+	assert.Len(t, result.Providers, 1)
+	assert.Len(t, result.Identities, 1)
+	assert.Equal(t, "Info", result.Logs.Level)
 }
 
 func TestAuthConfigToMap(t *testing.T) {

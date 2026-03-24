@@ -15,7 +15,7 @@ The `auth` section configures how Atmos obtains and manages credentials for clou
 ## Use Cases
 
 - **AWS SSO Integration:** Authenticate via AWS IAM Identity Center (SSO) for seamless credential management.
-- **Azure Authentication:** Authenticate via device code flow, OIDC (workload identity), or existing Azure CLI credentials.
+- **Azure Authentication:** Authenticate via device code flow, OIDC (workload identity), or existing Azure CLI credentials. Supports Azure Commercial, Government (GCC High), and China (Mooncake) clouds via the `cloud_environment` setting.
 - **GCP Authentication:** Authenticate via Application Default Credentials or Workload Identity Federation.
 - **Role Assumption Chains:** Configure multi-account access through role assumption.
 - **Credential Storage:** Securely store and retrieve credentials using system keyrings.
