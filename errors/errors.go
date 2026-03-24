@@ -318,6 +318,8 @@ var (
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
+	ErrMergeNilDst                   = errors.New("merge destination must not be nil")
+	ErrMergeTypeMismatch             = errors.New("cannot override two slices with different type")
 	ErrEncode                        = errors.New("encoding error")
 	ErrDecode                        = errors.New("decoding error")
 
