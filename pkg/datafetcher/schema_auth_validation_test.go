@@ -32,11 +32,15 @@ func TestManifestSchema_AuthDefinitionExists(t *testing.T) {
 	tfManifest, ok := definitions["terraform_component_manifest"].(map[string]interface{})
 	require.True(t, ok, "Schema should have terraform_component_manifest")
 
-	oneOf := tfManifest["oneOf"].([]interface{})
+	oneOf, ok := tfManifest["oneOf"].([]interface{})
+	require.True(t, ok, "terraform_component_manifest should have oneOf array")
 	// Find the object variant (not the !include string variant).
 	var objectVariant map[string]interface{}
 	for _, v := range oneOf {
-		variant := v.(map[string]interface{})
+		variant, vOK := v.(map[string]interface{})
+		if !vOK {
+			continue
+		}
 		if variant["type"] == "object" {
 			objectVariant = variant
 			break
@@ -44,7 +48,8 @@ func TestManifestSchema_AuthDefinitionExists(t *testing.T) {
 	}
 	require.NotNil(t, objectVariant, "terraform_component_manifest should have an object variant")
 
-	props := objectVariant["properties"].(map[string]interface{})
+	props, ok := objectVariant["properties"].(map[string]interface{})
+	require.True(t, ok, "object variant should have properties")
 	_, hasAuth := props["auth"]
 	assert.True(t, hasAuth, "terraform_component_manifest should have 'auth' property")
 }
@@ -60,14 +65,20 @@ func TestManifestSchema_AuthIdentityRequiredField(t *testing.T) {
 	err = json.Unmarshal(data, &schemaMap)
 	require.NoError(t, err)
 
-	definitions := schemaMap["definitions"].(map[string]interface{})
-	identity := definitions["auth_identity"].(map[string]interface{})
-	oneOf := identity["oneOf"].([]interface{})
+	definitions, ok := schemaMap["definitions"].(map[string]interface{})
+	require.True(t, ok, "schema should have definitions")
+	identity, ok := definitions["auth_identity"].(map[string]interface{})
+	require.True(t, ok, "schema should have auth_identity definition")
+	oneOf, ok := identity["oneOf"].([]interface{})
+	require.True(t, ok, "auth_identity should have oneOf array")
 
 	// Find the object variant.
 	var objectVariant map[string]interface{}
 	for _, v := range oneOf {
-		variant := v.(map[string]interface{})
+		variant, vOK := v.(map[string]interface{})
+		if !vOK {
+			continue
+		}
 		if variant["type"] == "object" {
 			objectVariant = variant
 			break
@@ -75,7 +86,8 @@ func TestManifestSchema_AuthIdentityRequiredField(t *testing.T) {
 	}
 	require.NotNil(t, objectVariant)
 
-	props := objectVariant["properties"].(map[string]interface{})
+	props, ok := objectVariant["properties"].(map[string]interface{})
+	require.True(t, ok, "object variant should have properties")
 
 	// Verify required field.
 	requiredProp, ok := props["required"].(map[string]interface{})
@@ -161,6 +173,26 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 				},
 			},
 			expectErr: false,
+		},
+		{
+			name: "identity with invalid required type (string instead of boolean)",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"terraform": map[string]interface{}{
+						"bad-required": map[string]interface{}{
+							"auth": map[string]interface{}{
+								"identities": map[string]interface{}{
+									"broken": map[string]interface{}{
+										"kind":     "aws/assume-role",
+										"required": "yes", // Should be boolean, not string.
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
 		},
 	}
 
