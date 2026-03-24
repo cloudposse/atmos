@@ -194,7 +194,7 @@ components:
       overlays:
         - path: "migrations/shared/common-import.tf"   # applied to all stacks using vpc-base
 
-# stacks/prod-us-east-1.yaml (derived component)
+# stacks/ue1-prod.yaml (derived component)
 components:
   terraform:
     vpc:
@@ -208,6 +208,10 @@ components:
               to = aws_vpc.main
             }
 ```
+
+> **Why not just put the file directly in the component directory?** A file placed in `components/terraform/vpc/` is **permanent** — it applies to every stack on every run forever, and it must be deleted from the repo once the migration is done. A base-component overlay is **ephemeral**: it is injected before execution and removed after, and it can be deleted with a PR once the migration is complete. Additionally, the overlay can be removed from the base component after all stacks have been migrated, while a file in the component directory would silently re-run the import on every subsequent `apply` (or fail with "resource already managed").
+>
+> **Caution — future/undeployed stacks:** An overlay defined at the base-component level runs for _every_ stack that inherits that component, including stacks that have not yet been deployed. If the overlay contains an `import {}` block for a resource that does not exist in a given stack's state, `terraform apply` will fail for that stack. Use base-component overlays only when the migration applies uniformly to all existing stacks, or use stack-level `overlays:` to scope imports to the exact stacks that need them.
 
 To **replace** the entire inherited list (opt out of append semantics), set `_override: true` on the `overlays:` list. `_override: true` discards **all inherited overlays from all ancestor levels** — not just the immediate parent — before appending the current list.
 
@@ -223,6 +227,21 @@ components:
           content: |
             import { id = "vpc-new123", to = aws_vpc.main }
 ```
+
+### Design Choice: List vs Map for `overlays:`
+
+The `overlays:` value is a **list**, not a map. Here is a comparison of both approaches:
+
+| Concern | List (chosen) | Map |
+|---|---|---|
+| **Order preservation** | ✅ Guaranteed — YAML lists are ordered; injection order is deterministic | ❌ YAML maps are unordered; injection order would be implementation-defined and surprising |
+| **Filename as key** | The `name:` field is explicit per entry | The map key is the filename — less repetition, but mixed with `content:` or `path:` values |
+| **List-append semantics** | ✅ Natural — appending a list across inheritance levels is a standard Atmos pattern (used by `vars:`, `env:`, etc.) | ❌ Map merge semantics in YAML are not well-defined without custom logic; shallow merge would silently drop entries with the same key |
+| **Override pattern** | `_override: true` is a standard Atmos escape hatch consistent with other overridable lists | Would require a separate mechanism (e.g., `_replace: true` key) |
+| **YAML authoring** | Familiar `- name: ...` list item style | Less indentation, but key-as-filename is unconventional for config objects with multiple sub-fields |
+| **Consistency with Atmos** | ✅ Consistent with `hooks:`, `env:`, `steps:` patterns | Diverges from established Atmos list patterns |
+
+**Conclusion:** The list form is chosen because it preserves deterministic injection order, fits naturally into Atmos's list-append inheritance model, and is consistent with how other multi-value config keys work across the stack catalog.
 
 **Three-level inheritance example** (global catalog → environment catalog → stack):
 
@@ -243,7 +262,7 @@ components:
       overlays:
         - path: "migrations/prod/compliance-tags.tf"  # appended; final list: [audit-tags, compliance-tags]
 
-# stacks/prod-us-east-1.yaml — Level 3 (stack)
+# stacks/ue1-prod.yaml — Level 3 (stack)
 components:
   terraform:
     vpc:
@@ -254,7 +273,7 @@ components:
         - name: "import-this-stack-only.tf"
           content: |
             import { id = "vpc-abc123", to = aws_vpc.main }
-            # Only this import runs for prod-us-east-1; global and env overlays are discarded
+            # Only this import runs for ue1-prod; global and env overlays are discarded
 ```
 
 ### `atmos.yaml` Global Configuration
@@ -879,6 +898,33 @@ Atmos custom commands (defined in `atmos.yaml` under `commands:`) support per-st
 | Overlay resolution logic not reusable | Convention-based resolution (stack slug matching, tenant/env/stage matching, `_override`) and inline `content:` expansion would have to be re-implemented inside the command steps rather than reusing the Atmos Go resolver. |
 
 **Conclusion:** Atmos Custom Commands are useful for wrapping complete, idempotent terraform operations. They are not a substitute for first-class overlay injection, which requires atomicity, deferred cleanup, and deep stack context that only the Atmos runtime has.
+
+### Alternative 8: Kustomize-Style Overlay System
+
+[Kustomize](https://kustomize.io/) is a tool that patches Kubernetes YAML manifests declaratively — you define a base set of YAML files and per-environment overlays that add, replace, or delete fields. The analogy to this PRD is intentional in naming but the mechanics and constraints are fundamentally different.
+
+**Similarities:**
+
+- Both define a "base" artifact and environment-specific patches layered on top.
+- Both are version-controlled, PR-reviewable, and avoid manual file editing.
+- Both use the term "overlay" to describe environment-scoped additions.
+
+**Key differences from kustomize:**
+
+| Concern | Kustomize | Atmos Stack Overlays |
+|---|---|---|
+| **Target format** | YAML (Kubernetes manifests) | HCL (Terraform resource blocks) |
+| **Merge strategy** | Strategic merge, JSON patch, replacements — fields are merged/replaced | Files are injected wholesale — no field-level merging of HCL |
+| **Persistence** | Output is a merged YAML file committed to the repo | Injected files are ephemeral — removed after execution |
+| **Scope of use** | All resource configuration — routing, labels, replicas, etc. | Intentionally narrow: state migration blocks only (`import`, `removed`, `moved`) |
+
+**⚠️ Scope-creep warning:** Because overlays inject raw `.tf` files, there is no technical enforcement preventing a team from adding `resource` blocks, `data` blocks, or complex HCL into an overlay. This is explicitly **discouraged**. Overlays that introduce general-purpose terraform changes outside state migration make the component's behavior environment-dependent in a hidden way — the overlay content is not visible in the component source directory, making it harder to reason about what terraform will do and harder to debug failures. The intended use is strictly limited to:
+
+- `import {}` blocks (state import)
+- `removed {}` blocks (state removal / lifecycle protection)
+- `moved {}` blocks (state address rename)
+
+Using overlays for anything else (e.g., injecting extra `resource` blocks or `provider` overrides) creates invisible environment-specific behavior that undermines the component model and makes troubleshooting significantly harder. If you need environment-specific resource configuration, use Atmos's `vars:` and component inheritance instead.
 
 ---
 
