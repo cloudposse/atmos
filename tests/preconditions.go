@@ -417,6 +417,26 @@ func RequireOCIAuthentication(t *testing.T) {
 		t.Skipf("GitHub token not configured: required for GitHub API access (OCI images, cloning repos, avoiding rate limits). Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable, or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
 	}
 
+	// Token exists — probe ghcr.io to verify this specific token can actually pull images.
+	// A bot token may exist but not have access to the ghcr.io registry used by tests.
+	client := &http.Client{Timeout: httpTimeout}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://ghcr.io/v2/", nil)
+	if err != nil {
+		t.Logf("Warning: Could not create ghcr.io request: %v", err)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+githubToken)
+		resp, reqErr := client.Do(req) //nolint:gosec // URL is a hardcoded constant (ghcr.io), not user input.
+		if reqErr != nil {
+			t.Skipf("Cannot reach ghcr.io: %v. OCI registry access required. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to skip.", reqErr)
+		}
+		resp.Body.Close()
+		// 401 = unauthorized (wrong/expired token); 403 = forbidden (no read:packages scope).
+		// Both indicate the token cannot pull OCI images from ghcr.io.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			t.Skipf("GitHub token exists but is not authorized for ghcr.io (HTTP %d). OCI integration test requires a token with 'read:packages' scope.", resp.StatusCode)
+		}
+	}
+
 	// Token exists, log that authentication is available
 	t.Logf("GitHub authentication available via token")
 }

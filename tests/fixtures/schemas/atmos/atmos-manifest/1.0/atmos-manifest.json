@@ -1570,13 +1570,30 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
+            "needs": {
+              "type": "array",
+              "description": "List of identity names this component requires. The first identity is primary (sets AWS_PROFILE, etc.). Additional identities have their profiles written to the shared credentials file for multi-account components.",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."
+            },
             "providers": {
               "$ref": "#/definitions/auth_providers"
             },
             "identities": {
               "$ref": "#/definitions/auth_identities"
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
             }
           },
           "required": []
@@ -1594,7 +1611,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9-_]+$": {
+            "^[a-zA-Z0-9/_-]+$": {
               "$ref": "#/definitions/auth_provider"
             }
           },
@@ -1667,7 +1684,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9-_]+$": {
+            "^[a-zA-Z0-9/_-]+$": {
               "$ref": "#/definitions/auth_identity"
             }
           },
