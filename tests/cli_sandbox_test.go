@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/tests/testhelpers"
@@ -93,24 +94,19 @@ func cleanDirectory(t *testing.T, workdir string) error {
 	return nil
 }
 
-// findGitRepoRoot finds the Git repository root.
+// findGitRepoRoot finds the root of the Git repository containing path,
+// by shelling out to `git rev-parse --show-toplevel`.
+// This is consistent with cleanDirectory which also shells out to git.
 func findGitRepoRoot(path string) (string, error) {
-	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
+	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel") //nolint:gosec
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to find git repository: %w", err)
+		return "", fmt.Errorf("failed to find git repository from %q: %w", path, err)
 	}
-
-	// Get the repository's working tree
-	worktree, err := repo.Worktree()
+	root := strings.TrimSpace(string(out))
+	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return "", fmt.Errorf("failed to get worktree: %w", err)
+		return "", fmt.Errorf("failed to get absolute path of repository root %q: %w", root, err)
 	}
-
-	// Return the absolute path to the root of the working tree
-	root, err := filepath.Abs(worktree.Filesystem.Root())
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path of repository root: %w", err)
-	}
-
-	return root, nil
+	return absRoot, nil
 }

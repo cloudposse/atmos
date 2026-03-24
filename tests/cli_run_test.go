@@ -16,7 +16,6 @@ import (
 
 	"github.com/otiai10/copy"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
