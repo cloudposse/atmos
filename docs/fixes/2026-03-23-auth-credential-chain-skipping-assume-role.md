@@ -4,15 +4,11 @@
 
 **Reported by:** Alexander Matveev (9spokes)
 
-**Related PR:** [#2143](https://github.com/cloudposse/atmos/pull/2143) (IRSA env var scrubbing)
-
-**Commit:** [9spokes/atmos@e8edcb4](https://github.com/9spokes/atmos/commit/e8edcb418ab7b4116e6bad82893eacbfbdd82598)
-
 ## Problem
 
 On EKS ARC (Actions Runner Controller) runners with IRSA, `atmos auth` returns stale cached credentials instead of performing the actual `AssumeRole` API call. Terraform runs with the runner's pod credentials instead of the Atmos-authenticated planner role.
 
-This is the **second bug** affecting IRSA on EKS. The first (PR #2143) handles env var scrubbing — removing `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_ROLE_ARN`, and `AWS_ROLE_SESSION_NAME` from the subprocess environment so the AWS SDK doesn't prefer pod identity over file-based credentials. This second bug is in the credential chain cache lookup and causes the `AssumeRole` step to be skipped entirely.
+This is the **second bug** affecting IRSA on EKS. The first handles env var scrubbing — removing `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_ROLE_ARN`, and `AWS_ROLE_SESSION_NAME` from the subprocess environment so the AWS SDK doesn't prefer pod identity over file-based credentials. This second bug is in the credential chain cache lookup and causes the `AssumeRole` step to be skipped entirely.
 
 ### Root Cause
 
@@ -62,15 +58,15 @@ This aligns with the existing comment on lines 30-33 of `manager_chain.go`:
 
 > "CRITICAL: Always re-authenticate through the full chain, even if the target identity has cached credentials."
 
-## Relationship to PR #2143 (IRSA Env Var Scrubbing)
+## Two Independent Bugs Affecting EKS ARC Runners
 
-These are two independent bugs that both affect EKS ARC runners with IRSA:
+There are two independent bugs that both affect EKS ARC runners with IRSA. Both fixes are needed for correct behavior:
 
-1. **PR #2143 (env var scrubbing):** Pod-injected IRSA env vars (`AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_ROLE_ARN`, `AWS_ROLE_SESSION_NAME`) leak into the subprocess, causing AWS SDK to prefer web identity token auth over the Atmos-managed credential files. Fix: scrub these vars from the subprocess environment via `PrepareShellEnvironment`.
+1. **IRSA env var scrubbing:** Pod-injected IRSA env vars (`AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_ROLE_ARN`, `AWS_ROLE_SESSION_NAME`) leak into the subprocess, causing AWS SDK to prefer web identity token auth over the Atmos-managed credential files. Fix: scrub these vars from the subprocess environment via `PrepareShellEnvironment`.
 
-2. **This fix (cache lookup):** The credential chain cache lookup returns stale cached credentials without calling `AssumeRole`, because `findFirstValidCachedCredentials` returns the last chain index and `fetchCachedCredentials` advances past the chain end. Fix: skip the last index in cache lookup to force re-authentication.
+2. **Credential chain cache lookup (this fix):** `findFirstValidCachedCredentials` returns the last chain index, `fetchCachedCredentials` advances past the chain end, and the `AssumeRole` call is skipped entirely. Fix: skip the last index in cache lookup to force re-authentication.
 
-Both fixes are needed for correct behavior on EKS. Alexander confirmed that this fix + `unset AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_ROLE_SESSION_NAME` (manual equivalent of PR #2143) resolved the issue for 9spokes.
+Alexander confirmed that both fixes together resolved the issue for 9spokes.
 
 ## Test Coverage
 
