@@ -2968,70 +2968,70 @@ func TestRelNormCorpusGolden(t *testing.T) {
 // TestConcernGroupSeparators verifies that concernGroup splits on hyphen, underscore,
 // and forward-slash in priority order.
 func TestConcernGroupSeparators(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-tests := []struct {
-input string
-want  string
-}{
-// Hyphen separator.
-{"vpc-endpoints", "vpc"},
-{"vpc-flow-logs", "vpc"},
-// Underscore separator.
-{"vpc_endpoints", "vpc"},
-{"s3_buckets", "s3"},
-// Path / separator (highest priority).
-{"network/vpc", "network"},
-{"network/vpc-endpoints", "network"},
-// Mixed: path wins over hyphen.
-{"network/vpc_peering", "network"},
-// No separator — returned unchanged.
-{"vpc", "vpc"},
-{"eks", "eks"},
-// Hyphen before underscore — hyphen wins.
-{"vpc-peering_vpn", "vpc"},
-// Underscore before hyphen — underscore wins.
-{"vpc_peering-extra", "vpc"},
-}
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Hyphen separator.
+		{"vpc-endpoints", "vpc"},
+		{"vpc-flow-logs", "vpc"},
+		// Underscore separator.
+		{"vpc_endpoints", "vpc"},
+		{"s3_buckets", "s3"},
+		// Path / separator (highest priority).
+		{"network/vpc", "network"},
+		{"network/vpc-endpoints", "network"},
+		// Mixed: path wins over hyphen.
+		{"network/vpc_peering", "network"},
+		// No separator — returned unchanged.
+		{"vpc", "vpc"},
+		{"eks", "eks"},
+		// Hyphen before underscore — hyphen wins.
+		{"vpc-peering_vpn", "vpc"},
+		// Underscore before hyphen — underscore wins.
+		{"vpc_peering-extra", "vpc"},
+	}
 
-for _, tc := range tests {
-tc := tc
-t.Run(tc.input, func(t *testing.T) {
-t.Parallel()
-got := rules.ExportedConcernGroup(tc.input)
-assert.Equal(t, tc.want, got,
-"concernGroup(%q)", tc.input)
-})
-}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			got := rules.ExportedConcernGroup(tc.input)
+			assert.Equal(t, tc.want, got,
+				"concernGroup(%q)", tc.input)
+		})
+	}
 }
 
 // TestPathnormParityWithRelNorm verifies that pkg/lint/pathnorm.NormalizeRelNoExt
 // produces identical output to the internal relNorm function used in L-07, confirming
 // that the shared package is a faithful replacement.
 func TestPathnormParityWithRelNorm(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-corpus := []struct {
-path     string
-basePath string
-}{
-{"/stacks/catalog/vpc.yaml", "/stacks"},
-{"/stacks/deploy/prod.yaml", "/stacks"},
-{"catalog/vpc.yaml", "/stacks"},
-{"/stacks/catalog/vpc", "/stacks"},
-{"/stacks/catalog/vpc.yaml", ""},
-{"deploy/prod.yaml", ""},
-{"./catalog/shared.yaml", "/stacks"},
-}
+	corpus := []struct {
+		path     string
+		basePath string
+	}{
+		{"/stacks/catalog/vpc.yaml", "/stacks"},
+		{"/stacks/deploy/prod.yaml", "/stacks"},
+		{"catalog/vpc.yaml", "/stacks"},
+		{"/stacks/catalog/vpc", "/stacks"},
+		{"/stacks/catalog/vpc.yaml", ""},
+		{"deploy/prod.yaml", ""},
+		{"./catalog/shared.yaml", "/stacks"},
+	}
 
-for _, tc := range corpus {
-tc := tc
-t.Run(tc.path, func(t *testing.T) {
-t.Parallel()
-want := rules.ExportedRelNorm(tc.path, tc.basePath)
-got := pathnorm.NormalizeRelNoExt(tc.path, tc.basePath)
-assert.Equal(t, want, got,
-"pathnorm.NormalizeRelNoExt(%q, %q) must match relNorm", tc.path, tc.basePath)
-})
-}
+	for _, tc := range corpus {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+			want := rules.ExportedRelNorm(tc.path, tc.basePath)
+			got := pathnorm.NormalizeRelNoExt(tc.path, tc.basePath)
+			assert.Equal(t, want, got,
+				"pathnorm.NormalizeRelNoExt(%q, %q) must match relNorm", tc.path, tc.basePath)
+		})
+	}
 }

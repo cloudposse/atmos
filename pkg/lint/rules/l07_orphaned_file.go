@@ -88,4 +88,3 @@ func relNorm(path, basePath string) string {
 func normalizeForComparison(path string) string {
 	return pathnorm.NormalizeRelNoExt(path, "")
 }
-
