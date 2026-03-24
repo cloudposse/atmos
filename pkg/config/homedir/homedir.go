@@ -74,6 +74,12 @@ var (
 	// preventing shell injection when the username is interpolated into sh -c.
 	usernameRe = regexp.MustCompile(`^[A-Za-z0-9._][A-Za-z0-9._-]*$`)
 
+	// dsclNFSHomeDirRe matches a dscl NFSHomeDirectory output line tolerating
+	// any amount of leading whitespace before the key and any whitespace
+	// after the colon. It captures the first non-whitespace token which
+	// is always the home directory path in well-formed dscl output.
+	dsclNFSHomeDirRe = regexp.MustCompile(`^\s*NFSHomeDirectory:\s*(\S+)`)
+
 	// externalCmdTimeout is the maximum time allowed for external subprocess
 	// calls (id, dscl, sh). A conservative default prevents Dir()/Expand()
 	// from hanging indefinitely on slow NSS/LDAP/directory backends.
@@ -460,18 +466,17 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 }
 
 // parseDsclNFSHomeDir extracts the home directory from dscl output.
-// It accepts leading/trailing whitespace around the key and multiple spaces
-// after the colon (defensive against dscl output variants). The returned path
-// is filepath.Clean'd. Returns ErrBlankOutput when the key is absent or the
+// It uses a compiled regex to tolerate any amount of leading whitespace before
+// the key and multiple spaces/tabs after the colon. The returned path is
+// filepath.Clean'd. Returns ErrBlankOutput when the key is absent or the
 // parsed value is empty, ".", or a non-absolute path (malformed record).
 func parseDsclNFSHomeDir(output string) (string, error) {
 	for _, line := range strings.Split(output, "\n") {
-		trimmed := strings.TrimSpace(line)
-		after, ok := strings.CutPrefix(trimmed, "NFSHomeDirectory:")
-		if !ok {
+		m := dsclNFSHomeDirRe.FindStringSubmatch(line)
+		if m == nil {
 			continue
 		}
-		home := filepath.Clean(strings.TrimSpace(after))
+		home := filepath.Clean(m[1])
 		if home == "" || home == "." {
 			continue
 		}
