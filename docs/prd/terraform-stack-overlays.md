@@ -834,6 +834,27 @@ The [Code Generation PRD](code-generation.md) proposes a `generate:` section tha
 
 `generate:` is the right tool for files that should always be present (e.g., a rendered `backend.tf`). `overlays:` is the right tool for ephemeral, one-time state operations that should not persist in the working directory.
 
+### Alternative 7: Atmos Custom Commands (Structured Tasks)
+
+Atmos custom commands (defined in `atmos.yaml` under `commands:`) support per-step retry, timeout, working directory override, and auth identity selection. A structured command pipeline could:
+
+1. Copy overlay files into the component working directory (`copy` step).
+2. Run `terraform plan` or `terraform apply` (`run` step).
+3. Delete the overlay files (`cleanup` step).
+
+**Why considered:** This is closer to a viable copy/apply/cleanup pipeline than GitHub Actions slash commands (Alternative 2). The steps are co-located with the stack config, visible in the repo, and can be composed.
+
+**Why rejected:**
+
+| Concern | Detail |
+|---|---|
+| Cleanup not guaranteed on SIGTERM/process kill | Custom command steps are run sequentially as child processes. If the runner is OOM-killed or receives SIGTERM between the apply step and the cleanup step, the overlay files are left in the working directory. There is no equivalent of Go's `defer` across process boundaries. |
+| Stack context must be manually injected | The working directory path (`.atmos/workdir/<stack-slug>-<component>/`) and the stack slug are not automatically available as template variables inside the copy/cleanup steps. They must be manually computed or passed as arguments, which is brittle when the workdir path formula changes. |
+| No atomicity guarantee | The copy step and the terraform step are separate process invocations. A failure between them leaves the workdir in a partially-copied state with no automatic rollback. |
+| Overlay resolution logic not reusable | Convention-based resolution (stack slug matching, tenant/env/stage matching, `_override`) and inline `content:` expansion would have to be re-implemented inside the command steps rather than reusing the Atmos Go resolver. |
+
+**Conclusion:** Atmos Custom Commands are useful for wrapping complete, idempotent terraform operations. They are not a substitute for first-class overlay injection, which requires atomicity, deferred cleanup, and deep stack context that only the Atmos runtime has.
+
 ---
 
 ## Success Metrics
