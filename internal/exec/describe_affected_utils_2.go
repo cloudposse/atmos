@@ -335,7 +335,7 @@ func areTerraformComponentModulesChanged(
 		}
 
 		// For other errors (syntax errors, permission issues, etc.), return error.
-		return false, errors.Join(errUtils.ErrFailedToLoadTerraformComponent, diagErr)
+		return false, componentLoadError(component, diags)
 	}
 
 	// If no configuration, there are no modules to check.
