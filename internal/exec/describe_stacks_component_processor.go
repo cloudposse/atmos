@@ -121,9 +121,6 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		}
 	}
 
-	// Extract stack-level description (set by ProcessStackConfig from metadata.description).
-	stackDescription, _ := stackMap[cfg.DescriptionSectionName].(string)
-
 	componentsSection, ok := stackMap[cfg.ComponentsSectionName].(map[string]any)
 	if !ok {
 		return nil
