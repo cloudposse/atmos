@@ -629,3 +629,17 @@ func envKeyIsSet(env []string, key string) bool {
 	}
 	return false
 }
+
+// envVarFromList returns the value of the last "KEY=value" entry in env, or ""
+// if the key is not present.  The last entry wins, matching how exec.Cmd.Env
+// and os.Environ() resolve duplicates.
+func envVarFromList(env []string, key string) string {
+	prefix := key + "="
+	result := ""
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			result = e[len(prefix):]
+		}
+	}
+	return result
+}
