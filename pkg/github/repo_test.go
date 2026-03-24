@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v59/github"
+	ghclient "github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -316,7 +316,7 @@ func TestIsRepoArchived(t *testing.T) {
 			defer ts.Close()
 
 			// Build a GitHub client pointing at the test server.
-			client := github.NewClient(nil)
+			client := ghclient.NewClient(nil)
 			u, err := url.Parse(ts.URL + "/")
 			require.NoError(t, err)
 			client.BaseURL = u
@@ -376,7 +376,7 @@ func TestArchivedCheckTimeoutOverride(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		client := github.NewClient(nil)
+		client := ghclient.NewClient(nil)
 		u, err := url.Parse(ts.URL + "/")
 		require.NoError(t, err)
 		client.BaseURL = u
@@ -424,8 +424,8 @@ func TestIsRepoArchived_ViaHook(t *testing.T) {
 	defer ts.Close()
 
 	// Inject a GitHub client pointing at the mock server via the test hook.
-	cleanup := SetNewGitHubClientHookForTest(func(ctx context.Context) *github.Client {
-		client := github.NewClient(nil)
+	cleanup := SetNewGitHubClientHookForTest(func(ctx context.Context) *ghclient.Client {
+		client := ghclient.NewClient(nil)
 		u, err := url.Parse(ts.URL + "/")
 		require.NoError(t, err)
 		client.BaseURL = u

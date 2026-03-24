@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/charmbracelet/log"
@@ -564,6 +565,40 @@ func TestAtmosLogger_Integration(t *testing.T) {
 	// Verify that our wrapper properly delegates
 	atmosLogger.Debug("integration test")
 	assert.Contains(t, buf.String(), "integration test")
+}
+
+// BenchmarkAtmosLogger_Info benchmarks the Info method to ensure performance.
+// TestAtmosLogger_ConcurrentWarnAndSetOutput verifies that concurrent calls to Warn
+// and SetOutput do not trigger a data race detected by the Go race detector.
+func TestAtmosLogger_ConcurrentWarnAndSetOutput(t *testing.T) {
+	var buf1 bytes.Buffer
+	logger := New()
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Goroutine A: emit log messages concurrently.
+	go func() {
+		defer wg.Done()
+		for range iterations {
+			logger.Warn("concurrent message")
+		}
+	}()
+
+	// Goroutine B: alternate the output writer concurrently.
+	go func() {
+		defer wg.Done()
+		for i := range iterations {
+			if i%2 == 0 {
+				logger.SetOutput(&buf1)
+			} else {
+				logger.SetOutput(os.Stderr)
+			}
+		}
+	}()
+
+	wg.Wait()
 }
 
 // BenchmarkAtmosLogger_Info benchmarks the Info method to ensure performance.

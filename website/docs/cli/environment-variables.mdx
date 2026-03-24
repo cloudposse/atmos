@@ -391,8 +391,8 @@ These environment variables configure Atmos behavior and can override settings i
     - **Opt-out:** `0s` — disables the check entirely; recommended for air-gapped or offline environments
     - **Format:** Any Go duration string, e.g. `2s`, `500ms`, `10s`
 
-    **Note:** This value is read once when Atmos starts. Setting it via `os.Setenv` after the
-    process starts has no effect; set it in the process environment before launching Atmos.
+    **Note:** This value is read once when Atmos starts. Set it in your shell environment
+    before running Atmos.
   </dd>
 
   <dt>`GITHUB_USERNAME` / `GITHUB_ACTOR` / `ATMOS_GITHUB_USERNAME`</dt>

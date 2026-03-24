@@ -2,7 +2,6 @@ package exec
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	gh "github.com/cloudposse/atmos/pkg/github"
@@ -31,7 +30,7 @@ func warnIfArchivedGitHubRepo(ctx context.Context, uri, component string) {
 		// Best-effort check: log at trace level and continue so vendoring is never blocked.
 		// Common causes: network unavailable, rate limit exceeded (set GITHUB_TOKEN),
 		// or repository not found.
-		log.Trace("Skipping archived-repo check", "repository", fmt.Sprintf("%s/%s", owner, repo), "error", err)
+		log.Trace("Skipping archived-repo check", "repository", owner+"/"+repo, "error", err)
 		return
 	}
 

@@ -327,6 +327,8 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 		pType := determinePackageType(useOciScheme, useLocalFileSystem)
 
 		// Warn if the source is an archived GitHub repository.
+		// TODO: thread context.Context through the vendor pipeline so this check cancels on Ctrl+C.
+		// See https://github.com/cloudposse/atmos/issues for the tracking issue.
 		if pType == pkgTypeRemote {
 			warnIfArchivedGitHubRepo(context.Background(), uri, params.sources[indexSource].Component)
 		}
