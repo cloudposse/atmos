@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -121,40 +120,37 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	if runtime.GOOS == "darwin" && isCIEnvironment() {
-		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
-		// Copying over the `.gitconfig` was not enough to fix the issue
-		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
+	// Always isolate HOME to tempDir for hermetic test environments.
+	// GIT_CONFIG_* vars above handle credential.helper; no platform bypass needed.
+	tc.Env["HOME"] = tempDir
+	tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
+	tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
+	// Gate file copies to prevent local secret exposure.
+	// Set ATMOS_TEST_COPY_GITCONFIG=1 to pull ~/.gitconfig into the test HOME.
+	// Otherwise a minimal sanitized .gitconfig (name/email only) is written.
+	originalHome := os.Getenv("HOME")
+	var filesToCopy []string
+	if os.Getenv("ATMOS_TEST_COPY_GITCONFIG") == "1" {
+		filesToCopy = append(filesToCopy, ".gitconfig")
 	} else {
-		// Set environment variables for the test case.
-		// These are written to tc.Env so they reach the subprocess via cmd.Env;
-		// no t.Setenv() is needed or used.
-		tc.Env["HOME"] = tempDir
-		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
-		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
-		// Copy some files to the temporary HOME directory.
-		// .ssh and .netrc are gated behind ATMOS_TEST_COPY_SSH=1 to avoid exposing
-		// private credentials on local developer machines by default.
-		originalHome := os.Getenv("HOME")
-		filesToCopy := []string{".gitconfig"}
-		if os.Getenv("ATMOS_TEST_COPY_SSH") == "1" {
-			filesToCopy = append(filesToCopy, ".ssh", ".netrc")
-		}
-		for _, file := range filesToCopy {
-			src := filepath.Join(originalHome, file)
-			dest := filepath.Join(tempDir, file)
+		minGitcfg := filepath.Join(tempDir, ".gitconfig")
+		_ = os.WriteFile(minGitcfg, []byte("[user]\n\tname = Test\n\temail = test@example.com\n"), 0o644)
+	}
+	if os.Getenv("ATMOS_TEST_COPY_SSH") == "1" {
+		filesToCopy = append(filesToCopy, ".ssh", ".netrc")
+	}
+	for _, file := range filesToCopy {
+		src := filepath.Join(originalHome, file)
+		dest := filepath.Join(tempDir, file)
 
-			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
-				// t.Logf("Copying %s to %s\n", src, dest)
-				// Skip socket files (e.g., SSH agent sockets) that cannot be copied.
-				copyOpts := copy.Options{
-					Skip: func(info os.FileInfo, src, dest string) (bool, error) {
-						return info.Mode()&os.ModeSocket != 0, nil
-					},
-				}
-				if err := copy.Copy(src, dest, copyOpts); err != nil {
-					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
-				}
+		if _, err := os.Stat(src); err == nil {
+			copyOpts := copy.Options{
+				Skip: func(info os.FileInfo, src, dest string) (bool, error) {
+					return info.Mode()&os.ModeSocket != 0, nil
+				},
+			}
+			if err := copy.Copy(src, dest, copyOpts); err != nil {
+				t.Fatalf("Failed to copy %s to test folder: %v", src, err)
 			}
 		}
 	}
@@ -237,9 +233,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 			logger.Debug("Skipping ATMOS_CLI_CONFIG_PATH for --chdir test")
 		}
 	}
-
-	// Include the system PATH in the test environment
-	tc.Env["PATH"] = os.Getenv("PATH")
 
 	// Set the test Git root to a clean temporary directory
 	// This makes each test scenario act as if it's its own Git repository

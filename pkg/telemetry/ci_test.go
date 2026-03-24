@@ -415,4 +415,17 @@ func TestFilterCIEnvVars(t *testing.T) {
 			assert.NotContains(t, entry, "CI=")
 		}
 	})
+
+	t.Run("preserves bare non-CI key without value separator", func(t *testing.T) {
+		t.Parallel()
+
+		// "HOME" without '=' is a bare entry that is not a CI variable;
+		// it must be preserved.  "CI=true" is a well-known CI var and must
+		// be stripped regardless of the bare-entry case.
+		input := []string{"CI=true", "HOME"}
+		result := FilterCIEnvVars(input)
+
+		assert.NotContains(t, result, "CI=true", "CI=true should be stripped")
+		assert.Contains(t, result, "HOME", "bare HOME entry should be preserved")
+	})
 }

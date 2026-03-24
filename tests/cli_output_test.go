@@ -452,6 +452,9 @@ func applyIgnorePatterns(t *testing.T, input string, patterns []string) string {
 func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
+		if isPTYUnsupported(err) {
+			t.Skipf("skipping TTY mode on this runner: %v", err)
+		}
 		return "", fmt.Errorf("failed to start TTY: %v", err)
 	}
 	defer func() { _ = ptmx.Close() }()
@@ -497,4 +500,18 @@ func ptyError(err error) error {
 		return err
 	}
 	return nil
+}
+
+// isPTYUnsupported reports whether a PTY error indicates the platform or
+// runner does not support pseudo-terminals (e.g. Windows, headless CI).
+func isPTYUnsupported(err error) bool {
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) && pathErr.Err == syscall.EINVAL {
+		return true
+	}
+	// creack/pty returns its own ErrUnsupported (errors.New) on Windows/unsupported OS.
+	if err != nil && err.Error() == pty.ErrUnsupported.Error() {
+		return true
+	}
+	return errors.Is(err, errors.ErrUnsupported)
 }

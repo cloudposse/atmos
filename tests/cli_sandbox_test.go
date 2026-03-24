@@ -103,10 +103,12 @@ func cleanDirectory(t *testing.T, workdir string) error {
 // by shelling out to `git rev-parse --show-toplevel`.
 // This is consistent with cleanDirectory which also shells out to git.
 func findGitRepoRoot(path string) (string, error) {
-	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel") //nolint:gosec
-	out, err := cmd.Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "--show-toplevel") //nolint:gosec
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("failed to find git repository from %q: %w", path, err)
+		return "", fmt.Errorf("failed to find git repository from %q: %w\n%s", path, err, out)
 	}
 	root := strings.TrimSpace(string(out))
 	absRoot, err := filepath.Abs(root)

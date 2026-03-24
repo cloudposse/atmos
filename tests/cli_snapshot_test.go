@@ -57,22 +57,20 @@ func normalizeLineEndings(s string) string {
 }
 
 // Generate a unified diff using gotextdiff.
+// Colors are suppressed when stderr is not a TTY (e.g. CI, piped output).
 func generateUnifiedDiff(actual, expected string) string {
 	edits := myers.ComputeEdits(span.URIFromPath("actual"), expected, actual)
 	unified := gotextdiff.ToUnified("expected", "actual", expected, edits)
 
-	// Use a buffer to construct the colorized diff
+	colorize := term.IsTerminal(int(os.Stderr.Fd()))
 	var buf bytes.Buffer
 	for _, line := range strings.Split(fmt.Sprintf("%v", unified), "\n") {
 		switch {
-		case strings.HasPrefix(line, "+"):
-			// Apply green style for additions
+		case colorize && strings.HasPrefix(line, "+"):
 			fmt.Fprintln(&buf, addedStyle.Render(line))
-		case strings.HasPrefix(line, "-"):
-			// Apply red style for deletions
+		case colorize && strings.HasPrefix(line, "-"):
 			fmt.Fprintln(&buf, removedStyle.Render(line))
 		default:
-			// Keep other lines as-is
 			fmt.Fprintln(&buf, line)
 		}
 	}
