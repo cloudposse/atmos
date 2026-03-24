@@ -13,9 +13,9 @@
 // The glob LRU cache is configurable at startup via environment variables:
 //
 //   - ATMOS_FS_GLOB_CACHE_MAX_ENTRIES – maximum number of cached patterns
-//     (default: 1024).
+//     (default: 1024, minimum: 16; values below 16 are clamped up).
 //   - ATMOS_FS_GLOB_CACHE_TTL – TTL per entry as a Go duration string, e.g.
-//     "10m" (default: 5m).
+//     "10m" (default: 5m, minimum: 1s; values below 1s are clamped up).
 //   - ATMOS_FS_GLOB_CACHE_EMPTY – set to "0" or "false" to disable caching
 //     of empty (no-match) results (default: "1" = enabled).
 //

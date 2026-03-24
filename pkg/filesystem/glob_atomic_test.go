@@ -614,6 +614,43 @@ func TestApplyGlobCacheConfig_InvalidInputsClamped(t *testing.T) {
 			wantTTL:        defaultTTL,
 			wantMaxEntries: 256,
 		},
+		// Values below the minimum should be clamped up, not rejected.
+		{
+			name:           "TTL_below_minimum_clamped_to_1s",
+			ttlEnv:         "100ms",
+			wantTTL:        time.Second,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		{
+			name:           "TTL_500ms_clamped_to_1s",
+			ttlEnv:         "500ms",
+			wantTTL:        time.Second,
+			wantMaxEntries: defaultMaxEntries,
+		},
+		{
+			name:           "maxEntries_below_minimum_clamped_to_16",
+			maxEntriesEnv:  "5",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: 16,
+		},
+		{
+			name:           "maxEntries_15_clamped_to_16",
+			maxEntriesEnv:  "15",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: 16,
+		},
+		{
+			name:           "maxEntries_exactly_16_accepted",
+			maxEntriesEnv:  "16",
+			wantTTL:        defaultTTL,
+			wantMaxEntries: 16,
+		},
+		{
+			name:           "TTL_exactly_1s_accepted",
+			ttlEnv:         "1s",
+			wantTTL:        time.Second,
+			wantMaxEntries: defaultMaxEntries,
+		},
 	}
 
 	for _, tc := range cases {

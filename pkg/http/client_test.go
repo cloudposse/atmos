@@ -1147,6 +1147,20 @@ func TestNormalizeHost(t *testing.T) {
 		// Upper-case + trailing dot.
 		{"API.GITHUB.COM.", "api.github.com"},
 		{"", ""},
+		// Default port 443 should be stripped.
+		{"api.github.com:443", "api.github.com"},
+		// Default port 80 should be stripped.
+		{"api.github.com:80", "api.github.com"},
+		// Non-default port should be preserved.
+		{"api.github.com:8443", "api.github.com:8443"},
+		// Port 443 + upper-case: both normalised.
+		{"API.GITHUB.COM:443", "api.github.com"},
+		// Port 443 + trailing dot: trailing dot stripped then port stripped.
+		{"api.github.com.:443", "api.github.com"},
+		// IPv6 with default port: brackets are stripped by net.SplitHostPort.
+		{"[::1]:443", "::1"},
+		// IPv6 with non-default port: preserved (with brackets stripped by SplitHostPort).
+		{"[::1]:8080", "[::1]:8080"},
 	}
 
 	for _, tt := range tests {
@@ -1167,6 +1181,11 @@ func TestIsGitHubHost_CaseAndTrailingDot(t *testing.T) {
 		"API.GITHUB.COM.",
 		"Raw.GitHubUserContent.com",
 		"UPLOADS.GITHUB.COM",
+		// Port variants: default port should be stripped before matching.
+		"api.github.com:443",
+		"API.GITHUB.COM:443",
+		"uploads.github.com:443",
+		"raw.githubusercontent.com:80",
 	}
 	for _, h := range positives {
 		assert.True(t, isGitHubHost(h), "expected %q to be allowed", h)
@@ -1176,6 +1195,9 @@ func TestIsGitHubHost_CaseAndTrailingDot(t *testing.T) {
 		"GITHUB.EXAMPLE.COM",
 		"EXAMPLE.GITHUB.COM",
 		"github.com",
+		// Port variants on disallowed hosts should still be denied.
+		"github.example.com:443",
+		"example.github.com:443",
 	}
 	for _, h := range negatives {
 		assert.False(t, isGitHubHost(h), "expected %q to be denied", h)

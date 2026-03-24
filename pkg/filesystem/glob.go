@@ -24,6 +24,16 @@ const (
 	// defaultGlobCacheTTL is the default time-to-live for each cache entry.
 	// Override at startup with ATMOS_FS_GLOB_CACHE_TTL (e.g. "10m", "30s").
 	defaultGlobCacheTTL = 5 * time.Minute
+
+	// minGlobCacheTTL is the minimum accepted TTL value.  Values parsed from
+	// ATMOS_FS_GLOB_CACHE_TTL that are positive but below this floor are clamped up.
+	// A sub-second TTL would make the cache nearly useless and cause excessive I/O.
+	minGlobCacheTTL = time.Second
+
+	// minGlobCacheMaxEntries is the minimum accepted LRU capacity.  Values parsed
+	// from ATMOS_FS_GLOB_CACHE_MAX_ENTRIES that are positive but below this floor
+	// are clamped up to prevent near-empty caches that evict on nearly every call.
+	minGlobCacheMaxEntries = 16
 )
 
 // globCacheEntry holds a cached glob result together with its expiry timestamp.
@@ -78,6 +88,9 @@ func applyGlobCacheConfig() {
 	//nolint:forbidigo // Direct env lookup required for cache configuration.
 	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n < minGlobCacheMaxEntries {
+				n = minGlobCacheMaxEntries
+			}
 			maxEntries = n
 		}
 	}
@@ -86,6 +99,9 @@ func applyGlobCacheConfig() {
 	//nolint:forbidigo // Direct env lookup required for cache configuration.
 	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			if d < minGlobCacheTTL {
+				d = minGlobCacheTTL
+			}
 			ttl = d
 		}
 	}
@@ -133,8 +149,8 @@ func init() {
 // Callers should always use len(result) == 0 to detect no matches, not a nil comparison.
 //
 // Caching policy:
-//   - Results are bounded to a configurable LRU (default 1024 entries, ATMOS_FS_GLOB_CACHE_MAX_ENTRIES).
-//   - Each entry expires after a configurable TTL (default 5 minutes, ATMOS_FS_GLOB_CACHE_TTL).
+//   - Results are bounded to a configurable LRU (default 1024 entries, minimum 16, ATMOS_FS_GLOB_CACHE_MAX_ENTRIES).
+//   - Each entry expires after a configurable TTL (default 5 minutes, minimum 1s, ATMOS_FS_GLOB_CACHE_TTL).
 //   - Empty results are cached by default; set ATMOS_FS_GLOB_CACHE_EMPTY=0 to disable.
 //   - Cached slices are cloned on read, so callers may safely mutate the returned slice.
 func GetGlobMatches(pattern string) ([]string, error) {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -186,14 +187,24 @@ type GitHubAuthenticatedTransport struct {
 }
 
 // normalizeHost canonicalizes a hostname for allowlist comparison:
-// it lower-cases the string and strips a trailing dot (FQDN form).
-// Port stripping is explicitly NOT performed here; callers should pass
-// the result of url.URL.Hostname() (which already has the port removed)
-// rather than the raw url.URL.Host field.  This avoids incorrectly
-// truncating IPv6 literals (e.g., [::1]) which contain colons.
+// it lower-cases the string, strips a trailing dot (FQDN form), and removes
+// default HTTP/HTTPS ports (:80 and :443) so that "api.github.com:443" is
+// treated identically to "api.github.com".
+//
+// net.SplitHostPort is used to handle IPv6 literals safely (e.g., "[::1]:443"
+// is split to "::1" and "443", and the brackets are dropped for comparison).
+// Non-default ports (e.g., :8443) are preserved unchanged.
+//
+// Note: in the hot path, callers pass url.URL.Hostname() which already strips
+// the port, making the port-stripping here a defence-in-depth measure.
 func normalizeHost(host string) string {
 	host = strings.ToLower(host)
 	host = strings.TrimSuffix(host, ".")
+	// Strip default ports so that "api.github.com:443" matches "api.github.com".
+	// Also strip any trailing dot from the host part (handles "api.github.com.:443").
+	if h, port, err := net.SplitHostPort(host); err == nil && (port == "443" || port == "80") {
+		host = strings.TrimSuffix(h, ".")
+	}
 	return host
 }
 
