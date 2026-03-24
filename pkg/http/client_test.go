@@ -919,36 +919,36 @@ func TestWithGitHubHostMatcher_Precedence(t *testing.T) {
 
 	cases := []struct {
 		name          string
-		gitHubAPIURL  string               // GITHUB_API_URL env value ("" = not set)
-		customMatcher func(string) bool    // nil = don't call WithGitHubHostMatcher
-		requestURL    string               // HTTPS URL to test
-		wantAuth      bool                 // whether Authorization should be injected
+		gitHubAPIURL  string            // GITHUB_API_URL env value ("" = not set)
+		customMatcher func(string) bool // nil = don't call WithGitHubHostMatcher
+		requestURL    string            // HTTPS URL to test
+		wantAuth      bool              // whether Authorization should be injected
 	}{
 		// ── Level 3: built-in allowlist ──────────────────────────────────────────
 		{
-			name:         "builtin_api_github_com",
-			requestURL:   "https://api.github.com/repos",
-			wantAuth:     true,
+			name:       "builtin_api_github_com",
+			requestURL: "https://api.github.com/repos",
+			wantAuth:   true,
 		},
 		{
-			name:         "builtin_raw_githubusercontent_com",
-			requestURL:   "https://raw.githubusercontent.com/owner/repo/main/file.go",
-			wantAuth:     true,
+			name:       "builtin_raw_githubusercontent_com",
+			requestURL: "https://raw.githubusercontent.com/owner/repo/main/file.go",
+			wantAuth:   true,
 		},
 		{
-			name:         "builtin_uploads_github_com",
-			requestURL:   "https://uploads.github.com/releases/assets",
-			wantAuth:     true,
+			name:       "builtin_uploads_github_com",
+			requestURL: "https://uploads.github.com/releases/assets",
+			wantAuth:   true,
 		},
 		{
-			name:         "builtin_negative_example_com",
-			requestURL:   "https://example.com/api",
-			wantAuth:     false,
+			name:       "builtin_negative_example_com",
+			requestURL: "https://example.com/api",
+			wantAuth:   false,
 		},
 		{
-			name:         "builtin_negative_github_example_com",
-			requestURL:   "https://github.example.com/api",
-			wantAuth:     false,
+			name:       "builtin_negative_github_example_com",
+			requestURL: "https://github.example.com/api",
+			wantAuth:   false,
 		},
 		// ── Level 2: GITHUB_API_URL overrides the default allowlist ──────────────
 		{
@@ -993,7 +993,7 @@ func TestWithGitHubHostMatcher_Precedence(t *testing.T) {
 		},
 		{
 			// Custom matcher replaces the default allowlist too.
-			name:         "custom_matcher_overrides_builtin_allowlist",
+			name: "custom_matcher_overrides_builtin_allowlist",
 			customMatcher: func(host string) bool {
 				return host == "custom-git.example.com"
 			},
