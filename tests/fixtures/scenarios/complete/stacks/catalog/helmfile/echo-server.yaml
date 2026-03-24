@@ -3,5 +3,7 @@
 components:
   helmfile:
     echo-server:
+      metadata:
+        description: "Echo server helmfile component for testing."
       vars:
         installed: true

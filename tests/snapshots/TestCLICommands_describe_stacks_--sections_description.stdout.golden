@@ -1,0 +1,12 @@
+{
+  "dev-uw2": {
+    "components": {
+      "terraform": {
+        "vpc": {
+          "description": "VPC mock component for testing."
+        }
+      }
+    },
+    "description": "Development UW2 stack without explicit name."
+  }
+}

@@ -92,6 +92,10 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	// not "imports", but keeping reads before mutations avoids implicit ordering assumptions.
 	stackManifestName := getStackManifestName(stackMap)
 
+	// Extract stack-level description from the top-level "description" key.
+	// ProcessStackConfig already promotes metadata.description to the top level of the result map.
+	stackDescription, _ := stackMap[cfg.DescriptionSectionName].(string)
+
 	// Delete the stack-wide imports section (not needed in output).
 	delete(stackMap, "imports")
 

@@ -433,3 +433,30 @@ tests:
     expect:
       diff: []
       exit_code: 0
+
+  - name: describe stacks --sections description
+    enabled: true
+    snapshot: true
+    description: "Verify that --sections description returns only the description fields for stacks and components"
+    workdir: "fixtures/scenarios/stack-manifest-name-pattern"
+    command: "atmos"
+    args:
+      - "describe"
+      - "stacks"
+      - "--stack"
+      - "dev-uw2"
+      - "--sections"
+      - "description"
+      - "--format"
+      - "json"
+    expect:
+      diff: []
+      valid:
+        - "json"
+      stdout:
+        - '"dev-uw2"'
+        - '"description"'
+        - '"Development UW2 stack without explicit name\."'
+        - '"vpc"'
+        - '"VPC mock component for testing\."'
+      exit_code: 0

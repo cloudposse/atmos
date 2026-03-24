@@ -3,5 +3,6 @@ components:
     vpc:
       metadata:
         component: mock
+        description: "VPC mock component for testing."
       vars:
         enabled: true

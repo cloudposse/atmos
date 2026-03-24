@@ -473,6 +473,39 @@ func TestDescribeStacksComponentDescription(t *testing.T) {
 	assert.Equal(t, "Top-level component for testing Atmos stack configuration.", description)
 }
 
+// TestDescribeStacksHelmfileComponentDescription verifies that the description field on a
+// helmfile component is included in the describe stacks output.
+func TestDescribeStacksHelmfileComponentDescription(t *testing.T) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	assert.Nil(t, err)
+
+	stack := "tenant1-ue2-dev"
+	components := []string{"echo-server"}
+	componentTypes := []string{"helmfile"}
+
+	stacks, err := ExecuteDescribeStacks(atmosConfig, stack, components, componentTypes, nil, false, false)
+	assert.Nil(t, err)
+	assert.NotNil(t, stacks)
+
+	stackMap, ok := stacks[stack].(map[string]any)
+	assert.True(t, ok, "stack entry should be a map")
+
+	componentsMap, ok := stackMap["components"].(map[string]any)
+	assert.True(t, ok, "stack should have components section")
+
+	helmfileMap, ok := componentsMap["helmfile"].(map[string]any)
+	assert.True(t, ok, "components should have helmfile section")
+
+	component, ok := helmfileMap["echo-server"].(map[string]any)
+	assert.True(t, ok, "helmfile should have echo-server")
+
+	description, ok := component["description"].(string)
+	assert.True(t, ok, "helmfile component should have description field")
+	assert.Equal(t, "Echo server helmfile component for testing.", description)
+}
+
 // TestDescribeStacksStackDescription verifies that the description field at the stack level
 // is included in the describe stacks output.
 func TestDescribeStacksStackDescription(t *testing.T) {
@@ -540,7 +573,7 @@ func TestDescribeStacksDescriptionSectionFilter(t *testing.T) {
 }
 
 // TestDescribeStacksNoDescriptionField verifies that components without a description field
-// don't have the description field in the output when it's empty and includeEmpty is false.
+// don't have the description key in the output at all.
 func TestDescribeStacksNoDescriptionField(t *testing.T) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
@@ -570,9 +603,7 @@ func TestDescribeStacksNoDescriptionField(t *testing.T) {
 	component, ok := terraformMap["test/test-component"].(map[string]any)
 	assert.True(t, ok, "terraform should have test/test-component")
 
-	// test/test-component has no description field - it should not appear as a non-empty string.
-	desc := component["description"]
-	if descStr, ok := desc.(string); ok {
-		assert.Empty(t, descStr, "description should be empty if not set in YAML")
-	}
+	// test/test-component has no metadata.description — the key must be absent entirely.
+	_, exists := component["description"]
+	assert.False(t, exists, "description key should be absent for component without metadata.description")
 }
