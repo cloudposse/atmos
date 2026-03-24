@@ -353,7 +353,7 @@ Overlay injection into the workdir is performed atomically to prevent partial in
 2. Once all files are staged successfully, the staged files are **moved** as a batch into the workdir.
 3. If any staging failure occurs (e.g., file read error, HCL validation failure, disk full), the staging directory is removed and the workdir is **not modified**. **Atmos aborts with a non-zero exit code**, printing the name of the failed file and the reason. The terraform execution **does not proceed**. Silent skipping is explicitly prohibited: for `import {}` and `removed {}` migration use cases, silently skipping an overlay would mean terraform runs without the required migration blocks, potentially leaving state inconsistent or re-importing already-managed resources.
 
-This ensures the workdir is never left in a partially-injected state, and operators are never surprised by a terraform run that was missing its required overlays.
+This ensures the workdir is never left in a partially-injected state, and operators are never surprised by a terraform run that was missing its required overlays. The overlay cleanup defer is registered immediately after injection completes — before terraform init is invoked — ensuring cleanup fires on any exit path including auto-backend provisioning failure within terraform init.
 
 ---
 
@@ -670,7 +670,7 @@ The sidecar file is written to `<planfile>.overlays.json` adjacent to the saved 
 }
 ```
 
-- `overlays_hash`: SHA-256 of the concatenation of all per-file `sha256` values (sorted by `name` for stability). This is the value compared at apply time.
+- `overlays_hash`: SHA-256 of the newline-joined `<name>:<sha256>` pairs (sorted by `name` for stability, one pair per line, no trailing newline). This is the value compared at apply time.
 - `overlays[].sha256`: SHA-256 of the file content at plan time.
 - If no overlays are present at plan time, `overlays` is an empty array and `overlays_hash` is the SHA-256 of an empty string.
 
@@ -772,6 +772,18 @@ INFO  overlay cleanup  overlay_name=compliance-tags.tf  event=cleanup  stack=pro
 
 These log entries allow operators to audit which overlays were injected for each execution, correlate overlay injection with terraform plan/apply outcomes, and detect unexpected overlay presence or absence in CI logs.
 
+### Secrets Masking
+
+Overlay file content that is emitted in log output **must** pass through Atmos's secrets masking pipeline before being written to any log sink. This is a mandatory requirement — not a best-effort measure — because `inline content:` blocks in YAML overlays may embed resource IDs or attribute values derived from sensitive stack variables (e.g., account IDs, ARNs, resource names built from secret prefixes).
+
+| Log level | Content emitted | Masking applied |
+|---|---|---|
+| `INFO` | Event fields only (file name, source type, source path, stack, component) | Not applicable — no file content emitted |
+| `DEBUG` | File name + first 256 bytes of file content (for diagnosability) | **Required** — content passes through the Gitleaks masking pipeline before output |
+| `TRACE` | Full raw file content | Masking disabled at this level; operators opting in to `TRACE` accept the risk of secret exposure in logs |
+
+The masking pipeline is the same one applied to terraform output and is configured via `ATMOS_LOGS_LEVEL` and the existing `--mask` / `--no-mask` flags. Inline `content:` values printed at `DEBUG` are subject to masking; full raw content is only accessible at `TRACE` when masking is explicitly disabled.
+
 - No breaking changes. Existing components without an `overlays/` directory behave identically.
 - The `overlays` YAML key is new and ignored by older versions of Atmos.
 - Convention-based detection is purely additive — no configuration required to opt in.
@@ -833,6 +845,19 @@ The [Code Generation PRD](code-generation.md) proposes a `generate:` section tha
 | Hash comparison for `--from-plan` | Not applicable | Required |
 
 `generate:` is the right tool for files that should always be present (e.g., a rendered `backend.tf`). `overlays:` is the right tool for ephemeral, one-time state operations that should not persist in the working directory.
+
+**Concrete failure scenario with `generate:`:**
+
+```
+# Step 1 — first apply with generate: writes import.tf
+atmos terraform apply vpc -s prod-us-east-1   # import.tf written → terraform apply succeeds
+                                               # import.tf persists in workdir after apply
+
+# Step 2 — next apply re-generates import.tf (same import block is still there)
+atmos terraform apply vpc -s prod-us-east-1   # Error: Resource already managed by Terraform
+```
+
+With `overlays:`, the inject → apply → cleanup cycle means the import block is gone after the first successful apply, so the second apply succeeds cleanly.
 
 ### Alternative 7: Atmos Custom Commands (Structured Tasks)
 
