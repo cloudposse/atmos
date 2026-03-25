@@ -556,6 +556,7 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
+	tests.RequireTerraform(t)
 	workDir := "../../tests/fixtures/scenarios/atmos-pro"
 	t.Chdir(workDir)
 
