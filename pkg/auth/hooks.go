@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -25,7 +26,10 @@ type (
 	Validator       = types.Validator
 )
 
-const hookOpTerraformPreHook = "TerraformPreHook"
+const (
+	hookOpTerraformPreHook = "TerraformPreHook"
+	identityKey            = "identity"
+)
 
 // TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
@@ -86,20 +90,24 @@ func decodeAuthConfigFromStack(stackInfo *schema.ConfigAndStacksInfo) (schema.Au
 }
 
 func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManager types.AuthManager) (string, error) {
+	// CLI --identity flag takes precedence.
 	if stackInfo.Identity != "" {
 		return stackInfo.Identity, nil
 	}
-	// Hooks don't have CLI flags, so never force selection here.
+
+	// Default identity from config is primary when available.
 	name, err := authManager.GetDefaultIdentity(false)
-	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, hookOpTerraformPreHook, "failed to get default identity")
-		return "", errUtils.ErrDefaultIdentity
+	if err == nil && name != "" {
+		return name, nil
 	}
-	if name == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
-		return "", errUtils.ErrNoDefaultIdentity
+	if err != nil && !errors.Is(err, errUtils.ErrNoDefaultIdentity) {
+		return "", err
 	}
-	return name, nil
+
+	// No default identity found — error out.
+	// The "required" field is about auto-authentication, not primary selection.
+	errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
+	return "", errUtils.ErrNoDefaultIdentity
 }
 
 // isAuthenticationDisabled checks if authentication has been explicitly disabled.
@@ -114,6 +122,10 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)
 	}
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
+
+	// Authenticate additional required identities so their profiles exist in the shared credentials file.
+	// This is needed for Terraform components that use multiple AWS provider aliases.
+	authenticateAdditionalIdentities(ctx, authManager, identityName)
 
 	// Convert ComponentEnvSection to env list for PrepareShellEnvironment.
 	// This includes any component-specific env vars already set in the stack config.
@@ -142,6 +154,31 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 		return fmt.Errorf("failed to print component env section: %w", err)
 	}
 	return nil
+}
+
+// authenticateAdditionalIdentities authenticates non-primary identities marked as required.
+// Failures are non-fatal: errors are logged as warnings but don't fail the hook.
+// This ensures all required profiles exist in the shared credentials file for Terraform
+// components that use multiple AWS provider aliases (e.g., hub-spoke networking).
+//
+// TODO: Azure credentials are keyed by provider name, not identity. If two identities
+// share the same Azure provider name, the second will overwrite the first. AWS merges
+// profiles into INI sections and GCP isolates by directory, so they handle this correctly.
+// Consider adopting a per-identity storage strategy for Azure if multi-identity Azure
+// support becomes a requirement.
+func authenticateAdditionalIdentities(ctx context.Context, authManager types.AuthManager,
+	primaryIdentity string,
+) {
+	for name, identity := range authManager.GetIdentities() {
+		if !identity.Required || strings.EqualFold(name, primaryIdentity) {
+			continue
+		}
+		log.Debug("Authenticating additional required identity", identityKey, name)
+		if _, err := authManager.Authenticate(ctx, name); err != nil {
+			log.Warn("Failed to authenticate additional identity (non-fatal)",
+				identityKey, name, "error", err)
+		}
+	}
 }
 
 // componentEnvSectionToList converts ComponentEnvSection map to environment variable list.

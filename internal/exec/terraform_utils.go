@@ -95,6 +95,50 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	}
 }
 
+// isTerraformCurrentWorkspace reports whether the given workspace name matches the workspace
+// recorded in the .terraform/environment file inside componentPath.
+// This is used to detect the edge case where the environment file already names the target
+// workspace but the corresponding state directory was deleted (e.g. by a previous test or a
+// partial cleanup on Windows).  In that scenario `terraform workspace new <name>` returns exit
+// code 1 even though we are already in the right workspace, so we should not treat the failure
+// as a fatal error.
+//
+// TF_DATA_DIR resolution: the envList parameter carries the subprocess env vars (typically
+// info.ComponentEnvList).  If TF_DATA_DIR is set there, it takes precedence over the parent
+// process env, ensuring this helper reads the same data directory that the terraform subprocess
+// would use.  A relative TF_DATA_DIR is joined to componentPath, matching Terraform's own
+// resolution relative to the process working directory.
+func isTerraformCurrentWorkspace(componentPath, workspace string, envList []string) bool {
+	tfDataDir := envVarFromList(envList, "TF_DATA_DIR")
+	if tfDataDir == "" {
+		//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos config var.
+		tfDataDir = os.Getenv("TF_DATA_DIR")
+	}
+	if tfDataDir == "" {
+		tfDataDir = ".terraform"
+	}
+	if !filepath.IsAbs(tfDataDir) {
+		tfDataDir = filepath.Join(componentPath, tfDataDir)
+	}
+	envFile := filepath.Join(filepath.Clean(tfDataDir), "environment")
+	data, err := os.ReadFile(envFile) //nolint:gosec // Path is constructed from componentPath + TF_DATA_DIR, not user input.
+	if err != nil {
+		// Only treat a missing file as "default workspace active".
+		// Other errors (permission denied, I/O error) are not equivalent
+		// to the workspace being "default" and must return false.
+		if errors.Is(err, os.ErrNotExist) && workspace == "default" {
+			return true
+		}
+		return false
+	}
+	// An empty file also indicates the default workspace.
+	recorded := strings.TrimSpace(string(data))
+	if recorded == "" {
+		return workspace == "default"
+	}
+	return recorded == workspace
+}
+
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Auto-generate backend file
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
@@ -228,12 +272,14 @@ func walkTerraformComponents(
 
 // processTerraformComponent performs filtering and execution logic for a single Terraform component.
 // Returns true if the component was processed (passed all filters), false otherwise.
+// The executeFn parameter allows callers to inject a custom executor (used for testing without gomonkey).
 func processTerraformComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	stackName, componentName string,
 	componentSection map[string]any,
 	logFunc func(msg any, keyvals ...any),
+	executeFn func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error,
 ) (bool, error) {
 	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
@@ -277,7 +323,7 @@ func processTerraformComponent(
 	info.Stack = stackName
 	info.StackFromArg = stackName
 
-	if err := ExecuteTerraform(*info); err != nil {
+	if err := executeFn(*info); err != nil {
 		return true, err
 	}
 

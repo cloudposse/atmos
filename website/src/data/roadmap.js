@@ -141,6 +141,18 @@ export const roadmapConfig = {
       pr: 1891,
       prd: 'native-ci-integration',
     },
+    {
+      id: 'instance-status-upload',
+      icon: 'RiUploadCloudLine',
+      title: 'Push Instance Status to Atmos Pro',
+      tagline: 'Raw exit codes, server-side interpretation',
+      description: 'CLI sends raw command and exit code to Atmos Pro after plan and apply. Includes configurable CI exit code mapping so detailed-exitcode does not break workflows.',
+      benefits: 'Instance status updates in real-time without waiting for webhooks. Status logic evolves server-side without CLI releases.',
+      status: 'shipped',
+      quarter: 'q1-2026',
+      pr: 2216,
+      changelog: 'instance-status-upload',
+    },
   ],
 
   initiatives: [
@@ -151,7 +163,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 88,
+      progress: 89,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.', category: 'featured', priority: 'high' },
@@ -169,8 +181,8 @@ export const roadmapConfig = {
         { label: 'Zero-config AWS SSO identity management', status: 'shipped', quarter: 'q4-2025', changelog: 'aws-sso-identity-auto-provisioning', version: 'v1.200.0', description: 'Automatic SSO identity provisioning without manual configuration—Atmos detects and configures SSO settings.', benefits: 'Get started with AWS SSO instantly. No manual identity configuration required.', experimental: true, category: 'featured', priority: 'high' },
         { label: 'Identity flag for describe commands', status: 'shipped', quarter: 'q4-2025', changelog: 'describe-commands-identity-flag', version: 'v1.197.0', description: 'Use --identity flag with describe commands to see configuration as it would appear under a specific identity.', benefits: 'Debug identity-specific configurations without switching credentials.' },
         { label: 'Seamless first login with provider fallback', status: 'shipped', quarter: 'q4-2025', pr: 1918, changelog: 'auth-login-provider-fallback', description: 'Automatic provider fallback when no identities are configured, enabling seamless first-time login with auto_provision_identities.', benefits: 'Just run atmos auth login on first use. No need to know about --provider flag.' },
-        { label: 'Automatic EKS kubeconfig tied to identities', status: 'in-progress', quarter: 'q4-2025', pr: 1903, changelog: 'helmfile-eks-modernization', description: 'Automatic kubeconfig generation for EKS clusters using Atmos-managed AWS credentials with flexible cluster name configuration.', benefits: 'No aws eks update-kubeconfig commands. Kubectl works immediately after Atmos auth.' },
-        { label: 'Flexible EKS cluster name configuration', status: 'in-progress', quarter: 'q4-2025', pr: 1903, changelog: 'helmfile-eks-modernization', description: 'Four-level precedence for EKS cluster names: --cluster-name flag, cluster_name config, cluster_name_template (Go templates), or legacy cluster_name_pattern. EKS integration is now opt-in with use_eks setting.', benefits: 'Use Go templates for dynamic cluster names. Non-EKS Kubernetes clusters work without EKS configuration.' },
+        { label: 'Automatic EKS kubeconfig tied to identities', status: 'shipped', quarter: 'q1-2026', pr: 2149, changelog: 'eks-kubeconfig-authentication', docs: '/tutorials/eks-kubeconfig-authentication', description: 'Automatic kubeconfig generation for EKS clusters using Atmos-managed AWS credentials. Integrations link clusters to identities for auto-provisioning on login.', benefits: 'No aws eks update-kubeconfig commands. Kubectl works immediately after Atmos auth login.', category: 'featured', priority: 'high' },
+        { label: 'EKS exec credential plugin (atmos aws eks token)', status: 'shipped', quarter: 'q1-2026', pr: 2149, changelog: 'eks-kubeconfig-authentication', docs: '/cli/commands/aws/eks-token', description: 'Short-lived EKS token generation via STS pre-signed URLs without the AWS CLI. Automatically called by kubectl.', benefits: 'kubectl authentication is seamless. Tokens refresh automatically without manual intervention.' },
         { label: 'Automatic ECR authentication tied to identities', status: 'shipped', quarter: 'q4-2025', pr: 1859, docs: '/tutorials/ecr-authentication', changelog: 'ecr-authentication-integration', description: 'Native ECR login for container image operations without external tooling.', benefits: 'Docker push/pull to ECR works without aws ecr get-login-password or external credential helpers.', category: 'featured', priority: 'high' },
         { label: 'AWS_REGION and AWS_DEFAULT_REGION export from `atmos auth env`', status: 'shipped', quarter: 'q1-2026', pr: 1955, docs: '/cli/commands/auth/env', changelog: 'auth-env-region-export', description: 'Export AWS_REGION and AWS_DEFAULT_REGION environment variables from atmos auth env when region is configured in the identity.', benefits: 'External tools like Terraform and AWS CLI automatically use the correct region without additional configuration.' },
         { label: 'GCP Authentication Support', status: 'shipped', quarter: 'q1-2026', changelog: 'gcp-authentication-support', pr: 2051, description: 'Google Cloud authentication with ADC, Workload Identity Federation, and service account impersonation.', benefits: 'GCP deployments use the same auth workflows as AWS and Azure, with provider-scoped credential isolation.' },
@@ -179,6 +191,8 @@ export const roadmapConfig = {
         { label: 'Native Okta Authentication (Device Code Flow)', status: 'planned', quarter: 'q1-2026', prd: 'okta-auth-identity', description: 'Native Okta authentication using OAuth 2.0 Device Authorization Grant. Enables Okta as a central IdP for AWS, Azure, and GCP federation, plus direct Okta API access for Terraform.', benefits: 'Use Okta as your single identity hub. Authenticate once with Okta and federate to any cloud. No browser automation or SAML complexity.' },
         { label: 'Support for `atmos auth` with GitHub Apps', status: 'planned', quarter: 'q1-2026', pr: 1683, description: 'GitHub App authentication for fine-grained repository access and elevated rate limits.', benefits: 'Higher API rate limits and granular permissions for automation that interacts with GitHub.' },
         { label: 'Identity selection for stores', status: 'shipped', quarter: 'q1-2026', pr: 2099, changelog: 'store-identity-support', description: 'Stores can authenticate using atmos auth identities instead of default credential chains.', benefits: 'Use the same identity system for stores as for Terraform. No separate credential management for secrets access.' },
+        { label: 'Required identities for multi-account components', status: 'shipped', quarter: 'q1-2026', changelog: 'auth-required-concurrent-identities', description: 'Identities marked required: true are automatically authenticated without prompting. The default identity stays primary; required non-default identities are authenticated as secondary and written to the shared credentials file.', benefits: 'Multi-account Terraform patterns with provider aliases work in CI with OIDC. No manual credential setup for hub-spoke networking or cross-account deployments.' },
+        { label: 'Isolated browser sessions for multi-account console access', status: 'shipped', quarter: 'q1-2026', pr: 2229, changelog: 'auth-console-isolated-sessions', prd: 'auth-console-isolated-sessions', description: 'Open multiple cloud provider consoles simultaneously in isolated Chrome browser contexts, one per identity, without logout conflicts.', benefits: 'Work in multiple AWS accounts at the same time. No more logging out to switch between consoles.' },
       ],
       issues: [],
       prs: [
@@ -187,6 +201,7 @@ export const roadmapConfig = {
         { number: 1884, title: 'Add EKS kubeconfig authentication integration PRD' },
         { number: 1887, title: 'Browser-based authentication for aws/user' },
         { number: 1683, title: 'Update auth docs and implement GitHub providers' },
+        { number: 2229, title: 'Isolated browser sessions for multi-account console access' },
       ],
     },
     {
@@ -196,9 +211,10 @@ export const roadmapConfig = {
       tagline: 'Sane defaults, full configurability',
       description:
         'Too many parameters, too much configuration. Everything should just work out of the box while remaining fully customizable.',
-      progress: 90,
+      progress: 91,
       status: 'in-progress',
       milestones: [
+        { label: 'Global `ignore_missing_template_values` for stack imports', status: 'shipped', quarter: 'q1-2026', changelog: 'global-ignore-missing-template-values', docs: '/cli/configuration/templates', description: 'Set `templates.settings.ignore_missing_template_values: true` in `atmos.yaml` once to apply globally, instead of annotating every catalog import individually.', benefits: 'Teams with hundreds of catalog imports no longer need to annotate each one. One-line change in atmos.yaml applies the setting project-wide.' },
         { label: 'Zero-config terminal output (auto TTY/color)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/terminal', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Terminal output adapts automatically to your environment—colors when interactive, clean text when piping. Works identically in CI and locally without configuration.', benefits: 'No terminal configuration needed. Output is readable regardless of where commands run—locally, in CI, or piped to files.' },
         { label: 'Force flags (`--force-tty`, `--force-color`)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/global-flags', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Override auto-detection for CI environments or screenshot generation with explicit TTY and color control.', benefits: 'Generate consistent screenshots for documentation or force colors in CI environments that support them.' },
         { label: 'Auto-degradation (TrueColor→256→16→None)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/terminal', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Graceful color fallback from 16 million colors to 256 to 16 to plain text based on terminal support.', benefits: 'Output looks good on any terminal—from modern iTerm2 to legacy xterm to CI logs.' },
@@ -267,8 +283,8 @@ export const roadmapConfig = {
       tagline: 'Bootstrap systems and create reusable patterns',
       description:
         'Bootstrapping new environments and repeating complex multi-step operations manually is error-prone and time-consuming. Workflows encode these patterns once and execute them reliably across teams and environments.',
-      progress: 100,
-      status: 'shipped',
+      progress: 86,
+      status: 'in-progress',
       milestones: [
         { label: 'New workflow step types (show, sleep, stage, alert, etc.)', status: 'in-progress', quarter: 'q1-2026', docs: '/cli/configuration/workflows', description: 'Rich step types including message display, timed delays, user prompts, and alert notifications.', category: 'featured', priority: 'high', benefits: 'Build interactive deployment workflows with user confirmations and status updates.' },
         { label: 'New interactive input types for workflow steps', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', description: 'Typed inputs for workflow steps with validation—strings, numbers, booleans, and selections.', category: 'featured', priority: 'high', benefits: 'Inputs are validated before execution starts. Bad values are caught early, not mid-deployment.' },
@@ -292,7 +308,7 @@ export const roadmapConfig = {
       tagline: 'Truly extensible architecture',
       description:
         'Modern infrastructure spans Terraform, Kubernetes, serverless, and custom tooling. A single orchestration layer should manage all of it consistently, not just a subset.',
-      progress: 89,
+      progress: 86,
       status: 'in-progress',
       milestones: [
         { label: 'Custom commands support interactive step types', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/commands', description: 'Define your own command types beyond Terraform and Helmfile—shell scripts, Ansible, Pulumi, and more.', category: 'featured', priority: 'high', benefits: 'Extend Atmos to orchestrate any tool. Your entire toolchain speaks the same language.' },
@@ -317,6 +333,8 @@ export const roadmapConfig = {
         { label: 'Boolean flags with defaults for custom commands', status: 'shipped', quarter: 'q4-2025', changelog: 'custom-command-boolean-flags', version: 'v1.201.0', description: 'Custom commands now support boolean flags with configurable default values.', benefits: 'Create intuitive CLI flags for custom commands. Defaults reduce repetitive typing.' },
         { label: 'Added `!unset` YAML function', status: 'planned', quarter: 'q1-2026', pr: 1521, description: 'Delete keys from inherited configuration for clean overrides.', codeExample: 'deprecated_setting: !unset', benefits: 'Remove inherited values without workarounds. Clean up configuration by exception.' },
         { label: 'Added `!append` YAML function', status: 'planned', quarter: 'q1-2026', pr: 1513, description: 'Append items to inherited lists instead of replacing them.', codeExample: 'extra_tags: !append [new-tag]', benefits: 'Add to inherited lists without copying the full list. Simpler inheritance for array values.' },
+        { label: 'Structured component dependencies (`dependencies.components`)', status: 'shipped', quarter: 'q4-2025', docs: '/stacks/dependencies/components', changelog: 'dependencies-components', description: 'New dependencies.components format with kind field for cross-type dependencies, file/folder path dependencies, and inheritance with append merge.', benefits: 'Explicit dependency declarations with support for terraform, helmfile, packer, and file/folder dependencies.' },
+        { label: 'Automatic dependency detection from YAML functions', status: 'planned', quarter: 'q1-2026', description: 'Automatically detect component dependencies from !terraform.output and !terraform.state YAML functions. No explicit dependencies.components configuration needed for cross-component data flows.', benefits: 'Dependencies are inferred from actual usage. No manual maintenance of dependency lists.' },
       ],
       issues: [],
       prs: [
@@ -332,7 +350,7 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 95,
+      progress: 91,
       status: 'in-progress',
       milestones: [
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
@@ -384,7 +402,7 @@ export const roadmapConfig = {
       tagline: 'Familiar concepts for Terragrunt users',
       description:
         'Users migrating from Terragrunt expect code generation, backend provisioning for cold-start scenarios, and other familiar patterns.',
-      progress: 85,
+      progress: 83,
       status: 'in-progress',
       milestones: [
         { label: 'File-scoped locals', status: 'shipped', quarter: 'q4-2025', docs: '/stacks/locals', changelog: 'file-scoped-locals', version: 'v1.202.0', description: 'Define local variables at the file level for DRY configuration—familiar to Terragrunt users.', category: 'featured', priority: 'high', benefits: 'Avoid repetition with local variables. Terragrunt users can apply the same patterns they know.', experimental: true },
@@ -415,8 +433,8 @@ export const roadmapConfig = {
       title: 'Code Quality and Test Coverage',
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
-        '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. Embracing AI-assisted development while maintaining high standards.',
-      progress: 88,
+        '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. In 2026, critical high-complexity functions are being refactored with 100% coverage. Embracing AI-assisted development while maintaining high standards.',
+      progress: 86,
       status: 'in-progress',
       milestones: [
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Test coverage improved from less than 20% to 74% over the course of 2025.', category: 'featured', priority: 'high', benefits: 'Fewer regressions reach users. Changes can be made confidently knowing tests catch issues.' },
@@ -429,6 +447,11 @@ export const roadmapConfig = {
         { label: 'Terraform command registry', status: 'in-progress', quarter: 'q4-2025', pr: 1891, changelog: 'terraform-command-registry-pattern', description: 'Centralized Terraform command configuration for consistent behavior across CI and local.', benefits: 'Terraform commands behave identically everywhere. CI matches local exactly.' },
         { label: 'Multiple terraform output formats', status: 'shipped', quarter: 'q4-2025', description: 'Export terraform outputs in multiple formats (JSON, YAML, HCL, env, dotenv, bash, CSV, TSV) with options for uppercase keys and nested value flattening.', benefits: 'Integrate terraform outputs directly into CI workflows. Export to GitHub Actions env format, source as bash exports, or pipe as CSV without jq gymnastics.' },
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.', category: 'featured', priority: 'high', benefits: 'Even more confidence in changes. Edge cases are covered before users hit them.' },
+        { label: '3.5× faster deep merge (hot-path)', status: 'shipped', quarter: 'q1-2026', pr: 2201, changelog: 'faster-deep-merge', description: 'Replace the reflection-based mergo pre-copy loop with a single-pass, reflection-free native merge for the hot path. Reduces N full pre-copies per merge to 1 and eliminates mergo reflection overhead. Note: mergo is still used in merge_yaml_functions.go and devcontainer/config_loader.go — full removal is tracked separately.', benefits: 'Faster atmos describe component, terraform plan, apply, and any command that reads stacks. Impact scales with stack depth and import chain length.' },
+        { label: 'Migrate remaining mergo call-sites; drop mergo', status: 'in-progress', quarter: 'q2-2026', issue: 2242, description: 'Migrate merge_yaml_functions.go and devcontainer/config_loader.go from dario.cat/mergo to the native deep-merge. Once complete, remove the mergo dependency entirely.', benefits: 'Fully reflection-free merge path. Simpler dependency tree and one fewer transitive vulnerability surface.' },
+        { label: 'processArgsAndFlags refactored: 100% coverage', status: 'shipped', quarter: 'q1-2026', pr: 2225, changelog: 'process-args-flags-refactor', description: 'The highest-cyclomatic-complexity function refactored using a table-driven DRY pattern (26 flag definitions in a single table). All helper functions — parseFlagValue, parseIdentityFlag, parseFromPlanFlag — achieve 100% unit test coverage.', benefits: 'Flag parsing is now fully tested and maintainable. Adding a new CLI flag is a single table entry instead of 7-8 lines of copy-paste code.' },
+        { label: 'Refactor ExecuteTerraform (cyclomatic complexity 160→26)', status: 'shipped', quarter: 'q1-2026', pr: 2226, changelog: 'refactoring-executeterraform-for-testability', category: 'featured', description: 'Extracted 26 focused helper functions from the ExecuteTerraform monolith, reducing cyclomatic complexity from 160 to 26 and adding 100+ unit tests with zero infrastructure required.', benefits: 'Safer changes to the core terraform execution pipeline. Bugs in auth, workspace, or plan-file handling are caught by pure unit tests before they reach users.' },
+        { label: 'Reduce ExecuteDescribeStacks complexity 98%', status: 'shipped', quarter: 'q1-2026', pr: 2204, changelog: 'describe-stacks-complexity-reduction', description: 'Broke down ExecuteDescribeStacks (cyclomatic 247 → 10, cognitive 1252 → 22) into 19 focused helper functions with 47 unit tests at 100% coverage for all pure helpers.', benefits: 'Easier to read, test, and extend the core stack processing pipeline. New component types can be added in one line.' },
       ],
       issues: [],
       prs: [],
@@ -464,7 +487,7 @@ export const roadmapConfig = {
       tagline: 'AI-powered infrastructure management',
       description:
         'An intelligent assistant built directly into Atmos CLI that understands your infrastructure-as-code. Unlike general-purpose AI assistants, Atmos AI has deep understanding of Atmos stacks, components, inheritance patterns, and infrastructure workflows.',
-      progress: 90,
+      progress: 94,
       status: 'in-progress',
       milestones: [
         { label: 'Multi-provider AI support (7 providers)', status: 'shipped', quarter: 'q1-2026', docs: '/ai/providers', changelog: 'introducing-atmos-ai', description: 'Support for Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok, Ollama (local), AWS Bedrock, and Azure OpenAI.', benefits: 'Choose the right AI for your needs—cloud, local, or enterprise. Switch providers mid-conversation.' },
@@ -483,6 +506,7 @@ export const roadmapConfig = {
         { label: 'Automatic context discovery', status: 'shipped', quarter: 'q1-2026', docs: '/ai', changelog: 'introducing-atmos-ai', description: 'Intelligent file discovery using glob patterns with gitignore filtering and caching.', benefits: 'AI automatically finds relevant files. Better responses without manual file selection.' },
         { label: 'CI/CD integration via atmos ai exec', status: 'shipped', quarter: 'q1-2026', docs: '/ai', changelog: 'introducing-atmos-ai', description: 'CI/CD integration via atmos ai exec command for automated PR reviews, security scans, and cost analysis.', benefits: 'Automated AI-powered PR reviews. Security scanning in CI/CD pipelines.' },
         { label: 'AI example with documentation', status: 'shipped', quarter: 'q1-2026', changelog: 'introducing-atmos-ai', description: 'Complete example in examples/ai/ demonstrating all AI features with inline documentation links.', benefits: 'Learn AI features from working examples. Quick start for new users.' },
+        { label: 'Global `--ai` flag for AI-powered command analysis', status: 'shipped', quarter: 'q1-2026', docs: '/cli/global-flags', changelog: 'ai-powered-analysis-with-global-ai-flag', description: 'Add --ai to any Atmos command to get instant AI-powered analysis of output. Errors get explained with fixes, successful plans get summarized.', benefits: 'Zero-friction AI integration—just add --ai to any command. No workflow changes required.', category: 'featured', priority: 'high' },
         { label: 'Agent marketplace', status: 'planned', quarter: 'q2-2026', docs: '/ai/agent-marketplace', description: 'Install community-created specialized agents from GitHub repositories.', benefits: 'Extend AI capabilities with community agents. Share agents across teams.' },
       ],
       issues: [],
