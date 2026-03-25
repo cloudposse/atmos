@@ -219,7 +219,7 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return err
 	}
 
-	return ExecuteShellCommand(
+	newErr := ExecuteShellCommand(
 		*atmosConfig,
 		info.Command,
 		[]string{"workspace", "new", info.TerraformWorkspace},
@@ -228,6 +228,20 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		info.DryRun,
 		info.RedirectStdErr,
 	)
+	if newErr == nil {
+		return nil
+	}
+	// If `workspace new` also fails with exit code 1, the workspace may already be the
+	// active workspace (the .terraform/environment file names it) but its state directory
+	// was deleted.  In that case we are already in the correct workspace and can proceed.
+	var newExitCodeErr errUtils.ExitCodeError
+	if errors.As(newErr, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
+		isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace, info.ComponentEnvList) {
+		log.Warn("Workspace is already active but its state directory is missing; proceeding — subsequent terraform commands may report missing state",
+			"workspace", info.TerraformWorkspace)
+		return nil
+	}
+	return newErr
 }
 
 // checkTTYRequirement returns an error when `terraform apply` is invoked without
