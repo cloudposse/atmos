@@ -1,12 +1,16 @@
 package pro
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
@@ -147,4 +151,84 @@ func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
 	err := client.UploadAffectedStacks(&dto)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAuthRequest)
+}
+
+func TestUploadAffectedStacks_Chunked(t *testing.T) {
+	var requestCount atomic.Int32
+	var receivedBodies []dtos.UploadAffectedStacksRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		var req dtos.UploadAffectedStacksRequest
+		require.NoError(t, json.Unmarshal(body, &req))
+		receivedBodies = append(receivedBodies, req)
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"success": true}`))
+	}))
+	defer server.Close()
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
+	}
+
+	// Create a large payload that exceeds DefaultMaxPayloadBytes.
+	largeSettings := make(schema.AtmosSectionMapType)
+	bigValue := make([]byte, 1000)
+	for i := range bigValue {
+		bigValue[i] = 'a'
+	}
+	largeSettings["big"] = string(bigValue)
+
+	numStacks := (DefaultMaxPayloadBytes / 1000) + 50
+	stacks := make([]schema.Affected, numStacks)
+	for i := range stacks {
+		stacks[i] = schema.Affected{
+			Component: "component",
+			Stack:     "stack",
+			Settings:  largeSettings,
+		}
+	}
+
+	dto := dtos.UploadAffectedStacksRequest{
+		HeadSHA:   "head-sha",
+		BaseSHA:   "base-sha",
+		RepoURL:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+		Stacks:    stacks,
+	}
+
+	err := client.UploadAffectedStacks(&dto)
+	require.NoError(t, err)
+
+	// Should have sent multiple requests.
+	totalRequests := int(requestCount.Load())
+	assert.Greater(t, totalRequests, 1, "large payload should be chunked into multiple requests")
+
+	// All requests should have the same batch_id.
+	batchID := receivedBodies[0].BatchID
+	assert.NotEmpty(t, batchID)
+
+	totalStacks := 0
+	for i, body := range receivedBodies {
+		assert.Equal(t, batchID, body.BatchID)
+		require.NotNil(t, body.BatchIndex)
+		assert.Equal(t, i, *body.BatchIndex)
+		require.NotNil(t, body.BatchTotal)
+		assert.Equal(t, totalRequests, *body.BatchTotal)
+		// Metadata should be preserved in each chunk.
+		assert.Equal(t, "head-sha", body.HeadSHA)
+		assert.Equal(t, "base-sha", body.BaseSHA)
+		assert.Equal(t, "test", body.RepoOwner)
+		totalStacks += len(body.Stacks)
+	}
+	assert.Equal(t, numStacks, totalStacks, "all stacks should be accounted for across chunks")
 }
