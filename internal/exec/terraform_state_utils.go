@@ -87,6 +87,16 @@ func GetTerraformState(
 		resolvedAuthMgr = parentAuthMgr
 	}
 
+	// Derive the effective AuthContext for backend reads.
+	// If we resolved a component-specific AuthManager, use its AuthContext instead of the
+	// passed-in one (which may be nil when the parent didn't propagate auth).
+	resolvedAuthContext := authContext
+	if resolvedAuthMgr != nil {
+		if si := resolvedAuthMgr.GetStackInfo(); si != nil && si.AuthContext != nil {
+			resolvedAuthContext = si.AuthContext
+		}
+	}
+
 	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		AtmosConfig:          atmosConfig,
 		Component:            component,
@@ -120,8 +130,8 @@ func GetTerraformState(
 		return result, nil
 	}
 
-	// Read Terraform backend.
-	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
+	// Read Terraform backend using resolved auth context.
+	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, resolvedAuthContext)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er

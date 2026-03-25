@@ -78,6 +78,7 @@ func (t *DescribeAffectedTool) Execute(ctx context.Context, params map[string]in
 		true,       // processYamlFunctions
 		[]string{}, // skip
 		false,      // excludeLocked
+		nil,        // authManager
 	)
 	if err != nil {
 		return &tools.Result{
