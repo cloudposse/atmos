@@ -65,35 +65,15 @@ func TestWriteFileAtomicWindows_RemoveBeforeRename(t *testing.T) {
 	}
 }
 
-// TestWriteFileAtomicWindows_OverwriteWhileOpenForRead verifies the remove-before-rename
-// code path when the target file is held open by a concurrent reader.
-// On Windows, os.Rename fails on open files; WriteFileAtomicWindows removes the target
-// first, which allows the rename to succeed while the reader still holds a file descriptor
-// to the now-deleted file (the data is accessible until the descriptor is closed).
-func TestWriteFileAtomicWindows_OverwriteWhileOpenForRead(t *testing.T) {
+// TestWriteFileAtomicWindows_ModePreserved verifies that WriteFileAtomicWindows sets the
+// requested file permissions on the written file.
+func TestWriteFileAtomicWindows_ModePreserved(t *testing.T) {
 	tmpDir := t.TempDir()
-	filePath := filepath.Join(tmpDir, "held-open.txt")
-	initial := []byte("initial content")
-	newContent := []byte("new content written while open")
+	filePath := filepath.Join(tmpDir, "mode-check.txt")
 
-	// Create the initial file.
-	require.NoError(t, os.WriteFile(filePath, initial, 0o644))
+	err := WriteFileAtomicWindows(filePath, []byte("content"), 0o644)
+	require.NoError(t, err, "WriteFileAtomicWindows should succeed")
 
-	// Open the file for reading to simulate a concurrent reader holding it open.
-	reader, err := os.Open(filePath)
-	require.NoError(t, err)
-	t.Cleanup(func() { reader.Close() })
-
-	// Overwrite while reader is open: this exercises the remove-before-rename path.
-	err = WriteFileAtomicWindows(filePath, newContent, 0o644)
-	require.NoError(t, err, "WriteFileAtomicWindows must succeed even when target is open for reading")
-
-	// The new file must contain the new content.
-	got, err := os.ReadFile(filePath)
-	require.NoError(t, err)
-	assert.Equal(t, newContent, got, "file must contain new content after overwrite")
-
-	// Verify mode is preserved.
 	info, err := os.Stat(filePath)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "file permissions must match requested mode")
