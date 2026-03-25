@@ -105,6 +105,28 @@ func TestBuildDependencyIndex_SkipsAbstractComponents(t *testing.T) {
 	assert.Empty(t, idx["vpc"], "abstract components should be skipped")
 }
 
+func TestBuildDependencyIndex_SkipsDisabledComponents(t *testing.T) {
+	stacks := map[string]any{
+		"dev-use1": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"disabled-component": map[string]any{
+						"metadata": map[string]any{"enabled": false},
+						"vars":     map[string]any{"region": "us-east-1"},
+						"dependencies": map[string]any{
+							"components": []any{
+								map[string]any{"component": "vpc"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	idx := buildDependencyIndex(stacks)
+	assert.Empty(t, idx["vpc"], "disabled components should be skipped")
+}
+
 func TestBuildDependencyIndex_MultipleStacks(t *testing.T) {
 	stacks := map[string]any{
 		"dev-use1": map[string]any{

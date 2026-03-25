@@ -2,27 +2,9 @@ package merge
 
 import (
 	"fmt"
-	"reflect"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
-
-// isMapValue reports whether v is a map kind (including typed maps like map[string]T)
-// without allocating a copy. Used to detect slice→map shape conflicts in deepMergeNative.
-// Performance note: the fast-path type assertion (map[string]any) handles the common case
-// without reflection; reflection is only used for rare typed maps (e.g., map[string]T where
-// T is a struct). The guard only runs when dstVal is already []any, so it is invoked
-// infrequently in typical atmos stack configs.
-func isMapValue(v any) bool {
-	if v == nil {
-		return false
-	}
-	if _, ok := v.(map[string]any); ok {
-		return true
-	}
-	rv := reflect.ValueOf(v)
-	return rv.IsValid() && rv.Kind() == reflect.Map
-}
 
 // safeCap returns a capacity hint of a+b, clamped to maxCapHint to prevent
 // OOM panics from oversize make() calls.

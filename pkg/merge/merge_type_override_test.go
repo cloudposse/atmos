@@ -73,7 +73,7 @@ func TestDeepMergeNative_TypeOverride(t *testing.T) {
 			dst:     map[string]any{"vars": map[string]any{"accounts": []any{"a"}}},
 			src:     map[string]any{"vars": map[string]any{"accounts": map[string]any{}}},
 			wantKey: "vars",
-			// After deep merge, vars.accounts should be the empty map from src.
+			wantVal: map[string]any{"accounts": map[string]any{}},
 		},
 	}
 
@@ -81,15 +81,7 @@ func TestDeepMergeNative_TypeOverride(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := deepMergeNative(tt.dst, tt.src, false, false)
 			require.NoError(t, err, "type override must not error")
-
-			if tt.wantKey == "vars" {
-				// Nested case: check vars.accounts.
-				vars, ok := tt.dst["vars"].(map[string]any)
-				require.True(t, ok)
-				assert.Equal(t, map[string]any{}, vars["accounts"])
-			} else {
-				assert.Equal(t, tt.wantVal, tt.dst[tt.wantKey])
-			}
+			assert.Equal(t, tt.wantVal, tt.dst[tt.wantKey])
 		})
 	}
 }

@@ -86,13 +86,13 @@ for 2,422+ items with recursive dependents.
 
 ## Affected Code Paths
 
-| File                                                 | Function                    | Issue                                    |
-|------------------------------------------------------|-----------------------------|------------------------------------------|
-| `internal/exec/describe_affected.go:220-222`         | Upload flag handler         | Forces `IncludeDependents=true`          |
-| `internal/exec/describe_affected_utils_2.go:532-594` | `addDependentsToAffected`   | No caching, sequential N calls           |
-| `internal/exec/describe_affected_utils_2.go:596-643` | `addDependentsToDependents` | Recursive, no cycle detection            |
-| `internal/exec/describe_dependents.go:138`           | `ExecuteDescribeDependents` | Calls `ExecuteDescribeStacks` every time |
-| `pkg/pro/api_client.go:165-193`                      | `UploadAffectedStacks`      | 30s HTTP timeout, no compression         |
+| File                                         | Function                    | Issue                                    |
+|----------------------------------------------|-----------------------------|------------------------------------------|
+| `internal/exec/describe_affected.go`         | Upload flag handler         | Forces `IncludeDependents=true`          |
+| `internal/exec/describe_affected_utils_2.go` | `addDependentsToAffected`   | No caching, sequential N calls           |
+| `internal/exec/describe_affected_utils_2.go` | `addDependentsToDependents` | Recursive, no cycle detection            |
+| `internal/exec/describe_dependents.go`       | `ExecuteDescribeDependents` | Calls `ExecuteDescribeStacks` every time |
+| `pkg/pro/api_client.go`                      | `UploadAffectedStacks`      | 30s HTTP timeout, no compression         |
 
 ---
 
