@@ -208,15 +208,8 @@ func ExecuteDescribeDependents(
 				}
 
 				// Skip abstract and disabled components.
-				if metadataSection, ok := stackComponentMap["metadata"].(map[string]any); ok {
-					if metadataType, ok := metadataSection["type"].(string); ok {
-						if metadataType == "abstract" {
-							continue
-						}
-					}
-					if !isComponentEnabled(metadataSection, stackComponentName) {
-						continue
-					}
+				if isAbstractOrDisabled(stackComponentMap, stackComponentName) {
+					continue
 				}
 
 				// Get the stack component `vars`.
@@ -262,7 +255,7 @@ func ExecuteDescribeDependents(
 						ComponentPath: BuildComponentPath(atmosConfig, &stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
-						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.Replace(stackComponentName, "/", "-", -1)),
+						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.ReplaceAll(stackComponentName, "/", "-")),
 						Namespace:     stackComponentVars.Namespace,
 						Tenant:        stackComponentVars.Tenant,
 						Environment:   stackComponentVars.Environment,
@@ -309,6 +302,18 @@ func ExecuteDescribeDependents(
 
 	sortDependentsByStackSlugRecursive(dependents)
 	return dependents, nil
+}
+
+// isAbstractOrDisabled returns true if the component metadata indicates it is abstract or disabled.
+func isAbstractOrDisabled(stackComponentMap map[string]any, stackComponentName string) bool {
+	metadataSection, ok := stackComponentMap["metadata"].(map[string]any)
+	if !ok {
+		return false
+	}
+	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
+		return true
+	}
+	return !isComponentEnabled(metadataSection, stackComponentName)
 }
 
 // sortDependentsByStackSlug sorts the dependents by stack slug.
