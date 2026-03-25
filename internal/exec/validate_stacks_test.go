@@ -173,10 +173,8 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 				return
 			}
 
-			// If no expected parts, just log the error if it exists
-			if err != nil {
-				t.Logf("Error occurred: %v", err)
-			}
+			// If no expected parts, assert success.
+			assert.NoError(t, err, "Expected no error when expectedParts is nil")
 		})
 	}
 }

@@ -17,7 +17,7 @@ atmos describe affected --process-functions=false --ref <sha>        # ~30s
 atmos describe affected --process-functions=false --ref <sha> --upload
 ```
 
-The `--upload` flag causes the command to hang indefinitely on large infrastructures.
+The `--upload` flag causes the command to stall for 40-50 minutes on large infrastructures, often ending in timeout or manual termination.
 The same infrastructure works fine with smaller change sets (fewer affected components).
 
 ---
@@ -179,6 +179,8 @@ reverse index: component name → list of (stack, component) pairs that depend o
 | `describe affected` (no dependents)      | ~7s                       | ~7s (unchanged)   |
 | `describe affected --include-dependents` | 40+ min (never completes) | **~10s**          |
 | Payload size (with dependents)           | N/A (never completed)     | ~1.2 MB           |
+
+_Note: `--upload` forces `IncludeDependents=true`, so this timing reflects the same dependent-resolution hot path._
 
 ### Files changed
 

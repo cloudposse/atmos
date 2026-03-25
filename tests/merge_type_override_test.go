@@ -106,6 +106,14 @@ func TestMergeTypeOverride_StackComposition(t *testing.T) {
 		// allowed_accounts should be the original list from defaults.
 		accounts, ok := vars["allowed_accounts"].([]any)
 		require.True(t, ok, "allowed_accounts should be a list in dev (no override)")
-		assert.Len(t, accounts, 2, "allowed_accounts should have 2 entries from defaults")
+		require.Len(t, accounts, 2, "allowed_accounts should have 2 entries from defaults")
+		first, ok := accounts[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "core", first["tenant"], "first account tenant should be 'core'")
+		assert.Equal(t, "auto", first["stage"], "first account stage should be 'auto'")
+		second, ok := accounts[1].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "core", second["tenant"], "second account tenant should be 'core'")
+		assert.Equal(t, "network", second["stage"], "second account stage should be 'network'")
 	})
 }
