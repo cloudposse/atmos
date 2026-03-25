@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -218,7 +219,7 @@ func TestUploadStatus(t *testing.T) {
 				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
 			})).Return(nil)
 
-			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
+			err := uploadStatus(&info, tc.exitCode, nil, mockProClient, mockGitRepo)
 
 			if tc.expectedError {
 				assert.Error(t, err)
@@ -311,7 +312,7 @@ func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
 				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
 			})).Return(nil)
 
-			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
+			err := uploadStatus(&info, tc.exitCode, nil, mockProClient, mockGitRepo)
 			assert.NoError(t, err)
 
 			mockProClient.AssertExpectations(t)
@@ -331,7 +332,7 @@ func TestUploadStatusWithGitErrors(t *testing.T) {
 		// Simulate git error
 		mockGitRepo.On("GetLocalRepoInfo").Return(nil, assert.AnError)
 
-		err := uploadStatus(&info, 2, mockProClient, mockGitRepo)
+		err := uploadStatus(&info, 2, nil, mockProClient, mockGitRepo)
 		assert.Error(t, err)
 
 		mockGitRepo.AssertExpectations(t)
@@ -355,7 +356,7 @@ func TestUploadStatusWithGitErrors(t *testing.T) {
 		mockGitRepo.On("GetCurrentCommitSHA").Return("", assert.AnError)
 		mockProClient.On("UploadInstanceStatus", mock.AnythingOfType("*dtos.InstanceStatusUploadRequest")).Return(nil)
 
-		err := uploadStatus(&info, 2, mockProClient, mockGitRepo)
+		err := uploadStatus(&info, 2, nil, mockProClient, mockGitRepo)
 		assert.NoError(t, err)
 
 		mockProClient.AssertExpectations(t)
@@ -683,5 +684,158 @@ func TestExecuteProUnlock(t *testing.T) {
 		assert.Error(t, err)
 		mockAPI.AssertExpectations(t)
 		mockGit.AssertExpectations(t)
+	})
+}
+
+// TestUploadStatusWithMetrics tests that process metrics are included in the upload DTO.
+func TestUploadStatusWithMetrics(t *testing.T) {
+	testRepoInfo := &atmosgit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
+
+	t.Run("includes metrics in DTO when provided", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+
+		info := createTestInfo(true)
+
+		metrics := &process.ProcessMetrics{
+			WallTime:         45200 * time.Millisecond,
+			UserCPUTime:      12300 * time.Millisecond,
+			SystemCPUTime:    4100 * time.Millisecond,
+			MaxRSSBytes:      536870912,
+			MinorPageFaults:  42000,
+			MajorPageFaults:  12,
+			InBlockOps:       1500,
+			OutBlockOps:      800,
+			VolCtxSwitches:   3200,
+			InvolCtxSwitches: 150,
+		}
+
+		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+			return dto.Command == "plan" &&
+				dto.ExitCode == 0 &&
+				dto.WallTimeMs != nil && *dto.WallTimeMs == 45200 &&
+				dto.UserCPUTimeMs != nil && *dto.UserCPUTimeMs == 12300 &&
+				dto.SysCPUTimeMs != nil && *dto.SysCPUTimeMs == 4100 &&
+				dto.PeakRSSBytes != nil && *dto.PeakRSSBytes == 536870912 &&
+				dto.MinorPageFaults != nil && *dto.MinorPageFaults == 42000 &&
+				dto.MajorPageFaults != nil && *dto.MajorPageFaults == 12 &&
+				dto.InBlockOps != nil && *dto.InBlockOps == 1500 &&
+				dto.OutBlockOps != nil && *dto.OutBlockOps == 800 &&
+				dto.VolCtxSwitches != nil && *dto.VolCtxSwitches == 3200 &&
+				dto.InvolCtxSwitches != nil && *dto.InvolCtxSwitches == 150
+		})).Return(nil)
+
+		err := uploadStatus(&info, 0, metrics, mockProClient, mockGitRepo)
+		assert.NoError(t, err)
+
+		mockProClient.AssertExpectations(t)
+		mockGitRepo.AssertExpectations(t)
+	})
+
+	t.Run("omits zero rusage fields", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+
+		info := createTestInfo(true)
+
+		// Simulate Windows: only timing metrics, no rusage.
+		metrics := &process.ProcessMetrics{
+			WallTime:      5 * time.Second,
+			UserCPUTime:   2 * time.Second,
+			SystemCPUTime: 1 * time.Second,
+		}
+
+		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+			return dto.WallTimeMs != nil && *dto.WallTimeMs == 5000 &&
+				dto.PeakRSSBytes == nil &&
+				dto.MinorPageFaults == nil &&
+				dto.MajorPageFaults == nil
+		})).Return(nil)
+
+		err := uploadStatus(&info, 0, metrics, mockProClient, mockGitRepo)
+		assert.NoError(t, err)
+
+		mockProClient.AssertExpectations(t)
+	})
+
+	t.Run("nil metrics produces no metrics fields", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+
+		info := createTestInfo(true)
+
+		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+			return dto.WallTimeMs == nil && dto.PeakRSSBytes == nil
+		})).Return(nil)
+
+		err := uploadStatus(&info, 0, nil, mockProClient, mockGitRepo)
+		assert.NoError(t, err)
+
+		mockProClient.AssertExpectations(t)
+	})
+}
+
+// TestPopulateMetricsDTO tests the populateMetricsDTO helper function.
+func TestPopulateMetricsDTO(t *testing.T) {
+	t.Run("populates all fields from metrics", func(t *testing.T) {
+		dto := &dtos.InstanceStatusUploadRequest{}
+		m := &process.ProcessMetrics{
+			WallTime:         10 * time.Second,
+			UserCPUTime:      3 * time.Second,
+			SystemCPUTime:    1500 * time.Millisecond,
+			MaxRSSBytes:      1024 * 1024 * 512,
+			MinorPageFaults:  100,
+			MajorPageFaults:  5,
+			InBlockOps:       200,
+			OutBlockOps:      50,
+			VolCtxSwitches:   300,
+			InvolCtxSwitches: 10,
+		}
+
+		populateMetricsDTO(dto, m)
+
+		assert.NotNil(t, dto.WallTimeMs)
+		assert.Equal(t, int64(10000), *dto.WallTimeMs)
+		assert.NotNil(t, dto.UserCPUTimeMs)
+		assert.Equal(t, int64(3000), *dto.UserCPUTimeMs)
+		assert.NotNil(t, dto.SysCPUTimeMs)
+		assert.Equal(t, int64(1500), *dto.SysCPUTimeMs)
+		assert.NotNil(t, dto.PeakRSSBytes)
+		assert.Equal(t, int64(1024*1024*512), *dto.PeakRSSBytes)
+		assert.NotNil(t, dto.VolCtxSwitches)
+		assert.Equal(t, int64(300), *dto.VolCtxSwitches)
+	})
+
+	t.Run("skips zero rusage fields", func(t *testing.T) {
+		dto := &dtos.InstanceStatusUploadRequest{}
+		m := &process.ProcessMetrics{
+			WallTime:      1 * time.Second,
+			UserCPUTime:   500 * time.Millisecond,
+			SystemCPUTime: 100 * time.Millisecond,
+			// All rusage fields zero (Windows).
+		}
+
+		populateMetricsDTO(dto, m)
+
+		assert.NotNil(t, dto.WallTimeMs)
+		assert.Equal(t, int64(1000), *dto.WallTimeMs)
+		assert.Nil(t, dto.PeakRSSBytes)
+		assert.Nil(t, dto.MinorPageFaults)
+		assert.Nil(t, dto.MajorPageFaults)
+		assert.Nil(t, dto.InBlockOps)
+		assert.Nil(t, dto.OutBlockOps)
+		assert.Nil(t, dto.VolCtxSwitches)
+		assert.Nil(t, dto.InvolCtxSwitches)
 	})
 }
