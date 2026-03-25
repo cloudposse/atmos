@@ -14,6 +14,8 @@ import (
 //   - included_in_dependents: Used in filtering logic
 //   - dependents: Nested stack processing (recursively stripped)
 //   - settings.pro: Workflow dispatch configuration
+//   - deleted: Marks components removed in HEAD
+//   - deletion_type: Whether a component or entire stack was deleted
 //
 // Fields removed:
 //   - settings.depends_on: Dependency graph (largest contributor to size)
@@ -36,6 +38,8 @@ func stripAffected(a schema.Affected) schema.Affected {
 		IncludedInDependents: a.IncludedInDependents,
 		Dependents:           stripDependents(a.Dependents),
 		Settings:             stripSettings(a.Settings),
+		Deleted:              a.Deleted,
+		DeletionType:         a.DeletionType,
 	}
 }
 
