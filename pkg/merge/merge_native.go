@@ -40,7 +40,7 @@ func safeCap(a, b int) int {
 
 // deepMergeNative performs a deep merge of src into dst in place.
 //
-// It is semantically equivalent to mergo.Merge(dst, src, mergo.WithOverride, mergo.WithTypeCheck)
+// It is semantically equivalent to mergo.Merge(dst, src, mergo.WithOverride)
 // but avoids reflection for the hot-path map[string]any/[]any types and does not require
 // pre-copying the entire src map.
 // Values from src are only copied when they are stored as leaves in dst, preventing
@@ -51,8 +51,8 @@ func safeCap(a, b int) int {
 //   - Typed maps (e.g., map[string]schema.Provider): normalized to map[string]any via deepCopyValue and recursed.
 //   - appendSlice=true and both are slices: append src elements to dst.
 //   - sliceDeepCopy=true and both are slices: element-wise deep-merge.
-//   - dst is []any but src is not a slice: return type mismatch error (WithTypeCheck).
 //   - Otherwise: src value overrides dst value (deep-copied to isolate src from dst).
+//     This includes type changes (list→map, list→scalar, list→nil, etc.).
 //
 // A nil src is safe: ranging over a nil map is a no-op in Go, so no keys are visited.
 // Dst must not be nil; the function returns an error if it is.
@@ -69,17 +69,6 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		}
 
 		// Key exists in both dst and src.
-
-		// Guard: reject map src overriding a dst slice — shape changes (slice→map) are
-		// disallowed (defined contract; matches mergo WithTypeCheck behavior).
-		// This check must run before the map-handling branches so that when dstVal is
-		// []any the map branches never silently replace the slice with a map.
-		// isMapValue is used here to avoid the allocation overhead of deepCopyValue.
-		if _, dstIsSlice := dstVal.([]any); dstIsSlice {
-			if isMapValue(srcVal) {
-				return errUtils.ErrMergeTypeMismatch
-			}
-		}
 
 		// Fast path: both are maps — recurse without allocating a new container.
 		if srcMap, srcIsMap := srcVal.(map[string]any); srcIsMap {
@@ -130,22 +119,9 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 			}
 		}
 
-		// Type check (defined contract: dst-slice/src-non-slice is a type mismatch): if dst holds a slice but src is
-		// not a slice, refuse the override to prevent silent data corruption.
-		if _, dstIsSlice := dstVal.([]any); dstIsSlice {
-			if _, srcIsSlice := srcVal.([]any); !srcIsSlice {
-				// Attempt normalization once: maybe srcVal is a typed slice (e.g. []string).
-				normalized := deepCopyValue(srcVal)
-				if _, normalizedIsSlice := normalized.([]any); !normalizedIsSlice {
-					return errUtils.ErrMergeTypeMismatch
-				}
-				// Normalized typed slice → use the result we already computed.
-				dst[k] = normalized
-				continue
-			}
-		}
-
 		// Default: src overrides dst (deep copy to isolate src).
+		// WithOverride semantics: src always wins regardless of type differences.
+		// This handles list→map, list→scalar, list→nil, and all other type overrides.
 		dst[k] = deepCopyValue(srcVal)
 	}
 	return nil
