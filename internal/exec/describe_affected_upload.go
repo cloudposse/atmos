@@ -14,8 +14,8 @@ import (
 //   - included_in_dependents: Used in filtering logic
 //   - dependents: Nested stack processing (recursively stripped)
 //   - settings.pro: Workflow dispatch configuration
-//   - deleted: Marks components removed in HEAD
-//   - deletion_type: Whether a component or entire stack was deleted
+//   - deleted: Marks components removed in HEAD.
+//   - deletion_type: Whether a component or entire stack was deleted.
 //
 // Fields removed:
 //   - settings.depends_on: Dependency graph (largest contributor to size)
