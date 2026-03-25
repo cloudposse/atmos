@@ -173,7 +173,11 @@ func mergeSliceItems(dst, src interface{}) (interface{}, error) {
 		for k, v := range dstMap {
 			mergedMap[k] = v
 		}
-		// Merge with source using mergo.
+		// NOTE: This still uses mergo (not the native merge) because YAML function
+		// slice merging has different semantics — it operates on individual slice
+		// elements during !include/!merge resolution, not on full stack configs.
+		// The hot-path merge (MergeWithOptions, ~118k calls/run) uses native merge.
+		// TODO: migrate to native merge to eliminate the mergo dependency entirely.
 		if err := mergo.Merge(&mergedMap, srcMap, mergo.WithOverride); err != nil {
 			return nil, fmt.Errorf("%w: merge slice items: %w", errUtils.ErrMerge, err)
 		}
@@ -260,6 +264,7 @@ func mergeDeferredMaps(values []*DeferredValue) (interface{}, error) {
 			return values[i].Value, nil
 		}
 
+		// NOTE: Uses mergo (not native merge) — see comment in mergeSliceItems above.
 		if err := mergo.Merge(&mergedMap, valueMap, mergo.WithOverride); err != nil {
 			return nil, fmt.Errorf("%w: merge deferred maps: %w", errUtils.ErrMerge, err)
 		}
