@@ -153,6 +153,18 @@ export const roadmapConfig = {
       pr: 2216,
       changelog: 'instance-status-upload',
     },
+    {
+      id: 'chunked-stack-uploads',
+      icon: 'RiUploadCloudLine',
+      title: 'Chunked Uploads for Large Payloads',
+      tagline: 'No size limit on stack uploads to Atmos Pro',
+      description: 'CLI automatically chunks large affected stack and instance payloads into multiple requests with batch metadata for server-side reassembly. Configurable threshold via max_payload_bytes in atmos.yaml.',
+      benefits: 'Eliminates HTTP 413 errors for large infrastructure repositories. No practical upper limit on the number of stacks or instances uploaded to Atmos Pro.',
+      status: 'shipped',
+      quarter: 'q1-2026',
+      pr: 2251,
+      changelog: 'chunked-stack-uploads',
+    },
   ],
 
   initiatives: [
