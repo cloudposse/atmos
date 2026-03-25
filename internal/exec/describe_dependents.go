@@ -42,6 +42,15 @@ type DescribeDependentsArgs struct {
 	Skip                 []string
 	OnlyInStack          string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	// Stacks is an optional pre-computed result from ExecuteDescribeStacks.
+	// When provided, ExecuteDescribeDependents skips the expensive stack resolution
+	// and uses this cached result instead. This avoids O(N) full stack resolutions
+	// when computing dependents for N affected components.
+	Stacks map[string]any
+	// DepIndex is an optional pre-computed reverse dependency index.
+	// When provided, ExecuteDescribeDependents skips the O(all_stacks × all_components)
+	// scan and uses the index for O(1) lookup per component name.
+	DepIndex dependencyIndex
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -134,34 +143,48 @@ func ExecuteDescribeDependents(
 	dependents := []schema.Dependent{}
 	var ok bool
 
-	// Get all stacks with all components, filtered by onlyInStack if provided.
-	stacks, err := ExecuteDescribeStacks(
-		atmosConfig,
-		args.OnlyInStack,
-		nil,
-		nil,
-		nil,
-		false,
-		args.ProcessTemplates,
-		args.ProcessYamlFunctions,
-		false,
-		args.Skip,
-		args.AuthManager, // AuthManager passed from describe dependents command layer
-	)
-	if err != nil {
-		return nil, err
+	// Use pre-computed stacks if provided (avoids redundant full stack resolution
+	// when called in a loop from addDependentsToAffected).
+	stacks := args.Stacks
+	if stacks == nil {
+		var err error
+		stacks, err = ExecuteDescribeStacks(
+			atmosConfig,
+			args.OnlyInStack,
+			nil,
+			nil,
+			nil,
+			false,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			false,
+			args.Skip,
+			args.AuthManager,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
-		Component:            args.Component,
-		Stack:                args.Stack,
-		ProcessTemplates:     args.ProcessTemplates,
-		ProcessYamlFunctions: args.ProcessYamlFunctions,
-		Skip:                 args.Skip,
-		AuthManager:          args.AuthManager,
-	})
-	if err != nil {
-		return nil, err
+	// Get the provided component section.
+	// When stacks are cached, extract directly from the cache to avoid redundant stack resolution.
+	var providedComponentSection map[string]any
+	if args.Stacks != nil {
+		providedComponentSection = findComponentSectionInCachedStacks(stacks, args.Stack, args.Component)
+	}
+	if providedComponentSection == nil {
+		var err error
+		providedComponentSection, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            args.Component,
+			Stack:                args.Stack,
+			ProcessTemplates:     args.ProcessTemplates,
+			ProcessYamlFunctions: args.ProcessYamlFunctions,
+			Skip:                 args.Skip,
+			AuthManager:          args.AuthManager,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Get the provided component `vars`.
@@ -172,148 +195,229 @@ func ExecuteDescribeDependents(
 
 	// Convert the provided component `vars` section to the `Context` structure.
 	var providedComponentVars schema.Context
-	err = mapstructure.Decode(providedComponentVarsSection, &providedComponentVars)
-	if err != nil {
+	if err := mapstructure.Decode(providedComponentVarsSection, &providedComponentVars); err != nil {
 		return nil, err
 	}
 
-	// Iterate over all stacks and all components in the stacks.
-	for stackName, stackSection := range stacks {
-		var stackSectionMap map[string]any
-		if stackSectionMap, ok = stackSection.(map[string]any); !ok {
-			continue
+	// Find all components that depend on the provided component.
+	// When a pre-computed dependency index is available, use O(1) lookup.
+	// Otherwise, fall back to the full O(stacks × components) scan.
+	if args.DepIndex != nil {
+		dependents = findDependentsFromIndex(atmosConfig, args, &providedComponentVars)
+	} else {
+		var err error
+		dependents, err = findDependentsByScan(atmosConfig, args, stacks, &providedComponentVars)
+		if err != nil {
+			return nil, err
 		}
-
-		// Get the stack `components` section.
-		var stackComponentsSection map[string]any
-		if stackComponentsSection, ok = stackSectionMap["components"].(map[string]any); !ok {
-			continue
-		}
-
-		for stackComponentType, stackComponentTypeSection := range stackComponentsSection {
-			var stackComponentTypeSectionMap map[string]any
-			if stackComponentTypeSectionMap, ok = stackComponentTypeSection.(map[string]any); !ok {
-				continue
-			}
-
-			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
-				var stackComponentMap map[string]any
-				if stackComponentMap, ok = stackComponent.(map[string]any); !ok {
-					continue
-				}
-
-				// Skip the stack component if it's the same as the provided component.
-				if stackComponentName == args.Component {
-					continue
-				}
-
-				// Skip abstract and disabled components.
-				if isAbstractOrDisabled(stackComponentMap, stackComponentName) {
-					continue
-				}
-
-				// Get the stack component `vars`.
-				var stackComponentVarsSection map[string]any
-				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[string]any); !ok {
-					continue
-				}
-
-				// Convert the stack component `vars` section to the `Context` structure.
-				var stackComponentVars schema.Context
-				err = mapstructure.Decode(stackComponentVarsSection, &stackComponentVars)
-				if err != nil {
-					return nil, err
-				}
-
-				// Get component dependencies from dependencies.components (preferred) or settings.depends_on (legacy).
-				componentDeps, settingsSection, depSource := getComponentDependencies(stackComponentMap)
-				if len(componentDeps) == 0 {
-					continue
-				}
-
-				// Check if the stack component is a dependent of the provided component.
-				for depIdx := range componentDeps {
-					dependsOn := &componentDeps[depIdx]
-					if dependsOn.Component != args.Component {
-						continue
-					}
-
-					// Matching logic depends on the source format.
-					if !isDependencyMatch(&dependencyMatchParams{
-						depSource:             depSource,
-						dependsOn:             dependsOn,
-						args:                  args,
-						stackName:             stackName,
-						providedComponentVars: &providedComponentVars,
-						stackComponentVars:    &stackComponentVars,
-					}) {
-						continue
-					}
-
-					dependent := schema.Dependent{
-						Component:     stackComponentName,
-						ComponentPath: BuildComponentPath(atmosConfig, &stackComponentMap, stackComponentType),
-						ComponentType: stackComponentType,
-						Stack:         stackName,
-						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.ReplaceAll(stackComponentName, "/", "-")),
-						Namespace:     stackComponentVars.Namespace,
-						Tenant:        stackComponentVars.Tenant,
-						Environment:   stackComponentVars.Environment,
-						Stage:         stackComponentVars.Stage,
-					}
-
-					// Add Spacelift stack and Atlantis project if they are configured for the dependent stack component.
-					if stackComponentType == "terraform" {
-						// Spacelift stack.
-						configAndStacksInfo := schema.ConfigAndStacksInfo{
-							ComponentFromArg:         stackComponentName,
-							Stack:                    stackName,
-							ComponentVarsSection:     stackComponentVarsSection,
-							ComponentSettingsSection: settingsSection,
-							ComponentSection: map[string]any{
-								cfg.VarsSectionName:     stackComponentVarsSection,
-								cfg.SettingsSectionName: settingsSection,
-							},
-						}
-
-						spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-						if err != nil {
-							return nil, err
-						}
-						dependent.SpaceliftStack = spaceliftStackName
-
-						// Atlantis project.
-						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-						if err != nil {
-							return nil, err
-						}
-						dependent.AtlantisProject = atlantisProjectName
-					}
-
-					if args.IncludeSettings {
-						dependent.Settings = settingsSection
-					}
-
-					dependents = append(dependents, dependent)
-				}
-			}
-		}
+	}
+	if dependents == nil {
+		dependents = []schema.Dependent{}
 	}
 
 	sortDependentsByStackSlugRecursive(dependents)
 	return dependents, nil
 }
 
-// isAbstractOrDisabled returns true if the component metadata indicates it is abstract or disabled.
-func isAbstractOrDisabled(stackComponentMap map[string]any, stackComponentName string) bool {
-	metadataSection, ok := stackComponentMap["metadata"].(map[string]any)
+// findDependentsFromIndex uses the pre-computed dependency index for O(1) lookup.
+func findDependentsFromIndex(
+	atmosConfig *schema.AtmosConfiguration,
+	args *DescribeDependentsArgs,
+	providedComponentVars *schema.Context,
+) []schema.Dependent {
+	var dependents []schema.Dependent
+
+	entries := args.DepIndex[args.Component]
+	for i := range entries {
+		e := &entries[i]
+
+		// Skip self-references.
+		if e.StackComponentName == args.Component {
+			continue
+		}
+
+		dep := e.DependsOn
+		if !isDependencyMatch(&dependencyMatchParams{
+			depSource:             e.DepSource,
+			dependsOn:             &dep,
+			args:                  args,
+			stackName:             e.StackName,
+			providedComponentVars: providedComponentVars,
+			stackComponentVars:    &e.StackComponentVars,
+		}) {
+			continue
+		}
+
+		dependent := buildDependentEntry(atmosConfig, args, e)
+		dependents = append(dependents, dependent)
+	}
+
+	return dependents
+}
+
+// findDependentsByScan falls back to the full O(stacks * components) scan.
+func findDependentsByScan(
+	atmosConfig *schema.AtmosConfiguration,
+	args *DescribeDependentsArgs,
+	stacks map[string]any,
+	providedComponentVars *schema.Context,
+) ([]schema.Dependent, error) {
+	var dependents []schema.Dependent
+
+	for stackName, stackSection := range stacks {
+		stackSectionMap, ok := stackSection.(map[string]any)
+		if !ok {
+			continue
+		}
+		stackComponentsSection, ok := stackSectionMap["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		for stackComponentType, stackComponentTypeSection := range stackComponentsSection {
+			stackComponentTypeSectionMap, ok := stackComponentTypeSection.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			for stackComponentName, stackComponent := range stackComponentTypeSectionMap {
+				deps, err := scanComponentForDependents(&scanComponentParams{
+					AtmosConfig:           atmosConfig,
+					Args:                  args,
+					StackName:             stackName,
+					StackComponentType:    stackComponentType,
+					StackComponentName:    stackComponentName,
+					StackComponent:        stackComponent,
+					ProvidedComponentVars: providedComponentVars,
+				})
+				if err != nil {
+					return nil, err
+				}
+				dependents = append(dependents, deps...)
+			}
+		}
+	}
+
+	return dependents, nil
+}
+
+// scanComponentParams groups parameters for scanComponentForDependents.
+type scanComponentParams struct {
+	AtmosConfig           *schema.AtmosConfiguration
+	Args                  *DescribeDependentsArgs
+	StackName             string
+	StackComponentType    string
+	StackComponentName    string
+	StackComponent        any
+	ProvidedComponentVars *schema.Context
+}
+
+// scanComponentForDependents checks a single component for dependencies on the provided component.
+func scanComponentForDependents(p *scanComponentParams) ([]schema.Dependent, error) {
+	stackComponentMap, ok := p.StackComponent.(map[string]any)
 	if !ok {
-		return false
+		return nil, nil
 	}
-	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
-		return true
+
+	if p.StackComponentName == p.Args.Component {
+		return nil, nil
 	}
-	return !isComponentEnabled(metadataSection, stackComponentName)
+
+	if isAbstractOrDisabled(stackComponentMap, p.StackComponentName) {
+		return nil, nil
+	}
+
+	stackComponentVarsSection, ok := stackComponentMap["vars"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+
+	var stackComponentVars schema.Context
+	if err := mapstructure.Decode(stackComponentVarsSection, &stackComponentVars); err != nil {
+		return nil, err
+	}
+
+	componentDeps, settingsSection, depSource := getComponentDependencies(stackComponentMap)
+	if len(componentDeps) == 0 {
+		return nil, nil
+	}
+
+	var dependents []schema.Dependent
+	for depIdx := range componentDeps {
+		dependsOn := &componentDeps[depIdx]
+		if dependsOn.Component != p.Args.Component {
+			continue
+		}
+
+		if !isDependencyMatch(&dependencyMatchParams{
+			depSource:             depSource,
+			dependsOn:             dependsOn,
+			args:                  p.Args,
+			stackName:             p.StackName,
+			providedComponentVars: p.ProvidedComponentVars,
+			stackComponentVars:    &stackComponentVars,
+		}) {
+			continue
+		}
+
+		e := &dependencyIndexEntry{
+			StackName:                 p.StackName,
+			StackComponentName:        p.StackComponentName,
+			StackComponentType:        p.StackComponentType,
+			StackComponentMap:         stackComponentMap,
+			StackComponentVarsSection: stackComponentVarsSection,
+			StackComponentVars:        stackComponentVars,
+			SettingsSection:           settingsSection,
+		}
+		dependents = append(dependents, buildDependentEntry(p.AtmosConfig, p.Args, e))
+	}
+
+	return dependents, nil
+}
+
+// buildDependentEntry constructs a Dependent struct from a dependency index entry.
+func buildDependentEntry(
+	atmosConfig *schema.AtmosConfiguration,
+	args *DescribeDependentsArgs,
+	e *dependencyIndexEntry,
+) schema.Dependent {
+	dependent := schema.Dependent{
+		Component:     e.StackComponentName,
+		ComponentPath: BuildComponentPath(atmosConfig, &e.StackComponentMap, e.StackComponentType),
+		ComponentType: e.StackComponentType,
+		Stack:         e.StackName,
+		StackSlug:     fmt.Sprintf("%s-%s", e.StackName, strings.ReplaceAll(e.StackComponentName, "/", "-")),
+		Namespace:     e.StackComponentVars.Namespace,
+		Tenant:        e.StackComponentVars.Tenant,
+		Environment:   e.StackComponentVars.Environment,
+		Stage:         e.StackComponentVars.Stage,
+	}
+
+	if e.StackComponentType == "terraform" {
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg:         e.StackComponentName,
+			Stack:                    e.StackName,
+			ComponentVarsSection:     e.StackComponentVarsSection,
+			ComponentSettingsSection: e.SettingsSection,
+			ComponentSection: map[string]any{
+				cfg.VarsSectionName:     e.StackComponentVarsSection,
+				cfg.SettingsSectionName: e.SettingsSection,
+			},
+		}
+
+		if spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo); err == nil {
+			dependent.SpaceliftStack = spaceliftStackName
+		}
+		if atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo); err == nil {
+			dependent.AtlantisProject = atlantisProjectName
+		}
+	}
+
+	if args.IncludeSettings {
+		dependent.Settings = e.SettingsSection
+	}
+
+	return dependent
 }
 
 // sortDependentsByStackSlug sorts the dependents by stack slug.
@@ -464,4 +568,30 @@ func matchContextField(depValue, providedValue, stackValue string) bool {
 		return providedValue == depValue
 	}
 	return providedValue == stackValue
+}
+
+// findComponentSectionInCachedStacks extracts a component section from pre-computed stacks.
+// Returns nil if the stack or component is not found (caller falls back to ExecuteDescribeComponent).
+func findComponentSectionInCachedStacks(stacks map[string]any, stackName, componentName string) map[string]any {
+	stackSection, ok := stacks[stackName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	componentsSection, ok := stackSection["components"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	// Check terraform components (the common case).
+	if tfSection, ok := componentsSection["terraform"].(map[string]any); ok {
+		if comp, ok := tfSection[componentName].(map[string]any); ok {
+			return comp
+		}
+	}
+	// Check helmfile components.
+	if hfSection, ok := componentsSection["helmfile"].(map[string]any); ok {
+		if comp, ok := hfSection[componentName].(map[string]any); ok {
+			return comp
+		}
+	}
+	return nil
 }

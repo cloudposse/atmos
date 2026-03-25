@@ -2,14 +2,12 @@ package merge
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -58,21 +56,21 @@ func TestNoDuplicateErrorPrinting(t *testing.T) {
 	assert.Empty(t, stderrOutput, "No output should be printed to stderr directly from merge.go")
 }
 
-// TestMergeErrorsAreWrappedNotPrinted ensures that when deepMergeNative returns an error,
-// we wrap it and return it rather than printing it.
-func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
+// TestMergeTypeOverride_SucceedsWithoutPrinting verifies that type overrides
+// (e.g., list→scalar) succeed silently — no error returned, nothing printed.
+// This is the WithOverride contract: src always wins regardless of type.
+func TestMergeTypeOverride_SucceedsWithoutPrinting(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",
 		},
 	}
 
-	// Use type-mismatched inputs to force deepMergeNative to return an error:
-	// dst has a []any slice, src provides a scalar string for the same key.
+	// src overrides a []any with a scalar string — this must succeed (WithOverride).
 	map1 := map[string]any{"subnets": []any{"10.0.1.0/24"}}
-	map2 := map[string]any{"subnets": "not-a-slice"} // triggers "cannot override two slices with different type"
+	map2 := map[string]any{"subnets": "not-a-slice"}
 
-	// Capture any direct prints to stderr
+	// Capture any direct prints to stderr.
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
@@ -84,23 +82,20 @@ func TestMergeErrorsAreWrappedNotPrinted(t *testing.T) {
 		stderrChan <- buf.String()
 	}()
 
-	// Perform the merge — must error
-	_, err := Merge(atmosConfig, []map[string]any{map1, map2})
+	// Perform the merge — must succeed.
+	result, err := Merge(atmosConfig, []map[string]any{map1, map2})
 
-	// Close and restore stderr
+	// Close and restore stderr.
 	w.Close()
 	os.Stderr = oldStderr
 	stderrOutput := <-stderrChan
 
-	// The error must be returned, not swallowed, and must keep the full merge error chain.
-	if assert.Error(t, err, "type-mismatch must return an error") {
-		assert.True(t, errors.Is(err, errUtils.ErrMerge),
-			"error must wrap ErrMerge (outer sentinel), got: %v", err)
-		assert.True(t, errors.Is(err, errUtils.ErrMergeTypeMismatch),
-			"error must wrap ErrMergeTypeMismatch (inner sentinel), got: %v", err)
-	}
+	// Type overrides are allowed: src scalar replaces dst slice.
+	assert.NoError(t, err, "type override (list→scalar) must not error")
+	assert.Equal(t, "not-a-slice", result["subnets"],
+		"src scalar must override dst slice")
 
-	// The error must be returned to caller, not printed to stderr
+	// Nothing should be printed to stderr.
 	assert.Empty(t, stderrOutput, "Merge should not print to stderr")
 }
 
