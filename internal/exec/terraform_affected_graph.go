@@ -67,6 +67,7 @@ func getAffectedWithRepoPath(args *DescribeAffectedCmdArgs) ([]schema.Affected, 
 		args.ProcessYamlFunctions,
 		args.Skip,
 		args.ExcludeLocked,
+		args.AuthManager,
 	)
 	return affectedList, err
 }
@@ -86,6 +87,7 @@ func getAffectedWithClone(args *DescribeAffectedCmdArgs) ([]schema.Affected, err
 		args.ProcessYamlFunctions,
 		args.Skip,
 		args.ExcludeLocked,
+		args.AuthManager,
 	)
 	return affectedList, err
 }
@@ -103,6 +105,7 @@ func getAffectedWithCheckout(args *DescribeAffectedCmdArgs) ([]schema.Affected, 
 		args.ProcessYamlFunctions,
 		args.Skip,
 		args.ExcludeLocked,
+		args.AuthManager,
 	)
 	return affectedList, err
 }
@@ -140,7 +143,7 @@ func buildFilteredDependencyGraph(
 		args.ProcessYamlFunctions,
 		false,
 		args.Skip,
-		nil, // authManager
+		args.AuthManager,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error describing stacks: %w", err)
