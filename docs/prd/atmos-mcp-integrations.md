@@ -163,6 +163,22 @@ The `.mcp.json` generation wraps each server with `atmos auth exec`:
    results back to the AI, and records every call in the execution result for display.
 5. **Implement `auto_start` and `timeout`** — declared in schema, timeout parsed in config.
 
+### Tool Execution Flow
+
+The tool invocation loop lives in `pkg/ai/executor/executor.go`:
+
+1. Atmos sends the prompt + list of available tools (native + MCP) to the AI provider.
+2. AI responds with either:
+   - `StopReasonEndTurn` — answered directly, no tools needed → no "Tool Executions" section.
+   - `StopReasonToolUse` + `ToolCalls` array — AI explicitly requests specific tools.
+3. Atmos executes the requested tools via `executeTools()`.
+4. Results are recorded in `result.ToolCalls`.
+5. Results sent back to AI for the final answer.
+6. The markdown formatter renders the "Tool Executions" section from `result.ToolCalls`.
+
+This is a standard tool-use loop — the AI provider controls which tools are called.
+Atmos never guesses or infers tool usage.
+
 ---
 
 ## AWS MCP Servers — Primary Use Case
