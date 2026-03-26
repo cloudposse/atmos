@@ -289,5 +289,6 @@ func ExecutePacker(
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		WithEnvironment(info.SanitizedEnv),
 	)
 }
