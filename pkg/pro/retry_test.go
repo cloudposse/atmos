@@ -21,15 +21,20 @@ func (f *fakeSleeper) Sleep(d time.Duration) {
 	f.sleeps = append(f.sleeps, d)
 }
 
-// fakeRefreshableClient creates an AtmosProAPIClient that can track RefreshToken calls.
-// Since RefreshToken checks useOIDC and atmosConfig, we set useOIDC=false so RefreshToken is a no-op.
-// For tests that need actual refresh behavior, we test via doWithRetry directly.
-func newTestClient() *AtmosProAPIClient {
-	return &AtmosProAPIClient{
-		APIToken:        "test-token",
-		BaseURL:         "https://example.com",
-		BaseAPIEndpoint: "api/v1",
-	}
+// mockRefresher tracks RefreshToken calls and returns a configurable error.
+type mockRefresher struct {
+	calls     int
+	returnErr error
+}
+
+func (m *mockRefresher) RefreshToken() error {
+	m.calls++
+	return m.returnErr
+}
+
+// newMockRefresher returns a mockRefresher that succeeds on RefreshToken.
+func newMockRefresher() *mockRefresher {
+	return &mockRefresher{}
 }
 
 func TestDoWithRetry_SuccessOnFirstAttempt(t *testing.T) {
@@ -40,7 +45,7 @@ func TestDoWithRetry_SuccessOnFirstAttempt(t *testing.T) {
 	err := doWithRetry("TestOp", func() error {
 		callCount++
 		return nil
-	}, newTestClient(), cfg)
+	}, newMockRefresher(), cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount)
@@ -58,7 +63,7 @@ func TestDoWithRetry_ServerErrorThenSuccess(t *testing.T) {
 			return &APIError{StatusCode: 500, Operation: "TestOp", Err: fmt.Errorf("internal server error")}
 		}
 		return nil
-	}, newTestClient(), cfg)
+	}, newMockRefresher(), cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount)
@@ -69,7 +74,7 @@ func TestDoWithRetry_ServerErrorThenSuccess(t *testing.T) {
 func TestDoWithRetry_AuthErrorThenSuccess(t *testing.T) {
 	s := &fakeSleeper{}
 	cfg := retryConfig{maxRetries: 3, baseDelay: time.Second, sleeper: s}
-	client := newTestClient()
+	refresher := newMockRefresher()
 
 	callCount := 0
 	err := doWithRetry("TestOp", func() error {
@@ -78,11 +83,48 @@ func TestDoWithRetry_AuthErrorThenSuccess(t *testing.T) {
 			return &APIError{StatusCode: 401, Operation: "TestOp", Err: fmt.Errorf("unauthorized")}
 		}
 		return nil
-	}, client, cfg)
+	}, refresher, cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount)
+	assert.Equal(t, 1, refresher.calls, "RefreshToken should be called once on 401")
 	require.Len(t, s.sleeps, 1)
+}
+
+func TestDoWithRetry_AuthRefreshFailureAbortsRetry(t *testing.T) {
+	s := &fakeSleeper{}
+	cfg := retryConfig{maxRetries: 3, baseDelay: time.Second, sleeper: s}
+	refresher := &mockRefresher{returnErr: errors.Join(errUtils.ErrTokenRefreshFailed, fmt.Errorf("OIDC unavailable"))}
+
+	callCount := 0
+	err := doWithRetry("TestOp", func() error {
+		callCount++
+		return &APIError{StatusCode: 401, Operation: "TestOp", Err: fmt.Errorf("unauthorized")}
+	}, refresher, cfg)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrTokenRefreshFailed), "should contain ErrTokenRefreshFailed")
+	assert.Equal(t, 1, callCount, "should not retry after refresh failure")
+	assert.Equal(t, 1, refresher.calls)
+	assert.Empty(t, s.sleeps, "no sleep when refresh fails")
+}
+
+func TestDoWithRetry_NonRetryableNonAPIError(t *testing.T) {
+	s := &fakeSleeper{}
+	cfg := retryConfig{maxRetries: 3, baseDelay: time.Second, sleeper: s}
+	refresher := newMockRefresher()
+
+	callCount := 0
+	err := doWithRetry("TestOp", func() error {
+		callCount++
+		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, fmt.Errorf("invalid URL"))
+	}, refresher, cfg)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToCreateAuthRequest), "should contain ErrFailedToCreateAuthRequest")
+	assert.Equal(t, 1, callCount, "should not retry on ErrFailedToCreateAuthRequest")
+	assert.Empty(t, s.sleeps)
+	assert.Equal(t, 0, refresher.calls)
 }
 
 func TestDoWithRetry_NonRetryable400(t *testing.T) {
@@ -93,7 +135,7 @@ func TestDoWithRetry_NonRetryable400(t *testing.T) {
 	err := doWithRetry("TestOp", func() error {
 		callCount++
 		return &APIError{StatusCode: 400, Operation: "TestOp", Err: fmt.Errorf("bad request")}
-	}, newTestClient(), cfg)
+	}, newMockRefresher(), cfg)
 
 	require.Error(t, err)
 	assert.Equal(t, 1, callCount, "should not retry on 400")
@@ -108,7 +150,7 @@ func TestDoWithRetry_NonRetryable403(t *testing.T) {
 	err := doWithRetry("TestOp", func() error {
 		callCount++
 		return &APIError{StatusCode: 403, Operation: "TestOp", Err: fmt.Errorf("forbidden")}
-	}, newTestClient(), cfg)
+	}, newMockRefresher(), cfg)
 
 	require.Error(t, err)
 	assert.Equal(t, 1, callCount, "should not retry on 403")
@@ -122,7 +164,7 @@ func TestDoWithRetry_NonRetryable404(t *testing.T) {
 	err := doWithRetry("TestOp", func() error {
 		callCount++
 		return &APIError{StatusCode: 404, Operation: "TestOp", Err: fmt.Errorf("not found")}
-	}, newTestClient(), cfg)
+	}, newMockRefresher(), cfg)
 
 	require.Error(t, err)
 	assert.Equal(t, 1, callCount, "should not retry on 404")
@@ -136,7 +178,7 @@ func TestDoWithRetry_AllRetriesExhausted(t *testing.T) {
 	err := doWithRetry("TestOp", func() error {
 		callCount++
 		return &APIError{StatusCode: 502, Operation: "TestOp", Err: fmt.Errorf("bad gateway")}
-	}, newTestClient(), cfg)
+	}, newMockRefresher(), cfg)
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrUploadRetryExhausted))
@@ -158,7 +200,7 @@ func TestDoWithRetry_NetworkErrorRetried(t *testing.T) {
 			return fmt.Errorf("connection refused")
 		}
 		return nil
-	}, newTestClient(), cfg)
+	}, newMockRefresher(), cfg)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount)
@@ -171,7 +213,7 @@ func TestDoWithRetry_ExponentialBackoff(t *testing.T) {
 
 	err := doWithRetry("TestOp", func() error {
 		return &APIError{StatusCode: 503, Operation: "TestOp", Err: fmt.Errorf("unavailable")}
-	}, newTestClient(), cfg)
+	}, newMockRefresher(), cfg)
 
 	require.Error(t, err)
 	require.Len(t, s.sleeps, 3)

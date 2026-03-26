@@ -44,11 +44,16 @@ func defaultRetryConfig() retryConfig {
 	}
 }
 
+// tokenRefresher abstracts token refresh for testability.
+type tokenRefresher interface {
+	RefreshToken() error
+}
+
 // doWithRetry executes fn with retry logic for transient failures.
-// On 401 errors, it calls client.RefreshToken() before retrying.
+// On 401 errors, it calls refresher.RefreshToken() before retrying.
 // On 5xx or network errors, it retries with exponential backoff.
 // On 400/403/404, it returns immediately without retrying.
-func doWithRetry(operation string, fn func() error, client *AtmosProAPIClient, cfg retryConfig) error {
+func doWithRetry(operation string, fn func() error, refresher tokenRefresher, cfg retryConfig) error {
 	var lastErr error
 
 	for attempt := 0; attempt <= cfg.maxRetries; attempt++ {
@@ -62,7 +67,7 @@ func doWithRetry(operation string, fn func() error, client *AtmosProAPIClient, c
 			break
 		}
 
-		if shouldAbort := handleRetryableError(operation, lastErr, attempt, cfg, client); shouldAbort != nil {
+		if shouldAbort := handleRetryableError(operation, lastErr, attempt, cfg, refresher); shouldAbort != nil {
 			return shouldAbort
 		}
 
@@ -83,10 +88,15 @@ func doWithRetry(operation string, fn func() error, client *AtmosProAPIClient, c
 // handleRetryableError inspects the error and logs the retry attempt.
 // Returns non-nil to signal the caller should abort (non-retryable or refresh failure).
 // Returns nil to signal the caller should proceed with the retry.
-func handleRetryableError(operation string, lastErr error, attempt int, cfg retryConfig, client *AtmosProAPIClient) error {
+func handleRetryableError(operation string, lastErr error, attempt int, cfg retryConfig, refresher tokenRefresher) error {
 	var apiErr *APIError
 	if !errors.As(lastErr, &apiErr) {
-		// Network error or other non-API error — retry.
+		// Deterministic local errors (e.g. bad URL) — do not retry.
+		if errors.Is(lastErr, errUtils.ErrFailedToCreateAuthRequest) {
+			return lastErr
+		}
+
+		// Remaining non-API errors are likely transient network issues — retry.
 		log.Warn("Upload failed with network error, retrying.",
 			logKeyOperation, operation,
 			logKeyAttempt, attempt+1,
@@ -102,7 +112,7 @@ func handleRetryableError(operation string, lastErr error, attempt int, cfg retr
 	}
 
 	if apiErr.IsAuthError() {
-		return handleAuthRetry(operation, lastErr, attempt, cfg, client)
+		return handleAuthRetry(operation, lastErr, attempt, cfg, refresher)
 	}
 
 	// 5xx — retry without token refresh.
@@ -118,14 +128,14 @@ func handleRetryableError(operation string, lastErr error, attempt int, cfg retr
 
 // handleAuthRetry refreshes the token on 401 errors before retrying.
 // Returns non-nil to abort if token refresh fails.
-func handleAuthRetry(operation string, lastErr error, attempt int, cfg retryConfig, client *AtmosProAPIClient) error {
+func handleAuthRetry(operation string, lastErr error, attempt int, cfg retryConfig, refresher tokenRefresher) error {
 	log.Warn("Upload received 401, refreshing token before retry.",
 		logKeyOperation, operation,
 		logKeyAttempt, attempt+1,
 		logKeyMaxRetries, cfg.maxRetries,
 	)
 
-	if refreshErr := client.RefreshToken(); refreshErr != nil {
+	if refreshErr := refresher.RefreshToken(); refreshErr != nil {
 		log.Error("Token refresh failed, aborting retries.",
 			logKeyOperation, operation,
 			"error", refreshErr,
