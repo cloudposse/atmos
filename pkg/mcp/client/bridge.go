@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -101,10 +102,17 @@ func (t *BridgedTool) Execute(ctx context.Context, params map[string]interface{}
 	}
 
 	output := ExtractTextContent(result)
-	isError := result.IsError
+
+	if result.IsError {
+		return &tools.Result{
+			Success: false,
+			Output:  output,
+			Error:   fmt.Errorf("%w: server %q, tool %q: %s", errUtils.ErrMCPServerToolError, t.serverName, t.mcpTool.Name, output),
+		}, nil
+	}
 
 	return &tools.Result{
-		Success: !isError,
+		Success: true,
 		Output:  output,
 	}, nil
 }

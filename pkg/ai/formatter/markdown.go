@@ -39,6 +39,13 @@ func (f *MarkdownFormatter) Format(w io.Writer, result *ExecutionResult) error {
 		if _, err := fmt.Fprintf(w, "%d. %s **%s** (%dms)\n", i+1, status, tc.Tool, tc.DurationMs); err != nil {
 			return err
 		}
+		// Show error details for failed tool calls so users can diagnose issues
+		// (e.g., missing credentials, permission denied, server timeout).
+		if !tc.Success && tc.Error != "" {
+			if _, err := fmt.Fprintf(w, "   Error: %s\n", tc.Error); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil

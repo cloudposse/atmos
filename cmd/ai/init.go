@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"fmt"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
@@ -11,6 +13,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // aiToolsResult holds the result of AI tools initialization.
@@ -41,7 +44,7 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiTo
 	// Register external MCP server tools (if configured).
 	mcpMgr := registerMCPServerTools(registry, atmosConfig)
 
-	log.Infof("AI tools initialized: %d total", registry.Count())
+	ui.Info(fmt.Sprintf("AI tools initialized: %d total", registry.Count()))
 
 	// Initialize permission cache for persistent decisions.
 	permCache, err := permission.NewPermissionCache(atmosConfig.BasePath)
@@ -97,7 +100,7 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 	// Register read-only MCP server tools (servers marked read_only: true).
 	registerReadOnlyMCPServerTools(registry, atmosConfig)
 
-	log.Infof("AI tools initialized: %d read-only", registry.Count())
+	ui.Info(fmt.Sprintf("AI tools initialized: %d read-only", registry.Count()))
 
 	// Read-only tools don't require permissions, but create a permissive checker just in case.
 	permConfig := &permission.Config{
@@ -131,7 +134,7 @@ func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosC
 			"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
 		)
 		if err != nil {
-			log.Warnf("Failed to create auth manager for MCP servers: %v", err)
+			ui.Error(fmt.Sprintf("Failed to create auth manager for MCP servers: %v", err))
 		} else if mgr != nil {
 			authProvider = mgr
 		}
@@ -139,7 +142,7 @@ func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosC
 
 	mgr, err := mcpclient.RegisterMCPTools(registry, atmosConfig, authProvider, toolchain)
 	if err != nil {
-		log.Warnf("Failed to initialize MCP servers: %v", err)
+		ui.Error(fmt.Sprintf("Failed to initialize MCP servers: %v", err))
 	}
 	return mgr
 }
@@ -167,7 +170,7 @@ func registerReadOnlyMCPServerTools(registry *tools.Registry, atmosConfig *schem
 	}
 
 	if err := mcpclient.RegisterReadOnlyMCPTools(registry, atmosConfig, authProvider, toolchain); err != nil {
-		log.Warnf("Failed to register read-only MCP server tools: %v", err)
+		ui.Error(fmt.Sprintf("Failed to register read-only MCP server tools: %v", err))
 	}
 }
 

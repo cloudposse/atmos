@@ -1016,6 +1016,7 @@ var (
 	ErrMCPServerCommandEmpty    = errors.New("MCP server command must not be empty")
 	ErrMCPServerInvalidTimeout  = errors.New("MCP server timeout is invalid")
 	ErrMCPServerToolListFailed  = errors.New("failed to list tools from MCP server")
+	ErrMCPServerToolError       = errors.New("MCP server returned error for tool")
 	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
 	ErrLSPConfigNil             = errors.New("LSP config is nil")
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")

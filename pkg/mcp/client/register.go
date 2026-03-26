@@ -2,12 +2,13 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/ai/tools"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const registrationTimeout = 60 * time.Second
@@ -21,7 +22,7 @@ const registrationTimeout = 60 * time.Second
 //   - toolchain: resolves command binaries and provides toolchain PATH for
 //     prerequisites like uvx/npx that may be managed by Atmos toolchain.
 //
-// Servers that fail to start are logged as warnings but do not prevent
+// Servers that fail to start are reported as errors but do not prevent
 // other servers from registering.
 func RegisterMCPTools(
 	registry *tools.Registry,
@@ -43,7 +44,7 @@ func RegisterMCPTools(
 	totalTools := startAndRegisterTools(mgr, registry, startOpts)
 
 	if totalTools > 0 {
-		log.Infof("Registered %d tools from %d MCP server(s)", totalTools, len(mgr.List()))
+		ui.Info(fmt.Sprintf("Registered %d tools from %d MCP server(s)", totalTools, len(mgr.List())))
 	}
 
 	return mgr, nil
@@ -80,7 +81,7 @@ func RegisterReadOnlyMCPTools(
 	totalTools := startAndRegisterTools(mgr, registry, startOpts)
 
 	if totalTools > 0 {
-		log.Infof("Registered %d read-only tools from MCP server(s)", totalTools)
+		ui.Info(fmt.Sprintf("Registered %d read-only tools from MCP server(s)", totalTools))
 	}
 
 	return nil
@@ -106,7 +107,7 @@ func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []S
 	var totalTools int
 	for _, session := range mgr.List() {
 		if err := session.Start(ctx, startOpts...); err != nil {
-			log.Warnf("MCP server %q failed to start: %v", session.Name(), err)
+			ui.Error(fmt.Sprintf("MCP server %q failed to start: %v", session.Name(), err))
 			continue
 		}
 
@@ -114,13 +115,13 @@ func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []S
 		serverTools := 0
 		for _, bt := range bridged {
 			if regErr := registry.Register(bt); regErr != nil {
-				log.Warnf("Failed to register MCP tool %q: %v", bt.Name(), regErr)
+				ui.Error(fmt.Sprintf("Failed to register MCP tool %q: %v", bt.Name(), regErr))
 				continue
 			}
 			serverTools++
 		}
 		totalTools += serverTools
-		log.Info("MCP server started", "server", session.Name(), "tools", serverTools)
+		ui.Info(fmt.Sprintf("MCP server %q started (%d tools)", session.Name(), serverTools))
 	}
 	return totalTools
 }
