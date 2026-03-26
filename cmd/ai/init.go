@@ -41,7 +41,7 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiTo
 	// Register external MCP server tools (if configured).
 	mcpMgr := registerMCPServerTools(registry, atmosConfig)
 
-	log.Debugf("Registered %d tools", registry.Count())
+	log.Infof("AI tools initialized: %d total", registry.Count())
 
 	// Initialize permission cache for persistent decisions.
 	permCache, err := permission.NewPermissionCache(atmosConfig.BasePath)
@@ -97,7 +97,7 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 	// Register read-only MCP server tools (servers marked read_only: true).
 	registerReadOnlyMCPServerTools(registry, atmosConfig)
 
-	log.Debugf("Registered %d read-only tools", registry.Count())
+	log.Infof("AI tools initialized: %d read-only", registry.Count())
 
 	// Read-only tools don't require permissions, but create a permissive checker just in case.
 	permConfig := &permission.Config{

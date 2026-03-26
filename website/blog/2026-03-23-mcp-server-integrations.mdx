@@ -64,6 +64,28 @@ atmos mcp tools aws-pricing
 atmos ai ask "What's the on-demand price for m7i.xlarge in us-east-1?"
 ```
 
+## Visibility
+
+Atmos shows which MCP servers are active and which tools the AI uses:
+
+```text
+INFO MCP server started server=aws-docs tools=4
+INFO MCP server started server=aws-pricing tools=7
+INFO Registered 11 tools from 2 MCP server(s)
+INFO AI tools initialized: 26 total
+```
+
+After the AI responds, tool executions are listed:
+
+```text
+---
+## Tool Executions (2)
+1. ✅ **aws-docs.search_documentation** (234ms)
+2. ✅ **aws-pricing.get_pricing** (456ms)
+```
+
+If no tool executions appear, the AI answered from its own knowledge without calling MCP tools.
+
 ## What You Can Do
 
 ### Search AWS Documentation

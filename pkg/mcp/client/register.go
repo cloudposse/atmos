@@ -43,7 +43,7 @@ func RegisterMCPTools(
 	totalTools := startAndRegisterTools(mgr, registry, startOpts)
 
 	if totalTools > 0 {
-		log.Debugf("Registered %d MCP server tools", totalTools)
+		log.Infof("Registered %d tools from %d MCP server(s)", totalTools, len(mgr.List()))
 	}
 
 	return mgr, nil
@@ -80,7 +80,7 @@ func RegisterReadOnlyMCPTools(
 	totalTools := startAndRegisterTools(mgr, registry, startOpts)
 
 	if totalTools > 0 {
-		log.Debugf("Registered %d read-only MCP server tools", totalTools)
+		log.Infof("Registered %d read-only tools from MCP server(s)", totalTools)
 	}
 
 	return nil
@@ -110,13 +110,17 @@ func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []S
 			continue
 		}
 
-		for _, bt := range BridgeTools(session) {
+		bridged := BridgeTools(session)
+		serverTools := 0
+		for _, bt := range bridged {
 			if regErr := registry.Register(bt); regErr != nil {
 				log.Warnf("Failed to register MCP tool %q: %v", bt.Name(), regErr)
 				continue
 			}
-			totalTools++
+			serverTools++
 		}
+		totalTools += serverTools
+		log.Info("MCP server started", "server", session.Name(), "tools", serverTools)
 	}
 	return totalTools
 }

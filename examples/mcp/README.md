@@ -92,6 +92,29 @@ atmos mcp restart aws-api
 atmos mcp generate-config
 ```
 
+### How to Know MCP Tools Are Active
+
+When you run any AI command, Atmos logs which MCP servers started and how many tools were discovered:
+
+```text
+INFO MCP server started server=aws-docs tools=4
+INFO MCP server started server=aws-pricing tools=7
+INFO Registered 11 tools from 2 MCP server(s)
+INFO AI tools initialized: 26 total
+```
+
+After the AI responds, a "Tool Executions" section shows which tools were actually called:
+
+```text
+---
+## Tool Executions (2)
+1. ✅ **aws-docs.search_documentation** (234ms)
+2. ✅ **aws-pricing.get_pricing** (456ms)
+```
+
+If no "Tool Executions" section appears, the AI answered from its own knowledge without
+calling any MCP tools — the tools were available but not needed for that question.
+
 ### Using MCP Tools in AI Chat
 
 Interactive chat sessions with full access to all MCP server tools:

@@ -148,14 +148,17 @@ The `.mcp.json` generation wraps each server with `atmos auth exec`:
 
 ### Phase 5 Improvements
 
-1. **Wire auth identity in AI commands** — `auth_identity` field currently declared but
-   not passed to MCP server subprocess during `atmos ai chat`. Fix: pass `authManager`
-   through the tool registration path.
+1. **Wire auth identity in AI commands** — `auth_identity` field now creates an
+   `AuthEnvProvider` and passes it through the tool registration path, enabling
+   automatic credential injection for MCP server subprocesses.
 2. **`.mcp.json` generation** — `atmos mcp generate-config` emits IDE-compatible config
-   from `atmos.yaml` servers, wrapping each with `atmos auth exec`.
+   from `atmos.yaml` servers, wrapping auth servers with `atmos auth exec`.
 3. **Read-only server marking** — `read_only: true` field allows safe servers (docs, pricing)
-   to be used in `atmos ai ask` (currently excluded for safety).
-4. **Implement `auto_start` and `timeout`** — declared in schema but unused.
+   to be used in `atmos ai ask` (non-interactive mode).
+4. **User-facing MCP server feedback** — MCP server startup, tool discovery counts, and
+   tool execution results are shown at Info log level so users can see which servers are
+   active and which tools were invoked by the AI.
+5. **Implement `auto_start` and `timeout`** — declared in schema, timeout parsed in config.
 
 ---
 
