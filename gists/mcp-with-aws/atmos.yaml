@@ -1,0 +1,5 @@
+# Minimal atmos.yaml for MCP with AWS gist.
+# Configuration is split into .atmos.d/ files for organization.
+
+import:
+  - path: .atmos.d/**/*.yaml
