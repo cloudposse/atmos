@@ -2,11 +2,13 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -235,6 +237,270 @@ func TestIsStandaloneAWSAmbientChain(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := IsStandaloneAWSAmbientChain(tt.chain, tt.identities)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestAWSAmbientIdentitySetRealm(t *testing.T) {
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	// SetRealm stores the realm. Verify it doesn't panic.
+	identity.SetRealm("test-realm")
+}
+
+func TestAWSAmbientIdentityValidate(t *testing.T) {
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	err = identity.Validate()
+	assert.NoError(t, err)
+}
+
+func TestAWSAmbientIdentityPostAuthenticate(t *testing.T) {
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	err = identity.PostAuthenticate(context.Background(), nil)
+	assert.NoError(t, err)
+}
+
+func TestAWSAmbientIdentityLogout(t *testing.T) {
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	err = identity.Logout(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestAWSAmbientIdentityAuthenticate(t *testing.T) {
+	// Use environment variables to provide fake credentials to the AWS SDK.
+	// The SDK resolves from env vars without making network calls.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_SESSION_TOKEN", "test-session-token")
+	// Prevent SDK from trying IMDS or other sources.
+	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{
+		Kind:      "aws/ambient",
+		Principal: map[string]interface{}{"region": "us-west-2"},
+	})
+	require.NoError(t, err)
+
+	creds, err := identity.Authenticate(context.Background(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+	assert.Equal(t, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", awsCreds.SecretAccessKey)
+	assert.Equal(t, "test-session-token", awsCreds.SessionToken)
+	assert.Equal(t, "us-west-2", awsCreds.Region)
+}
+
+func TestAWSAmbientIdentityAuthenticateWithoutRegion(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	creds, err := identity.Authenticate(context.Background(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+	assert.Empty(t, awsCreds.Region)
+}
+
+func TestAWSAmbientIdentityCredentialsExist(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	exists, err := identity.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists)
+}
+
+func TestAWSAmbientIdentityCredentialsExistNoCreds(t *testing.T) {
+	// Clear all AWS credential sources.
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_SESSION_TOKEN", "")
+	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	exists, err := identity.CredentialsExist()
+	require.NoError(t, err)
+	assert.False(t, exists)
+}
+
+func TestAWSAmbientIdentityLoadCredentials(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	creds, err := identity.LoadCredentials(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+}
+
+func TestAWSAmbientIdentityResolveRegion(t *testing.T) {
+	tests := []struct {
+		name      string
+		principal map[string]interface{}
+		want      string
+	}{
+		{
+			name:      "with region",
+			principal: map[string]interface{}{"region": "eu-central-1"},
+			want:      "eu-central-1",
+		},
+		{
+			name:      "nil principal",
+			principal: nil,
+			want:      "",
+		},
+		{
+			name:      "empty region",
+			principal: map[string]interface{}{"region": ""},
+			want:      "",
+		},
+		{
+			name:      "region not a string",
+			principal: map[string]interface{}{"region": 42},
+			want:      "",
+		},
+		{
+			name:      "no region key",
+			principal: map[string]interface{}{"account": "123456789"},
+			want:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := &awsAmbientIdentity{
+				name:   "test",
+				config: &schema.Identity{Kind: "aws/ambient", Principal: tt.principal},
+			}
+			assert.Equal(t, tt.want, id.resolveRegion())
+		})
+	}
+}
+
+// mockAWSIdentity is a test double for types.Identity used by AuthenticateStandaloneAWSAmbient tests.
+type mockAWSIdentity struct {
+	kind      string
+	authCreds types.ICredentials
+	authErr   error
+}
+
+func (m *mockAWSIdentity) Kind() string                            { return m.kind }
+func (m *mockAWSIdentity) GetProviderName() (string, error)        { return "mock", nil }
+func (m *mockAWSIdentity) Validate() error                         { return nil }
+func (m *mockAWSIdentity) Environment() (map[string]string, error) { return nil, nil }
+func (m *mockAWSIdentity) Paths() ([]types.Path, error)            { return nil, nil }
+func (m *mockAWSIdentity) SetRealm(_ string)                       {}
+func (m *mockAWSIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
+	return nil
+}
+func (m *mockAWSIdentity) Logout(_ context.Context) error  { return nil }
+func (m *mockAWSIdentity) CredentialsExist() (bool, error) { return true, nil }
+func (m *mockAWSIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
+	return nil, nil
+}
+
+func (m *mockAWSIdentity) PrepareEnvironment(_ context.Context, env map[string]string) (map[string]string, error) {
+	return env, nil
+}
+
+func (m *mockAWSIdentity) Authenticate(_ context.Context, _ types.ICredentials) (types.ICredentials, error) {
+	return m.authCreds, m.authErr
+}
+
+func TestAuthenticateStandaloneAWSAmbient(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		identities   map[string]types.Identity
+		wantErr      bool
+		errSubstr    string
+		wantCreds    bool
+	}{
+		{
+			name:         "success",
+			identityName: "eks-deployer",
+			identities: map[string]types.Identity{
+				"eks-deployer": &mockAWSIdentity{
+					kind: "aws/ambient",
+					authCreds: &types.AWSCredentials{
+						AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+						SecretAccessKey: "secret",
+					},
+				},
+			},
+			wantCreds: true,
+		},
+		{
+			name:         "identity not found",
+			identityName: "missing",
+			identities:   map[string]types.Identity{},
+			wantErr:      true,
+			errSubstr:    "not found",
+		},
+		{
+			name:         "authentication fails",
+			identityName: "broken",
+			identities: map[string]types.Identity{
+				"broken": &mockAWSIdentity{
+					kind:    "aws/ambient",
+					authErr: fmt.Errorf("no credentials available"),
+				},
+			},
+			wantErr:   true,
+			errSubstr: "authentication failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creds, err := AuthenticateStandaloneAWSAmbient(context.Background(), tt.identityName, tt.identities)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errSubstr)
+			} else {
+				require.NoError(t, err)
+				if tt.wantCreds {
+					require.NotNil(t, creds)
+				} else {
+					assert.Nil(t, creds)
+				}
+			}
 		})
 	}
 }

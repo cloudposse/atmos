@@ -2,11 +2,13 @@ package ambient
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -210,4 +212,116 @@ func TestAmbientIdentityLoadCredentials(t *testing.T) {
 	creds, err := identity.LoadCredentials(context.Background())
 	require.NoError(t, err)
 	assert.Nil(t, creds)
+}
+
+func TestAmbientIdentitySetRealm(t *testing.T) {
+	identity, err := NewAmbientIdentity("test", &schema.Identity{Kind: "ambient"})
+	require.NoError(t, err)
+
+	// SetRealm is a no-op for ambient identities, just verify it doesn't panic.
+	identity.SetRealm("test-realm")
+}
+
+func TestAmbientIdentityValidate(t *testing.T) {
+	identity, err := NewAmbientIdentity("test", &schema.Identity{Kind: "ambient"})
+	require.NoError(t, err)
+
+	err = identity.Validate()
+	assert.NoError(t, err)
+}
+
+func TestAmbientIdentityPostAuthenticate(t *testing.T) {
+	identity, err := NewAmbientIdentity("test", &schema.Identity{Kind: "ambient"})
+	require.NoError(t, err)
+
+	err = identity.PostAuthenticate(context.Background(), nil)
+	assert.NoError(t, err)
+}
+
+func TestAmbientIdentityLogout(t *testing.T) {
+	identity, err := NewAmbientIdentity("test", &schema.Identity{Kind: "ambient"})
+	require.NoError(t, err)
+
+	err = identity.Logout(context.Background())
+	assert.NoError(t, err)
+}
+
+// mockIdentity is a test double for types.Identity used by AuthenticateStandaloneAmbient tests.
+type mockIdentity struct {
+	kind      string
+	authCreds types.ICredentials
+	authErr   error
+}
+
+func (m *mockIdentity) Kind() string                            { return m.kind }
+func (m *mockIdentity) GetProviderName() (string, error)        { return "mock", nil }
+func (m *mockIdentity) Validate() error                         { return nil }
+func (m *mockIdentity) Environment() (map[string]string, error) { return nil, nil }
+func (m *mockIdentity) Paths() ([]types.Path, error)            { return nil, nil }
+func (m *mockIdentity) SetRealm(_ string)                       {}
+func (m *mockIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
+	return nil
+}
+func (m *mockIdentity) Logout(_ context.Context) error  { return nil }
+func (m *mockIdentity) CredentialsExist() (bool, error) { return true, nil }
+func (m *mockIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
+	return nil, nil
+}
+
+func (m *mockIdentity) PrepareEnvironment(_ context.Context, env map[string]string) (map[string]string, error) {
+	return env, nil
+}
+
+func (m *mockIdentity) Authenticate(_ context.Context, _ types.ICredentials) (types.ICredentials, error) {
+	return m.authCreds, m.authErr
+}
+
+func TestAuthenticateStandaloneAmbient(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		identities   map[string]types.Identity
+		wantErr      bool
+		errSubstr    string
+	}{
+		{
+			name:         "success",
+			identityName: "passthrough",
+			identities: map[string]types.Identity{
+				"passthrough": &mockIdentity{kind: "ambient"},
+			},
+		},
+		{
+			name:         "identity not found",
+			identityName: "missing",
+			identities:   map[string]types.Identity{},
+			wantErr:      true,
+			errSubstr:    "not found",
+		},
+		{
+			name:         "authentication fails",
+			identityName: "broken",
+			identities: map[string]types.Identity{
+				"broken": &mockIdentity{
+					kind:    "ambient",
+					authErr: fmt.Errorf("credential resolution failed"),
+				},
+			},
+			wantErr:   true,
+			errSubstr: "authentication failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creds, err := AuthenticateStandaloneAmbient(context.Background(), tt.identityName, tt.identities)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errSubstr)
+			} else {
+				require.NoError(t, err)
+				assert.Nil(t, creds, "ambient identity should return nil credentials")
+			}
+		})
+	}
 }
