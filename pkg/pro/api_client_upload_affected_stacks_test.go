@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -155,6 +156,7 @@ func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
 
 func TestUploadAffectedStacks_Chunked(t *testing.T) {
 	var requestCount atomic.Int32
+	var mu sync.Mutex
 	var receivedBodies []dtos.UploadAffectedStacksRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +166,10 @@ func TestUploadAffectedStacks_Chunked(t *testing.T) {
 
 		var req dtos.UploadAffectedStacksRequest
 		require.NoError(t, json.Unmarshal(body, &req))
+
+		mu.Lock()
 		receivedBodies = append(receivedBodies, req)
+		mu.Unlock()
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"success": true}`))
@@ -214,11 +219,16 @@ func TestUploadAffectedStacks_Chunked(t *testing.T) {
 	assert.Greater(t, totalRequests, 1, "large payload should be chunked into multiple requests")
 
 	// All requests should have the same batch_id.
-	batchID := receivedBodies[0].BatchID
+	mu.Lock()
+	bodies := make([]dtos.UploadAffectedStacksRequest, len(receivedBodies))
+	copy(bodies, receivedBodies)
+	mu.Unlock()
+
+	batchID := bodies[0].BatchID
 	assert.NotEmpty(t, batchID)
 
 	totalStacks := 0
-	for i, body := range receivedBodies {
+	for i, body := range bodies {
 		assert.Equal(t, batchID, body.BatchID)
 		require.NotNil(t, body.BatchIndex)
 		assert.Equal(t, i, *body.BatchIndex)
