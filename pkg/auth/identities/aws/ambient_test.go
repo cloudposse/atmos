@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +13,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// setEmptyAWSConfigFiles creates empty temp files for AWS config and credentials,
+// replacing /dev/null usage for cross-platform compatibility.
+func setEmptyAWSConfigFiles(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config")
+	creds := filepath.Join(dir, "credentials")
+	require.NoError(t, os.WriteFile(cfg, []byte(""), 0o600))
+	require.NoError(t, os.WriteFile(creds, []byte(""), 0o600))
+	t.Setenv("AWS_CONFIG_FILE", cfg)
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", creds)
+}
 
 func TestNewAWSAmbientIdentity(t *testing.T) {
 	tests := []struct {
@@ -290,8 +305,7 @@ func TestAWSAmbientIdentityAuthenticate(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
 	t.Setenv("AWS_SESSION_TOKEN", "test-session-token")
 	// Prevent SDK from trying IMDS or other sources.
-	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+	setEmptyAWSConfigFiles(t)
 
 	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{
 		Kind:      "aws/ambient",
@@ -314,8 +328,9 @@ func TestAWSAmbientIdentityAuthenticate(t *testing.T) {
 func TestAWSAmbientIdentityAuthenticateWithoutRegion(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
-	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+	setEmptyAWSConfigFiles(t)
 
 	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
 	require.NoError(t, err)
@@ -337,9 +352,9 @@ func TestAWSAmbientIdentityAuthenticateSDKResolvedRegion(t *testing.T) {
 	// be preserved in the returned credentials.
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_REGION", "")
 	t.Setenv("AWS_DEFAULT_REGION", "ap-southeast-1")
-	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+	setEmptyAWSConfigFiles(t)
 
 	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
 	require.NoError(t, err)
@@ -356,8 +371,7 @@ func TestAWSAmbientIdentityAuthenticateSDKResolvedRegion(t *testing.T) {
 func TestAWSAmbientIdentityCredentialsExist(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
-	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+	setEmptyAWSConfigFiles(t)
 
 	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
 	require.NoError(t, err)
@@ -372,8 +386,7 @@ func TestAWSAmbientIdentityCredentialsExistNoCreds(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
 	t.Setenv("AWS_SESSION_TOKEN", "")
-	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+	setEmptyAWSConfigFiles(t)
 	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
 
 	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
@@ -387,8 +400,7 @@ func TestAWSAmbientIdentityCredentialsExistNoCreds(t *testing.T) {
 func TestAWSAmbientIdentityLoadCredentials(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
-	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+	setEmptyAWSConfigFiles(t)
 
 	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
 	require.NoError(t, err)

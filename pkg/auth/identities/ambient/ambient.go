@@ -34,6 +34,9 @@ func NewAmbientIdentity(name string, config *schema.Identity) (types.Identity, e
 	if config.Kind != "ambient" {
 		return nil, fmt.Errorf("%w: invalid identity kind for ambient: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}
+	if config.Via != nil {
+		return nil, fmt.Errorf("%w: ambient identity %q must not define via", errUtils.ErrInvalidIdentityConfig, name)
+	}
 
 	return &ambientIdentity{
 		name:   name,

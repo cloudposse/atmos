@@ -39,6 +39,16 @@ func TestNewAmbientIdentity(t *testing.T) {
 			wantErr:   true,
 			errSubstr: "invalid identity kind",
 		},
+		{
+			name:   "via is rejected",
+			idName: "bad",
+			config: &schema.Identity{
+				Kind: "ambient",
+				Via:  &schema.IdentityVia{Identity: "base-identity"},
+			},
+			wantErr:   true,
+			errSubstr: "must not define via",
+		},
 	}
 
 	for _, tt := range tests {
