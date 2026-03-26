@@ -16,6 +16,10 @@ commands:
             steps:
               - |
                 SERVER="{{ .Arguments.server }}"
+                if [ -z "$SERVER" ]; then
+                  echo "Missing required argument: server"
+                  exit 2
+                fi
 
                 # Resolve package name from short name
                 resolve_package() {
@@ -53,7 +57,9 @@ commands:
                     stepfunctions-tool
                   )
                   for s in "${ALL_SERVERS[@]}"; do
-                    if ! atmos mcp aws install "$s"; then
+                    PACKAGE=$(resolve_package "$s")
+                    echo "Installing $PACKAGE..."
+                    if ! uv tool install "$PACKAGE" --force -q --python 3.13; then
                       echo ""
                       echo "Failed installing server package: $s"
                       exit 1
@@ -74,6 +80,10 @@ commands:
             steps:
               - |
                 SERVER="{{ .Arguments.server }}"
+                if [ -z "$SERVER" ]; then
+                  echo "Missing required argument: server"
+                  exit 2
+                fi
                 AWS_PREFIXED="pricing serverless iac documentation support network"
                 if echo "$AWS_PREFIXED" | grep -qw "$SERVER"; then
                   PACKAGE="awslabs.aws-${SERVER}-mcp-server"

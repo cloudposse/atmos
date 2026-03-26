@@ -65,14 +65,14 @@ Every gist README.md MUST include:
 
 After creating the gist directory, add entries to `website/plugins/file-browser/index.js`:
 
-### TAGS_MAP (~line 26)
+### TAGS_MAP
 Add tags for the new gist. Available tags: Quickstart, Stacks, Components, Automation, DX
 
 ```js
 'my-gist-name': ['DX', 'Automation'],
 ```
 
-### DOCS_MAP (~line 53)
+### DOCS_MAP
 Add documentation links for the new gist:
 
 ```js
