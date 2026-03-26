@@ -157,7 +157,10 @@ The `.mcp.json` generation wraps each server with `atmos auth exec`:
    to be used in `atmos ai ask` (non-interactive mode).
 4. **User-facing MCP server feedback** — MCP server startup, tool discovery counts, and
    tool execution results are shown at Info log level so users can see which servers are
-   active and which tools were invoked by the AI.
+   active and which tools were invoked by the AI. Tool usage is not inferred — the AI
+   provider explicitly declares which tools it wants to use via `tool_use` stop reason
+   and `tool_calls` in the API response. Atmos executes the requested tools, sends
+   results back to the AI, and records every call in the execution result for display.
 5. **Implement `auto_start` and `timeout`** — declared in schema, timeout parsed in config.
 
 ---

@@ -112,8 +112,11 @@ After the AI responds, a "Tool Executions" section shows which tools were actual
 2. ✅ **aws-pricing.get_pricing** (456ms)
 ```
 
-If no "Tool Executions" section appears, the AI answered from its own knowledge without
-calling any MCP tools — the tools were available but not needed for that question.
+Tool usage is not inferred — the AI provider explicitly declares which tools it wants to call
+via the API protocol (`tool_use` stop reason with a `tool_calls` array). Atmos executes the
+requested tools, sends results back to the AI for the final answer, and records every call.
+If no "Tool Executions" section appears, the AI genuinely chose not to use any tools for
+that question.
 
 ### Using MCP Tools in AI Chat
 
