@@ -57,6 +57,7 @@ mcp:
       env:
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Documentation — search and fetch AWS docs"
+      read_only: true
 
     # -----------------------------------------------------------------------
     # AWS Knowledge — managed remote knowledge base
@@ -71,6 +72,7 @@ mcp:
         - "run"
         - "https://knowledge-mcp.global.api.aws"
       description: "AWS Knowledge — managed AWS knowledge base (remote)"
+      read_only: true
 
     # -----------------------------------------------------------------------
     # AWS Pricing — real-time pricing and cost analysis
@@ -87,6 +89,7 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Pricing — real-time pricing and cost analysis"
+      read_only: true
 
     # -----------------------------------------------------------------------
     # AWS API — direct AWS CLI access via AI

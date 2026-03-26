@@ -15,13 +15,16 @@ tools become available across the Atmos AI surface:
 
 Five AWS MCP servers are pre-configured in `atmos.yaml`:
 
-| Server            | What It Does                                 | Credentials Required |
-|-------------------|----------------------------------------------|----------------------|
-| **aws-api**       | Direct AWS CLI access with security controls | Yes                  |
-| **aws-docs**      | Search and fetch AWS documentation           | No                   |
-| **aws-knowledge** | Managed AWS knowledge base (remote service)  | No                   |
-| **aws-pricing**   | Real-time AWS pricing and cost analysis      | Yes (free API)       |
-| **aws-security**  | Well-Architected security posture assessment | Yes (read-only)      |
+| Server            | What It Does                                 | Credentials | Read-Only |
+|-------------------|----------------------------------------------|-------------|-----------|
+| **aws-api**       | Direct AWS CLI access with security controls | Yes         | No        |
+| **aws-docs**      | Search and fetch AWS documentation           | No          | Yes       |
+| **aws-knowledge** | Managed AWS knowledge base (remote service)  | No          | Yes       |
+| **aws-pricing**   | Real-time AWS pricing and cost analysis      | Yes (free)  | Yes       |
+| **aws-security**  | Well-Architected security posture assessment | Yes         | No        |
+
+Servers marked **Read-Only** are available in `atmos ai ask` (non-interactive). Other servers
+require `atmos ai chat` (interactive) for safety.
 
 ## Prerequisites
 
@@ -84,6 +87,9 @@ atmos mcp tools aws-security
 
 # Restart a server
 atmos mcp restart aws-api
+
+# Generate .mcp.json for Claude Code / Cursor / IDE
+atmos mcp generate-config
 ```
 
 ### Using MCP Tools in AI Chat
@@ -212,6 +218,7 @@ mcp:
       # Atmos extensions
       description: "Human-readable description"   # Shown in `atmos mcp list`
       auth_identity: "my-identity"                 # Atmos Auth credential injection
+      read_only: true                              # Safe for `atmos ai ask`
       auto_start: false                            # Start automatically
       timeout: "30s"                               # Connection timeout
 ```
@@ -297,7 +304,7 @@ To auto-install the `uv` package manager (which provides `uvx`), add it to your 
 toolchain:
   tools:
     uv:
-      version: "0.7.x"
+      version: ">=0.7"
 ```
 
 Atmos will automatically install `uv` (and make `uvx` available) before starting any MCP server. This ensures the
@@ -373,6 +380,47 @@ to `"aws-cn"` for China partition docs.
 
 Remote MCP server operated by AWS. Provides documentation, code samples, and regional availability information. No
 credentials or local installation needed.
+
+## IDE Integration (Claude Code / Cursor)
+
+Generate a `.mcp.json` file from your `atmos.yaml` configuration for use with Claude Code,
+Cursor, or any MCP-compatible IDE:
+
+```bash
+atmos mcp generate-config
+```
+
+This creates a `.mcp.json` file where:
+
+- Servers **without** `auth_identity` use their command directly
+- Servers **with** `auth_identity` are wrapped with `atmos auth exec -i <identity> --` for
+  automatic credential injection
+
+Example generated output:
+
+```json
+{
+  "mcpServers": {
+    "aws-docs": {
+      "command": "uvx",
+      "args": ["awslabs.aws-documentation-mcp-server@latest"],
+      "env": { "FASTMCP_LOG_LEVEL": "ERROR" }
+    },
+    "aws-security": {
+      "command": "atmos",
+      "args": ["auth", "exec", "-i", "security-audit", "--",
+               "uvx", "awslabs.well-architected-security-mcp-server@latest"],
+      "env": { "AWS_REGION": "us-east-1" }
+    }
+  }
+}
+```
+
+Use `--output` to specify a different file path:
+
+```bash
+atmos mcp generate-config --output .cursor/mcp.json
+```
 
 ## Learn More
 
