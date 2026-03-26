@@ -1,19 +1,20 @@
 package pro
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -22,7 +23,8 @@ const (
 )
 
 // UploadInstances uploads drift detection data to the API.
-// It retries on transient 401/5xx failures with exponential backoff, refreshing
+// Large payloads are automatically split into chunks to stay within server body size limits.
+// Each chunk is retried on transient 401/5xx failures with exponential backoff, refreshing
 // the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) error {
 	if dto == nil {
@@ -33,26 +35,61 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 	}
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
 
+	// Estimate metadata overhead (everything except the instances array).
+	overheadDTO := dtos.InstancesUploadRequest{
+		RepoURL:   dto.RepoURL,
+		RepoName:  dto.RepoName,
+		RepoOwner: dto.RepoOwner,
+		RepoHost:  dto.RepoHost,
+		Instances: []schema.Instance{},
+	}
+	overhead := metadataOverhead(overheadDTO)
+
+	return sendChunked(dto.Instances, c.MaxPayloadBytes, overhead, func(chunk []schema.Instance, batch *BatchInfo) error {
+		chunkDTO := &dtos.InstancesUploadRequest{
+			RepoURL:   dto.RepoURL,
+			RepoName:  dto.RepoName,
+			RepoOwner: dto.RepoOwner,
+			RepoHost:  dto.RepoHost,
+			Instances: chunk,
+		}
+		if batch != nil {
+			chunkDTO.BatchID = batch.BatchID
+			chunkDTO.BatchIndex = &batch.BatchIndex
+			chunkDTO.BatchTotal = &batch.BatchTotal
+		}
+		return c.sendInstancesRequest(endpoint, chunkDTO)
+	})
+}
+
+// sendInstancesRequest sends a single instances upload request.
+func (c *AtmosProAPIClient) sendInstancesRequest(endpoint string, dto *dtos.InstancesUploadRequest) error {
 	// Guard against nil HTTPClient by ensuring a default client with a sane timeout.
 	client := c.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: DefaultHTTPClientTimeout}
 	}
 
-	data, err := utils.ConvertToJSON(dto)
+	data, err := json.Marshal(dto)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	// Log safe metadata instead of full payload to prevent secret leakage.
-	hash := sha256.Sum256([]byte(data))
-	log.Debug("Uploading instances DTO.", "repo_owner", dto.RepoOwner, "repo_name", dto.RepoName, "instances_count", len(dto.Instances), "payload_hash", hex.EncodeToString(hash[:]))
+	hash := sha256.Sum256(data)
+	log.Debug("Uploading instances DTO.",
+		"repo_owner", dto.RepoOwner,
+		"repo_name", dto.RepoName,
+		"instances_count", len(dto.Instances),
+		"payload_bytes", len(data),
+		"payload_hash", hex.EncodeToString(hash[:]),
+	)
 
 	log.Debug("Uploading instances.", "endpoint", endpoint)
 
 	// Wrap the HTTP call in retry logic to handle transient 401/5xx failures.
 	err = doWithRetry("UploadInstances", func() error {
-		req, reqErr := getAuthenticatedRequest(c, "POST", endpoint, strings.NewReader(data))
+		req, reqErr := getAuthenticatedRequest(c, "POST", endpoint, bytes.NewReader(data))
 		if reqErr != nil {
 			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
 		}

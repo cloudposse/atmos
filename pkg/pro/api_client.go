@@ -17,7 +17,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -97,7 +96,8 @@ type AtmosProAPIClient struct {
 	atmosConfig *schema.AtmosConfiguration
 	// useOIDC indicates the client was created via OIDC exchange (not a static token),
 	// meaning token refresh is possible on 401 errors.
-	useOIDC bool
+	useOIDC         bool
+	MaxPayloadBytes int // Configurable max payload size before chunking. 0 uses default.
 }
 
 // NewAtmosProAPIClient creates a new instance of AtmosProAPIClient.
@@ -125,11 +125,15 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	}
 	log.Debug("Using baseAPIEndpoint", "baseAPIEndpoint", baseAPIEndpoint)
 
+	maxPayloadBytes := atmosConfig.Settings.Pro.MaxPayloadBytes
+
 	// First, check if the API key is set via environment variable
 	apiToken := atmosConfig.Settings.Pro.Token
 	if apiToken != "" {
 		log.Debug("Creating API client with API token from environment variable")
-		return NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken), nil
+		client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
+		client.MaxPayloadBytes = maxPayloadBytes
+		return client, nil
 	}
 
 	// If API key is not set, attempt to use GitHub OIDC token exchange
@@ -154,6 +158,7 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
 	client.atmosConfig = atmosConfig
 	client.useOIDC = true
+	client.MaxPayloadBytes = maxPayloadBytes
 
 	return client, nil
 }
@@ -198,21 +203,55 @@ func (c *AtmosProAPIClient) RefreshToken() error {
 }
 
 // UploadAffectedStacks uploads information about affected stacks.
-// It retries on transient 401/5xx failures with exponential backoff, refreshing
+// Large payloads are automatically split into chunks to stay within server body size limits.
+// Each chunk is retried on transient 401/5xx failures with exponential backoff, refreshing
 // the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
 	endpoint := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
-	data, err := utils.ConvertToJSON(dto)
+	// Estimate metadata overhead (everything except the stacks array).
+	overheadDTO := dtos.UploadAffectedStacksRequest{
+		HeadSHA:   dto.HeadSHA,
+		BaseSHA:   dto.BaseSHA,
+		RepoURL:   dto.RepoURL,
+		RepoName:  dto.RepoName,
+		RepoOwner: dto.RepoOwner,
+		RepoHost:  dto.RepoHost,
+		Stacks:    []schema.Affected{},
+	}
+	overhead := metadataOverhead(overheadDTO)
+
+	return sendChunked(dto.Stacks, c.MaxPayloadBytes, overhead, func(chunk []schema.Affected, batch *BatchInfo) error {
+		chunkDTO := &dtos.UploadAffectedStacksRequest{
+			HeadSHA:   dto.HeadSHA,
+			BaseSHA:   dto.BaseSHA,
+			RepoURL:   dto.RepoURL,
+			RepoName:  dto.RepoName,
+			RepoOwner: dto.RepoOwner,
+			RepoHost:  dto.RepoHost,
+			Stacks:    chunk,
+		}
+		if batch != nil {
+			chunkDTO.BatchID = batch.BatchID
+			chunkDTO.BatchIndex = &batch.BatchIndex
+			chunkDTO.BatchTotal = &batch.BatchTotal
+		}
+		return c.sendAffectedStacksRequest(endpoint, chunkDTO)
+	})
+}
+
+// sendAffectedStacksRequest sends a single affected stacks upload request.
+func (c *AtmosProAPIClient) sendAffectedStacksRequest(url string, dto *dtos.UploadAffectedStacksRequest) error {
+	data, err := json.Marshal(dto)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
-	log.Debug("Uploading affected components and stacks.", logKeyURL, endpoint)
+	log.Debug("Uploading affected components and stacks.", logKeyURL, url)
 
 	// Wrap the HTTP call in retry logic to handle transient 401/5xx failures.
 	err = doWithRetry("UploadAffectedStacks", func() error {
-		req, reqErr := getAuthenticatedRequest(c, "POST", endpoint, bytes.NewBuffer([]byte(data)))
+		req, reqErr := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
 		if reqErr != nil {
 			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
 		}
@@ -229,7 +268,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 		return errors.Join(errUtils.ErrFailedToUploadStacks, err)
 	}
 
-	log.Debug("Uploaded affected components and stacks.", logKeyURL, endpoint)
+	log.Debug("Uploaded affected components and stacks.", logKeyURL, url)
 
 	return nil
 }
