@@ -47,6 +47,16 @@ func TestNewAWSAmbientIdentity(t *testing.T) {
 			wantErr:   true,
 			errSubstr: "invalid identity kind",
 		},
+		{
+			name:   "via is rejected",
+			idName: "bad",
+			config: &schema.Identity{
+				Kind: "aws/ambient",
+				Via:  &schema.IdentityVia{Identity: "base-identity"},
+			},
+			wantErr:   true,
+			errSubstr: "must not define via",
+		},
 	}
 
 	for _, tt := range tests {
@@ -317,7 +327,30 @@ func TestAWSAmbientIdentityAuthenticateWithoutRegion(t *testing.T) {
 	awsCreds, ok := creds.(*types.AWSCredentials)
 	require.True(t, ok)
 	assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+	// No explicit region and /dev/null config means SDK resolves no region either.
 	assert.Empty(t, awsCreds.Region)
+}
+
+func TestAWSAmbientIdentityAuthenticateSDKResolvedRegion(t *testing.T) {
+	// Set credentials via env vars but region only via AWS_DEFAULT_REGION
+	// (not in principal config). The SDK resolves this region, and it should
+	// be preserved in the returned credentials.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_DEFAULT_REGION", "ap-southeast-1")
+	t.Setenv("AWS_CONFIG_FILE", "/dev/null")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+
+	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
+
+	creds, err := identity.Authenticate(context.Background(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "ap-southeast-1", awsCreds.Region, "SDK-resolved region should be preserved")
 }
 
 func TestAWSAmbientIdentityCredentialsExist(t *testing.T) {

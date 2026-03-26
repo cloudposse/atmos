@@ -138,7 +138,7 @@ func IsStandaloneAmbientChain(chain []string, identities map[string]schema.Ident
 }
 
 // AuthenticateStandaloneAmbient handles authentication for standalone ambient identities.
-func AuthenticateStandaloneAmbient(_ context.Context, identityName string, identities map[string]types.Identity) (types.ICredentials, error) {
+func AuthenticateStandaloneAmbient(ctx context.Context, identityName string, identities map[string]types.Identity) (types.ICredentials, error) {
 	defer perf.Track(nil, "ambient.AuthenticateStandaloneAmbient")()
 
 	log.Debug("Authenticating ambient identity directly", logKeyIdentityAmbient, identityName)
@@ -149,7 +149,7 @@ func AuthenticateStandaloneAmbient(_ context.Context, identityName string, ident
 	}
 
 	// Ambient identities return nil credentials — they don't manage credentials.
-	credentials, err := identity.Authenticate(context.Background(), nil)
+	credentials, err := identity.Authenticate(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: ambient identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 	}

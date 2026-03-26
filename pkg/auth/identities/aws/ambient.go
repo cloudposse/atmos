@@ -40,6 +40,9 @@ func NewAWSAmbientIdentity(name string, config *schema.Identity) (types.Identity
 	if config.Kind != awsAmbientKind {
 		return nil, fmt.Errorf("%w: invalid identity kind for aws/ambient: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}
+	if config.Via != nil {
+		return nil, fmt.Errorf("%w: aws/ambient identity %q must not define via", errUtils.ErrInvalidIdentityConfig, name)
+	}
 
 	return &awsAmbientIdentity{
 		name:   name,
@@ -90,6 +93,12 @@ func (i *awsAmbientIdentity) Authenticate(ctx context.Context, _ types.ICredenti
 			errUtils.ErrLoadAWSConfig, i.name, err)
 	}
 
+	// Fall back to SDK-resolved region when no explicit region is configured.
+	resolvedRegion := region
+	if resolvedRegion == "" {
+		resolvedRegion = cfg.Region
+	}
+
 	// Retrieve credentials from the resolved config.
 	creds, err := cfg.Credentials.Retrieve(ctx)
 	if err != nil {
@@ -108,7 +117,7 @@ func (i *awsAmbientIdentity) Authenticate(ctx context.Context, _ types.ICredenti
 		AccessKeyID:     creds.AccessKeyID,
 		SecretAccessKey: creds.SecretAccessKey,
 		SessionToken:    creds.SessionToken,
-		Region:          region,
+		Region:          resolvedRegion,
 	}
 
 	// Set expiration if available.
