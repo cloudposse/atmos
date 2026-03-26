@@ -132,7 +132,7 @@ func executeCommandPipeline(
 
 	if shouldRunTerraformInit(atmosConfig, info) {
 		var err error
-		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile)
+		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
 		if err != nil {
 			return err
 		}
@@ -146,7 +146,7 @@ func executeCommandPipeline(
 		return err
 	}
 
-	if err = runWorkspaceSetup(atmosConfig, info, componentPath); err != nil {
+	if err = runWorkspaceSetup(atmosConfig, info, componentPath, opts...); err != nil {
 		return err
 	}
 
@@ -178,7 +178,7 @@ func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 
 // runWorkspaceSetup selects (or creates) the Terraform workspace before the main command
 // runs.  It is a no-op when shouldSkipWorkspaceSetup returns true.
-func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) error {
+func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
 	if shouldSkipWorkspaceSetup(info) {
 		return nil
 	}
@@ -191,7 +191,8 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 
 	// For data-producing subcommands redirect "Switched to workspace…" to stderr
 	// so it doesn't pollute captured stdout in $() substitutions.
-	var wsOpts []ShellCommandOption
+	// Merge caller-provided opts (e.g., WithEnvironment) with workspace-specific opts.
+	wsOpts := append([]ShellCommandOption{}, opts...)
 	if info.SubCommand == "output" || info.SubCommand == "show" {
 		wsOpts = append(wsOpts, WithStdoutOverride(os.Stderr))
 	}
@@ -216,6 +217,13 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return err
 	}
 
+	return createWorkspaceFallback(atmosConfig, info, componentPath, opts...)
+}
+
+// createWorkspaceFallback attempts to create a new workspace when select fails.
+// If workspace creation also fails with exit code 1 and the workspace is already
+// active (stale .terraform/environment file), it proceeds with a warning.
+func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
 	newErr := ExecuteShellCommand(
 		*atmosConfig,
 		info.Command,
@@ -224,6 +232,7 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		info.ComponentEnvList,
 		info.DryRun,
 		info.RedirectStdErr,
+		opts...,
 	)
 	if newErr == nil {
 		return nil

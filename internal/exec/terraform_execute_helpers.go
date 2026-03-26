@@ -483,7 +483,7 @@ func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.C
 // buildInitSubcommandArgs in terraform_execute_helpers_args.go handles the provisioner
 // invocation via prepareInitExecution.  These two code paths must never both execute
 // in the same command invocation or provisioners will run twice.
-func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string) (string, error) {
+func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) (string, error) {
 	newPath, err := prepareInitExecution(atmosConfig, info, componentPath)
 	if err != nil {
 		return componentPath, err
@@ -498,6 +498,7 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 		info.ComponentEnvList,
 		info.DryRun,
 		info.RedirectStdErr,
+		opts...,
 	); err != nil {
 		return newPath, err
 	}
