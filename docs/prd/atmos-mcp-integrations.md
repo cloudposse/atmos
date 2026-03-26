@@ -179,6 +179,32 @@ The tool invocation loop lives in `pkg/ai/executor/executor.go`:
 This is a standard tool-use loop — the AI provider controls which tools are called.
 Atmos never guesses or infers tool usage.
 
+Each tool sent to the AI provider includes its **name**, **description**, and **full
+parameter schema** (types, descriptions, required flags) so the AI knows what each tool
+does and when to use it. For MCP bridged tools, this information comes directly from
+the external MCP server's tool definitions discovered during startup.
+
+### MCP Tool Call Routing
+
+When the AI provider decides to use an external MCP tool, the call routes through:
+
+1. AI provider responds with `tool_use` and requests e.g. `aws-docs.search_documentation`.
+2. `executor.go` calls `toolExecutor.Execute(ctx, "aws-docs.search_documentation", params)`.
+3. Tool executor looks up `"aws-docs.search_documentation"` in the registry → finds the `BridgedTool`.
+4. `BridgedTool.Execute()` (`bridge.go`) calls `session.CallTool(ctx, mcpTool.Name, params)` —
+   note it uses the **original tool name** (`"search_documentation"`, without the server prefix).
+5. `Session.CallTool()` (`session.go`) forwards to the Go MCP SDK's `ClientSession`, which
+   sends JSON-RPC over stdio to the running MCP server subprocess.
+6. The MCP server process executes the tool and returns the result over stdio.
+7. `BridgedTool.Execute()` extracts text content from the result and returns it as `tools.Result`.
+8. The executor sends the result back to the AI provider for the final answer.
+
+**Key detail:** Each `BridgedTool` holds a reference to the specific `Session` (the running
+subprocess) it came from. Even with multiple MCP servers running simultaneously, each tool
+routes to the correct server process. The namespacing (`aws-docs.search_documentation`) is
+only for the Atmos tool registry lookup — the actual MCP JSON-RPC call uses the original
+tool name (`search_documentation`) that the server understands.
+
 ---
 
 ## AWS MCP Servers — Primary Use Case
