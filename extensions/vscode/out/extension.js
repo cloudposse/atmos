@@ -2084,7 +2084,7 @@ var require_connection = __commonJS({
         }
         if (responseMessage.id === null) {
           if (responseMessage.error) {
-            logger.error(`Received response message without id: Error is: 
+            logger.error(`Received response message without id: Error is:
 ${JSON.stringify(responseMessage.error, void 0, 4)}`);
           } else {
             logger.error(`Received response message without id. No further error information provided.`);
