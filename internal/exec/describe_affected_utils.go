@@ -8,6 +8,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -27,6 +28,7 @@ func executeDescribeAffected(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -52,7 +54,7 @@ func executeDescribeAffected(
 		processYamlFunctions,
 		false,
 		skip,
-		nil, // AuthManager passed from describe affected command layer
+		authManager,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -152,7 +154,7 @@ func executeDescribeAffected(
 		processYamlFunctions,
 		false,
 		skip,
-		nil, // AuthManager passed from describe affected command layer
+		authManager,
 	)
 	if err != nil {
 		return nil, nil, nil, err

@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -530,6 +531,8 @@ func addAffectedSpaceliftAdminStack(
 }
 
 // addDependentsToAffected adds dependent components and stacks to each affected component.
+// It resolves all stacks once upfront and reuses the result for every affected component,
+// avoiding O(N) full stack resolutions that made --upload hang on large infrastructures.
 func addDependentsToAffected(
 	atmosConfig *schema.AtmosConfiguration,
 	affected *[]schema.Affected,
@@ -538,7 +541,33 @@ func addDependentsToAffected(
 	processYamlFunctions bool,
 	skip []string,
 	onlyInStack string,
+	authManager auth.AuthManager,
 ) error {
+	// Resolve all stacks once and build a reverse dependency index — these are the expensive
+	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
+	// ExecuteDescribeDependents for every affected component, causing O(N) full resolutions
+	// (e.g., 2,422 × ~1s = 40+ minutes). The dependency index further eliminates the
+	// O(stacks × components) scan per affected item.
+	stacks, err := ExecuteDescribeStacks(
+		atmosConfig,
+		onlyInStack,
+		nil,
+		nil,
+		nil,
+		false,
+		processTemplates,
+		processYamlFunctions,
+		false,
+		skip,
+		authManager,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Build the reverse dependency index once from the cached stacks.
+	depIdx := buildDependencyIndex(stacks)
+
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
 
@@ -564,6 +593,8 @@ func addDependentsToAffected(
 				ProcessYamlFunctions: processYamlFunctions,
 				Skip:                 skip,
 				OnlyInStack:          onlyInStack,
+				Stacks:               stacks,
+				DepIndex:             depIdx,
 			},
 		)
 		if err != nil {
@@ -580,6 +611,8 @@ func addDependentsToAffected(
 				processYamlFunctions,
 				skip,
 				onlyInStack,
+				stacks,
+				depIdx,
 			)
 			if err != nil {
 				return err
@@ -594,6 +627,7 @@ func addDependentsToAffected(
 }
 
 // addDependentsToDependents recursively adds dependent components and stacks to each dependent component.
+// The stacks and depIdx parameters are pre-computed and shared across all calls.
 func addDependentsToDependents(
 	atmosConfig *schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
@@ -602,6 +636,8 @@ func addDependentsToDependents(
 	processYamlFunctions bool,
 	skip []string,
 	onlyInStack string,
+	stacks map[string]any,
+	depIdx dependencyIndex,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
@@ -616,6 +652,8 @@ func addDependentsToDependents(
 				ProcessYamlFunctions: processYamlFunctions,
 				Skip:                 skip,
 				OnlyInStack:          onlyInStack,
+				Stacks:               stacks,
+				DepIndex:             depIdx,
 			},
 		)
 		if err != nil {
@@ -632,6 +670,8 @@ func addDependentsToDependents(
 				processYamlFunctions,
 				skip,
 				onlyInStack,
+				stacks,
+				depIdx,
 			)
 			if err != nil {
 				return err
