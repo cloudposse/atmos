@@ -158,20 +158,28 @@ func TestUploadAffectedStacks_Chunked(t *testing.T) {
 	var requestCount atomic.Int32
 	var mu sync.Mutex
 	var receivedBodies []dtos.UploadAffectedStacksRequest
-	var handlerErr atomic.Value // Captures first error from handler goroutine.
+	var handlerErr error // Captures first error from handler goroutine, guarded by mu.
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			handlerErr.CompareAndSwap(nil, err)
+			mu.Lock()
+			if handlerErr == nil {
+				handlerErr = err
+			}
+			mu.Unlock()
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		var req dtos.UploadAffectedStacksRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			handlerErr.CompareAndSwap(nil, err)
+			mu.Lock()
+			if handlerErr == nil {
+				handlerErr = err
+			}
+			mu.Unlock()
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -224,7 +232,10 @@ func TestUploadAffectedStacks_Chunked(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check for handler-side errors (read/unmarshal failures).
-	if hErr, ok := handlerErr.Load().(error); ok && hErr != nil {
+	mu.Lock()
+	hErr := handlerErr
+	mu.Unlock()
+	if hErr != nil {
 		t.Fatalf("httptest handler error: %v", hErr)
 	}
 
