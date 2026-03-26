@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/identities/ambient"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -137,6 +138,16 @@ func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (ty
 	// Handle special case: standalone AWS user identity.
 	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
 		return aws.AuthenticateStandaloneAWSUser(ctx, m.chain[0], m.identities)
+	}
+
+	// Handle special case: standalone AWS ambient identity.
+	if aws.IsStandaloneAWSAmbientChain(m.chain, m.config.Identities) {
+		return aws.AuthenticateStandaloneAWSAmbient(ctx, m.chain[0], m.identities)
+	}
+
+	// Handle special case: standalone generic ambient identity.
+	if ambient.IsStandaloneAmbientChain(m.chain, m.config.Identities) {
+		return ambient.AuthenticateStandaloneAmbient(ctx, m.chain[0], m.identities)
 	}
 
 	// Handle regular provider-based authentication chains.
@@ -568,10 +579,10 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 
-	// AWS User identities don't require via configuration - they are standalone.
+	// Standalone identities don't require via configuration.
+	// AWS user, AWS ambient, and generic ambient identities are all standalone.
 	if identity.Via == nil {
-		if identity.Kind == "aws/user" {
-			// AWS User is standalone - just add it to the chain and return.
+		if identity.Kind == "aws/user" || identity.Kind == "aws/ambient" || identity.Kind == "ambient" {
 			*chain = append(*chain, identityName)
 			return nil
 		}
