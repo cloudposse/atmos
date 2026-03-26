@@ -9,6 +9,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	g "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -38,6 +39,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefClone")()
 
@@ -161,6 +163,7 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 		processYamlFunctions,
 		skip,
 		excludeLocked,
+		authManager,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -195,6 +198,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRefCheckout")()
 
@@ -256,6 +260,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		processYamlFunctions,
 		skip,
 		excludeLocked,
+		authManager,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -282,6 +287,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeAffectedWithTargetRepoPath")()
 
@@ -326,6 +332,7 @@ func ExecuteDescribeAffectedWithTargetRepoPath(
 		processYamlFunctions,
 		skip,
 		excludeLocked,
+		authManager,
 	)
 	if err != nil {
 		return nil, nil, nil, "", err

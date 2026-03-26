@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -540,6 +541,7 @@ func addDependentsToAffected(
 	processYamlFunctions bool,
 	skip []string,
 	onlyInStack string,
+	authManager auth.AuthManager,
 ) error {
 	// Resolve all stacks once and build a reverse dependency index — these are the expensive
 	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
@@ -557,7 +559,7 @@ func addDependentsToAffected(
 		processYamlFunctions,
 		false,
 		skip,
-		nil,
+		authManager,
 	)
 	if err != nil {
 		return err
