@@ -184,9 +184,9 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	}
 
 	// Default: redirect workspace-select stderr to stdout so it is visible.
-	workspaceSelectRedirectStdErr := "/dev/stdout"
+	redirectStdErr := "/dev/stdout"
 	if info.RedirectStdErr != "" {
-		workspaceSelectRedirectStdErr = info.RedirectStdErr
+		redirectStdErr = info.RedirectStdErr
 	}
 
 	// For data-producing subcommands redirect "Switched to workspace…" to stderr
@@ -204,7 +204,7 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		componentPath,
 		info.ComponentEnvList,
 		info.DryRun,
-		workspaceSelectRedirectStdErr,
+		redirectStdErr,
 		wsOpts...,
 	)
 	if err == nil {
@@ -237,6 +237,7 @@ func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schem
 	if newErr == nil {
 		return nil
 	}
+
 	// If `workspace new` also fails with exit code 1, the workspace may already be the
 	// active workspace (the .terraform/environment file names it) but its state directory
 	// was deleted.  In that case we are already in the correct workspace and can proceed.
@@ -247,6 +248,7 @@ func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schem
 			"workspace", info.TerraformWorkspace)
 		return nil
 	}
+
 	return newErr
 }
 
