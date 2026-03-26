@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1723,6 +1724,109 @@ func TestGetRefreshCachePath(t *testing.T) {
 	path, err := identity.getRefreshCachePath()
 	require.NoError(t, err)
 	assert.Contains(t, path, filepath.Join("aws-webflow", "my-identity-my-realm", "refresh.json"))
+}
+
+func TestIsTransientTokenError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "nil error is not transient",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "context.Canceled is transient",
+			err:      context.Canceled,
+			expected: true,
+		},
+		{
+			name:     "context.DeadlineExceeded is transient",
+			err:      context.DeadlineExceeded,
+			expected: true,
+		},
+		{
+			name:     "wrapped context.Canceled is transient",
+			err:      fmt.Errorf("token exchange: %w", context.Canceled),
+			expected: true,
+		},
+		{
+			name:     "wrapped context.DeadlineExceeded is transient",
+			err:      fmt.Errorf("token exchange: %w", context.DeadlineExceeded),
+			expected: true,
+		},
+		{
+			name:     "net.Error is transient",
+			err:      &net.OpError{Op: "dial", Err: fmt.Errorf("connection refused")},
+			expected: true,
+		},
+		{
+			name:     "wrapped net.Error is transient",
+			err:      fmt.Errorf("request failed: %w", &net.OpError{Op: "dial", Err: fmt.Errorf("connection refused")}),
+			expected: true,
+		},
+		{
+			name:     "generic error is not transient",
+			err:      fmt.Errorf("invalid_grant: token expired"),
+			expected: false,
+		},
+		{
+			name:     "sentinel error is not transient",
+			err:      errUtils.ErrWebflowTokenExchange,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isTransientTokenError(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRefreshWebflowCredentials_TransientErrorPreservesCache(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	identity := &userIdentity{
+		name:  "test",
+		realm: "realm",
+		config: &schema.Identity{
+			Kind: "aws/user",
+		},
+	}
+
+	// Save a valid refresh cache.
+	identity.saveRefreshCache(&webflowRefreshCache{
+		RefreshToken: "still-valid-token",
+		Region:       "us-east-2",
+		ExpiresAt:    time.Now().Add(10 * time.Hour),
+	})
+
+	// Mock endpoint that simulates a network error (transient).
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(_ *http.Request) (*http.Response, error) {
+			return nil, &net.OpError{
+				Op:  "dial",
+				Net: "tcp",
+				Err: fmt.Errorf("connection refused"),
+			}
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	creds, err := identity.refreshWebflowCredentials(context.Background(), "us-east-2")
+	assert.Nil(t, creds)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowRefreshFailed)
+
+	// Cache should still exist because the error was transient.
+	cache, cacheErr := identity.loadRefreshCache()
+	require.NoError(t, cacheErr)
+	assert.Equal(t, "still-valid-token", cache.RefreshToken)
 }
 
 // mockHTTPClient is a test helper for mocking HTTP requests.

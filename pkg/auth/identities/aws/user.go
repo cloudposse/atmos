@@ -97,8 +97,10 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	// No valid existing credentials - resolve base credentials and generate new session tokens.
 	longLivedCreds, err := i.resolveLongLivedCredentials(ctx)
 	if err != nil {
-		// Try browser webflow as final fallback when no long-lived credentials available.
-		if i.isWebflowEnabled() {
+		// Only try browser webflow when credentials are unavailable, not for config errors.
+		// Config errors (e.g. partial access_key_id/secret_access_key) must be surfaced immediately
+		// to avoid silently authenticating as a different principal.
+		if i.isWebflowEnabled() && !errors.Is(err, errUtils.ErrInvalidAuthConfig) {
 			webflowCreds, webflowErr := i.resolveCredentialsViaWebflow(ctx)
 			if webflowErr == nil {
 				region := i.resolveRegion()

@@ -1,8 +1,10 @@
 package aws
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
+	"errors"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -18,7 +20,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/viper"
@@ -148,8 +149,11 @@ func (i *userIdentity) refreshWebflowCredentials(ctx context.Context, region str
 	// Exchange refresh token for new credentials.
 	tokenResp, err := exchangeRefreshToken(ctx, defaultHTTPClient, region, cache.RefreshToken)
 	if err != nil {
-		// Clear expired/invalid refresh token.
-		i.deleteRefreshCache()
+		// Only clear cache for definitive server rejections (invalid_grant, etc.),
+		// not transient errors (network issues, timeouts) that don't invalidate the token.
+		if !isTransientTokenError(err) {
+			i.deleteRefreshCache()
+		}
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowRefreshFailed, err)
 	}
 
@@ -264,35 +268,28 @@ func (i *userIdentity) browserWebflowNonInteractive(ctx context.Context, region 
 	// Display URL for manual use.
 	displayWebflowDialogPlainText(authURL)
 
-	// Prompt for manual code entry (but also listen for callback).
-	var authCode string
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Authorization code").
-				Description("After signing in, paste the authorization code from your browser").
-				Value(&authCode).
-				Validate(func(s string) error {
-					if s == "" {
-						return fmt.Errorf("%w: authorization code is required", errUtils.ErrWebflowAuthFailed)
-					}
-					return nil
-				}),
-		),
-	)
-
-	// Race between manual code entry and callback.
+	// Read authorization code from stdin (non-interactive: no TUI, just line input).
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
-		if formErr := form.Run(); formErr != nil {
-			errCh <- formErr
-			return
+		fmt.Fprintf(os.Stderr, "Authorization code: ")
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			code := strings.TrimSpace(scanner.Text())
+			if code == "" {
+				errCh <- fmt.Errorf("authorization code is required")
+				return
+			}
+			codeCh <- code
+		} else if err := scanner.Err(); err != nil {
+			errCh <- fmt.Errorf("failed to read authorization code: %w", err)
+		} else {
+			errCh <- fmt.Errorf("no input received (stdin closed)")
 		}
-		codeCh <- authCode
 	}()
 
+	// Race between manual code entry and callback.
 	select {
 	case result := <-resultCh:
 		if result.err != nil {
@@ -309,8 +306,8 @@ func (i *userIdentity) browserWebflowNonInteractive(ctx context.Context, region 
 			return nil, tokenErr
 		}
 		return i.processTokenResponse(tokenResp, region)
-	case formErr := <-errCh:
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowAuthFailed, formErr)
+	case readErr := <-errCh:
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowAuthFailed, readErr)
 	case <-ctx.Done():
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowTimeout, ctx.Err())
 	}
@@ -323,6 +320,7 @@ func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh 
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, webflowCallbackTimeout)
+	defer cancel()
 
 	tokenCh := make(chan webflowSpinnerTokenResult, 1)
 
@@ -580,6 +578,7 @@ func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, bo
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrWebflowTokenExchange).
+			WithCause(err).
 			WithExplanation("Failed to contact the AWS signin service").
 			WithHint("Check your network connectivity").
 			WithHintf("Ensure the region '%s' is correct", region).
@@ -712,6 +711,25 @@ func (i *userIdentity) deleteRefreshCache() {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		log.Debug("Failed to delete refresh cache", logKeyIdentity, i.name, "error", err)
 	}
+}
+
+// isTransientTokenError checks if a token exchange error is transient (network/timeout)
+// vs a definitive server rejection (invalid_grant). Transient errors should not
+// invalidate cached refresh tokens since the token may still be valid.
+func isTransientTokenError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Context cancellation/timeout is transient.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	// Network errors (connectivity, DNS, etc.) are transient.
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	return false
 }
 
 // TTY detection helpers (mirrors providers/aws/sso.go pattern).
