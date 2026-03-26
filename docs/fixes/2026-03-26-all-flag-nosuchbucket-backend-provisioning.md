@@ -33,7 +33,7 @@ ALL components — before any provisioners have run.
 
 The error chain:
 
-```
+```text
 S3 GetObject returns NoSuchBucket
   → ReadTerraformBackendS3Internal retries 3 times (NoSuchBucket was not an early-exit case)
   → Returns ErrGetObjectFromS3
@@ -51,7 +51,7 @@ return a non-recoverable error.
 
 The existing recovery mechanism works correctly once the error is classified properly:
 
-```
+```text
 nil content from S3 reader
   → GetTerraformBackend returns nil backend
   → GetTerraformState returns ErrTerraformStateNotProvisioned
