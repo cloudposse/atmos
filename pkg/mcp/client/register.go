@@ -39,28 +39,78 @@ func RegisterMCPTools(
 		return nil, err
 	}
 
+	startOpts := buildStartOptions(authProvider, toolchain)
+	totalTools := startAndRegisterTools(mgr, registry, startOpts)
+
+	if totalTools > 0 {
+		log.Debugf("Registered %d MCP server tools", totalTools)
+	}
+
+	return mgr, nil
+}
+
+// RegisterReadOnlyMCPTools starts only MCP servers marked as read_only and registers
+// their tools. This is used by non-interactive commands like 'atmos ai ask' where
+// only data-retrieval tools (docs, pricing, etc.) are appropriate.
+func RegisterReadOnlyMCPTools(
+	registry *tools.Registry,
+	atmosConfig *schema.AtmosConfiguration,
+	authProvider AuthEnvProvider,
+	toolchain ToolchainResolver,
+) error {
+	defer perf.Track(atmosConfig, "mcp.client.RegisterReadOnlyMCPTools")()
+
+	// Filter to read-only servers only.
+	readOnlyServers := make(map[string]schema.MCPServerConfig)
+	for name, cfg := range atmosConfig.MCP.Servers {
+		if cfg.ReadOnly {
+			readOnlyServers[name] = cfg
+		}
+	}
+	if len(readOnlyServers) == 0 {
+		return nil
+	}
+
+	mgr, err := NewManager(readOnlyServers)
+	if err != nil {
+		return err
+	}
+
+	startOpts := buildStartOptions(authProvider, toolchain)
+	totalTools := startAndRegisterTools(mgr, registry, startOpts)
+
+	if totalTools > 0 {
+		log.Debugf("Registered %d read-only MCP server tools", totalTools)
+	}
+
+	return nil
+}
+
+// buildStartOptions creates StartOption slice from optional providers.
+func buildStartOptions(authProvider AuthEnvProvider, toolchain ToolchainResolver) []StartOption {
+	var opts []StartOption
+	if toolchain != nil {
+		opts = append(opts, WithToolchain(toolchain))
+	}
+	if authProvider != nil {
+		opts = append(opts, WithAuthManager(authProvider))
+	}
+	return opts
+}
+
+// startAndRegisterTools starts all sessions and registers their bridged tools.
+func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []StartOption) int {
 	ctx, cancel := context.WithTimeout(context.Background(), registrationTimeout)
 	defer cancel()
 
-	// Build start options.
-	var startOpts []StartOption
-	if toolchain != nil {
-		startOpts = append(startOpts, WithToolchain(toolchain))
-	}
-	if authProvider != nil {
-		startOpts = append(startOpts, WithAuthManager(authProvider))
-	}
-
 	var totalTools int
-
 	for _, session := range mgr.List() {
 		if err := session.Start(ctx, startOpts...); err != nil {
 			log.Warnf("MCP server %q failed to start: %v", session.Name(), err)
 			continue
 		}
 
-		bridged := BridgeTools(session)
-		for _, bt := range bridged {
+		for _, bt := range BridgeTools(session) {
 			if regErr := registry.Register(bt); regErr != nil {
 				log.Warnf("Failed to register MCP tool %q: %v", bt.Name(), regErr)
 				continue
@@ -68,10 +118,5 @@ func RegisterMCPTools(
 			totalTools++
 		}
 	}
-
-	if totalTools > 0 {
-		log.Debugf("Registered %d MCP server tools", totalTools)
-	}
-
-	return mgr, nil
+	return totalTools
 }

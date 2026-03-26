@@ -5,6 +5,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
+	"github.com/cloudposse/atmos/pkg/auth"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
@@ -92,6 +94,9 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 		log.Warnf("Failed to register read-only Atmos tools: %v", err)
 	}
 
+	// Register read-only MCP server tools (servers marked read_only: true).
+	registerReadOnlyMCPServerTools(registry, atmosConfig)
+
 	log.Debugf("Registered %d read-only tools", registry.Count())
 
 	// Read-only tools don't require permissions, but create a permissive checker just in case.
@@ -106,7 +111,8 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 	return registry, executor, nil
 }
 
-// registerMCPServerTools registers external MCP server tools with toolchain resolution.
+// registerMCPServerTools registers external MCP server tools with toolchain resolution
+// and auth credential injection.
 func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) *mcpclient.Manager {
 	if len(atmosConfig.MCP.Servers) == 0 {
 		return nil
@@ -118,9 +124,59 @@ func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosC
 		toolchain = tenv
 	}
 
-	mgr, err := mcpclient.RegisterMCPTools(registry, atmosConfig, nil, toolchain)
+	// Create auth provider if any server has auth_identity configured.
+	var authProvider mcpclient.AuthEnvProvider
+	if serversNeedAuth(atmosConfig.MCP.Servers) {
+		mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+			"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
+		)
+		if err != nil {
+			log.Warnf("Failed to create auth manager for MCP servers: %v", err)
+		} else if mgr != nil {
+			authProvider = mgr
+		}
+	}
+
+	mgr, err := mcpclient.RegisterMCPTools(registry, atmosConfig, authProvider, toolchain)
 	if err != nil {
 		log.Warnf("Failed to initialize MCP servers: %v", err)
 	}
 	return mgr
+}
+
+// registerReadOnlyMCPServerTools registers external MCP server tools marked as read_only.
+func registerReadOnlyMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) {
+	if len(atmosConfig.MCP.Servers) == 0 {
+		return
+	}
+
+	var toolchain mcpclient.ToolchainResolver
+	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
+	if tenvErr == nil && tenv != nil {
+		toolchain = tenv
+	}
+
+	var authProvider mcpclient.AuthEnvProvider
+	if serversNeedAuth(atmosConfig.MCP.Servers) {
+		mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+			"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
+		)
+		if err == nil && mgr != nil {
+			authProvider = mgr
+		}
+	}
+
+	if err := mcpclient.RegisterReadOnlyMCPTools(registry, atmosConfig, authProvider, toolchain); err != nil {
+		log.Warnf("Failed to register read-only MCP server tools: %v", err)
+	}
+}
+
+// serversNeedAuth returns true if any configured MCP server has auth_identity set.
+func serversNeedAuth(servers map[string]schema.MCPServerConfig) bool {
+	for _, s := range servers {
+		if s.AuthIdentity != "" {
+			return true
+		}
+	}
+	return false
 }

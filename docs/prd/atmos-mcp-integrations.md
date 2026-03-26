@@ -1,8 +1,8 @@
 # Atmos MCP Servers — External MCP Server Management
 
-**Status:** Complete — All 4 Phases Shipped
-**Version:** 5.0
-**Last Updated:** 2026-03-23
+**Status:** Phase 5 — Unified Experience
+**Version:** 6.0
+**Last Updated:** 2026-03-26
 
 ---
 
@@ -59,35 +59,103 @@ Atmos CLI  ──MCP──>  AWS MCP Server     ──>  AWS APIs
 
 ### Combined Architecture
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────────┐
-│                         Atmos CLI                                   │
+│                         Atmos CLI                                  │
 ├────────────────────────────────────────────────────────────────────┤
-│  Unified Tool Registry                                              │
+│  Unified Tool Registry                                             │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
 │  │ Native Atmos     │  │ AWS MCP Server   │  │ GCP MCP Server   │  │
 │  │ Tools (15+)      │  │ Tools            │  │ Tools            │  │
 │  └──────────────────┘  └──────────────────┘  └──────────────────┘  │
 ├────────────────────────────────────────────────────────────────────┤
-│  MCP Client Layer (pkg/mcp/client/)                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
-│  │ Process      │  │ Connection   │  │ Tool         │             │
-│  │ Manager      │  │ Pool         │  │ Bridge       │             │
-│  └──────────────┘  └──────────────┘  └──────────────┘             │
+│  MCP Client Layer (pkg/mcp/client/)                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │ Process      │  │ Connection   │  │ Tool         │              │
+│  │ Manager      │  │ Pool         │  │ Bridge       │              │
+│  └──────────────┘  └──────────────┘  └──────────────┘              │
 ├────────────────────────────────────────────────────────────────────┤
-│  MCP Server Layer (existing pkg/mcp/server.go)                      │
-│  ┌──────────────┐  ┌──────────────┐                               │
-│  │ stdio        │  │ HTTP/SSE     │                               │
-│  │ transport    │  │ transport    │                               │
-│  └──────────────┘  └──────────────┘                               │
+│  MCP Server Layer (existing pkg/mcp/server.go)                     │
+│  ┌──────────────┐  ┌──────────────┐                                │
+│  │ stdio        │  │ HTTP/SSE     │                                │
+│  │ transport    │  │ transport    │                                │
+│  └──────────────┘  └──────────────┘                                │
 ├────────────────────────────────────────────────────────────────────┤
-│  Toolchain Layer (existing pkg/dependencies/)                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
-│  │ Installer    │  │ Version      │  │ Aqua         │             │
-│  │ Engine       │  │ Manager      │  │ Registry     │             │
-│  └──────────────┘  └──────────────┘  └──────────────┘             │
+│  Toolchain Layer (existing pkg/dependencies/)                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │ Installer    │  │ Version      │  │ Aqua         │              │
+│  │ Engine       │  │ Manager      │  │ Registry     │              │
+│  └──────────────┘  └──────────────┘  └──────────────┘              │
 └────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Two Orthogonal Approaches
+
+Atmos supports two complementary approaches for using external MCP servers:
+
+|                      | Atmos AI Integration                           | IDE/Claude Code Integration                         |
+|----------------------|------------------------------------------------|-----------------------------------------------------|
+| **Target user**      | Uses `atmos ai ask/chat/exec`                  | Uses Claude Code / Cursor / IDE                     |
+| **Config location**  | `atmos.yaml` under `mcp.servers`               | `.mcp.json` + custom commands in `.atmos.d/`        |
+| **Server lifecycle** | Atmos manages (spawn, bridge, call)            | IDE manages (via `.mcp.json`)                       |
+| **Auth**             | `auth_identity` field on server config         | `atmos auth exec -i <identity> --` wraps subprocess |
+| **Tool invocation**  | AI executor → BridgedTool → `Session.CallTool` | IDE → stdio → MCP server directly                   |
+| **Discovery**        | `atmos mcp list/tools/test/status`             | Manual (`atmos mcp aws install/start/test`)         |
+
+Both approaches can coexist. The `atmos.yaml` configuration serves as the single source
+of truth: `atmos mcp generate-config` can emit a `.mcp.json` from the configured servers,
+wrapping each with `atmos auth exec` for credential injection.
+
+### Unified Experience (Phase 5)
+
+From a single `atmos.yaml` config:
+
+```yaml
+mcp:
+  servers:
+    aws-pricing:
+      command: uvx
+      args: ["awslabs.aws-pricing-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+      auth_identity: "core-root/terraform"
+      description: "AWS Pricing"
+```
+
+Users get:
+
+- `atmos ai chat` → uses the server via the bridge (tools appear alongside native Atmos tools)
+- `atmos mcp test aws-pricing` → tests connectivity and authentication
+- `atmos mcp generate-config` → emits `.mcp.json` for Claude Code / IDE
+- `atmos mcp list` → shows all configured servers with status
+
+The `.mcp.json` generation wraps each server with `atmos auth exec`:
+
+```json
+{
+  "mcpServers": {
+    "aws-pricing": {
+      "command": "atmos",
+      "args": ["auth", "exec", "-i", "core-root/terraform", "--",
+               "uvx", "awslabs.aws-pricing-mcp-server@latest"],
+      "env": { "AWS_REGION": "us-east-1" }
+    }
+  }
+}
+```
+
+### Phase 5 Improvements
+
+1. **Wire auth identity in AI commands** — `auth_identity` field currently declared but
+   not passed to MCP server subprocess during `atmos ai chat`. Fix: pass `authManager`
+   through the tool registration path.
+2. **`.mcp.json` generation** — `atmos mcp generate-config` emits IDE-compatible config
+   from `atmos.yaml` servers, wrapping each with `atmos auth exec`.
+3. **Read-only server marking** — `read_only: true` field allows safe servers (docs, pricing)
+   to be used in `atmos ai ask` (currently excluded for safety).
+4. **Implement `auto_start` and `timeout`** — declared in schema but unused.
 
 ---
 
@@ -95,24 +163,24 @@ Atmos CLI  ──MCP──>  AWS MCP Server     ──>  AWS APIs
 
 The `awslabs/mcp` repository provides 20+ MCP servers covering the AWS ecosystem:
 
-| Server | Package | Purpose |
-|--------|---------|---------|
-| AWS MCP Server | `awslabs.aws-mcp-server` | Comprehensive AWS API access (preview) |
-| Amazon EKS | `awslabs.amazon-eks-mcp-server` | EKS cluster management |
-| Amazon ECS | `awslabs.amazon-ecs-mcp-server` | ECS service management |
-| AWS IaC | `awslabs.aws-iac-mcp-server` | CloudFormation/CDK operations |
-| Amazon S3 | `awslabs.s3-mcp-server` | S3 bucket operations |
-| DynamoDB | `awslabs.dynamodb-mcp-server` | DynamoDB table operations |
-| AWS Serverless | `awslabs.aws-serverless-mcp-server` | SAM CLI operations |
-| Lambda Tool | `awslabs.lambda-tool-mcp-server` | Lambda function management |
-| AWS Support | `awslabs.aws-support-mcp-server` | AWS Support cases |
-| AWS Documentation | `awslabs.aws-documentation-mcp-server` | AWS docs search |
-| Amazon Bedrock | `awslabs.amazon-bedrock-mcp-server` | Bedrock model operations |
-| AWS Knowledge | `awslabs.aws-knowledge-mcp-server` | AWS knowledge base search |
-| Aurora DSQL | `awslabs.aurora-dsql-mcp-server` | Aurora DSQL queries |
-| AWS Glue | `awslabs.glue-mcp-server` | Glue ETL operations |
-| Finch | `awslabs.finch-mcp-server` | Container image builds |
-| Nova Canvas | `awslabs.nova-canvas-mcp-server` | Image generation |
+| Server            | Package                                | Purpose                                |
+|-------------------|----------------------------------------|----------------------------------------|
+| AWS MCP Server    | `awslabs.aws-mcp-server`               | Comprehensive AWS API access (preview) |
+| Amazon EKS        | `awslabs.amazon-eks-mcp-server`        | EKS cluster management                 |
+| Amazon ECS        | `awslabs.amazon-ecs-mcp-server`        | ECS service management                 |
+| AWS IaC           | `awslabs.aws-iac-mcp-server`           | CloudFormation/CDK operations          |
+| Amazon S3         | `awslabs.s3-mcp-server`                | S3 bucket operations                   |
+| DynamoDB          | `awslabs.dynamodb-mcp-server`          | DynamoDB table operations              |
+| AWS Serverless    | `awslabs.aws-serverless-mcp-server`    | SAM CLI operations                     |
+| Lambda Tool       | `awslabs.lambda-tool-mcp-server`       | Lambda function management             |
+| AWS Support       | `awslabs.aws-support-mcp-server`       | AWS Support cases                      |
+| AWS Documentation | `awslabs.aws-documentation-mcp-server` | AWS docs search                        |
+| Amazon Bedrock    | `awslabs.amazon-bedrock-mcp-server`    | Bedrock model operations               |
+| AWS Knowledge     | `awslabs.aws-knowledge-mcp-server`     | AWS knowledge base search              |
+| Aurora DSQL       | `awslabs.aurora-dsql-mcp-server`       | Aurora DSQL queries                    |
+| AWS Glue          | `awslabs.glue-mcp-server`              | Glue ETL operations                    |
+| Finch             | `awslabs.finch-mcp-server`             | Container image builds                 |
+| Nova Canvas       | `awslabs.nova-canvas-mcp-server`       | Image generation                       |
 
 **Installation:** All use `uvx` (Python's `uv` package manager): `uvx awslabs.package@latest`
 

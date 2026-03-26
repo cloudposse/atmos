@@ -112,12 +112,13 @@ atmos mcp tools <name>    # List tools from a server
 atmos mcp test <name>     # Test server connectivity
 atmos mcp status          # Show all server statuses
 atmos mcp restart <name>  # Restart a server
+atmos mcp generate-config # Generate .mcp.json for Claude Code / IDE
 ```
 
 ## Standard Config Format
 
 The `command`, `args`, `env` fields follow the same format used by Claude Code, Codex CLI, and
-Gemini CLI. Atmos adds `description`, `auth_identity`, and `timeout` as extensions:
+Gemini CLI. Atmos adds `description`, `auth_identity`, `timeout`, and `read_only` as extensions:
 
 ```yaml
 mcp:
@@ -130,6 +131,7 @@ mcp:
       description: "What this server does"    # Atmos extension
       auth_identity: "my-identity"            # Atmos Auth integration
       timeout: "30s"                          # Connection timeout
+      read_only: true                         # Safe for atmos ai ask
 ```
 
 ## Atmos Auth Integration
@@ -160,6 +162,18 @@ toolchain:
     uv:
       version: ">=0.7"
 ```
+
+## IDE Integration
+
+Use the same servers from Claude Code, Cursor, or any MCP-compatible IDE:
+
+```bash
+# Generate .mcp.json from your atmos.yaml config
+atmos mcp generate-config
+```
+
+Servers with `auth_identity` are automatically wrapped with `atmos auth exec` for
+credential injection. The generated `.mcp.json` works with Claude Code out of the box.
 
 ## YAML Functions
 
