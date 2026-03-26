@@ -17,7 +17,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -93,6 +92,7 @@ type AtmosProAPIClient struct {
 	BaseAPIEndpoint string
 	BaseURL         string
 	HTTPClient      *http.Client
+	MaxPayloadBytes int // Configurable max payload size before chunking. 0 uses default.
 }
 
 // NewAtmosProAPIClient creates a new instance of AtmosProAPIClient.
@@ -120,11 +120,15 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	}
 	log.Debug("Using baseAPIEndpoint", "baseAPIEndpoint", baseAPIEndpoint)
 
+	maxPayloadBytes := atmosConfig.Settings.Pro.MaxPayloadBytes
+
 	// First, check if the API key is set via environment variable
 	apiToken := atmosConfig.Settings.Pro.Token
 	if apiToken != "" {
 		log.Debug("Creating API client with API token from environment variable")
-		return NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken), nil
+		client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
+		client.MaxPayloadBytes = maxPayloadBytes
+		return client, nil
 	}
 
 	// If API key is not set, attempt to use GitHub OIDC token exchange
@@ -146,7 +150,9 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 		return nil, errors.Join(errUtils.ErrOIDCTokenExchangeFailed, err)
 	}
 
-	return NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken), nil
+	client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
+	client.MaxPayloadBytes = maxPayloadBytes
+	return client, nil
 }
 
 func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.Reader) (*http.Request, error) {
@@ -162,15 +168,49 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 }
 
 // UploadAffectedStacks uploads information about affected stacks.
+// Large payloads are automatically split into chunks to stay within server body size limits.
 func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
 	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
-	data, err := utils.ConvertToJSON(dto)
+	// Estimate metadata overhead (everything except the stacks array).
+	overheadDTO := dtos.UploadAffectedStacksRequest{
+		HeadSHA:   dto.HeadSHA,
+		BaseSHA:   dto.BaseSHA,
+		RepoURL:   dto.RepoURL,
+		RepoName:  dto.RepoName,
+		RepoOwner: dto.RepoOwner,
+		RepoHost:  dto.RepoHost,
+		Stacks:    []schema.Affected{},
+	}
+	overhead := metadataOverhead(overheadDTO)
+
+	return sendChunked(dto.Stacks, c.MaxPayloadBytes, overhead, func(chunk []schema.Affected, batch *BatchInfo) error {
+		chunkDTO := &dtos.UploadAffectedStacksRequest{
+			HeadSHA:   dto.HeadSHA,
+			BaseSHA:   dto.BaseSHA,
+			RepoURL:   dto.RepoURL,
+			RepoName:  dto.RepoName,
+			RepoOwner: dto.RepoOwner,
+			RepoHost:  dto.RepoHost,
+			Stacks:    chunk,
+		}
+		if batch != nil {
+			chunkDTO.BatchID = batch.BatchID
+			chunkDTO.BatchIndex = &batch.BatchIndex
+			chunkDTO.BatchTotal = &batch.BatchTotal
+		}
+		return c.sendAffectedStacksRequest(url, chunkDTO)
+	})
+}
+
+// sendAffectedStacksRequest sends a single affected stacks upload request.
+func (c *AtmosProAPIClient) sendAffectedStacksRequest(url string, dto *dtos.UploadAffectedStacksRequest) error {
+	data, err := json.Marshal(dto)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
+	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
 	}
