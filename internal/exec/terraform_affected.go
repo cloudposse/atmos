@@ -29,6 +29,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
 		)
 		return affectedList, err
 	case args.CloneTargetRef:
@@ -45,6 +46,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
 		)
 		return affectedList, err
 	default:
@@ -59,6 +61,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
 		)
 		return affectedList, err
 	}
@@ -90,6 +93,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessYamlFunctions,
 			args.Skip,
 			"",
+			args.AuthManager,
 		)
 		if err != nil {
 			return err

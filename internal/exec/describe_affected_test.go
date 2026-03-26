@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -115,15 +116,15 @@ func TestDescribeAffected(t *testing.T) {
 		return false
 	}
 
-	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -132,7 +133,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -232,6 +233,7 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		false,
 		nil,
 		false,
+		nil,
 	)
 	assert.Nil(t, err)
 
@@ -315,6 +317,7 @@ func TestDescribeAffectedWithTemplatesAndFunctions(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -337,6 +340,7 @@ func TestDescribeAffectedWithoutTemplatesAndFunctions(t *testing.T) {
 		false,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -394,6 +398,7 @@ func TestDescribeAffectedWithExcludeLocked(t *testing.T) {
 		true,
 		nil,
 		true,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -573,6 +578,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -583,6 +589,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		true,
 		nil,
 		"",
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -712,6 +719,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		false,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -722,6 +730,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		false,
 		nil,
 		"",
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -903,6 +912,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -912,7 +922,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		true,
 		true,
 		nil,
-		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.
+		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1012,6 +1023,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -1021,7 +1033,8 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		true,
 		true,
 		nil,
-		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.
+		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1057,6 +1070,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1069,6 +1083,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		true,
 		nil,
 		onlyInStack,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1214,6 +1229,7 @@ func TestDescribeAffectedNewComponentInBase(t *testing.T) {
 		false, // processYamlFunctions - disable to avoid !terraform.state issues
 		nil,
 		false,
+		nil,
 	)
 
 	// The test should pass - new components in BASE should be handled gracefully.
@@ -1267,6 +1283,7 @@ func TestDescribeAffectedNewComponentInBaseWithYamlFunctions(t *testing.T) {
 		true, // processYamlFunctions - this triggers the bug
 		nil,
 		false,
+		nil,
 	)
 	// FIXED BEHAVIOR: The fix passes atmosConfig through the YAML function chain to
 	// ExecuteDescribeComponent, so component lookups use BASE paths correctly.
@@ -1332,6 +1349,7 @@ func TestDescribeAffectedSourceVersionChange(t *testing.T) {
 		false, // processYamlFunctions - don't need YAML functions for this test
 		nil,
 		false,
+		nil,
 	)
 	// Check if there was an error.
 	require.NoError(t, err)
@@ -1413,6 +1431,7 @@ func TestDescribeAffectedDeletedComponentDetection(t *testing.T) {
 		false, // processYamlFunctions - don't need YAML functions for this test
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1514,6 +1533,7 @@ func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
 		false,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1548,6 +1568,7 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 		false, // processYamlFunctions
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1572,6 +1593,7 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 		false,
 		nil,
 		"",
+		nil,
 	)
 	require.NoError(t, err, "addDependentsToAffected should not crash on deleted components")
 
