@@ -810,3 +810,49 @@ func TestSetStackDescription(t *testing.T) {
 		assert.Equal(t, "filtered in", stackEntry[cfg.DescriptionSectionName])
 	})
 }
+
+// TestProcessStackFile_DescriptionOnPreCreatedEntry is a regression test for the
+// includeEmptyStacks description-drop bug: the existingStacks snapshot must be taken
+// BEFORE the pre-creation block so that pre-created entries are recognised as "new"
+// and receive the stack-level description.
+func TestProcessStackFile_DescriptionOnPreCreatedEntry(t *testing.T) {
+	// Use a config with no NameTemplate and no NamePattern so the stack name is
+	// resolved from the raw file name — canResolveNameEarly is true.
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	p := newDescribeStacksProcessor(
+		atmosConfig,
+		"", nil, nil, nil,
+		false, false,
+		true, // includeEmptyStacks — triggers the pre-creation path.
+		nil, nil,
+	)
+
+	// A stack map that has a description AND a components section.
+	// When includeEmptyStacks=true, processStackFile should:
+	//   1. Snapshot existingStacks (empty at this point).
+	//   2. Pre-create p.finalStacksMap["stacks/dev.yaml"] = { components: {} }.
+	//   3. Process the terraform component (reuses the pre-created entry).
+	//   4. Stamp the description onto every entry not in the snapshot.
+	stackMap := map[string]any{
+		cfg.DescriptionSectionName: "Dev stack with description.",
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: map[string]any{
+				"vpc": map[string]any{},
+			},
+		},
+	}
+
+	err := p.processStackFile("stacks/dev.yaml", stackMap)
+	require.NoError(t, err)
+
+	entry, exists := p.finalStacksMap["stacks/dev.yaml"]
+	require.True(t, exists, "stack entry must exist after processing")
+
+	stackEntry, ok := entry.(map[string]any)
+	require.True(t, ok)
+
+	desc, hasDesc := stackEntry[cfg.DescriptionSectionName]
+	assert.True(t, hasDesc, "stack entry must carry the stack-level description")
+	assert.Equal(t, "Dev stack with description.", desc)
+}

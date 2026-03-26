@@ -123,18 +123,14 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 			entry[cfg.ComponentsSectionName] = make(map[string]any)
 			p.finalStacksMap[initialName] = entry
 		}
+		// Stamp the description onto the pre-created entry immediately.  For import-only
+		// stacks (no components section) this is the only opportunity to attach it.
+		setStackDescription(p.finalStacksMap, initialName, stackDescription, p.sections)
 	}
 
 	componentsSection, ok := stackMap[cfg.ComponentsSectionName].(map[string]any)
 	if !ok {
 		return nil
-	}
-
-	// Snapshot the set of already-existing stack entries so we can identify which entries
-	// are NEW after component processing (and therefore belong to this stack file).
-	existingStacks := make(map[string]bool, len(p.finalStacksMap))
-	for k := range p.finalStacksMap {
-		existingStacks[k] = true
 	}
 
 	type typeEntry struct {
@@ -160,19 +156,8 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		if !ok {
 			continue
 		}
-		if err := p.processComponentTypeSection(stackFileName, stackManifestName, te.name, typeSection, te.opts); err != nil {
+		if err := p.processComponentTypeSection(stackFileName, stackManifestName, te.name, typeSection, te.opts, stackDescription); err != nil {
 			return err
-		}
-	}
-
-	// Propagate stack-level description to every stack entry that was created
-	// while processing this file.  Pre-created entries (includeEmptyStacks path) are
-	// also covered because they were not in existingStacks before the snapshot.
-	if stackDescription != "" {
-		for stackName := range p.finalStacksMap {
-			if !existingStacks[stackName] {
-				setStackDescription(p.finalStacksMap, stackName, stackDescription, p.sections)
-			}
 		}
 	}
 
@@ -185,6 +170,7 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 	stackFileName, stackManifestName, typeName string,
 	typeSection map[string]any,
 	opts processComponentTypeOpts,
+	stackDescription string,
 ) error {
 	defer perf.Track(p.atmosConfig, "exec.describeStacksProcessor.processComponentTypeSection")()
 
@@ -209,7 +195,7 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 
 		if err := p.processComponentEntry(
 			stackFileName, stackManifestName, typeName,
-			componentName, componentSection, typeSection, opts,
+			componentName, componentSection, typeSection, opts, stackDescription,
 		); err != nil {
 			return err
 		}
@@ -219,11 +205,13 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 
 // processComponentEntry processes a single component: resolves the stack name,
 // filters, builds the ConfigAndStacksInfo, processes templates, and writes to the result map.
+// stackDescription is the stack-manifest-level description (may be empty).
 func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,revive,cyclop,funlen // Orchestrator function with unavoidable branching.
 	stackFileName, stackManifestName, typeName,
 	componentName string,
 	componentSection, allTypeComponents map[string]any,
 	opts processComponentTypeOpts,
+	stackDescription string,
 ) error {
 	defer perf.Track(p.atmosConfig, "exec.describeStacksProcessor.processComponentEntry")()
 
@@ -292,6 +280,12 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	setAtmosComponentMetadata(info.ComponentSection, componentName, stackName, stackFileName)
 
 	ensureComponentEntryInMap(p.finalStacksMap, stackName, typeName, componentName)
+
+	// Propagate the stack-level description to the stack entry.  Using setStackDescription
+	// here (per component, per file) rather than in a post-processing loop means the
+	// description is applied regardless of whether this stack name was already in
+	// finalStacksMap from a prior file's processing (idempotent: first non-empty wins).
+	setStackDescription(p.finalStacksMap, stackName, stackDescription, p.sections)
 
 	// Terraform-only: build and attach the Terraform workspace.
 	if opts.buildWorkspace {

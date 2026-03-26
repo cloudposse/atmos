@@ -857,6 +857,7 @@ func TestProcessComponentTypeSection_ComponentSectionNotMap(t *testing.T) {
 	err := p.processComponentTypeSection(
 		"test.yaml", "", cfg.TerraformSectionName, typeSection,
 		processComponentTypeOpts{},
+	"",
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid")
@@ -884,6 +885,7 @@ func TestProcessComponentEntry_ComponentFilterExcluded(t *testing.T) {
 		"test.yaml", "", cfg.TerraformSectionName,
 		"vpc", componentSection, allTypeComponents,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.NoError(t, err)
@@ -911,6 +913,7 @@ func TestProcessComponentEntry_EmptyStackName(t *testing.T) {
 		"", cfg.TerraformSectionName,
 		"vpc", componentSection, allTypeComponents,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.NoError(t, err)
@@ -938,6 +941,7 @@ func TestProcessComponentEntry_ResolveStackNameError(t *testing.T) {
 		"test.yaml", "", cfg.TerraformSectionName,
 		"vpc", componentSection, allTypeComponents,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.Error(t, err)
@@ -962,6 +966,7 @@ func TestProcessComponentTypeSection_DefaultsComponentKey(t *testing.T) {
 	err := p.processComponentTypeSection(
 		"test.yaml", "", cfg.TerraformSectionName, typeSection,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.NoError(t, err)
@@ -992,6 +997,7 @@ func TestProcessComponentTypeSection_ProcessComponentEntryError(t *testing.T) {
 	err := p.processComponentTypeSection(
 		"test.yaml", "", cfg.TerraformSectionName, typeSection,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.Error(t, err)
@@ -1023,6 +1029,7 @@ func TestProcessComponentEntry_FindComponentsDerivedError(t *testing.T) {
 		"test.yaml", "", cfg.TerraformSectionName,
 		"vpc", componentSection, allTypeComponents,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.Error(t, err)
@@ -1055,6 +1062,7 @@ func TestProcessComponentEntry_ApplyMetadataInheritanceError(t *testing.T) {
 		"inherit-error-stack.yaml", "", cfg.TerraformSectionName,
 		"inherit-error-vpc", componentSection, allTypeComponents,
 		processComponentTypeOpts{applyMetadataInheritance: true},
+	"",
 	)
 
 	require.Error(t, err)
@@ -1079,6 +1087,7 @@ func TestProcessComponentEntry_BuildWorkspaceError(t *testing.T) {
 		"test.yaml", "", cfg.TerraformSectionName,
 		"vpc", componentSection, allTypeComponents,
 		processComponentTypeOpts{buildWorkspace: true},
+	"",
 	)
 
 	require.Error(t, err)
@@ -1242,6 +1251,7 @@ func TestProcessComponentEntry_ProcessTemplatesError(t *testing.T) {
 		"test.yaml", "", cfg.TerraformSectionName,
 		"vpc", componentSection, allTypeComponents,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.Error(t, err)
@@ -1296,6 +1306,7 @@ func TestProcessComponentEntry_ProcessYAMLFunctionsError(t *testing.T) {
 		"yaml-func-err.yaml", "", cfg.TerraformSectionName,
 		"yaml-func-err", componentSection, allTypeComponents,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.Error(t, err)
@@ -1471,6 +1482,7 @@ func TestProcessComponentEntry_NoGhostEntryWhenFiltered(t *testing.T) {
 		"stacks/prod.yaml", "prod", cfg.TerraformSectionName,
 		"vpc", componentSection, allTypeComponents,
 		processComponentTypeOpts{},
+	"",
 	)
 
 	require.NoError(t, err)
