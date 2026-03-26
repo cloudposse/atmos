@@ -158,14 +158,23 @@ func TestUploadAffectedStacks_Chunked(t *testing.T) {
 	var requestCount atomic.Int32
 	var mu sync.Mutex
 	var receivedBodies []dtos.UploadAffectedStacksRequest
+	var handlerErr atomic.Value // Captures first error from handler goroutine.
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		if err != nil {
+			handlerErr.CompareAndSwap(nil, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
 		var req dtos.UploadAffectedStacksRequest
-		require.NoError(t, json.Unmarshal(body, &req))
+		if err := json.Unmarshal(body, &req); err != nil {
+			handlerErr.CompareAndSwap(nil, err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
 		mu.Lock()
 		receivedBodies = append(receivedBodies, req)
@@ -214,9 +223,14 @@ func TestUploadAffectedStacks_Chunked(t *testing.T) {
 	err := client.UploadAffectedStacks(&dto)
 	require.NoError(t, err)
 
+	// Check for handler-side errors (read/unmarshal failures).
+	if hErr, ok := handlerErr.Load().(error); ok && hErr != nil {
+		t.Fatalf("httptest handler error: %v", hErr)
+	}
+
 	// Should have sent multiple requests.
 	totalRequests := int(requestCount.Load())
-	assert.Greater(t, totalRequests, 1, "large payload should be chunked into multiple requests")
+	require.Greater(t, totalRequests, 1, "large payload should be chunked into multiple requests")
 
 	// All requests should have the same batch_id.
 	mu.Lock()
@@ -224,6 +238,7 @@ func TestUploadAffectedStacks_Chunked(t *testing.T) {
 	copy(bodies, receivedBodies)
 	mu.Unlock()
 
+	require.NotEmpty(t, bodies, "receivedBodies should not be empty")
 	batchID := bodies[0].BatchID
 	assert.NotEmpty(t, batchID)
 
