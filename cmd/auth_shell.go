@@ -115,6 +115,7 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Prepare shell environment with file-based credentials.
 	// Start with current OS environment and let PrepareShellEnvironment configure auth.
+	// PrepareShellEnvironment sanitizes the env (removes IRSA/credential vars) and adds auth vars.
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, os.Environ())
 	if err != nil {
 		return fmt.Errorf("failed to prepare shell environment: %w", err)
@@ -129,18 +130,9 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Get provider name from the identity to display in shell messages.
 	providerName := authManager.GetProviderForIdentity(identityName)
 
-	// Execute the shell with authentication environment.
-	// ExecAuthShellCommand expects env vars as a map, so convert the list.
-	envMap := make(map[string]string)
-	for _, envVar := range envList {
-		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-			key := envVar[:idx]
-			value := envVar[idx+1:]
-			envMap[key] = value
-		}
-	}
-
-	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, providerName, envMap, shell, shellArgs)
+	// Execute the shell with the sanitized environment directly.
+	// envList already includes os.Environ() (sanitized) + auth vars.
+	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, providerName, envList, shell, shellArgs)
 }
 
 // extractAuthShellFlags extracts --identity and --shell flags from args and returns the remaining shell args.

@@ -59,6 +59,21 @@ func (m *manager) findFirstValidCachedCredentials() int {
 				// Credentials without expiration (API keys, long-lived tokens, etc.).
 				log.Debug("Found valid cached credentials", logKeyChainIndex, i, identityNameKey, identityName, logKeyExpirationChain, "none")
 			}
+
+			// Skip cached credentials at the target (last) identity in the chain.
+			// The cached output of the last step cannot be used as input to any further step
+			// because there are no further steps. fetchCachedCredentials would advance the
+			// startIndex past the end of the chain, causing authenticateIdentityChain's loop
+			// to never execute — returning stale/incorrect cached credentials without
+			// performing the actual AssumeRole (or equivalent) API call.
+			// Instead, continue scanning earlier in the chain for a valid cache point
+			// whose output CAN feed into the identity chain for re-authentication.
+			if i == len(m.chain)-1 {
+				log.Debug("Skipping cached target identity credentials to force re-authentication",
+					logKeyChainIndex, i, identityNameKey, identityName)
+				continue
+			}
+
 			return i
 		}
 

@@ -132,7 +132,7 @@ func executeCommandPipeline(
 
 	if shouldRunTerraformInit(atmosConfig, info) {
 		var err error
-		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile)
+		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
 		if err != nil {
 			return err
 		}
@@ -146,7 +146,7 @@ func executeCommandPipeline(
 		return err
 	}
 
-	if err = runWorkspaceSetup(atmosConfig, info, componentPath); err != nil {
+	if err = runWorkspaceSetup(atmosConfig, info, componentPath, opts...); err != nil {
 		return err
 	}
 
@@ -176,9 +176,13 @@ func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 	return os.Getenv("TF_WORKSPACE") != ""
 }
 
-// resolveWorkspaceSelectOpts returns the stderr redirect path and shell command options
-// for the workspace select command.
-func resolveWorkspaceSelectOpts(info *schema.ConfigAndStacksInfo) (string, []ShellCommandOption) {
+// runWorkspaceSetup selects (or creates) the Terraform workspace before the main command
+// runs.  It is a no-op when shouldSkipWorkspaceSetup returns true.
+func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+	if shouldSkipWorkspaceSetup(info) {
+		return nil
+	}
+
 	// Default: redirect workspace-select stderr to stdout so it is visible.
 	redirectStdErr := "/dev/stdout"
 	if info.RedirectStdErr != "" {
@@ -187,52 +191,11 @@ func resolveWorkspaceSelectOpts(info *schema.ConfigAndStacksInfo) (string, []She
 
 	// For data-producing subcommands redirect "Switched to workspace…" to stderr
 	// so it doesn't pollute captured stdout in $() substitutions.
-	var opts []ShellCommandOption
+	// Merge caller-provided opts (e.g., WithEnvironment) with workspace-specific opts.
+	wsOpts := append([]ShellCommandOption{}, opts...)
 	if info.SubCommand == "output" || info.SubCommand == "show" {
-		opts = append(opts, WithStdoutOverride(os.Stderr))
+		wsOpts = append(wsOpts, WithStdoutOverride(os.Stderr))
 	}
-
-	return redirectStdErr, opts
-}
-
-// createWorkspaceFallback attempts to create a workspace after a failed select.
-// Returns nil if the workspace was created or is already the active workspace.
-func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) error {
-	newErr := ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		[]string{"workspace", "new", info.TerraformWorkspace},
-		componentPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		info.RedirectStdErr,
-	)
-	if newErr == nil {
-		return nil
-	}
-
-	// If `workspace new` also fails with exit code 1, the workspace may already be the
-	// active workspace (the .terraform/environment file names it) but its state directory
-	// was deleted.  In that case we are already in the correct workspace and can proceed.
-	var newExitCodeErr errUtils.ExitCodeError
-	if errors.As(newErr, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
-		isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace, info.ComponentEnvList) {
-		log.Warn("Workspace is already active but its state directory is missing; proceeding — subsequent terraform commands may report missing state",
-			"workspace", info.TerraformWorkspace)
-		return nil
-	}
-
-	return newErr
-}
-
-// runWorkspaceSetup selects (or creates) the Terraform workspace before the main command
-// runs.  It is a no-op when shouldSkipWorkspaceSetup returns true.
-func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) error {
-	if shouldSkipWorkspaceSetup(info) {
-		return nil
-	}
-
-	redirectStdErr, wsOpts := resolveWorkspaceSelectOpts(info)
 
 	err := ExecuteShellCommand(
 		*atmosConfig,
@@ -254,7 +217,39 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return err
 	}
 
-	return createWorkspaceFallback(atmosConfig, info, componentPath)
+	return createWorkspaceFallback(atmosConfig, info, componentPath, opts...)
+}
+
+// createWorkspaceFallback attempts to create a new workspace when select fails.
+// If workspace creation also fails with exit code 1 and the workspace is already
+// active (stale .terraform/environment file), it proceeds with a warning.
+func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+	newErr := ExecuteShellCommand(
+		*atmosConfig,
+		info.Command,
+		[]string{"workspace", "new", info.TerraformWorkspace},
+		componentPath,
+		info.ComponentEnvList,
+		info.DryRun,
+		info.RedirectStdErr,
+		opts...,
+	)
+	if newErr == nil {
+		return nil
+	}
+
+	// If `workspace new` also fails with exit code 1, the workspace may already be the
+	// active workspace (the .terraform/environment file names it) but its state directory
+	// was deleted.  In that case we are already in the correct workspace and can proceed.
+	var newExitCodeErr errUtils.ExitCodeError
+	if errors.As(newErr, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
+		isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace, info.ComponentEnvList) {
+		log.Warn("Workspace is already active but its state directory is missing; proceeding — subsequent terraform commands may report missing state",
+			"workspace", info.TerraformWorkspace)
+		return nil
+	}
+
+	return newErr
 }
 
 // checkTTYRequirement returns an error when `terraform apply` is invoked without
