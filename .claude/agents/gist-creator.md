@@ -34,7 +34,7 @@ Gists are community-contributed recipes that show how to combine Atmos features 
 
 Gists live in the `/gists/` directory at the repo root (alongside `/examples/`).
 
-```
+```text
 gists/{name}/
 ├── README.md              # Comprehensive guide (REQUIRED)
 ├── atmos.yaml             # Atmos configuration (REQUIRED)
@@ -91,7 +91,7 @@ IMPORTANT: Only use tags from `website/blog/tags.yml` and authors from `website/
 ---
 slug: gist-slug
 title: "Gist: Descriptive Title"
-authors: [osterman]
+authors: [author-id] # Must exist in website/blog/authors.yml
 tags: [feature]
 ---
 

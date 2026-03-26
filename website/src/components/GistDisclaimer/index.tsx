@@ -11,7 +11,7 @@ const GistDisclaimer: React.FC<GistDisclaimerProps> = ({
 }) => {
   return (
     <div className="gist-disclaimer" role="note" aria-label="Gist disclaimer">
-      <RiLightbulbFlashLine className="gist-disclaimer-icon" />
+      <RiLightbulbFlashLine className="gist-disclaimer-icon" aria-hidden="true" />
       <span className="gist-disclaimer-text">{text}</span>
     </div>
   );

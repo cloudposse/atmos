@@ -53,7 +53,11 @@ commands:
                     stepfunctions-tool
                   )
                   for s in "${ALL_SERVERS[@]}"; do
-                    atmos mcp aws install "$s"
+                    if ! atmos mcp aws install "$s"; then
+                      echo ""
+                      echo "Failed installing server package: $s"
+                      exit 1
+                    fi
                   done
                   echo ""
                   echo "Done. All AWS MCP server packages are installed."
@@ -80,9 +84,6 @@ commands:
                   uvx --python 3.13 "$PACKAGE@latest"
           - name: test
             description: Test that AWS MCP servers can authenticate
-            arguments:
-              - name: server
-                description: "Server name or 'all'"
             steps:
               - |
                 echo "Testing auth..."
