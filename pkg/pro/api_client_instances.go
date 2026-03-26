@@ -22,6 +22,8 @@ const (
 )
 
 // UploadInstances uploads drift detection data to the API.
+// It retries on transient 401/5xx failures with exponential backoff, refreshing
+// the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) error {
 	if dto == nil {
 		return errors.Join(
@@ -31,7 +33,7 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 	}
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
 
-	// Guard against nil HTTPClient by ensuring a default client with a sane timeout
+	// Guard against nil HTTPClient by ensuring a default client with a sane timeout.
 	client := c.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: DefaultHTTPClientTimeout}
@@ -42,26 +44,31 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
-	// Log safe metadata instead of full payload to prevent secret leakage
+	// Log safe metadata instead of full payload to prevent secret leakage.
 	hash := sha256.Sum256([]byte(data))
 	log.Debug("Uploading instances DTO.", "repo_owner", dto.RepoOwner, "repo_name", dto.RepoName, "instances_count", len(dto.Instances), "payload_hash", hex.EncodeToString(hash[:]))
 
-	req, err := getAuthenticatedRequest(c, "POST", endpoint, strings.NewReader(data))
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
-	}
-
 	log.Debug("Uploading instances.", "endpoint", endpoint)
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
-	}
-	defer resp.Body.Close()
+	// Wrap the HTTP call in retry logic to handle transient 401/5xx failures.
+	err = doWithRetry("UploadInstances", func() error {
+		req, reqErr := getAuthenticatedRequest(c, "POST", endpoint, strings.NewReader(data))
+		if reqErr != nil {
+			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+		}
 
-	if err := handleAPIResponse(resp, "UploadInstances"); err != nil {
+		resp, doErr := client.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+		if doErr != nil {
+			return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
+		}
+		defer resp.Body.Close()
+
+		return handleAPIResponse(resp, "UploadInstances")
+	}, c, defaultRetryConfig())
+	if err != nil {
 		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
+
 	log.Debug("Uploaded instances.", "endpoint", endpoint)
 
 	return nil

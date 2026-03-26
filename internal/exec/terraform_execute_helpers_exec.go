@@ -325,9 +325,11 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	exitCode := resolveExitCode(err)
 
 	// Upload status only when explicitly requested via --upload-status flag.
+	// Upload failures are logged but never cause the terraform command to fail —
+	// the exit code should reflect the plan/apply result, not telemetry.
 	if uploadStatusFlag && shouldUploadStatus(info) {
 		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode); uploadErr != nil {
-			return uploadErr
+			log.Warn("Failed to upload command status to Atmos Pro. The terraform command result is unaffected.", "error", uploadErr)
 		}
 	}
 
