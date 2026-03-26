@@ -150,8 +150,8 @@ mcp:
         args:
           - "awslabs.amazon-eks-mcp-server@latest"
         env:
-          AWS_PROFILE: "{{ .vars.aws_profile }}"
-          AWS_REGION: "{{ .vars.region }}"
+          AWS_PROFILE: !env AWS_PROFILE
+          AWS_REGION: !env AWS_DEFAULT_REGION
         # Optional: only start when these tools are needed.
         auto_start: true
         # Optional: connection timeout.
@@ -164,8 +164,8 @@ mcp:
         args:
           - "awslabs.aws-iac-mcp-server@latest"
         env:
-          AWS_PROFILE: "{{ .vars.aws_profile }}"
-          AWS_REGION: "{{ .vars.region }}"
+          AWS_PROFILE: !env AWS_PROFILE
+          AWS_REGION: !env AWS_DEFAULT_REGION
 
       # AWS S3 MCP server.
       aws-s3:
@@ -174,7 +174,7 @@ mcp:
         args:
           - "awslabs.s3-mcp-server@latest"
         env:
-          AWS_PROFILE: "{{ .vars.aws_profile }}"
+          AWS_PROFILE: !env AWS_PROFILE
 
       # Custom MCP server (any stdio-based server).
       custom-db:
