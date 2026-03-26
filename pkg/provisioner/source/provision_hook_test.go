@@ -1368,7 +1368,7 @@ func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testi
 	// A component config with a valid source but the done-key present should return nil
 	// immediately without touching the filesystem.
 	componentConfig := map[string]any{
-		"component": "null-label",
+		"component":   "null-label",
 		"atmos_stack": "demo",
 		"source": map[string]any{
 			"uri":     "github.com/cloudposse/terraform-null-label.git//",
