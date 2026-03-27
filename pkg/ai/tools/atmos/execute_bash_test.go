@@ -205,7 +205,7 @@ func TestExecuteBashCommandTool_Execute_NoPipeInterpretation(t *testing.T) {
 	ctx := context.Background()
 
 	// "echo foo | grep foo" — the | is passed as a literal argument to echo,
-	// NOT interpreted as a shell pipe. echo outputs the literal "|" character.
+	// NOT interpreted as a shell pipe. echo prints all its arguments literally.
 	result, err := tool.Execute(ctx, map[string]interface{}{
 		"command": "echo foo | grep foo",
 	})
@@ -213,8 +213,13 @@ func TestExecuteBashCommandTool_Execute_NoPipeInterpretation(t *testing.T) {
 	assert.NoError(t, err)
 	// echo still exits 0 even when given literal "|" as an argument.
 	assert.True(t, result.Success)
-	// The output contains the literal pipe character — it was NOT piped.
-	assert.Contains(t, result.Output, "|")
+
+	// If the pipe were shell-interpreted, grep would have consumed echo's stdout.
+	// The combined output would be just "foo\n" (grep match) and "grep" would NOT
+	// appear in the output.  With direct execution echo prints all its args
+	// literally, so both "|" and "grep" appear in the output.
+	assert.Contains(t, result.Output, "|", "pipe char must appear literally in output")
+	assert.Contains(t, result.Output, "grep", "word 'grep' must appear as a literal echo arg, proving it was never executed as a subprocess")
 }
 
 func TestExecuteBashCommandTool_Execute_GitCommand(t *testing.T) {

@@ -37,7 +37,7 @@ var blacklistedCommands = map[string]bool{
 //
 // Note: The tool now executes commands via exec.Command(binary, args...) instead
 // of "sh -c <command>", so none of these characters are ever interpreted.  The
-// check is therefore defence-in-depth: it gives the caller a clear error message
+// check is therefore defense-in-depth: it gives the caller a clear error message
 // rather than silently ignoring the metacharacters.
 var shellMetaChars = []string{
 	";",   // command separator: cmd1; cmd2
@@ -119,7 +119,7 @@ func validateCommand(args []string, command string) *tools.Result {
 		}
 	}
 
-	// Defence-in-depth: reject commands that contain shell metacharacters.
+	// Defense-in-depth: reject commands that contain shell metacharacters.
 	// Because commands are executed directly (exec.Command, not "sh -c"), these
 	// characters would not be interpreted anyway — but raising an explicit error
 	// prevents confusing silent failures and signals clearly that injection
