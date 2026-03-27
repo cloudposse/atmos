@@ -436,13 +436,11 @@ func buildProAPIError(operation string, statusCode int, apiResponse dtos.AtmosAp
 			WithHint("Learn how Atmos Pro authentication works: https://atmos-pro.com/docs/learn/authentication")
 	case http.StatusNotFound:
 		builder = builder.
-			WithHint("Verify the workspace ID is correct, the repository has been imported, and the Atmos Pro GitHub App is installed: https://atmos-pro.com/docs/install").
-			WithHint("For a working example of a properly configured setup, see the quickstart: https://atmos-pro.com/docs/install")
+			WithHint("Verify the workspace ID is correct, the repository has been imported, and the Atmos Pro GitHub App is installed: https://atmos-pro.com/docs/install")
 	default:
 		if statusCode >= http.StatusInternalServerError {
 			builder = builder.
-				WithHint("This is a server-side error that will be retried automatically. If the problem persists, contact support with the `trace_id` from above.").
-				WithHint("https://atmos-pro.com/docs/learn/troubleshooting")
+				WithHint("This is a server-side error that will be retried automatically. If the problem persists, contact support with the `trace_id` from above: https://atmos-pro.com/docs/learn/troubleshooting")
 		}
 	}
 
