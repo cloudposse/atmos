@@ -13,15 +13,31 @@ tools become available across the Atmos AI surface:
 
 ## What's Included
 
-Five AWS MCP servers are pre-configured in `atmos.yaml`:
+Nine AWS MCP servers are pre-configured in `atmos.yaml`:
+
+### Cost Analysis & FinOps
+
+| Server               | What It Does                                      | Credentials            | Read-Only |
+|----------------------|---------------------------------------------------|------------------------|-----------|
+| **aws-billing**      | Billing summaries, payment history, cost tags     | Yes — `ce:*`, `billing:*` | Yes    |
+| **aws-cost-explorer**| Spend breakdowns by service/account/tag, forecasts| Yes — `ce:*`           | Yes       |
+| **aws-pricing**      | On-demand/reserved pricing, cost comparisons      | Yes — `pricing:*` (free) | Yes     |
+
+### Security & Compliance
+
+| Server              | What It Does                                       | Credentials                     | Read-Only |
+|---------------------|----------------------------------------------------|---------------------------------|-----------|
+| **aws-security**    | Well-Architected Security Pillar assessment        | Yes — security services read    | No        |
+| **aws-iam**         | IAM role/policy analysis, permission boundaries    | Yes — `iam:Get*`, `iam:List*`  | No        |
+| **aws-cloudtrail**  | CloudTrail event history, API call auditing        | Yes — `cloudtrail:LookupEvents`| No        |
+
+### General
 
 | Server            | What It Does                                 | Credentials | Read-Only |
 |-------------------|----------------------------------------------|-------------|-----------|
 | **aws-api**       | Direct AWS CLI access with security controls | Yes         | No        |
 | **aws-docs**      | Search and fetch AWS documentation           | No          | Yes       |
 | **aws-knowledge** | Managed AWS knowledge base (remote service)  | No          | Yes       |
-| **aws-pricing**   | Real-time AWS pricing and cost analysis      | Yes (free)  | Yes       |
-| **aws-security**  | Well-Architected security posture assessment | Yes         | No        |
 
 Servers marked **Read-Only** are available in `atmos ai ask` (non-interactive). Other servers
 require `atmos ai chat` (interactive) for safety.
@@ -139,20 +155,20 @@ atmos ai chat
 One-shot questions — get an answer and exit. No interactive session:
 
 ```bash
-# Pricing questions
+# FinOps — cost analysis (uses aws-cost-explorer, aws-billing, aws-pricing)
+atmos ai ask "What did we spend on EC2 last month?"
+atmos ai ask "Break down costs by service for the past 30 days"
+atmos ai ask "Compare the pricing of t3.medium vs t3.large in us-west-2"
 atmos ai ask "What's the on-demand price for an m7i.xlarge in us-east-1?"
 
-# Documentation lookups
-atmos ai ask "How do I configure S3 bucket versioning?"
-
-# Security checks
+# Security — posture checks (uses aws-security, aws-iam, aws-cloudtrail)
 atmos ai ask "Is GuardDuty enabled in us-east-1?"
+atmos ai ask "List all IAM roles with admin access"
+atmos ai ask "Show recent API calls from the root account"
 
-# AWS knowledge
+# Documentation lookups (uses aws-docs, aws-knowledge)
+atmos ai ask "How do I configure S3 bucket versioning?"
 atmos ai ask "Which AWS regions support Amazon Bedrock?"
-
-# Cost comparison
-atmos ai ask "Compare the pricing of t3.medium vs t3.large in us-west-2"
 ```
 
 ### Using MCP Tools with `atmos ai exec`
@@ -401,6 +417,30 @@ atmos mcp tools aws-docs
 
 **Configuration:** No `env` variables needed. Optionally set `AWS_DOCUMENTATION_PARTITION`
 to `"aws-cn"` for China partition docs.
+
+### aws-billing — Billing & Cost Management
+
+Access to billing summaries, payment history, and cost allocation tags.
+
+**IAM:** `ce:*`, `billing:*`
+
+### aws-cost-explorer — Spend Breakdowns & Forecasts
+
+Break down spend by service, account, tag, and time period. Provides cost trends and forecasts.
+
+**IAM:** `ce:*`
+
+### aws-iam — IAM Analysis
+
+Analyze IAM roles, policies, permission boundaries, and access patterns. Read-only — no changes to IAM.
+
+**IAM:** `iam:Get*`, `iam:List*`
+
+### aws-cloudtrail — Event History & Auditing
+
+Query CloudTrail event history for API call auditing, security investigations, and compliance reporting.
+
+**IAM:** `cloudtrail:LookupEvents`
 
 ### aws-knowledge — Managed Knowledge Base
 

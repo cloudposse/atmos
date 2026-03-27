@@ -127,6 +127,72 @@ mcp:
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Security — Well-Architected security posture assessment"
 
+    # -----------------------------------------------------------------------
+    # AWS Billing & Cost Management — billing summaries and payment history
+    # -----------------------------------------------------------------------
+    # Provides access to billing summaries, payment history, and cost
+    # allocation tags.
+    #
+    # IAM permissions required: ce:*, billing:*
+    aws-billing:
+      command: uvx
+      args:
+        - "awslabs.billing-cost-management-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Billing — billing summaries and payment history"
+      read_only: true
+
+    # -----------------------------------------------------------------------
+    # AWS Cost Explorer — spend breakdowns, trends, and forecasts
+    # -----------------------------------------------------------------------
+    # Breaks down spend by service, account, tag, and time period.
+    # Provides cost trends and forecasts.
+    #
+    # IAM permissions required: ce:*
+    aws-cost-explorer:
+      command: uvx
+      args:
+        - "awslabs.cost-explorer-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Cost Explorer — spend breakdowns, trends, and forecasts"
+      read_only: true
+
+    # -----------------------------------------------------------------------
+    # AWS IAM — role/policy analysis and access patterns
+    # -----------------------------------------------------------------------
+    # Analyzes IAM roles, policies, permission boundaries, and access
+    # patterns. Read-only — no changes to IAM resources.
+    #
+    # IAM permissions required: iam:Get*, iam:List*
+    aws-iam:
+      command: uvx
+      args:
+        - "awslabs.iam-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS IAM — role/policy analysis and access patterns"
+
+    # -----------------------------------------------------------------------
+    # AWS CloudTrail — event history and API call auditing
+    # -----------------------------------------------------------------------
+    # Queries CloudTrail event history for API call auditing, security
+    # investigations, and compliance reporting.
+    #
+    # IAM permissions required: cloudtrail:LookupEvents
+    aws-cloudtrail:
+      command: uvx
+      args:
+        - "awslabs.cloudtrail-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS CloudTrail — event history and API call auditing"
+
 # ---------------------------------------------------------------------------
 # Atmos Auth Integration (optional)
 # ---------------------------------------------------------------------------
