@@ -86,6 +86,52 @@ func TestListPlugins(t *testing.T) {
 	assert.Equal(t, []string{"alpha", "beta", "gamma"}, list)
 }
 
+// statusStubPlugin is a stub that also implements StatusDataProvider.
+type statusStubPlugin struct {
+	componentType string
+	statusData    map[string]any
+}
+
+func (s *statusStubPlugin) GetType() string                       { return s.componentType }
+func (s *statusStubPlugin) GetHookBindings() []plugin.HookBinding { return nil }
+func (s *statusStubPlugin) BuildStatusData(_ string, _ string) map[string]any {
+	return s.statusData
+}
+
+func TestBuildStatusData(t *testing.T) {
+	t.Run("returns nil for unregistered component type", func(t *testing.T) {
+		ClearPlugins()
+		result := BuildStatusData("nonexistent", "output", "plan")
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns nil when plugin does not implement StatusDataProvider", func(t *testing.T) {
+		ClearPlugins()
+		sp := &stubPlugin{componentType: "basic"}
+		err := RegisterPlugin(sp)
+		require.NoError(t, err)
+
+		result := BuildStatusData("basic", "output", "plan")
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns data when plugin implements StatusDataProvider", func(t *testing.T) {
+		ClearPlugins()
+		expected := map[string]any{
+			"component_type": "test-tf",
+			"has_changes":    true,
+		}
+		sp := &statusStubPlugin{componentType: "test-tf", statusData: expected}
+		err := RegisterPlugin(sp)
+		require.NoError(t, err)
+
+		result := BuildStatusData("test-tf", "output", "plan")
+		require.NotNil(t, result)
+		assert.Equal(t, "test-tf", result["component_type"])
+		assert.Equal(t, true, result["has_changes"])
+	})
+}
+
 func TestHookBindingsGetBindingForEvent(t *testing.T) {
 	bindings := plugin.HookBindings{
 		{Event: "after.terraform.plan", Handler: func(_ *plugin.HookContext) error { return nil }},

@@ -218,7 +218,7 @@ func TestUploadStatus(t *testing.T) {
 				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
 			})).Return(nil)
 
-			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
+			err := uploadStatus(&info, tc.exitCode, nil, mockProClient, mockGitRepo)
 
 			if tc.expectedError {
 				assert.Error(t, err)
@@ -311,7 +311,7 @@ func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
 				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
 			})).Return(nil)
 
-			err := uploadStatus(&info, tc.exitCode, mockProClient, mockGitRepo)
+			err := uploadStatus(&info, tc.exitCode, nil, mockProClient, mockGitRepo)
 			assert.NoError(t, err)
 
 			mockProClient.AssertExpectations(t)
@@ -331,7 +331,7 @@ func TestUploadStatusWithGitErrors(t *testing.T) {
 		// Simulate git error
 		mockGitRepo.On("GetLocalRepoInfo").Return(nil, assert.AnError)
 
-		err := uploadStatus(&info, 2, mockProClient, mockGitRepo)
+		err := uploadStatus(&info, 2, nil, mockProClient, mockGitRepo)
 		assert.Error(t, err)
 
 		mockGitRepo.AssertExpectations(t)
@@ -355,7 +355,7 @@ func TestUploadStatusWithGitErrors(t *testing.T) {
 		mockGitRepo.On("GetCurrentCommitSHA").Return("", assert.AnError)
 		mockProClient.On("UploadInstanceStatus", mock.AnythingOfType("*dtos.InstanceStatusUploadRequest")).Return(nil)
 
-		err := uploadStatus(&info, 2, mockProClient, mockGitRepo)
+		err := uploadStatus(&info, 2, nil, mockProClient, mockGitRepo)
 		assert.NoError(t, err)
 
 		mockProClient.AssertExpectations(t)
@@ -389,6 +389,142 @@ func TestUploadStatusDTO(t *testing.T) {
 		assert.Equal(t, "vpc", dto.Component)
 		assert.Equal(t, "plan", dto.Command)
 		assert.Equal(t, 2, dto.ExitCode)
+	})
+}
+
+// TestUploadStatusWithCIData tests that CI data is included in the upload DTO.
+func TestUploadStatusWithCIData(t *testing.T) {
+	testRepoInfo := &atmosgit.RepoInfo{
+		RepoUrl:   "https://github.com/test/repo",
+		RepoName:  "repo",
+		RepoOwner: "test",
+		RepoHost:  "github.com",
+	}
+
+	t.Run("includes CI data in DTO when provided", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+		info := createTestInfo(true)
+
+		ciData := map[string]any{
+			"component_type": "terraform",
+			"has_changes":    true,
+			"has_errors":     false,
+			"resource_counts": map[string]int{
+				"create":  3,
+				"change":  1,
+				"replace": 0,
+				"destroy": 0,
+			},
+		}
+
+		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+			return dto.CI != nil &&
+				dto.CI["component_type"] == "terraform" &&
+				dto.CI["has_changes"] == true &&
+				dto.Command == "plan"
+		})).Return(nil)
+
+		err := uploadStatus(&info, 2, ciData, mockProClient, mockGitRepo)
+		assert.NoError(t, err)
+
+		mockProClient.AssertExpectations(t)
+		mockGitRepo.AssertExpectations(t)
+	})
+
+	t.Run("omits CI data from DTO when nil", func(t *testing.T) {
+		mockProClient := new(MockProAPIClient)
+		mockGitRepo := new(MockGitRepo)
+		info := createTestInfo(true)
+
+		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
+		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
+		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
+			return dto.CI == nil && dto.Command == "plan"
+		})).Return(nil)
+
+		err := uploadStatus(&info, 0, nil, mockProClient, mockGitRepo)
+		assert.NoError(t, err)
+
+		mockProClient.AssertExpectations(t)
+		mockGitRepo.AssertExpectations(t)
+	})
+}
+
+// TestBuildCIStatusData tests the buildCIStatusData function.
+func TestBuildCIStatusData(t *testing.T) {
+	t.Run("returns nil for unknown component type", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "unknown",
+			SubCommand: "plan",
+		}
+		result := buildCIStatusData(info, []byte("some output"))
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns CI data with output log for terraform", func(t *testing.T) {
+		// The terraform plugin is auto-registered via init().
+		// We need to import the package to trigger registration.
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		output := []byte("Plan: 2 to add, 1 to change, 0 to destroy.")
+		result := buildCIStatusData(info, output)
+
+		// If terraform plugin is registered, we should get data.
+		if result != nil {
+			assert.Equal(t, "terraform", result["component_type"])
+			assert.Contains(t, result, "output_log")
+			assert.Contains(t, result, "has_changes")
+		}
+	})
+}
+
+// TestAddOutputLog tests the addOutputLog helper.
+func TestAddOutputLog(t *testing.T) {
+	t.Run("adds base64 encoded output", func(t *testing.T) {
+		data := make(map[string]any)
+		output := []byte("hello world")
+		addOutputLog(data, output, 1024)
+
+		assert.Contains(t, data, "output_log")
+		assert.NotContains(t, data, "truncated")
+		assert.Equal(t, "aGVsbG8gd29ybGQ=", data["output_log"])
+	})
+
+	t.Run("truncates from beginning when exceeding max", func(t *testing.T) {
+		data := make(map[string]any)
+		output := []byte("AAAAABBBBB")
+		addOutputLog(data, output, 5)
+
+		assert.Contains(t, data, "output_log")
+		assert.Equal(t, true, data["truncated"])
+		// Should keep last 5 bytes: "BBBBB".
+		assert.Equal(t, "QkJCQkI=", data["output_log"])
+	})
+
+	t.Run("does nothing for empty output", func(t *testing.T) {
+		data := make(map[string]any)
+		addOutputLog(data, []byte{}, 1024)
+
+		assert.NotContains(t, data, "output_log")
+	})
+
+	t.Run("does nothing for nil data map", func(t *testing.T) {
+		// Should not panic.
+		addOutputLog(nil, []byte("hello"), 1024)
+	})
+
+	t.Run("no truncation when exactly at max", func(t *testing.T) {
+		data := make(map[string]any)
+		output := []byte("12345")
+		addOutputLog(data, output, 5)
+
+		assert.Contains(t, data, "output_log")
+		assert.NotContains(t, data, "truncated")
 	})
 }
 

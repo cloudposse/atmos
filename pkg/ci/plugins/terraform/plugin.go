@@ -26,6 +26,9 @@ type Plugin struct{}
 // Ensure Plugin implements plugin.Plugin.
 var _ plugin.Plugin = (*Plugin)(nil)
 
+// Ensure Plugin implements plugin.StatusDataProvider.
+var _ plugin.StatusDataProvider = (*Plugin)(nil)
+
 func init() {
 	// Self-register on package import.
 	if err := ci.RegisterPlugin(&Plugin{}); err != nil {
@@ -240,4 +243,47 @@ func cleanApplyOutput(output string) string {
 	cleaned = multiBlankLinesRe.ReplaceAllString(cleaned, "\n\n")
 
 	return strings.TrimSpace(cleaned)
+}
+
+// BuildStatusData implements plugin.StatusDataProvider.
+// It parses the raw terraform output and returns a map of structured CI data
+// for the Atmos Pro status upload.
+func (p *Plugin) BuildStatusData(output string, command string) map[string]any {
+	defer perf.Track(nil, "terraform.Plugin.BuildStatusData")()
+
+	result := ParseOutput(output, command)
+
+	data := map[string]any{
+		"component_type": "terraform",
+		"has_changes":    result.HasChanges,
+		"has_errors":     result.HasErrors,
+		"errors":         result.Errors,
+	}
+
+	if tfData, ok := result.Data.(*plugin.TerraformOutputData); ok {
+		data["warnings"] = tfData.Warnings
+		data["resource_counts"] = map[string]int{
+			"create":  tfData.ResourceCounts.Create,
+			"change":  tfData.ResourceCounts.Change,
+			"replace": tfData.ResourceCounts.Replace,
+			"destroy": tfData.ResourceCounts.Destroy,
+		}
+		data["outputs"] = extractOutputValues(tfData.Outputs)
+	}
+
+	return data
+}
+
+// extractOutputValues converts TerraformOutput map to raw values.
+// Sensitive outputs are replaced with "<MASKED>" to prevent secret leakage.
+func extractOutputValues(outputs map[string]plugin.TerraformOutput) map[string]any {
+	result := make(map[string]any, len(outputs))
+	for key, out := range outputs {
+		if out.Sensitive {
+			result[key] = "<MASKED>"
+		} else {
+			result[key] = out.Value
+		}
+	}
+	return result
 }

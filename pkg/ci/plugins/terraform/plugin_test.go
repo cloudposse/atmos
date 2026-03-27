@@ -357,6 +357,88 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 	})
 }
 
+func TestPlugin_BuildStatusData_Plan(t *testing.T) {
+	p := &Plugin{}
+	output := "Plan: 3 to add, 1 to change, 0 to destroy."
+
+	data := p.BuildStatusData(output, "plan")
+
+	require.NotNil(t, data)
+	assert.Equal(t, "terraform", data["component_type"])
+	assert.Equal(t, true, data["has_changes"])
+	assert.Equal(t, false, data["has_errors"])
+
+	counts, ok := data["resource_counts"].(map[string]int)
+	require.True(t, ok, "resource_counts should be map[string]int")
+	assert.Equal(t, 3, counts["create"])
+	assert.Equal(t, 1, counts["change"])
+	assert.Equal(t, 0, counts["replace"])
+	assert.Equal(t, 0, counts["destroy"])
+}
+
+func TestPlugin_BuildStatusData_Apply(t *testing.T) {
+	p := &Plugin{}
+	output := `Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+vpc_id = "vpc-abc123"
+public = "true"`
+
+	data := p.BuildStatusData(output, "apply")
+
+	require.NotNil(t, data)
+	assert.Equal(t, "terraform", data["component_type"])
+	assert.Equal(t, false, data["has_errors"])
+}
+
+func TestPlugin_BuildStatusData_NoChanges(t *testing.T) {
+	p := &Plugin{}
+	output := "No changes. Your infrastructure matches the configuration."
+
+	data := p.BuildStatusData(output, "plan")
+
+	require.NotNil(t, data)
+	assert.Equal(t, false, data["has_changes"])
+	assert.Equal(t, false, data["has_errors"])
+}
+
+func TestExtractOutputValues(t *testing.T) {
+	t.Run("extracts non-sensitive values", func(t *testing.T) {
+		outputs := map[string]plugin.TerraformOutput{
+			"vpc_id": {Value: "vpc-abc123", Sensitive: false},
+			"name":   {Value: "test", Sensitive: false},
+		}
+
+		result := extractOutputValues(outputs)
+
+		assert.Equal(t, "vpc-abc123", result["vpc_id"])
+		assert.Equal(t, "test", result["name"])
+	})
+
+	t.Run("masks sensitive values", func(t *testing.T) {
+		outputs := map[string]plugin.TerraformOutput{
+			"password": {Value: "secret123", Sensitive: true},
+			"vpc_id":   {Value: "vpc-abc123", Sensitive: false},
+		}
+
+		result := extractOutputValues(outputs)
+
+		assert.Equal(t, "<MASKED>", result["password"])
+		assert.Equal(t, "vpc-abc123", result["vpc_id"])
+	})
+
+	t.Run("handles empty map", func(t *testing.T) {
+		result := extractOutputValues(map[string]plugin.TerraformOutput{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("handles nil map", func(t *testing.T) {
+		result := extractOutputValues(nil)
+		assert.Empty(t, result)
+	})
+}
+
 // Helper function to find a binding by event.
 func findBinding(bindings []plugin.HookBinding, event string) *plugin.HookBinding {
 	for i := range bindings {

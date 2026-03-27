@@ -32,4 +32,7 @@ type InstanceStatusUploadRequest struct {
 	Stack         string `json:"stack"`
 	Command       string `json:"command"`
 	ExitCode      int    `json:"exit_code"`
+	// CI contains structured plan/apply data as a flexible map.
+	// Each component type populates its own keys. Omitted when ci.enabled is false.
+	CI map[string]any `json:"ci,omitempty"`
 }

@@ -34,6 +34,11 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 		"exit_code": dto.ExitCode,
 	}
 
+	// Add CI data if present.
+	if dto.CI != nil {
+		payload["ci"] = dto.CI
+	}
+
 	// Add last_run if we have atmos_pro_run_id or git_sha
 	if dto.AtmosProRunID != "" || dto.GitSHA != "" {
 		payload["last_run"] = time.Now().UTC().Format(time.RFC3339)
