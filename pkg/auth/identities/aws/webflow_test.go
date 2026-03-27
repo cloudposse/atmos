@@ -645,12 +645,11 @@ func TestCallbackServer_ContextCancellation(t *testing.T) {
 	// Cancel the context to trigger server shutdown.
 	cancel()
 
-	// Give the server a moment to shut down.
-	time.Sleep(100 * time.Millisecond)
-
 	// Connection should fail after shutdown.
-	_, err = http.Get(fmt.Sprintf("http://%s%s", addr, webflowCallbackPath)) //nolint:gosec // Test code.
-	assert.Error(t, err)
+	require.Eventually(t, func() bool {
+		_, err := http.Get(fmt.Sprintf("http://%s%s", addr, webflowCallbackPath)) //nolint:gosec // Test code.
+		return err != nil
+	}, 2*time.Second, 50*time.Millisecond, "server should shut down after context cancellation")
 }
 
 func TestExchangeRefreshToken_Success(t *testing.T) {
