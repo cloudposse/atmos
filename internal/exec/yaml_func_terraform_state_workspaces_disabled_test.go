@@ -192,7 +192,10 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	// On Windows, the previous test (TestYamlFuncTerraformStateWorkspacesDisabled) may
+	// briefly retain a file-lock on terraform.tfstate after exiting.  Retry to avoid a
+	// transient "file locked by another process" error when acquiring the state lock.
+	err = executeTerraformWithRetry(info)
 	require.NoError(t, err, "Failed to deploy component-1")
 
 	// Verify that the state file is at terraform.tfstate (not terraform.tfstate.d/default/terraform.tfstate).
@@ -206,6 +209,27 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 	// State should NOT exist at the wrong location.
 	_, err = os.Stat(wrongStatePath)
 	assert.True(t, os.IsNotExist(err), "State file should NOT exist at %s when workspaces are disabled", wrongStatePath)
+}
+
+// executeTerraformWithRetry calls ExecuteTerraform and retries on Windows when the
+// error is a transient state-file lock ("file locked by another process").  All tests
+// in this package share the same mock-component directory, so a brief OS-level lock
+// held by a just-exited Terraform process can prevent the next operation from
+// acquiring the state lock.  Retrying is safe because deploy is idempotent.
+func executeTerraformWithRetry(info schema.ConfigAndStacksInfo) error {
+	const maxAttempts = 3
+	for i := range maxAttempts {
+		err := ExecuteTerraform(info)
+		if err == nil {
+			return nil
+		}
+		if i < maxAttempts-1 && runtime.GOOS == "windows" {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		return err
+	}
+	return nil
 }
 
 // removeWithRetry removes a file, retrying on Windows where brief file locks
