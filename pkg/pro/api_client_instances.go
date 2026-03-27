@@ -24,6 +24,8 @@ const (
 
 // UploadInstances uploads drift detection data to the API.
 // Large payloads are automatically split into chunks to stay within server body size limits.
+// Each chunk is retried on transient 401/5xx failures with exponential backoff, refreshing
+// the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) error {
 	if dto == nil {
 		return errors.Join(
@@ -83,22 +85,27 @@ func (c *AtmosProAPIClient) sendInstancesRequest(endpoint string, dto *dtos.Inst
 		"payload_hash", hex.EncodeToString(hash[:]),
 	)
 
-	req, err := getAuthenticatedRequest(c, "POST", endpoint, bytes.NewReader(data))
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
-	}
-
 	log.Debug("Uploading instances.", "endpoint", endpoint)
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
-	}
-	defer resp.Body.Close()
+	// Wrap the HTTP call in retry logic to handle transient 401/5xx failures.
+	err = doWithRetry("UploadInstances", func() error {
+		req, reqErr := getAuthenticatedRequest(c, "POST", endpoint, bytes.NewReader(data))
+		if reqErr != nil {
+			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+		}
 
-	if err := handleAPIResponse(resp, "UploadInstances"); err != nil {
+		resp, doErr := client.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+		if doErr != nil {
+			return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
+		}
+		defer resp.Body.Close()
+
+		return handleAPIResponse(resp, "UploadInstances")
+	}, c, defaultRetryConfig())
+	if err != nil {
 		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
+
 	log.Debug("Uploaded instances.", "endpoint", endpoint)
 
 	return nil
