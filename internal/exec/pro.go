@@ -215,7 +215,7 @@ func executeProUnlock(a *ProUnlockCmdArgs, apiClient pro.AtmosProAPIClientInterf
 }
 
 // uploadStatus uploads the terraform results to the pro API.
-func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, ciData map[string]any, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, componentType string, metadata map[string]any, client pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
 	// Get the git repository info
 	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
@@ -251,7 +251,8 @@ func uploadStatus(info *schema.ConfigAndStacksInfo, exitCode int, ciData map[str
 		Component:     info.Component,
 		Command:       info.SubCommand,
 		ExitCode:      exitCode,
-		CI:            ciData,
+		ComponentType: componentType,
+		Metadata:      metadata,
 	}
 
 	// Upload the status

@@ -339,11 +339,11 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 
 	// Upload status only when explicitly requested via --upload-status flag.
 	if uploadStatusFlag && shouldUploadStatus(info) {
-		var ciData map[string]any
+		var metadata map[string]any
 		if captureOutput {
-			ciData = buildCIStatusData(info, maskedOutput.Bytes())
+			metadata = buildCIStatusData(info, maskedOutput.Bytes())
 		}
-		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode, ciData); uploadErr != nil {
+		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode, metadata); uploadErr != nil {
 			return uploadErr
 		}
 	}
@@ -362,14 +362,14 @@ func uploadCommandStatus(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	exitCode int,
-	ciData map[string]any,
+	metadata map[string]any,
 ) error {
 	client, cerr := pro.NewAtmosProAPIClientFromEnv(atmosConfig)
 	if cerr != nil {
 		return cerr
 	}
 	gitRepo := &git.DefaultGitRepo{}
-	return uploadStatus(info, exitCode, ciData, client, gitRepo)
+	return uploadStatus(info, exitCode, info.Command, metadata, client, gitRepo)
 }
 
 // defaultMaxOutputLogBytes is the fallback max size for the output log (3MB pre-encoding).

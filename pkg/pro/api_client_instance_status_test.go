@@ -38,7 +38,7 @@ func TestUploadInstanceStatus(t *testing.T) {
 }
 
 func TestUploadInstanceStatus_WithCIData(t *testing.T) {
-	t.Run("includes ci field in payload when CI data is set", func(t *testing.T) {
+	t.Run("includes metadata and component_type in payload when set", func(t *testing.T) {
 		mockRoundTripper := new(MockRoundTripper)
 		httpClient := &http.Client{Transport: mockRoundTripper}
 		apiClient := &AtmosProAPIClient{
@@ -49,11 +49,11 @@ func TestUploadInstanceStatus_WithCIData(t *testing.T) {
 		}
 
 		dto := dtos.InstanceStatusUploadRequest{
-			Command:  "plan",
-			ExitCode: 2,
-			CI: map[string]any{
-				"component_type": "terraform",
-				"has_changes":    true,
+			Command:       "plan",
+			ExitCode:      2,
+			ComponentType: "terraform",
+			Metadata: map[string]any{
+				"has_changes": true,
 				"resource_counts": map[string]int{
 					"create": 3, "change": 1, "replace": 0, "destroy": 0,
 				},
@@ -71,12 +71,16 @@ func TestUploadInstanceStatus_WithCIData(t *testing.T) {
 			if err := json.Unmarshal(body, &payload); err != nil {
 				return false
 			}
-			// Verify CI block is present in the serialized payload.
-			ci, ok := payload["ci"].(map[string]any)
+			// Verify component_type is a top-level field.
+			if payload["component_type"] != "terraform" {
+				return false
+			}
+			// Verify metadata block is present.
+			md, ok := payload["metadata"].(map[string]any)
 			if !ok {
 				return false
 			}
-			return ci["component_type"] == "terraform" && ci["has_changes"] == true
+			return md["has_changes"] == true
 		})).Return(mockResponse, nil)
 
 		err := apiClient.UploadInstanceStatus(&dto)
@@ -84,7 +88,7 @@ func TestUploadInstanceStatus_WithCIData(t *testing.T) {
 		mockRoundTripper.AssertExpectations(t)
 	})
 
-	t.Run("omits ci field from payload when CI data is nil", func(t *testing.T) {
+	t.Run("omits metadata and component_type from payload when not set", func(t *testing.T) {
 		mockRoundTripper := new(MockRoundTripper)
 		httpClient := &http.Client{Transport: mockRoundTripper}
 		apiClient := &AtmosProAPIClient{
@@ -97,7 +101,6 @@ func TestUploadInstanceStatus_WithCIData(t *testing.T) {
 		dto := dtos.InstanceStatusUploadRequest{
 			Command:  "plan",
 			ExitCode: 0,
-			CI:       nil,
 		}
 
 		mockResponse := &http.Response{
@@ -111,9 +114,9 @@ func TestUploadInstanceStatus_WithCIData(t *testing.T) {
 			if err := json.Unmarshal(body, &payload); err != nil {
 				return false
 			}
-			// Verify CI block is NOT present in the payload.
-			_, hasCi := payload["ci"]
-			return !hasCi
+			_, hasMetadata := payload["metadata"]
+			_, hasComponentType := payload["component_type"]
+			return !hasMetadata && !hasComponentType
 		})).Return(mockResponse, nil)
 
 		err := apiClient.UploadInstanceStatus(&dto)

@@ -118,8 +118,7 @@ func TestBuildStatusData(t *testing.T) {
 	t.Run("returns data when plugin implements StatusDataProvider", func(t *testing.T) {
 		ClearPlugins()
 		expected := map[string]any{
-			"component_type": "test-tf",
-			"has_changes":    true,
+			"has_changes": true,
 		}
 		sp := &statusStubPlugin{componentType: "test-tf", statusData: expected}
 		err := RegisterPlugin(sp)
@@ -127,7 +126,6 @@ func TestBuildStatusData(t *testing.T) {
 
 		result := BuildStatusData("test-tf", "output", "plan")
 		require.NotNil(t, result)
-		assert.Equal(t, "test-tf", result["component_type"])
 		assert.Equal(t, true, result["has_changes"])
 	})
 }

@@ -364,7 +364,6 @@ func TestPlugin_BuildStatusData_Plan(t *testing.T) {
 	data := p.BuildStatusData(output, "plan")
 
 	require.NotNil(t, data)
-	assert.Equal(t, "terraform", data["component_type"])
 	assert.Equal(t, true, data["has_changes"])
 	assert.Equal(t, false, data["has_errors"])
 
@@ -388,7 +387,6 @@ public = "true"`
 	data := p.BuildStatusData(output, "apply")
 
 	require.NotNil(t, data)
-	assert.Equal(t, "terraform", data["component_type"])
 	assert.Equal(t, false, data["has_errors"])
 }
 

@@ -219,7 +219,7 @@ func TestUploadStatus(t *testing.T) {
 				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
 			})).Return(nil)
 
-			err := uploadStatus(&info, tc.exitCode, nil, mockProClient, mockGitRepo)
+			err := uploadStatus(&info, tc.exitCode, "", nil, mockProClient, mockGitRepo)
 
 			if tc.expectedError {
 				assert.Error(t, err)
@@ -312,7 +312,7 @@ func TestUploadStatusWithDifferentExitCodes(t *testing.T) {
 				return dto.Command == "plan" && dto.ExitCode == tc.exitCode
 			})).Return(nil)
 
-			err := uploadStatus(&info, tc.exitCode, nil, mockProClient, mockGitRepo)
+			err := uploadStatus(&info, tc.exitCode, "", nil, mockProClient, mockGitRepo)
 			assert.NoError(t, err)
 
 			mockProClient.AssertExpectations(t)
@@ -332,7 +332,7 @@ func TestUploadStatusWithGitErrors(t *testing.T) {
 		// Simulate git error
 		mockGitRepo.On("GetLocalRepoInfo").Return(nil, assert.AnError)
 
-		err := uploadStatus(&info, 2, nil, mockProClient, mockGitRepo)
+		err := uploadStatus(&info, 2, "", nil, mockProClient, mockGitRepo)
 		assert.Error(t, err)
 
 		mockGitRepo.AssertExpectations(t)
@@ -356,7 +356,7 @@ func TestUploadStatusWithGitErrors(t *testing.T) {
 		mockGitRepo.On("GetCurrentCommitSHA").Return("", assert.AnError)
 		mockProClient.On("UploadInstanceStatus", mock.AnythingOfType("*dtos.InstanceStatusUploadRequest")).Return(nil)
 
-		err := uploadStatus(&info, 2, nil, mockProClient, mockGitRepo)
+		err := uploadStatus(&info, 2, "", nil, mockProClient, mockGitRepo)
 		assert.NoError(t, err)
 
 		mockProClient.AssertExpectations(t)
@@ -407,10 +407,9 @@ func TestUploadStatusWithCIData(t *testing.T) {
 		mockGitRepo := new(MockGitRepo)
 		info := createTestInfo(true)
 
-		ciData := map[string]any{
-			"component_type": "terraform",
-			"has_changes":    true,
-			"has_errors":     false,
+		metadata := map[string]any{
+			"has_changes": true,
+			"has_errors":  false,
 			"resource_counts": map[string]int{
 				"create":  3,
 				"change":  1,
@@ -422,20 +421,20 @@ func TestUploadStatusWithCIData(t *testing.T) {
 		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
 		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
 		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
-			return dto.CI != nil &&
-				dto.CI["component_type"] == "terraform" &&
-				dto.CI["has_changes"] == true &&
+			return dto.Metadata != nil &&
+				dto.Metadata["has_changes"] == true &&
+				dto.ComponentType == "terraform" &&
 				dto.Command == "plan"
 		})).Return(nil)
 
-		err := uploadStatus(&info, 2, ciData, mockProClient, mockGitRepo)
+		err := uploadStatus(&info, 2, "terraform", metadata, mockProClient, mockGitRepo)
 		assert.NoError(t, err)
 
 		mockProClient.AssertExpectations(t)
 		mockGitRepo.AssertExpectations(t)
 	})
 
-	t.Run("omits CI data from DTO when nil", func(t *testing.T) {
+	t.Run("omits metadata from DTO when nil", func(t *testing.T) {
 		mockProClient := new(MockProAPIClient)
 		mockGitRepo := new(MockGitRepo)
 		info := createTestInfo(true)
@@ -443,10 +442,10 @@ func TestUploadStatusWithCIData(t *testing.T) {
 		mockGitRepo.On("GetLocalRepoInfo").Return(testRepoInfo, nil)
 		mockGitRepo.On("GetCurrentCommitSHA").Return("abc123", nil)
 		mockProClient.On("UploadInstanceStatus", mock.MatchedBy(func(dto *dtos.InstanceStatusUploadRequest) bool {
-			return dto.CI == nil && dto.Command == "plan"
+			return dto.Metadata == nil && dto.ComponentType == "" && dto.Command == "plan"
 		})).Return(nil)
 
-		err := uploadStatus(&info, 0, nil, mockProClient, mockGitRepo)
+		err := uploadStatus(&info, 0, "", nil, mockProClient, mockGitRepo)
 		assert.NoError(t, err)
 
 		mockProClient.AssertExpectations(t)
@@ -477,7 +476,6 @@ func TestBuildCIStatusData(t *testing.T) {
 
 		// If terraform plugin is registered, we should get data.
 		if result != nil {
-			assert.Equal(t, "terraform", result["component_type"])
 			assert.Contains(t, result, "output_log")
 			assert.Contains(t, result, "has_changes")
 		}
@@ -635,6 +633,159 @@ func TestBuildCIStatusDataOutputLogIncluded(t *testing.T) {
 			// Should contain the tail, not the head.
 			assert.Contains(t, string(decoded), "TAIL__")
 			assert.NotContains(t, string(decoded), "HEAD...")
+		}
+	})
+}
+
+// TestBuildCIStatusDataWithCapturedOutput tests buildCIStatusData with realistic
+// captured terraform output, covering the path where captureOutput is non-empty
+// in executeMainTerraformCommand.
+func TestBuildCIStatusDataWithCapturedOutput(t *testing.T) {
+	t.Run("plan output produces resource counts and output_log", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		capturedOutput := []byte(`Terraform used the selected providers to generate the following execution plan.
+Resource actions are indicated with the following symbols:
+  + create
+  ~ update in-place
+  - destroy
+
+Terraform will perform the following actions:
+
+  # aws_instance.web will be created
+  + resource "aws_instance" "web" {
+      + ami           = "ami-12345"
+      + instance_type = "t2.micro"
+    }
+
+  # aws_security_group.allow_tls will be updated in-place
+  ~ resource "aws_security_group" "allow_tls" {
+      ~ description = "old" -> "new"
+    }
+
+  # aws_s3_bucket.old will be destroyed
+  - resource "aws_s3_bucket" "old" {
+    }
+
+Plan: 1 to add, 1 to change, 1 to destroy.
+`)
+		result := buildCIStatusData(info, capturedOutput)
+
+		if result != nil {
+			// Verify has_changes is set.
+			assert.Equal(t, true, result["has_changes"])
+			assert.Equal(t, false, result["has_errors"])
+
+			// Verify resource counts are extracted.
+			counts, ok := result["resource_counts"].(map[string]int)
+			if ok {
+				assert.Equal(t, 1, counts["create"])
+				assert.Equal(t, 1, counts["change"])
+				assert.Equal(t, 1, counts["destroy"])
+			}
+
+			// Verify output_log is base64-encoded and contains the plan output.
+			outputLog, ok := result["output_log"].(string)
+			assert.True(t, ok, "output_log should be a string")
+			decoded, err := base64.StdEncoding.DecodeString(outputLog)
+			assert.NoError(t, err)
+			assert.Contains(t, string(decoded), "Plan: 1 to add, 1 to change, 1 to destroy")
+			assert.Contains(t, string(decoded), "aws_instance.web")
+
+			// Verify not truncated (small output).
+			_, hasTruncated := result["truncated"]
+			assert.False(t, hasTruncated)
+		}
+	})
+
+	t.Run("apply output produces has_changes and output_log", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "apply",
+		}
+		capturedOutput := []byte(`aws_instance.web: Creating...
+aws_instance.web: Creation complete after 30s [id=i-abc123]
+
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+instance_id = "i-abc123"
+`)
+		result := buildCIStatusData(info, capturedOutput)
+
+		if result != nil {
+			assert.Equal(t, false, result["has_errors"])
+
+			// Verify output_log contains the apply output.
+			outputLog, ok := result["output_log"].(string)
+			assert.True(t, ok)
+			decoded, err := base64.StdEncoding.DecodeString(outputLog)
+			assert.NoError(t, err)
+			assert.Contains(t, string(decoded), "Apply complete!")
+			assert.Contains(t, string(decoded), "instance_id")
+		}
+	})
+
+	t.Run("error output produces has_errors and output_log with error text", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		capturedOutput := []byte(`
+Error: Invalid provider configuration
+
+Provider "registry.terraform.io/hashicorp/aws" requires explicit configuration.
+Add a provider block to the root module.
+`)
+		result := buildCIStatusData(info, capturedOutput)
+
+		if result != nil {
+			assert.Equal(t, true, result["has_errors"])
+
+			// Verify output_log contains the error text.
+			outputLog, ok := result["output_log"].(string)
+			assert.True(t, ok)
+			decoded, err := base64.StdEncoding.DecodeString(outputLog)
+			assert.NoError(t, err)
+			assert.Contains(t, string(decoded), "Error: Invalid provider configuration")
+		}
+	})
+
+	t.Run("masked output preserves masked tokens in output_log", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		// Simulate output that has already been through MaskWriter.
+		capturedOutput := []byte(`Plan: 0 to add, 0 to change, 0 to destroy.
+
+Warning: Value for undeclared variable "api_key" is <MASKED>
+`)
+		result := buildCIStatusData(info, capturedOutput)
+
+		if result != nil {
+			outputLog, ok := result["output_log"].(string)
+			assert.True(t, ok)
+			decoded, err := base64.StdEncoding.DecodeString(outputLog)
+			assert.NoError(t, err)
+			// The <MASKED> token should be preserved in the output log.
+			assert.Contains(t, string(decoded), "<MASKED>")
+		}
+	})
+
+	t.Run("empty captured output returns data without output_log", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		result := buildCIStatusData(info, []byte{})
+
+		if result != nil {
+			_, hasOutputLog := result["output_log"]
+			assert.False(t, hasOutputLog, "empty output should not produce output_log")
 		}
 	})
 }

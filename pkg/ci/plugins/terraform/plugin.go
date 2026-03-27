@@ -254,10 +254,9 @@ func (p *Plugin) BuildStatusData(output string, command string) map[string]any {
 	result := ParseOutput(output, command)
 
 	data := map[string]any{
-		"component_type": "terraform",
-		"has_changes":    result.HasChanges,
-		"has_errors":     result.HasErrors,
-		"errors":         result.Errors,
+		"has_changes": result.HasChanges,
+		"has_errors":  result.HasErrors,
+		"errors":      result.Errors,
 	}
 
 	if tfData, ok := result.Data.(*plugin.TerraformOutputData); ok {

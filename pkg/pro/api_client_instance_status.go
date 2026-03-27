@@ -34,9 +34,14 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 		"exit_code": dto.ExitCode,
 	}
 
-	// Add CI data if present.
-	if dto.CI != nil {
-		payload["ci"] = dto.CI
+	// Add component type if present.
+	if dto.ComponentType != "" {
+		payload["component_type"] = dto.ComponentType
+	}
+
+	// Add metadata if present.
+	if dto.Metadata != nil {
+		payload["metadata"] = dto.Metadata
 	}
 
 	// Add last_run if we have atmos_pro_run_id or git_sha
