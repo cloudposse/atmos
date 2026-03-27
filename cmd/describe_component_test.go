@@ -19,12 +19,79 @@ func TestDescribeComponentCmd_Error(t *testing.T) {
 }
 
 func TestDescribeComponentCmd_ProvenanceFlag(t *testing.T) {
-	// Test that the --provenance flag is properly registered
-	// Use PersistentFlags() since that's where the flag is registered
+	// Test that the --provenance flag is properly registered as a string flag with NoOptDefVal.
 	provenanceFlag := describeComponentCmd.PersistentFlags().Lookup("provenance")
 	require.NotNil(t, provenanceFlag, "provenance flag should be registered")
-	assert.Equal(t, "bool", provenanceFlag.Value.Type(), "provenance flag should be a boolean")
-	assert.Equal(t, "false", provenanceFlag.DefValue, "provenance flag should default to false")
+	assert.Equal(t, "string", provenanceFlag.Value.Type(), "provenance flag should be a string")
+	assert.Equal(t, "", provenanceFlag.DefValue, "provenance flag should default to empty string")
+	assert.Equal(t, "true", provenanceFlag.NoOptDefVal, "--provenance without a value should activate basic provenance mode")
+}
+
+// TestDescribeComponentCmd_ExplainFlag tests that the --explain flag is properly registered.
+func TestDescribeComponentCmd_ExplainFlag(t *testing.T) {
+	explainFlag := describeComponentCmd.PersistentFlags().Lookup("explain")
+	require.NotNil(t, explainFlag, "explain flag should be registered")
+	assert.Equal(t, "bool", explainFlag.Value.Type(), "explain flag should be a boolean")
+	assert.Equal(t, "false", explainFlag.DefValue, "explain flag should default to false")
+}
+
+// TestDescribeComponentCmd_ExplainFlagParsing tests that the --explain flag is parsed correctly
+// by the command and exercises the GetBool("explain") code path (alias for --provenance=full).
+func TestDescribeComponentCmd_ExplainFlagParsing(t *testing.T) {
+	tk := NewTestKit(t)
+
+	stacksPath := "examples/quick-start-advanced"
+
+	// Skip if examples directory doesn't exist.
+	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
+		tk.Skipf("Skipping test: %s directory not found", stacksPath)
+	}
+
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	tk.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	// Set flags for this test.
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev"))
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("explain", "true"))
+
+	// Execute command - may fail due to missing files in test environment.
+	// We're testing that flag parsing succeeds, not the full command execution.
+	err := describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
+	if err != nil {
+		// Verify the error is not due to flag parsing issues.
+		errStr := err.Error()
+		assert.NotContains(tk, errStr, "unknown flag", "Flag parsing should succeed")
+		assert.NotContains(tk, errStr, "invalid flag", "Flag validation should succeed")
+	}
+}
+
+// TestDescribeComponentCmd_ProvenanceFullFlagParsing tests that --provenance=full is parsed correctly.
+func TestDescribeComponentCmd_ProvenanceFullFlagParsing(t *testing.T) {
+	tk := NewTestKit(t)
+
+	stacksPath := "examples/quick-start-advanced"
+
+	// Skip if examples directory doesn't exist.
+	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
+		tk.Skipf("Skipping test: %s directory not found", stacksPath)
+	}
+
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	tk.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	// Set flags for this test.
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev"))
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("provenance", "full"))
+
+	// Execute command - may fail due to missing files in test environment.
+	// We're testing that flag parsing succeeds, not the full command execution.
+	err := describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
+	if err != nil {
+		// Verify the error is not due to flag parsing issues.
+		errStr := err.Error()
+		assert.NotContains(tk, errStr, "unknown flag", "Flag parsing should succeed")
+		assert.NotContains(tk, errStr, "invalid flag", "Flag validation should succeed")
+	}
 }
 
 // TestDescribeComponentCmd_ProvenanceWithFormatJSON tests that provenance and format flags

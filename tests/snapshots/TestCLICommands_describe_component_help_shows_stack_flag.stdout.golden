@@ -1,5 +1,5 @@
 
-👽 test darwin/arm64
+👽 test linux/amd64
 
 Display the configuration details for a specific Atmos component within a
 designated Atmos stack, including its dependencies, settings, and overrides.
@@ -45,6 +45,8 @@ EXAMPLES
 
 FLAGS
 
+      --explain            Alias for --provenance=full: show a full YAML merge-trace with all overrides per key
+
       --file string        Write the result to the file
 
   -f, --format string      The output format (default yaml)
@@ -57,7 +59,8 @@ FLAGS
       --process-templates  Enable/disable Go template processing in Atmos stack manifests when executing the command
                            (default true)
 
-      --provenance         Enable provenance tracking to show where configuration values originated
+      --provenance string  Show where configuration values originated (use --provenance or --provenance=full for full
+                           merge-trace in YAML)
 
       --skip strings       Skip executing a YAML function in the Atmos stack manifests when executing the command
 
