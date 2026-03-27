@@ -103,13 +103,29 @@ func getRunnableDescribeComponentCmd(
 		// Otherwise, treat it as a component name (even if it contains slashes).
 		needsPathResolution := g.isExplicitComponentPath(component)
 
+		// Build ConfigAndStacksInfo from global flags so --base-path, --config,
+		// --config-path, and --profile are preserved (matching ProcessCommandLineArgs).
+		info := schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			Stack:            stack,
+		}
+		if bp, _ := flags.GetString("base-path"); bp != "" {
+			info.BasePath = bp
+		}
+		if cfgFiles, _ := flags.GetStringSlice("config"); len(cfgFiles) > 0 {
+			info.AtmosConfigFilesFromArg = cfgFiles
+		}
+		if cfgDirs, _ := flags.GetStringSlice("config-path"); len(cfgDirs) > 0 {
+			info.AtmosConfigDirsFromArg = cfgDirs
+		}
+		if profiles, _ := flags.GetStringSlice("profile"); len(profiles) > 0 {
+			info.ProfilesFromArg = profiles
+		}
+
 		// Load atmos configuration. Use processStacks=true when path resolution is needed
 		// because the resolver needs StackConfigFilesAbsolutePaths to find stacks and
 		// detect ambiguity.
-		atmosConfig, err := g.initCliConfig(schema.ConfigAndStacksInfo{
-			ComponentFromArg: component,
-			Stack:            stack,
-		}, needsPathResolution)
+		atmosConfig, err := g.initCliConfig(info, needsPathResolution)
 		if err != nil {
 			// If config loading failed and we're trying to resolve a path,
 			// try to give a more specific error about the path.
