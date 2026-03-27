@@ -5,7 +5,9 @@ coverage:
   status:
     project:
       default:
-        target: auto      # Automatically use the base branch's coverage
+        # Hard floor of 77 %. Raise this by 1 every time the overall coverage
+        # crosses the next whole-integer boundary (e.g. 78 %, 79 %, …).
+        target: 77%
         threshold: 1%     # Allow up to 1% drop to account for Codecov rounding
         base: auto
         if_not_found: success  # Don't fail if base coverage is missing
