@@ -31,6 +31,22 @@ var blacklistedCommands = map[string]bool{
 	"init":     true,
 }
 
+// shellMetaChars contains characters and sequences that are interpreted by the
+// shell as special operators. If any of these appear in the raw command string,
+// the command is rejected to prevent shell-injection attacks.
+//
+// Note: The tool now executes commands via exec.Command(binary, args...) instead
+// of "sh -c <command>", so none of these characters are ever interpreted.  The
+// check is therefore defence-in-depth: it gives the caller a clear error message
+// rather than silently ignoring the metacharacters.
+var shellMetaChars = []string{
+	";",   // command separator: cmd1; cmd2
+	"&&",  // logical AND: cmd1 && cmd2
+	"||",  // logical OR:  cmd1 || cmd2
+	"$(", // command substitution: $(cmd)
+	"`",   // backtick command substitution: `cmd`
+}
+
 // ExecuteBashCommandTool executes any shell command.
 type ExecuteBashCommandTool struct {
 	atmosConfig *schema.AtmosConfiguration
@@ -50,7 +66,7 @@ func (t *ExecuteBashCommandTool) Name() string {
 
 // Description returns the tool description.
 func (t *ExecuteBashCommandTool) Description() string {
-	return "Execute any shell command and return the output. Use this for git operations, file listing (ls), searching (grep), package management (npm, pip), and other system commands. Examples: 'git status', 'ls -la', 'grep pattern file.txt', 'npm install'. IMPORTANT: Destructive commands (rm, dd, kill, etc.) are blocked for safety."
+	return "Execute a command directly (without a shell) and return the output. Use this for git operations, file listing (ls), searching (grep), package management (npm, pip), and other system commands. Examples: 'git status', 'ls -la', 'grep pattern file.txt', 'npm install'. IMPORTANT: Destructive commands (rm, dd, kill, etc.) are blocked for safety. Shell metacharacters (;, &&, ||, $(...), backticks) are not supported; issue multiple separate commands instead."
 }
 
 // Parameters returns the tool parameters.
@@ -103,6 +119,21 @@ func validateCommand(args []string, command string) *tools.Result {
 		}
 	}
 
+	// Defence-in-depth: reject commands that contain shell metacharacters.
+	// Because commands are executed directly (exec.Command, not "sh -c"), these
+	// characters would not be interpreted anyway — but raising an explicit error
+	// prevents confusing silent failures and signals clearly that injection
+	// attempts are detected.
+	for _, meta := range shellMetaChars {
+		if strings.Contains(command, meta) {
+			log.Warnf("Blocked command with shell metacharacter %q: %s", meta, command)
+			return &tools.Result{
+				Success: false,
+				Error:   fmt.Errorf("%w: %q found in command", errUtils.ErrAICommandShellInjection, meta),
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -144,9 +175,12 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 
 	workingDir := t.resolveWorkingDir(params)
 
-	log.Debugf("Executing shell command: %s (in %s)", command, workingDir)
+	log.Debugf("Executing command: %s (in %s)", command, workingDir)
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	// Execute the command directly — without a shell intermediary.
+	// This eliminates shell-metacharacter interpretation (CWE-78) entirely:
+	// args[0] is the binary, args[1:] are the literal arguments.
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = workingDir
 
 	output, err := cmd.CombinedOutput()
