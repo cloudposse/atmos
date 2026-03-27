@@ -17,7 +17,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -93,6 +92,12 @@ type AtmosProAPIClient struct {
 	BaseAPIEndpoint string
 	BaseURL         string
 	HTTPClient      *http.Client
+	// atmosConfig is stored for token refresh on 401 retries. Nil when created via NewAtmosProAPIClient.
+	atmosConfig *schema.AtmosConfiguration
+	// useOIDC indicates the client was created via OIDC exchange (not a static token),
+	// meaning token refresh is possible on 401 errors.
+	useOIDC         bool
+	MaxPayloadBytes int // Configurable max payload size before chunking. 0 uses default.
 }
 
 // NewAtmosProAPIClient creates a new instance of AtmosProAPIClient.
@@ -120,11 +125,15 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	}
 	log.Debug("Using baseAPIEndpoint", "baseAPIEndpoint", baseAPIEndpoint)
 
+	maxPayloadBytes := atmosConfig.Settings.Pro.MaxPayloadBytes
+
 	// First, check if the API key is set via environment variable
 	apiToken := atmosConfig.Settings.Pro.Token
 	if apiToken != "" {
 		log.Debug("Creating API client with API token from environment variable")
-		return NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken), nil
+		client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
+		client.MaxPayloadBytes = maxPayloadBytes
+		return client, nil
 	}
 
 	// If API key is not set, attempt to use GitHub OIDC token exchange
@@ -140,13 +149,18 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 		return nil, fmt.Errorf("%w: environment variable: %s", errUtils.ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
 	}
 
-	// Exchange OIDC token for Atmos token
+	// Exchange OIDC token for Atmos token.
 	apiToken, err = exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrOIDCTokenExchangeFailed, err)
 	}
 
-	return NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken), nil
+	client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
+	client.atmosConfig = atmosConfig
+	client.useOIDC = true
+	client.MaxPayloadBytes = maxPayloadBytes
+
+	return client, nil
 }
 
 func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.Reader) (*http.Request, error) {
@@ -161,29 +175,96 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 	return req, nil
 }
 
-// UploadAffectedStacks uploads information about affected stacks.
-func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
-	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
+// RefreshToken re-exchanges the OIDC token for a fresh Atmos Pro JWT.
+// This is used by retry logic when a 401 suggests the original JWT was signed
+// by a different deployment instance. Returns a no-op nil error when the client
+// was created with a static token (no OIDC).
+func (c *AtmosProAPIClient) RefreshToken() error {
+	if !c.useOIDC || c.atmosConfig == nil {
+		// Static token — nothing to refresh.
+		return nil
+	}
 
-	data, err := utils.ConvertToJSON(dto)
+	oidcToken, err := getGitHubOIDCToken(c.atmosConfig.Settings.Pro.GithubOIDC)
+	if err != nil {
+		return errors.Join(errUtils.ErrTokenRefreshFailed, err)
+	}
+
+	workspaceID := c.atmosConfig.Settings.Pro.WorkspaceID
+	newToken, err := exchangeOIDCTokenForAtmosToken(c.BaseURL, c.BaseAPIEndpoint, oidcToken, workspaceID)
+	if err != nil {
+		return errors.Join(errUtils.ErrTokenRefreshFailed, err)
+	}
+
+	c.APIToken = newToken
+	log.Debug("Refreshed Atmos Pro API token via OIDC re-exchange.")
+
+	return nil
+}
+
+// UploadAffectedStacks uploads information about affected stacks.
+// Large payloads are automatically split into chunks to stay within server body size limits.
+// Each chunk is retried on transient 401/5xx failures with exponential backoff, refreshing
+// the OIDC token on 401 errors before each retry.
+func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
+	endpoint := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
+
+	// Estimate metadata overhead (everything except the stacks array).
+	overheadDTO := dtos.UploadAffectedStacksRequest{
+		HeadSHA:   dto.HeadSHA,
+		BaseSHA:   dto.BaseSHA,
+		RepoURL:   dto.RepoURL,
+		RepoName:  dto.RepoName,
+		RepoOwner: dto.RepoOwner,
+		RepoHost:  dto.RepoHost,
+		Stacks:    []schema.Affected{},
+	}
+	overhead := metadataOverhead(overheadDTO)
+
+	return sendChunked(dto.Stacks, c.MaxPayloadBytes, overhead, func(chunk []schema.Affected, batch *BatchInfo) error {
+		chunkDTO := &dtos.UploadAffectedStacksRequest{
+			HeadSHA:   dto.HeadSHA,
+			BaseSHA:   dto.BaseSHA,
+			RepoURL:   dto.RepoURL,
+			RepoName:  dto.RepoName,
+			RepoOwner: dto.RepoOwner,
+			RepoHost:  dto.RepoHost,
+			Stacks:    chunk,
+		}
+		if batch != nil {
+			chunkDTO.BatchID = batch.BatchID
+			chunkDTO.BatchIndex = &batch.BatchIndex
+			chunkDTO.BatchTotal = &batch.BatchTotal
+		}
+		return c.sendAffectedStacksRequest(endpoint, chunkDTO)
+	})
+}
+
+// sendAffectedStacksRequest sends a single affected stacks upload request.
+func (c *AtmosProAPIClient) sendAffectedStacksRequest(url string, dto *dtos.UploadAffectedStacksRequest) error {
+	data, err := json.Marshal(dto)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer([]byte(data)))
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
-	}
-
 	log.Debug("Uploading affected components and stacks.", logKeyURL, url)
 
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
-	}
-	defer resp.Body.Close()
+	// Wrap the HTTP call in retry logic to handle transient 401/5xx failures.
+	err = doWithRetry("UploadAffectedStacks", func() error {
+		req, reqErr := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
+		if reqErr != nil {
+			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+		}
 
-	if err := handleAPIResponse(resp, "UploadAffectedStacks"); err != nil {
+		resp, doErr := c.HTTPClient.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+		if doErr != nil {
+			return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
+		}
+		defer resp.Body.Close()
+
+		return handleAPIResponse(resp, "UploadAffectedStacks")
+	}, c, defaultRetryConfig())
+	if err != nil {
 		return errors.Join(errUtils.ErrFailedToUploadStacks, err)
 	}
 
@@ -282,9 +363,10 @@ func (c *AtmosProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.Unlo
 }
 
 // handleAPIResponse processes the HTTP response and logs detailed information including trace IDs and error messages.
-// It returns an error if the response indicates failure.
+// It returns an *APIError (which implements error) if the response indicates failure, allowing callers
+// to inspect the HTTP status code for retry decisions.
 func handleAPIResponse(resp *http.Response, operation string) error {
-	// Read the response body
+	// Read the response body.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToReadResponseBody, err)
@@ -292,28 +374,37 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 
 	var apiResponse dtos.AtmosApiResponse
 
-	// Try to unmarshal the response to get structured data
+	// Try to unmarshal the response to get structured data.
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		// If we can't parse the response as JSON, handle based on status code
+		// If we can't parse the response as JSON, handle based on status code.
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-			return fmt.Errorf("%w: HTTP status: %s", errUtils.ErrFailedToUnmarshalAPIResponse, resp.Status)
+			return &APIError{
+				StatusCode: resp.StatusCode,
+				Operation:  operation,
+				Err:        fmt.Errorf("%w: HTTP status: %s", errUtils.ErrFailedToUnmarshalAPIResponse, resp.Status),
+			}
 		}
-		// For successful responses that can't be parsed, just return nil
+		// For successful responses that can't be parsed, just return nil.
 		return nil
 	}
 
-	// Log the structured response for debugging (only if we successfully unmarshaled)
+	// Log the structured response for debugging (only if we successfully unmarshaled).
 	logProAPIResponse(operation, apiResponse)
 
 	// For successful HTTP responses, trust the status code over the Success field
-	// (some APIs might return minimal responses without the Success field)
+	// (some APIs might return minimal responses without the Success field).
 	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
 		return nil
 	}
 
-	// For error HTTP responses, return an error
+	// For error HTTP responses, return an *APIError with the status code so retry logic
+	// can distinguish retryable (401, 5xx) from non-retryable (400, 403, 404) failures.
 	errorMsg := logAndReturnProAPIError(operation, apiResponse)
-	return fmt.Errorf(errMessageFormat, errUtils.ErrAPIResponseError, errorMsg)
+	return &APIError{
+		StatusCode: resp.StatusCode,
+		Operation:  operation,
+		Err:        fmt.Errorf(errMessageFormat, errUtils.ErrAPIResponseError, errorMsg),
+	}
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.

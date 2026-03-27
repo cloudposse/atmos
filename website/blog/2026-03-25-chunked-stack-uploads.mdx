@@ -1,0 +1,48 @@
+---
+slug: chunked-stack-uploads
+title: Chunked Uploads for Large Stack Payloads
+sidebar_label: Chunked Stack Uploads
+authors:
+  - milldr
+tags:
+  - feature
+date: 2026-03-25T00:00:00.000Z
+---
+
+Atmos now automatically chunks large payloads when uploading affected stacks and instances to Atmos Pro, eliminating HTTP 413 errors for large infrastructure repositories.
+
+<!--truncate-->
+
+## What Changed
+
+When running `atmos describe affected --upload` or `atmos list instances --upload`, the CLI now checks the serialized payload size before sending. If the payload exceeds the configurable threshold (default 4MB), Atmos splits the data into multiple smaller requests, each tagged with batch metadata (`batch_id`, `batch_index`, `batch_total`) for server-side reassembly.
+
+### Key Improvements
+
+- **Automatic chunking** - Payloads are split transparently when they exceed the size threshold
+- **Compact JSON** - Upload payloads now use compact JSON serialization, reducing size by ~30%
+- **Configurable threshold** - The `max_payload_bytes` setting in `atmos.yaml` lets you tune the chunk size
+- **Backward compatible** - Small payloads send exactly as before; old CLI versions continue to work with updated servers
+
+## Why This Matters
+
+Organizations with large infrastructure footprints (hundreds of stacks and components) were hitting Vercel's serverless function body size limit (~4.5MB) when uploading stack data to Atmos Pro. The existing `StripAffectedForUpload` optimization reduces payloads by 70-75%, but that was not enough for the largest repositories.
+
+With chunked uploads, there is no practical upper limit on the number of stacks or instances that can be uploaded.
+
+## How to Use It
+
+Chunked uploads work automatically with no configuration required. To customize the chunk size threshold, add `max_payload_bytes` to the `pro` section of your `atmos.yaml`:
+
+```yaml
+settings:
+  pro:
+    max_payload_bytes: 4194304  # 4MB (default)
+```
+
+Set a lower value if you're behind a reverse proxy with a smaller body size limit, or a higher value if your server supports larger payloads.
+
+## Get Involved
+
+- Report issues at [github.com/cloudposse/atmos/issues](https://github.com/cloudposse/atmos/issues)
+- Join the discussion in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)

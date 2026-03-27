@@ -71,6 +71,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -85,6 +86,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -97,6 +99,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -106,6 +109,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		onlyInStack string,
+		authManager auth.AuthManager,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -247,6 +251,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -262,6 +267,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
@@ -275,6 +281,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	}
 	if err != nil {
@@ -283,7 +290,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager)
 		if err != nil {
 			return err
 		}
@@ -342,7 +349,8 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	log.Debug("Creating API client")
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(d.atmosConfig)
 	if err != nil {
-		return err
+		log.Warn("Failed to create Atmos Pro API client for upload. The describe affected result is unaffected.", "error", err)
+		return nil
 	}
 
 	req := dtos.UploadAffectedStacksRequest{
@@ -357,7 +365,11 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 
 	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	return apiClient.UploadAffectedStacks(&req)
+	if uploadErr := apiClient.UploadAffectedStacks(&req); uploadErr != nil {
+		log.Warn("Failed to upload affected stacks to Atmos Pro. The describe affected result is unaffected.", "error", uploadErr)
+	}
+
+	return nil
 }
 
 type viewWithScrollProps struct {
