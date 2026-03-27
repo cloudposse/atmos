@@ -112,6 +112,8 @@ func TestDescribeStacks_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 func TestDescribeStacks_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
+	// Re-bind after reset so viper can see the env var via GetIdentityFromFlags.
+	require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 	// Set the env var — this should NOT trigger auth when functions are disabled.
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
@@ -223,6 +225,7 @@ func TestDescribeDependents_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 func TestDescribeDependents_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
+	require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
 
@@ -334,6 +337,7 @@ func TestDescribeAffected_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 func TestDescribeAffected_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
+	require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
 
@@ -481,6 +485,7 @@ func TestDescribeComponent_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
 	_ = NewTestKit(t)
 	viper.Reset()
+	require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
 	t.Setenv("ATMOS_IDENTITY", "some-identity")
 	t.Setenv("IDENTITY", "")
 

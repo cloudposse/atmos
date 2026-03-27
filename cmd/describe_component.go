@@ -185,8 +185,8 @@ func getRunnableDescribeComponentCmd(
 			}
 
 			// Create and authenticate AuthManager using merged auth config.
-			// This enables stack-level default identity to be recognized.
-			authManager, err = CreateAuthManagerFromIdentity(identityName, mergedAuthConfig)
+			// Use the WithAtmosConfig variant to enable stack-level default identity loading.
+			authManager, err = CreateAuthManagerFromIdentityWithAtmosConfig(identityName, mergedAuthConfig, &atmosConfig)
 			if err != nil {
 				return err
 			}
