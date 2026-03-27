@@ -56,10 +56,10 @@ The double-slash (`//`) is a special delimiter (not a path separator) that separ
 
   <TabItem value="root" label="Root Directory">
     ```yaml
-    source: "github.com/cloudposse-terraform-components/aws-s3-bucket.git//.?ref=v1.541.1"
+    source: "github.com/cloudposse-terraform-components/aws-s3-bucket.git//src?ref=v1.541.1"
     ```
 
-    **Result:** Clones the repository and uses the root directory (`.` means current directory).
+    **Result:** Clones the repository and extracts the `src` subdirectory (where Terraform files reside in `cloudposse-terraform-components` repos).
   </TabItem>
 
   <TabItem value="no-delimiter" label="Without Delimiter">
@@ -68,6 +68,10 @@ The double-slash (`//`) is a special delimiter (not a path separator) that separ
     ```
 
     **Result:** For Git URLs without a subdirectory, Atmos automatically adds `//.` for you (root of repository).
+
+    :::caution cloudposse-terraform-components repos
+    For `cloudposse-terraform-components` repos, always specify `//src` explicitly — Terraform files reside in the `src/` subdirectory, not the repository root.
+    :::
   </TabItem>
 </Tabs>
 
@@ -126,13 +130,13 @@ Atmos automatically adds `depth=1` to Git clones for faster downloads. You can o
 
   <TabItem value="commit" label="Git Commit SHA">
     ```yaml
-    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=a1b2c3d4"
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=a1b2c3d4"
     ```
   </TabItem>
 
   <TabItem value="depth" label="Custom Clone Depth">
     ```yaml
-    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=main&depth=10"
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0&depth=10"
     ```
   </TabItem>
 </Tabs>
@@ -163,10 +167,10 @@ source: "git::https://github.com/cloudposse/atmos.git//examples?ref=main"
 ### SSH Authentication
 ```yaml
 # SSH protocol (requires SSH key setup)
-source: "git::ssh://git@github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.539.0"
+source: "git::ssh://git@github.com/cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
 
 # Or SCP-style shorthand
-source: "git@github.com:cloudposse-terraform-components/aws-vpc.git?ref=v1.539.0"
+source: "git@github.com:cloudposse-terraform-components/aws-vpc.git//src?ref=v1.539.0"
 ```
 
 ### With Credentials (Not Recommended)
