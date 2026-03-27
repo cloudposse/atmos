@@ -513,21 +513,22 @@ func TestValidateCommand_Blacklist(t *testing.T) {
 // TestValidateCommand_RmRecursiveFlag exercises isRmRecursiveFlag-driven blocking.
 func TestValidateCommand_RmRecursiveFlag(t *testing.T) {
 	dangerous := []struct {
+		name string
 		args []string
 	}{
-		{[]string{"rm", "-r", "/tmp/dir"}},
-		{[]string{"rm", "-R", "/tmp/dir"}},
-		{[]string{"rm", "-rf", "/"}},
-		{[]string{"rm", "-Rf", "/"}},
-		{[]string{"rm", "-fR", "/"}},
-		{[]string{"rm", "-rfv", "/tmp/dir"}},
-		{[]string{"rm", "--recursive", "/tmp/dir"}},
-		{[]string{"rm", "--no-preserve-root", "/"}},
+		{"-r", []string{"rm", "-r", "/tmp/dir"}},
+		{"-R", []string{"rm", "-R", "/tmp/dir"}},
+		{"-rf", []string{"rm", "-rf", "/"}},
+		{"-Rf", []string{"rm", "-Rf", "/"}},
+		{"-fR", []string{"rm", "-fR", "/"}},
+		{"-rfv", []string{"rm", "-rfv", "/tmp/dir"}},
+		{"--recursive", []string{"rm", "--recursive", "/tmp/dir"}},
+		{"--no-preserve-root", []string{"rm", "--no-preserve-root", "/"}},
 	}
 	for _, tc := range dangerous {
-		t.Run(tc.args[1], func(t *testing.T) {
-			result := validateCommand(tc.args, "rm "+tc.args[1]+" "+tc.args[2])
-			require.NotNil(t, result, "dangerous rm must be blocked")
+		t.Run(tc.name, func(t *testing.T) {
+			result := validateCommand(tc.args, "rm "+tc.name)
+			require.NotNil(t, result, "dangerous rm must be blocked: %v", tc.args)
 			assert.False(t, result.Success)
 			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandRmNotAllowed),
 				"got: %v", result.Error)
@@ -535,16 +536,17 @@ func TestValidateCommand_RmRecursiveFlag(t *testing.T) {
 	}
 
 	safe := []struct {
+		name string
 		args []string
 	}{
-		{[]string{"rm", "file.txt"}},
-		{[]string{"rm", "-f", "file.txt"}},
-		{[]string{"rm", "-v", "file.txt"}},
-		{[]string{"rm", "-i", "file.txt"}},
+		{"single file", []string{"rm", "file.txt"}},
+		{"-f", []string{"rm", "-f", "file.txt"}},
+		{"-v", []string{"rm", "-v", "file.txt"}},
+		{"-i", []string{"rm", "-i", "file.txt"}},
 	}
 	for _, tc := range safe {
-		t.Run("safe "+tc.args[1], func(t *testing.T) {
-			result := validateCommand(tc.args, "rm "+tc.args[1])
+		t.Run("safe "+tc.name, func(t *testing.T) {
+			result := validateCommand(tc.args, "rm "+tc.name)
 			assert.Nil(t, result, "safe rm should not be blocked: %v", tc.args)
 		})
 	}

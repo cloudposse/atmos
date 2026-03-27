@@ -169,7 +169,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 	// (single quotes, double quotes, backslash escapes).  It also returns an
 	// error for any unquoted shell operator (;, &&, ||, |, >, <, &, $(...),
 	// backticks, >>, 2>&1, etc.), which eliminates the need for a separate
-	// metacharacter check and — critically — supports operators INSIDE quotes
+	// metacharacter check and -- critically -- supports operators INSIDE quotes
 	// as literal text (e.g. grep "a;b" file or git commit -m "fix && support").
 	args, shellErr := shell.Fields(command, nil)
 	if shellErr != nil {
