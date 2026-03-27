@@ -14,16 +14,39 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// describeComponentCmd describes configuration for components
+// describeComponentCmd describes configuration for components.
 var describeComponentCmd = &cobra.Command{
 	Use:                "component",
 	Short:              "Show configuration details for an Atmos component in a stack",
 	Long:               `Display the configuration details for a specific Atmos component within a designated Atmos stack, including its dependencies, settings, and overrides.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration
-		if err := checkAtmosConfigE(); err != nil {
+	RunE: getRunnableDescribeComponentCmd(getRunnableDescribeComponentCmdProps{
+		checkAtmosConfigE:        checkAtmosConfigE,
+		initCliConfig:            cfg.InitCliConfig,
+		isExplicitComponentPath:  comp.IsExplicitComponentPath,
+		resolveComponentFromPath: e.ResolveComponentFromPathWithoutTypeCheck,
+		executeDescribeComponent: e.ExecuteDescribeComponent,
+		newDescribeComponentExec: e.NewDescribeComponentExec(),
+	}),
+	ValidArgsFunction: ComponentsArgCompletion,
+}
+
+type getRunnableDescribeComponentCmdProps struct {
+	checkAtmosConfigE        func(opts ...AtmosValidateOption) error
+	initCliConfig            func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
+	isExplicitComponentPath  func(component string) bool
+	resolveComponentFromPath func(atmosConfig *schema.AtmosConfiguration, component string, stack string) (string, error)
+	executeDescribeComponent func(params *e.ExecuteDescribeComponentParams) (map[string]any, error)
+	newDescribeComponentExec e.DescribeComponentCmdExec
+}
+
+func getRunnableDescribeComponentCmd(
+	g getRunnableDescribeComponentCmdProps,
+) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		// Check Atmos configuration.
+		if err := g.checkAtmosConfigE(); err != nil {
 			return err
 		}
 
@@ -78,12 +101,12 @@ var describeComponentCmd = &cobra.Command{
 		// Determine if we need path resolution.
 		// Only resolve as a filesystem path if the argument explicitly indicates a path.
 		// Otherwise, treat it as a component name (even if it contains slashes).
-		needsPathResolution := comp.IsExplicitComponentPath(component)
+		needsPathResolution := g.isExplicitComponentPath(component)
 
 		// Load atmos configuration. Use processStacks=true when path resolution is needed
 		// because the resolver needs StackConfigFilesAbsolutePaths to find stacks and
 		// detect ambiguity.
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		atmosConfig, err := g.initCliConfig(schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
 			Stack:            stack,
 		}, needsPathResolution)
@@ -114,10 +137,10 @@ var describeComponentCmd = &cobra.Command{
 			// 1. Extract the component name from the path.
 			// 2. Look up which Atmos components reference this terraform folder in the stack.
 			// 3. If multiple components reference the same folder, return an ambiguous path error.
-			resolvedComponent, err := e.ResolveComponentFromPathWithoutTypeCheck(&atmosConfig, component, stack)
-			if err != nil {
+			resolvedComponent, resolveErr := g.resolveComponentFromPath(&atmosConfig, component, stack)
+			if resolveErr != nil {
 				// Return the error directly to preserve detailed hints and exit codes.
-				return err
+				return resolveErr
 			}
 			component = resolvedComponent
 		}
@@ -138,7 +161,7 @@ var describeComponentCmd = &cobra.Command{
 			mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
 
 			// Get component config to extract auth section (without processing YAML functions to avoid circular dependency).
-			componentConfig, componentErr := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+			componentConfig, componentErr := g.executeDescribeComponent(&e.ExecuteDescribeComponentParams{
 				Component:            component,
 				Stack:                stack,
 				ProcessTemplates:     false,
@@ -169,7 +192,7 @@ var describeComponentCmd = &cobra.Command{
 			}
 		}
 
-		err = e.NewDescribeComponentExec().ExecuteDescribeComponentCmd(e.DescribeComponentParams{
+		err = g.newDescribeComponentExec.ExecuteDescribeComponentCmd(e.DescribeComponentParams{
 			Component:            component,
 			Stack:                stack,
 			ProcessTemplates:     processTemplates,
@@ -182,8 +205,7 @@ var describeComponentCmd = &cobra.Command{
 			AuthManager:          authManager,
 		})
 		return err
-	},
-	ValidArgsFunction: ComponentsArgCompletion,
+	}
 }
 
 func init() {

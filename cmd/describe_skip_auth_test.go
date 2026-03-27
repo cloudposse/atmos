@@ -406,6 +406,123 @@ func TestDescribeAffected_ExplicitIdentityForcesAuthWhenFunctionsDisabled(t *tes
 	assert.Error(t, err, "explicit --identity must trigger auth even when functions disabled; broken config should cause error")
 }
 
+// newTestCmdForDescribeComponent creates a minimal cobra.Command with all flags needed
+// for the describe component command. Uses local flags because Cobra does not propagate
+// the Changed state from PersistentFlags to the merged Flags() FlagSet.
+func newTestCmdForDescribeComponent(t *testing.T, processFunctions bool, identityValue string) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().StringP("stack", "s", "", "")
+	cmd.Flags().StringP("format", "f", "yaml", "")
+	cmd.Flags().String("file", "", "")
+	cmd.Flags().Bool("process-templates", true, "")
+	cmd.Flags().Bool("process-functions", true, "")
+	cmd.Flags().String("query", "", "")
+	cmd.Flags().StringSlice("skip", nil, "")
+	cmd.Flags().Bool("provenance", false, "")
+	cmd.Flags().StringP("identity", "i", "", "")
+	require.NoError(t, cmd.Flags().Set("stack", "test-stack"))
+	if !processFunctions {
+		require.NoError(t, cmd.Flags().Set("process-functions", "false"))
+	}
+	if identityValue != "" {
+		require.NoError(t, cmd.Flags().Set("identity", identityValue))
+	}
+	return cmd
+}
+
+// describeComponentTestProps returns default props for describe component tests.
+// initCliConfig returns a minimal config. executeDescribeComponent and resolveComponentFromPath
+// are stubs since the auth guard is exercised before they would be called in the skip case.
+func describeComponentTestProps(mockExec exec.DescribeComponentCmdExec, atmosConfig schema.AtmosConfiguration) getRunnableDescribeComponentCmdProps {
+	return getRunnableDescribeComponentCmdProps{
+		checkAtmosConfigE: func(_ ...AtmosValidateOption) error { return nil },
+		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return atmosConfig, nil
+		},
+		isExplicitComponentPath: func(_ string) bool { return false },
+		resolveComponentFromPath: func(_ *schema.AtmosConfiguration, _ string, _ string) (string, error) {
+			return "", nil
+		},
+		executeDescribeComponent: func(_ *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
+			return map[string]any{}, nil
+		},
+		newDescribeComponentExec: mockExec,
+	}
+}
+
+// TestDescribeComponent_SkipsAuthWhenFunctionsDisabled verifies that describe component
+// does not attempt identity resolution when --process-functions=false.
+func TestDescribeComponent_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
+		func(params exec.DescribeComponentParams) error {
+			assert.Nil(t, params.AuthManager, "AuthManager must be nil when --process-functions=false")
+			assert.False(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, atmosConfigWithBrokenDefaultIdentity()))
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
+}
+
+// TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
+// ATMOS_IDENTITY env var does not bypass the guard for describe component.
+func TestDescribeComponent_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	viper.Reset()
+	t.Setenv("ATMOS_IDENTITY", "some-identity")
+	t.Setenv("IDENTITY", "")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
+		func(params exec.DescribeComponentParams) error {
+			assert.Nil(t, params.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var set but no explicit --identity flag")
+			assert.False(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, atmosConfigWithBrokenDefaultIdentity()))
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+}
+
+// TestDescribeComponent_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that
+// an explicit --identity CLI flag forces auth even when --process-functions=false.
+// We prove auth is attempted by providing a broken config — the error proves the guard was bypassed.
+func TestDescribeComponent_ExplicitIdentityForcesAuthWhenFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Mock should NOT be called — auth should fail before execution.
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "broken-identity")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, atmosConfigWithBrokenDefaultIdentity()))
+
+	err := run(testCmd, []string{"test-component"})
+	assert.Error(t, err, "explicit --identity must trigger auth even when functions disabled; broken config should cause error")
+}
+
 // TestIdentityExplicitGuard_FlagChangedVsEnvVar verifies the guard logic unit:
 // cmd.Flags().Changed(IdentityFlagName) must be false when only env var is set,
 // and true when the CLI flag is explicitly set. This protects all describe commands
