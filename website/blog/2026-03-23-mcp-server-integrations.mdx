@@ -5,7 +5,6 @@ authors: [aknysh]
 tags: [feature]
 ---
 
-import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -89,43 +88,31 @@ via the API protocol (`tool_use` stop reason with a `tool_calls` array). Atmos e
 requested tools, sends results back to the AI for the final answer, and records every call.
 If no tool executions appear, the AI genuinely chose not to use any tools for that question.
 
+## Pre-configured Servers
+
+The [MCP example](/examples/mcp) includes 9 AWS MCP servers across three categories:
+
+**Cost Analysis & FinOps** — `aws-billing`, `aws-cost-explorer`, `aws-pricing`
+
+**Security & Compliance** — `aws-security`, `aws-iam`, `aws-cloudtrail`
+
+**General** — `aws-api`, `aws-docs`, `aws-knowledge`
+
 ## What You Can Do
 
-### Search AWS Documentation
-
-No credentials needed — try this first:
-
-<Terminal title="shell">
 ```bash
-$ atmos mcp test aws-docs
-✓ Server started successfully
-✓ Initialization handshake complete
-✓ 4 tools available
-✓ Server responds to ping
-
-$ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
-```
-</Terminal>
-
-### Check Security Posture
-
-```bash
-atmos ai ask "Is GuardDuty enabled in us-east-1?"
-
-atmos ai exec "Check security services, storage encryption, and \
-  network security in us-east-1, then summarize as a markdown report"
-```
-
-### Look Up Pricing
-
-```bash
+# FinOps — cost analysis
+atmos ai ask "What did we spend on EC2 last month?"
 atmos ai ask "Compare t3.medium vs t3.large pricing in us-west-2"
-```
 
-### Analyze Terraform Plans with Cloud Context
+# Security — posture checks
+atmos ai ask "Is GuardDuty enabled in us-east-1?"
+atmos ai ask "List all IAM roles with admin access"
 
-```bash
-# AI can use MCP tools to enrich its analysis
+# Documentation — no credentials needed
+atmos ai ask "How do I configure S3 bucket lifecycle rules?"
+
+# Terraform analysis with cloud context
 atmos terraform plan vpc -s prod --ai --skill atmos-terraform
 ```
 
