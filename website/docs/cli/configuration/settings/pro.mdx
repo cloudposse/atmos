@@ -53,6 +53,7 @@ settings:
     base_url: "https://app.cloudposse.com"
     endpoint: "api/v1"
     workspace_id: "your-workspace-id"
+    max_payload_bytes: 4194304
     github_oidc:
       request_url: ""
       request_token: ""
@@ -99,6 +100,14 @@ settings:
     - **Type:** `string`
     - **Default:** (none)
     - **Environment Variable:** `ATMOS_PRO_TOKEN`
+  </dd>
+
+  <dt>`settings.pro.max_payload_bytes`</dt>
+  <dd>
+    Maximum payload size (in bytes) before Atmos automatically chunks upload requests to Atmos Pro. When `atmos describe affected --upload` or `atmos list instances --upload` produces a payload larger than this threshold, it is split into multiple smaller requests with batch metadata for server-side reassembly.
+
+    - **Type:** `integer`
+    - **Default:** `4194304` (4 MB)
   </dd>
 
   <dt>`settings.pro.github_oidc.request_url`</dt>
