@@ -155,19 +155,28 @@ atmos ai chat
 One-shot questions — get an answer and exit. No interactive session:
 
 ```bash
-# FinOps — cost analysis (uses aws-cost-explorer, aws-billing, aws-pricing)
-atmos ai ask "What did we spend on EC2 last month?"
-atmos ai ask "Break down costs by service for the past 30 days"
-atmos ai ask "Compare the pricing of t3.medium vs t3.large in us-west-2"
-atmos ai ask "What's the on-demand price for an m7i.xlarge in us-east-1?"
+# Cost analysis (uses aws-pricing)
+atmos ai ask "What's the on-demand price for m7i.xlarge in us-east-1?"
 
-# Security — posture checks (uses aws-security, aws-iam, aws-cloudtrail)
+# Spend breakdown (uses aws-cost-explorer)
+atmos ai ask "What did we spend on EC2 last month?"
+
+# Billing history (uses aws-billing)
+atmos ai ask "Show our billing summary for the past 3 months"
+
+# Security posture (uses aws-security)
 atmos ai ask "Is GuardDuty enabled in us-east-1?"
+
+# IAM analysis (uses aws-iam)
 atmos ai ask "List all IAM roles with admin access"
+
+# Audit trail (uses aws-cloudtrail)
 atmos ai ask "Show recent API calls from the root account"
 
-# Documentation lookups (uses aws-docs, aws-knowledge)
-atmos ai ask "How do I configure S3 bucket versioning?"
+# Documentation (uses aws-docs, no credentials needed)
+atmos ai ask "How do I configure S3 bucket lifecycle rules?"
+
+# AWS knowledge (uses aws-knowledge, no credentials needed)
 atmos ai ask "Which AWS regions support Amazon Bedrock?"
 ```
 

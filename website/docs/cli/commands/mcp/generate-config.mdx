@@ -1,0 +1,82 @@
+---
+title: atmos mcp generate-config
+sidebar_label: generate-config
+sidebar_class_name: command
+id: generate-config
+description: Generate .mcp.json from atmos.yaml MCP server configuration
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to generate a `.mcp.json` file from the MCP servers configured in `atmos.yaml`. This enables Claude Code, Cursor, and other MCP-compatible IDEs to use the same servers.
+</Intro>
+
+<Experimental />
+
+## Description
+
+The `atmos mcp generate-config` command reads all servers from `mcp.servers` in `atmos.yaml` and generates a `.mcp.json` file in the standard format used by Claude Code, Codex CLI, and other MCP-compatible tools.
+
+Servers with `auth_identity` are automatically wrapped with `atmos auth exec -i <identity> --` so that credentials are injected when the IDE starts the server process.
+
+## Usage
+
+```shell
+atmos mcp generate-config [flags]
+```
+
+<dl>
+  <dt>`--output`, `-o`</dt>
+  <dd>Output file path. Default: `.mcp.json`</dd>
+</dl>
+
+### Examples
+
+```shell
+# Generate .mcp.json in the current directory
+atmos mcp generate-config
+
+# Generate to a custom path (e.g., for Cursor)
+atmos mcp generate-config --output .cursor/mcp.json
+```
+
+### Example Output
+
+Given this `atmos.yaml`:
+
+```yaml
+mcp:
+  servers:
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation"
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+      auth_identity: "security-audit"
+```
+
+The generated `.mcp.json` will be:
+
+```json
+{
+  "mcpServers": {
+    "aws-docs": {
+      "command": "uvx",
+      "args": ["awslabs.aws-documentation-mcp-server@latest"]
+    },
+    "aws-security": {
+      "command": "atmos",
+      "args": ["auth", "exec", "-i", "security-audit", "--",
+               "uvx", "awslabs.well-architected-security-mcp-server@latest"],
+      "env": { "AWS_REGION": "us-east-1" }
+    }
+  }
+}
+```
+
+Note how `aws-security` is wrapped with `atmos auth exec` because it has `auth_identity` set, while `aws-docs` uses the command directly.

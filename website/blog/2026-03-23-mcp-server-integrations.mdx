@@ -34,16 +34,49 @@ Add servers to your `atmos.yaml`:
 ```yaml
 mcp:
   servers:
-    aws-docs:
+    # Cost Analysis & FinOps
+    aws-billing:
       command: uvx
-      args: ["awslabs.aws-documentation-mcp-server@latest"]
-      description: "AWS Documentation"
+      args: ["awslabs.billing-cost-management-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Billing — summaries and payment history"
+      read_only: true
+    aws-cost-explorer:
+      command: uvx
+      args: ["awslabs.cost-explorer-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Cost Explorer — spend breakdowns and forecasts"
+      read_only: true
     aws-pricing:
       command: uvx
       args: ["awslabs.aws-pricing-mcp-server@latest"]
-      env:
-        AWS_REGION: "us-east-1"
-      description: "AWS Pricing"
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Pricing — on-demand and reserved pricing"
+      read_only: true
+
+    # Security & Compliance
+    aws-security:
+      command: uvx
+      args: ["awslabs.well-architected-security-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Security — Well-Architected posture assessment"
+    aws-iam:
+      command: uvx
+      args: ["awslabs.iam-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS IAM — role/policy analysis"
+    aws-cloudtrail:
+      command: uvx
+      args: ["awslabs.cloudtrail-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS CloudTrail — event history and auditing"
+
+    # Documentation (no credentials needed)
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation — search and fetch docs"
+      read_only: true
 ```
 </File>
 
@@ -59,8 +92,26 @@ atmos mcp test aws-docs
 # See what tools a server exposes
 atmos mcp tools aws-pricing
 
-# Ask questions using the server tools
+# Cost analysis (uses aws-pricing)
 atmos ai ask "What's the on-demand price for m7i.xlarge in us-east-1?"
+
+# Spend breakdown (uses aws-cost-explorer)
+atmos ai ask "What did we spend on EC2 last month?"
+
+# Billing history (uses aws-billing)
+atmos ai ask "Show our billing summary for the past 3 months"
+
+# Security posture (uses aws-security)
+atmos ai ask "Is GuardDuty enabled in us-east-1?"
+
+# IAM analysis (uses aws-iam)
+atmos ai ask "List all IAM roles with admin access"
+
+# Audit trail (uses aws-cloudtrail)
+atmos ai ask "Show recent API calls from the root account"
+
+# Documentation (uses aws-docs, no credentials needed)
+atmos ai ask "How do I configure S3 bucket lifecycle rules?"
 ```
 
 ## Visibility
@@ -206,7 +257,7 @@ mcp:
 ## Try It
 
 <ActionCard title="Explore the MCP Example">
-    Try a complete example with 5 pre-configured AWS MCP servers — documentation, knowledge base,
+    Try a complete example with pre-configured AWS MCP servers — documentation, knowledge base,
     pricing, API access, and security assessment.
     <div>
       <PrimaryCTA to="/examples/mcp">Browse Example</PrimaryCTA>
