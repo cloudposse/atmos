@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -525,6 +526,116 @@ func TestAddOutputLog(t *testing.T) {
 
 		assert.Contains(t, data, "output_log")
 		assert.NotContains(t, data, "truncated")
+	})
+}
+
+// TestAddOutputLogTruncation tests truncation at the defaultMaxOutputLogBytes boundary.
+func TestAddOutputLogTruncation(t *testing.T) {
+	t.Run("truncates at defaultMaxOutputLogBytes boundary", func(t *testing.T) {
+		// Create output larger than defaultMaxOutputLogBytes (3MB).
+		size := defaultMaxOutputLogBytes + 1000
+		output := make([]byte, size)
+		// Fill with a pattern so we can verify truncation keeps the tail.
+		for i := range output {
+			output[i] = byte('A' + (i % 26))
+		}
+
+		data := make(map[string]any)
+		addOutputLog(data, output, defaultMaxOutputLogBytes)
+
+		assert.Contains(t, data, "output_log")
+		assert.Equal(t, true, data["truncated"])
+
+		// Decode and verify the tail was kept.
+		decoded, err := base64.StdEncoding.DecodeString(data["output_log"].(string))
+		assert.NoError(t, err)
+		assert.Equal(t, defaultMaxOutputLogBytes, len(decoded))
+		// The decoded bytes should be the last defaultMaxOutputLogBytes of the original.
+		assert.Equal(t, output[size-defaultMaxOutputLogBytes:], decoded)
+	})
+
+	t.Run("does not truncate when output is exactly defaultMaxOutputLogBytes", func(t *testing.T) {
+		output := make([]byte, defaultMaxOutputLogBytes)
+		for i := range output {
+			output[i] = byte('X')
+		}
+
+		data := make(map[string]any)
+		addOutputLog(data, output, defaultMaxOutputLogBytes)
+
+		assert.Contains(t, data, "output_log")
+		assert.NotContains(t, data, "truncated")
+
+		decoded, err := base64.StdEncoding.DecodeString(data["output_log"].(string))
+		assert.NoError(t, err)
+		assert.Equal(t, defaultMaxOutputLogBytes, len(decoded))
+	})
+
+	t.Run("does not truncate when output is under defaultMaxOutputLogBytes", func(t *testing.T) {
+		output := []byte("small output")
+
+		data := make(map[string]any)
+		addOutputLog(data, output, defaultMaxOutputLogBytes)
+
+		assert.Contains(t, data, "output_log")
+		assert.NotContains(t, data, "truncated")
+
+		decoded, err := base64.StdEncoding.DecodeString(data["output_log"].(string))
+		assert.NoError(t, err)
+		assert.Equal(t, output, decoded)
+	})
+}
+
+// TestBuildCIStatusDataOutputLogIncluded verifies that buildCIStatusData includes
+// a base64-encoded output_log key when the terraform plugin is available.
+func TestBuildCIStatusDataOutputLogIncluded(t *testing.T) {
+	t.Run("output_log is base64 encoded from masked output", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		maskedOutput := []byte("Plan: 1 to add, 0 to change, 0 to destroy.\nSome <MASKED> secret was here.")
+
+		result := buildCIStatusData(info, maskedOutput)
+
+		// If terraform plugin is registered, verify output_log.
+		if result != nil {
+			outputLog, ok := result["output_log"].(string)
+			assert.True(t, ok, "output_log should be a string")
+
+			decoded, err := base64.StdEncoding.DecodeString(outputLog)
+			assert.NoError(t, err)
+			// The decoded output should contain the masked content.
+			assert.Contains(t, string(decoded), "<MASKED>")
+			assert.Contains(t, string(decoded), "Plan: 1 to add")
+		}
+	})
+
+	t.Run("output_log is truncated for large output", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		// Create output larger than defaultMaxOutputLogBytes.
+		largeOutput := make([]byte, defaultMaxOutputLogBytes+100)
+		copy(largeOutput, []byte("HEAD... "))
+		// Put a recognizable marker at the tail.
+		copy(largeOutput[len(largeOutput)-50:], []byte("Plan: 5 to add, 0 to change, 0 to destroy.TAIL__"))
+
+		result := buildCIStatusData(info, largeOutput)
+
+		if result != nil {
+			assert.Equal(t, true, result["truncated"])
+
+			outputLog, ok := result["output_log"].(string)
+			assert.True(t, ok)
+
+			decoded, err := base64.StdEncoding.DecodeString(outputLog)
+			assert.NoError(t, err)
+			// Should contain the tail, not the head.
+			assert.Contains(t, string(decoded), "TAIL__")
+			assert.NotContains(t, string(decoded), "HEAD...")
+		}
 	})
 }
 
