@@ -245,9 +245,9 @@ var (
 	ErrInvalidFlagValue               = errors.New("invalid value for flag")
 
 	// File and URL handling errors.
-	ErrInvalidPagerCommand = errors.New("invalid pager command")
-	ErrEmptyURL            = errors.New("empty URL provided")
-	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrInvalidPagerCommand   = errors.New("invalid pager command")
+	ErrEmptyURL              = errors.New("empty URL provided")
+	ErrFailedToFindImport    = errors.New("failed to find import")
 	ErrInvalidFilePath       = errors.New("invalid file path")
 	ErrRelPath               = errors.New("error determining relative path")
 	ErrHTTPRequestFailed     = errors.New("HTTP request failed")
