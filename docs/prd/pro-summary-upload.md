@@ -2,9 +2,9 @@
 
 ## Problem
 
-Atmos Pro users operating CI/CD pipelines need visibility into what each plan/apply actually did — resource counts, errors, warnings, and raw command output. Today the CLI uploads only a minimal status (command name, exit code, timestamp) via `InstanceStatusUploadRequest`. Teams using the Atmos Pro dashboard must switch to their CI platform (GitHub Actions, GitLab CI, etc.) to see the actual terraform output, parse error messages, or understand the scope of a plan. This context-switching slows down incident triage, drift review, and approval workflows.
+Atmos Pro users operating CI/CD pipelines need visibility into what each plan/apply actually did for approvals decigions — resource counts, errors, warnings, and raw command output. Today the CLI uploads only a minimal status (command name, exit code, timestamp) via `InstanceStatusUploadRequest`. Teams using the Atmos Pro dashboard must switch to their CI platform (GitHub Actions, GitLab CI, etc.) to see the actual terraform output, parse error messages, or understand the scope of a plan. This context-switching slows down incident triage, drift review, and approval workflows.
 
-By enriching the existing instance status upload with structured CI data, Atmos Pro can surface plan summaries, error details, and output logs directly in its dashboard — eliminating the need to leave the tool. This also enables server-side features like drift alerts, change magnitude tracking, and audit logging without requiring changes to individual CI platform integrations.
+By enriching the existing instance status upload with structured CI data, Atmos Pro can surface plan summaries, error details, and output logs directly in its approval dashboard — eliminating the need to leave the tool. This also enables server-side features like drift alerts, change magnitude tracking, and audit logging without requiring changes to individual CI platform integrations.
 
 The data must be component-type-agnostic: terraform is the first implementation, but packer, helmfile, and future component types should plug into the same upload contract.
 
