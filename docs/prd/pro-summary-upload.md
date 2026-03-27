@@ -23,78 +23,59 @@ Define an interface in `pkg/ci/internal/plugin/` that plugins implement to produ
 // to provide structured data for the Atmos Pro status upload.
 // Plugins that don't implement this interface will not contribute CI data.
 type StatusDataProvider interface {
-    // BuildStatusData converts parsed output into a component-type-specific
-    // data structure suitable for the Pro status upload.
-    // The returned value is serialized into the "ci.data" field of the upload payload.
-    BuildStatusData(result *OutputResult, output string) *StatusData
-}
-
-// StatusData contains the component-type-agnostic CI data for the Pro upload.
-type StatusData struct {
-    // ComponentType identifies the component type (e.g., "terraform", "helmfile", "packer").
-    ComponentType string `json:"component_type"`
-
-    // HasChanges indicates whether the command detected changes.
-    HasChanges bool `json:"has_changes"`
-
-    // HasErrors indicates whether the command had errors.
-    HasErrors bool `json:"has_errors"`
-
-    // Warnings contains warning messages extracted from command output.
-    Warnings []string `json:"warnings,omitempty"`
-
-    // Errors contains error messages extracted from command output.
-    Errors []string `json:"errors,omitempty"`
-
-    // OutputLog contains the raw command stdout, passed through the IO masking
-    // layer to redact secrets, then base64-encoded.
-    OutputLog string `json:"output_log,omitempty"`
-
-    // Data contains component-type-specific structured data.
-    // For terraform: *TerraformStatusData
-    // For helmfile: *HelmfileStatusData
-    // For packer: *PackerStatusData (future)
-    Data any `json:"data,omitempty"`
+    // BuildStatusData converts parsed output into a map of key-value pairs
+    // for the Pro status upload. Each component type decides its own keys.
+    // The returned map is serialized as-is into the "ci" field of the upload payload.
+    BuildStatusData(result *OutputResult, output string) map[string]any
 }
 ```
+
+The `ci` field on the DTO is `map[string]any` — a flexible bag of data that each component type populates with whatever keys it needs. This avoids a rigid shared struct and lets each component type evolve its schema independently. The only convention is that plugins should include a `"component_type"` key so the server can dispatch.
 
 ### 2. Terraform Implementation: `BuildStatusData`
 
 The terraform plugin (`pkg/ci/plugins/terraform/`) implements `StatusDataProvider`:
 
 ```go
-// TerraformStatusData contains terraform-specific data for the Pro upload.
-type TerraformStatusData struct {
-    // ResourceCounts contains resource change counts from plan output.
-    ResourceCounts *ResourceCounts `json:"resource_counts,omitempty"`
-
-    // Outputs contains terraform output values (after successful apply).
-    // Keys are output names, values are the raw output values.
-    Outputs map[string]any `json:"outputs,omitempty"`
-}
-
-func (p *Plugin) BuildStatusData(result *OutputResult, output string) *StatusData {
-    data := &StatusData{
-        ComponentType: "terraform",
-        HasChanges:    result.HasChanges,
-        HasErrors:     result.HasErrors,
-        Errors:        result.Errors,
+func (p *Plugin) BuildStatusData(result *OutputResult, output string) map[string]any {
+    data := map[string]any{
+        "component_type": "terraform",
+        "has_changes":    result.HasChanges,
+        "has_errors":     result.HasErrors,
+        "errors":         result.Errors,
     }
 
     if tfData, ok := result.Data.(*TerraformOutputData); ok {
-        data.Warnings = tfData.Warnings
-        data.Data = &TerraformStatusData{
-            ResourceCounts: &tfData.ResourceCounts,
-            Outputs:        extractOutputValues(tfData.Outputs),
+        data["warnings"] = tfData.Warnings
+        data["resource_counts"] = map[string]int{
+            "create":  tfData.ResourceCounts.Create,
+            "change":  tfData.ResourceCounts.Change,
+            "replace": tfData.ResourceCounts.Replace,
+            "destroy": tfData.ResourceCounts.Destroy,
         }
+        data["outputs"] = extractOutputValues(tfData.Outputs)
     }
 
-    // Output log is set by the caller after masking.
+    // "output_log" and "truncated" are set by the caller after capture/truncation.
     return data
+}
+
+// extractOutputValues converts TerraformOutput map to raw values.
+// Sensitive outputs are replaced with "<MASKED>" to prevent secret leakage.
+func extractOutputValues(outputs map[string]TerraformOutput) map[string]any {
+    result := make(map[string]any, len(outputs))
+    for key, out := range outputs {
+        if out.Sensitive {
+            result[key] = "<MASKED>"
+        } else {
+            result[key] = out.Value
+        }
+    }
+    return result
 }
 ```
 
-Other component types (helmfile, packer) implement the same interface with their own `*StatusData.Data` payloads when ready.
+Other component types (helmfile, packer) implement the same interface with their own keys when ready. For example, a helmfile plugin might include `"releases"` instead of `"resource_counts"`.
 
 ### 3. Extend `InstanceStatusUploadRequest` DTO
 
@@ -117,37 +98,41 @@ type InstanceStatusUploadRequest struct {
     Command       string `json:"command"`
     ExitCode      int    `json:"exit_code"`
 
-    // CI contains structured plan/apply data. Populated only when ci.enabled is true.
-    // Grouped into a nested struct so the entire block is omitted when CI is disabled.
-    CI *StatusData `json:"ci,omitempty"`
+    // CI contains structured plan/apply data as a flexible map.
+    // Each component type populates its own keys. Omitted when ci.enabled is false.
+    CI map[string]any `json:"ci,omitempty"`
 }
 ```
 
-The `CI` field is a pointer with `omitempty` — when `ci.enabled` is false the pointer is nil and the entire block is omitted, producing identical payloads to today.
+The `CI` field is `map[string]any` with `omitempty` — when `ci.enabled` is false the map is nil and the entire block is omitted, producing identical payloads to today. Each component type decides what keys to include; the only convention is a `"component_type"` key for server-side dispatch.
 
 ### 4. Secret Masking for Output Log
 
 The raw command output must pass through the IO masking layer before encoding:
 
+`ExecuteShellCommand` already supports `WithStdoutCapture(w io.Writer)` which tees output into a buffer **after** the `MaskWriter` layer. This means the captured output is already masked — no explicit `Masker().Mask()` call is needed.
+
 ```go
-// In the upload logic:
-maskedOutput := io.Mask(capturedOutput)  // Redact secrets via Gitleaks patterns
-data.OutputLog = base64.StdEncoding.EncodeToString([]byte(maskedOutput))
+// In the command execution:
+var capturedOutput bytes.Buffer
+err := ExecuteShellCommand(..., WithStdoutCapture(&capturedOutput))
+
+// In the upload logic — output is already masked by MaskWriter:
+data.OutputLog = base64.StdEncoding.EncodeToString(capturedOutput.Bytes())
 ```
 
-The masking uses the same Gitleaks-based pattern library (120+ patterns) that protects all other Atmos output streams. This ensures that secrets (API keys, tokens, passwords) in terraform output are never sent to Atmos Pro in cleartext.
-
-The `OutputLog` field is set by the upload caller after masking, not by the plugin's `BuildStatusData` — this keeps the masking concern in the IO layer rather than leaking it into plugin implementations.
+The `OutputLog` field is set by the upload caller, not by the plugin's `BuildStatusData` — this keeps the capture/masking concern in the IO layer rather than leaking it into plugin implementations.
 
 ### 5. Populate CI Data in Upload Logic
 
 Extend `uploadCommandStatus()` in `internal/exec/terraform_execute_helpers_exec.go` to populate the CI block:
 
 1. Check `atmosConfig.CI.Enabled` — if false, leave `CI` nil (existing behavior preserved).
-2. Resolve the CI plugin for the current component type.
-3. If the plugin implements `StatusDataProvider`, call `BuildStatusData(result, output)`.
-4. Mask the captured output via `io.Mask()` and base64-encode it into `StatusData.OutputLog`.
-5. Set `dto.CI = statusData` on the `InstanceStatusUploadRequest`.
+2. Resolve the CI plugin for the current component type via `ci.GetPlugin(info.Command)`.
+3. If the plugin implements `StatusDataProvider`, call `BuildStatusData(result, output)` to get `map[string]any`.
+4. Add `"output_log"` key: base64-encode the captured output (already masked by `WithStdoutCapture`).
+5. If truncated, add `"truncated": true`.
+6. Set `dto.CI = ciData` on the `InstanceStatusUploadRequest`.
 
 ```go
 // Upload status only when explicitly requested via --upload-status flag.
@@ -165,15 +150,55 @@ if uploadStatusFlag && shouldUploadStatus(info) {
 }
 ```
 
-### 6. Integration Point
+### 6. Output Log Size Limits
 
-The command output must be captured and passed to the upload function. Two options:
+The output log can be large (verbose providers, many resources). To prevent oversized payloads, the CLI truncates the output log before base64 encoding.
 
-**Option A (Preferred): Capture output at command execution.**
-Add output capture to the `ExecuteShellCommand` call (via a new `ShellCommandOption` or by reading from the existing CI hook output capture) and pass it to `uploadCommandStatus()`.
+**Max size is server-defined:** The CLI fetches the max payload size from the Atmos Pro API at upload time (or caches it). The server returns the limit via a settings/configuration endpoint. This lets the server control the limit without requiring CLI updates.
 
-**Option B: Re-invoke output parsing.**
-If the output is not readily available at the upload call site, the upload function can accept the captured output string from wherever the CI hooks already capture it (e.g., stored on `ConfigAndStacksInfo`).
+**Truncation behavior:**
+- If the masked output exceeds the server-defined max size, truncate from the **beginning** (keep the tail — the most useful part: plan summary, apply result, errors).
+- Add a `"truncated": true` key to the CI map so the server knows the log is incomplete.
+- If the server is unreachable for settings, fall back to a built-in default (e.g., 3MB pre-encoding, which becomes ~4MB after base64).
+
+**Server settings endpoint:**
+```
+GET /api/v1/settings
+```
+Response (relevant fields):
+```json
+{
+  "max_output_log_bytes": 3145728
+}
+```
+
+The CLI caches this value for the duration of the command execution. If the endpoint is unavailable, the built-in default is used.
+
+### 7. Integration Point
+
+The upload needs two views of the command output:
+
+1. **Raw output** — for parsing (resource counts, warnings, errors, terraform outputs). The parser's regex patterns expect unmodified terraform output; masked strings (`<MASKED>`) could break extraction.
+2. **Masked output** — for the `output_log` field. Secrets must be redacted before upload.
+
+`ExecuteShellCommand` supports both via its option system:
+- `WithStdoutCapture(w io.Writer)` captures output **after** `MaskWriter` (masked).
+- A second capture buffer can be added **before** `MaskWriter` to get raw output for parsing.
+
+Alternatively, if the CI hooks already capture raw output into `HookContext.Output`, reuse that for parsing and only use `WithStdoutCapture` for the masked log.
+
+```go
+var maskedOutput bytes.Buffer
+err := ExecuteShellCommand(..., WithStdoutCapture(&maskedOutput))
+
+// For parsing: use raw output from CI hook context or pre-mask capture
+result := terraform.ParseOutput(rawOutput, info.SubCommand)
+
+// For upload: use masked capture
+data.OutputLog = base64.StdEncoding.EncodeToString(maskedOutput.Bytes())
+```
+
+Pass both the parsed result and the masked buffer to `uploadCommandStatus()`.
 
 ### 7. Data to Upload
 
@@ -188,22 +213,23 @@ All fields live under the `ci` block in the payload.
 | `ci.has_errors` | `result.HasErrors` | Whether the command had errors |
 | `ci.warnings` | parsed from output | Warning messages |
 | `ci.errors` | `result.Errors` | Error messages |
-| `ci.output_log` | base64(io.Mask(stdout)) | Full command stdout, masked and base64-encoded |
+| `ci.output_log` | base64(captured stdout) | Full command stdout, masked via `WithStdoutCapture`, base64-encoded |
+| `ci.truncated` | size check | Whether the output log was truncated due to size limits |
 
-**Terraform-specific `ci.data` (plan):**
-
-| Field | Source | Description |
-|---|---|---|
-| `ci.data.resource_counts.create` | `ResourceCounts.Create` | Resources to create |
-| `ci.data.resource_counts.change` | `ResourceCounts.Change` | Resources to change |
-| `ci.data.resource_counts.replace` | `ResourceCounts.Replace` | Resources to replace |
-| `ci.data.resource_counts.destroy` | `ResourceCounts.Destroy` | Resources to destroy |
-
-**Terraform-specific `ci.data` (apply):**
+**Terraform-specific keys (plan):**
 
 | Field | Source | Description |
 |---|---|---|
-| `ci.data.outputs` | `TerraformOutputData.Outputs` | Terraform output values (raw) |
+| `ci.resource_counts.create` | `ResourceCounts.Create` | Resources to create |
+| `ci.resource_counts.change` | `ResourceCounts.Change` | Resources to change |
+| `ci.resource_counts.replace` | `ResourceCounts.Replace` | Resources to replace |
+| `ci.resource_counts.destroy` | `ResourceCounts.Destroy` | Resources to destroy |
+
+**Terraform-specific keys (apply):**
+
+| Field | Source | Description |
+|---|---|---|
+| `ci.outputs` | `TerraformOutputData.Outputs` | Terraform output values (sensitive values masked) |
 
 **Not uploaded (server-side concern):**
 - Rendered summary markdown — the server renders summaries from the structured data.
@@ -217,18 +243,20 @@ The `CI` block is populated **only** when ALL of the following are true:
 3. `ci.enabled` is true in the global atmos configuration.
 4. The CI plugin for the component type implements `StatusDataProvider`.
 
-When any condition is false, the upload sends only the existing `command` + `exit_code` fields (backward compatible). The `ci` pointer is nil and the entire block is omitted.
+When any condition is false, the upload sends only the existing `command` + `exit_code` fields (backward compatible). The `ci` map is nil and the entire block is omitted.
+
+**Note on `deploy`:** The `deploy` subcommand is internally converted to `apply` by `handleDeploySubcommand()` before the upload logic runs. For Atmos Pro, deploy and apply are identical — no special handling is needed.
 
 ## Error Handling
 
-- Failure to build CI status data is **warn-only** — the upload proceeds with just `command` + `exit_code` (existing behavior, `ci` pointer stays nil).
+- Failure to build CI status data is **warn-only** — the upload proceeds with just `command` + `exit_code` (existing behavior, `ci` map stays nil).
 - Individual fields within the `ci` block are best-effort. If output parsing partially fails, populate what is available.
-- If masking fails, the output log is omitted rather than sending unmasked output.
+- If output capture fails, the output log is omitted rather than blocking the upload.
 - The upload itself remains fatal (matching existing behavior in `executeMainTerraformCommand`).
 
 ## API Contract
 
-The existing PATCH endpoint is extended with an optional `ci` block. The server must handle payloads with or without the block for backward compatibility with older CLI versions.
+The existing PATCH endpoint is extended with an optional `ci` map. The server must handle payloads with or without the map for backward compatibility with older CLI versions.
 
 ```
 PATCH /api/v1/repos/{owner}/{repo}/instances?stack={stack}&component={component}
@@ -256,13 +284,11 @@ Extended payload (when ci.enabled, terraform plan):
     "warnings": ["Warning: Value for undeclared variable..."],
     "errors": [],
     "output_log": "VGVycmFmb3JtIHdpbGwgcGVyZm9ybS...",
-    "data": {
-      "resource_counts": {
-        "create": 3,
-        "change": 1,
-        "replace": 0,
-        "destroy": 2
-      }
+    "resource_counts": {
+      "create": 3,
+      "change": 1,
+      "replace": 0,
+      "destroy": 2
     }
   }
 }
@@ -281,25 +307,27 @@ Extended payload (when ci.enabled, terraform apply):
     "warnings": [],
     "errors": [],
     "output_log": "QXBwbHkgY29tcGxldGUhIFJlc291cmNlczo...",
-    "data": {
-      "outputs": {
-        "vpc_id": "vpc-abc123",
-        "subnet_ids": ["subnet-1", "subnet-2"]
-      }
+    "outputs": {
+      "vpc_id": "vpc-abc123",
+      "subnet_ids": ["subnet-1", "subnet-2"]
     }
   }
 }
 ```
 
-The `ci.data` field is polymorphic — its schema depends on `ci.component_type`. The server uses the component type to deserialize the correct structure.
+The `ci` map is a flat bag of keys. The server reads `component_type` to know which other keys to expect. Each component type owns its key namespace.
+
+## Related PRDs
+
+- **[Instance Status Raw Upload](instance-status-raw-upload.md)** — defines the base `InstanceStatusUploadRequest` DTO, the PATCH endpoint, exit code interpretation, and the `--upload-status` flag. This PRD extends that foundation with the optional `ci` map.
 
 ## Design Rationale
 
-- **Component-type abstraction**: The `StatusDataProvider` interface lets each component type (terraform, helmfile, packer) produce its own structured data. Common fields (`has_changes`, `has_errors`, `warnings`, `errors`, `output_log`) live on `StatusData`; type-specific data lives in `StatusData.Data`. This mirrors the existing `OutputResult` / `TerraformOutputData` / `HelmfileOutputData` pattern in the CI plugin system.
+- **Component-type abstraction via `map[string]any`**: The `StatusDataProvider` interface returns `map[string]any`, giving each component type full flexibility over its keys. Terraform includes `resource_counts` and `outputs`; helmfile might include `releases`; packer might include `build_artifacts`. No shared struct constrains them — only the convention of including `component_type` for server-side dispatch.
 - **Extend existing DTO, not new one**: The data belongs to the same instance status upload. A single PATCH with optional fields is simpler than a separate endpoint and avoids race conditions between two uploads for the same command.
 - **Raw data, not rendered summaries**: The CLI sends structured data (resource counts, outputs, warnings, errors). The server owns rendering — this decouples summary presentation from CLI releases and lets the dashboard evolve independently.
-- **Secret masking before upload**: The output log passes through `io.Mask()` (Gitleaks-based, 120+ patterns) before base64 encoding. This ensures secrets never leave the CLI unredacted, matching the security guarantees of all other Atmos output streams.
+- **Secret masking before upload**: The output log is captured via `WithStdoutCapture`, which tees output after the `MaskWriter` layer. The captured buffer is already masked — no additional masking call is needed. This reuses the same masking pipeline that protects all other Atmos output streams.
 - **`ci.enabled` gate**: Output parsing is only meaningful when the CI subsystem is active. Without `ci.enabled`, the terraform output may not be captured in a parseable form.
-- **Nested `ci` struct with pointer**: Grouping all new fields under a single pointer means the entire block is cleanly omitted when CI is disabled. Older CLIs that don't populate the field produce identical payloads.
+- **`map[string]any` with `omitempty`**: A nil map is cleanly omitted from JSON. Older CLIs that don't populate the field produce identical payloads. No rigid struct means no breaking changes when adding new keys.
 - **Base64-encoded output log**: The raw command stdout can be large and contain ANSI escape codes, newlines, and other characters that are problematic in JSON string values. Base64 encoding ensures safe transport and lets the server decode and render as needed.
-- **Polymorphic `ci.data`**: Using `any` for the data field and discriminating on `component_type` lets the server evolve per-type schemas independently. New component types can be added without changing the common upload contract.
+- **No polymorphic nesting**: Instead of a shared struct with a polymorphic `data` field, the entire `ci` map is the component's canvas. This is simpler to serialize, simpler to extend, and the server just reads the `component_type` key to know what other keys to expect.
