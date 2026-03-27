@@ -13,6 +13,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -89,6 +90,8 @@ func applyGlobCacheConfig() {
 	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			if n < minGlobCacheMaxEntries {
+				log.Warn("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES below minimum, clamping up",
+					"requested", n, "minimum", minGlobCacheMaxEntries)
 				n = minGlobCacheMaxEntries
 			}
 			maxEntries = n
@@ -100,6 +103,8 @@ func applyGlobCacheConfig() {
 	if v := os.Getenv("ATMOS_FS_GLOB_CACHE_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			if d < minGlobCacheTTL {
+				log.Warn("ATMOS_FS_GLOB_CACHE_TTL below minimum, clamping up",
+					"requested", d, "minimum", minGlobCacheTTL)
 				d = minGlobCacheTTL
 			}
 			ttl = d

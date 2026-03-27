@@ -70,6 +70,8 @@ exclude = [
   "lfaidata\\.foundation",
   # Test data placeholder URLs (intentional)
   "github\\.com/test/",
+  # Taskfile.dev (intermittent connection resets from CI runner IP ranges)
+  "taskfile\\.dev",
   # Planned documentation paths (not yet published)
   "file://.*/ai/skills",
   "file://.*/ai/skill-marketplace",
