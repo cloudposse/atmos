@@ -1,23 +1,22 @@
 # Atmos MCP Servers — External MCP Server Management
 
-**Status:** Phase 5 — Unified Experience
 **Version:** 6.0
-**Last Updated:** 2026-03-26
+**Last Updated:** 2026-03-27
 
 ---
 
 ## Executive Summary
 
-Atmos MCP Servers extends the existing `atmos mcp` command to support installing,
-managing, and consuming **external MCP servers** — bringing the same MCP client capability
-found in Claude Code, Gemini CLI, and AI IDEs directly into the Atmos CLI.
+Atmos MCP Servers extends the `atmos mcp` command to support connecting to and consuming
+**external MCP servers** — bringing the same MCP client capability found in Claude Code,
+Gemini CLI, and AI IDEs directly into the Atmos CLI.
 
 Instead of reimplementing cloud provider functionality (AWS APIs, GCP APIs, Azure APIs),
-Atmos can install and orchestrate existing MCP servers from the ecosystem — like the
-20+ AWS MCP servers from `awslabs/mcp` — and expose their tools alongside native Atmos
+Atmos installs and orchestrates existing MCP servers from the ecosystem — like the
+20+ AWS MCP servers from `awslabs/mcp` — and exposes their tools alongside native Atmos
 tools in a unified interface.
 
-**Key Insight:** The Go MCP SDK (`github.com/modelcontextprotocol/go-sdk v1.4.1`) that
+**Key Insight:** The Go MCP SDK (`github.com/modelcontextprotocol/go-sdk`) that
 Atmos already depends on has full client support (`mcp.NewClient`, `CommandTransport`,
 `ClientSession`). No new dependencies are needed.
 
@@ -34,81 +33,24 @@ Atmos already depends on has full client support (`mcp.NewClient`, `CommandTrans
 
 ---
 
-## Current State
-
-### What Atmos Has Today
-
-Atmos implements an MCP **server** (`atmos mcp start`) that exposes native Atmos tools to
-external clients:
-
-```
-External AI Tool  ──MCP──>  Atmos MCP Server  ──>  Atmos Tools
-(Claude Code)               (pkg/mcp/)              (describe_component, etc.)
-```
-
-### What This PRD Adds
-
-An MCP **client** that connects to external MCP servers and makes their tools available
-within Atmos:
-
-```
-Atmos CLI  ──MCP──>  AWS MCP Server     ──>  AWS APIs
-           ──MCP──>  GCP MCP Server     ──>  GCP APIs
-           ──MCP──>  Custom MCP Server  ──>  Custom APIs
-```
-
-### Combined Architecture
-
-```text
-┌────────────────────────────────────────────────────────────────────┐
-│                         Atmos CLI                                  │
-├────────────────────────────────────────────────────────────────────┤
-│  Unified Tool Registry                                             │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
-│  │ Native Atmos     │  │ AWS MCP Server   │  │ GCP MCP Server   │  │
-│  │ Tools (15+)      │  │ Tools            │  │ Tools            │  │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘  │
-├────────────────────────────────────────────────────────────────────┤
-│  MCP Client Layer (pkg/mcp/client/)                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │ Process      │  │ Connection   │  │ Tool         │              │
-│  │ Manager      │  │ Pool         │  │ Bridge       │              │
-│  └──────────────┘  └──────────────┘  └──────────────┘              │
-├────────────────────────────────────────────────────────────────────┤
-│  MCP Server Layer (existing pkg/mcp/server.go)                     │
-│  ┌──────────────┐  ┌──────────────┐                                │
-│  │ stdio        │  │ HTTP/SSE     │                                │
-│  │ transport    │  │ transport    │                                │
-│  └──────────────┘  └──────────────┘                                │
-├────────────────────────────────────────────────────────────────────┤
-│  Toolchain Layer (existing pkg/dependencies/)                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
-│  │ Installer    │  │ Version      │  │ Aqua         │              │
-│  │ Engine       │  │ Manager      │  │ Registry     │              │
-│  └──────────────┘  └──────────────┘  └──────────────┘              │
-└────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Two Orthogonal Approaches
+## Two Approaches
 
 Atmos supports two complementary approaches for using external MCP servers:
 
-|                      | Atmos AI Integration                           | IDE/Claude Code Integration                         |
-|----------------------|------------------------------------------------|-----------------------------------------------------|
-| **Target user**      | Uses `atmos ai ask/chat/exec`                  | Uses Claude Code / Cursor / IDE                     |
-| **Config location**  | `atmos.yaml` under `mcp.servers`               | `.mcp.json` + custom commands in `.atmos.d/`        |
-| **Server lifecycle** | Atmos manages (spawn, bridge, call)            | IDE manages (via `.mcp.json`)                       |
-| **Auth**             | `auth_identity` field on server config         | `atmos auth exec -i <identity> --` wraps subprocess |
-| **Tool invocation**  | AI executor → BridgedTool → `Session.CallTool` | IDE → stdio → MCP server directly                   |
-| **Discovery**        | `atmos mcp list/tools/test/status`             | Manual (`atmos mcp aws install/start/test`)         |
+| | Atmos AI Integration | IDE/Claude Code Integration |
+|---|---|---|
+| **Target user** | Uses `atmos ai ask/chat/exec` | Uses Claude Code / Cursor / IDE |
+| **Config location** | `atmos.yaml` under `mcp.servers` | `.mcp.json` + custom commands in `.atmos.d/` |
+| **Server lifecycle** | Atmos manages (spawn, bridge, call) | IDE manages (via `.mcp.json`) |
+| **Auth** | `auth_identity` field on server config | `atmos auth exec -i <identity> --` wraps subprocess |
+| **Tool invocation** | AI executor → BridgedTool → `Session.CallTool` | IDE → stdio → MCP server directly |
+| **Discovery** | `atmos mcp list/tools/test/status` | Manual (`atmos mcp aws install/start/test`) |
 
-Both approaches can coexist. The `atmos.yaml` configuration serves as the single source
-of truth: `atmos mcp generate-config` can emit a `.mcp.json` from the configured servers,
+Both approaches coexist. `atmos.yaml` is the single source of truth:
+`atmos mcp generate-config` emits a `.mcp.json` from the configured servers,
 wrapping each with `atmos auth exec` for credential injection.
 
-### Unified Experience (Phase 5)
+### Unified Experience
 
 From a single `atmos.yaml` config:
 
@@ -120,90 +62,31 @@ mcp:
       args: ["awslabs.aws-pricing-mcp-server@latest"]
       env:
         AWS_REGION: "us-east-1"
-      auth_identity: "core-root/terraform"
+      auth_identity: "readonly"
       description: "AWS Pricing"
 ```
 
 Users get:
 
-- `atmos ai chat` → uses the server via the bridge (tools appear alongside native Atmos tools)
-- `atmos mcp test aws-pricing` → tests connectivity and authentication
-- `atmos mcp generate-config` → emits `.mcp.json` for Claude Code / IDE
-- `atmos mcp list` → shows all configured servers with status
+- `atmos ai ask/chat/exec` — server tools appear alongside native Atmos tools
+- `atmos mcp test aws-pricing` — tests connectivity and authentication
+- `atmos mcp generate-config` — emits `.mcp.json` for Claude Code / IDE
+- `atmos mcp list` — shows all configured servers with status
 
-The `.mcp.json` generation wraps each server with `atmos auth exec`:
+The `.mcp.json` generation wraps servers with `atmos auth exec`:
 
 ```json
 {
   "mcpServers": {
     "aws-pricing": {
       "command": "atmos",
-      "args": ["auth", "exec", "-i", "core-root/terraform", "--",
+      "args": ["auth", "exec", "-i", "readonly", "--",
                "uvx", "awslabs.aws-pricing-mcp-server@latest"],
       "env": { "AWS_REGION": "us-east-1" }
     }
   }
 }
 ```
-
-### Phase 5 Improvements
-
-1. **Wire auth identity in AI commands** — `auth_identity` field now creates an
-   `AuthEnvProvider` and passes it through the tool registration path, enabling
-   automatic credential injection for MCP server subprocesses.
-2. **`.mcp.json` generation** — `atmos mcp generate-config` emits IDE-compatible config
-   from `atmos.yaml` servers, wrapping auth servers with `atmos auth exec`.
-3. ~~**Read-only server marking**~~ — Removed. All configured MCP servers are available
-   across all AI commands (`ask`, `chat`, `exec`, `--ai`). One config, works everywhere.
-4. **User-facing MCP server feedback** — MCP server startup, tool discovery counts, and
-   tool execution results are shown at Info log level so users can see which servers are
-   active and which tools were invoked by the AI. Tool usage is not inferred — the AI
-   provider explicitly declares which tools it wants to use via `tool_use` stop reason
-   and `tool_calls` in the API response. Atmos executes the requested tools, sends
-   results back to the AI, and records every call in the execution result for display.
-5. **Implement `auto_start` and `timeout`** — declared in schema, timeout parsed in config.
-
-### Tool Execution Flow
-
-The tool invocation loop lives in `pkg/ai/executor/executor.go`:
-
-1. Atmos sends the prompt + list of available tools (native + MCP) to the AI provider.
-2. AI responds with either:
-   - `StopReasonEndTurn` — answered directly, no tools needed → no "Tool Executions" section.
-   - `StopReasonToolUse` + `ToolCalls` array — AI explicitly requests specific tools.
-3. Atmos executes the requested tools via `executeTools()`.
-4. Results are recorded in `result.ToolCalls`.
-5. Results sent back to AI for the final answer.
-6. The markdown formatter renders the "Tool Executions" section from `result.ToolCalls`.
-
-This is a standard tool-use loop — the AI provider controls which tools are called.
-Atmos never guesses or infers tool usage.
-
-Each tool sent to the AI provider includes its **name**, **description**, and **full
-parameter schema** (types, descriptions, required flags) so the AI knows what each tool
-does and when to use it. For MCP bridged tools, this information comes directly from
-the external MCP server's tool definitions discovered during startup.
-
-### MCP Tool Call Routing
-
-When the AI provider decides to use an external MCP tool, the call routes through:
-
-1. AI provider responds with `tool_use` and requests e.g. `aws-docs.search_documentation`.
-2. `executor.go` calls `toolExecutor.Execute(ctx, "aws-docs.search_documentation", params)`.
-3. Tool executor looks up `"aws-docs.search_documentation"` in the registry → finds the `BridgedTool`.
-4. `BridgedTool.Execute()` (`bridge.go`) calls `session.CallTool(ctx, mcpTool.Name, params)` —
-   note it uses the **original tool name** (`"search_documentation"`, without the server prefix).
-5. `Session.CallTool()` (`session.go`) forwards to the Go MCP SDK's `ClientSession`, which
-   sends JSON-RPC over stdio to the running MCP server subprocess.
-6. The MCP server process executes the tool and returns the result over stdio.
-7. `BridgedTool.Execute()` extracts text content from the result and returns it as `tools.Result`.
-8. The executor sends the result back to the AI provider for the final answer.
-
-**Key detail:** Each `BridgedTool` holds a reference to the specific `Session` (the running
-subprocess) it came from. Even with multiple MCP servers running simultaneously, each tool
-routes to the correct server process. The namespacing (`aws-docs.search_documentation`) is
-only for the Atmos tool registry lookup — the actual MCP JSON-RPC call uses the original
-tool name (`search_documentation`) that the server understands.
 
 ---
 
@@ -225,752 +108,224 @@ The `awslabs/mcp` repository provides 20+ MCP servers covering the AWS ecosystem
 | AWS Documentation | `awslabs.aws-documentation-mcp-server` | AWS docs search                        |
 | Amazon Bedrock    | `awslabs.amazon-bedrock-mcp-server`    | Bedrock model operations               |
 | AWS Knowledge     | `awslabs.aws-knowledge-mcp-server`     | AWS knowledge base search              |
-| Aurora DSQL       | `awslabs.aurora-dsql-mcp-server`       | Aurora DSQL queries                    |
-| AWS Glue          | `awslabs.glue-mcp-server`              | Glue ETL operations                    |
-| Finch             | `awslabs.finch-mcp-server`             | Container image builds                 |
-| Nova Canvas       | `awslabs.nova-canvas-mcp-server`       | Image generation                       |
+| Cost Explorer     | `awslabs.cost-explorer-mcp-server`     | Cost breakdowns and forecasts          |
+| Billing           | `awslabs.billing-cost-management-mcp-server` | Billing summaries              |
+| AWS Pricing       | `awslabs.aws-pricing-mcp-server`       | On-demand/reserved pricing             |
+| CloudWatch        | `awslabs.cloudwatch-mcp-server`        | Metrics, logs, alarms                  |
+| CloudTrail        | `awslabs.cloudtrail-mcp-server`        | Event history and auditing             |
+| IAM               | `awslabs.iam-mcp-server`              | Role/policy analysis                   |
+| Well-Arch Security| `awslabs.well-architected-security-mcp-server` | Security posture assessment  |
+| Network           | `awslabs.aws-network-mcp-server`       | VPC/subnet/route analysis              |
 
 **Installation:** All use `uvx` (Python's `uv` package manager): `uvx awslabs.package@latest`
 
 **Transport:** All use **stdio** (subprocess spawned, JSON-RPC over stdin/stdout).
 
-**Configuration pattern:**
-```json
-{
-  "command": "uvx",
-  "args": ["awslabs.amazon-eks-mcp-server@latest"],
-  "env": {
-    "AWS_PROFILE": "production",
-    "AWS_REGION": "us-east-1"
-  }
-}
-```
-
 ---
 
-## Configuration Design
+## Configuration
 
-### atmos.yaml Configuration
+### atmos.yaml
 
 ```yaml
 mcp:
-  # Existing Atmos MCP server configuration.
-  enabled: true
-
-  # External MCP server integrations.
   servers:
-    # AWS EKS MCP server.
-    aws-eks:
-        description: "Amazon EKS cluster management"
-        command: "uvx"
-        args:
-          - "awslabs.amazon-eks-mcp-server@latest"
-        env:
-          AWS_PROFILE: !env AWS_PROFILE
-          AWS_REGION: !env AWS_DEFAULT_REGION
-        # Optional: only start when these tools are needed.
-        auto_start: true
-        # Optional: connection timeout.
-        timeout: 30s
+    aws-cost-explorer:
+      description: "AWS Cost Explorer — spend breakdowns and forecasts"
+      command: "uvx"
+      args: ["awslabs.cost-explorer-mcp-server@latest"]
+      env:
+        AWS_REGION: "us-east-1"
+      auth_identity: "readonly"
+      timeout: "30s"
 
-      # AWS IaC MCP server for CloudFormation.
-      aws-iac:
-        description: "AWS Infrastructure as Code (CloudFormation/CDK)"
-        command: "uvx"
-        args:
-          - "awslabs.aws-iac-mcp-server@latest"
-        env:
-          AWS_PROFILE: !env AWS_PROFILE
-          AWS_REGION: !env AWS_DEFAULT_REGION
-
-      # AWS S3 MCP server.
-      aws-s3:
-        description: "Amazon S3 bucket operations"
-        command: "uvx"
-        args:
-          - "awslabs.s3-mcp-server@latest"
-        env:
-          AWS_PROFILE: !env AWS_PROFILE
-
-      # Custom MCP server (any stdio-based server).
-      custom-db:
-        description: "Internal database query server"
-        command: "/usr/local/bin/db-mcp-server"
-        args:
-          - "--config"
-          - "/etc/db-mcp.yaml"
-        env:
-          DB_HOST: "localhost"
+    aws-docs:
+      description: "AWS Documentation — search and fetch docs"
+      command: "uvx"
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
 ```
 
-### Toolchain Integration for Prerequisites
+### Server Config Fields
 
-External MCP servers often require runtime dependencies (Python's `uvx`, Node.js `npx`,
-etc.). The existing Atmos toolchain can manage these prerequisites:
+**Standard MCP fields** (compatible with Claude Code, Codex CLI, Gemini CLI):
+
+- `command` — Command to run the server (e.g., `uvx`, `npx`, or an absolute path).
+- `args` — Command arguments (e.g., `["awslabs.aws-pricing-mcp-server@latest"]`).
+- `env` — Environment variables passed to the subprocess. Supports YAML functions
+  (`!env`, `!exec`, `!repo-root`, `!cwd`).
+
+**Atmos extensions:**
+
+- `description` — Human-readable description shown in `atmos mcp list` and `atmos mcp status`.
+- `auth_identity` — Atmos Auth identity for credential injection.
+- `auto_start` — Start the server automatically when Atmos starts.
+- `timeout` — Connection timeout as a Go duration string (default: `30s`).
+
+### Toolchain Integration
 
 ```yaml
-# atmos.yaml
 toolchain:
   tools:
     uv:
-      # Python package manager (provides uvx for AWS MCP servers).
-      version: "0.7.x"
-      aliases:
-        - uvx
+      version: ">=0.7"
 ```
 
-This ensures `uvx` is available before any AWS MCP server is started, with version pinning
-and automatic installation via the existing Aqua registry integration.
+This ensures `uvx` is available before any AWS MCP server is started.
 
 ---
 
 ## CLI Commands
 
-### Subcommand Structure
-
-Extend the existing `atmos mcp` command:
-
 ```bash
-atmos mcp start          # (existing) Start Atmos as an MCP server
-atmos mcp list           # List configured external MCP servers and their status
-atmos mcp status         # Show status of all running MCP server processes
-atmos mcp restart <name> # Restart an MCP server process
-atmos mcp tools [name]   # List tools exposed by an MCP server
-atmos mcp test <name>    # Test connectivity to an MCP server
-```
-
-### Examples
-
-```bash
-# List all configured MCP servers.
-$ atmos mcp list
-NAME       STATUS    TOOLS  DESCRIPTION
-aws-eks    running   12     Amazon EKS cluster management
-aws-iac    stopped    8     AWS Infrastructure as Code
-aws-s3     running    6     Amazon S3 bucket operations
-custom-db  error      0     Internal database query server
-
-# List tools from a specific server.
-$ atmos mcp tools aws-eks
-TOOL                          DESCRIPTION
-eks_list_clusters              List EKS clusters in the account
-eks_describe_cluster           Get details of an EKS cluster
-eks_list_nodegroups            List node groups for a cluster
-eks_create_cluster             Create a new EKS cluster
-...
-
-# Test connectivity.
-$ atmos mcp test aws-eks
-✓ Server started successfully
-✓ Initialization handshake complete
-✓ 12 tools available
-✓ Server responds to ping
+atmos mcp start              # Start Atmos as an MCP server (server mode)
+atmos mcp list               # List configured external MCP servers
+atmos mcp status             # Show live status of all servers
+atmos mcp tools <name>       # List tools from a server
+atmos mcp test <name>        # Test connectivity to a server
+atmos mcp restart <name>     # Restart a server
+atmos mcp generate-config    # Generate .mcp.json for Claude Code / IDE
 ```
 
 ---
 
-## Implementation Architecture
+## Architecture
 
 ### Package Structure
 
 ```text
 pkg/mcp/
-├── server.go              # (existing) Atmos MCP server
-├── adapter.go             # (existing) Atmos tool → MCP bridge
+├── server.go              # Atmos MCP server (exposes Atmos tools to IDEs)
+├── adapter.go             # Atmos tool → MCP bridge
 ├── client/
-│   ├── manager.go         # MCP client process manager (lifecycle)
-│   ├── session.go         # MCP client session wrapper
-│   ├── pool.go            # Connection pool for multiple servers
-│   ├── bridge.go          # External MCP tool → Atmos tool bridge
-│   └── config.go          # Integration configuration types
-└── client_test.go         # Tests
+│   ├── config.go          # Server configuration parsing and validation
+│   ├── session.go         # MCP client session (subprocess lifecycle, handshake, tools)
+│   ├── manager.go         # Multi-session manager (start/stop/list)
+│   ├── bridge.go          # External MCP tool → Atmos tools.Tool bridge
+│   └── register.go        # Starts servers and registers tools in AI registry
 ```
 
-### Core Types
+### Tool Execution Flow
 
-```go
-// IntegrationConfig represents an external MCP server configuration
-// from atmos.yaml mcp.servers.
-type IntegrationConfig struct {
-    Description string            `yaml:"description" mapstructure:"description"`
-    Command     string            `yaml:"command" mapstructure:"command"`
-    Args        []string          `yaml:"args" mapstructure:"args"`
-    Env         map[string]string `yaml:"env" mapstructure:"env"`
-    AutoStart   bool              `yaml:"auto_start" mapstructure:"auto_start"`
-    Timeout     time.Duration     `yaml:"timeout" mapstructure:"timeout"`
-}
+The tool invocation loop lives in `pkg/ai/executor/executor.go`:
 
-// Manager manages the lifecycle of external MCP server processes.
-type Manager struct {
-    sessions map[string]*ClientSession
-    configs  map[string]IntegrationConfig
-    mu       sync.RWMutex
-}
+1. Atmos sends the prompt + list of available tools (native + MCP) to the AI provider.
+   Each tool includes its **name**, **description**, and **full parameter schema**.
+2. AI responds with either:
+   - `StopReasonEndTurn` — answered directly, no tools needed.
+   - `StopReasonToolUse` + `ToolCalls` array — AI explicitly requests specific tools.
+3. Atmos executes the requested tools via `executeTools()`.
+4. Results are recorded in `result.ToolCalls`.
+5. Results sent back to AI for the final answer.
+6. The markdown formatter renders the "Tool Executions" section from `result.ToolCalls`.
 
-// ClientSession wraps an MCP client connection to an external server.
-type ClientSession struct {
-    name    string
-    client  *mcp.ClientSession
-    process *os.Process
-    tools   []mcp.Tool
-    status  SessionStatus
-}
-```
+The AI provider controls which tools are called. Atmos never guesses or infers tool usage.
 
-### Process Lifecycle
+### MCP Tool Call Routing
+
+When the AI provider decides to use an external MCP tool:
+
+1. AI responds with `tool_use` requesting e.g. `aws-docs.search_documentation`.
+2. Tool executor looks up `"aws-docs.search_documentation"` in the registry → finds `BridgedTool`.
+3. `BridgedTool.Execute()` calls `session.CallTool()` using the **original tool name**
+   (`"search_documentation"`, without the server prefix).
+4. `Session.CallTool()` sends JSON-RPC over stdio to the running MCP server subprocess.
+5. The MCP server executes the tool and returns the result over stdio.
+6. `BridgedTool.Execute()` extracts text content and returns it as `tools.Result`.
+7. The executor sends the result back to the AI provider for the final answer.
+
+Each `BridgedTool` holds a reference to the specific `Session` it came from. Even with
+multiple MCP servers running, each tool routes to the correct server process. The namespacing
+(`aws-docs.search_documentation`) is only for registry lookup — the actual MCP call uses
+the original tool name that the server understands.
+
+### Auth Integration
+
+AWS MCP servers need credentials. With `auth_identity`, Atmos Auth handles this automatically:
+
+1. Atmos Auth resolves the identity through the provider chain (SSO → role assumption).
+2. Credentials are written to isolated files at `~/.aws/atmos/<realm>/`.
+3. The MCP server subprocess gets environment variables:
+   - `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`
+   - `AWS_REGION`, `AWS_SDK_LOAD_CONFIG=1`, `AWS_EC2_METADATA_DISABLED=true`
+4. The server's AWS SDK picks up credentials automatically.
+
+No manual `AWS_PROFILE` setup, no SSO login prompts during execution, credentials scoped
+per-identity and isolated per-realm.
+
+### User-Facing Feedback
+
+MCP server startup and tool execution are visible at Info log level:
 
 ```text
-1. Configuration Load
-   atmos.yaml → IntegrationConfig → Manager.Register()
-
-2. Server Start (on-demand or auto_start)
-   Manager.Start(name) →
-     a. Resolve command via toolchain (ensure uvx/npx available)
-     b. Expand env var templates ({{ .vars.region }})
-     c. Spawn subprocess via CommandTransport
-     d. MCP initialize handshake
-     e. List tools → cache tool definitions
-     f. Register external tools in unified registry
-
-3. Tool Execution
-   AI chat or --ai flag →
-     Unified tool registry →
-       Native tool? → Execute directly
-       External tool? → Manager.CallTool(serverName, toolName, args)
-                          → ClientSession.CallTool()
-                            → JSON-RPC over stdio
-                              → External MCP server executes
-                                → Result returned
-
-4. Server Shutdown
-   Manager.Stop(name) or Manager.StopAll() →
-     a. Close stdin (signal graceful shutdown)
-     b. Wait with timeout
-     c. SIGTERM if needed
-     d. SIGKILL as last resort
+ℹ MCP server "aws-docs" started (4 tools)
+ℹ MCP server "aws-pricing" started (7 tools)
+ℹ Registered 11 tools from 2 MCP server(s)
+ℹ AI tools initialized: 26 total
 ```
 
-### Tool Bridge
+After the AI responds, tool executions are listed with error details:
 
-External MCP tools are bridged into the Atmos tool registry so they appear alongside
-native tools:
-
-```go
-// BridgedTool wraps an external MCP tool as an Atmos AI tool.
-type BridgedTool struct {
-    serverName string
-    mcpTool    mcp.Tool
-    manager    *Manager
-}
-
-func (t *BridgedTool) Name() string {
-    // Namespace: "aws-eks.list_clusters" to avoid conflicts.
-    return t.serverName + "." + t.mcpTool.Name
-}
-
-func (t *BridgedTool) Execute(ctx context.Context, params map[string]any) (string, error) {
-    result, err := t.manager.CallTool(ctx, t.serverName, t.mcpTool.Name, params)
-    if err != nil {
-        return "", err
-    }
-    return extractTextContent(result), nil
-}
+```text
+---
+## Tool Executions (2)
+1. ✅ **aws-docs.search_documentation** (234ms)
+2. ❌ **aws-pricing.get_pricing** (1234ms)
+   Error: MCP server returned error for tool: credentials expired
 ```
 
 ---
 
-## Integration with Existing Atmos Systems
+## Implementation Summary
 
-### AI Chat Integration
+### Phase 1: Core Client Infrastructure
 
-External MCP tools are available in `atmos ai chat`:
+- `pkg/mcp/client/session.go` — Session lifecycle: Start (subprocess + MCP handshake + tool list), Stop, CallTool, Ping
+- `pkg/mcp/client/manager.go` — Multi-session manager: NewManager, Start/Stop/StopAll, Get/List, Test
+- `pkg/mcp/client/config.go` — Config parsing with validation and timeout resolution
+- `cmd/mcp/client/list.go` — `atmos mcp list` themed table
+- `cmd/mcp/client/tools.go` — `atmos mcp tools <name>` connect, list, disconnect
+- `cmd/mcp/client/test_cmd.go` — `atmos mcp test <name>` full lifecycle test
 
-```text
-$ atmos ai chat
-You: List my EKS clusters in production
-AI: I'll check your EKS clusters using the AWS EKS integration.
+### Phase 2: Tool Bridge + AI Integration
 
-[Calling aws-eks.eks_list_clusters with region=us-east-1]
+- `pkg/mcp/client/bridge.go` — `BridgedTool` implements `tools.Tool` interface with JSON Schema extraction
+- `pkg/mcp/client/register.go` — `RegisterMCPTools` starts servers and registers tools in AI registry
+- `cmd/ai/init.go` — MCP tools registered in both interactive (`chat`, `exec`) and non-interactive (`ask`) paths
 
-You have 3 EKS clusters in us-east-1:
-1. prod-platform (v1.29, ACTIVE)
-2. prod-data (v1.28, ACTIVE)
-3. prod-staging (v1.29, UPDATING)
-```
+### Phase 3: Management Commands
 
-### --ai Flag Integration
+- `cmd/mcp/client/status.go` — `atmos mcp status` health table
+- `cmd/mcp/client/restart.go` — `atmos mcp restart <name>` stop + start cycle
 
-External tools are available when using `--ai`:
+### Phase 4: Auth + Toolchain
 
-```bash
-$ atmos terraform plan vpc -s prod --ai --skill atmos-terraform
-# AI analysis can reference AWS MCP tools for context:
-# "I see this VPC component. Let me check the current EKS clusters
-#  that depend on this VPC using the aws-eks integration..."
-```
+- `auth_identity` field on `MCPServerConfig` with `AuthEnvProvider` interface
+- `WithAuthManager` and `WithToolchain` start options for credential and binary resolution
+- YAML functions (`!env`, `!exec`, `!repo-root`, `!cwd`) work in env values via `preprocessAtmosYamlFunc`
 
-### Atmos MCP Server (Composite)
+### Phase 5: Unified Experience
 
-When Atmos runs as an MCP server itself, it can expose both native AND external tools to
-the upstream client:
-
-```text
-Claude Code  ──MCP──>  Atmos MCP Server  ──>  Native Atmos tools
-                                          ──MCP──>  AWS EKS tools
-                                          ──MCP──>  AWS S3 tools
-```
-
-This makes Atmos a **composite MCP server** — a single connection point that aggregates
-tools from multiple sources.
-
-### Auth Integration — Seamless AWS Credential Flow
-
-This is the key differentiator. AWS MCP servers need credentials. Without Atmos Auth, users
-must manually configure `AWS_PROFILE`, manage SSO sessions, and handle role assumption.
-With Atmos Auth, credentials flow automatically from the identity chain to the MCP server
-subprocess — zero manual credential management.
-
-#### How It Works
-
-Atmos Auth already manages AWS credentials for Terraform/Helmfile subprocesses by:
-
-1. Authenticating through a provider-identity chain (SSO → role assumption → target role).
-2. Writing isolated credential files to `~/.aws/atmos/<realm>/<provider>/`.
-3. Setting environment variables on the subprocess:
-   - `AWS_SHARED_CREDENTIALS_FILE` → Atmos-managed credentials file
-   - `AWS_CONFIG_FILE` → Atmos-managed config file
-   - `AWS_PROFILE` → Identity name (profile in the credential files)
-   - `AWS_REGION` / `AWS_DEFAULT_REGION` → Region from identity or component
-   - `AWS_SDK_LOAD_CONFIG=1` → Force SDK to read shared config
-   - `AWS_EC2_METADATA_DISABLED=true` → Prevent IMDS fallback
-4. Clearing conflicting variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-   `AWS_SESSION_TOKEN`, etc.) to prevent profile-based auth from being overridden.
-
-The **same mechanism** works for MCP servers — they are spawned as subprocesses with these
-environment variables, and their boto3/AWS SDK picks up the credentials automatically.
-
-#### Configuration
-
-```yaml
-mcp:
-  servers:
-      # Cost analysis across all accounts.
-      aws-cost-explorer:
-        description: "AWS Cost Explorer — cost analysis and forecasting"
-        command: "uvx"
-        args: ["awslabs.cost-explorer-mcp-server@latest"]
-        env:
-          FASTMCP_LOG_LEVEL: "ERROR"
-        # Use Atmos auth identity — credentials injected automatically.
-        auth_identity: "billing-readonly"
-
-      # Security posture in production.
-      aws-security:
-        description: "AWS Well-Architected Security — security findings and posture"
-        command: "uvx"
-        args:
-          - "--from"
-          - "awslabs.well-architected-security-mcp-server"
-          - "well-architected-security-mcp-server"
-        env:
-          FASTMCP_LOG_LEVEL: "ERROR"
-        auth_identity: "security-audit"
-```
-
-#### Credential Flow Diagram
-
-```text
-User runs: atmos ai chat
-
-1. Atmos Auth resolves identity "billing-readonly"
-   ┌──────────────────────────────────────────────────┐
-   │ Provider: aws-sso (IAM Identity Center)          │
-   │   → Identity: billing-account                    │
-   │     → Identity: billing-readonly (assume role)   │
-   └──────────────────────────────────────────────────┘
-
-2. Credentials written to ~/.aws/atmos/<realm>/billing-readonly/
-   ├── credentials  (access key, secret key, session token)
-   └── config       (region, output format)
-
-3. MCP server spawned with env vars:
-   ┌──────────────────────────────────────────────────┐
-   │ AWS_SHARED_CREDENTIALS_FILE=~/.aws/atmos/.../creds │
-   │ AWS_CONFIG_FILE=~/.aws/atmos/.../config          │
-   │ AWS_PROFILE=billing-readonly                     │
-   │ AWS_REGION=us-east-1                             │
-   │ AWS_SDK_LOAD_CONFIG=1                            │
-   │ AWS_EC2_METADATA_DISABLED=true                   │
-   │ FASTMCP_LOG_LEVEL=ERROR                          │
-   └──────────────────────────────────────────────────┘
-
-4. MCP server's boto3 picks up credentials automatically
-   → No manual AWS_PROFILE setup needed
-   → No SSO login prompts during MCP server execution
-   → Credentials are scoped to the specific identity
-   → Credentials are isolated per-realm (no cross-project leaking)
-```
-
-#### Credential Caching
-
-Atmos Auth caches credentials in the system keyring with 15-minute validity buffer.
-When an MCP server is started, the credentials are already cached from the initial
-authentication. If the MCP server runs for longer than the credential TTL, Atmos can
-refresh credentials and restart the server process transparently.
-
----
-
-## Concrete Examples — Calling MCP Servers from Atmos CLI
-
-### Example 1: Cost Analysis with AWS Cost Explorer
-
-**Configuration:**
-```yaml
-mcp:
-  servers:
-      aws-cost-explorer:
-        command: "uvx"
-        args: ["awslabs.cost-explorer-mcp-server@latest"]
-        env:
-          FASTMCP_LOG_LEVEL: "ERROR"
-        auth_identity: "billing-readonly"
-```
-
-**Tools exposed (7):**
-
-| Tool | Description |
-|------|-------------|
-| `get_cost_and_usage` | Retrieve cost/usage data with filtering and grouping |
-| `get_cost_and_usage_comparisons` | Compare costs between two time periods |
-| `get_cost_comparison_drivers` | Analyze top 10 cost change drivers |
-| `get_cost_forecast` | Generate cost forecasts from historical data |
-| `get_dimension_values` | List available dimensions (SERVICE, REGION, etc.) |
-| `get_tag_values` | List available tag values for filtering |
-| `get_today_date` | Get current date for contextual queries |
-
-**Usage in `atmos ai chat`:**
-```
-You: What are our top 5 most expensive AWS services this month?
-
-AI: I'll check your AWS costs using the Cost Explorer integration.
-
-[Calling aws-cost-explorer.get_today_date]
-[Calling aws-cost-explorer.get_cost_and_usage with
-  start="2026-03-01", end="2026-03-21", granularity="MONTHLY",
-  group_by=[{"Type":"DIMENSION","Key":"SERVICE"}]]
-
-Your top 5 AWS services by cost this month:
-
-1. Amazon EC2          $12,450.23  (↑ 8% from last month)
-2. Amazon RDS          $8,230.15   (↓ 3%)
-3. Amazon S3           $3,120.89   (↑ 12%)
-4. AWS Lambda          $1,890.45   (↑ 25%)
-5. Amazon CloudFront   $1,200.00   (flat)
-
-Total spend: $31,450.72 (22 days into the month)
-Projected monthly total: ~$43,100
-
-Would you like me to analyze what's driving the Lambda cost increase?
-```
-
-**Usage with `--ai` flag:**
-```bash
-# After deploying a VPC change, analyze cost impact.
-$ atmos terraform apply vpc -s prod --ai --skill atmos-terraform
-
-AI: The VPC change added 3 NAT gateways. Let me check the cost impact.
-
-[Calling aws-cost-explorer.get_cost_forecast with service="Amazon VPC"]
-
-Projected NAT gateway cost: ~$450/month additional.
-Consider using VPC endpoints for S3/DynamoDB to reduce NAT traffic costs.
-```
-
-**Note:** Each Cost Explorer API call costs $0.01. Atmos should display this in verbose
-mode to avoid surprise charges.
-
-### Example 2: Security Posture with Well-Architected Security
-
-**Configuration:**
-```yaml
-mcp:
-  servers:
-      aws-security:
-        command: "uvx"
-        args:
-          - "--from"
-          - "awslabs.well-architected-security-mcp-server"
-          - "well-architected-security-mcp-server"
-        env:
-          FASTMCP_LOG_LEVEL: "ERROR"
-        auth_identity: "security-audit"
-```
-
-**Tools exposed (6):**
-
-| Tool                       | Description                                                       |
-|----------------------------|-------------------------------------------------------------------|
-| `CheckSecurityServices`    | Verify security services are enabled (GuardDuty, Inspector, etc.) |
-| `GetSecurityFindings`      | Retrieve findings with severity filtering                         |
-| `CheckStorageEncryption`   | Check encryption on S3, EBS, RDS, DynamoDB, EFS                   |
-| `CheckNetworkSecurity`     | Check TLS/HTTPS on ELB, VPC, API Gateway, CloudFront              |
-| `ListServicesInRegion`     | List active AWS services in a region                              |
-| `GetStoredSecurityContext` | Retrieve historical security data                                 |
-
-**Usage in `atmos ai chat`:**
-
-```text
-You: Check security posture for our production account in us-east-1
-
-AI: I'll run a comprehensive security check using the Well-Architected
-Security integration.
-
-[Calling aws-security.CheckSecurityServices with
-  region="us-east-1",
-  services=["guardduty","inspector","securityhub","accessanalyzer"]]
-
-[Calling aws-security.CheckStorageEncryption with
-  region="us-east-1",
-  services=["s3","ebs","rds"],
-  include_unencrypted_only=true]
-
-[Calling aws-security.CheckNetworkSecurity with
-  region="us-east-1",
-  services=["elb","apigateway"],
-  include_non_compliant_only=true]
-
-## Security Posture Report — us-east-1
-
-### Security Services
-✅ GuardDuty: Enabled
-✅ Security Hub: Enabled
-✅ IAM Access Analyzer: Enabled
-⚠️ Inspector: Not enabled — recommend enabling for vulnerability scanning
-
-### Storage Encryption
-✅ All S3 buckets encrypted (47/47)
-✅ All EBS volumes encrypted (128/128)
-⚠️ 2 RDS instances without encryption:
-   - db-legacy-reports (db.m5.large)
-   - db-temp-analytics (db.t3.medium)
-
-### Network Security
-✅ All ALBs use HTTPS listeners
-⚠️ 1 API Gateway without WAF:
-   - api-internal-v2 (REST API)
-
-Would you like me to check the security findings from GuardDuty?
-```
-
-### Example 3: Combined Atmos + AWS MCP Workflow
-
-The real power is combining native Atmos tools with external MCP tools:
-
-```text
-You: We're planning to decommission the staging VPC. What's the impact?
-
-AI: Let me analyze this from multiple angles.
-
-[Calling describe_component with component="vpc", stack="staging"]
-# Native Atmos tool — understands stack configuration
-
-[Calling aws-security.ListServicesInRegion with region="us-west-2"]
-# External MCP tool — finds active AWS services
-
-[Calling aws-cost-explorer.get_cost_and_usage with
-  filter={"Tags":{"Key":"Stage","Values":["staging"]}},
-  group_by=[{"Type":"DIMENSION","Key":"SERVICE"}]]
-# External MCP tool — calculates cost savings
-
-## Decommission Impact Analysis
-
-### Components Using staging VPC
-- vpc (Terraform component, 3 subnets, 2 NAT gateways)
-- eks/cluster (depends on vpc via remote-state)
-- rds/primary (depends on vpc subnet group)
-- elasticache/redis (depends on vpc security group)
-
-### Active AWS Services in us-west-2 staging
-- 12 EC2 instances, 3 RDS instances, 1 EKS cluster
-- 2 ElastiCache clusters, 5 Lambda functions
-
-### Cost Savings
-Estimated monthly savings: $8,200
-- EC2: $4,500, NAT gateways: $900, RDS: $1,800, EKS: $1,000
-
-### Recommended Decommission Order
-1. Lambda functions (no dependencies)
-2. ElastiCache (depends on VPC only)
-3. EKS cluster (depends on VPC)
-4. RDS instances (depends on VPC, needs snapshot)
-5. VPC (last — all dependencies removed)
-
-Shall I generate an atmos workflow for this decommission sequence?
-```
-
----
-
-## Phased Implementation
-
-### Phase 1: Core Client Infrastructure (MVP) ✅ SHIPPED
-
-**Implemented files:**
-
-| File                         | Lines | Purpose                                                                                 |
-|------------------------------|-------|-----------------------------------------------------------------------------------------|
-| `pkg/schema/mcp.go`          | 20    | `MCPServerConfig` type + `Integrations` map on `MCPSettings`                            |
-| `pkg/mcp/client/config.go`   | 50    | Config parsing with validation and timeout resolution                                   |
-| `pkg/mcp/client/session.go`  | 180   | Session lifecycle: Start (subprocess + MCP handshake + tool list), Stop, CallTool, Ping |
-| `pkg/mcp/client/manager.go`  | 120   | Multi-session manager: NewManager, Start/Stop/StopAll, Get/List, Test                   |
-| `pkg/mcp/client/bridge.go`   | 90    | BridgedTool wrapping external MCP tools with namespaced names                           |
-| `cmd/mcp/client/list.go`     | 50    | `atmos mcp list` — themed table of configured servers                                   |
-| `cmd/mcp/client/tools.go`    | 70    | `atmos mcp tools <name>` — connect, list tools, disconnect                              |
-| `cmd/mcp/client/test_cmd.go` | 70    | `atmos mcp test <name>` — start, handshake, list tools, ping                            |
-| `errors/errors.go`           | +5    | `ErrMCPServerNotFound/NotRunning/StartFailed/CommandEmpty/InvalidTimeout`               |
-
-**Tests:** 34 unit tests across 4 test files at 73% coverage.
-
-**Configuration path:** `mcp.servers` in `atmos.yaml` (sibling to existing `mcp.enabled`).
-
-**Key design decisions:**
-- Uses Go MCP SDK v1.4.1 `Client` + `CommandTransport` + `ClientSession` — no new dependencies.
-- Subprocess environment inherits `os.Environ()` + configured `env` map — external tools get PATH, HOME, etc.
-- Session status tracking: `stopped` → `starting` → `running` / `error`.
-- Tool bridge uses `server.tool_name` namespacing to avoid conflicts between servers.
-- Manager.Test performs full lifecycle: start → handshake → list tools → ping → report.
-
-### Phase 2: Tool Bridge + AI Integration ✅ SHIPPED
-
-**Implemented files:**
-
-| File                              | Lines    | Purpose                                                                               |
-|-----------------------------------|----------|---------------------------------------------------------------------------------------|
-| `pkg/mcp/client/register.go`      | 60       | `RegisterMCPTools` — starts integrations, bridges tools into AI registry              |
-| `pkg/mcp/client/register_test.go` | 45       | Tests: no integrations, invalid config, failed start continues                        |
-| `pkg/mcp/client/bridge.go`        | 170      | `BridgedTool` implements `tools.Tool` interface with JSON Schema parameter extraction |
-| `pkg/mcp/client/bridge_test.go`   | 170      | Tests: interface compliance, parameters, schema types, content extraction             |
-| `cmd/ai/init.go`                  | modified | `aiToolsResult` struct, calls `RegisterMCPTools` after native tools                   |
-| `cmd/ai/chat.go`                  | modified | `defer MCPMgr.StopAll()` for subprocess cleanup                                       |
-| `cmd/ai/exec.go`                  | modified | `defer MCPMgr.StopAll()` for subprocess cleanup                                       |
-
-**What shipped:**
-- ~~Tool bridge: external MCP tools → Atmos AI tool registry~~ ✅
-- ~~Namespaced tool names (`server.tool_name`)~~ ✅
-- ~~`atmos ai chat` integration~~ ✅ — MCP tools registered in AI executor
-- ~~`atmos ai exec` integration~~ ✅ — MCP tools available in non-interactive mode
-- ~~Graceful shutdown on CLI exit~~ ✅ — `defer MCPMgr.StopAll()` in chat and exec
-
-**Key design decisions:**
-- `BridgedTool` implements `tools.Tool` interface (compile-time `var _ tools.Tool = (*BridgedTool)(nil)` check).
-- `Execute()` returns `*tools.Result` with `Success`, `Output`, and `Error` fields.
-- `Parameters()` extracts from MCP `InputSchema` JSON Schema — maps `string`, `integer`,
-  `number`, `boolean`, `array`, `object` to Atmos `ParamType`.
-- `RegisterMCPTools` is best-effort: failed servers log warnings but don't block other tools.
-- `aiToolsResult` struct avoids 4-return-value lint error (`function-result-limit: max 3`).
-- `--ai` flag analysis (output capture) does not use tools — MCP tools are available only
-  in `atmos ai chat` and `atmos ai exec`.
-
-**Remaining for future:**
-- Lazy initialization (auto-start on first tool call instead of upfront)
-- `--ai` flag tool integration (requires executor in the analysis path)
-
-### Phase 3: Management Commands ✅ SHIPPED
-
-**Implemented files:**
-
-| File                        | Lines | Purpose                                                                          |
-|-----------------------------|-------|----------------------------------------------------------------------------------|
-| `cmd/mcp/client/status.go`  | 80    | `atmos mcp status` — start all, display table (name, status, tools, description) |
-| `cmd/mcp/client/restart.go` | 60    | `atmos mcp restart <name>` — stop and restart server                             |
-
-**What shipped:**
-- ~~`atmos mcp restart`~~ ✅ — stop + start cycle
-- ~~`atmos mcp status`~~ ✅ — health table with running/degraded/error status
-
-**Note:** `atmos mcp add` and `atmos mcp remove` were initially implemented but later
-removed — users edit `atmos.yaml` directly to configure servers.
-
-**Full command tree:**
-```bash
-atmos mcp start          # Start Atmos as MCP server
-atmos mcp list           # List configured servers
-atmos mcp tools <name>   # List tools from a server
-atmos mcp test <name>    # Test connectivity
-atmos mcp status         # Show all server statuses
-atmos mcp restart <name> # Restart a server
-```
-
-### Phase 4: Advanced Features ✅ SHIPPED
-
-**Shipped:**
-- ~~Atmos Auth integration for credential injection~~ ✅ — `auth_identity` field on
-  `MCPServerConfig`, `AuthEnvProvider` interface, `WithAuthManager` start option,
-  `PrepareShellEnvironment` integration. 8 tests.
-- ~~Toolchain integration for prerequisite management~~ ✅ — `WithToolchain` start option,
-  `ToolchainResolver` interface, command binary resolution via `ForComponent`, toolchain
-  PATH prepended to subprocess environment. 3 tests.
-- ~~YAML functions in env vars~~ ✅ — `!env`, `!exec`, `!repo-root`, `!cwd`, `!random`
-  work out of the box in `atmos.yaml` via `preprocessAtmosYamlFunc`. No code needed.
-
-### Future Considerations
-
-- Stack-level MCP server overrides (per-stack `settings.mcp.servers` config)
-- Composite MCP server (expose external tools via Atmos MCP server)
-- Connection pooling and health checks with auto-restart on failure
-- `tools/list_changed` notification handling for dynamic tool updates
-- MCP server registry (curated list of known servers with default configs)
+- Auth identity wired in AI commands (creates `AuthEnvProvider` when servers need auth)
+- `atmos mcp generate-config` — emits `.mcp.json` for IDE integration
+- User-facing feedback via `ui.Info`/`ui.Error` for server startup and tool execution
+- Error details displayed for failed tool calls (credential failures, server errors)
 
 ---
 
 ## Security Considerations
 
-1. **Process isolation** — Each MCP server runs as a separate subprocess with its own
-   environment. No shared memory or file handles.
+1. **Process isolation** — Each MCP server runs as a separate subprocess with its own environment.
 2. **Environment scoping** — Environment variables are explicitly configured per server.
-   No implicit credential leaking between servers.
-3. **Permission model** — External MCP tools inherit the Atmos AI permission system
-   (Allow/Prompt/YOLO). Users can control which external tools are auto-approved.
-4. **Transport security** — stdio transport is local-only (no network exposure). HTTP
-   transport for remote servers uses TLS.
-5. **Supply chain** — MCP servers are installed via package managers (`uvx`, `npx`) with
-   version pinning support. Atmos toolchain can enforce specific versions.
+3. **Permission model** — External MCP tools use the Atmos AI permission system (Allow/Prompt/YOLO).
+4. **Transport security** — stdio transport is local-only (no network exposure).
+5. **Supply chain** — MCP servers installed via package managers (`uvx`, `npx`) with version pinning.
 
 ---
 
-## Comparison with Claude Code MCP
+## Future Considerations
 
-| Feature           | Claude Code                    | Atmos (Proposed)            |
-|-------------------|--------------------------------|-----------------------------|
-| List servers      | `claude mcp list`              | `atmos mcp list`            |
-| Config location   | `.mcp.json` / `~/.claude.json` | `atmos.yaml`                |
-| Config scopes     | local / project / user         | global (atmos.yaml)         |
-| Transport         | stdio / HTTP / SSE             | stdio                       |
-| Tool namespacing  | Flat (server-level)            | `server.tool_name`          |
-| Auth integration  | None                           | Atmos Auth identities       |
-| Prerequisite mgmt | Manual                         | Atmos Toolchain (automatic) |
-| Stack context     | N/A                            | Env vars from stack vars    |
-| Version pinning   | Manual                         | Toolchain + Aqua registry   |
-
----
-
-## Success Metrics
-
-1. **Time to first external tool call** — User can configure and call an AWS MCP tool
-   in under 5 minutes.
-2. **Tool parity** — All 20+ AWS MCP servers work out of the box with `uvx`.
-3. **Zero reimplementation** — No AWS API code in Atmos — all delegated to MCP servers.
-4. **Composability** — Native and external tools work together in the same AI conversation.
-5. **Reliability** — MCP server processes are managed with proper lifecycle (start, health
-   check, restart, graceful shutdown).
-
----
-
-## References
-
-- [AWS MCP Servers](https://github.com/awslabs/mcp) — 20+ AWS MCP servers
-- [MCP Specification](https://spec.modelcontextprotocol.io/) — Protocol version 2025-03-26
-- [Go MCP SDK](https://github.com/modelcontextprotocol/go-sdk) — v1.4.1 (already in Atmos)
-- [Claude Code MCP](https://docs.anthropic.com/en/docs/claude-code/mcp) — Reference implementation
-- [Atmos Toolchain PRD](./toolchain-implementation.md) — Prerequisite management
-- [Atmos AI PRD](./atmos-ai.md) — AI architecture
-- [Atmos MCP Server PRD](./atmos-ai.md#mcp-integration) — Existing server implementation
+- Stack-level MCP server overrides (per-stack `settings.mcp.servers` config)
+- Composite MCP server (expose external tools via Atmos MCP server to IDEs)
+- Connection pooling and health checks with auto-restart on failure
+- `tools/list_changed` notification handling for dynamic tool updates
+- Lazy initialization (auto-start on first tool call instead of upfront)
