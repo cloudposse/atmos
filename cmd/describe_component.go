@@ -125,40 +125,46 @@ var describeComponentCmd = &cobra.Command{
 		// Get identity flag value.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 
-		// Get component-specific auth config and merge with global auth config.
-		// This follows the same pattern as terraform.go to handle stack-level default identities.
-		// Start with global config.
-		mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
+		// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
+		// When functions are disabled (--process-functions=false), there are no YAML functions
+		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
+		var authManager auth.AuthManager
+		if processYamlFunctions || identityName != "" {
+			// Get component-specific auth config and merge with global auth config.
+			// This follows the same pattern as terraform.go to handle stack-level default identities.
+			// Start with global config.
+			mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
 
-		// Get component config to extract auth section (without processing YAML functions to avoid circular dependency).
-		componentConfig, componentErr := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-			Component:            component,
-			Stack:                stack,
-			ProcessTemplates:     false,
-			ProcessYamlFunctions: false, // Avoid circular dependency with YAML functions that need auth.
-			Skip:                 nil,
-			AuthManager:          nil, // No auth manager yet - we're determining which identity to use.
-		})
-		if componentErr != nil {
-			// If component doesn't exist, exit immediately before attempting authentication.
-			// This prevents prompting for identity when the component is invalid.
-			if errors.Is(componentErr, errUtils.ErrInvalidComponent) {
-				return componentErr
+			// Get component config to extract auth section (without processing YAML functions to avoid circular dependency).
+			componentConfig, componentErr := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+				Component:            component,
+				Stack:                stack,
+				ProcessTemplates:     false,
+				ProcessYamlFunctions: false, // Avoid circular dependency with YAML functions that need auth.
+				Skip:                 nil,
+				AuthManager:          nil, // No auth manager yet - we're determining which identity to use.
+			})
+			if componentErr != nil {
+				// If component doesn't exist, exit immediately before attempting authentication.
+				// This prevents prompting for identity when the component is invalid.
+				if errors.Is(componentErr, errUtils.ErrInvalidComponent) {
+					return componentErr
+				}
+				// For other errors (e.g., permission issues), continue with global auth config.
+			} else {
+				// Merge component-specific auth with global auth.
+				mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
+				if err != nil {
+					return err
+				}
 			}
-			// For other errors (e.g., permission issues), continue with global auth config.
-		} else {
-			// Merge component-specific auth with global auth.
-			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
+
+			// Create and authenticate AuthManager using merged auth config.
+			// This enables stack-level default identity to be recognized.
+			authManager, err = CreateAuthManagerFromIdentity(identityName, mergedAuthConfig)
 			if err != nil {
 				return err
 			}
-		}
-
-		// Create and authenticate AuthManager using merged auth config.
-		// This enables stack-level default identity to be recognized.
-		authManager, err := CreateAuthManagerFromIdentity(identityName, mergedAuthConfig)
-		if err != nil {
-			return err
 		}
 
 		err = e.NewDescribeComponentExec().ExecuteDescribeComponentCmd(e.DescribeComponentParams{
