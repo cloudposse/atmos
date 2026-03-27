@@ -97,10 +97,10 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 		log.Warnf("Failed to register read-only Atmos tools: %v", err)
 	}
 
-	// Register read-only MCP server tools (servers marked read_only: true).
-	registerReadOnlyMCPServerTools(registry, atmosConfig)
+	// Register external MCP server tools (all configured servers).
+	registerMCPServerTools(registry, atmosConfig)
 
-	ui.Info(fmt.Sprintf("AI tools initialized: %d read-only", registry.Count()))
+	ui.Info(fmt.Sprintf("AI tools initialized: %d", registry.Count()))
 
 	// Read-only tools don't require permissions, but create a permissive checker just in case.
 	permConfig := &permission.Config{
@@ -145,33 +145,6 @@ func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosC
 		ui.Error(fmt.Sprintf("Failed to initialize MCP servers: %v", err))
 	}
 	return mgr
-}
-
-// registerReadOnlyMCPServerTools registers external MCP server tools marked as read_only.
-func registerReadOnlyMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) {
-	if len(atmosConfig.MCP.Servers) == 0 {
-		return
-	}
-
-	var toolchain mcpclient.ToolchainResolver
-	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
-	if tenvErr == nil && tenv != nil {
-		toolchain = tenv
-	}
-
-	var authProvider mcpclient.AuthEnvProvider
-	if serversNeedAuth(atmosConfig.MCP.Servers) {
-		mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-			"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
-		)
-		if err == nil && mgr != nil {
-			authProvider = mgr
-		}
-	}
-
-	if err := mcpclient.RegisterReadOnlyMCPTools(registry, atmosConfig, authProvider, toolchain); err != nil {
-		ui.Error(fmt.Sprintf("Failed to register read-only MCP server tools: %v", err))
-	}
 }
 
 // serversNeedAuth returns true if any configured MCP server has auth_identity set.

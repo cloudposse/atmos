@@ -17,52 +17,44 @@ Nine AWS MCP servers are pre-configured in `atmos.yaml`:
 
 ### Cost Analysis & FinOps
 
-| Server               | What It Does                                      | Credentials            | Read-Only |
-|----------------------|---------------------------------------------------|------------------------|-----------|
-| **aws-billing**      | Billing summaries, payment history, cost tags     | Yes — `ce:*`, `billing:*` | Yes    |
-| **aws-cost-explorer**| Spend breakdowns by service/account/tag, forecasts| Yes — `ce:*`           | Yes       |
-| **aws-pricing**      | On-demand/reserved pricing, cost comparisons      | Yes — `pricing:*` (free) | Yes     |
+| Server               | What It Does                                      | Credentials               |
+|----------------------|---------------------------------------------------|---------------------------|
+| **aws-billing**      | Billing summaries, payment history, cost tags     | Yes — `ce:*`, `billing:*` |
+| **aws-cost-explorer**| Spend breakdowns by service/account/tag, forecasts| Yes — `ce:*`              |
+| **aws-pricing**      | On-demand/reserved pricing, cost comparisons      | Yes — `pricing:*` (free)  |
 
 ### Security & Compliance
 
-| Server              | What It Does                                       | Credentials                     | Read-Only |
-|---------------------|----------------------------------------------------|---------------------------------|-----------|
-| **aws-security**    | Well-Architected Security Pillar assessment        | Yes — security services read    | No        |
-| **aws-iam**         | IAM role/policy analysis, permission boundaries    | Yes — `iam:Get*`, `iam:List*`  | No        |
-| **aws-cloudtrail**  | CloudTrail event history, API call auditing        | Yes — `cloudtrail:LookupEvents`| No        |
+| Server              | What It Does                                       | Credentials                      |
+|---------------------|----------------------------------------------------|---------------------------------|
+| **aws-security**    | Well-Architected Security Pillar assessment        | Yes — security services read    |
+| **aws-iam**         | IAM role/policy analysis, permission boundaries    | Yes — `iam:Get*`, `iam:List*`  |
+| **aws-cloudtrail**  | CloudTrail event history, API call auditing        | Yes — `cloudtrail:LookupEvents`|
 
 ### General
 
-| Server            | What It Does                                 | Credentials | Read-Only |
-|-------------------|----------------------------------------------|-------------|-----------|
-| **aws-api**       | Direct AWS CLI access with security controls | Yes         | No        |
-| **aws-docs**      | Search and fetch AWS documentation           | No          | Yes       |
-| **aws-knowledge** | Managed AWS knowledge base (remote service)  | No          | Yes       |
+| Server            | What It Does                                 | Credentials |
+|-------------------|----------------------------------------------|-------------|
+| **aws-api**       | Direct AWS CLI access with security controls | Yes         |
+| **aws-docs**      | Search and fetch AWS documentation           | No          |
+| **aws-knowledge** | Managed AWS knowledge base (remote service)  | No          |
 
-Servers marked **Read-Only** are available in `atmos ai ask` (non-interactive). Other servers
-require `atmos ai chat` (interactive) for safety.
+All configured MCP servers are available across all Atmos AI commands — `atmos ai ask`,
+`atmos ai chat`, `atmos ai exec`, and `--ai` flag.
 
 ## Prerequisites
 
-1. **Python 3.10+** with the `uv` package manager:
+1. **Python 3.10+** — the `uv` package manager is auto-installed by the Atmos toolchain
+   (configured in `atmos.yaml`), so you don't need to install it manually.
+
+2. **Atmos Auth** — all servers that need AWS credentials use `auth_identity: "readonly"`.
+   Update the auth section in `atmos.yaml` with your SSO start URL, permission set, and
+   account ID, then run:
    ```bash
-   # macOS
-   brew install uv
-
-   # Or via pip
-   pip install uv
+   atmos auth login
    ```
-
-2. **AWS credentials** (for servers that need them):
-   ```bash
-   # Option A: AWS CLI profile
-   aws configure
-
-   # Option B: Environment variables
-   export AWS_ACCESS_KEY_ID=...
-   export AWS_SECRET_ACCESS_KEY=...
-   export AWS_DEFAULT_REGION=us-east-1
-   ```
+   That's it — Atmos authenticates once and injects credentials into every MCP server
+   automatically. No `aws configure`, no environment variables, no credential files.
 
 ## Quick Start
 
@@ -269,7 +261,6 @@ mcp:
       # Atmos extensions
       description: "Human-readable description"   # Shown in `atmos mcp list`
       auth_identity: "my-identity"                 # Atmos Auth credential injection
-      read_only: true                              # Safe for `atmos ai ask`
       auto_start: false                            # Start automatically
       timeout: "30s"                               # Connection timeout
 ```
@@ -301,50 +292,29 @@ mcp:
 
 ## Atmos Auth Integration
 
-For production use, configure Atmos Auth to automatically inject AWS credentials into MCP server subprocesses. This
-eliminates manual credential management:
+This example uses Atmos Auth to automatically inject AWS credentials into every MCP server
+that needs them. Instead of manually running `aws configure` or exporting environment
+variables for each server, you configure auth once and every server with `auth_identity`
+gets credentials automatically.
 
-```yaml
-# atmos.yaml
-auth:
-  enabled: true
-  providers:
-    aws-sso:
-      type: aws-sso
-      spec:
-        start_url: "https://your-org.awsapps.com/start"
-        region: "us-east-1"
-  identities:
-    security-audit:
-      provider: aws-sso
-      spec:
-        role_name: "SecurityAuditRole"
-        account_id: "123456789012"
-    pricing-reader:
-      provider: aws-sso
-      spec:
-        role_name: "PricingReadOnly"
-        account_id: "123456789012"
+### Setup
 
-mcp:
-  servers:
-    aws-security:
-      command: uvx
-      args: [ "awslabs.well-architected-security-mcp-server@latest" ]
-      auth_identity: "security-audit"   # ← Credentials injected automatically
+1. Edit the `auth` section in `atmos.yaml` — update `start_url`, `permission_set`, and
+   `account.id` to match your AWS organization
+2. Run `atmos auth login` to authenticate
+3. All MCP servers with `auth_identity: "readonly"` will get credentials injected
 
-    aws-pricing:
-      command: uvx
-      args: [ "awslabs.aws-pricing-mcp-server@latest" ]
-      auth_identity: "pricing-reader"   # ← Credentials injected automatically
-```
+### How it works
 
-When `auth_identity` is set, Atmos:
+When `auth_identity` is set on a server, Atmos:
 
 1. Authenticates through the identity chain (SSO → role assumption)
 2. Writes isolated credential files to `~/.aws/atmos/<realm>/`
 3. Sets `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE` on the subprocess
 4. The MCP server's AWS SDK picks up credentials automatically
+
+No credential files to manage, no environment variables to set, no expiration headaches.
+Run `atmos auth login` once and all servers work.
 
 ## Atmos Toolchain Integration
 

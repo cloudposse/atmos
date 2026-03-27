@@ -20,7 +20,6 @@ type ParsedConfig struct {
 	AutoStart    bool
 	Timeout      time.Duration
 	AuthIdentity string
-	ReadOnly     bool
 }
 
 // ParseConfig validates and converts an MCPServerConfig into a ParsedConfig.
@@ -52,6 +51,5 @@ func ParseConfig(name string, cfg schema.MCPServerConfig) (*ParsedConfig, error)
 		AutoStart:    cfg.AutoStart,
 		Timeout:      timeout,
 		AuthIdentity: cfg.AuthIdentity,
-		ReadOnly:     cfg.ReadOnly,
 	}, nil
 }

@@ -41,8 +41,8 @@ atmos ai ask "What stacks do we have?"               # Single question
 atmos ai exec "validate stacks" --format json        # CI/CD automation
 atmos ai sessions list                               # List sessions
 atmos ai skill list                                  # List installed skills
-atmos terraform plan vpc -s prod --ai                              # AI analysis of any command
-atmos terraform plan vpc -s prod --ai --skill atmos-terraform      # With domain expertise
+atmos terraform plan vpc -s prod --ai                                       # AI analysis of any command
+atmos terraform plan vpc -s prod --ai --skill atmos-terraform               # With domain expertise
 atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks  # Multiple skills
 ```
 </Terminal>
@@ -125,6 +125,15 @@ ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc 
 
   <dt>[`atmos mcp test`](/cli/commands/mcp/test)</dt>
   <dd>Test connectivity to an external MCP server.</dd>
+
+  <dt>[`atmos mcp status`](/cli/commands/mcp/status)</dt>
+  <dd>Show live connection status of all configured MCP servers.</dd>
+
+  <dt>[`atmos mcp restart`](/cli/commands/mcp/restart)</dt>
+  <dd>Restart an external MCP server.</dd>
+
+  <dt>[`atmos mcp generate-config`](/cli/commands/mcp/generate-config)</dt>
+  <dd>Generate `.mcp.json` from `atmos.yaml` for Claude Code / Cursor / IDE integration.</dd>
 </dl>
 
 ## AI Assistants
@@ -178,25 +187,40 @@ in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos t
 atmos mcp list                    # See configured servers
 atmos mcp test aws-docs           # Test connectivity
 atmos mcp tools aws-security      # List available tools
-# External MCP tools are available in AI commands
-atmos ai ask "What's the price of m7i.xlarge in us-east-1?"
-atmos ai chat   # Then: "Check our security posture in us-east-1"
+atmos mcp status                  # Show live status of all servers
+atmos mcp generate-config         # Generate .mcp.json for Claude Code / IDE
+
+# Ask questions — AI uses the appropriate MCP server automatically
+atmos ai ask "What did we spend on EC2 last month?"     # uses aws-cost-explorer
+atmos ai ask "Is GuardDuty enabled in us-east-1?"       # uses aws-security
+atmos ai ask "How do I configure S3 lifecycle rules?"   # uses aws-docs
 ```
 
 <File title="atmos.yaml">
 ```yaml
 mcp:
   servers:
-    aws-docs:
+    # FinOps
+    aws-cost-explorer:
       command: uvx
-      args: ["awslabs.aws-documentation-mcp-server@latest"]
-      description: "AWS Documentation"
+      args: ["awslabs.cost-explorer-mcp-server@latest"]
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Cost Explorer — spend breakdowns and forecasts"
+      auth_identity: "readonly"
+
+    # Security & Compliance
     aws-security:
       command: uvx
       args: ["awslabs.well-architected-security-mcp-server@latest"]
-      env:
-        AWS_REGION: "us-east-1"
-      auth_identity: "security-audit"  # Atmos Auth credential injection
+      env: { AWS_REGION: "us-east-1" }
+      description: "AWS Security — Well-Architected posture assessment"
+      auth_identity: "readonly"
+
+    # Documentation (no credentials needed)
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation — search and fetch docs"
 ```
 </File>
 
@@ -208,7 +232,7 @@ mcp:
 </ActionCard>
 
 <ActionCard title="Try the MCP Example">
-    Explore a complete example with 5 pre-configured AWS MCP servers.
+    Explore a complete example with pre-configured AWS MCP servers for cost analysis, security, and documentation.
     <div>
         <PrimaryCTA to="/examples/mcp">Browse Example</PrimaryCTA>
     </div>

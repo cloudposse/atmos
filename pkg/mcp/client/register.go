@@ -50,43 +50,6 @@ func RegisterMCPTools(
 	return mgr, nil
 }
 
-// RegisterReadOnlyMCPTools starts only MCP servers marked as read_only and registers
-// their tools. This is used by non-interactive commands like 'atmos ai ask' where
-// only data-retrieval tools (docs, pricing, etc.) are appropriate.
-func RegisterReadOnlyMCPTools(
-	registry *tools.Registry,
-	atmosConfig *schema.AtmosConfiguration,
-	authProvider AuthEnvProvider,
-	toolchain ToolchainResolver,
-) error {
-	defer perf.Track(atmosConfig, "mcp.client.RegisterReadOnlyMCPTools")()
-
-	// Filter to read-only servers only.
-	readOnlyServers := make(map[string]schema.MCPServerConfig)
-	for name, cfg := range atmosConfig.MCP.Servers {
-		if cfg.ReadOnly {
-			readOnlyServers[name] = cfg
-		}
-	}
-	if len(readOnlyServers) == 0 {
-		return nil
-	}
-
-	mgr, err := NewManager(readOnlyServers)
-	if err != nil {
-		return err
-	}
-
-	startOpts := buildStartOptions(authProvider, toolchain)
-	totalTools := startAndRegisterTools(mgr, registry, startOpts)
-
-	if totalTools > 0 {
-		ui.Info(fmt.Sprintf("Registered %d read-only tools from MCP server(s)", totalTools))
-	}
-
-	return nil
-}
-
 // buildStartOptions creates StartOption slice from optional providers.
 func buildStartOptions(authProvider AuthEnvProvider, toolchain ToolchainResolver) []StartOption {
 	var opts []StartOption

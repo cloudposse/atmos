@@ -57,7 +57,6 @@ mcp:
       env:
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Documentation — search and fetch AWS docs"
-      read_only: true
 
     # -----------------------------------------------------------------------
     # AWS Knowledge — managed remote knowledge base
@@ -72,7 +71,6 @@ mcp:
         - "run"
         - "https://knowledge-mcp.global.api.aws"
       description: "AWS Knowledge — managed AWS knowledge base (remote)"
-      read_only: true
 
     # -----------------------------------------------------------------------
     # AWS Pricing — real-time pricing and cost analysis
@@ -89,7 +87,7 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Pricing — real-time pricing and cost analysis"
-      read_only: true
+      auth_identity: "readonly"
 
     # -----------------------------------------------------------------------
     # AWS API — direct AWS CLI access via AI
@@ -109,6 +107,7 @@ mcp:
         READ_OPERATIONS_ONLY: "true"
         REQUIRE_MUTATION_CONSENT: "true"
       description: "AWS API — direct AWS CLI access with security controls"
+      auth_identity: "readonly"
 
     # -----------------------------------------------------------------------
     # AWS Security — Well-Architected security posture assessment
@@ -126,6 +125,7 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Security — Well-Architected security posture assessment"
+      auth_identity: "readonly"
 
     # -----------------------------------------------------------------------
     # AWS Billing & Cost Management — billing summaries and payment history
@@ -142,7 +142,7 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Billing — billing summaries and payment history"
-      read_only: true
+      auth_identity: "readonly"
 
     # -----------------------------------------------------------------------
     # AWS Cost Explorer — spend breakdowns, trends, and forecasts
@@ -159,7 +159,7 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Cost Explorer — spend breakdowns, trends, and forecasts"
-      read_only: true
+      auth_identity: "readonly"
 
     # -----------------------------------------------------------------------
     # AWS IAM — role/policy analysis and access patterns
@@ -176,6 +176,7 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS IAM — role/policy analysis and access patterns"
+      auth_identity: "readonly"
 
     # -----------------------------------------------------------------------
     # AWS CloudTrail — event history and API call auditing
@@ -192,32 +193,43 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS CloudTrail — event history and API call auditing"
+      auth_identity: "readonly"
 
 # ---------------------------------------------------------------------------
-# Atmos Auth Integration (optional)
+# Atmos Auth — automatic credential injection for MCP servers
 # ---------------------------------------------------------------------------
-# Uncomment to use Atmos Auth for automatic credential injection.
-# When auth_identity is set on a server, Atmos resolves the identity
-# through the auth chain and injects AWS credentials into the subprocess.
+# Instead of manually configuring AWS_PROFILE, AWS_ACCESS_KEY_ID, or running
+# `aws configure` for each MCP server, Atmos Auth handles authentication once
+# and injects credentials into every MCP server that needs them.
 #
-# auth:
-#   enabled: true
-#   providers:
-#     aws-sso:
-#       type: aws-sso
-#       spec:
-#         start_url: "https://your-org.awsapps.com/start"
-#         region: "us-east-1"
-#   identities:
-#     security-audit:
-#       provider: aws-sso
-#       spec:
-#         role_name: "SecurityAuditRole"
-#         account_id: "123456789012"
+# How it works:
+#   1. Configure your auth provider (SSO, OIDC, IAM user, etc.)
+#   2. Define identities with the roles/accounts you need
+#   3. Set auth_identity on each MCP server
+#   4. Atmos authenticates once and injects credentials automatically
 #
-# Then add to server config:
-#   aws-security:
-#     auth_identity: "security-audit"
+# To set up:
+#   1. Update the provider and identity settings below to match your AWS org
+#   2. Run: atmos auth login
+#   3. All MCP servers with auth_identity will get credentials automatically
+#
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      start_url: "https://your-org.awsapps.com/start"   # ← Change this
+      region: "us-east-1"
+  identities:
+    # Read-only identity for cost analysis and security assessment.
+    # Change the role_name and account_id to match your AWS organization.
+    readonly:
+      kind: aws/permission-set
+      provider: aws-sso
+      default: true
+      principal:
+        permission_set: "ReadOnlyAccess"                 # ← Change this
+        account:
+          id: "123456789012"                             # ← Change this
 
 # ---------------------------------------------------------------------------
 # AI Configuration (required for atmos ai chat / atmos ai ask / atmos ai exec)

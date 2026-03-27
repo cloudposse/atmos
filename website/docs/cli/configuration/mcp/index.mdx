@@ -93,7 +93,6 @@ mcp:
       # Atmos extensions
       description: "Human-readable description"
       auth_identity: "my-identity"      # Atmos Auth credential injection
-      read_only: true                   # Safe for atmos ai ask
       auto_start: false                 # Start server automatically
       timeout: "30s"                    # Connection timeout
 ```
@@ -122,9 +121,6 @@ These fields are compatible with the `mcpServers` JSON format used by Claude Cod
 
   <dt>`auth_identity`</dt>
   <dd>Name of an [Atmos Auth identity](/cli/configuration/auth) to use for credential injection. When set, Atmos authenticates through the identity chain and injects `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, and `AWS_REGION` into the subprocess environment.</dd>
-
-  <dt>`read_only`</dt>
-  <dd>Mark the server as read-only safe (default: `false`). Read-only servers are included in non-interactive commands like `atmos ai ask`. Servers that only retrieve data (documentation, pricing) should set this to `true`.</dd>
 
   <dt>`auto_start`</dt>
   <dd>Start the server automatically when Atmos starts (default: `false`).</dd>
@@ -215,16 +211,15 @@ toolchain:
 ```yaml
 mcp:
   servers:
-    # No credentials needed — safe for atmos ai ask
+    # No credentials needed
     aws-docs:
       command: uvx
       args: ["awslabs.aws-documentation-mcp-server@latest"]
       env:
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Documentation"
-      read_only: true
 
-    # Requires AWS credentials — safe for atmos ai ask
+    # Requires AWS credentials
     aws-pricing:
       command: uvx
       args: ["awslabs.aws-pricing-mcp-server@latest"]
@@ -232,7 +227,6 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Pricing"
-      read_only: true
 
     # Security assessment (read-only)
     aws-security:

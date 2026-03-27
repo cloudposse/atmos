@@ -10,7 +10,7 @@ type MCPSettings struct {
 // MCPServerConfig represents an external MCP server configured in atmos.yaml
 // under mcp.servers. The core fields (command, args, env) follow the standard
 // MCP server configuration format used by Claude Code, Codex CLI, and Gemini CLI.
-// Atmos-specific extensions (description, auto_start, timeout, auth_identity, read_only)
+// Atmos-specific extensions (description, auto_start, timeout, auth_identity)
 // provide additional functionality.
 type MCPServerConfig struct {
 	// Standard MCP server fields (compatible with mcpServers JSON format).
@@ -23,8 +23,4 @@ type MCPServerConfig struct {
 	AutoStart    bool   `yaml:"auto_start,omitempty" json:"auto_start,omitempty" mapstructure:"auto_start"`
 	Timeout      string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
 	AuthIdentity string `yaml:"auth_identity,omitempty" json:"auth_identity,omitempty" mapstructure:"auth_identity"`
-	// ReadOnly marks a server as safe for non-interactive commands (atmos ai ask).
-	// Read-only servers expose tools that only retrieve data (docs, pricing, etc.)
-	// and are included in the read-only tool set alongside native Atmos tools.
-	ReadOnly bool `yaml:"read_only,omitempty" json:"read_only,omitempty" mapstructure:"read_only"`
 }

@@ -153,8 +153,8 @@ The `.mcp.json` generation wraps each server with `atmos auth exec`:
    automatic credential injection for MCP server subprocesses.
 2. **`.mcp.json` generation** — `atmos mcp generate-config` emits IDE-compatible config
    from `atmos.yaml` servers, wrapping auth servers with `atmos auth exec`.
-3. **Read-only server marking** — `read_only: true` field allows safe servers (docs, pricing)
-   to be used in `atmos ai ask` (non-interactive mode).
+3. ~~**Read-only server marking**~~ — Removed. All configured MCP servers are available
+   across all AI commands (`ask`, `chat`, `exec`, `--ai`). One config, works everywhere.
 4. **User-facing MCP server feedback** — MCP server startup, tool discovery counts, and
    tool execution results are shown at Info log level so users can see which servers are
    active and which tools were invoked by the AI. Tool usage is not inferred — the AI
@@ -330,7 +330,7 @@ and automatic installation via the existing Aqua registry integration.
 
 Extend the existing `atmos mcp` command:
 
-```
+```bash
 atmos mcp start          # (existing) Start Atmos as an MCP server
 atmos mcp list           # List configured external MCP servers and their status
 atmos mcp status         # Show status of all running MCP server processes
@@ -373,7 +373,7 @@ $ atmos mcp test aws-eks
 
 ### Package Structure
 
-```
+```text
 pkg/mcp/
 ├── server.go              # (existing) Atmos MCP server
 ├── adapter.go             # (existing) Atmos tool → MCP bridge
@@ -419,7 +419,7 @@ type ClientSession struct {
 
 ### Process Lifecycle
 
-```
+```text
 1. Configuration Load
    atmos.yaml → IntegrationConfig → Manager.Register()
 
@@ -485,7 +485,7 @@ func (t *BridgedTool) Execute(ctx context.Context, params map[string]any) (strin
 
 External MCP tools are available in `atmos ai chat`:
 
-```
+```text
 $ atmos ai chat
 You: List my EKS clusters in production
 AI: I'll check your EKS clusters using the AWS EKS integration.
@@ -514,7 +514,7 @@ $ atmos terraform plan vpc -s prod --ai --skill atmos-terraform
 When Atmos runs as an MCP server itself, it can expose both native AND external tools to
 the upstream client:
 
-```
+```text
 Claude Code  ──MCP──>  Atmos MCP Server  ──>  Native Atmos tools
                                           ──MCP──>  AWS EKS tools
                                           ──MCP──>  AWS S3 tools
@@ -579,7 +579,7 @@ mcp:
 
 #### Credential Flow Diagram
 
-```
+```text
 User runs: atmos ai chat
 
 1. Atmos Auth resolves identity "billing-readonly"
@@ -708,17 +708,18 @@ mcp:
 
 **Tools exposed (6):**
 
-| Tool | Description |
-|------|-------------|
-| `CheckSecurityServices` | Verify security services are enabled (GuardDuty, Inspector, etc.) |
-| `GetSecurityFindings` | Retrieve findings with severity filtering |
-| `CheckStorageEncryption` | Check encryption on S3, EBS, RDS, DynamoDB, EFS |
-| `CheckNetworkSecurity` | Check TLS/HTTPS on ELB, VPC, API Gateway, CloudFront |
-| `ListServicesInRegion` | List active AWS services in a region |
-| `GetStoredSecurityContext` | Retrieve historical security data |
+| Tool                       | Description                                                       |
+|----------------------------|-------------------------------------------------------------------|
+| `CheckSecurityServices`    | Verify security services are enabled (GuardDuty, Inspector, etc.) |
+| `GetSecurityFindings`      | Retrieve findings with severity filtering                         |
+| `CheckStorageEncryption`   | Check encryption on S3, EBS, RDS, DynamoDB, EFS                   |
+| `CheckNetworkSecurity`     | Check TLS/HTTPS on ELB, VPC, API Gateway, CloudFront              |
+| `ListServicesInRegion`     | List active AWS services in a region                              |
+| `GetStoredSecurityContext` | Retrieve historical security data                                 |
 
 **Usage in `atmos ai chat`:**
-```
+
+```text
 You: Check security posture for our production account in us-east-1
 
 AI: I'll run a comprehensive security check using the Well-Architected
@@ -765,7 +766,7 @@ Would you like me to check the security findings from GuardDuty?
 
 The real power is combining native Atmos tools with external MCP tools:
 
-```
+```text
 You: We're planning to decommission the staging VPC. What's the impact?
 
 AI: Let me analyze this from multiple angles.
@@ -815,17 +816,17 @@ Shall I generate an atmos workflow for this decommission sequence?
 
 **Implemented files:**
 
-| File | Lines | Purpose |
-|---|---|---|
-| `pkg/schema/mcp.go` | 20 | `MCPServerConfig` type + `Integrations` map on `MCPSettings` |
-| `pkg/mcp/client/config.go` | 50 | Config parsing with validation and timeout resolution |
-| `pkg/mcp/client/session.go` | 180 | Session lifecycle: Start (subprocess + MCP handshake + tool list), Stop, CallTool, Ping |
-| `pkg/mcp/client/manager.go` | 120 | Multi-session manager: NewManager, Start/Stop/StopAll, Get/List, Test |
-| `pkg/mcp/client/bridge.go` | 90 | BridgedTool wrapping external MCP tools with namespaced names |
-| `cmd/mcp/client/list.go` | 50 | `atmos mcp list` — themed table of configured servers |
-| `cmd/mcp/client/tools.go` | 70 | `atmos mcp tools <name>` — connect, list tools, disconnect |
-| `cmd/mcp/client/test_cmd.go` | 70 | `atmos mcp test <name>` — start, handshake, list tools, ping |
-| `errors/errors.go` | +5 | `ErrMCPServerNotFound/NotRunning/StartFailed/CommandEmpty/InvalidTimeout` |
+| File                         | Lines | Purpose                                                                                 |
+|------------------------------|-------|-----------------------------------------------------------------------------------------|
+| `pkg/schema/mcp.go`          | 20    | `MCPServerConfig` type + `Integrations` map on `MCPSettings`                            |
+| `pkg/mcp/client/config.go`   | 50    | Config parsing with validation and timeout resolution                                   |
+| `pkg/mcp/client/session.go`  | 180   | Session lifecycle: Start (subprocess + MCP handshake + tool list), Stop, CallTool, Ping |
+| `pkg/mcp/client/manager.go`  | 120   | Multi-session manager: NewManager, Start/Stop/StopAll, Get/List, Test                   |
+| `pkg/mcp/client/bridge.go`   | 90    | BridgedTool wrapping external MCP tools with namespaced names                           |
+| `cmd/mcp/client/list.go`     | 50    | `atmos mcp list` — themed table of configured servers                                   |
+| `cmd/mcp/client/tools.go`    | 70    | `atmos mcp tools <name>` — connect, list tools, disconnect                              |
+| `cmd/mcp/client/test_cmd.go` | 70    | `atmos mcp test <name>` — start, handshake, list tools, ping                            |
+| `errors/errors.go`           | +5    | `ErrMCPServerNotFound/NotRunning/StartFailed/CommandEmpty/InvalidTimeout`               |
 
 **Tests:** 34 unit tests across 4 test files at 73% coverage.
 
@@ -842,15 +843,15 @@ Shall I generate an atmos workflow for this decommission sequence?
 
 **Implemented files:**
 
-| File | Lines | Purpose |
-|---|---|---|
-| `pkg/mcp/client/register.go` | 60 | `RegisterMCPTools` — starts integrations, bridges tools into AI registry |
-| `pkg/mcp/client/register_test.go` | 45 | Tests: no integrations, invalid config, failed start continues |
-| `pkg/mcp/client/bridge.go` | 170 | `BridgedTool` implements `tools.Tool` interface with JSON Schema parameter extraction |
-| `pkg/mcp/client/bridge_test.go` | 170 | Tests: interface compliance, parameters, schema types, content extraction |
-| `cmd/ai/init.go` | modified | `aiToolsResult` struct, calls `RegisterMCPTools` after native tools |
-| `cmd/ai/chat.go` | modified | `defer MCPMgr.StopAll()` for subprocess cleanup |
-| `cmd/ai/exec.go` | modified | `defer MCPMgr.StopAll()` for subprocess cleanup |
+| File                              | Lines    | Purpose                                                                               |
+|-----------------------------------|----------|---------------------------------------------------------------------------------------|
+| `pkg/mcp/client/register.go`      | 60       | `RegisterMCPTools` — starts integrations, bridges tools into AI registry              |
+| `pkg/mcp/client/register_test.go` | 45       | Tests: no integrations, invalid config, failed start continues                        |
+| `pkg/mcp/client/bridge.go`        | 170      | `BridgedTool` implements `tools.Tool` interface with JSON Schema parameter extraction |
+| `pkg/mcp/client/bridge_test.go`   | 170      | Tests: interface compliance, parameters, schema types, content extraction             |
+| `cmd/ai/init.go`                  | modified | `aiToolsResult` struct, calls `RegisterMCPTools` after native tools                   |
+| `cmd/ai/chat.go`                  | modified | `defer MCPMgr.StopAll()` for subprocess cleanup                                       |
+| `cmd/ai/exec.go`                  | modified | `defer MCPMgr.StopAll()` for subprocess cleanup                                       |
 
 **What shipped:**
 - ~~Tool bridge: external MCP tools → Atmos AI tool registry~~ ✅
@@ -877,10 +878,10 @@ Shall I generate an atmos workflow for this decommission sequence?
 
 **Implemented files:**
 
-| File | Lines | Purpose |
-|---|---|---|
-| `cmd/mcp/client/status.go` | 80 | `atmos mcp status` — start all, display table (name, status, tools, description) |
-| `cmd/mcp/client/restart.go` | 60 | `atmos mcp restart <name>` — stop and restart server |
+| File                        | Lines | Purpose                                                                          |
+|-----------------------------|-------|----------------------------------------------------------------------------------|
+| `cmd/mcp/client/status.go`  | 80    | `atmos mcp status` — start all, display table (name, status, tools, description) |
+| `cmd/mcp/client/restart.go` | 60    | `atmos mcp restart <name>` — stop and restart server                             |
 
 **What shipped:**
 - ~~`atmos mcp restart`~~ ✅ — stop + start cycle
@@ -890,7 +891,7 @@ Shall I generate an atmos workflow for this decommission sequence?
 removed — users edit `atmos.yaml` directly to configure servers.
 
 **Full command tree:**
-```
+```bash
 atmos mcp start          # Start Atmos as MCP server
 atmos mcp list           # List configured servers
 atmos mcp tools <name>   # List tools from a server
@@ -938,17 +939,17 @@ atmos mcp restart <name> # Restart a server
 
 ## Comparison with Claude Code MCP
 
-| Feature | Claude Code | Atmos (Proposed) |
-|---------|-------------|------------------|
-| List servers | `claude mcp list` | `atmos mcp list` |
-| Config location | `.mcp.json` / `~/.claude.json` | `atmos.yaml` |
-| Config scopes | local / project / user | global (atmos.yaml) |
-| Transport | stdio / HTTP / SSE | stdio |
-| Tool namespacing | Flat (server-level) | `server.tool_name` |
-| Auth integration | None | Atmos Auth identities |
-| Prerequisite mgmt | Manual | Atmos Toolchain (automatic) |
-| Stack context | N/A | Env vars from stack vars |
-| Version pinning | Manual | Toolchain + Aqua registry |
+| Feature           | Claude Code                    | Atmos (Proposed)            |
+|-------------------|--------------------------------|-----------------------------|
+| List servers      | `claude mcp list`              | `atmos mcp list`            |
+| Config location   | `.mcp.json` / `~/.claude.json` | `atmos.yaml`                |
+| Config scopes     | local / project / user         | global (atmos.yaml)         |
+| Transport         | stdio / HTTP / SSE             | stdio                       |
+| Tool namespacing  | Flat (server-level)            | `server.tool_name`          |
+| Auth integration  | None                           | Atmos Auth identities       |
+| Prerequisite mgmt | Manual                         | Atmos Toolchain (automatic) |
+| Stack context     | N/A                            | Env vars from stack vars    |
+| Version pinning   | Manual                         | Toolchain + Aqua registry   |
 
 ---
 
