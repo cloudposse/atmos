@@ -1354,3 +1354,103 @@ func TestWriteWorkdirMetadata_PreservesContentHash(t *testing.T) {
 	assert.Equal(t, "abc123hash", metadata.ContentHash,
 		"ContentHash should be preserved for local sources")
 }
+
+// TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning verifies that once
+// AutoProvisionSource completes within a command invocation (marked via invocationDoneKey),
+// a second call with the same componentConfig is a no-op even with ttl:"0s".
+//
+// This is the regression test for the JIT TTL bug: without the guard, a zero-TTL would
+// cause AutoProvisionSource to delete the workdir on its second call (via the
+// before.terraform.init hook), wiping out varfiles and backend configs written between
+// the two calls and causing the subprocess to fail with "file does not exist" errors.
+func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testing.T) {
+	// The guard is checked before any provisioning when invocationDoneKey is set.
+	// A component config with a valid source but the done-key present should return nil
+	// immediately without touching the filesystem.
+	componentConfig := map[string]any{
+		"component":   "null-label",
+		"atmos_stack": "demo",
+		"source": map[string]any{
+			"uri":     "github.com/cloudposse/terraform-null-label.git//",
+			"version": "0.25.0",
+			"ttl":     "0s",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+		// Simulate that this invocation already ran AutoProvisionSource once.
+		invocationDoneKey: struct{}{},
+	}
+
+	// Use a real atmosConfig with base path pointing to a temp dir.
+	// The function should return nil without ever trying to resolve a target dir
+	// or call VendorSource (which would require network access).
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	ctx := t.Context()
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	require.NoError(t, err, "second AutoProvisionSource call with invocationDoneKey set should be a no-op")
+}
+
+// TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning verifies that the
+// invocationDoneKey is written into componentConfig when provisioning is skipped
+// (cache still valid). This ensures the before.terraform.init hook will be a no-op.
+func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a workdir with valid metadata so needsProvisioning returns false
+	// (TTL not expired, version unchanged).
+	workdirPath := filepath.Join(tmpDir, ".workdir", "terraform", "demo-null-label")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+	// Place a dummy file so isNonEmptyDir returns true.
+	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644))
+	// Write metadata matching the source spec so TTL check is the only gate.
+	meta := &workdir.WorkdirMetadata{
+		SourceURI:     "github.com/cloudposse/terraform-null-label.git//",
+		SourceVersion: "0.25.0",
+		UpdatedAt:     time.Now(), // Fresh — 1h TTL not expired.
+	}
+	require.NoError(t, workdir.WriteMetadata(workdirPath, meta))
+
+	componentConfig := map[string]any{
+		"component":   "null-label",
+		"atmos_stack": "demo",
+		"source": map[string]any{
+			"uri":     "github.com/cloudposse/terraform-null-label.git//",
+			"version": "0.25.0",
+			"ttl":     "1h",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	ctx := t.Context()
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	require.NoError(t, err)
+
+	// The guard marker must now be present in componentConfig.
+	_, done := componentConfig[invocationDoneKey]
+	assert.True(t, done, "invocationDoneKey should be set in componentConfig after a skipped provision")
+}
