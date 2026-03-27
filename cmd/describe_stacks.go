@@ -75,7 +75,8 @@ func getRunnableDescribeStacksCmd(
 		// When functions are disabled (--process-functions=false), there are no YAML functions
 		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		if describe.ProcessYamlFunctions || identityName != "" {
+		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
+		if describe.ProcessYamlFunctions || identityExplicit {
 			authManager, authErr := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &atmosConfig.Auth, &atmosConfig)
 			if authErr != nil {
 				return authErr

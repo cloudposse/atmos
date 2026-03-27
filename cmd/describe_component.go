@@ -124,12 +124,14 @@ var describeComponentCmd = &cobra.Command{
 
 		// Get identity flag value.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
+		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
 
-		// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
+		// Only create auth manager when YAML functions are enabled or identity is explicitly requested via CLI flag.
 		// When functions are disabled (--process-functions=false), there are no YAML functions
 		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
+		// Environment variables (ATMOS_IDENTITY) do not count as explicit — only the --identity CLI flag does.
 		var authManager auth.AuthManager
-		if processYamlFunctions || identityName != "" {
+		if processYamlFunctions || identityExplicit {
 			// Get component-specific auth config and merge with global auth config.
 			// This follows the same pattern as terraform.go to handle stack-level default identities.
 			// Start with global config.

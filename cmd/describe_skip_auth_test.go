@@ -45,6 +45,18 @@ func newTestCmdWithFunctionsDisabled(t *testing.T) *cobra.Command {
 	return cmd
 }
 
+// newTestCmdWithFunctionsDisabledAndExplicitIdentity creates a command with
+// --process-functions=false AND --identity explicitly set (simulates CLI flag).
+func newTestCmdWithFunctionsDisabledAndExplicitIdentity(t *testing.T, identityValue string) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().Bool("process-functions", true, "")
+	cmd.Flags().StringP("identity", "i", "", "")
+	require.NoError(t, cmd.Flags().Set("process-functions", "false"))
+	require.NoError(t, cmd.Flags().Set("identity", identityValue))
+	return cmd
+}
+
 // clearIdentityEnvVars prevents CI-set identity env vars from triggering auth.
 func clearIdentityEnvVars(t *testing.T) {
 	t.Helper()
@@ -94,6 +106,81 @@ func TestDescribeStacks_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
 }
 
+// TestDescribeStacks_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that an
+// ATMOS_IDENTITY environment variable does NOT bypass the process-functions guard.
+// Only an explicit --identity CLI flag should force auth when functions are disabled.
+func TestDescribeStacks_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	viper.Reset()
+	// Set the env var — this should NOT trigger auth when functions are disabled.
+	t.Setenv("ATMOS_IDENTITY", "some-identity")
+	t.Setenv("IDENTITY", "")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeStacksExec(ctrl)
+	mockExec.EXPECT().Execute(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ *schema.AtmosConfiguration, args *exec.DescribeStacksArgs) error {
+			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var is set but --process-functions=false and no explicit --identity flag")
+			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdWithFunctionsDisabled(t)
+
+	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
+		func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
+		},
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return atmosConfigWithBrokenDefaultIdentity(), nil
+		},
+		func(_ *schema.AtmosConfiguration) error { return nil },
+		func(_ *pflag.FlagSet, _ *exec.DescribeStacksArgs) error { return nil },
+		mockExec,
+	})
+
+	err := run(testCmd, []string{})
+	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+}
+
+// TestDescribeStacks_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that
+// an explicit --identity CLI flag forces auth even when --process-functions=false.
+// We prove auth is attempted by providing a broken config — if the guard skipped auth,
+// no error would occur. The error proves the guard was bypassed (as intended).
+func TestDescribeStacks_ExplicitIdentityForcesAuthWhenFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	// Use a command with --identity explicitly set via the CLI flag.
+	testCmd := newTestCmdWithFunctionsDisabledAndExplicitIdentity(t, "broken-identity")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Mock should NOT be called — auth should fail before execution.
+	mockExec := exec.NewMockDescribeStacksExec(ctrl)
+
+	run := getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
+		func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
+		},
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return atmosConfigWithBrokenDefaultIdentity(), nil
+		},
+		func(_ *schema.AtmosConfiguration) error { return nil },
+		func(_ *pflag.FlagSet, _ *exec.DescribeStacksArgs) error { return nil },
+		mockExec,
+	})
+
+	err := run(testCmd, []string{})
+	assert.Error(t, err, "explicit --identity must trigger auth even when functions disabled; broken config should cause error")
+}
+
 // TestDescribeDependents_SkipsAuthWhenFunctionsDisabled verifies that describe dependents
 // does not attempt identity resolution when --process-functions=false.
 func TestDescribeDependents_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
@@ -129,6 +216,77 @@ func TestDescribeDependents_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 
 	err := run(testCmd, []string{"test-component"})
 	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
+}
+
+// TestDescribeDependents_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
+// ATMOS_IDENTITY env var does not bypass the guard for describe dependents.
+func TestDescribeDependents_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	viper.Reset()
+	t.Setenv("ATMOS_IDENTITY", "some-identity")
+	t.Setenv("IDENTITY", "")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeDependentsExec(ctrl)
+	mockExec.EXPECT().Execute(gomock.Any()).DoAndReturn(
+		func(props *exec.DescribeDependentsExecProps) error {
+			assert.Nil(t, props.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var set but no explicit --identity flag")
+			assert.False(t, props.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdWithFunctionsDisabled(t)
+
+	run := getRunnableDescribeDependentsCmd(
+		func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
+		},
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return atmosConfigWithBrokenDefaultIdentity(), nil
+		},
+		func(_ *schema.AtmosConfiguration) exec.DescribeDependentsExec {
+			return mockExec
+		},
+	)
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+}
+
+// TestDescribeDependents_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that
+// an explicit --identity CLI flag forces auth even when --process-functions=false.
+// We prove auth is attempted by providing a broken config — the error proves the guard was bypassed.
+func TestDescribeDependents_ExplicitIdentityForcesAuthWhenFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	testCmd := newTestCmdWithFunctionsDisabledAndExplicitIdentity(t, "broken-identity")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Mock should NOT be called — auth should fail before execution.
+	mockExec := exec.NewMockDescribeDependentsExec(ctrl)
+
+	run := getRunnableDescribeDependentsCmd(
+		func(opts ...AtmosValidateOption) {},
+		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+			return schema.ConfigAndStacksInfo{}, nil
+		},
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return atmosConfigWithBrokenDefaultIdentity(), nil
+		},
+		func(_ *schema.AtmosConfiguration) exec.DescribeDependentsExec {
+			return mockExec
+		},
+	)
+
+	err := run(testCmd, []string{"test-component"})
+	assert.Error(t, err, "explicit --identity must trigger auth even when functions disabled; broken config should cause error")
 }
 
 // TestDescribeAffected_SkipsAuthWhenFunctionsDisabled verifies that describe affected
@@ -169,4 +327,137 @@ func TestDescribeAffected_SkipsAuthWhenFunctionsDisabled(t *testing.T) {
 
 	err := run(testCmd, []string{})
 	assert.NoError(t, err, "should succeed when functions disabled — auth must be skipped entirely")
+}
+
+// TestDescribeAffected_SkipsAuthWhenEnvVarSetButFunctionsDisabled verifies that
+// ATMOS_IDENTITY env var does not bypass the guard for describe affected.
+func TestDescribeAffected_SkipsAuthWhenEnvVarSetButFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	viper.Reset()
+	t.Setenv("ATMOS_IDENTITY", "some-identity")
+	t.Setenv("IDENTITY", "")
+
+	brokenConfig := atmosConfigWithBrokenDefaultIdentity()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeAffectedExec(ctrl)
+	mockExec.EXPECT().Execute(gomock.Any()).DoAndReturn(
+		func(args *exec.DescribeAffectedCmdArgs) error {
+			assert.Nil(t, args.AuthManager, "AuthManager must be nil when ATMOS_IDENTITY env var set but no explicit --identity flag")
+			assert.False(t, args.ProcessYamlFunctions, "ProcessYamlFunctions must be false")
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdWithFunctionsDisabled(t)
+
+	run := getRunnableDescribeAffectedCmd(
+		func(opts ...AtmosValidateOption) {},
+		func(_ *cobra.Command, _ []string) (exec.DescribeAffectedCmdArgs, error) {
+			return exec.DescribeAffectedCmdArgs{
+				CLIConfig:            &brokenConfig,
+				ProcessYamlFunctions: false,
+				Format:               "json",
+			}, nil
+		},
+		func(_ *schema.AtmosConfiguration) exec.DescribeAffectedExec {
+			return mockExec
+		},
+	)
+
+	err := run(testCmd, []string{})
+	assert.NoError(t, err, "env var ATMOS_IDENTITY must not trigger auth when --process-functions=false")
+}
+
+// TestDescribeAffected_ExplicitIdentityForcesAuthWhenFunctionsDisabled verifies that
+// an explicit --identity CLI flag forces auth even when --process-functions=false.
+// We prove auth is attempted by providing a broken config — the error proves the guard was bypassed.
+func TestDescribeAffected_ExplicitIdentityForcesAuthWhenFunctionsDisabled(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	brokenConfig := atmosConfigWithBrokenDefaultIdentity()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Mock should NOT be called — auth should fail before execution.
+	mockExec := exec.NewMockDescribeAffectedExec(ctrl)
+
+	testCmd := newTestCmdWithFunctionsDisabledAndExplicitIdentity(t, "broken-identity")
+
+	run := getRunnableDescribeAffectedCmd(
+		func(opts ...AtmosValidateOption) {},
+		func(_ *cobra.Command, _ []string) (exec.DescribeAffectedCmdArgs, error) {
+			return exec.DescribeAffectedCmdArgs{
+				CLIConfig:            &brokenConfig,
+				ProcessYamlFunctions: false,
+				Format:               "json",
+			}, nil
+		},
+		func(_ *schema.AtmosConfiguration) exec.DescribeAffectedExec {
+			return mockExec
+		},
+	)
+
+	err := run(testCmd, []string{})
+	assert.Error(t, err, "explicit --identity must trigger auth even when functions disabled; broken config should cause error")
+}
+
+// TestIdentityExplicitGuard_FlagChangedVsEnvVar verifies the guard logic unit:
+// cmd.Flags().Changed(IdentityFlagName) must be false when only env var is set,
+// and true when the CLI flag is explicitly set. This protects all describe commands
+// that share the identityExplicit guard pattern (including describe component which
+// is not testable via factory function injection).
+func TestIdentityExplicitGuard_FlagChangedVsEnvVar(t *testing.T) {
+	t.Run("env var only does not mark flag as changed", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("ATMOS_IDENTITY", "some-identity")
+
+		// Re-bind env after reset so viper can see the env var.
+		require.NoError(t, viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"))
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().StringP("identity", "i", "", "")
+
+		// Flag should NOT be marked as changed — only env var is set.
+		assert.False(t, cmd.Flags().Changed(IdentityFlagName),
+			"Flags().Changed must be false when identity comes from env var only")
+
+		// GetIdentityFromFlags should still return the env var value (for when auth IS needed).
+		identity := GetIdentityFromFlags(cmd, []string{"test"})
+		assert.Equal(t, "some-identity", identity, "GetIdentityFromFlags should return env var value")
+	})
+
+	t.Run("explicit CLI flag marks flag as changed", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("ATMOS_IDENTITY", "")
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().StringP("identity", "i", "", "")
+		require.NoError(t, cmd.Flags().Set("identity", "explicit-identity"))
+
+		assert.True(t, cmd.Flags().Changed(IdentityFlagName),
+			"Flags().Changed must be true when --identity is explicitly set")
+
+		identity := GetIdentityFromFlags(cmd, []string{"test", "--identity", "explicit-identity"})
+		assert.Equal(t, "explicit-identity", identity)
+	})
+
+	t.Run("neither flag nor env var", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("ATMOS_IDENTITY", "")
+		t.Setenv("IDENTITY", "")
+
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().StringP("identity", "i", "", "")
+
+		assert.False(t, cmd.Flags().Changed(IdentityFlagName),
+			"Flags().Changed must be false when nothing is set")
+
+		identity := GetIdentityFromFlags(cmd, []string{"test"})
+		assert.Empty(t, identity, "GetIdentityFromFlags should return empty when nothing is set")
+	})
 }
