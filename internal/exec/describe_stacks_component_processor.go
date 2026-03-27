@@ -235,7 +235,6 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	info := buildConfigAndStacksInfo(componentName, stackFileName, stackManifestName, secs)
-	propagateAuth(&info, p.authManager)
 
 	// Ensure the component key is present in the info's ComponentSection.
 	if comp, ok := info.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
@@ -250,6 +249,20 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		return err
 	}
 	info.Context = resolvedContext
+
+	// Resolve per-component auth when YAML functions will be processed (the only consumer of auth context).
+	// This enables each component to use its own identity for !terraform.state reads.
+	componentAuthManager := p.authManager
+	if p.processYamlFunctions {
+		authSection, hasAuth := componentSection[cfg.AuthSectionName].(map[string]any)
+		if hasAuth && hasDefaultIdentity(authSection) {
+			resolved, createErr := createComponentAuthManager(p.atmosConfig, componentSection, componentName, stackName, p.authManager)
+			if createErr == nil && resolved != nil {
+				componentAuthManager = resolved
+			}
+		}
+	}
+	propagateAuth(&info, componentAuthManager)
 
 	// Filter: skip this component if it does not belong to the requested stack.
 	if shouldFilterByStack(p.filterByStack, stackFileName, stackName) {
