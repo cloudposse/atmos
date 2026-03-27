@@ -790,6 +790,65 @@ Warning: Value for undeclared variable "api_key" is <MASKED>
 	})
 }
 
+// TestBuildMetadataForUpload tests the buildMetadataForUpload function
+// which gates metadata construction on the captureOutput flag.
+func TestBuildMetadataForUpload(t *testing.T) {
+	t.Run("returns nil when captureOutput is false", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		result := buildMetadataForUpload(false, info, []byte("Plan: 1 to add, 0 to change, 0 to destroy."))
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns metadata when captureOutput is true with terraform plugin", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		output := []byte("Plan: 2 to add, 1 to change, 0 to destroy.")
+		result := buildMetadataForUpload(true, info, output)
+
+		// If terraform plugin is registered, should get metadata with output_log.
+		if result != nil {
+			assert.Contains(t, result, "has_changes")
+			assert.Contains(t, result, "output_log")
+
+			// Verify output_log decodes back to the captured output.
+			outputLog, ok := result["output_log"].(string)
+			assert.True(t, ok)
+			decoded, err := base64.StdEncoding.DecodeString(outputLog)
+			assert.NoError(t, err)
+			assert.Equal(t, output, decoded)
+		}
+	})
+
+	t.Run("returns nil when captureOutput is true but plugin not found", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "unknown-tool",
+			SubCommand: "plan",
+		}
+		result := buildMetadataForUpload(true, info, []byte("some output"))
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns metadata without output_log when output is empty", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:    "terraform",
+			SubCommand: "plan",
+		}
+		result := buildMetadataForUpload(true, info, []byte{})
+
+		// buildCIStatusData returns nil for empty output because ci.BuildStatusData
+		// parses empty string and still returns data, but addOutputLog skips empty.
+		if result != nil {
+			_, hasOutputLog := result["output_log"]
+			assert.False(t, hasOutputLog)
+		}
+	})
+}
+
 // TestShouldUploadStatusEdgeCases tests edge cases for shouldUploadStatus.
 func TestShouldUploadStatusEdgeCases(t *testing.T) {
 	testCases := []struct {

@@ -339,10 +339,7 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 
 	// Upload status only when explicitly requested via --upload-status flag.
 	if uploadStatusFlag && shouldUploadStatus(info) {
-		var metadata map[string]any
-		if captureOutput {
-			metadata = buildCIStatusData(info, maskedOutput.Bytes())
-		}
+		metadata := buildMetadataForUpload(captureOutput, info, maskedOutput.Bytes())
 		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode, metadata); uploadErr != nil {
 			return uploadErr
 		}
@@ -355,6 +352,15 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	}
 
 	return err
+}
+
+// buildMetadataForUpload builds the metadata map when CI output was captured.
+// Returns nil when captureOutput is false (CI disabled or upload not requested).
+func buildMetadataForUpload(captureOutput bool, info *schema.ConfigAndStacksInfo, maskedOutput []byte) map[string]any {
+	if !captureOutput {
+		return nil
+	}
+	return buildCIStatusData(info, maskedOutput)
 }
 
 // uploadCommandStatus uploads the command status to Atmos Pro.
