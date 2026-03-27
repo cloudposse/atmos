@@ -296,6 +296,16 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 	}
 
 	if err := json.Unmarshal(b, params.Out); err != nil {
+		// If we can't parse the response as JSON, provide enriched errors for error status codes
+		// so users still get troubleshooting hints on lock/unlock failures.
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			enrichedErr := errUtils.Build(errUtils.ErrFailedToUnmarshalAPIResponse).
+				WithCausef("HTTP status: %s", resp.Status).
+				WithContext("operation", params.Op).
+				WithHint("The API returned an unexpected response format. See troubleshooting: https://atmos-pro.com/docs/learn/troubleshooting").
+				Err()
+			return errors.Join(params.WrapErr, enrichedErr)
+		}
 		return errors.Join(errUtils.ErrFailedToUnmarshalAPIResponse, err)
 	}
 
@@ -306,13 +316,13 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 		logProAPIResponse(params.Op, responseData.AtmosApiResponse)
 		if !responseData.Success {
 			return errors.Join(params.WrapErr,
-				buildProAPIError(params.Op, responseData.Status, responseData.AtmosApiResponse))
+				buildProAPIError(params.Op, resp.StatusCode, responseData.AtmosApiResponse))
 		}
 	case *dtos.UnlockStackResponse:
 		logProAPIResponse(params.Op, responseData.AtmosApiResponse)
 		if !responseData.Success {
 			return errors.Join(params.WrapErr,
-				buildProAPIError(params.Op, responseData.Status, responseData.AtmosApiResponse))
+				buildProAPIError(params.Op, resp.StatusCode, responseData.AtmosApiResponse))
 		}
 	}
 
@@ -411,7 +421,17 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 }
 
 // buildProAPIError creates an enriched error with status-specific hints and documentation links.
+// The statusCode should be the HTTP transport status (resp.StatusCode) as the canonical source.
+// When unavailable, apiResponse.Status is used as a fallback.
 func buildProAPIError(operation string, statusCode int, apiResponse dtos.AtmosApiResponse) error {
+	// Normalize: prefer the transport status code, but fall back to apiResponse.Status if needed.
+	if statusCode == 0 {
+		statusCode = apiResponse.Status
+	}
+	if apiResponse.Status == 0 {
+		apiResponse.Status = statusCode
+	}
+
 	errorMsg := logAndReturnProAPIError(operation, apiResponse)
 
 	builder := errUtils.Build(errUtils.ErrAPIResponseError).
@@ -575,12 +595,21 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	var tokenResp dtos.ExchangeGitHubOIDCTokenResponse
 	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		// If we can't parse the response as JSON, provide enriched errors for error status codes.
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			enrichedErr := errUtils.Build(errUtils.ErrFailedToDecodeTokenResponse).
+				WithCausef("HTTP status: %s", resp.Status).
+				WithContext("operation", "ExchangeOIDCToken").
+				WithHint("The API returned an unexpected response format. See troubleshooting: https://atmos-pro.com/docs/learn/troubleshooting").
+				Err()
+			return "", errors.Join(errUtils.ErrFailedToExchangeOIDCToken, enrichedErr)
+		}
 		return "", errors.Join(errUtils.ErrFailedToDecodeTokenResponse, err)
 	}
 
 	if !tokenResp.Success {
 		return "", errors.Join(errUtils.ErrFailedToExchangeOIDCToken,
-			buildProAPIError("ExchangeOIDCToken", tokenResp.Status, tokenResp.AtmosApiResponse))
+			buildProAPIError("ExchangeOIDCToken", resp.StatusCode, tokenResp.AtmosApiResponse))
 	}
 
 	return tokenResp.Data.Token, nil

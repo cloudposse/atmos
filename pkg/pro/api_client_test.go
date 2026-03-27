@@ -566,10 +566,11 @@ func TestHandleAPIResponse(t *testing.T) {
 
 func TestBuildProAPIError_HintsPerStatusCode(t *testing.T) {
 	tests := []struct {
-		name           string
-		statusCode     int
-		expectedHints  []string // Substrings that must appear in at least one hint.
-		unexpectedHint string   // Substring that must NOT appear in any hint.
+		name               string
+		statusCode         int
+		expectedHints      []string // Substrings that must appear in at least one hint.
+		unexpectedHint     string   // Substring that must NOT appear in any hint.
+		zeroResponseStatus bool     // When true, apiResponse.Status is set to 0 to simulate missing status in JSON body.
 	}{
 		{
 			name:       "403 includes permissions link",
@@ -613,12 +614,46 @@ func TestBuildProAPIError_HintsPerStatusCode(t *testing.T) {
 			expectedHints:  []string{},
 			unexpectedHint: "atmos-pro.com/docs",
 		},
+		{
+			name:       "401 with missing response status (status=0 in body)",
+			statusCode: http.StatusUnauthorized,
+			expectedHints: []string{
+				"id-token: write",
+				"atmos-pro.com/docs/configure/github-workflows",
+				"atmos-pro.com/docs/learn/authentication",
+			},
+			zeroResponseStatus: true,
+		},
+		{
+			name:       "403 with missing response status (status=0 in body)",
+			statusCode: http.StatusForbidden,
+			expectedHints: []string{
+				"per-repository",
+				"atmos-pro.com/docs/learn/permissions",
+				"atmos-pro.com/docs/install",
+			},
+			zeroResponseStatus: true,
+		},
+		{
+			name:       "500 with missing response status (status=0 in body)",
+			statusCode: http.StatusInternalServerError,
+			expectedHints: []string{
+				"retried automatically",
+				"`trace_id`",
+				"atmos-pro.com/docs/learn/troubleshooting",
+			},
+			zeroResponseStatus: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			responseStatus := tt.statusCode
+			if tt.zeroResponseStatus {
+				responseStatus = 0
+			}
 			apiResponse := dtos.AtmosApiResponse{
-				Status:       tt.statusCode,
+				Status:       responseStatus,
 				ErrorMessage: "test error",
 				TraceID:      "abc123",
 			}
