@@ -22,13 +22,12 @@ base_path: "."
 # ---------------------------------------------------------------------------
 # Atmos Toolchain
 # ---------------------------------------------------------------------------
-# Auto-install `uv` (Python package manager) via Atmos toolchain.
+# Map `uv` to the aqua registry so the toolchain can resolve and install it.
 # This ensures `uvx` is available before any MCP server starts.
-# Must be defined before mcp.servers so the binary is resolved at startup.
+# Install with: atmos toolchain install astral-sh/uv@0.7.12
 toolchain:
-  tools:
-    uv:
-      version: ">=0.7"
+  aliases:
+    uv: astral-sh/uv
 
 # ---------------------------------------------------------------------------
 # MCP Servers
@@ -56,7 +55,7 @@ mcp:
         - "awslabs.aws-documentation-mcp-server@latest"
       env:
         FASTMCP_LOG_LEVEL: "ERROR"
-        PYTHONWARNINGS: "ignore::DeprecationWarning"
+
       description: "AWS Documentation — search and fetch AWS docs"
 
     # -----------------------------------------------------------------------
@@ -72,7 +71,7 @@ mcp:
         - "run"
         - "https://knowledge-mcp.global.api.aws"
       env:
-        PYTHONWARNINGS: "ignore::DeprecationWarning"
+
       description: "AWS Knowledge — managed AWS knowledge base (remote)"
 
     # -----------------------------------------------------------------------
@@ -89,7 +88,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
-        PYTHONWARNINGS: "ignore::DeprecationWarning"
+
       description: "AWS Pricing — real-time pricing and cost analysis"
       auth_identity: "readonly"
 
@@ -110,7 +109,7 @@ mcp:
         AWS_REGION: "us-east-1"
         READ_OPERATIONS_ONLY: "true"
         REQUIRE_MUTATION_CONSENT: "true"
-        PYTHONWARNINGS: "ignore::DeprecationWarning"
+
       description: "AWS API — direct AWS CLI access with security controls"
       auth_identity: "readonly"
 
@@ -129,7 +128,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
-        PYTHONWARNINGS: "ignore::DeprecationWarning"
+
       description: "AWS Security — Well-Architected security posture assessment"
       auth_identity: "readonly"
 
@@ -147,7 +146,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
-        PYTHONWARNINGS: "ignore::DeprecationWarning"
+
       description: "AWS Billing — billing summaries and payment history"
       auth_identity: "readonly"
 
@@ -165,7 +164,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
-        PYTHONWARNINGS: "ignore::DeprecationWarning"
+
       description: "AWS IAM — role/policy analysis and access patterns"
       auth_identity: "readonly"
 
@@ -183,7 +182,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
-        PYTHONWARNINGS: "ignore::DeprecationWarning"
+
       description: "AWS CloudTrail — event history and API call auditing"
       auth_identity: "readonly"
 
@@ -224,18 +223,43 @@ auth:
           id: "123456789012"                             # ← Change this
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # AI Configuration (required for atmos ai chat / atmos ai ask / atmos ai exec)
 # ---------------------------------------------------------------------------
+# Docs: https://atmos.tools/cli/configuration/ai
 ai:
   enabled: true
-  # Configure your preferred AI provider.
-  # default_provider: "anthropic"
-  # providers:
-  #   anthropic:
-  #     api_key_env_var: "ANTHROPIC_API_KEY"
-  #     model: "claude-sonnet-4-20250514"
+  default_provider: "anthropic"
+
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
+      cache:
+        enabled: true
+
+    # Uncomment to add more providers:
+    # openai:
+    #   model: "gpt-5.4"
+    #   api_key: !env "OPENAI_API_KEY"
+    # ollama:
+    #   model: "llama4"
+    #   base_url: "http://localhost:11434/v1"
+
   tools:
     enabled: true
+    require_confirmation: true
+    # Tools that execute without confirmation:
+    allowed_tools:
+      - atmos_describe_component
+      - atmos_list_stacks
+      - atmos_validate_stacks
+      - read_stack_file
+
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
 
 # Minimal stacks config (required for atmos to load).
 stacks:

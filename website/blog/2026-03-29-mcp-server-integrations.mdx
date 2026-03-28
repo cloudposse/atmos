@@ -183,14 +183,16 @@ Atmos authenticates through the identity chain, writes isolated credential files
 
 ## Toolchain Integration
 
-Auto-install `uvx` (the Python package runner used by all AWS MCP servers) via the
-[Atmos Toolchain](/cli/configuration/toolchain):
+Map `uv` to the aqua registry and install via the [Atmos Toolchain](/cli/configuration/toolchain):
 
 ```yaml
 toolchain:
-  tools:
-    uv:
-      version: ">=0.7"
+  aliases:
+    uv: astral-sh/uv
+```
+
+```bash
+atmos toolchain install astral-sh/uv@0.7.12
 ```
 
 ## IDE Integration

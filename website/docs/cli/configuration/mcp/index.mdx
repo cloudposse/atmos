@@ -194,16 +194,19 @@ When `auth_identity` is set, Atmos:
 
 ### Toolchain Integration
 
-Auto-install prerequisites like `uv` (which provides `uvx` for AWS MCP servers) via the [Atmos Toolchain](/cli/configuration/toolchain):
+Map `uv` to the aqua registry and install via the [Atmos Toolchain](/cli/configuration/toolchain):
 
 <File title="atmos.yaml">
 ```yaml
 toolchain:
-  tools:
-    uv:
-      version: ">=0.7"
+  aliases:
+    uv: astral-sh/uv
 ```
 </File>
+
+```bash
+atmos toolchain install astral-sh/uv@0.7.12
+```
 
 ### Example: AWS MCP Servers
 

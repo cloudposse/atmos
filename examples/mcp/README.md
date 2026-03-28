@@ -24,11 +24,11 @@ The following AWS MCP servers are pre-configured in `atmos.yaml`:
 
 ### Security & Compliance
 
-| Server              | What It Does                                       | Credentials                      |
-|---------------------|----------------------------------------------------|---------------------------------|
-| **aws-security**    | Well-Architected Security Pillar assessment        | Yes — security services read    |
-| **aws-iam**         | IAM role/policy analysis, permission boundaries    | Yes — `iam:Get*`, `iam:List*`  |
-| **aws-cloudtrail**  | CloudTrail event history, API call auditing        | Yes — `cloudtrail:LookupEvents`|
+| Server             | What It Does                                    | Credentials                     |
+|--------------------|-------------------------------------------------|---------------------------------|
+| **aws-security**   | Well-Architected Security Pillar assessment     | Yes — security services read    |
+| **aws-iam**        | IAM role/policy analysis, permission boundaries | Yes — `iam:Get*`, `iam:List*`   |
+| **aws-cloudtrail** | CloudTrail event history, API call auditing     | Yes — `cloudtrail:LookupEvents` |
 
 ### General
 
@@ -235,15 +235,15 @@ atmos mcp tools aws-pricing
 # Test all servers at once
 atmos mcp status
 # Example output:
-#   NAME              STATUS    TOOLS   DESCRIPTION
-#   aws-api           running   3       AWS API — direct AWS CLI access
-#   aws-billing       running   5       AWS Billing — summaries and payment history
-#   aws-cloudtrail    running   3       AWS CloudTrail — event history and auditing
-#   aws-docs          running   4       AWS Documentation — search and fetch
-#   aws-iam           running   4       AWS IAM — role/policy analysis
-#   aws-knowledge     running   2       AWS Knowledge — managed knowledge base
-#   aws-pricing       running   7       AWS Pricing — real-time pricing
-#   aws-security      running   6       AWS Security — posture assessment
+#   NAME           STATUS   TOOLS  DESCRIPTION
+#   aws-api        running  2      AWS API — direct AWS CLI access with security controls
+#   aws-billing    running  25     AWS Billing — summaries and payment history
+#   aws-cloudtrail running  5      AWS CloudTrail — event history and API call auditing
+#   aws-docs       running  4      AWS Documentation — search and fetch AWS docs
+#   aws-iam        running  29     AWS IAM — role/policy analysis and access patterns
+#   aws-knowledge  running  6      AWS Knowledge — managed AWS knowledge base (remote)
+#   aws-pricing    running  9      AWS Pricing — on-demand and reserved pricing (free API)
+#   aws-security   running  6      AWS Security — Well-Architected posture assessment
 ```
 
 ## Configuration Reference
@@ -256,12 +256,12 @@ mcp:
     <server-name>:
       # Standard MCP fields (compatible with Claude Code / Codex / Gemini CLI)
       command: "uvx"                              # Command to run
-      args: [ "package-name@latest" ]               # Arguments
+      args: [ "package-name@latest" ]             # Arguments
       env: # Environment variables
         AWS_REGION: "us-east-1"
 
       # Atmos extensions
-      description: "Human-readable description"   # Shown in `atmos mcp list`
+      description: "Human-readable description"    # Shown in `atmos mcp list`
       auth_identity: "my-identity"                 # Atmos Auth credential injection
       auto_start: false                            # Start automatically
       timeout: "30s"                               # Connection timeout
@@ -320,18 +320,20 @@ Run `atmos auth login` once and all servers work.
 
 ## Atmos Toolchain Integration
 
-To auto-install the `uv` package manager (which provides `uvx`), add it to your toolchain:
+Map `uv` to the aqua registry so the toolchain can resolve it, then install:
 
 ```yaml
 # atmos.yaml
 toolchain:
-  tools:
-    uv:
-      version: ">=0.7"
+  aliases:
+    uv: astral-sh/uv
 ```
 
-Atmos will automatically install `uv` (and make `uvx` available) before starting any MCP server. This ensures the
-correct version is used across all team members and CI/CD.
+```bash
+atmos toolchain install astral-sh/uv@0.7.12
+```
+
+Atmos resolves `uvx` from the toolchain PATH before starting any MCP server.
 
 ## Server Details
 
@@ -467,7 +469,7 @@ atmos mcp generate-config --output .cursor/mcp.json
 
 ### List configured servers
 
-```
+```text
 $ atmos mcp list
        NAME         STATUS                           DESCRIPTION
 ─────────────────────────────────────────────────────────────────────────────────────────
@@ -483,7 +485,7 @@ $ atmos mcp list
 
 ### Explore tools from a server
 
-```
+```text
 $ atmos mcp tools aws-api
          TOOL                                      DESCRIPTION
 ───────────────────────────────────────────────────────────────────────────────────────────
@@ -491,7 +493,7 @@ $ atmos mcp tools aws-api
  call_aws              Execute AWS CLI commands with validation and proper error handling.
 ```
 
-```
+```text
 $ atmos mcp tools aws-security
            TOOL                                                         DESCRIPTION
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -505,7 +507,7 @@ $ atmos mcp tools aws-security
 
 ### Test server connectivity
 
-```
+```text
 $ atmos mcp test aws-docs
 ✓ Server started successfully
 ✓ Initialization handshake complete
@@ -513,12 +515,28 @@ $ atmos mcp test aws-docs
 ✓ Server responds to ping
 ```
 
-```
+```text
 $ atmos mcp test aws-security
 ✓ Server started successfully
 ✓ Initialization handshake complete
 ✓ 6 tools available
 ✓ Server responds to ping
+```
+
+### Check status of all servers
+
+```text
+$ atmos mcp status
+      NAME       STATUS   TOOLS                        DESCRIPTION
+─────────────────────────────────────────────────────────────────────────────────────────
+ aws-api         running  2      AWS API — direct AWS CLI access with security controls
+ aws-billing     running  25     AWS Billing — summaries and payment history
+ aws-cloudtrail  running  5      AWS CloudTrail — event history and API call auditing
+ aws-docs        running  4      AWS Documentation — search and fetch AWS docs
+ aws-iam         running  29     AWS IAM — role/policy analysis and access patterns
+ aws-knowledge   running  6      AWS Knowledge — managed AWS knowledge base (remote)
+ aws-pricing     running  9      AWS Pricing — on-demand and reserved pricing (free API)
+ aws-security    running  6      AWS Security — Well-Architected posture assessment
 ```
 
 ## Learn More

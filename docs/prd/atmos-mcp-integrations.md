@@ -164,9 +164,12 @@ mcp:
 
 ```yaml
 toolchain:
-  tools:
-    uv:
-      version: ">=0.7"
+  aliases:
+    uv: astral-sh/uv
+```
+
+```bash
+atmos toolchain install astral-sh/uv@0.7.12
 ```
 
 This ensures `uvx` is available before any AWS MCP server is started.
