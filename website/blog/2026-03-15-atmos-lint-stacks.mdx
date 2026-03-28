@@ -1,0 +1,217 @@
+---
+slug: atmos-lint-stacks
+title: "Introducing `atmos lint stacks`: Static Analysis for Stack Configurations"
+authors: [nitrocode]
+tags: [feature, dx]
+---
+
+import Terminal from '@site/src/components/Terminal'
+
+Catch misconfigurations before they cause problems. `atmos lint stacks` is a new static analysis command that scans your stack YAML files for anti-patterns, DRY violations, and structural issues—distinct from `atmos validate stacks`, which checks correctness.
+
+<!--truncate-->
+
+## What Is `atmos lint stacks`?
+
+`atmos validate stacks` answers **"is this configuration valid?"**
+`atmos lint stacks` answers **"is this configuration well-structured?"**
+
+Linting runs 10 built-in quality rules against your stack manifests without touching Terraform or cloud providers. It's fast, offline, and can be added to any CI pipeline.
+
+## Quick Start
+
+```shell
+# Lint everything
+atmos lint stacks
+
+# Get machine-readable JSON for downstream tooling
+atmos lint stacks --format json
+
+# Run only specific rules
+atmos lint stacks --rule L-09,L-04
+
+# Suppress warnings and info — show only errors
+atmos lint stacks --severity error
+
+# Scope to one stack
+atmos lint stacks -s plat-ue2-prod
+```
+
+## The 10 Built-In Rules
+
+| ID | Name | Severity | Auto-fixable |
+|----|------|----------|:---:|
+| **L-09** | Inheritance Cycle Detection | error | — |
+| **L-04** | Abstract Component Leak | error | — |
+| **L-02** | Redundant No-Op Override | warning | ✓ |
+| **L-01** | Dead Var Detection | warning | — |
+| **L-03** | Import Depth Warning | warning | — |
+| **L-07** | Orphaned Catalog File | warning | — |
+| **L-08** | Sensitive Var at Global Scope | warning | — |
+| **L-10** | Env Var Shadowing | warning | — |
+| **L-05** | Catalog File Cohesion | info | — |
+| **L-06** | DRY Extraction Opportunity | info | — |
+
+### L-09: Inheritance Cycle Detection
+
+Detects components that inherit from each other in a circular chain:
+
+```yaml
+# stacks/catalog/components.yaml
+components:
+  terraform:
+    comp-a:
+      metadata:
+        inherits: [comp-b]  # ← L-09: cycle! comp-b also inherits comp-a
+    comp-b:
+      metadata:
+        inherits: [comp-a]
+```
+
+Circular inheritance is a hard error that prevents Atmos from resolving configurations.
+
+### L-04: Abstract Component Leak
+
+Flags abstract components with no concrete inheritors — they define configuration that will never be deployed:
+
+```yaml
+components:
+  terraform:
+    vpc-base:
+      metadata:
+        type: abstract  # ← L-04: no component inherits from vpc-base
+      vars:
+        cidr: "10.0.0.0/16"
+```
+
+### L-02: Redundant No-Op Override
+
+Finds components that re-declare a variable with the same value already set by the base component — pure noise:
+
+```yaml
+components:
+  terraform:
+    vpc-base:
+      metadata: {type: abstract}
+      vars:
+        region: us-east-1
+    vpc-prod:
+      metadata:
+        inherits: [vpc-base]
+      vars:
+        region: us-east-1  # ← L-02: same value as inherited — remove this
+```
+
+### L-08: Sensitive Var at Global Scope
+
+Catches secrets defined at the top-level `vars` section where they're visible across all components:
+
+```yaml
+vars:
+  my_database_password: "hunter2"  # ← L-08: sensitive var at global scope
+```
+
+### L-06: DRY Extraction Opportunity
+
+Identifies variable values that are identical across many stacks and suggests extracting them to a shared catalog component.
+
+## Configuration
+
+Customize rule behavior in `atmos.yaml`:
+
+```yaml
+lint:
+  max_import_depth: 5       # L-03: warn when import chains exceed this depth
+  dry_threshold_pct: 80     # L-06: flag when a value appears in ≥N% of stacks
+  sensitive_var_patterns:   # L-08: additional patterns (merged with built-in 120+)
+    - "*api_key*"
+    - "*db_password*"
+  rules:
+    L-03: error             # promote import depth from warning to error
+    L-05: warning           # promote cohesion from info to warning
+```
+
+## Output Formats
+
+**Text** (default) — grouped by severity with file attribution and fix hints:
+
+<Terminal title="atmos lint stacks">
+```console
+$ atmos lint stacks
+
+ERRORS (2)
+
+  L-09 stacks/catalog/network.yaml
+    Inheritance cycle detected: vpc-prod → vpc-base → vpc-prod
+    Fix: Break the cycle by removing one of the inherits entries
+
+  L-04 stacks/catalog/compute.yaml
+    Abstract component 'ecs-base' has no concrete inheritors
+    Fix: Either add a concrete inheritor or remove the abstract component
+
+WARNINGS (3)
+
+  L-02 stacks/prod/us-east-1.yaml
+    Component 'vpc' re-declares var 'region' with the same value as its base
+    Fix: Remove the redundant var override
+
+  L-08 stacks/globals.yaml
+    Global var 'db_password' matches a sensitive pattern
+    Fix: Move this var to a component-level secrets reference
+
+  L-07 stacks/catalog/unused.yaml
+    Stack file 'catalog/unused.yaml' is not referenced by any import chain
+    Fix: Import this file or remove it if no longer needed
+
+Summary: 2 errors, 3 warnings, 0 info
+```
+</Terminal>
+
+**JSON** (`--format json`) — structured output for pipeline integration:
+
+```json
+{
+  "findings": [
+    {
+      "rule_id": "L-09",
+      "severity": "error",
+      "message": "Inheritance cycle detected: vpc-prod → vpc-base → vpc-prod",
+      "file": "stacks/catalog/network.yaml",
+      "fix_hint": "Break the cycle by removing one of the inherits entries"
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "warnings": 3,
+    "info": 0
+  }
+}
+```
+
+## Exit Codes
+
+- **0** — no findings at or above the minimum severity
+- **1** — one or more error-severity findings
+
+Use `--severity error` to make the command exit 0 even with warnings (useful for advisory-only pipelines).
+
+## CI Integration
+
+Add `atmos lint stacks` to your CI pipeline to catch issues before they reach `terraform plan`:
+
+```yaml
+# GitHub Actions
+- name: Lint stacks
+  run: atmos lint stacks --format json > lint-results.json
+  continue-on-error: false
+
+- name: Upload lint results
+  uses: actions/upload-artifact@v4
+  with:
+    name: lint-results
+    path: lint-results.json
+```
+
+## Documentation
+
+For full documentation including all rule details and configuration options, see the [atmos lint stacks reference](/cli/commands/lint/stacks).

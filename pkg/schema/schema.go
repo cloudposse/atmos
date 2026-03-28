@@ -108,6 +108,8 @@ type AtmosConfiguration struct {
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
 	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
+	// Lint configures the atmos lint stacks command behavior.
+	Lint LintConfig `yaml:"lint,omitempty" json:"lint,omitempty" mapstructure:"lint"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -311,10 +313,11 @@ type Terminal struct {
 
 // MaskSettings contains configuration for sensitive data masking.
 type MaskSettings struct {
-	Enabled     bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	Replacement string   `yaml:"replacement,omitempty" json:"replacement,omitempty" mapstructure:"replacement"` // Custom replacement string (default: ***MASKED***)
-	Patterns    []string `yaml:"patterns,omitempty" json:"patterns,omitempty" mapstructure:"patterns"`          // Custom regex patterns to mask
-	Literals    []string `yaml:"literals,omitempty" json:"literals,omitempty" mapstructure:"literals"`          // Custom literal values to mask
+	Enabled              bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Replacement          string   `yaml:"replacement,omitempty" json:"replacement,omitempty" mapstructure:"replacement"`                                  // Custom replacement string (default: ***MASKED***)
+	Patterns             []string `yaml:"patterns,omitempty" json:"patterns,omitempty" mapstructure:"patterns"`                                           // Custom regex patterns to mask
+	Literals             []string `yaml:"literals,omitempty" json:"literals,omitempty" mapstructure:"literals"`                                           // Custom literal values to mask
+	SensitiveKeyPatterns []string `yaml:"sensitive_key_patterns,omitempty" json:"sensitive_key_patterns,omitempty" mapstructure:"sensitive_key_patterns"` // Glob patterns for sensitive variable/key names shared with lint L-08 rule
 }
 
 // IsPagerEnabled reports whether a pager should be used based on Terminal.Pager.

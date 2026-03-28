@@ -1,0 +1,85 @@
+package rules
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/cloudposse/atmos/pkg/lint"
+)
+
+const defaultMaxImportDepth = 3
+
+// l03ImportDepthRule warns when a logical stack has an import depth that exceeds a configurable threshold.
+type l03ImportDepthRule struct{}
+
+func newL03ImportDepthRule() lint.LintRule {
+	return &l03ImportDepthRule{}
+}
+
+func (r *l03ImportDepthRule) ID() string   { return "L-03" }
+func (r *l03ImportDepthRule) Name() string { return "Import Depth Warning" }
+func (r *l03ImportDepthRule) Description() string {
+	return "Warns when the import graph depth for a stack file exceeds the configured threshold. " +
+		"Depth is measured as the number of nodes in the longest import chain (node count, not edge count): " +
+		"a file with no imports has depth 1, a file importing one other file has depth 2, etc."
+}
+func (r *l03ImportDepthRule) Severity() lint.Severity { return lint.SeverityWarning }
+func (r *l03ImportDepthRule) AutoFixable() bool       { return false }
+
+func (r *l03ImportDepthRule) Run(ctx lint.LintContext) ([]lint.LintFinding, error) {
+	threshold := ctx.LintConfig.MaxImportDepth
+	if threshold <= 0 {
+		threshold = defaultMaxImportDepth
+	}
+
+	var findings []lint.LintFinding
+
+	// For each file that imports others, measure max depth using BFS.
+	for rootFile, imports := range ctx.ImportGraph {
+		if len(imports) == 0 {
+			continue
+		}
+		depth := maxImportDepth(rootFile, ctx.ImportGraph)
+		if depth > threshold {
+			// Convert to a path relative to StacksBasePath for portable, readable output
+			// (mirrors L-07's displayPath convention so findings are consistent).
+			displayFile := rootFile
+			if ctx.StacksBasePath != "" {
+				if rel, err := filepath.Rel(ctx.StacksBasePath, rootFile); err == nil {
+					displayFile = filepath.ToSlash(rel)
+				}
+			}
+			findings = append(findings, lint.LintFinding{
+				RuleID:   r.ID(),
+				Severity: r.Severity(),
+				File:     displayFile,
+				Message:  fmt.Sprintf("Stack file '%s' has import depth %d which exceeds the configured threshold of %d", displayFile, depth, threshold),
+				FixHint:  fmt.Sprintf("Reduce nesting by flattening imports or increasing max_import_depth in the lint config"),
+			})
+		}
+	}
+
+	return findings, nil
+}
+
+// maxImportDepth computes the maximum import chain depth starting from root.
+func maxImportDepth(root string, graph map[string][]string) int {
+	visited := make(map[string]bool)
+	return dfsDepth(root, graph, visited)
+}
+
+func dfsDepth(node string, graph map[string][]string, visited map[string]bool) int {
+	if visited[node] {
+		return 0
+	}
+	visited[node] = true
+	maxChild := 0
+	for _, child := range graph[node] {
+		d := dfsDepth(child, graph, visited)
+		if d > maxChild {
+			maxChild = d
+		}
+	}
+	visited[node] = false
+	return maxChild + 1
+}

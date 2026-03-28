@@ -6,7 +6,7 @@ atmos:
   image_url: https://github.com/cloudposse/atmos/raw/main/docs/img/atmos-logo-128.svg
 
 nitrocode:
-  name: nitrocode
+  name: RB
   title: CEO of Infralicious
   url: https://github.com/nitrocode
   image_url: https://github.com/nitrocode.png
