@@ -40,16 +40,19 @@ mcp:
       args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Billing — summaries and payment history"
+      auth_identity: "readonly"
     aws-cost-explorer:
       command: uvx
       args: ["awslabs.cost-explorer-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Cost Explorer — spend breakdowns and forecasts"
+      auth_identity: "readonly"
     aws-pricing:
       command: uvx
       args: ["awslabs.aws-pricing-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Pricing — on-demand and reserved pricing"
+      auth_identity: "readonly"
 
     # Security & Compliance
     aws-security:
@@ -57,16 +60,19 @@ mcp:
       args: ["awslabs.well-architected-security-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Security — Well-Architected posture assessment"
+      auth_identity: "readonly"
     aws-iam:
       command: uvx
       args: ["awslabs.iam-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS IAM — role/policy analysis"
+      auth_identity: "readonly"
     aws-cloudtrail:
       command: uvx
       args: ["awslabs.cloudtrail-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS CloudTrail — event history and auditing"
+      auth_identity: "readonly"
 
     # Documentation (no credentials needed)
     aws-docs:
@@ -115,10 +121,10 @@ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
 Atmos shows which MCP servers are active and which tools the AI uses:
 
 ```text
-INFO MCP server started server=aws-docs tools=4
-INFO MCP server started server=aws-pricing tools=7
-INFO Registered 11 tools from 2 MCP server(s)
-INFO AI tools initialized: 26 total
+ℹ MCP server "aws-docs" started (4 tools)
+ℹ MCP server "aws-pricing" started (7 tools)
+ℹ Registered 11 tools from 2 MCP server(s)
+ℹ AI tools initialized: 26 total
 ```
 
 After the AI responds, tool executions are listed:
@@ -134,34 +140,6 @@ Tool usage is not inferred — the AI provider explicitly declares which tools i
 via the API protocol (`tool_use` stop reason with a `tool_calls` array). Atmos executes the
 requested tools, sends results back to the AI for the final answer, and records every call.
 If no tool executions appear, the AI genuinely chose not to use any tools for that question.
-
-## Pre-configured Servers
-
-The [MCP example](/examples/mcp) includes 9 AWS MCP servers across three categories:
-
-**Cost Analysis & FinOps** — `aws-billing`, `aws-cost-explorer`, `aws-pricing`
-
-**Security & Compliance** — `aws-security`, `aws-iam`, `aws-cloudtrail`
-
-**General** — `aws-api`, `aws-docs`, `aws-knowledge`
-
-## What You Can Do
-
-```bash
-# FinOps — cost analysis
-atmos ai ask "What did we spend on EC2 last month?"
-atmos ai ask "Compare t3.medium vs t3.large pricing in us-west-2"
-
-# Security — posture checks
-atmos ai ask "Is GuardDuty enabled in us-east-1?"
-atmos ai ask "List all IAM roles with admin access"
-
-# Documentation — no credentials needed
-atmos ai ask "How do I configure S3 bucket lifecycle rules?"
-
-# Terraform analysis with cloud context
-atmos terraform plan vpc -s prod --ai --skill atmos-terraform
-```
 
 ## CLI Commands
 

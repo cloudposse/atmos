@@ -13,7 +13,7 @@ tools become available across the Atmos AI surface:
 
 ## What's Included
 
-Nine AWS MCP servers are pre-configured in `atmos.yaml`:
+The following AWS MCP servers are pre-configured in `atmos.yaml`:
 
 ### Cost Analysis & FinOps
 
@@ -105,10 +105,10 @@ atmos mcp generate-config
 When you run any AI command, Atmos logs which MCP servers started and how many tools were discovered:
 
 ```text
-INFO MCP server started server=aws-docs tools=4
-INFO MCP server started server=aws-pricing tools=7
-INFO Registered 11 tools from 2 MCP server(s)
-INFO AI tools initialized: 26 total
+ℹ MCP server "aws-docs" started (4 tools)
+ℹ MCP server "aws-pricing" started (7 tools)
+ℹ Registered 11 tools from 2 MCP server(s)
+ℹ AI tools initialized: 26 total
 ```
 
 After the AI responds, a "Tool Executions" section shows which tools were actually called:
@@ -236,12 +236,16 @@ atmos mcp tools aws-pricing
 # Test all servers at once
 atmos mcp status
 # Example output:
-#   NAME            STATUS    TOOLS   DESCRIPTION
-#   aws-api         running   3       AWS API — direct AWS CLI access
-#   aws-docs        running   4       AWS Documentation — search and fetch
-#   aws-knowledge   running   2       AWS Knowledge — managed knowledge base
-#   aws-pricing     running   7       AWS Pricing — real-time pricing
-#   aws-security    running   6       AWS Security — posture assessment
+#   NAME              STATUS    TOOLS   DESCRIPTION
+#   aws-api           running   3       AWS API — direct AWS CLI access
+#   aws-billing       running   5       AWS Billing — summaries and payment history
+#   aws-cloudtrail    running   3       AWS CloudTrail — event history and auditing
+#   aws-cost-explorer running   7       AWS Cost Explorer — spend breakdowns
+#   aws-docs          running   4       AWS Documentation — search and fetch
+#   aws-iam           running   4       AWS IAM — role/policy analysis
+#   aws-knowledge     running   2       AWS Knowledge — managed knowledge base
+#   aws-pricing       running   7       AWS Pricing — real-time pricing
+#   aws-security      running   6       AWS Security — posture assessment
 ```
 
 ## Configuration Reference
@@ -453,7 +457,7 @@ Example generated output:
     },
     "aws-security": {
       "command": "atmos",
-      "args": ["auth", "exec", "-i", "security-audit", "--",
+      "args": ["auth", "exec", "-i", "readonly", "--",
                "uvx", "awslabs.well-architected-security-mcp-server@latest"],
       "env": { "AWS_REGION": "us-east-1" }
     }
