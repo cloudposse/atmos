@@ -48,11 +48,12 @@ var statusCmd = &cobra.Command{
 			ctx = context.Background()
 		}
 
+		startOpts := buildStartOptions(&atmosConfig)
 		headers := []string{"NAME", "STATUS", "TOOLS", "DESCRIPTION"}
 		var rows [][]string
 
 		for _, session := range mgr.List() {
-			result := mgr.Test(ctx, session.Name())
+			result := mgr.Test(ctx, session.Name(), startOpts...)
 			status := "error"
 			toolCount := "0"
 

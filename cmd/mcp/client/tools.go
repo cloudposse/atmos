@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -52,7 +53,8 @@ func executeMCPTools(cmd *cobra.Command, args []string) error {
 		ctx = context.Background()
 	}
 
-	if err := mgr.Start(ctx, name); err != nil {
+	startOpts := buildStartOptions(&atmosConfig)
+	if err := mgr.Start(ctx, name, startOpts...); err != nil {
 		return err
 	}
 
@@ -67,18 +69,34 @@ func executeMCPTools(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	const maxDescLen = 80
-
 	headers := []string{"TOOL", "DESCRIPTION"}
 	var rows [][]string
 	for _, tool := range tools {
-		desc := tool.Description
-		if len(desc) > maxDescLen {
-			desc = desc[:maxDescLen-3] + "..."
-		}
+		// Use only the first sentence for table display.
+		desc := firstSentence(tool.Description)
 		rows = append(rows, []string{tool.Name, desc})
 	}
 
 	fmt.Fprintln(os.Stderr, theme.CreateMinimalTable(headers, rows))
 	return nil
+}
+
+// firstSentence extracts the first sentence from a description, collapsing whitespace.
+// Returns the complete first sentence (up to period+space), or truncates at a markdown
+// header boundary if no sentence break is found.
+func firstSentence(desc string) string {
+	// Collapse all whitespace (newlines, tabs, multiple spaces) into single spaces.
+	desc = strings.Join(strings.Fields(desc), " ")
+
+	// Stop at first period followed by a space (end of sentence).
+	if idx := strings.Index(desc, ". "); idx > 0 {
+		return desc[:idx+1]
+	}
+
+	// Stop at markdown header.
+	if idx := strings.Index(desc, " ##"); idx > 0 {
+		return strings.TrimSpace(desc[:idx]) + "."
+	}
+
+	return desc
 }

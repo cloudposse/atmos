@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -121,7 +123,11 @@ func prepareEnv(ctx context.Context, config *ParsedConfig, opts []StartOption) [
 
 // connectAndDiscover spawns the MCP server, performs the handshake, and lists tools.
 func (s *Session) connectAndDiscover(ctx context.Context, env []string) error {
-	cmd := exec.CommandContext(ctx, s.config.Command, s.config.Args...) //nolint:gosec // Command from atmos.yaml config.
+	// Resolve the command using the subprocess environment PATH, not the parent process PATH.
+	// This is necessary because toolchain binaries (uvx, npx) may only exist in the
+	// toolchain PATH prepended by WithToolchain, not in the system PATH.
+	command := resolveCommandInEnv(s.config.Command, env)
+	cmd := exec.CommandContext(ctx, command, s.config.Args...)
 	cmd.Env = env
 	cmd.Stderr = os.Stderr
 
@@ -257,6 +263,36 @@ func WithToolchain(resolver ToolchainResolver) StartOption {
 
 		return env, nil
 	}
+}
+
+// resolveCommandInEnv looks up a command using the PATH from the given env list.
+// If the command is already absolute or not found, it returns the original.
+func resolveCommandInEnv(command string, env []string) string {
+	if filepath.IsAbs(command) {
+		return command
+	}
+
+	// Extract PATH from the env list (last entry wins).
+	const pathPrefix = "PATH="
+	var envPATH string
+	for _, e := range env {
+		if strings.HasPrefix(e, pathPrefix) {
+			envPATH = e[len(pathPrefix):]
+		}
+	}
+	if envPATH == "" {
+		return command
+	}
+
+	// Search each PATH directory for the command.
+	for _, dir := range filepath.SplitList(envPATH) {
+		candidate := filepath.Join(dir, command)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+
+	return command
 }
 
 // buildEnv creates the environment variable list for the subprocess.

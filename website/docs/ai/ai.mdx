@@ -191,7 +191,7 @@ atmos mcp status                  # Show live status of all servers
 atmos mcp generate-config         # Generate .mcp.json for Claude Code / IDE
 
 # Ask questions — AI uses the appropriate MCP server automatically
-atmos ai ask "What did we spend on EC2 last month?"     # uses aws-cost-explorer
+atmos ai ask "What did we spend on EC2 last month?"     # uses aws-billing
 atmos ai ask "Is GuardDuty enabled in us-east-1?"       # uses aws-security
 atmos ai ask "How do I configure S3 lifecycle rules?"   # uses aws-docs
 ```
@@ -201,11 +201,11 @@ atmos ai ask "How do I configure S3 lifecycle rules?"   # uses aws-docs
 mcp:
   servers:
     # FinOps
-    aws-cost-explorer:
+    aws-billing:
       command: uvx
-      args: ["awslabs.cost-explorer-mcp-server@latest"]
+      args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
-      description: "AWS Cost Explorer — spend breakdowns and forecasts"
+      description: "AWS Billing — summaries, cost explorer, and forecasts"
       auth_identity: "readonly"
 
     # Security & Compliance

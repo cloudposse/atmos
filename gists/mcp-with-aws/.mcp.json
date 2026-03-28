@@ -7,107 +7,107 @@
     "aws-billing-cost-management": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "billing-cost-management"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-cost-explorer": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "cost-explorer"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-pricing": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "pricing"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-terraform": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "terraform"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-cfn": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "cfn"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-cdk": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "cdk"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-iac": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "iac"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-ecs": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "ecs"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-eks": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "eks"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-serverless": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "serverless"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-cloudwatch": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "cloudwatch"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-cloudtrail": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "cloudtrail"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-iam": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "iam"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-well-architected-security": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "well-architected-security"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-network": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "network"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-dynamodb": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "dynamodb"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-s3-tables": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "s3-tables"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-documentation": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "documentation"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-support": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "support"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-lambda-tool": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "lambda-tool"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     },
     "aws-stepfunctions-tool": {
       "command": "atmos",
       "args": ["mcp", "aws", "start", "stepfunctions-tool"],
-      "env": { "AWS_REGION": "us-east-2" }
+      "env": { "AWS_REGION": "us-east-2", "PYTHONWARNINGS": "ignore::DeprecationWarning" }
     }
   }
 }

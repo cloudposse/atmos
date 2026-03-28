@@ -45,8 +45,9 @@ var restartCmd = &cobra.Command{
 		// Stop if running (ignore error — it may not be running).
 		_ = mgr.Stop(name)
 
-		// Start fresh.
-		if err := mgr.Start(ctx, name); err != nil {
+		// Start fresh with toolchain resolution.
+		startOpts := buildStartOptions(&atmosConfig)
+		if err := mgr.Start(ctx, name, startOpts...); err != nil {
 			return err
 		}
 

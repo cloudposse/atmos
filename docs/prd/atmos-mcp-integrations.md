@@ -108,8 +108,7 @@ The `awslabs/mcp` repository provides 20+ MCP servers covering the AWS ecosystem
 | AWS Documentation | `awslabs.aws-documentation-mcp-server` | AWS docs search                        |
 | Amazon Bedrock    | `awslabs.amazon-bedrock-mcp-server`    | Bedrock model operations               |
 | AWS Knowledge     | `awslabs.aws-knowledge-mcp-server`     | AWS knowledge base search              |
-| Cost Explorer     | `awslabs.cost-explorer-mcp-server`     | Cost breakdowns and forecasts          |
-| Billing           | `awslabs.billing-cost-management-mcp-server` | Billing summaries              |
+| Billing & Cost    | `awslabs.billing-cost-management-mcp-server` | Billing, cost explorer, forecasts |
 | AWS Pricing       | `awslabs.aws-pricing-mcp-server`       | On-demand/reserved pricing             |
 | CloudWatch        | `awslabs.cloudwatch-mcp-server`        | Metrics, logs, alarms                  |
 | CloudTrail        | `awslabs.cloudtrail-mcp-server`        | Event history and auditing             |
@@ -130,10 +129,10 @@ The `awslabs/mcp` repository provides 20+ MCP servers covering the AWS ecosystem
 ```yaml
 mcp:
   servers:
-    aws-cost-explorer:
-      description: "AWS Cost Explorer — spend breakdowns and forecasts"
+    aws-billing:
+      description: "AWS Billing — summaries, cost explorer, and forecasts"
       command: "uvx"
-      args: ["awslabs.cost-explorer-mcp-server@latest"]
+      args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env:
         AWS_REGION: "us-east-1"
       auth_identity: "readonly"

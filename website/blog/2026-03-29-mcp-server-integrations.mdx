@@ -41,12 +41,6 @@ mcp:
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Billing — summaries and payment history"
       auth_identity: "readonly"
-    aws-cost-explorer:
-      command: uvx
-      args: ["awslabs.cost-explorer-mcp-server@latest"]
-      env: { AWS_REGION: "us-east-1" }
-      description: "AWS Cost Explorer — spend breakdowns and forecasts"
-      auth_identity: "readonly"
     aws-pricing:
       command: uvx
       args: ["awslabs.aws-pricing-mcp-server@latest"]
@@ -97,7 +91,7 @@ atmos mcp tools aws-pricing
 # Cost analysis (uses aws-pricing)
 atmos ai ask "What's the on-demand price for m7i.xlarge in us-east-1?"
 
-# Spend breakdown (uses aws-cost-explorer)
+# Spend breakdown (uses aws-billing)
 atmos ai ask "What did we spend on EC2 last month?"
 
 # Billing history (uses aws-billing)
@@ -225,6 +219,48 @@ mcp:
         AWS_REGION: !env AWS_DEFAULT_REGION    # Read OS env var
         API_KEY: !exec "vault kv get -field=key secret/mcp"  # Run command
         PROJECT_ROOT: !repo-root               # Git root path
+```
+
+## See It in Action
+
+List configured servers:
+
+```text
+$ atmos mcp list
+       NAME         STATUS                           DESCRIPTION
+─────────────────────────────────────────────────────────────────────────────────────────
+ aws-api            stopped  AWS API — direct AWS CLI access with security controls
+ aws-billing        stopped  AWS Billing — summaries and payment history
+ aws-cloudtrail     stopped  AWS CloudTrail — event history and API call auditing
+ aws-docs           stopped  AWS Documentation — search and fetch AWS docs
+ aws-iam            stopped  AWS IAM — role/policy analysis and access patterns
+ aws-knowledge      stopped  AWS Knowledge — managed AWS knowledge base (remote)
+ aws-pricing        stopped  AWS Pricing — on-demand and reserved pricing (free API)
+ aws-security       stopped  AWS Security — Well-Architected posture assessment
+```
+
+Explore tools from a security server:
+
+```text
+$ atmos mcp tools aws-security
+           TOOL                                                         DESCRIPTION
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ CheckSecurityServices     Verify if selected AWS security services are enabled in the specified region and account.
+ GetSecurityFindings       Retrieve security findings from AWS security services.
+ GetStoredSecurityContext  Retrieve security services data that was stored in context from a previous CheckSecurityServices call.
+ CheckStorageEncryption    Check if AWS storage resources have encryption enabled.
+ ListServicesInRegion      List all AWS services being used in a specific region.
+ CheckNetworkSecurity      Check if AWS network resources are configured for secure data-in-transit.
+```
+
+Test server connectivity:
+
+```text
+$ atmos mcp test aws-docs
+✓ Server started successfully
+✓ Initialization handshake complete
+✓ 4 tools available
+✓ Server responds to ping
 ```
 
 ## Try It

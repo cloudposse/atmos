@@ -20,7 +20,6 @@ The following AWS MCP servers are pre-configured in `atmos.yaml`:
 | Server               | What It Does                                      | Credentials               |
 |----------------------|---------------------------------------------------|---------------------------|
 | **aws-billing**      | Billing summaries, payment history, cost tags     | Yes — `ce:*`, `billing:*` |
-| **aws-cost-explorer**| Spend breakdowns by service/account/tag, forecasts| Yes — `ce:*`              |
 | **aws-pricing**      | On-demand/reserved pricing, cost comparisons      | Yes — `pricing:*` (free)  |
 
 ### Security & Compliance
@@ -150,7 +149,7 @@ One-shot questions — get an answer and exit. No interactive session:
 # Cost analysis (uses aws-pricing)
 atmos ai ask "What's the on-demand price for m7i.xlarge in us-east-1?"
 
-# Spend breakdown (uses aws-cost-explorer)
+# Spend breakdown (uses aws-billing)
 atmos ai ask "What did we spend on EC2 last month?"
 
 # Billing history (uses aws-billing)
@@ -240,7 +239,6 @@ atmos mcp status
 #   aws-api           running   3       AWS API — direct AWS CLI access
 #   aws-billing       running   5       AWS Billing — summaries and payment history
 #   aws-cloudtrail    running   3       AWS CloudTrail — event history and auditing
-#   aws-cost-explorer running   7       AWS Cost Explorer — spend breakdowns
 #   aws-docs          running   4       AWS Documentation — search and fetch
 #   aws-iam           running   4       AWS IAM — role/policy analysis
 #   aws-knowledge     running   2       AWS Knowledge — managed knowledge base
@@ -407,12 +405,6 @@ Access to billing summaries, payment history, and cost allocation tags.
 
 **IAM:** `ce:*`, `billing:*`
 
-### aws-cost-explorer — Spend Breakdowns & Forecasts
-
-Break down spend by service, account, tag, and time period. Provides cost trends and forecasts.
-
-**IAM:** `ce:*`
-
 ### aws-iam — IAM Analysis
 
 Analyze IAM roles, policies, permission boundaries, and access patterns. Read-only — no changes to IAM.
@@ -469,6 +461,64 @@ Use `--output` to specify a different file path:
 
 ```bash
 atmos mcp generate-config --output .cursor/mcp.json
+```
+
+## See It in Action
+
+### List configured servers
+
+```
+$ atmos mcp list
+       NAME         STATUS                           DESCRIPTION
+─────────────────────────────────────────────────────────────────────────────────────────
+ aws-api            stopped  AWS API — direct AWS CLI access with security controls
+ aws-billing        stopped  AWS Billing — summaries and payment history
+ aws-cloudtrail     stopped  AWS CloudTrail — event history and API call auditing
+ aws-docs           stopped  AWS Documentation — search and fetch AWS docs
+ aws-iam            stopped  AWS IAM — role/policy analysis and access patterns
+ aws-knowledge      stopped  AWS Knowledge — managed AWS knowledge base (remote)
+ aws-pricing        stopped  AWS Pricing — on-demand and reserved pricing (free API)
+ aws-security       stopped  AWS Security — Well-Architected posture assessment
+```
+
+### Explore tools from a server
+
+```
+$ atmos mcp tools aws-api
+         TOOL                                      DESCRIPTION
+───────────────────────────────────────────────────────────────────────────────────────────
+ suggest_aws_commands  Suggest AWS CLI commands based on a natural language query.
+ call_aws              Execute AWS CLI commands with validation and proper error handling.
+```
+
+```
+$ atmos mcp tools aws-security
+           TOOL                                                         DESCRIPTION
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ CheckSecurityServices     Verify if selected AWS security services are enabled in the specified region and account.
+ GetSecurityFindings       Retrieve security findings from AWS security services.
+ GetStoredSecurityContext  Retrieve security services data that was stored in context from a previous CheckSecurityServices call.
+ CheckStorageEncryption    Check if AWS storage resources have encryption enabled.
+ ListServicesInRegion      List all AWS services being used in a specific region.
+ CheckNetworkSecurity      Check if AWS network resources are configured for secure data-in-transit.
+```
+
+### Test server connectivity
+
+```
+$ atmos mcp test aws-docs
+✓ Server started successfully
+✓ Initialization handshake complete
+✓ 4 tools available
+✓ Server responds to ping
+```
+
+```
+$ atmos mcp test aws-security
+✓ Server started successfully
+✓ Initialization handshake complete
+✓ 6 tools available
+✓ Server responds to ping
 ```
 
 ## Learn More

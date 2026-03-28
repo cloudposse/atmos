@@ -49,7 +49,8 @@ func executeMCPTest(cmd *cobra.Command, args []string) error {
 		ctx = context.Background()
 	}
 
-	result := mgr.Test(ctx, name)
+	startOpts := buildStartOptions(&atmosConfig)
+	result := mgr.Test(ctx, name, startOpts...)
 	printTestResult(result)
 	return result.Error
 }

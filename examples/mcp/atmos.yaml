@@ -56,6 +56,7 @@ mcp:
         - "awslabs.aws-documentation-mcp-server@latest"
       env:
         FASTMCP_LOG_LEVEL: "ERROR"
+        PYTHONWARNINGS: "ignore::DeprecationWarning"
       description: "AWS Documentation — search and fetch AWS docs"
 
     # -----------------------------------------------------------------------
@@ -70,6 +71,8 @@ mcp:
         - "fastmcp"
         - "run"
         - "https://knowledge-mcp.global.api.aws"
+      env:
+        PYTHONWARNINGS: "ignore::DeprecationWarning"
       description: "AWS Knowledge — managed AWS knowledge base (remote)"
 
     # -----------------------------------------------------------------------
@@ -86,6 +89,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
+        PYTHONWARNINGS: "ignore::DeprecationWarning"
       description: "AWS Pricing — real-time pricing and cost analysis"
       auth_identity: "readonly"
 
@@ -106,6 +110,7 @@ mcp:
         AWS_REGION: "us-east-1"
         READ_OPERATIONS_ONLY: "true"
         REQUIRE_MUTATION_CONSENT: "true"
+        PYTHONWARNINGS: "ignore::DeprecationWarning"
       description: "AWS API — direct AWS CLI access with security controls"
       auth_identity: "readonly"
 
@@ -124,6 +129,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
+        PYTHONWARNINGS: "ignore::DeprecationWarning"
       description: "AWS Security — Well-Architected security posture assessment"
       auth_identity: "readonly"
 
@@ -141,24 +147,8 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
+        PYTHONWARNINGS: "ignore::DeprecationWarning"
       description: "AWS Billing — billing summaries and payment history"
-      auth_identity: "readonly"
-
-    # -----------------------------------------------------------------------
-    # AWS Cost Explorer — spend breakdowns, trends, and forecasts
-    # -----------------------------------------------------------------------
-    # Breaks down spend by service, account, tag, and time period.
-    # Provides cost trends and forecasts.
-    #
-    # IAM permissions required: ce:*
-    aws-cost-explorer:
-      command: uvx
-      args:
-        - "awslabs.cost-explorer-mcp-server@latest"
-      env:
-        AWS_REGION: "us-east-1"
-        FASTMCP_LOG_LEVEL: "ERROR"
-      description: "AWS Cost Explorer — spend breakdowns, trends, and forecasts"
       auth_identity: "readonly"
 
     # -----------------------------------------------------------------------
@@ -175,6 +165,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
+        PYTHONWARNINGS: "ignore::DeprecationWarning"
       description: "AWS IAM — role/policy analysis and access patterns"
       auth_identity: "readonly"
 
@@ -192,6 +183,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
+        PYTHONWARNINGS: "ignore::DeprecationWarning"
       description: "AWS CloudTrail — event history and API call auditing"
       auth_identity: "readonly"
 
