@@ -73,14 +73,18 @@ func getRunnableDescribeAffectedCmd(
 			}
 		}
 
-		// Get identity from flag and create AuthManager if provided.
-		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
+		// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
+		// When functions are disabled (--process-functions=false), there are no YAML functions
+		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
-		if err != nil {
-			return err
+		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
+		if props.ProcessYamlFunctions || identityExplicit {
+			authManager, authErr := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
+			if authErr != nil {
+				return authErr
+			}
+			props.AuthManager = authManager
 		}
-		props.AuthManager = authManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 
