@@ -30,9 +30,29 @@ func NewBridgedTool(serverName string, tool *mcpsdk.Tool, session *Session) *Bri
 	}
 }
 
-// Name returns the namespaced tool name (e.g., "aws-eks.list_clusters").
+// Name returns the namespaced tool name (e.g., "aws-eks__list_clusters").
+// Uses double underscore as separator and sanitizes to match AI provider requirements
+// (Anthropic requires tool names to match ^[a-zA-Z0-9_-]{1,128}$).
 func (t *BridgedTool) Name() string {
-	return t.serverName + "." + t.mcpTool.Name
+	return sanitizeToolName(t.serverName + "__" + t.mcpTool.Name)
+}
+
+// sanitizeToolName replaces any character not in [a-zA-Z0-9_-] with underscore,
+// and truncates to 128 characters to satisfy AI provider constraints.
+func sanitizeToolName(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	result := b.String()
+	if len(result) > 128 {
+		result = result[:128]
+	}
+	return result
 }
 
 // Description returns the tool's description from the MCP server.

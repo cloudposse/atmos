@@ -2,6 +2,7 @@ package azureopenai
 
 import (
 	"context"
+	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -71,12 +72,16 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	// Get API version (Azure-specific, use default).
 	apiVersion := DefaultAPIVersion
 
-	// Create OpenAI client configured for Azure.
-	// Azure OpenAI uses api-key header instead of Authorization Bearer.
+	// Create OpenAI client configured for Azure with timeout.
+	requestTimeout := 60 * time.Second
+	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
+		requestTimeout = time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
+	}
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
 		option.WithBaseURL(config.BaseURL),
 		option.WithHeader("api-version", apiVersion),
+		option.WithRequestTimeout(requestTimeout),
 	)
 
 	return &Client{

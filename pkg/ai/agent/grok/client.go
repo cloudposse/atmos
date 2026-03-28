@@ -2,6 +2,7 @@ package grok
 
 import (
 	"context"
+	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -60,10 +61,15 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 			Err()
 	}
 
-	// Create OpenAI client with Grok's base URL.
+	// Create OpenAI client with Grok's base URL and timeout.
+	requestTimeout := 60 * time.Second
+	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
+		requestTimeout = time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
+	}
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
 		option.WithBaseURL(config.BaseURL),
+		option.WithRequestTimeout(requestTimeout),
 	)
 
 	return &Client{

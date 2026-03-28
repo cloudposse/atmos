@@ -16,7 +16,7 @@ func TestBridgedTool_Name(t *testing.T) {
 	tool := &mcpsdk.Tool{Name: "list_clusters", Description: "List EKS clusters"}
 	bt := NewBridgedTool("aws-eks", tool, nil)
 
-	assert.Equal(t, "aws-eks.list_clusters", bt.Name())
+	assert.Equal(t, "aws-eks__list_clusters", bt.Name())
 }
 
 func TestBridgedTool_Description(t *testing.T) {
@@ -175,8 +175,8 @@ func TestBridgeTools(t *testing.T) {
 
 	bridged := BridgeTools(session)
 	assert.Len(t, bridged, 2)
-	assert.Equal(t, "test-server.tool_a", bridged[0].Name())
-	assert.Equal(t, "test-server.tool_b", bridged[1].Name())
+	assert.Equal(t, "test-server__tool_a", bridged[0].Name())
+	assert.Equal(t, "test-server__tool_b", bridged[1].Name())
 }
 
 func TestBridgeTools_Empty(t *testing.T) {

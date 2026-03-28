@@ -41,7 +41,8 @@ func RegisterMCPTools(
 	}
 
 	startOpts := buildStartOptions(authProvider, toolchain)
-	totalTools := startAndRegisterTools(mgr, registry, startOpts)
+	// Suppress subprocess stderr in AI commands — MCP server log output pollutes AI responses.
+	totalTools := startAndRegisterTools(mgr, registry, startOpts, true)
 
 	if totalTools > 0 {
 		ui.Info(fmt.Sprintf("Registered %d tools from %d MCP server(s)", totalTools, len(mgr.List())))
@@ -63,12 +64,18 @@ func buildStartOptions(authProvider AuthEnvProvider, toolchain ToolchainResolver
 }
 
 // startAndRegisterTools starts all sessions and registers their bridged tools.
-func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []StartOption) int {
+// When suppressStderr is true, MCP server subprocess output is not forwarded to os.Stderr.
+func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []StartOption, suppressStderr ...bool) int {
 	ctx, cancel := context.WithTimeout(context.Background(), registrationTimeout)
 	defer cancel()
 
+	suppress := len(suppressStderr) > 0 && suppressStderr[0]
+
 	var totalTools int
 	for _, session := range mgr.List() {
+		if suppress {
+			session.SetSuppressStderr(true)
+		}
 		if err := session.Start(ctx, startOpts...); err != nil {
 			ui.Error(fmt.Sprintf("MCP server %q failed to start: %v", session.Name(), err))
 			continue

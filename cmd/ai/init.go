@@ -122,9 +122,19 @@ func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosC
 	}
 
 	var toolchain mcpclient.ToolchainResolver
-	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
-	if tenvErr == nil && tenv != nil {
-		toolchain = tenv
+	// Load tool dependencies from .tool-versions so uvx/npx are resolved from the toolchain.
+	deps, depsErr := dependencies.LoadToolVersionsDependencies(atmosConfig)
+	if depsErr == nil && len(deps) > 0 {
+		tenv, tenvErr := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
+		if tenvErr == nil && tenv != nil {
+			toolchain = tenv
+		}
+	} else {
+		// Fall back to component-based resolution.
+		tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
+		if tenvErr == nil && tenv != nil {
+			toolchain = tenv
+		}
 	}
 
 	// Create auth provider if any server has auth_identity configured.

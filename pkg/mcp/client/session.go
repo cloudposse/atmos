@@ -31,15 +31,23 @@ const (
 )
 
 // Session wraps an MCP client connection to an external server.
+// Session wraps an MCP client connection to an external server.
 type Session struct {
-	name      string
-	config    *ParsedConfig
-	client    *mcpsdk.Client
-	session   *mcpsdk.ClientSession
-	tools     []*mcpsdk.Tool
-	status    SessionStatus
-	lastError error
-	mu        sync.RWMutex
+	name           string
+	config         *ParsedConfig
+	client         *mcpsdk.Client
+	session        *mcpsdk.ClientSession
+	tools          []*mcpsdk.Tool
+	status         SessionStatus
+	lastError      error
+	suppressStderr bool
+	mu             sync.RWMutex
+}
+
+// SetSuppressStderr controls whether subprocess stderr is forwarded to os.Stderr.
+// When true, MCP server log output is suppressed (used during AI commands).
+func (s *Session) SetSuppressStderr(suppress bool) {
+	s.suppressStderr = suppress
 }
 
 // NewSession creates a new session in stopped state.
@@ -129,7 +137,9 @@ func (s *Session) connectAndDiscover(ctx context.Context, env []string) error {
 	command := resolveCommandInEnv(s.config.Command, env)
 	cmd := exec.CommandContext(ctx, command, s.config.Args...)
 	cmd.Env = env
-	cmd.Stderr = os.Stderr
+	if !s.suppressStderr {
+		cmd.Stderr = os.Stderr
+	}
 
 	s.client = mcpsdk.NewClient(&mcpsdk.Implementation{
 		Name:    "atmos",
