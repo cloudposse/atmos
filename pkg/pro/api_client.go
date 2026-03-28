@@ -460,7 +460,7 @@ func buildProAPIError(operation string, statusCode int, apiResponse dtos.AtmosAp
 	default:
 		if statusCode >= http.StatusInternalServerError {
 			builder = builder.
-				WithHint("This is a server-side error that will be retried automatically. If the problem persists, contact support with the `trace_id` from above: https://atmos-pro.com/docs/learn/troubleshooting")
+				WithHint("This is a server-side error. If the problem persists, contact support with the `trace_id` from above: https://atmos-pro.com/docs/learn/troubleshooting")
 		}
 	}
 

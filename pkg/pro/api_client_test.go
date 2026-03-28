@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
@@ -564,6 +565,59 @@ func TestHandleAPIResponse(t *testing.T) {
 	})
 }
 
+func TestHandleAPIResponse_NonJSONErrorResponse(t *testing.T) {
+	// Non-JSON body with error status → should return enriched error with troubleshooting link.
+	resp := &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Status:     "502 Bad Gateway",
+		Body:       io.NopCloser(bytes.NewBufferString("<html>Bad Gateway</html>")),
+	}
+	err := handleAPIResponse(resp, "TestOp")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrFailedToUnmarshalAPIResponse))
+
+	hints := cockroachErrors.GetAllHints(err)
+	allHints := strings.Join(hints, "\n")
+	assert.Contains(t, allHints, "troubleshooting")
+
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+}
+
+func TestHandleAPIResponse_NonJSONSuccessResponse(t *testing.T) {
+	// Non-JSON body with success status → should return nil (not an error).
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewBufferString("OK")),
+	}
+	err := handleAPIResponse(resp, "TestOp")
+	assert.NoError(t, err)
+}
+
+func TestHandleAPIResponse_SuccessHTTPStatusRange(t *testing.T) {
+	// 201 Created with valid JSON but no Success field → trusts HTTP status.
+	resp := &http.Response{
+		StatusCode: http.StatusCreated,
+		Body:       io.NopCloser(bytes.NewBufferString(`{"message": "created"}`)),
+	}
+	err := handleAPIResponse(resp, "TestOp")
+	assert.NoError(t, err)
+}
+
+func TestBuildProAPIError_WithTraceID(t *testing.T) {
+	err := buildProAPIError("TestOp", http.StatusForbidden, dtos.AtmosApiResponse{
+		Status:  http.StatusForbidden,
+		TraceID: "abc-123-trace",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "abc-123-trace")
+
+	hints := cockroachErrors.GetAllHints(err)
+	allHints := strings.Join(hints, "\n")
+	assert.Contains(t, allHints, "permissions")
+}
+
 func TestBuildProAPIError_HintsPerStatusCode(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -603,7 +657,7 @@ func TestBuildProAPIError_HintsPerStatusCode(t *testing.T) {
 			name:       "500 includes troubleshooting link",
 			statusCode: http.StatusInternalServerError,
 			expectedHints: []string{
-				"retried automatically",
+				"server-side error",
 				"`trace_id`",
 				"atmos-pro.com/docs/learn/troubleshooting",
 			},
@@ -638,7 +692,7 @@ func TestBuildProAPIError_HintsPerStatusCode(t *testing.T) {
 			name:       "500 with missing response status (status=0 in body)",
 			statusCode: http.StatusInternalServerError,
 			expectedHints: []string{
-				"retried automatically",
+				"server-side error",
 				"`trace_id`",
 				"atmos-pro.com/docs/learn/troubleshooting",
 			},
