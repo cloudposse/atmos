@@ -18,8 +18,11 @@ type BridgedTool struct {
 	session    *Session
 }
 
-// Verify BridgedTool implements tools.Tool at compile time.
-var _ tools.Tool = (*BridgedTool)(nil)
+// Verify BridgedTool implements tools.Tool and tools.BridgedToolInfo at compile time.
+var (
+	_ tools.Tool            = (*BridgedTool)(nil)
+	_ tools.BridgedToolInfo = (*BridgedTool)(nil)
+)
 
 // NewBridgedTool creates a new BridgedTool from an MCP tool definition.
 func NewBridgedTool(serverName string, tool *mcpsdk.Tool, session *Session) *BridgedTool {
@@ -37,22 +40,27 @@ func (t *BridgedTool) Name() string {
 	return sanitizeToolName(t.serverName + "__" + t.mcpTool.Name)
 }
 
+// maxToolNameLen is the maximum length for AI provider tool names.
+const maxToolNameLen = 128
+
 // sanitizeToolName replaces any character not in [a-zA-Z0-9_-] with underscore,
-// and truncates to 128 characters to satisfy AI provider constraints.
+// and truncates to maxToolNameLen characters to satisfy AI provider constraints.
 func sanitizeToolName(name string) string {
-	var b strings.Builder
-	for _, r := range name {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
-			b.WriteRune(r)
-		} else {
-			b.WriteRune('_')
+	result := strings.Map(func(r rune) rune {
+		if isToolNameChar(r) {
+			return r
 		}
-	}
-	result := b.String()
-	if len(result) > 128 {
-		result = result[:128]
+		return '_'
+	}, name)
+	if len(result) > maxToolNameLen {
+		result = result[:maxToolNameLen]
 	}
 	return result
+}
+
+// isToolNameChar returns true if the rune is allowed in AI provider tool names.
+func isToolNameChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-'
 }
 
 // Description returns the tool's description from the MCP server.
@@ -134,6 +142,7 @@ func (t *BridgedTool) Execute(ctx context.Context, params map[string]interface{}
 	return &tools.Result{
 		Success: true,
 		Output:  output,
+		Data:    map[string]interface{}{"result": output},
 	}, nil
 }
 

@@ -1899,7 +1899,7 @@ func TestExecCommand_TimeoutConfiguration(t *testing.T) {
 	t.Run("custom timeout from config", func(t *testing.T) {
 		// Test that timeout_seconds config is read at lines 143-146.
 		extraConfig := `
-    timeout_seconds: 300
+    timeout_seconds: 120
 `
 		tmpDir := createValidAtmosConfig(t, true, extraConfig)
 

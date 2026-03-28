@@ -523,6 +523,55 @@ $ atmos mcp test aws-security
 ✓ Server responds to ping
 ```
 
+### Ask AI with MCP tools
+
+```text
+$ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
+
+ℹ MCP server "aws-knowledge" started (6 tools)
+ℹ Registered 6 tools from 1 MCP server(s)
+ℹ AI tools initialized: 16
+👽 Thinking...
+
+   Configuring S3 Bucket Lifecycle Rules
+
+   S3 lifecycle rules automate object management by transitioning objects between
+   storage classes, archiving, or expiring them. Here's a comprehensive guide:
+
+  --------
+
+  ## 📋 Lifecycle Rule Structure
+
+   Each rule contains 3 key components:
+
+   Component │ Description
+  ───────────┼────────────────────────────────────────────────────────
+   Metadata  │ Rule ID and Status (Enabled/Disabled)
+   Filter    │ Which objects the rule applies to (prefix, tags, size)
+   Actions   │ What to do (transition, expire, delete)
+
+  │  A bucket can have up to 1,000 rules per lifecycle configuration.
+
+  --------
+
+  ## 🔧 Available Actions
+
+   Action                           │ Description
+  ──────────────────────────────────┼────────────────────────────────────────────────────────
+    Transition                      │ Move objects to a different storage class after N days
+    Expiration                      │ Permanently delete current object versions
+    NoncurrentVersionTransition     │ Transition old versions in versioned buckets
+    NoncurrentVersionExpiration     │ Delete noncurrent versions in versioned buckets
+    AbortIncompleteMultipartUpload  │ Cancel incomplete uploads after N days
+    ExpiredObjectDeleteMarker       │ Remove expired delete markers
+
+  ---
+
+  ## Tool Executions (1)
+
+  1. ✅ aws-knowledge → aws.search_documentation (2874ms)
+```
+
 ### Check status of all servers
 
 ```text

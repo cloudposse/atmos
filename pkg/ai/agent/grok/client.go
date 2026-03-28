@@ -62,7 +62,7 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	}
 
 	// Create OpenAI client with Grok's base URL and timeout.
-	requestTimeout := 60 * time.Second
+	requestTimeout := base.DefaultRequestTimeout
 	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
 		requestTimeout = time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
 	}

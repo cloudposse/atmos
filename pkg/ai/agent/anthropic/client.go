@@ -70,7 +70,7 @@ func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, err
 
 	// Create Anthropic client with timeout matching atmos config.
 	// Default 60s, configurable via ai.timeout_seconds.
-	requestTimeout := 60 * time.Second
+	requestTimeout := base.DefaultRequestTimeout
 	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
 		requestTimeout = time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
 	}

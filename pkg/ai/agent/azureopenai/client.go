@@ -73,7 +73,7 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	apiVersion := DefaultAPIVersion
 
 	// Create OpenAI client configured for Azure with timeout.
-	requestTimeout := 60 * time.Second
+	requestTimeout := base.DefaultRequestTimeout
 	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
 		requestTimeout = time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
 	}

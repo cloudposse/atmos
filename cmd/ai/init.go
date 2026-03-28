@@ -121,38 +121,45 @@ func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosC
 		return nil
 	}
 
-	var toolchain mcpclient.ToolchainResolver
+	toolchain := resolveToolchain(atmosConfig)
+	authProvider := resolveAuthProvider(atmosConfig)
+
+	mgr, err := mcpclient.RegisterMCPTools(registry, atmosConfig, authProvider, toolchain)
+	if err != nil {
+		ui.Error(fmt.Sprintf("Failed to initialize MCP servers: %v", err))
+	}
+	return mgr
+}
+
+// resolveToolchain attempts to create a toolchain resolver from .tool-versions or component deps.
+func resolveToolchain(atmosConfig *schema.AtmosConfiguration) mcpclient.ToolchainResolver {
 	// Load tool dependencies from .tool-versions so uvx/npx are resolved from the toolchain.
 	deps, depsErr := dependencies.LoadToolVersionsDependencies(atmosConfig)
 	if depsErr == nil && len(deps) > 0 {
 		tenv, tenvErr := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
 		if tenvErr == nil && tenv != nil {
-			toolchain = tenv
-		}
-	} else {
-		// Fall back to component-based resolution.
-		tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
-		if tenvErr == nil && tenv != nil {
-			toolchain = tenv
+			return tenv
 		}
 	}
-
-	// Create auth provider if any server has auth_identity configured.
-	var authProvider mcpclient.AuthEnvProvider
-	if serversNeedAuth(atmosConfig.MCP.Servers) {
-		mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-			"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
-		)
-		if err != nil {
-			ui.Error(fmt.Sprintf("Failed to create auth manager for MCP servers: %v", err))
-		} else if mgr != nil {
-			authProvider = mgr
-		}
+	// Fall back to component-based resolution.
+	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
+	if tenvErr == nil && tenv != nil {
+		return tenv
 	}
+	return nil
+}
 
-	mgr, err := mcpclient.RegisterMCPTools(registry, atmosConfig, authProvider, toolchain)
+// resolveAuthProvider creates an auth provider if any MCP server needs credentials.
+func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthEnvProvider {
+	if !serversNeedAuth(atmosConfig.MCP.Servers) {
+		return nil
+	}
+	mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+		"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
+	)
 	if err != nil {
-		ui.Error(fmt.Sprintf("Failed to initialize MCP servers: %v", err))
+		ui.Error(fmt.Sprintf("Failed to create auth manager for MCP servers: %v", err))
+		return nil
 	}
 	return mgr
 }

@@ -234,9 +234,10 @@ func (e *Executor) executeTools(ctx context.Context, toolCalls []types.ToolCall,
 		toolResult, err := e.toolExecutor.Execute(ctx, call.Name, call.Input)
 
 		results[i] = formatter.ToolCallResult{
-			Tool:       call.Name,
-			Args:       call.Input,
-			DurationMs: time.Since(startTime).Milliseconds(),
+			Tool:        call.Name,
+			DisplayName: e.toolExecutor.DisplayName(call.Name),
+			Args:        call.Input,
+			DurationMs:  time.Since(startTime).Milliseconds(),
 		}
 
 		if err != nil {

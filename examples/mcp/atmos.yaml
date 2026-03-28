@@ -230,7 +230,7 @@ auth:
 ai:
   enabled: true
   default_provider: "anthropic"
-  # Increase timeout for large tool sets — 96 tools from 8 MCP servers.
+  # Increase timeout for large tool sets.
   timeout_seconds: 120
 
   providers:

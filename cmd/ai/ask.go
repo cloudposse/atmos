@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
+	"github.com/cloudposse/atmos/pkg/ai/formatter"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -129,8 +131,13 @@ var askCmd = &cobra.Command{
 			return errUtils.ErrAIExecutionFailed
 		}
 
-		// Render response as Markdown for rich terminal output.
-		utils.PrintfMarkdown("%s", result.Response)
+		// Render response with tool execution details as Markdown.
+		var buf bytes.Buffer
+		mdFormatter := formatter.NewFormatter(formatter.FormatMarkdown)
+		if err := mdFormatter.Format(&buf, result); err != nil {
+			return fmt.Errorf("failed to format response: %w", err)
+		}
+		utils.PrintfMarkdown("%s", buf.String())
 
 		return nil
 	},
