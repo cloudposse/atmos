@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -425,6 +427,10 @@ func newTestCmdForDescribeComponent(t *testing.T, processFunctions bool, identit
 	cmd.Flags().StringSlice("skip", nil, "")
 	cmd.Flags().Bool("provenance", false, "")
 	cmd.Flags().StringP("identity", "i", "", "")
+	cmd.Flags().String("base-path", "", "")
+	cmd.Flags().StringSlice("config", nil, "")
+	cmd.Flags().StringSlice("config-path", nil, "")
+	cmd.Flags().StringSlice("profile", nil, "")
 	require.NoError(t, cmd.Flags().Set("stack", "test-stack"))
 	if !processFunctions {
 		require.NoError(t, cmd.Flags().Set("process-functions", "false"))
@@ -436,9 +442,9 @@ func newTestCmdForDescribeComponent(t *testing.T, processFunctions bool, identit
 }
 
 // describeComponentTestProps returns default props for describe component tests.
-// initCliConfig returns a minimal config. executeDescribeComponent and resolveComponentFromPath
+// InitCliConfig returns a minimal config; executeDescribeComponent and resolveComponentFromPath
 // are stubs since the auth guard is exercised before they would be called in the skip case.
-func describeComponentTestProps(mockExec exec.DescribeComponentCmdExec, atmosConfig schema.AtmosConfiguration) getRunnableDescribeComponentCmdProps {
+func describeComponentTestProps(mockExec exec.DescribeComponentCmdExec, atmosConfig schema.AtmosConfiguration) getRunnableDescribeComponentCmdProps { //nolint:gocritic // hugeParam: test helper, performance not a concern.
 	return getRunnableDescribeComponentCmdProps{
 		checkAtmosConfigE: func(_ ...AtmosValidateOption) error { return nil },
 		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
@@ -582,4 +588,237 @@ func TestIdentityExplicitGuard_FlagChangedVsEnvVar(t *testing.T) {
 		identity := GetIdentityFromFlags(cmd, []string{"test"})
 		assert.Empty(t, identity, "GetIdentityFromFlags should return empty when nothing is set")
 	})
+}
+
+// TestDescribeComponent_FunctionsEnabled_HappyPath verifies describe component
+// runs auth resolution and the executor when process-functions is enabled.
+func TestDescribeComponent_FunctionsEnabled_HappyPath(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
+		func(params exec.DescribeComponentParams) error {
+			// Auth manager is nil because the minimal config has no auth configured.
+			// The important thing is that the executor IS called.
+			assert.True(t, params.ProcessYamlFunctions, "ProcessYamlFunctions must be true")
+			return nil
+		},
+	).Times(1)
+
+	// functions enabled (default).
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	run := getRunnableDescribeComponentCmd(describeComponentTestProps(mockExec, schema.AtmosConfiguration{}))
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err)
+}
+
+// TestDescribeComponent_ComponentNotFound_ReturnsErrInvalidComponent verifies that
+// ErrInvalidComponent from the auth probe is returned immediately.
+func TestDescribeComponent_ComponentNotFound_ReturnsErrInvalidComponent(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	// Executor should NOT be called — error before execution.
+
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
+	// Override executeDescribeComponent to return ErrInvalidComponent.
+	props.executeDescribeComponent = func(_ *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, errUtils.ErrInvalidComponent
+	}
+	run := getRunnableDescribeComponentCmd(props)
+
+	err := run(testCmd, []string{"nonexistent-component"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponent)
+}
+
+// TestDescribeComponent_ComponentAuthError_FallsBackToGlobal verifies that
+// a non-fatal error from the auth probe falls back to global auth config.
+func TestDescribeComponent_ComponentAuthError_FallsBackToGlobal(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Return(nil).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, true, "")
+	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
+	// Override executeDescribeComponent to return a generic error (not ErrInvalidComponent).
+	props.executeDescribeComponent = func(_ *exec.ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, errors.New("permission denied reading stack file")
+	}
+	run := getRunnableDescribeComponentCmd(props)
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err, "non-fatal auth probe error should fall back to global auth config")
+}
+
+// TestDescribeComponent_PathResolution verifies that isExplicitComponentPath=true
+// triggers path resolution logic.
+func TestDescribeComponent_PathResolution(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	resolvedComponent := "resolved-vpc"
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).DoAndReturn(
+		func(params exec.DescribeComponentParams) error {
+			assert.Equal(t, resolvedComponent, params.Component, "component should be resolved from path")
+			return nil
+		},
+	).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "")
+	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
+	props.isExplicitComponentPath = func(_ string) bool { return true }
+	props.resolveComponentFromPath = func(_ *schema.AtmosConfiguration, _ string, _ string) (string, error) {
+		return resolvedComponent, nil
+	}
+	run := getRunnableDescribeComponentCmd(props)
+
+	err := run(testCmd, []string{"./components/terraform/vpc"})
+	assert.NoError(t, err)
+}
+
+// TestDescribeComponent_PathResolutionError verifies that path resolution errors
+// are returned to the user.
+func TestDescribeComponent_PathResolutionError(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "")
+	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
+	props.isExplicitComponentPath = func(_ string) bool { return true }
+	props.resolveComponentFromPath = func(_ *schema.AtmosConfiguration, _ string, _ string) (string, error) {
+		return "", errors.New("ambiguous component path")
+	}
+	run := getRunnableDescribeComponentCmd(props)
+
+	err := run(testCmd, []string{"./components/terraform/vpc"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ambiguous")
+}
+
+// TestDescribeComponent_InitConfigError verifies that config loading errors are returned.
+func TestDescribeComponent_InitConfigError(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "")
+	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
+	props.initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, errors.New("config not found")
+	}
+	run := getRunnableDescribeComponentCmd(props)
+
+	err := run(testCmd, []string{"test-component"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config not found")
+}
+
+// TestDescribeComponent_GlobalFlagsExtracted verifies that global flags (base-path,
+// config, config-path, profile) are extracted into ConfigAndStacksInfo.
+func TestDescribeComponent_GlobalFlagsExtracted(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Return(nil).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "")
+	require.NoError(t, testCmd.Flags().Set("base-path", "/custom/path"))
+
+	var capturedInfo schema.ConfigAndStacksInfo
+	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
+	props.initCliConfig = func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		capturedInfo = info
+		return schema.AtmosConfiguration{}, nil
+	}
+	run := getRunnableDescribeComponentCmd(props)
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err)
+	assert.Equal(t, "/custom/path", capturedInfo.BasePath, "base-path flag should be captured in ConfigAndStacksInfo")
+}
+
+// TestDescribeComponent_CheckAtmosConfigError verifies that checkAtmosConfigE errors
+// are returned immediately.
+func TestDescribeComponent_CheckAtmosConfigError(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
+	props.checkAtmosConfigE = func(_ ...AtmosValidateOption) error {
+		return errors.New("atmos config check failed")
+	}
+	run := getRunnableDescribeComponentCmd(props)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "")
+	err := run(testCmd, []string{"test-component"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "atmos config check failed")
+}
+
+// TestDescribeComponent_AllGlobalFlagsExtracted verifies config, config-path, and profile flags.
+func TestDescribeComponent_AllGlobalFlagsExtracted(t *testing.T) {
+	_ = NewTestKit(t)
+	clearIdentityEnvVars(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockExec := exec.NewMockDescribeComponentCmdExec(ctrl)
+	mockExec.EXPECT().ExecuteDescribeComponentCmd(gomock.Any()).Return(nil).Times(1)
+
+	testCmd := newTestCmdForDescribeComponent(t, false, "")
+	require.NoError(t, testCmd.Flags().Set("config", "a.yaml,b.yaml"))
+	require.NoError(t, testCmd.Flags().Set("config-path", "/etc/atmos"))
+	require.NoError(t, testCmd.Flags().Set("profile", "staging"))
+
+	var capturedInfo schema.ConfigAndStacksInfo
+	props := describeComponentTestProps(mockExec, schema.AtmosConfiguration{})
+	props.initCliConfig = func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		capturedInfo = info
+		return schema.AtmosConfiguration{}, nil
+	}
+	run := getRunnableDescribeComponentCmd(props)
+
+	err := run(testCmd, []string{"test-component"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"a.yaml", "b.yaml"}, capturedInfo.AtmosConfigFilesFromArg)
+	assert.Equal(t, []string{"/etc/atmos"}, capturedInfo.AtmosConfigDirsFromArg)
+	assert.Equal(t, []string{"staging"}, capturedInfo.ProfilesFromArg)
 }
