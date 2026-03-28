@@ -770,6 +770,41 @@ func TestMarkdownFormatter_ErrorReturnPaths(t *testing.T) {
 	}
 }
 
+func TestMarkdownFormatter_DisplayName(t *testing.T) {
+	tests := []struct {
+		name     string
+		tc       ToolCallResult
+		expected string
+	}{
+		{
+			name:     "DisplayName used when set",
+			tc:       ToolCallResult{Tool: "aws-knowledge__aws___search_documentation", DisplayName: "aws-knowledge → aws.search_documentation", DurationMs: 100, Success: true},
+			expected: "aws-knowledge → aws.search_documentation",
+		},
+		{
+			name:     "Falls back to Tool when DisplayName empty",
+			tc:       ToolCallResult{Tool: "atmos_list_stacks", DisplayName: "", DurationMs: 50, Success: true},
+			expected: "atmos_list_stacks",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := &ExecutionResult{
+				Success:   true,
+				Response:  "test",
+				ToolCalls: []ToolCallResult{tt.tc},
+			}
+			formatter := &MarkdownFormatter{}
+			var buf bytes.Buffer
+
+			err := formatter.Format(&buf, result)
+			require.NoError(t, err)
+			assert.Contains(t, buf.String(), "**"+tt.expected+"**")
+		})
+	}
+}
+
 func TestMarkdownFormatter_AllBranches(t *testing.T) {
 	// Ensure we hit all branches in the Format function.
 	t.Run("Error path returns early", func(t *testing.T) {

@@ -187,6 +187,62 @@ func TestBridgeTools_Empty(t *testing.T) {
 	assert.Empty(t, bridged)
 }
 
+func TestSanitizeToolName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"alphanumeric", "list_clusters", "list_clusters"},
+		{"dots replaced", "aws.search_documentation", "aws_search_documentation"},
+		{"hyphens preserved", "aws-eks", "aws-eks"},
+		{"spaces replaced", "my tool name", "my_tool_name"},
+		{"special chars replaced", "tool@v1.2/path", "tool_v1_2_path"},
+		{"empty string", "", ""},
+		{"long name truncated", string(make([]byte, 200)), string(make([]byte, maxToolNameLen))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// For the long name test, fill with 'a'.
+			if tt.name == "long name truncated" {
+				input := make([]byte, 200)
+				for i := range input {
+					input[i] = 'a'
+				}
+				expected := make([]byte, maxToolNameLen)
+				for i := range expected {
+					expected[i] = 'a'
+				}
+				assert.Equal(t, string(expected), sanitizeToolName(string(input)))
+				return
+			}
+			assert.Equal(t, tt.expected, sanitizeToolName(tt.input))
+		})
+	}
+}
+
+func TestIsToolNameChar(t *testing.T) {
+	// Allowed characters.
+	for _, r := range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" {
+		assert.True(t, isToolNameChar(r), "expected %c to be allowed", r)
+	}
+	// Disallowed characters.
+	for _, r := range "./@#$%^&*() " {
+		assert.False(t, isToolNameChar(r), "expected %c to be disallowed", r)
+	}
+}
+
+func TestBridgedTool_ImplementsBridgedToolInfo(t *testing.T) {
+	// Verify the interface is properly implemented via type assertion.
+	tool := &mcpsdk.Tool{Name: "search_docs", Description: "Search"}
+	bt := NewBridgedTool("aws-docs", tool, nil)
+
+	info, ok := interface{}(bt).(tools.BridgedToolInfo)
+	assert.True(t, ok, "BridgedTool should implement BridgedToolInfo")
+	assert.Equal(t, "aws-docs", info.ServerName())
+	assert.Equal(t, "search_docs", info.OriginalName())
+}
+
 func TestMapJSONSchemaType(t *testing.T) {
 	tests := []struct {
 		input string
