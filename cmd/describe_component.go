@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -41,187 +42,201 @@ type getRunnableDescribeComponentCmdProps struct {
 	newDescribeComponentExec e.DescribeComponentCmdExec
 }
 
+// describeComponentFlags holds parsed flag values for the describe component command.
+type describeComponentFlags struct {
+	stack                string
+	format               string
+	file                 string
+	processTemplates     bool
+	processYamlFunctions bool
+	query                string
+	skip                 []string
+	provenance           bool
+}
+
+// parseDescribeComponentFlags extracts all flag values from the command.
+func parseDescribeComponentFlags(cmd *cobra.Command) (describeComponentFlags, error) {
+	flags := cmd.Flags()
+	var f describeComponentFlags
+	var err error
+
+	if f.stack, err = flags.GetString("stack"); err != nil {
+		return f, err
+	}
+	if f.format, err = flags.GetString("format"); err != nil {
+		return f, err
+	}
+	if f.file, err = flags.GetString("file"); err != nil {
+		return f, err
+	}
+	if f.processTemplates, err = flags.GetBool("process-templates"); err != nil {
+		return f, err
+	}
+	if f.processYamlFunctions, err = flags.GetBool("process-functions"); err != nil {
+		return f, err
+	}
+	if f.query, err = flags.GetString("query"); err != nil {
+		return f, err
+	}
+	if f.skip, err = flags.GetStringSlice("skip"); err != nil {
+		return f, err
+	}
+	if f.provenance, err = flags.GetBool("provenance"); err != nil {
+		return f, err
+	}
+	return f, nil
+}
+
+// buildConfigAndStacksInfoFromFlags constructs ConfigAndStacksInfo from global CLI flags.
+func buildConfigAndStacksInfoFromFlags(cmd *cobra.Command, component, stack string) schema.ConfigAndStacksInfo {
+	flags := cmd.Flags()
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+	}
+	if bp, _ := flags.GetString("base-path"); bp != "" {
+		info.BasePath = bp
+	}
+	if cfgFiles, _ := flags.GetStringSlice("config"); len(cfgFiles) > 0 {
+		info.AtmosConfigFilesFromArg = cfgFiles
+	}
+	if cfgDirs, _ := flags.GetStringSlice("config-path"); len(cfgDirs) > 0 {
+		info.AtmosConfigDirsFromArg = cfgDirs
+	}
+	if profiles, _ := flags.GetStringSlice("profile"); len(profiles) > 0 {
+		info.ProfilesFromArg = profiles
+	}
+	return info
+}
+
+// resolveAuthManagerParams groups parameters for resolveAuthManager.
+type resolveAuthManagerParams struct {
+	props                *getRunnableDescribeComponentCmdProps
+	atmosConfig          *schema.AtmosConfiguration
+	component            string
+	stack                string
+	identityName         string
+	identityExplicit     bool
+	processYamlFunctions bool
+}
+
+// resolveAuthManager creates an AuthManager when YAML functions are enabled or identity
+// is explicitly requested via CLI flag.
+func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
+	if !p.processYamlFunctions && !p.identityExplicit {
+		return nil, nil
+	}
+
+	mergedAuthConfig := auth.CopyGlobalAuthConfig(&p.atmosConfig.Auth)
+
+	// Get component config to extract auth section (without YAML functions to avoid circular dependency).
+	componentConfig, componentErr := p.props.executeDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            p.component,
+		Stack:                p.stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
+	if componentErr != nil {
+		if errors.Is(componentErr, errUtils.ErrInvalidComponent) {
+			return nil, componentErr
+		}
+		// For other errors (e.g., permission issues), continue with global auth config.
+	} else {
+		var err error
+		mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&p.atmosConfig.Auth, componentConfig, p.atmosConfig, cfg.AuthSectionName)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return CreateAuthManagerFromIdentityWithAtmosConfig(p.identityName, mergedAuthConfig, p.atmosConfig)
+}
+
 func getRunnableDescribeComponentCmd(
 	g getRunnableDescribeComponentCmdProps,
 ) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration.
 		if err := g.checkAtmosConfigE(); err != nil {
 			return err
 		}
 
 		if len(args) != 1 {
-			return errors.New("invalid arguments. The command requires one argument `component`")
+			return fmt.Errorf("%w: the command requires one argument `component`", errUtils.ErrInvalidArguments)
 		}
 
-		flags := cmd.Flags()
-
-		stack, err := flags.GetString("stack")
-		if err != nil {
-			return err
-		}
-
-		format, err := flags.GetString("format")
-		if err != nil {
-			return err
-		}
-
-		file, err := flags.GetString("file")
-		if err != nil {
-			return err
-		}
-
-		processTemplates, err := flags.GetBool("process-templates")
-		if err != nil {
-			return err
-		}
-
-		processYamlFunctions, err := flags.GetBool("process-functions")
-		if err != nil {
-			return err
-		}
-
-		query, err := flags.GetString("query")
-		if err != nil {
-			return err
-		}
-
-		skip, err := flags.GetStringSlice("skip")
-		if err != nil {
-			return err
-		}
-
-		provenance, err := flags.GetBool("provenance")
+		f, err := parseDescribeComponentFlags(cmd)
 		if err != nil {
 			return err
 		}
 
 		component := args[0]
-
-		// Determine if we need path resolution.
-		// Only resolve as a filesystem path if the argument explicitly indicates a path.
-		// Otherwise, treat it as a component name (even if it contains slashes).
 		needsPathResolution := g.isExplicitComponentPath(component)
 
-		// Build ConfigAndStacksInfo from global flags so --base-path, --config,
-		// --config-path, and --profile are preserved (matching ProcessCommandLineArgs).
-		info := schema.ConfigAndStacksInfo{
-			ComponentFromArg: component,
-			Stack:            stack,
-		}
-		if bp, _ := flags.GetString("base-path"); bp != "" {
-			info.BasePath = bp
-		}
-		if cfgFiles, _ := flags.GetStringSlice("config"); len(cfgFiles) > 0 {
-			info.AtmosConfigFilesFromArg = cfgFiles
-		}
-		if cfgDirs, _ := flags.GetStringSlice("config-path"); len(cfgDirs) > 0 {
-			info.AtmosConfigDirsFromArg = cfgDirs
-		}
-		if profiles, _ := flags.GetStringSlice("profile"); len(profiles) > 0 {
-			info.ProfilesFromArg = profiles
-		}
+		info := buildConfigAndStacksInfoFromFlags(cmd, component, f.stack)
 
-		// Load atmos configuration. Use processStacks=true when path resolution is needed
-		// because the resolver needs StackConfigFilesAbsolutePaths to find stacks and
-		// detect ambiguity.
 		atmosConfig, err := g.initCliConfig(info, needsPathResolution)
 		if err != nil {
-			// If config loading failed and we're trying to resolve a path,
-			// try to give a more specific error about the path.
-			if needsPathResolution {
-				// Try to determine if the path is outside component directories.
-				// Since we don't have config, we can't determine base paths,
-				// so we just indicate that path resolution requires valid config.
-				pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
-					WithHintf("Failed to initialize config for path: `%s`\n\nPath resolution requires valid Atmos configuration", component).
-					WithHint("Verify `atmos.yaml` exists in your repository root or `.atmos/` directory\nRun `atmos describe config` to validate your configuration").
-					WithContext("component_arg", component).
-					WithContext("stack", stack).
-					WithCause(err).
-					WithExitCode(2).
-					Err()
-				return pathErr
-			}
-			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+			return handleConfigError(err, needsPathResolution, component, f.stack)
 		}
 
-		// Resolve path-based component arguments to component names.
-		if needsPathResolution {
-			// We don't know the component type yet - describe component detects it.
-			// Use the full resolver with stack validation to:
-			// 1. Extract the component name from the path.
-			// 2. Look up which Atmos components reference this terraform folder in the stack.
-			// 3. If multiple components reference the same folder, return an ambiguous path error.
-			resolvedComponent, resolveErr := g.resolveComponentFromPath(&atmosConfig, component, stack)
-			if resolveErr != nil {
-				// Return the error directly to preserve detailed hints and exit codes.
-				return resolveErr
-			}
-			component = resolvedComponent
+		component, err = resolveComponentFromPathIfNeeded(&g, &atmosConfig, component, f.stack, needsPathResolution)
+		if err != nil {
+			return err
 		}
 
-		// Get identity flag value.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
-
-		// Only create auth manager when YAML functions are enabled or identity is explicitly requested via CLI flag.
-		// When functions are disabled (--process-functions=false), there are no YAML functions
-		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
-		// Environment variables (ATMOS_IDENTITY) do not count as explicit — only the --identity CLI flag does.
-		var authManager auth.AuthManager
-		if processYamlFunctions || identityExplicit {
-			// Get component-specific auth config and merge with global auth config.
-			// This follows the same pattern as terraform.go to handle stack-level default identities.
-			// Start with global config.
-			mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
-
-			// Get component config to extract auth section (without processing YAML functions to avoid circular dependency).
-			componentConfig, componentErr := g.executeDescribeComponent(&e.ExecuteDescribeComponentParams{
-				Component:            component,
-				Stack:                stack,
-				ProcessTemplates:     false,
-				ProcessYamlFunctions: false, // Avoid circular dependency with YAML functions that need auth.
-				Skip:                 nil,
-				AuthManager:          nil, // No auth manager yet - we're determining which identity to use.
-			})
-			if componentErr != nil {
-				// If component doesn't exist, exit immediately before attempting authentication.
-				// This prevents prompting for identity when the component is invalid.
-				if errors.Is(componentErr, errUtils.ErrInvalidComponent) {
-					return componentErr
-				}
-				// For other errors (e.g., permission issues), continue with global auth config.
-			} else {
-				// Merge component-specific auth with global auth.
-				mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
-				if err != nil {
-					return err
-				}
-			}
-
-			// Create and authenticate AuthManager using merged auth config.
-			// Use the WithAtmosConfig variant to enable stack-level default identity loading.
-			authManager, err = CreateAuthManagerFromIdentityWithAtmosConfig(identityName, mergedAuthConfig, &atmosConfig)
-			if err != nil {
-				return err
-			}
+		authManager, err := resolveAuthManager(&resolveAuthManagerParams{
+			props:                &g,
+			atmosConfig:          &atmosConfig,
+			component:            component,
+			stack:                f.stack,
+			identityName:         identityName,
+			identityExplicit:     identityExplicit,
+			processYamlFunctions: f.processYamlFunctions,
+		})
+		if err != nil {
+			return err
 		}
 
-		err = g.newDescribeComponentExec.ExecuteDescribeComponentCmd(e.DescribeComponentParams{
+		return g.newDescribeComponentExec.ExecuteDescribeComponentCmd(e.DescribeComponentParams{
 			Component:            component,
-			Stack:                stack,
-			ProcessTemplates:     processTemplates,
-			ProcessYamlFunctions: processYamlFunctions,
-			Skip:                 skip,
-			Query:                query,
-			Format:               format,
-			File:                 file,
-			Provenance:           provenance,
+			Stack:                f.stack,
+			ProcessTemplates:     f.processTemplates,
+			ProcessYamlFunctions: f.processYamlFunctions,
+			Skip:                 f.skip,
+			Query:                f.query,
+			Format:               f.format,
+			File:                 f.file,
+			Provenance:           f.provenance,
 			AuthManager:          authManager,
 		})
-		return err
 	}
+}
+
+// resolveComponentFromPathIfNeeded resolves a filesystem path to a component name when needed.
+func resolveComponentFromPathIfNeeded(g *getRunnableDescribeComponentCmdProps, atmosConfig *schema.AtmosConfiguration, component, stack string, needsPathResolution bool) (string, error) {
+	if !needsPathResolution {
+		return component, nil
+	}
+	return g.resolveComponentFromPath(atmosConfig, component, stack)
+}
+
+// handleConfigError wraps config loading errors with path-resolution context when applicable.
+func handleConfigError(err error, needsPathResolution bool, component, stack string) error {
+	if !needsPathResolution {
+		return errors.Join(errUtils.ErrFailedToInitConfig, err)
+	}
+	return errUtils.Build(errUtils.ErrPathResolutionFailed).
+		WithHintf("Failed to initialize config for path: `%s`\n\nPath resolution requires valid Atmos configuration", component).
+		WithHint("Verify `atmos.yaml` exists in your repository root or `.atmos/` directory\nRun `atmos describe config` to validate your configuration").
+		WithContext("component_arg", component).
+		WithContext("stack", stack).
+		WithCause(err).
+		WithExitCode(2).
+		Err()
 }
 
 func init() {
