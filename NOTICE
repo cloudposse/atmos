@@ -147,7 +147,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/service/eks
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/eks/v1.80.2/service/eks/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/eks/v1.81.1/service/eks/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding
     License: Apache-2.0
