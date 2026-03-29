@@ -977,6 +977,7 @@ var (
 	ErrAILineNumberOutOfRange       = errors.New("line number out of range")
 	ErrAIInvalidLineRange           = errors.New("invalid line range")
 	ErrAICommandEmpty               = errors.New("command cannot be empty")
+	ErrAICommandNotAllowed          = errors.New("command is not in the allowed commands list")
 	ErrAICommandBlacklisted         = errors.New("command is blacklisted for security reasons")
 	ErrAICommandRmNotAllowed        = errors.New("rm with recursive or force flags is not allowed")
 	ErrAICommandShellInjection      = errors.New("command contains shell metacharacters that could enable injection; use separate commands instead")
