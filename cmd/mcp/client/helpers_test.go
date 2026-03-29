@@ -9,6 +9,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time sentinel: fails build if referenced schema fields are renamed.
+var _ = schema.MCPServerConfig{
+	Command:      "",
+	Args:         nil,
+	Env:          nil,
+	AuthIdentity: "",
+}
+
 // TestFirstSentence tests the firstSentence helper that extracts the first sentence
 // from a description string, collapsing whitespace and handling markdown boundaries.
 func TestFirstSentence(t *testing.T) {

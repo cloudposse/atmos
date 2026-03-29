@@ -252,26 +252,25 @@ func TestSanitizeToolName(t *testing.T) {
 		{"spaces replaced", "my tool name", "my_tool_name"},
 		{"special chars replaced", "tool@v1.2/path", "tool_v1_2_path"},
 		{"empty string", "", ""},
-		{"long name truncated", string(make([]byte, 200)), string(make([]byte, maxToolNameLen))},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// For the long name test, fill with 'a'.
-			if tt.name == "long name truncated" {
-				input := make([]byte, 200)
-				for i := range input {
-					input[i] = 'a'
-				}
-				expected := make([]byte, maxToolNameLen)
-				for i := range expected {
-					expected[i] = 'a'
-				}
-				assert.Equal(t, string(expected), sanitizeToolName(string(input)))
-				return
-			}
 			assert.Equal(t, tt.expected, sanitizeToolName(tt.input))
 		})
 	}
+
+	// Long name test uses generated data, tested separately.
+	t.Run("long name truncated", func(t *testing.T) {
+		input := make([]byte, 200)
+		for i := range input {
+			input[i] = 'a'
+		}
+		expected := make([]byte, maxToolNameLen)
+		for i := range expected {
+			expected[i] = 'a'
+		}
+		assert.Equal(t, string(expected), sanitizeToolName(string(input)))
+	})
 }
 
 func TestIsToolNameChar(t *testing.T) {

@@ -579,6 +579,13 @@ func TestMaxToolIterations_NilConfig(t *testing.T) {
 	assert.Equal(t, DefaultMaxToolIterations, exec.maxToolIterations())
 }
 
+func TestMaxToolIterations_NegativeValue(t *testing.T) {
+	exec := NewExecutor(nil, nil, &schema.AtmosConfiguration{
+		AI: schema.AISettings{MaxToolIterations: -1},
+	})
+	assert.Equal(t, DefaultMaxToolIterations, exec.maxToolIterations())
+}
+
 func TestExecutor_ExecuteToolsEnabled(t *testing.T) {
 	// Test that tools enabled flag is correctly set in metadata.
 	// Note: When tools are enabled, a valid tool registry is required.
