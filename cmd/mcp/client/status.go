@@ -53,30 +53,7 @@ var statusCmd = &cobra.Command{
 
 		for _, session := range mgr.List() {
 			result := mgr.Test(ctx, session.Name(), startOpts...)
-			status := "error"
-			toolCount := "0"
-
-			if result.PingOK {
-				status = "running"
-			} else if result.ServerStarted {
-				status = "degraded"
-			}
-
-			if result.ToolCount > 0 {
-				toolCount = fmt.Sprintf("%d", result.ToolCount)
-			}
-
-			desc := session.Config().Description
-			if result.Error != nil {
-				const maxErrLen = 50
-				errMsg := result.Error.Error()
-				if len(errMsg) > maxErrLen {
-					errMsg = errMsg[:maxErrLen-3] + "..."
-				}
-				desc += " (" + errMsg + ")"
-			}
-
-			rows = append(rows, []string{session.Name(), status, toolCount, desc})
+			rows = append(rows, formatStatusRow(session.Name(), session.Config().Description, result))
 		}
 
 		ui.Writeln(theme.CreateMinimalTable(headers, rows))
@@ -86,4 +63,32 @@ var statusCmd = &cobra.Command{
 
 func init() {
 	mcpcmd.McpCmd.AddCommand(statusCmd)
+}
+
+// formatStatusRow builds a table row from a test result.
+func formatStatusRow(name, description string, result *mcpclient.TestResult) []string {
+	status := "error"
+	toolCount := "0"
+
+	if result.PingOK {
+		status = "running"
+	} else if result.ServerStarted {
+		status = "degraded"
+	}
+
+	if result.ToolCount > 0 {
+		toolCount = fmt.Sprintf("%d", result.ToolCount)
+	}
+
+	desc := description
+	if result.Error != nil {
+		const maxErrLen = 50
+		errMsg := result.Error.Error()
+		if len(errMsg) > maxErrLen {
+			errMsg = errMsg[:maxErrLen-3] + "..."
+		}
+		desc += " (" + errMsg + ")"
+	}
+
+	return []string{name, status, toolCount, desc}
 }
