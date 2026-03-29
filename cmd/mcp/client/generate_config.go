@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -68,11 +69,15 @@ func executeMCPGenerateConfig(cmd *cobra.Command, _ []string) error {
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal MCP config: %w", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrMCPConfigMarshalFailed, err)
 	}
 
 	if err := os.WriteFile(outputFile, append(data, '\n'), configFilePermissions); err != nil {
-		return fmt.Errorf("failed to write %s: %w", outputFile, err)
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, outputFile, err)
+	}
+	// Enforce permissions on existing files (WriteFile only sets perms on new files).
+	if err := os.Chmod(outputFile, configFilePermissions); err != nil {
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigPermsFailed, outputFile, err)
 	}
 
 	ui.Success(fmt.Sprintf("Generated %s with %d server(s)", outputFile, len(config.MCPServers)))

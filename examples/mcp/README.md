@@ -52,7 +52,7 @@ All configured MCP servers are available across all Atmos AI commands — `atmos
    atmos auth login
    ```
    That's it — Atmos authenticates once and injects credentials into every MCP server
-   automatically. No `aws configure`, no environment variables, no credential files.
+   automatically. No manual `aws configure`, no environment variables to export, no credential files to manage.
 
 ## Quick Start
 
