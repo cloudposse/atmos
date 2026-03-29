@@ -802,6 +802,6 @@ $ atmos mcp status
 
 - [Atmos MCP Documentation](https://atmos.tools/cli/commands/mcp)
 - [AWS MCP Servers](https://github.com/awslabs/mcp)
-- [MCP Protocol Specification](https://spec.modelcontextprotocol.io/)
+- [MCP Protocol Specification](https://modelcontextprotocol.io/)
 - [Atmos AI Documentation](https://atmos.tools/ai)
 - [Atmos Auth Documentation](https://atmos.tools/cli/commands/auth)
