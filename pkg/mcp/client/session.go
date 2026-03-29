@@ -285,7 +285,9 @@ func WithToolchain(resolver ToolchainResolver) StartOption {
 // On Windows, also probes PATHEXT extensions (.exe, .cmd, etc.).
 // If the command is already absolute or not found, it returns the original.
 func resolveCommandInEnv(command string, env []string) string {
-	if filepath.IsAbs(command) {
+	// Absolute paths and relative paths with separators (./server, bin/server)
+	// are returned as-is — only bare command names are searched in PATH.
+	if filepath.IsAbs(command) || strings.ContainsAny(command, "/\\") {
 		return command
 	}
 

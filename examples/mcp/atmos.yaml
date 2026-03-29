@@ -230,6 +230,7 @@ ai:
   enabled: true
   default_provider: "anthropic"
   timeout_seconds: 120
+  max_tool_iterations: 25
 
   providers:
     anthropic:

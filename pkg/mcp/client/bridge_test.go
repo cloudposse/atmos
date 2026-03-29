@@ -166,6 +166,56 @@ func TestExtractTextContent_TextContent(t *testing.T) {
 	assert.Equal(t, "Hello\nWorld", ExtractTextContent(result))
 }
 
+// TestExtractTextContent_MixedContentTypes tests that non-text content is skipped
+// and only TextContent values are extracted.
+func TestExtractTextContent_MixedContentTypes(t *testing.T) {
+	// imageContent implements mcpsdk.Content but is not TextContent.
+	result := &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{
+			&mcpsdk.TextContent{Text: "First text"},
+			&mcpsdk.ImageContent{Data: []byte("base64data"), MIMEType: "image/png"},
+			&mcpsdk.TextContent{Text: "Second text"},
+		},
+	}
+	output := ExtractTextContent(result)
+	assert.Equal(t, "First text\nSecond text", output)
+}
+
+// TestExtractTextContent_SingleTextContent tests extraction of a single text content item.
+func TestExtractTextContent_SingleTextContent(t *testing.T) {
+	result := &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{
+			&mcpsdk.TextContent{Text: "Only text"},
+		},
+	}
+	output := ExtractTextContent(result)
+	assert.Equal(t, "Only text", output)
+}
+
+// TestExtractTextContent_OnlyNonTextContent tests that result with only non-text content
+// returns an empty string.
+func TestExtractTextContent_OnlyNonTextContent(t *testing.T) {
+	result := &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{
+			&mcpsdk.ImageContent{Data: []byte("base64data"), MIMEType: "image/png"},
+		},
+	}
+	output := ExtractTextContent(result)
+	assert.Equal(t, "", output)
+}
+
+// TestExtractTextContent_EmptyTextContent tests that empty text strings are included in output.
+func TestExtractTextContent_EmptyTextContent(t *testing.T) {
+	result := &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{
+			&mcpsdk.TextContent{Text: ""},
+			&mcpsdk.TextContent{Text: "non-empty"},
+		},
+	}
+	output := ExtractTextContent(result)
+	assert.Equal(t, "\nnon-empty", output)
+}
+
 func TestBridgeTools(t *testing.T) {
 	cfg := &ParsedConfig{Name: "test-server", Command: "echo"}
 	session := NewSession(cfg)

@@ -248,6 +248,16 @@ func TestResolveCommandInEnv(t *testing.T) {
 		assert.Equal(t, absPath, result)
 	})
 
+	t.Run("relative path with slash returned as-is", func(t *testing.T) {
+		result := resolveCommandInEnv("./bin/server", []string{"PATH=/usr/bin"})
+		assert.Equal(t, "./bin/server", result)
+	})
+
+	t.Run("relative path with backslash returned as-is", func(t *testing.T) {
+		result := resolveCommandInEnv("bin\\server", []string{"PATH=/usr/bin"})
+		assert.Equal(t, "bin\\server", result)
+	})
+
 	t.Run("empty PATH returns original command", func(t *testing.T) {
 		env := []string{"HOME=/tmp"}
 		result := resolveCommandInEnv("mycommand", env)

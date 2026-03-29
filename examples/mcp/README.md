@@ -486,6 +486,10 @@ atmos mcp generate-config --output .cursor/mcp.json
 
 ## See It in Action
 
+> **Note:** All outputs below are from real AWS accounts. Account IDs, role suffixes,
+> and internal identifiers have been redacted (replaced with `...`). Cost figures
+> represent an example of real-world spending.
+
 ### List configured servers
 
 ```text
@@ -686,7 +690,7 @@ $ atmos ai ask "Is GuardDuty enabled in all regions?"
 
    Region    │ Detector ID
   ───────────┼────────────────────────────────────
-   us-east-2 │  c8c419ea4992fa2eb9c9c23aef14a66e
+   us-east-2 │  <detector-id-redacted>
 
   ### ❌ Not Enabled (33 regions)
 

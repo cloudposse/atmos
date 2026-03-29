@@ -527,6 +527,47 @@ func TestSortedServerNames(t *testing.T) {
 	})
 }
 
+// TestInitializeAIReadOnlyTools_ToolsDisabled tests that initializeAIReadOnlyTools
+// returns nil and ErrAIToolsDisabled when tools are disabled.
+func TestInitializeAIReadOnlyTools_ToolsDisabled(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled: false,
+			},
+		},
+	}
+
+	result, err := initializeAIReadOnlyTools(atmosConfig, nil, "")
+
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrAIToolsDisabled))
+	assert.Nil(t, result)
+}
+
+// TestInitializeAIReadOnlyTools_ToolsEnabled tests that initializeAIReadOnlyTools
+// returns a valid result with registered tools when tools are enabled.
+func TestInitializeAIReadOnlyTools_ToolsEnabled(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		AI: schema.AISettings{
+			Tools: schema.AIToolSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	result, err := initializeAIReadOnlyTools(atmosConfig, nil, "")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.NotNil(t, result.Executor)
+	assert.NotNil(t, result.Registry)
+	assert.Greater(t, result.Registry.Count(), 0, "Expected at least one read-only tool to be registered")
+}
+
 // TestServersNeedAuth tests the serversNeedAuth function.
 func TestServersNeedAuth(t *testing.T) {
 	t.Run("no servers need auth", func(t *testing.T) {

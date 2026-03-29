@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	// MaxToolIterations is the maximum number of tool execution loops to prevent infinite loops.
-	MaxToolIterations = 10
+	// DefaultMaxToolIterations is the default maximum number of tool execution loops.
+	DefaultMaxToolIterations = 25
 )
 
 // Executor handles non-interactive AI execution with tool support.
@@ -32,6 +32,14 @@ func NewExecutor(client ai.Client, toolExecutor *tools.Executor, atmosConfig *sc
 		toolExecutor: toolExecutor,
 		atmosConfig:  atmosConfig,
 	}
+}
+
+// maxToolIterations returns the configured or default max tool iterations.
+func (e *Executor) maxToolIterations() int {
+	if e.atmosConfig != nil && e.atmosConfig.AI.MaxToolIterations > 0 {
+		return e.atmosConfig.AI.MaxToolIterations
+	}
+	return DefaultMaxToolIterations
 }
 
 // Options contains execution options.
@@ -194,7 +202,8 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 	var accumulatedResponse string
 	var totalUsage *types.Usage
 
-	for iteration := 0; iteration < MaxToolIterations; iteration++ {
+	maxIter := e.maxToolIterations()
+	for iteration := 0; iteration < maxIter; iteration++ {
 		response, err := e.client.SendMessageWithSystemPromptAndTools(ctx, toolSystemPrompt, atmosMemory, messages, availableTools)
 		if err != nil {
 			result.Success = false
@@ -219,7 +228,7 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 
 	result.Success = false
 	result.Error = &formatter.ErrorInfo{
-		Message: fmt.Sprintf("exceeded maximum tool execution iterations (%d)", MaxToolIterations),
+		Message: fmt.Sprintf("exceeded maximum tool execution iterations (%d)", maxIter),
 		Type:    "tool_error",
 	}
 }
