@@ -447,7 +447,7 @@ func TestExecuteBashCommandTool_Execute_RmSafeAllowed(t *testing.T) {
 	// Create a real temp file that we will delete.
 	dir := t.TempDir()
 	target := filepath.Join(dir, "to-delete.txt")
-	require.NoError(t, os.WriteFile(target, []byte("delete me"), 0600))
+	require.NoError(t, os.WriteFile(target, []byte("delete me"), 0o600))
 
 	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
@@ -469,7 +469,7 @@ func TestExecuteBashCommandTool_Execute_RmSafeWithForceAllowed(t *testing.T) {
 	}
 	dir := t.TempDir()
 	target := filepath.Join(dir, "to-delete.txt")
-	require.NoError(t, os.WriteFile(target, []byte("delete me"), 0600))
+	require.NoError(t, os.WriteFile(target, []byte("delete me"), 0o600))
 
 	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
@@ -582,5 +582,3 @@ func TestExecuteBashCommandTool_ResolveWorkingDir_Empty(t *testing.T) {
 	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/base"})
 	assert.Equal(t, "/base", tool.resolveWorkingDir(map[string]interface{}{}))
 }
-
-
