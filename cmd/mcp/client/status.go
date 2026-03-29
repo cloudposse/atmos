@@ -4,7 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -80,7 +79,7 @@ var statusCmd = &cobra.Command{
 			rows = append(rows, []string{session.Name(), status, toolCount, desc})
 		}
 
-		fmt.Fprintln(os.Stderr, theme.CreateMinimalTable(headers, rows))
+		ui.Writeln(theme.CreateMinimalTable(headers, rows))
 		return nil
 	},
 }

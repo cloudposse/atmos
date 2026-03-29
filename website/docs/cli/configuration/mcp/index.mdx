@@ -38,7 +38,7 @@ mcp:
     aws-docs:
       command: uvx
       args: ["awslabs.aws-documentation-mcp-server@latest"]
-      description: "AWS Documentation"
+      description: "AWS Documentation — search and fetch AWS docs"
 
 ai:
   enabled: true
@@ -163,19 +163,20 @@ For production use, configure [Atmos Auth](/cli/configuration/auth) to automatic
 <File title="atmos.yaml">
 ```yaml
 auth:
-  enabled: true
   providers:
     aws-sso:
-      type: aws-sso
-      spec:
-        start_url: "https://your-org.awsapps.com/start"
-        region: "us-east-1"
+      kind: aws/iam-identity-center
+      start_url: "https://your-org.awsapps.com/start"
+      region: "us-east-1"
   identities:
     security-audit:
+      kind: aws/permission-set
       provider: aws-sso
-      spec:
-        role_name: "SecurityAuditRole"
-        account_id: "123456789012"
+      default: true
+      principal:
+        permission_set: "ReadOnlyAccess"
+        account:
+          id: "123456789012"
 
 mcp:
   servers:
@@ -220,7 +221,7 @@ mcp:
       args: ["awslabs.aws-documentation-mcp-server@latest"]
       env:
         FASTMCP_LOG_LEVEL: "ERROR"
-      description: "AWS Documentation"
+      description: "AWS Documentation — search and fetch AWS docs"
 
     # Requires AWS credentials
     aws-pricing:
@@ -229,7 +230,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
-      description: "AWS Pricing"
+      description: "AWS Pricing — real-time pricing and cost analysis"
 
     # Security assessment (read-only)
     aws-security:
@@ -238,7 +239,7 @@ mcp:
       env:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
-      description: "AWS Security"
+      description: "AWS Security — Well-Architected security posture assessment"
 ```
 </File>
 

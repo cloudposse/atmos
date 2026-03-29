@@ -237,13 +237,13 @@ atmos mcp status
 # Example output:
 #   NAME           STATUS   TOOLS  DESCRIPTION
 #   aws-api        running  2      AWS API — direct AWS CLI access with security controls
-#   aws-billing    running  25     AWS Billing — summaries and payment history
+#   aws-billing    running  25     AWS Billing — billing summaries and payment history
 #   aws-cloudtrail running  5      AWS CloudTrail — event history and API call auditing
 #   aws-docs       running  4      AWS Documentation — search and fetch AWS docs
 #   aws-iam        running  29     AWS IAM — role/policy analysis and access patterns
 #   aws-knowledge  running  6      AWS Knowledge — managed AWS knowledge base (remote)
-#   aws-pricing    running  9      AWS Pricing — on-demand and reserved pricing (free API)
-#   aws-security   running  6      AWS Security — Well-Architected posture assessment
+#   aws-pricing    running  9      AWS Pricing — real-time pricing and cost analysis
+#   aws-security   running  6      AWS Security — Well-Architected security posture assessment
 ```
 
 ## Configuration Reference
@@ -474,13 +474,13 @@ $ atmos mcp list
        NAME         STATUS                           DESCRIPTION
 ─────────────────────────────────────────────────────────────────────────────────────────
  aws-api            stopped  AWS API — direct AWS CLI access with security controls
- aws-billing        stopped  AWS Billing — summaries and payment history
+ aws-billing        stopped  AWS Billing — billing summaries and payment history
  aws-cloudtrail     stopped  AWS CloudTrail — event history and API call auditing
  aws-docs           stopped  AWS Documentation — search and fetch AWS docs
  aws-iam            stopped  AWS IAM — role/policy analysis and access patterns
  aws-knowledge      stopped  AWS Knowledge — managed AWS knowledge base (remote)
- aws-pricing        stopped  AWS Pricing — on-demand and reserved pricing (free API)
- aws-security       stopped  AWS Security — Well-Architected posture assessment
+ aws-pricing        stopped  AWS Pricing — real-time pricing and cost analysis
+ aws-security       stopped  AWS Security — Well-Architected security posture assessment
 ```
 
 ### Explore tools from a server
@@ -764,13 +764,13 @@ $ atmos mcp status
       NAME       STATUS   TOOLS                        DESCRIPTION
 ─────────────────────────────────────────────────────────────────────────────────────────
  aws-api         running  2      AWS API — direct AWS CLI access with security controls
- aws-billing     running  25     AWS Billing — summaries and payment history
+ aws-billing     running  25     AWS Billing — billing summaries and payment history
  aws-cloudtrail  running  5      AWS CloudTrail — event history and API call auditing
  aws-docs        running  4      AWS Documentation — search and fetch AWS docs
  aws-iam         running  29     AWS IAM — role/policy analysis and access patterns
  aws-knowledge   running  6      AWS Knowledge — managed AWS knowledge base (remote)
- aws-pricing     running  9      AWS Pricing — on-demand and reserved pricing (free API)
- aws-security    running  6      AWS Security — Well-Architected posture assessment
+ aws-pricing     running  9      AWS Pricing — real-time pricing and cost analysis
+ aws-security    running  6      AWS Security — Well-Architected security posture assessment
 ```
 
 ## Learn More

@@ -39,13 +39,13 @@ mcp:
       command: uvx
       args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
-      description: "AWS Billing — summaries and payment history"
+      description: "AWS Billing — billing summaries and payment history"
       auth_identity: "readonly"
     aws-pricing:
       command: uvx
       args: ["awslabs.aws-pricing-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
-      description: "AWS Pricing — on-demand and reserved pricing"
+      description: "AWS Pricing — real-time pricing and cost analysis"
       auth_identity: "readonly"
 
     # Security & Compliance
@@ -53,26 +53,26 @@ mcp:
       command: uvx
       args: ["awslabs.well-architected-security-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
-      description: "AWS Security — Well-Architected posture assessment"
+      description: "AWS Security — Well-Architected security posture assessment"
       auth_identity: "readonly"
     aws-iam:
       command: uvx
       args: ["awslabs.iam-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
-      description: "AWS IAM — role/policy analysis"
+      description: "AWS IAM — role/policy analysis and access patterns"
       auth_identity: "readonly"
     aws-cloudtrail:
       command: uvx
       args: ["awslabs.cloudtrail-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
-      description: "AWS CloudTrail — event history and auditing"
+      description: "AWS CloudTrail — event history and API call auditing"
       auth_identity: "readonly"
 
     # Documentation (no credentials needed)
     aws-docs:
       command: uvx
       args: ["awslabs.aws-documentation-mcp-server@latest"]
-      description: "AWS Documentation — search and fetch docs"
+      description: "AWS Documentation — search and fetch AWS docs"
 ```
 </File>
 
@@ -232,13 +232,13 @@ $ atmos mcp list
        NAME         STATUS                           DESCRIPTION
 ─────────────────────────────────────────────────────────────────────────────────────────
  aws-api            stopped  AWS API — direct AWS CLI access with security controls
- aws-billing        stopped  AWS Billing — summaries and payment history
+ aws-billing        stopped  AWS Billing — billing summaries and payment history
  aws-cloudtrail     stopped  AWS CloudTrail — event history and API call auditing
  aws-docs           stopped  AWS Documentation — search and fetch AWS docs
  aws-iam            stopped  AWS IAM — role/policy analysis and access patterns
  aws-knowledge      stopped  AWS Knowledge — managed AWS knowledge base (remote)
- aws-pricing        stopped  AWS Pricing — on-demand and reserved pricing (free API)
- aws-security       stopped  AWS Security — Well-Architected posture assessment
+ aws-pricing        stopped  AWS Pricing — real-time pricing and cost analysis
+ aws-security       stopped  AWS Security — Well-Architected security posture assessment
 ```
 
 Explore tools from a security server:

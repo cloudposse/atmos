@@ -3,8 +3,6 @@ package client
 import (
 	"context"
 	_ "embed"
-	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -77,7 +75,7 @@ func executeMCPTools(cmd *cobra.Command, args []string) error {
 		rows = append(rows, []string{tool.Name, desc})
 	}
 
-	fmt.Fprintln(os.Stderr, theme.CreateMinimalTable(headers, rows))
+	ui.Writeln(theme.CreateMinimalTable(headers, rows))
 	return nil
 }
 

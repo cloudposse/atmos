@@ -2,8 +2,6 @@ package client
 
 import (
 	_ "embed"
-	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -57,6 +55,6 @@ func executeMCPList(_ *cobra.Command, _ []string) error {
 		})
 	}
 
-	fmt.Fprintln(os.Stderr, theme.CreateMinimalTable(headers, rows))
+	ui.Writeln(theme.CreateMinimalTable(headers, rows))
 	return nil
 }
