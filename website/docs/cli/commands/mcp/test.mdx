@@ -7,12 +7,15 @@ description: Test connectivity to an external MCP server
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
 Use this command to test connectivity to an external MCP server. It performs a full connectivity check: starts the server, verifies the initialization handshake, lists available tools, and pings the server.
 </Intro>
 
 <Experimental />
+
+<Screengrab title="atmos mcp test --help" slug="atmos-mcp-test--help" />
 
 ## Usage
 
@@ -26,6 +29,10 @@ atmos mcp test <name>
   <dt>`name`</dt>
   <dd>The name of the MCP server (as shown in `atmos mcp list`).</dd>
 </dl>
+
+## Flags
+
+This command has no command-specific flags.
 
 ### Examples
 

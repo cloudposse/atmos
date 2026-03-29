@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -28,8 +29,8 @@ type aiToolsResult struct {
 }
 
 // initializeAIToolsAndExecutor initializes the AI tool registry and executor.
-// Passing mcpServerNames filters which MCP servers to start (nil = auto-route or all).
-// The question parameter is used for automatic routing when mcpServerNames is nil.
+// Passing mcpServerNames filters which MCP servers to start (empty or nil = auto-route or all).
+// The question parameter is used for automatic routing when mcpServerNames is empty or nil.
 func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) (*aiToolsResult, error) {
 	if !atmosConfig.AI.Tools.Enabled {
 		return nil, errUtils.ErrAIToolsDisabled
@@ -86,12 +87,19 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 	}, nil
 }
 
+// aiReadOnlyResult holds the result of read-only AI tools initialization.
+type aiReadOnlyResult struct {
+	Registry *tools.Registry
+	Executor *tools.Executor
+	MCPMgr   *mcpclient.Manager
+}
+
 // initializeAIReadOnlyTools initializes a tool executor with only read-only, in-process tools.
-// Passing mcpServerNames filters which MCP servers to start (nil = auto-route or all).
-// The question parameter is used for automatic routing when mcpServerNames is nil.
-func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) (*tools.Registry, *tools.Executor, error) {
+// Passing mcpServerNames filters which MCP servers to start (empty or nil = auto-route or all).
+// The question parameter is used for automatic routing when mcpServerNames is empty or nil.
+func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) (*aiReadOnlyResult, error) {
 	if !atmosConfig.AI.Tools.Enabled {
-		return nil, nil, errUtils.ErrAIToolsDisabled
+		return nil, errUtils.ErrAIToolsDisabled
 	}
 
 	log.Debug("Initializing read-only AI tools")
@@ -103,7 +111,7 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration, mcpServer
 	}
 
 	// Register external MCP server tools (filtered by routing).
-	registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
+	mcpMgr := registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
 
 	ui.Info(fmt.Sprintf("AI tools initialized: %d", registry.Count()))
 
@@ -116,7 +124,11 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration, mcpServer
 	executor := tools.NewExecutor(registry, permChecker, tools.DefaultTimeout)
 	log.Debug("Read-only tool executor initialized")
 
-	return registry, executor, nil
+	return &aiReadOnlyResult{
+		Registry: registry,
+		Executor: executor,
+		MCPMgr:   mcpMgr,
+	}, nil
 }
 
 // registerMCPServerTools registers external MCP server tools with toolchain resolution,
@@ -156,6 +168,13 @@ func selectMCPServers(atmosConfig *schema.AtmosConfiguration, mcpServerNames []s
 	// Manual override via --mcp flag.
 	if len(mcpServerNames) > 0 {
 		filtered := filterServersByName(servers, mcpServerNames)
+		// Warn about unrecognized server names (typos, removed servers).
+		for _, name := range mcpServerNames {
+			if _, ok := servers[name]; !ok {
+				ui.Warning(fmt.Sprintf("MCP server %q not found in configuration (available: %s)",
+					name, strings.Join(sortedServerNames(servers), ", ")))
+			}
+		}
 		if len(filtered) > 0 {
 			ui.Info(fmt.Sprintf("MCP servers selected via --mcp flag: %s", strings.Join(mcpServerNames, ", ")))
 		}
@@ -223,15 +242,32 @@ func createRoutingClient(atmosConfig *schema.AtmosConfiguration) (router.Message
 	if provider == "" {
 		provider = "anthropic"
 	}
-	if routingConfig.AI.Providers != nil {
+
+	// Deep-copy the provider map to avoid mutating the original config.
+	if atmosConfig.AI.Providers != nil {
+		routingConfig.AI.Providers = make(map[string]*schema.AIProviderConfig, len(atmosConfig.AI.Providers))
+		for k, v := range atmosConfig.AI.Providers {
+			if v != nil {
+				copied := *v
+				routingConfig.AI.Providers[k] = &copied
+			}
+		}
 		if existing, ok := routingConfig.AI.Providers[provider]; ok && existing != nil {
-			copied := *existing
-			copied.MaxTokens = router.DefaultMaxTokens()
-			routingConfig.AI.Providers[provider] = &copied
+			existing.MaxTokens = router.DefaultMaxTokens()
 		}
 	}
 
 	return ai.NewClient(&routingConfig)
+}
+
+// sortedServerNames returns server names sorted alphabetically.
+func sortedServerNames(servers map[string]schema.MCPServerConfig) []string {
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // filterServersByName returns only servers whose names are in the given list.

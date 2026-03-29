@@ -99,11 +99,16 @@ var askCmd = &cobra.Command{
 		// The ask command uses only in-process, read-only tools (no subprocess execution).
 		var toolExecutor *tools.Executor
 		if !noTools && atmosConfig.AI.Tools.Enabled {
-			_, toolExecutor, err = initializeAIReadOnlyTools(&atmosConfig, mcpServers, question)
-			if err != nil {
-				log.Warn("Failed to initialize tools", "error", err)
+			toolsResult, toolsErr := initializeAIReadOnlyTools(&atmosConfig, mcpServers, question)
+			if toolsErr != nil {
+				log.Warn("Failed to initialize tools", "error", toolsErr)
 				// Continue without tools rather than failing.
-				toolExecutor = nil
+			}
+			if toolsResult != nil {
+				toolExecutor = toolsResult.Executor
+				if toolsResult.MCPMgr != nil {
+					defer toolsResult.MCPMgr.StopAll() //nolint:errcheck // Best-effort MCP server cleanup.
+				}
 			}
 		}
 

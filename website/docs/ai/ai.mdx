@@ -187,6 +187,11 @@ relevant to your question using a lightweight routing call to your configured AI
 tool payloads small and responses fast, even with dozens of servers configured.
 Use the `--mcp` flag to override and specify servers directly.
 
+:::note Chat Mode and Routing
+In chat mode (`atmos ai chat`), routing is skipped because the question isn't known when servers start.
+All configured MCP servers are started. Use `--mcp` to select specific servers and keep tool payloads small.
+:::
+
 ```bash
 # Manage external MCP servers
 atmos mcp list                    # See configured servers

@@ -4,7 +4,7 @@ Displays a table with the server name, connection status, and description.
 Servers are not started — use `atmos mcp status` to see live connection status.
 
 **Example output:**
-```
+```text
 NAME              STATUS    DESCRIPTION
 aws-eks           stopped   Amazon EKS cluster management
 aws-cost-explorer stopped   AWS Cost Explorer

@@ -801,6 +801,9 @@ func TestMarkdownFormatter_DisplayName(t *testing.T) {
 			err := formatter.Format(&buf, result)
 			require.NoError(t, err)
 			assert.Contains(t, buf.String(), "**"+tt.expected+"**")
+			if tt.tc.DisplayName != "" {
+				assert.NotContains(t, buf.String(), "**"+tt.tc.Tool+"**")
+			}
 		})
 	}
 }

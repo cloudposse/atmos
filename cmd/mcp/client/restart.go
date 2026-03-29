@@ -58,8 +58,8 @@ var restartCmd = &cobra.Command{
 
 		ui.Successf("Restarted MCP server %q (%d tools available)", name, len(session.Tools()))
 
-		// Keep running until context is cancelled (for interactive use).
-		// For non-interactive use (CI), the process will exit after this.
+		// Clean up — MCP servers are subprocess-based and started on-demand by AI commands.
+		// This command verifies the server can restart successfully (stop + start cycle).
 		_ = mgr.Stop(name)
 		return nil
 	},

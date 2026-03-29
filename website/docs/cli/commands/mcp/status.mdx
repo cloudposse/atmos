@@ -7,12 +7,15 @@ description: Show status of all configured MCP servers
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
 Use this command to check the live connection status of all configured MCP servers. Each server is started, tested for connectivity, and its tool count is displayed.
 </Intro>
 
 <Experimental />
+
+<Screengrab title="atmos mcp status --help" slug="atmos-mcp-status--help" />
 
 ## Usage
 
@@ -47,3 +50,7 @@ atmos mcp status
   <dt>`error`</dt>
   <dd>Server failed to start (check credentials, command path, or network).</dd>
 </dl>
+
+## Flags
+
+This command has no command-specific flags.

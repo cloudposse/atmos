@@ -198,7 +198,9 @@ func TestSession_Start_WithOpts(t *testing.T) {
 	session := NewSession(cfg)
 
 	// Will fail due to bad command, but opts should have been called.
-	_ = session.Start(context.Background(), opt)
+	err := session.Start(context.Background(), opt)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerStartFailed)
 	assert.True(t, optCalled, "start option should have been called even if server fails")
 }
 
@@ -215,7 +217,9 @@ func TestManager_Start_WithOpts(t *testing.T) {
 	}
 
 	// Will fail but opt should be called.
-	_ = mgr.Start(context.Background(), "test", opt)
+	err = mgr.Start(context.Background(), "test", opt)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerStartFailed)
 	assert.True(t, optCalled)
 }
 

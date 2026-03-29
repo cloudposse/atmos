@@ -44,7 +44,7 @@ Atmos supports two complementary approaches for using external MCP servers:
 | **Server lifecycle** | Atmos manages (spawn, bridge, call) | IDE manages (via `.mcp.json`) |
 | **Auth** | `auth_identity` field on server config | `atmos auth exec -i <identity> --` wraps subprocess |
 | **Tool invocation** | AI executor → BridgedTool → `Session.CallTool` | IDE → stdio → MCP server directly |
-| **Discovery** | `atmos mcp list/tools/test/status` | Manual (`atmos mcp aws install/start/test`) |
+| **Discovery** | `atmos mcp list/tools/test/status` | Manual (IDE-driven via generated .mcp.json and `atmos mcp test <name>`) |
 
 Both approaches coexist. `atmos.yaml` is the single source of truth:
 `atmos mcp generate-config` emits a `.mcp.json` from the configured servers,

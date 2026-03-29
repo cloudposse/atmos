@@ -46,19 +46,19 @@ func TestRoute_ValidJSONResponse(t *testing.T) {
 func TestRoute_FallbackOnError(t *testing.T) {
 	sender := &mockSender{err: errors.New("API error")}
 	result := Route(context.Background(), sender, "anything", testServers)
-	assert.Len(t, result, 4, "should return all servers on error")
+	assert.ElementsMatch(t, allNames(testServers), result, "should return all servers on error")
 }
 
 func TestRoute_FallbackOnEmptyResponse(t *testing.T) {
 	sender := &mockSender{response: ""}
 	result := Route(context.Background(), sender, "anything", testServers)
-	assert.Len(t, result, 4, "should return all servers on empty response")
+	assert.ElementsMatch(t, allNames(testServers), result, "should return all servers on empty response")
 }
 
 func TestRoute_FallbackOnInvalidJSON(t *testing.T) {
 	sender := &mockSender{response: "not json"}
 	result := Route(context.Background(), sender, "anything", testServers)
-	assert.Len(t, result, 4, "should return all servers on invalid JSON")
+	assert.ElementsMatch(t, allNames(testServers), result, "should return all servers on invalid JSON")
 }
 
 func TestParseResponse_ValidJSON(t *testing.T) {

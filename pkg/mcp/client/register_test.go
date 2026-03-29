@@ -31,7 +31,7 @@ func TestRegisterMCPTools_InvalidConfig(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRegisterMCPTools_FailedStart_ContinuesOtherServers(t *testing.T) {
+func TestRegisterMCPTools_FailedStart(t *testing.T) {
 	registry := tools.NewRegistry()
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.MCP.Servers = map[string]schema.MCPServerConfig{
@@ -44,4 +44,23 @@ func TestRegisterMCPTools_FailedStart_ContinuesOtherServers(t *testing.T) {
 	assert.NotNil(t, mgr)
 	// No tools registered since the server failed to start.
 	assert.Equal(t, 0, registry.Count())
+}
+
+func TestRegisterMCPTools_FailedStart_ContinuesOtherServers(t *testing.T) {
+	registry := tools.NewRegistry()
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.MCP.Servers = map[string]schema.MCPServerConfig{
+		"bad-server":   {Command: "nonexistent-binary-xyz-123"},
+		"bad-server-2": {Command: "another-nonexistent-binary-abc-456"},
+	}
+
+	// Should not return error — failed starts are logged as warnings.
+	// Both servers fail but neither prevents the other from being attempted.
+	mgr, err := RegisterMCPTools(registry, atmosConfig, nil, nil)
+	require.NoError(t, err)
+	assert.NotNil(t, mgr)
+	// No tools registered since both servers failed to start.
+	assert.Equal(t, 0, registry.Count())
+	// Manager still holds both sessions.
+	assert.Len(t, mgr.List(), 2)
 }

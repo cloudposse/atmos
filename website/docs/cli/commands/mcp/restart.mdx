@@ -7,12 +7,15 @@ description: Restart an external MCP server
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
 Use this command to stop and restart an external MCP server. This is useful for picking up configuration changes or recovering from server errors.
 </Intro>
 
 <Experimental />
+
+<Screengrab title="atmos mcp restart --help" slug="atmos-mcp-restart--help" />
 
 ## Usage
 
@@ -26,6 +29,10 @@ atmos mcp restart <name>
   <dt>`name`</dt>
   <dd>The name of the MCP server to restart (as shown in `atmos mcp list`).</dd>
 </dl>
+
+## Flags
+
+This command has no command-specific flags.
 
 ### Examples
 

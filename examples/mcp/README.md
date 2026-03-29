@@ -79,6 +79,9 @@ atmos ai chat
 ### Managing Servers
 
 ```bash
+# Start the Atmos MCP server (for IDE/Claude Code integration)
+atmos mcp start
+
 # List all configured servers
 atmos mcp list
 
@@ -646,14 +649,14 @@ $ atmos ai ask "Show our billing summary for the past 2 months"
   ### 🔍 Key Observations
 
     1. Amazon VPC is the largest cost at ~$261–$310/month (NAT Gateway data
-       transfer is typically the main driver). Costs dropped notably in June.
-    2. Redshift & RDS dropped sharply in June ($50.87 → $0.30 and
+       transfer is typically the main driver). Costs dropped notably in March.
+    2. Redshift & RDS dropped sharply in March ($50.87 → $0.30 and
        $43.99 → $0.11), suggesting those resources were stopped or deleted.
-    3. EC2 - Other increased by $35 in June — worth investigating if this
+    3. EC2 - Other increased by $35 in March — worth investigating if this
        correlates with EBS, data transfer, or Elastic IP costs.
-    4. Amazon EC2 Compute tripled in June ($5.03 → $15.30), possibly linked
+    4. Amazon EC2 Compute tripled in March ($5.03 → $15.30), possibly linked
        to the appearance of EKS ($1.86), indicating new compute workloads.
-    5. Amazon Registrar appeared as a new $14 charge in June (domain renewal).
+    5. Amazon Registrar appeared as a new $14 charge in March (domain renewal).
 
   │  ⚠️ Note: Credits and refunds are excluded from these figures.
 

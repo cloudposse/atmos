@@ -7,12 +7,15 @@ description: List configured external MCP servers
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
 Use this command to list all external MCP servers configured in `atmos.yaml` under `mcp.servers`.
 </Intro>
 
 <Experimental />
+
+<Screengrab title="atmos mcp list --help" slug="atmos-mcp-list--help" />
 
 ## Description
 
@@ -38,6 +41,14 @@ atmos mcp list
 # aws-api           stopped   AWS API — direct AWS CLI access with security controls
 # aws-security      stopped   AWS Security — Well-Architected security posture assessment
 ```
+
+## Arguments
+
+This command takes no arguments.
+
+## Flags
+
+This command has no command-specific flags.
 
 ## Configuration
 

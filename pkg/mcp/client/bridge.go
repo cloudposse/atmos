@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // BridgedTool wraps an external MCP tool to implement the Atmos tools.Tool interface.

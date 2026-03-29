@@ -9,11 +9,12 @@ import (
 	"strings"
 	"sync"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // SessionStatus represents the state of an MCP client session.
@@ -30,7 +31,6 @@ const (
 	StatusError SessionStatus = "error"
 )
 
-// Session wraps an MCP client connection to an external server.
 // Session wraps an MCP client connection to an external server.
 type Session struct {
 	name           string

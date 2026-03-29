@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-const configFilePermissions = 0o644
+const configFilePermissions = 0o600
 
 var generateConfigCmd = &cobra.Command{
 	Use:   "generate-config",

@@ -21,6 +21,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List configured MCP servers",
 	Long:  listLongMarkdown,
+	Args:  cobra.NoArgs,
 	RunE:  executeMCPList,
 }
 

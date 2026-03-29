@@ -23,12 +23,13 @@ func TestParseConfig(t *testing.T) {
 			name:    "valid config with all fields",
 			cfgName: "aws-eks",
 			cfg: schema.MCPServerConfig{
-				Description: "Amazon EKS",
-				Command:     "uvx",
-				Args:        []string{"awslabs.amazon-eks-mcp-server@latest"},
-				Env:         map[string]string{"AWS_REGION": "us-east-1"},
-				AutoStart:   true,
-				Timeout:     "45s",
+				Description:  "Amazon EKS",
+				Command:      "uvx",
+				Args:         []string{"awslabs.amazon-eks-mcp-server@latest"},
+				Env:          map[string]string{"AWS_REGION": "us-east-1"},
+				AutoStart:    true,
+				Timeout:      "45s",
+				AuthIdentity: "aws-prod",
 			},
 			checkFunc: func(t *testing.T, pc *ParsedConfig) {
 				t.Helper()
@@ -39,6 +40,7 @@ func TestParseConfig(t *testing.T) {
 				assert.Equal(t, "us-east-1", pc.Env["AWS_REGION"])
 				assert.True(t, pc.AutoStart)
 				assert.Equal(t, 45*time.Second, pc.Timeout)
+				assert.Equal(t, "aws-prod", pc.AuthIdentity)
 			},
 		},
 		{

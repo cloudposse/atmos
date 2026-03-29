@@ -7,12 +7,15 @@ description: List tools exposed by an external MCP server
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
 Use this command to connect to an external MCP server and list the tools it exposes. This starts the server, performs the MCP initialization handshake, retrieves the tool list, then shuts down the server.
 </Intro>
 
 <Experimental />
+
+<Screengrab title="atmos mcp tools --help" slug="atmos-mcp-tools--help" />
 
 ## Usage
 
@@ -26,6 +29,10 @@ atmos mcp tools <name>
   <dt>`name`</dt>
   <dd>The name of the MCP server (as shown in `atmos mcp list`).</dd>
 </dl>
+
+## Flags
+
+This command has no command-specific flags.
 
 ### Examples
 
