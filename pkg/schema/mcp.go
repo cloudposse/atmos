@@ -10,13 +10,10 @@ type MCPSettings struct {
 
 // MCPRoutingConfig configures the two-pass routing that selects which MCP servers
 // are relevant to a user's question before starting them.
+// Routing uses the same AI provider and model configured under ai.default_provider.
 type MCPRoutingConfig struct {
 	// Enabled controls whether automatic server routing is active (default: true).
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	// Model is the fast model used for routing (default: claude-haiku-4-5-20251001).
-	Model string `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
-	// Provider overrides the AI provider for routing (default: same as ai.default_provider).
-	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 }
 
 // IsEnabled returns true if routing is enabled (defaults to true when not explicitly set).

@@ -212,7 +212,7 @@ auth:
       region: "us-east-1"
   identities:
     # Read-only identity for cost analysis and security assessment.
-    # Change the role_name and account_id to match your AWS organization.
+    # Change the permission_set and account id to match your AWS organization.
     readonly:
       kind: aws/permission-set
       provider: aws-sso
@@ -223,14 +223,12 @@ auth:
           id: "123456789012"                             # ← Change this
 
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # AI Configuration (required for atmos ai chat / atmos ai ask / atmos ai exec)
 # ---------------------------------------------------------------------------
 # Docs: https://atmos.tools/cli/configuration/ai
 ai:
   enabled: true
   default_provider: "anthropic"
-  # Increase timeout for large tool sets.
   timeout_seconds: 120
 
   providers:

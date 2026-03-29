@@ -99,11 +99,50 @@ atmos mcp restart aws-api
 atmos mcp generate-config
 ```
 
+### Smart Server Routing
+
+When multiple MCP servers are configured, Atmos automatically selects only the servers
+relevant to your question using a lightweight routing call to your configured AI provider.
+This keeps tool payloads small and responses fast, even with dozens of servers configured:
+
+```text
+$ atmos ai ask "List all IAM roles with admin access"
+ℹ MCP routing selected 1 of 8 servers: aws-iam
+ℹ MCP server "aws-iam" started (29 tools)
+ℹ Registered 29 tools from 1 MCP server(s)
+ℹ AI tools initialized: 39
+```
+
+Use `--mcp` to override and specify servers directly:
+
+```bash
+# Specify one server
+atmos ai ask --mcp aws-iam "List all admin roles"
+
+# Specify multiple servers (comma-separated)
+atmos ai ask --mcp aws-iam,aws-cloudtrail "Who accessed the admin role last week?"
+
+# Specify multiple servers (repeated flag)
+atmos ai ask --mcp aws-iam --mcp aws-cloudtrail "Who accessed the admin role?"
+
+# Works with all AI commands
+atmos ai chat --mcp aws-billing
+atmos ai exec --mcp aws-security,aws-iam "audit our security posture"
+
+# Environment variable
+ATMOS_AI_MCP=aws-billing atmos ai ask "What did we spend last month?"
+```
+
+Routing is skipped when only one server is configured or when `--mcp` is provided.
+In `chat` mode, routing is skipped because the question isn't known upfront — use
+`--mcp` to filter servers in chat.
+
 ### How to Know MCP Tools Are Active
 
 When you run any AI command, Atmos logs which MCP servers started and how many tools were discovered:
 
 ```text
+ℹ MCP routing selected 2 of 8 servers: aws-docs, aws-pricing
 ℹ MCP server "aws-docs" started (4 tools)
 ℹ MCP server "aws-pricing" started (7 tools)
 ℹ Registered 11 tools from 2 MCP server(s)
@@ -115,8 +154,8 @@ After the AI responds, a "Tool Executions" section shows which tools were actual
 ```text
 ---
 ## Tool Executions (2)
-1. ✅ **aws-docs.search_documentation** (234ms)
-2. ✅ **aws-pricing.get_pricing** (456ms)
+1. ✅ aws-docs → aws.search_documentation (234ms)
+2. ✅ aws-pricing → get_pricing (456ms)
 ```
 
 Tool usage is not inferred — the AI provider explicitly declares which tools it wants to call
@@ -528,6 +567,7 @@ $ atmos mcp test aws-security
 ```text
 $ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
 
+ℹ MCP routing selected 1 of 8 servers: aws-knowledge
 ℹ MCP server "aws-knowledge" started (6 tools)
 ℹ Registered 6 tools from 1 MCP server(s)
 ℹ AI tools initialized: 16
@@ -576,7 +616,7 @@ $ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
 
 ```text
 $ atmos ai ask "Show our billing summary for the past 2 months"
-🧪 ai is an experimental feature. Learn more https://atmos.tools/experimental
+ℹ MCP routing selected 1 of 8 servers: aws-billing
 ℹ MCP server "aws-billing" started (25 tools)
 ℹ Registered 25 tools from 1 MCP server(s)
 ℹ AI tools initialized: 35
@@ -621,7 +661,7 @@ $ atmos ai ask "Show our billing summary for the past 2 months"
    Month      │ Total Cost
   ────────────┼──────────────────
    Feb 2026   │ ~$782.16
-   Mar 2026  │ ~$745.26
+   Mar 2026   │ ~$745.26
    Difference │ ▼ $36.90 (-4.7%)
 
   --------
@@ -651,61 +691,71 @@ $ atmos ai ask "Show our billing summary for the past 2 months"
 
 ```text
 $ atmos ai ask "Is GuardDuty enabled in us-east-1?"
+ℹ MCP routing selected 2 of 8 servers: aws-api, aws-security
+ℹ MCP server "aws-api" started (2 tools)
 ℹ MCP server "aws-security" started (6 tools)
-ℹ Registered 6 tools from 1 MCP server(s)
-ℹ AI tools initialized: 16
+ℹ Registered 8 tools from 2 MCP server(s)
+ℹ AI tools initialized: 18
 👽 Thinking...
-
-   I'll check the status of GuardDuty in us-east-1 right away!
 
   ## GuardDuty Status in us-east-1
 
-   ⚠️ GuardDuty is NOT enabled in  us-east-1 .
+   ❌ GuardDuty is NOT enabled in  us-east-1 .
 
-  ### Recommendation
+  ### Why This Matters
 
-   Enabling GuardDuty is strongly recommended as it provides intelligent threat
-   detection to protect your AWS accounts and workloads. It continuously monitors
-   for malicious activity and unauthorized behavior.
+   Amazon GuardDuty is a threat detection service that continuously monitors your
+   AWS accounts and workloads for malicious activity and unauthorized behavior.
+   Without it, you lose visibility into:
+
+    • 🔍 Reconnaissance attempts (port scanning, unusual API calls)
+    • 🚨 Instance compromise (cryptocurrency mining, malware, backdoors)
+    • 🔑 Account compromise (unusual login patterns, credential exfiltration)
+    • 🌐 Network threats (communication with known malicious IPs/domains)
+
+  --------
 
   ### How to Enable GuardDuty
 
-   Via AWS Console:
+   Option 1 – AWS Console:
 
-    1. Open the GuardDuty Console
-    2. Choose Get Started
-    3. Choose Enable GuardDuty
+    1. Go to the GuardDuty Console
+    2. Click Get Started
+    3. Click Enable GuardDuty
 
-   Via AWS CLI:
+   Option 2 – AWS CLI:
 
    aws guardduty create-detector --enable --region us-east-1
 
-   Via Terraform:
+   Option 3 – Terraform/Atmos:
 
    resource "aws_guardduty_detector" "main" {
      enable = true
    }
 
-  ### Why Enable GuardDuty?
+  --------
 
-    • 🔍 Threat Detection – Identifies unexpected and potentially unauthorized
-      activity in your AWS environment
-    • 📊 Continuous Monitoring – Analyzes CloudTrail, VPC Flow Logs, and DNS
-      logs automatically
-    • 🤖 ML-Powered – Uses machine learning to detect anomalies
-    • 💡 No Infrastructure Required – Fully managed, no agents to deploy
+  ### 💡 Recommendation
+
+   Enabling GuardDuty is strongly recommended, especially for  us-east-1
+   which is a commonly used primary region. It is a low-cost, low-overhead
+   service that provides significant security value with no impact on performance.
+
+   Would you like help enabling GuardDuty via an Atmos component or checking
+   its status in other regions?
 
   --------
 
   ## Tool Executions (1)
 
-  1. ✅ aws-security → CheckSecurityServices (260ms)
+  1. ✅ aws-security → CheckSecurityServices (264ms)
 ```
 
-### Audit IAM roles with MCP tools
+### Audit IAM roles with smart routing
 
 ```text
 $ atmos ai ask "List all IAM roles with admin access"
+ℹ MCP routing selected 1 of 8 servers: aws-iam
 ℹ MCP server "aws-iam" started (29 tools)
 ℹ Registered 29 tools from 1 MCP server(s)
 ℹ AI tools initialized: 39
@@ -718,43 +768,41 @@ $ atmos ai ask "List all IAM roles with admin access"
 
   ## 🔐 IAM Roles with Admin Access
 
-  ### 1. ✅ Explicit Admin Role (via AdministratorAccess Policy)
+  ### 1. ✅ Direct AdministratorAccess Policy (4 attachments)
 
-   Role Name                                │ Description                                    │ Trust Principal
-  ──────────────────────────────────────────┼────────────────────────────────────────────────┼───────────────────────────
-    AWSReservedSSO_AdministratorAccess_...  │ Allow Full Administrator access to the account │ AWS SSO (SAML Federation)
-
-  │  This is the primary role with the AdministratorAccess managed policy,
-  │  which grants * on all resources.
+   Role Name                                        │ Description                                    │ Trust Principal
+  ──────────────────────────────────────────────────┼────────────────────────────────────────────────┼───────────────────────────
+    AWSReservedSSO_AdministratorAccess_...          │ Allow Full Administrator access to the account │ AWS SSO (SAML Federation)
+    AWSReservedSSO_RootAccess_...                   │ Centralized root access to member accounts     │ AWS SSO (SAML Federation)
+    AWSReservedSSO_TerraformApplyAccess_...         │ Full Terraform state and account access        │ AWS SSO (SAML Federation)
+    AWSReservedSSO_TerraformApplyAccess-Core_...    │ Full Terraform access (core backend)           │ AWS SSO (SAML Federation)
 
   --------
 
-  ### 2. ⚠️ Elevated / Near-Admin Roles
+  ## 📋 Summary
 
-   These roles have broad, privileged access that may be considered
-   equivalent to admin in practice:
-
-   Role Name                                        │ Why It's High-Privilege
-  ──────────────────────────────────────────────────┼──────────────────────────────────────────────
-    AWSReservedSSO_RootAccess_...                   │ Root-level access across member accounts
-    AWSReservedSSO_TerraformApplyAccess_...         │ Full account write access via Terraform
-    AWSReservedSSO_TerraformApplyAccess-Core_...    │ Full account write access via Terraform (core)
+   Category                                  │ Count
+  ───────────────────────────────────────────┼──────────
+   Full Admin (AdministratorAccess policy)   │ 4 roles
+   Broad Terraform/State access (elevated)   │ 4 roles
+   AWS Service-Linked Roles (scoped)         │ 13 roles
+   Other application roles (Lambda, etc.)    │ 4 roles
 
   --------
 
   ### 🛡️ Security Recommendations
 
-    1. Audit all attachments of the AdministratorAccess policy.
-    2. Restrict Root Access role usage to approved SSO permission sets.
-    3. Review Terraform Apply roles — consider permission boundaries.
+    1. Review SSO assignments for AdministratorAccess and RootAccess roles.
+    2. Audit TerraformApplyAccess roles — ensure MFA/session policies are enforced.
+    3. Monitor tfstate roles — cross-account trust across 14 accounts.
     4. Enable CloudTrail for AssumeRole calls on high-privilege roles.
 
   --------
 
   ## Tool Executions (2)
 
-  1. ✅ aws-iam → list_roles (328ms)
-  2. ✅ aws-iam → list_policies (189ms)
+  1. ✅ aws-iam → list_roles (314ms)
+  2. ✅ aws-iam → list_policies (174ms)
 ```
 
 ### Check status of all servers

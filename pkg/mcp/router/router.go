@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	// DefaultModel is the fast model used for routing decisions.
-	DefaultModel = "claude-haiku-4-5-20251001"
 	// DefaultTimeout is the maximum time allowed for the routing call.
 	DefaultTimeout = 10 * time.Second
 	// Max tokens for routing responses (server name list only).

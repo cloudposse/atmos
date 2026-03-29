@@ -182,6 +182,11 @@ VS Code, Cursor, Gemini CLI). Use Atmos tools inside your preferred AI assistant
 **External MCP Servers** — Connect to AWS, GCP, Azure, and custom MCP servers. Their tools become available
 in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos tools.
 
+**Smart Routing** — When multiple MCP servers are configured, Atmos automatically selects only the servers
+relevant to your question using a lightweight routing call to your configured AI provider. This keeps
+tool payloads small and responses fast, even with dozens of servers configured.
+Use the `--mcp` flag to override and specify servers directly.
+
 ```bash
 # Manage external MCP servers
 atmos mcp list                    # See configured servers
@@ -190,10 +195,15 @@ atmos mcp tools aws-security      # List available tools
 atmos mcp status                  # Show live status of all servers
 atmos mcp generate-config         # Generate .mcp.json for Claude Code / IDE
 
-# Ask questions — AI uses the appropriate MCP server automatically
-atmos ai ask "What did we spend on EC2 last month?"     # uses aws-billing
-atmos ai ask "Is GuardDuty enabled in us-east-1?"       # uses aws-security
-atmos ai ask "How do I configure S3 lifecycle rules?"   # uses aws-docs
+# Ask questions — AI auto-routes to the right MCP server
+atmos ai ask "What did we spend on EC2 last month?"     # routes to aws-billing
+atmos ai ask "Is GuardDuty enabled in us-east-1?"       # routes to aws-security
+atmos ai ask "How do I configure S3 lifecycle rules?"   # routes to aws-docs
+
+# Manual MCP server(s) selection (skip auto-routing)
+atmos ai ask --mcp aws-iam "List all admin roles"
+atmos ai ask --mcp aws-iam,aws-cloudtrail "Who accessed the admin role?"
+atmos ai chat --mcp aws-billing
 ```
 
 <File title="atmos.yaml">
@@ -205,7 +215,7 @@ mcp:
       command: uvx
       args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
-      description: "AWS Billing — summaries, cost explorer, and forecasts"
+      description: "AWS Billing — billing summaries and payment history"
       auth_identity: "readonly"
 
     # Security & Compliance
@@ -213,14 +223,18 @@ mcp:
       command: uvx
       args: ["awslabs.well-architected-security-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
-      description: "AWS Security — Well-Architected posture assessment"
+      description: "AWS Security — Well-Architected security posture assessment"
       auth_identity: "readonly"
 
     # Documentation (no credentials needed)
     aws-docs:
       command: uvx
       args: ["awslabs.aws-documentation-mcp-server@latest"]
-      description: "AWS Documentation — search and fetch docs"
+      description: "AWS Documentation — search and fetch AWS docs"
+
+  # Smart routing (enabled by default, uses your configured AI provider)
+  routing:
+    enabled: true
 ```
 </File>
 
@@ -232,7 +246,7 @@ mcp:
 </ActionCard>
 
 <ActionCard title="Try the MCP Example">
-    Explore a complete example with pre-configured AWS MCP servers for cost analysis, security, and documentation.
+    Explore a complete example with pre-configured AWS MCP servers for cost analysis, security, IAM, and documentation.
     <div>
         <PrimaryCTA to="/examples/mcp">Browse Example</PrimaryCTA>
     </div>

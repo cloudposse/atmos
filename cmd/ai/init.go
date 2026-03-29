@@ -212,36 +212,24 @@ func routeWithAI(atmosConfig *schema.AtmosConfiguration, question string) []stri
 	return router.Route(ctx, client, question, serverInfos)
 }
 
-// createRoutingClient creates a lightweight AI client for the routing step.
-// It uses a fast model (Haiku) with minimal max_tokens for quick server selection.
+// createRoutingClient creates an AI client for the routing step.
+// Uses the same provider and model the user already configured — no extra model config needed.
+// Only overrides max_tokens to keep routing responses small.
 func createRoutingClient(atmosConfig *schema.AtmosConfiguration) (router.MessageSender, error) {
-	// Build a temporary config with the routing model.
 	routingConfig := *atmosConfig
 
-	provider := atmosConfig.MCP.Routing.Provider
+	// Override max_tokens for routing (responses are just a JSON array of server names).
+	provider := atmosConfig.AI.DefaultProvider
 	if provider == "" {
-		provider = atmosConfig.AI.DefaultProvider
-		if provider == "" {
-			provider = "anthropic"
+		provider = "anthropic"
+	}
+	if routingConfig.AI.Providers != nil {
+		if existing, ok := routingConfig.AI.Providers[provider]; ok && existing != nil {
+			copied := *existing
+			copied.MaxTokens = router.DefaultMaxTokens()
+			routingConfig.AI.Providers[provider] = &copied
 		}
 	}
-
-	model := atmosConfig.MCP.Routing.Model
-	if model == "" {
-		model = router.DefaultModel
-	}
-
-	// Override the provider's model for the routing call.
-	if routingConfig.AI.Providers == nil {
-		routingConfig.AI.Providers = make(map[string]*schema.AIProviderConfig)
-	}
-	if existing, ok := routingConfig.AI.Providers[provider]; ok && existing != nil {
-		copied := *existing
-		copied.Model = model
-		copied.MaxTokens = router.DefaultMaxTokens()
-		routingConfig.AI.Providers[provider] = &copied
-	}
-	routingConfig.AI.DefaultProvider = provider
 
 	return ai.NewClient(&routingConfig)
 }

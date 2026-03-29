@@ -324,7 +324,7 @@ After the AI responds, tool executions are listed with error details:
 
 ---
 
-## Phase 6 — Smart Tool Routing (Planned)
+## Phase 6 — Smart Tool Routing (Implemented)
 
 ### Problem
 
@@ -389,16 +389,20 @@ Simple keyword matching: "IAM" → aws-iam, "billing"/"cost" → aws-billing,
 **Pros:** Zero latency, no API calls, deterministic.
 **Cons:** Brittle, misses intent ("who has admin access" → should route to aws-iam).
 
-### Recommended Approach
+### Chosen Approach
 
-Combine two-pass router with manual override:
+Two-pass router with manual override (implemented):
 
-- **Default:** Two-pass router using a fast model (e.g., Claude Haiku) to select servers
+- **Default:** Two-pass router using a fast model (Claude Haiku) to select servers
   from their descriptions. This is the industry standard for making large tool sets practical.
-- **Override:** `--mcp aws-iam,aws-cloudtrail` flag on all `atmos ai` commands for power
+- **Override:** `--mcp` flag on all `atmos ai` subcommands (`ask`, `chat`, `exec`) for power
   users who want to skip the routing step and directly specify which servers to use.
 
-### Implementation Sketch
+### Implementation
+
+**Package:** `pkg/mcp/router/` — stateless routing with `Route()` function.
+
+**Flow:**
 
 ```
 atmos ai ask "List unused IAM roles"
@@ -407,15 +411,37 @@ atmos ai ask "List unused IAM roles"
 2. If --mcp flag provided:
      → Start only specified servers
      → Skip routing step
-3. Else:
+3. Else if single server configured:
+     → Start it directly (no routing needed)
+4. Else if routing disabled in config:
+     → Start all servers
+5. Else if no question available (chat mode):
+     → Start all servers (question unknown upfront)
+6. Else:
      → Send to fast model: "Given these servers: {name: description, ...},
         which are relevant to: {question}? Return server names only."
-     → Parse response → start only selected servers
-4. Bridge tools from selected servers
-5. Send question + selected tools to main model
+     → Parse JSON response → start only selected servers
+     → On any error, fall back to starting all servers
+7. Bridge tools from selected servers
+8. Send question + selected tools to main model
 ```
 
+**Routing configuration** (`atmos.yaml`):
+
+```yaml
+mcp:
+  routing:
+    enabled: true   # Default: true. Uses the same AI provider and model from ai.default_provider.
+```
+
+Routing uses the same provider and model the user already configured under `ai.default_provider`.
+No extra model configuration is needed — this avoids hardcoding provider-specific model names
+and keeps UX simple (one model config, not two).
+
 ### CLI Interface
+
+The `--mcp` flag is registered on all three `atmos ai` subcommands (`ask`, `chat`, `exec`).
+It supports both repeated flags and comma-separated values:
 
 ```bash
 # Automatic routing (default) — fast model selects relevant servers
@@ -424,10 +450,29 @@ atmos ai ask "List unused IAM roles"
 # Manual override — skip routing, use specific servers
 atmos ai ask --mcp aws-iam,aws-cloudtrail "List unused IAM roles"
 
-# Works with all AI commands
+# Repeated flags (equivalent to comma-separated)
+atmos ai ask --mcp aws-iam --mcp aws-cloudtrail "List unused IAM roles"
+
+# Works with all AI subcommands
 atmos ai chat --mcp aws-billing
 atmos ai exec --mcp aws-security,aws-iam "audit our security posture"
+
+# Environment variable support
+ATMOS_AI_MCP=aws-iam,aws-billing atmos ai ask "List admin roles and their costs"
 ```
+
+**Chat mode note:** Since `chat` is interactive, the user's question isn't known when
+servers are initialized. Routing is skipped in chat mode — use `--mcp` to filter servers.
+
+### Design Decisions
+
+- **Graceful fallback:** If routing fails (API error, parse error, model unavailable),
+  all servers start. Never blocks the user.
+- **Single-server optimization:** Routing is skipped when only one MCP server is configured.
+- **Config copy, not mutation:** The routing client creates a shallow copy of config with
+  the fast model, never mutating the original.
+- **Upstream filtering:** Server selection happens before `RegisterMCPTools`, so existing
+  registration code is unchanged.
 
 ---
 
