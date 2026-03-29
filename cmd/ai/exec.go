@@ -52,6 +52,7 @@ var execCmd = &cobra.Command{
 		includePatterns := v.GetStringSlice("include")
 		excludePatterns := v.GetStringSlice("exclude")
 		noAutoContext := v.GetBool("no-auto-context")
+		mcpServers := v.GetStringSlice("mcp")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -104,7 +105,7 @@ var execCmd = &cobra.Command{
 		var toolExecutor *tools.Executor
 		if !noTools && atmosConfig.AI.Tools.Enabled {
 			// Use shared initialization function.
-			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig)
+			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, prompt)
 			if toolsErr != nil {
 				log.Warn("Failed to initialize tools", "error", toolsErr)
 			}
@@ -239,6 +240,7 @@ func init() {
 		flags.WithStringFlag("format", "f", "text", "Output format: text, json, markdown"),
 		flags.WithStringFlag("output", "o", "", "Output file (default: stdout)"),
 		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
+		flags.WithStringSliceFlag("mcp", "", nil, "MCP servers to use (comma-separated, skips auto-routing)"),
 		flags.WithBoolFlag("context", "", false, "Include stack context in prompt"),
 		flags.WithStringFlag("provider", "p", "", "Override AI provider (anthropic, openai, gemini, etc.)"),
 		flags.WithStringFlag("session", "s", "", "Session ID for conversation context"),
@@ -248,6 +250,7 @@ func init() {
 		flags.WithEnvVars("format", "ATMOS_AI_FORMAT"),
 		flags.WithEnvVars("output", "ATMOS_AI_OUTPUT"),
 		flags.WithEnvVars("no-tools", "ATMOS_AI_NO_TOOLS"),
+		flags.WithEnvVars("mcp", "ATMOS_AI_MCP"),
 		flags.WithEnvVars("context", "ATMOS_AI_CONTEXT"),
 		flags.WithEnvVars("provider", "ATMOS_AI_PROVIDER"),
 		flags.WithEnvVars("session", "ATMOS_AI_SESSION"),

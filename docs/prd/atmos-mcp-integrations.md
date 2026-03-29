@@ -324,10 +324,116 @@ After the AI responds, tool executions are listed with error details:
 
 ---
 
+## Phase 6 — Smart Tool Routing (Planned)
+
+### Problem
+
+When many MCP servers are configured (e.g., 8 servers, 96 tools), the full tool schema
+payload overwhelms the AI context — increasing latency, cost, and reducing response quality.
+Most queries only need 1-2 servers.
+
+### Industry Approaches
+
+Four established patterns exist for tool selection at scale:
+
+#### 1. Two-Pass Router (Industry Standard)
+
+Send the question + server descriptions (not full tool schemas) to a fast/cheap model →
+it returns which 1-2 servers are relevant → only start those → send the real query with
+just those tools.
+
+```
+User: "List unused IAM roles"
+  → Pass 1 (fast model, ~200ms): "Which servers? aws-iam, aws-cloudtrail"
+  → Start only aws-iam + aws-cloudtrail (34 tools instead of 96)
+  → Pass 2 (full model): Execute with relevant tools only
+```
+
+**Used by:** Claude Code (tool selection), Cursor, Continue.dev, LangChain, CrewAI.
+
+**Pros:** Automatic, no user knowledge needed, cheap (pass 1 can use haiku).
+**Cons:** Extra latency for the routing call (~200-500ms).
+
+#### 2. Meta-Tool / Progressive Disclosure
+
+Register ONE tool: `discover_tools(query)`. The AI calls it first, it starts the relevant
+servers, returns their tool schemas. Then the AI uses those tools on the next iteration.
+
+```
+AI sees: 10 atmos tools + 1 "discover_mcp_tools" tool
+AI calls: discover_mcp_tools("IAM role analysis")
+  → Starts aws-iam, returns 29 tool schemas
+AI calls: aws-iam → list_roles, etc.
+```
+
+**Used by:** OpenAI Plugins (original design), MCP tool discovery pattern, Semantic Kernel.
+
+**Pros:** Zero config, AI decides, scales to unlimited servers.
+**Cons:** Always costs one extra tool round-trip.
+
+#### 3. Semantic Matching (No LLM Needed)
+
+Embed the question and all server descriptions at startup. Pick top-K servers by cosine
+similarity. No LLM call needed.
+
+**Used by:** RAG-based tool selection, some LangChain agents.
+
+**Pros:** Fast (~10ms), no extra API call.
+**Cons:** Requires embedding model, less accurate than LLM routing.
+
+#### 4. Keyword/Heuristic Routing
+
+Simple keyword matching: "IAM" → aws-iam, "billing"/"cost" → aws-billing,
+"security"/"GuardDuty" → aws-security.
+
+**Pros:** Zero latency, no API calls, deterministic.
+**Cons:** Brittle, misses intent ("who has admin access" → should route to aws-iam).
+
+### Recommended Approach
+
+Combine two-pass router with manual override:
+
+- **Default:** Two-pass router using a fast model (e.g., Claude Haiku) to select servers
+  from their descriptions. This is the industry standard for making large tool sets practical.
+- **Override:** `--mcp aws-iam,aws-cloudtrail` flag on all `atmos ai` commands for power
+  users who want to skip the routing step and directly specify which servers to use.
+
+### Implementation Sketch
+
+```
+atmos ai ask "List unused IAM roles"
+
+1. Load MCP config (server names + descriptions only)
+2. If --mcp flag provided:
+     → Start only specified servers
+     → Skip routing step
+3. Else:
+     → Send to fast model: "Given these servers: {name: description, ...},
+        which are relevant to: {question}? Return server names only."
+     → Parse response → start only selected servers
+4. Bridge tools from selected servers
+5. Send question + selected tools to main model
+```
+
+### CLI Interface
+
+```bash
+# Automatic routing (default) — fast model selects relevant servers
+atmos ai ask "List unused IAM roles"
+
+# Manual override — skip routing, use specific servers
+atmos ai ask --mcp aws-iam,aws-cloudtrail "List unused IAM roles"
+
+# Works with all AI commands
+atmos ai chat --mcp aws-billing
+atmos ai exec --mcp aws-security,aws-iam "audit our security posture"
+```
+
+---
+
 ## Future Considerations
 
 - Stack-level MCP server overrides (per-stack `settings.mcp.servers` config)
 - Composite MCP server (expose external tools via Atmos MCP server to IDEs)
 - Connection pooling and health checks with auto-restart on failure
 - `tools/list_changed` notification handling for dynamic tool updates
-- Lazy initialization (auto-start on first tool call instead of upfront)

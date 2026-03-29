@@ -1,9 +1,12 @@
 package ai
 
 import (
+	"context"
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
@@ -12,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
+	"github.com/cloudposse/atmos/pkg/mcp/router"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -24,8 +28,9 @@ type aiToolsResult struct {
 }
 
 // initializeAIToolsAndExecutor initializes the AI tool registry and executor.
-// This is shared by both 'atmos ai chat' and 'atmos mcp start' commands.
-func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiToolsResult, error) {
+// Passing mcpServerNames filters which MCP servers to start (nil = auto-route or all).
+// The question parameter is used for automatic routing when mcpServerNames is nil.
+func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) (*aiToolsResult, error) {
 	if !atmosConfig.AI.Tools.Enabled {
 		return nil, errUtils.ErrAIToolsDisabled
 	}
@@ -41,8 +46,8 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiTo
 		log.Warnf("Failed to register Atmos tools: %v", err)
 	}
 
-	// Register external MCP server tools (if configured).
-	mcpMgr := registerMCPServerTools(registry, atmosConfig)
+	// Register external MCP server tools (filtered by routing).
+	mcpMgr := registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
 
 	ui.Info(fmt.Sprintf("AI tools initialized: %d total", registry.Count()))
 
@@ -82,9 +87,9 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*aiTo
 }
 
 // initializeAIReadOnlyTools initializes a tool executor with only read-only, in-process tools.
-// This is used by non-interactive commands like 'ask' where subprocess tools and write tools
-// are not appropriate.
-func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.Registry, *tools.Executor, error) {
+// Passing mcpServerNames filters which MCP servers to start (nil = auto-route or all).
+// The question parameter is used for automatic routing when mcpServerNames is nil.
+func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) (*tools.Registry, *tools.Executor, error) {
 	if !atmosConfig.AI.Tools.Enabled {
 		return nil, nil, errUtils.ErrAIToolsDisabled
 	}
@@ -97,8 +102,8 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 		log.Warnf("Failed to register read-only Atmos tools: %v", err)
 	}
 
-	// Register external MCP server tools (all configured servers).
-	registerMCPServerTools(registry, atmosConfig)
+	// Register external MCP server tools (filtered by routing).
+	registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
 
 	ui.Info(fmt.Sprintf("AI tools initialized: %d", registry.Count()))
 
@@ -114,21 +119,142 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 	return registry, executor, nil
 }
 
-// registerMCPServerTools registers external MCP server tools with toolchain resolution
-// and auth credential injection.
-func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) *mcpclient.Manager {
+// registerMCPServerTools registers external MCP server tools with toolchain resolution,
+// auth credential injection, and optional server routing.
+func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) *mcpclient.Manager {
 	if len(atmosConfig.MCP.Servers) == 0 {
 		return nil
 	}
 
-	toolchain := resolveToolchain(atmosConfig)
-	authProvider := resolveAuthProvider(atmosConfig)
+	// Select which servers to start.
+	selectedServers := selectMCPServers(atmosConfig, mcpServerNames, question)
+	if len(selectedServers) == 0 {
+		return nil
+	}
 
-	mgr, err := mcpclient.RegisterMCPTools(registry, atmosConfig, authProvider, toolchain)
+	// Create a filtered copy of the config for RegisterMCPTools.
+	filteredConfig := *atmosConfig
+	filteredConfig.MCP.Servers = selectedServers
+
+	toolchain := resolveToolchain(atmosConfig)
+	authProvider := resolveAuthProvider(&filteredConfig)
+
+	mgr, err := mcpclient.RegisterMCPTools(registry, &filteredConfig, authProvider, toolchain)
 	if err != nil {
 		ui.Error(fmt.Sprintf("Failed to initialize MCP servers: %v", err))
 	}
 	return mgr
+}
+
+// selectMCPServers determines which MCP servers to start based on:
+// 1. Manual override via --mcp flag (mcpServerNames).
+// 2. Two-pass AI routing using a fast model.
+// 3. All servers (fallback).
+func selectMCPServers(atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) map[string]schema.MCPServerConfig {
+	servers := atmosConfig.MCP.Servers
+
+	// Manual override via --mcp flag.
+	if len(mcpServerNames) > 0 {
+		filtered := filterServersByName(servers, mcpServerNames)
+		if len(filtered) > 0 {
+			ui.Info(fmt.Sprintf("MCP servers selected via --mcp flag: %s", strings.Join(mcpServerNames, ", ")))
+		}
+		return filtered
+	}
+
+	// Single server — no routing needed.
+	if len(servers) <= 1 {
+		return servers
+	}
+
+	// Routing disabled in config.
+	if !atmosConfig.MCP.Routing.IsEnabled() {
+		return servers
+	}
+
+	// No question available (e.g., chat mode) — start all.
+	if question == "" {
+		return servers
+	}
+
+	// Two-pass routing with fast model.
+	selected := routeWithAI(atmosConfig, question)
+	if len(selected) == 0 {
+		return servers
+	}
+
+	ui.Info(fmt.Sprintf("MCP routing selected %d of %d servers: %s",
+		len(selected), len(servers), strings.Join(selected, ", ")))
+
+	return filterServersByName(servers, selected)
+}
+
+// routeWithAI uses a fast model to select relevant MCP servers for a question.
+func routeWithAI(atmosConfig *schema.AtmosConfiguration, question string) []string {
+	client, err := createRoutingClient(atmosConfig)
+	if err != nil {
+		log.Debug("Failed to create routing client, starting all servers", "error", err)
+		return nil
+	}
+
+	// Build server info list for routing.
+	var serverInfos []router.ServerInfo
+	for name, cfg := range atmosConfig.MCP.Servers {
+		serverInfos = append(serverInfos, router.ServerInfo{
+			Name:        name,
+			Description: cfg.Description,
+		})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), router.DefaultTimeout)
+	defer cancel()
+
+	return router.Route(ctx, client, question, serverInfos)
+}
+
+// createRoutingClient creates a lightweight AI client for the routing step.
+// It uses a fast model (Haiku) with minimal max_tokens for quick server selection.
+func createRoutingClient(atmosConfig *schema.AtmosConfiguration) (router.MessageSender, error) {
+	// Build a temporary config with the routing model.
+	routingConfig := *atmosConfig
+
+	provider := atmosConfig.MCP.Routing.Provider
+	if provider == "" {
+		provider = atmosConfig.AI.DefaultProvider
+		if provider == "" {
+			provider = "anthropic"
+		}
+	}
+
+	model := atmosConfig.MCP.Routing.Model
+	if model == "" {
+		model = router.DefaultModel
+	}
+
+	// Override the provider's model for the routing call.
+	if routingConfig.AI.Providers == nil {
+		routingConfig.AI.Providers = make(map[string]*schema.AIProviderConfig)
+	}
+	if existing, ok := routingConfig.AI.Providers[provider]; ok && existing != nil {
+		copied := *existing
+		copied.Model = model
+		copied.MaxTokens = router.DefaultMaxTokens()
+		routingConfig.AI.Providers[provider] = &copied
+	}
+	routingConfig.AI.DefaultProvider = provider
+
+	return ai.NewClient(&routingConfig)
+}
+
+// filterServersByName returns only servers whose names are in the given list.
+func filterServersByName(servers map[string]schema.MCPServerConfig, names []string) map[string]schema.MCPServerConfig {
+	filtered := make(map[string]schema.MCPServerConfig, len(names))
+	for _, name := range names {
+		if cfg, ok := servers[name]; ok {
+			filtered[name] = cfg
+		}
+	}
+	return filtered
 }
 
 // resolveToolchain attempts to create a toolchain resolver from .tool-versions or component deps.

@@ -23,7 +23,7 @@ func TestInitializeAIToolsAndExecutor_ToolsDisabled(t *testing.T) {
 		},
 	}
 
-	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrAIToolsDisabled))
@@ -47,7 +47,7 @@ func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
 		},
 	}
 
-	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, toolsResult)
@@ -68,7 +68,7 @@ func TestInitializeAIToolsAndExecutor_YOLOMode(t *testing.T) {
 		},
 	}
 
-	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, toolsResult)
@@ -128,7 +128,7 @@ func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
 				},
 			}
 
-			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 			if tt.shouldError {
 				assert.Error(t, err)
@@ -174,7 +174,7 @@ func TestInitializeAIToolsAndExecutor_RequireConfirmation(t *testing.T) {
 				},
 			}
 
-			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 			assert.NoError(t, err)
 			assert.NotNil(t, toolsResult)
@@ -208,7 +208,7 @@ func TestInitializeAIToolsAndExecutor_PermissionCacheFailure(t *testing.T) {
 
 	// The function should still succeed, but use NewCLIPrompter instead of
 	// NewCLIPrompterWithCache due to the permission cache failure.
-	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, toolsResult)
@@ -229,7 +229,7 @@ func TestInitializeAIToolsAndExecutor_EmptyBasePath(t *testing.T) {
 		},
 	}
 
-	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, toolsResult)
@@ -297,7 +297,7 @@ func TestInitializeAIToolsAndExecutor_PermissionModes(t *testing.T) {
 				},
 			}
 
-			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 			assert.NoError(t, err, tt.description)
 			assert.NotNil(t, toolsResult)
@@ -318,7 +318,7 @@ func TestInitializeAIToolsAndExecutor_ToolRegistration(t *testing.T) {
 		},
 	}
 
-	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, toolsResult)
@@ -354,7 +354,7 @@ func TestInitializeAIToolsAndExecutor_NilPermCacheUsesSimplePrompter(t *testing.
 
 	// The function should still succeed because it handles permCache failure gracefully
 	// by using NewCLIPrompter() instead of NewCLIPrompterWithCache().
-	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, toolsResult)

@@ -558,8 +558,8 @@ func TestAskCommand_FlagCount(t *testing.T) {
 			count++
 		}
 	})
-	// Expected: include, exclude, no-auto-context, no-tools = 4 flags.
-	assert.Equal(t, 4, count, "ask command should have exactly 4 custom flags")
+	// Expected: include, exclude, no-auto-context, no-tools, mcp = 5 flags.
+	assert.Equal(t, 5, count, "ask command should have exactly 5 custom flags")
 }
 
 func TestAskCommand_AIEnabledButClientCreationFails(t *testing.T) {

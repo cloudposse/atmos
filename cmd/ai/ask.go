@@ -47,6 +47,7 @@ var askCmd = &cobra.Command{
 		excludePatterns := v.GetStringSlice("exclude")
 		noAutoContext := v.GetBool("no-auto-context")
 		noTools := v.GetBool("no-tools")
+		mcpServers := v.GetStringSlice("mcp")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -98,7 +99,7 @@ var askCmd = &cobra.Command{
 		// The ask command uses only in-process, read-only tools (no subprocess execution).
 		var toolExecutor *tools.Executor
 		if !noTools && atmosConfig.AI.Tools.Enabled {
-			_, toolExecutor, err = initializeAIReadOnlyTools(&atmosConfig)
+			_, toolExecutor, err = initializeAIReadOnlyTools(&atmosConfig, mcpServers, question)
 			if err != nil {
 				log.Warn("Failed to initialize tools", "error", err)
 				// Continue without tools rather than failing.
@@ -150,10 +151,12 @@ func init() {
 		flags.WithStringSliceFlag("exclude", "", nil, "Add glob patterns to exclude from context (can be repeated)"),
 		flags.WithBoolFlag("no-auto-context", "", false, "Disable automatic context discovery"),
 		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
+		flags.WithStringSliceFlag("mcp", "", nil, "MCP servers to use (comma-separated, skips auto-routing)"),
 		flags.WithEnvVars("include", "ATMOS_AI_INCLUDE"),
 		flags.WithEnvVars("exclude", "ATMOS_AI_EXCLUDE"),
 		flags.WithEnvVars("no-auto-context", "ATMOS_AI_NO_AUTO_CONTEXT"),
 		flags.WithEnvVars("no-tools", "ATMOS_AI_NO_TOOLS"),
+		flags.WithEnvVars("mcp", "ATMOS_AI_MCP"),
 	)
 
 	// Register flags on the command.
