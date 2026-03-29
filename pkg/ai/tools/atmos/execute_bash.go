@@ -371,4 +371,3 @@ func (t *ExecuteBashCommandTool) RequiresPermission() bool {
 func (t *ExecuteBashCommandTool) IsRestricted() bool {
 	return false // Permission system will handle per-command restrictions.
 }
-
