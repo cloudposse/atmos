@@ -98,7 +98,7 @@ atmos ai ask "What did we spend on EC2 last month?"
 atmos ai ask "Show our billing summary for the past 3 months"
 
 # Security posture (uses aws-security)
-atmos ai ask "Is GuardDuty enabled in us-east-1?"
+atmos ai ask "Is GuardDuty enabled in all regions?"
 
 # IAM analysis (uses aws-iam)
 atmos ai ask "List all IAM roles with admin access"
@@ -422,7 +422,7 @@ $ atmos ai ask "Show our billing summary for the past 2 months"
 Check security posture with MCP tools:
 
 ```text
-$ atmos ai ask "Is GuardDuty enabled in us-east-1?"
+$ atmos ai ask "Is GuardDuty enabled in all regions?"
 ℹ MCP routing selected 2 of 8 servers: aws-api, aws-security
 ℹ MCP server "aws-api" started (2 tools)
 ℹ MCP server "aws-security" started (6 tools)
@@ -430,57 +430,50 @@ $ atmos ai ask "Is GuardDuty enabled in us-east-1?"
 ℹ AI tools initialized: 18
 👽 Thinking...
 
-  ## GuardDuty Status in us-east-1
+  ## ❌ GuardDuty is NOT Enabled in All Regions
 
-   ❌ GuardDuty is NOT enabled in  us-east-1 .
+   GuardDuty is only enabled in 1 out of 34 regions checked.
 
-  ### Why This Matters
+  ### ✅ Enabled (1 region)
 
-   Amazon GuardDuty is a threat detection service that continuously monitors your
-   AWS accounts and workloads for malicious activity and unauthorized behavior.
-   Without it, you lose visibility into:
+   Region    │ Detector ID
+  ───────────┼────────────────────────────────────
+   us-east-2 │  c8c419ea4992fa2eb9c9c23aef14a66e
 
-    • 🔍 Reconnaissance attempts (port scanning, unusual API calls)
-    • 🚨 Instance compromise (cryptocurrency mining, malware, backdoors)
-    • 🔑 Account compromise (unusual login patterns, credential exfiltration)
-    • 🌐 Network threats (communication with known malicious IPs/domains)
+  ### ❌ Not Enabled (33 regions)
 
-  --------
-
-  ### How to Enable GuardDuty
-
-   Option 1 – AWS Console:
-
-    1. Go to the GuardDuty Console
-    2. Click Get Started
-    3. Click Enable GuardDuty
-
-   Option 2 – AWS CLI:
-
-   aws guardduty create-detector --enable --region us-east-1
-
-   Option 3 – Terraform/Atmos:
-
-   resource "aws_guardduty_detector" "main" {
-     enable = true
-   }
+   Region         │ Region         │ Region
+  ────────────────┼────────────────┼────────────────
+   ap-south-1     │ ap-south-2     │ ap-southeast-1
+   ap-southeast-2 │ ap-southeast-3 │ ap-southeast-4
+   ap-northeast-1 │ ap-northeast-2 │ ap-northeast-3
+   ap-east-1      │ ca-central-1   │ ca-west-1
+   eu-central-1   │ eu-central-2   │ eu-north-1
+   eu-south-1     │ eu-south-2     │ eu-west-1
+   eu-west-2      │ eu-west-3      │ me-central-1
+   me-south-1     │ il-central-1   │ af-south-1
+   sa-east-1      │ us-east-1      │ us-west-1
+   us-west-2      │ mx-central-1   │ ...
 
   --------
 
-  ### 💡 Recommendation
+  ### 🔒 Recommendations
 
-   Enabling GuardDuty is strongly recommended, especially for  us-east-1
-   which is a commonly used primary region. It is a low-cost, low-overhead
-   service that provides significant security value with no impact on performance.
-
-   Would you like help enabling GuardDuty via an Atmos component or checking
-   its status in other regions?
+    1. Enable GuardDuty in all active regions — even regions where you don't
+       actively deploy can be targeted by attackers.
+    2. Use a GuardDuty delegated administrator (via AWS Organizations) to
+       centrally enable and manage across all accounts and regions.
+    3. Consider AWS Security Hub to aggregate findings from all regions.
+    4. Prioritize us-east-1, us-west-2, eu-west-1 immediately.
 
   --------
 
-  ## Tool Executions (1)
+  ## Tool Executions (4)
 
-  1. ✅ aws-security → CheckSecurityServices (264ms)
+  1. ✅ aws-api → call_aws (400ms)
+  2. ✅ aws-api → call_aws (14ms)
+  3. ✅ aws-api → call_aws (7ms)
+  4. ✅ aws-api → call_aws (9450ms)
 ```
 
 Audit IAM roles with smart routing:
