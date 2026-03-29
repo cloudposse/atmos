@@ -27,7 +27,7 @@ func (r *MCPRoutingConfig) IsEnabled() bool {
 // MCPServerConfig represents an external MCP server configured in atmos.yaml
 // under mcp.servers. The core fields (command, args, env) follow the standard
 // MCP server configuration format used by Claude Code, Codex CLI, and Gemini CLI.
-// Atmos-specific extensions (description, auto_start, timeout, auth_identity)
+// Atmos-specific extensions (description, auto_start, timeout, identity)
 // provide additional functionality.
 type MCPServerConfig struct {
 	// Standard MCP server fields (compatible with mcpServers JSON format).
@@ -36,8 +36,9 @@ type MCPServerConfig struct {
 	Env     map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
 	// Atmos-specific extensions.
-	Description  string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
-	AutoStart    bool   `yaml:"auto_start,omitempty" json:"auto_start,omitempty" mapstructure:"auto_start"`
-	Timeout      string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
-	AuthIdentity string `yaml:"auth_identity,omitempty" json:"auth_identity,omitempty" mapstructure:"auth_identity"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
+	AutoStart   bool   `yaml:"auto_start,omitempty" json:"auto_start,omitempty" mapstructure:"auto_start"`
+	Timeout     string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
+	// Identity is the Atmos Auth identity (from the auth section) for credential injection.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }

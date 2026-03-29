@@ -22,7 +22,7 @@ var generateConfigCmd = &cobra.Command{
 	Long: `Generate a .mcp.json file from the MCP servers configured in atmos.yaml.
 
 This enables Claude Code, Cursor, and other MCP-compatible IDEs to use the same
-servers configured in atmos.yaml. Servers with auth_identity are wrapped with
+servers configured in atmos.yaml. Servers with identity are wrapped with
 'atmos auth exec' for automatic credential injection.`,
 	RunE: executeMCPGenerateConfig,
 }
@@ -80,11 +80,11 @@ func executeMCPGenerateConfig(cmd *cobra.Command, _ []string) error {
 }
 
 // buildMCPJSONEntry creates a .mcp.json entry for a server.
-// Servers with auth_identity are wrapped with 'atmos auth exec' for credential injection.
+// Servers with identity are wrapped with 'atmos auth exec' for credential injection.
 func buildMCPJSONEntry(_ string, serverCfg *schema.MCPServerConfig) mcpJSONServer {
-	if serverCfg.AuthIdentity != "" {
+	if serverCfg.Identity != "" {
 		// Wrap with atmos auth exec for credential injection.
-		args := []string{"auth", "exec", "-i", serverCfg.AuthIdentity, "--", serverCfg.Command}
+		args := []string{"auth", "exec", "-i", serverCfg.Identity, "--", serverCfg.Command}
 		args = append(args, serverCfg.Args...)
 		return mcpJSONServer{
 			Command: "atmos",

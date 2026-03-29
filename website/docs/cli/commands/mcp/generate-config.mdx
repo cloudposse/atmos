@@ -21,7 +21,7 @@ Use this command to generate a `.mcp.json` file from the MCP servers configured 
 
 The `atmos mcp generate-config` command reads all servers from `mcp.servers` in `atmos.yaml` and generates a `.mcp.json` file in the standard format used by Claude Code, Codex CLI, and other MCP-compatible tools.
 
-Servers with `auth_identity` are automatically wrapped with `atmos auth exec -i <identity> --` so that credentials are injected when the IDE starts the server process.
+Servers with `identity` are automatically wrapped with `atmos auth exec -i <identity> --` so that credentials are injected when the IDE starts the server process.
 
 ## Usage
 
@@ -60,7 +60,7 @@ mcp:
       args: ["awslabs.well-architected-security-mcp-server@latest"]
       env:
         AWS_REGION: "us-east-1"
-      auth_identity: "security-audit"
+      identity: "security-audit"   # Atmos Auth identity (from the auth section)
 ```
 
 The generated `.mcp.json` will be:
@@ -82,4 +82,4 @@ The generated `.mcp.json` will be:
 }
 ```
 
-Note how `aws-security` is wrapped with `atmos auth exec` because it has `auth_identity` set, while `aws-docs` uses the command directly.
+Note how `aws-security` is wrapped with `atmos auth exec` because it has `identity` set, while `aws-docs` uses the command directly.

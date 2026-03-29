@@ -92,7 +92,7 @@ mcp:
 
       # Atmos extensions
       description: "Human-readable description"
-      auth_identity: "my-identity"      # Atmos Auth credential injection
+      identity: "my-identity"           # Atmos Auth identity (from the auth section)
       auto_start: false                 # Start server automatically
       timeout: "30s"                    # Connection timeout
 ```
@@ -119,8 +119,8 @@ These fields are compatible with the `mcpServers` JSON format used by Claude Cod
   <dt>`description`</dt>
   <dd>Human-readable description shown in `atmos mcp list` and `atmos mcp status`.</dd>
 
-  <dt>`auth_identity`</dt>
-  <dd>Name of an [Atmos Auth identity](/cli/configuration/auth) to use for credential injection. When set, Atmos authenticates through the identity chain and injects `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, and `AWS_REGION` into the subprocess environment.</dd>
+  <dt>`identity`</dt>
+  <dd>Name of an Atmos Auth identity (from the [`auth`](/cli/configuration/auth) section) to use for credential injection. When set, Atmos authenticates through the identity chain and injects `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, and `AWS_REGION` into the subprocess environment.</dd>
 
   <dt>`auto_start`</dt>
   <dd>Start the server automatically when Atmos starts (default: `false`).</dd>
@@ -183,11 +183,11 @@ mcp:
     aws-security:
       command: uvx
       args: ["awslabs.well-architected-security-mcp-server@latest"]
-      auth_identity: "security-audit"
+      identity: "security-audit"   # Atmos Auth identity (from the auth section)
 ```
 </File>
 
-When `auth_identity` is set, Atmos:
+When `identity` is set, Atmos:
 1. Authenticates through the identity chain (SSO → role assumption)
 2. Writes isolated credential files to `~/.aws/atmos/<realm>/`
 3. Injects `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE` into the subprocess
@@ -257,7 +257,7 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Pricing — real-time pricing and cost analysis"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # Security assessment (read-only, uses Atmos Auth)
     aws-security:
@@ -267,7 +267,7 @@ mcp:
         AWS_REGION: "us-east-1"
         FASTMCP_LOG_LEVEL: "ERROR"
       description: "AWS Security — Well-Architected security posture assessment"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 ```
 </File>
 

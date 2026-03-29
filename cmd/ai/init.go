@@ -314,10 +314,10 @@ func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthE
 	return mgr
 }
 
-// serversNeedAuth returns true if any configured MCP server has auth_identity set.
+// serversNeedAuth returns true if any configured MCP server has identity set.
 func serversNeedAuth(servers map[string]schema.MCPServerConfig) bool {
 	for _, s := range servers {
-		if s.AuthIdentity != "" {
+		if s.Identity != "" {
 			return true
 		}
 	}

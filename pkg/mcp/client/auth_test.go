@@ -37,8 +37,8 @@ func TestWithAuthManager_InjectsCredentials(t *testing.T) {
 	opt := WithAuthManager(mock)
 
 	config := &ParsedConfig{
-		Name:         "aws-eks",
-		AuthIdentity: "production",
+		Name:     "aws-eks",
+		Identity: "production",
 	}
 	env := []string{"PATH=/usr/bin"}
 
@@ -56,8 +56,8 @@ func TestWithAuthManager_NoIdentity_Passthrough(t *testing.T) {
 	opt := WithAuthManager(mock)
 
 	config := &ParsedConfig{
-		Name:         "custom-server",
-		AuthIdentity: "", // No auth identity.
+		Name:     "custom-server",
+		Identity: "", // No auth identity.
 	}
 	env := []string{"PATH=/usr/bin"}
 
@@ -72,8 +72,8 @@ func TestWithAuthManager_NilProvider_Passthrough(t *testing.T) {
 	opt := WithAuthManager(nil)
 
 	config := &ParsedConfig{
-		Name:         "aws-eks",
-		AuthIdentity: "production",
+		Name:     "aws-eks",
+		Identity: "production",
 	}
 	env := []string{"PATH=/usr/bin"}
 
@@ -87,8 +87,8 @@ func TestWithAuthManager_Error_ReturnsError(t *testing.T) {
 	opt := WithAuthManager(mock)
 
 	config := &ParsedConfig{
-		Name:         "aws-eks",
-		AuthIdentity: "production",
+		Name:     "aws-eks",
+		Identity: "production",
 	}
 	env := []string{"PATH=/usr/bin"}
 
@@ -101,21 +101,21 @@ func newTestServerConfig(command string) schema.MCPServerConfig {
 	return schema.MCPServerConfig{Command: command}
 }
 
-func TestParseConfig_AuthIdentity(t *testing.T) {
+func TestParseConfig_Identity(t *testing.T) {
 	cfg := newTestServerConfig("uvx")
-	cfg.AuthIdentity = "billing-readonly"
+	cfg.Identity = "billing-readonly"
 
 	parsed, err := ParseConfig("aws-cost", cfg)
 	require.NoError(t, err)
-	assert.Equal(t, "billing-readonly", parsed.AuthIdentity)
+	assert.Equal(t, "billing-readonly", parsed.Identity)
 }
 
-func TestParseConfig_EmptyAuthIdentity(t *testing.T) {
+func TestParseConfig_EmptyIdentity(t *testing.T) {
 	cfg := newTestServerConfig("echo")
 
 	parsed, err := ParseConfig("test", cfg)
 	require.NoError(t, err)
-	assert.Empty(t, parsed.AuthIdentity)
+	assert.Empty(t, parsed.Identity)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

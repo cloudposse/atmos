@@ -87,10 +87,35 @@ func TestBridgedTool_Parameters_WithSchema(t *testing.T) {
 			break
 		}
 	}
-	assert.NotNil(t, regionParam)
+	require.NotNil(t, regionParam)
 	assert.True(t, regionParam.Required)
 	assert.Equal(t, tools.ParamTypeString, regionParam.Type)
 	assert.Equal(t, "AWS region", regionParam.Description)
+
+	// Validate count param.
+	var countParam *tools.Parameter
+	for i := range params {
+		if params[i].Name == "count" {
+			countParam = &params[i]
+			break
+		}
+	}
+	require.NotNil(t, countParam)
+	assert.False(t, countParam.Required)
+	assert.Equal(t, tools.ParamTypeInt, countParam.Type)
+	assert.Equal(t, "Number of items", countParam.Description)
+
+	// Validate verbose param.
+	var verboseParam *tools.Parameter
+	for i := range params {
+		if params[i].Name == "verbose" {
+			verboseParam = &params[i]
+			break
+		}
+	}
+	require.NotNil(t, verboseParam)
+	assert.False(t, verboseParam.Required)
+	assert.Equal(t, tools.ParamTypeBool, verboseParam.Type)
 }
 
 func TestBridgedTool_Parameters_NoSchema(t *testing.T) {

@@ -221,7 +221,7 @@ mcp:
       args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Billing — billing summaries and payment history"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # Security & Compliance
     aws-security:
@@ -229,7 +229,7 @@ mcp:
       args: ["awslabs.well-architected-security-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Security — Well-Architected security posture assessment"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # Documentation (no credentials needed)
     aws-docs:

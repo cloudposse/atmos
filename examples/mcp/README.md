@@ -45,7 +45,7 @@ All configured MCP servers are available across all Atmos AI commands — `atmos
 1. **Python 3.10+** — the `uv` package manager is auto-installed by the Atmos toolchain
    (configured in `atmos.yaml`), so you don't need to install it manually.
 
-2. **Atmos Auth** — all servers that need AWS credentials use `auth_identity: "readonly"`.
+2. **Atmos Auth** — all servers that need AWS credentials use `identity: "readonly"`.
    Update the auth section in `atmos.yaml` with your SSO start URL, permission set, and
    account ID, then run:
    ```bash
@@ -281,7 +281,7 @@ mcp:
 
       # Atmos extensions
       description: "Human-readable description"    # Shown in `atmos mcp list`
-      auth_identity: "my-identity"                 # Atmos Auth credential injection
+      identity: "my-identity"                  # Atmos Auth identity (from the auth section)
       auto_start: false                            # Start automatically
       timeout: "30s"                               # Connection timeout
 ```
@@ -315,7 +315,7 @@ mcp:
 
 This example uses Atmos Auth to automatically inject AWS credentials into every MCP server
 that needs them. Instead of manually running `aws configure` or exporting environment
-variables for each server, you configure auth once and every server with `auth_identity`
+variables for each server, you configure auth once and every server with `identity`
 gets credentials automatically.
 
 ### Setup
@@ -323,11 +323,11 @@ gets credentials automatically.
 1. Edit the `auth` section in `atmos.yaml` — update `start_url`, `permission_set`, and
    `account.id` to match your AWS organization
 2. Run `atmos auth login` to authenticate
-3. All MCP servers with `auth_identity: "readonly"` will get credentials injected
+3. All MCP servers with `identity: "readonly"` will get credentials injected
 
 ### How it works
 
-When `auth_identity` is set on a server, Atmos:
+When `identity` is set on a server, Atmos:
 
 1. Authenticates through the identity chain (SSO → role assumption)
 2. Writes isolated credential files to `~/.aws/atmos/<realm>/`
@@ -454,8 +454,8 @@ atmos mcp generate-config
 
 This creates a `.mcp.json` file where:
 
-- Servers **without** `auth_identity` use their command directly
-- Servers **with** `auth_identity` are wrapped with `atmos auth exec -i <identity> --` for
+- Servers **without** `identity` use their command directly
+- Servers **with** `identity` are wrapped with `atmos auth exec -i <identity> --` for
   automatic credential injection
 
 Example generated output:

@@ -18,7 +18,7 @@ const registrationTimeout = 60 * time.Second
 // all servers on exit.
 //
 // Optional providers:
-//   - authProvider: injects credentials for servers with auth_identity configured.
+//   - authProvider: injects credentials for servers with identity configured.
 //   - toolchain: resolves command binaries and provides toolchain PATH for
 //     prerequisites like uvx/npx that may be managed by Atmos toolchain.
 //

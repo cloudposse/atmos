@@ -580,7 +580,7 @@ func TestServersNeedAuth(t *testing.T) {
 
 	t.Run("one server needs auth", func(t *testing.T) {
 		servers := map[string]schema.MCPServerConfig{
-			"aws": {Command: "aws-mcp", AuthIdentity: "aws-identity"},
+			"aws": {Command: "aws-mcp", Identity: "aws-identity"},
 			"gcp": {Command: "gcp-mcp"},
 		}
 		assert.True(t, serversNeedAuth(servers))
@@ -588,8 +588,8 @@ func TestServersNeedAuth(t *testing.T) {
 
 	t.Run("all servers need auth", func(t *testing.T) {
 		servers := map[string]schema.MCPServerConfig{
-			"aws": {Command: "aws-mcp", AuthIdentity: "aws-id"},
-			"gcp": {Command: "gcp-mcp", AuthIdentity: "gcp-id"},
+			"aws": {Command: "aws-mcp", Identity: "aws-id"},
+			"gcp": {Command: "gcp-mcp", Identity: "gcp-id"},
 		}
 		assert.True(t, serversNeedAuth(servers))
 	})

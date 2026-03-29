@@ -9,7 +9,7 @@
 #   - `uv` package manager is auto-installed by Atmos toolchain (see toolchain section below)
 #   - AWS credentials (for servers that need them):
 #       Option A: `aws configure` or `export AWS_PROFILE=...`
-#       Option B: Atmos Auth with `auth_identity` on each server (see auth section below)
+#       Option B: Atmos Auth with `identity` on each server (see auth section below)
 #
 # Quick start:
 #   atmos mcp list          # See configured servers
@@ -34,7 +34,7 @@ toolchain:
 # ---------------------------------------------------------------------------
 # Each server follows the standard MCP format (command, args, env) used by
 # Claude Code, Codex CLI, and Gemini CLI. Atmos adds extensions like
-# `description` and `auth_identity` for enhanced functionality.
+# `description` and `identity` for enhanced functionality.
 #
 # YAML functions work in env values:
 #   !env VAR_NAME          - Read from OS environment (empty string if unset)
@@ -90,7 +90,7 @@ mcp:
         FASTMCP_LOG_LEVEL: "ERROR"
 
       description: "AWS Pricing — real-time pricing and cost analysis"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # -----------------------------------------------------------------------
     # AWS API — direct AWS CLI access via AI
@@ -111,7 +111,7 @@ mcp:
         REQUIRE_MUTATION_CONSENT: "true"
 
       description: "AWS API — direct AWS CLI access with security controls"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # -----------------------------------------------------------------------
     # AWS Security — Well-Architected security posture assessment
@@ -130,7 +130,7 @@ mcp:
         FASTMCP_LOG_LEVEL: "ERROR"
 
       description: "AWS Security — Well-Architected security posture assessment"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # -----------------------------------------------------------------------
     # AWS Billing & Cost Management — billing summaries and payment history
@@ -148,7 +148,7 @@ mcp:
         FASTMCP_LOG_LEVEL: "ERROR"
 
       description: "AWS Billing — billing summaries and payment history"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # -----------------------------------------------------------------------
     # AWS IAM — role/policy analysis and access patterns
@@ -166,7 +166,7 @@ mcp:
         FASTMCP_LOG_LEVEL: "ERROR"
 
       description: "AWS IAM — role/policy analysis and access patterns"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # -----------------------------------------------------------------------
     # AWS CloudTrail — event history and API call auditing
@@ -184,7 +184,7 @@ mcp:
         FASTMCP_LOG_LEVEL: "ERROR"
 
       description: "AWS CloudTrail — event history and API call auditing"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
 # ---------------------------------------------------------------------------
 # Atmos Auth — automatic credential injection for MCP servers
@@ -196,13 +196,13 @@ mcp:
 # How it works:
 #   1. Configure your auth provider (SSO, OIDC, IAM user, etc.)
 #   2. Define identities with the roles/accounts you need
-#   3. Set auth_identity on each MCP server
+#   3. Set identity on each MCP server
 #   4. Atmos authenticates once and injects credentials automatically
 #
 # To set up:
 #   1. Update the provider and identity settings below to match your AWS org
 #   2. Run: atmos auth login
-#   3. All MCP servers with auth_identity will get credentials automatically
+#   3. All MCP servers with identity will get credentials automatically
 #
 auth:
   providers:

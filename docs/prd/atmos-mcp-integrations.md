@@ -42,7 +42,7 @@ Atmos supports two complementary approaches for using external MCP servers:
 | **Target user** | Uses `atmos ai ask/chat/exec` | Uses Claude Code / Cursor / IDE |
 | **Config location** | `atmos.yaml` under `mcp.servers` | `.mcp.json` + custom commands in `.atmos.d/` |
 | **Server lifecycle** | Atmos manages (spawn, bridge, call) | IDE manages (via `.mcp.json`) |
-| **Auth** | `auth_identity` field on server config | `atmos auth exec -i <identity> --` wraps subprocess |
+| **Auth** | `identity` field on server config | `atmos auth exec -i <identity> --` wraps subprocess |
 | **Tool invocation** | AI executor → BridgedTool → `Session.CallTool` | IDE → stdio → MCP server directly |
 | **Discovery** | `atmos mcp list/tools/test/status` | Manual (IDE-driven via generated .mcp.json and `atmos mcp test <name>`) |
 
@@ -62,7 +62,7 @@ mcp:
       args: ["awslabs.aws-pricing-mcp-server@latest"]
       env:
         AWS_REGION: "us-east-1"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
       description: "AWS Pricing"
 ```
 
@@ -135,7 +135,7 @@ mcp:
       args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env:
         AWS_REGION: "us-east-1"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
       timeout: "30s"
 
     aws-docs:
@@ -156,7 +156,7 @@ mcp:
 **Atmos extensions:**
 
 - `description` — Human-readable description shown in `atmos mcp list` and `atmos mcp status`.
-- `auth_identity` — Atmos Auth identity for credential injection.
+- `identity` — Atmos Auth identity (from the `auth` section) for credential injection.
 - `auto_start` — Start the server automatically when Atmos starts.
 - `timeout` — Connection timeout as a Go duration string (default: `30s`).
 
@@ -246,7 +246,7 @@ format (`aws-docs → search_documentation`) via the `BridgedToolInfo` interface
 
 ### Auth Integration
 
-AWS MCP servers need credentials. With `auth_identity`, Atmos Auth handles this automatically:
+AWS MCP servers need credentials. With `identity`, Atmos Auth handles this automatically:
 
 1. Atmos Auth resolves the identity through the provider chain (SSO → role assumption).
 2. Credentials are written to isolated files at `~/.aws/atmos/<realm>/`.
@@ -308,7 +308,7 @@ All phases are implemented and shipped.
 
 ### Phase 4: Auth + Toolchain ✅
 
-- `auth_identity` field on `MCPServerConfig` with `AuthEnvProvider` interface
+- `identity` field on `MCPServerConfig` with `AuthEnvProvider` interface
 - `WithAuthManager` and `WithToolchain` start options for credential and binary resolution
 - YAML functions (`!env`, `!exec`, `!repo-root`, `!cwd`) work in env values via `preprocessAtmosYamlFunc`
 

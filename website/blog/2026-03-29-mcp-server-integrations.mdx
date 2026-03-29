@@ -40,13 +40,13 @@ mcp:
       args: ["awslabs.billing-cost-management-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Billing — billing summaries and payment history"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
     aws-pricing:
       command: uvx
       args: ["awslabs.aws-pricing-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Pricing — real-time pricing and cost analysis"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # Security & Compliance
     aws-security:
@@ -54,19 +54,19 @@ mcp:
       args: ["awslabs.well-architected-security-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS Security — Well-Architected security posture assessment"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
     aws-iam:
       command: uvx
       args: ["awslabs.iam-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS IAM — role/policy analysis and access patterns"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
     aws-cloudtrail:
       command: uvx
       args: ["awslabs.cloudtrail-mcp-server@latest"]
       env: { AWS_REGION: "us-east-1" }
       description: "AWS CloudTrail — event history and API call auditing"
-      auth_identity: "readonly"
+      identity: "readonly"   # Atmos Auth identity (from the auth section)
 
     # Documentation (no credentials needed)
     aws-docs:
@@ -178,7 +178,7 @@ atmos mcp generate-config # Generate .mcp.json for Claude Code / IDE
 ## Standard Config Format
 
 The `command`, `args`, `env` fields follow the same format used by Claude Code, Codex CLI, and
-Gemini CLI. Atmos adds `description`, `auth_identity`, and `timeout` as extensions:
+Gemini CLI. Atmos adds `description`, `identity`, and `timeout` as extensions:
 
 ```yaml
 mcp:
@@ -189,7 +189,7 @@ mcp:
       env:                                    # Standard
         AWS_REGION: "us-east-1"
       description: "What this server does"    # Atmos extension
-      auth_identity: "my-identity"            # Atmos Auth integration
+      identity: "my-identity"                 # Atmos Auth identity (from the auth section)
       timeout: "30s"                          # Connection timeout
 ```
 
@@ -204,7 +204,7 @@ mcp:
     aws-security:
       command: uvx
       args: ["awslabs.well-architected-security-mcp-server@latest"]
-      auth_identity: "security-audit"  # Credentials injected automatically
+      identity: "security-audit"   # Atmos Auth identity (from the auth section)
 ```
 
 Atmos authenticates through the identity chain, writes isolated credential files, and sets
@@ -233,7 +233,7 @@ Use the same servers from Claude Code, Cursor, or any MCP-compatible IDE:
 atmos mcp generate-config
 ```
 
-Servers with `auth_identity` are automatically wrapped with `atmos auth exec` for
+Servers with `identity` are automatically wrapped with `atmos auth exec` for
 credential injection. The generated `.mcp.json` works with Claude Code out of the box.
 
 ## Atmos YAML Functions

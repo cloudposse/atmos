@@ -557,33 +557,31 @@ func TestExecutor_ExecuteMetadata(t *testing.T) {
 	assert.True(t, result.Metadata.Timestamp.Before(afterExec) || result.Metadata.Timestamp.Equal(afterExec))
 }
 
+// Compile-time sentinel: fails build if MaxToolIterations field is renamed.
+var _ = schema.AISettings{MaxToolIterations: 1}
+
 func TestDefaultMaxToolIterationsConstant(t *testing.T) {
 	// Verify the default is set to a reasonable value.
 	assert.Equal(t, 25, DefaultMaxToolIterations)
 }
 
-func TestMaxToolIterations_Default(t *testing.T) {
-	exec := NewExecutor(nil, nil, &schema.AtmosConfiguration{})
-	assert.Equal(t, DefaultMaxToolIterations, exec.maxToolIterations())
-}
-
-func TestMaxToolIterations_Configured(t *testing.T) {
-	exec := NewExecutor(nil, nil, &schema.AtmosConfiguration{
-		AI: schema.AISettings{MaxToolIterations: 50},
-	})
-	assert.Equal(t, 50, exec.maxToolIterations())
-}
-
-func TestMaxToolIterations_NilConfig(t *testing.T) {
-	exec := NewExecutor(nil, nil, nil)
-	assert.Equal(t, DefaultMaxToolIterations, exec.maxToolIterations())
-}
-
-func TestMaxToolIterations_NegativeValue(t *testing.T) {
-	exec := NewExecutor(nil, nil, &schema.AtmosConfiguration{
-		AI: schema.AISettings{MaxToolIterations: -1},
-	})
-	assert.Equal(t, DefaultMaxToolIterations, exec.maxToolIterations())
+func TestMaxToolIterations(t *testing.T) {
+	tests := []struct {
+		name   string
+		cfg    *schema.AtmosConfiguration
+		expect int
+	}{
+		{"default", &schema.AtmosConfiguration{}, DefaultMaxToolIterations},
+		{"configured", &schema.AtmosConfiguration{AI: schema.AISettings{MaxToolIterations: 50}}, 50},
+		{"nil config", nil, DefaultMaxToolIterations},
+		{"negative value", &schema.AtmosConfiguration{AI: schema.AISettings{MaxToolIterations: -1}}, DefaultMaxToolIterations},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exec := NewExecutor(nil, nil, tt.cfg)
+			assert.Equal(t, tt.expect, exec.maxToolIterations())
+		})
+	}
 }
 
 func TestExecutor_ExecuteToolsEnabled(t *testing.T) {

@@ -228,15 +228,15 @@ func (s *Session) Ping(ctx context.Context) error {
 type StartOption func(ctx context.Context, config *ParsedConfig, env []string) ([]string, error)
 
 // WithAuthManager returns a StartOption that injects auth credentials when
-// the server has auth_identity configured.
+// the server has identity configured.
 func WithAuthManager(authMgr AuthEnvProvider) StartOption {
 	return func(ctx context.Context, config *ParsedConfig, env []string) ([]string, error) {
-		if config.AuthIdentity == "" || authMgr == nil {
+		if config.Identity == "" || authMgr == nil {
 			return env, nil
 		}
 		log.Debug("Injecting auth credentials for MCP server",
-			logFieldName, config.Name, "identity", config.AuthIdentity)
-		return authMgr.PrepareShellEnvironment(ctx, config.AuthIdentity, env)
+			logFieldName, config.Name, "identity", config.Identity)
+		return authMgr.PrepareShellEnvironment(ctx, config.Identity, env)
 	}
 }
 

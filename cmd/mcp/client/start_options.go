@@ -15,7 +15,7 @@ import (
 // buildStartOptions creates StartOption slice with toolchain and auth resolution
 // for CLI management commands (tools, test, status, restart).
 // This ensures uvx/npx are available from the Atmos toolchain and credentials
-// are injected for servers with auth_identity.
+// are injected for servers with identity.
 func buildStartOptions(atmosConfig *schema.AtmosConfiguration) []mcpclient.StartOption {
 	var opts []mcpclient.StartOption
 
@@ -55,7 +55,7 @@ func buildAuthOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.StartOp
 	// Check if any server needs auth.
 	needsAuth := false
 	for _, s := range atmosConfig.MCP.Servers {
-		if s.AuthIdentity != "" {
+		if s.Identity != "" {
 			needsAuth = true
 			break
 		}

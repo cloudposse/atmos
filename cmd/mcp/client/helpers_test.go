@@ -11,10 +11,10 @@ import (
 
 // Compile-time sentinel: fails build if referenced schema fields are renamed.
 var _ = schema.MCPServerConfig{
-	Command:      "",
-	Args:         nil,
-	Env:          nil,
-	AuthIdentity: "",
+	Command:  "",
+	Args:     nil,
+	Env:      nil,
+	Identity: "",
 }
 
 // TestFirstSentence tests the firstSentence helper that extracts the first sentence
@@ -81,9 +81,9 @@ func TestFirstSentence(t *testing.T) {
 }
 
 // TestBuildMCPJSONEntry tests the buildMCPJSONEntry function that creates .mcp.json
-// entries from MCPServerConfig, with optional auth_identity wrapping.
+// entries from MCPServerConfig, with optional identity wrapping.
 func TestBuildMCPJSONEntry(t *testing.T) {
-	t.Run("server without auth_identity uses command directly", func(t *testing.T) {
+	t.Run("server without identity uses command directly", func(t *testing.T) {
 		cfg := &schema.MCPServerConfig{
 			Command: "npx",
 			Args:    []string{"-y", "some-mcp-server"},
@@ -97,12 +97,12 @@ func TestBuildMCPJSONEntry(t *testing.T) {
 		assert.Equal(t, map[string]string{"API_KEY": "abc123"}, entry.Env)
 	})
 
-	t.Run("server with auth_identity wraps with atmos auth exec", func(t *testing.T) {
+	t.Run("server with identity wraps with atmos auth exec", func(t *testing.T) {
 		cfg := &schema.MCPServerConfig{
-			Command:      "npx",
-			Args:         []string{"-y", "some-mcp-server"},
-			Env:          map[string]string{"REGION": "us-east-1"},
-			AuthIdentity: "aws-dev",
+			Command:  "npx",
+			Args:     []string{"-y", "some-mcp-server"},
+			Env:      map[string]string{"REGION": "us-east-1"},
+			Identity: "aws-dev",
 		}
 
 		entry := buildMCPJSONEntry("my-server", cfg)
@@ -127,10 +127,10 @@ func TestBuildMCPJSONEntry(t *testing.T) {
 		assert.Nil(t, entry.Env)
 	})
 
-	t.Run("server with auth_identity and no args", func(t *testing.T) {
+	t.Run("server with identity and no args", func(t *testing.T) {
 		cfg := &schema.MCPServerConfig{
-			Command:      "my-server",
-			AuthIdentity: "prod-identity",
+			Command:  "my-server",
+			Identity: "prod-identity",
 		}
 
 		entry := buildMCPJSONEntry("prod", cfg)
