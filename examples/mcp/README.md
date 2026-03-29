@@ -7,7 +7,6 @@ tools become available across the Atmos AI surface:
 - **`atmos ai chat`** — interactive conversations with MCP tools
 - **`atmos ai ask`** — one-shot questions using MCP tools
 - **`atmos ai exec`** — execute AI-driven tasks with MCP tools
-- **`atmos terraform plan --ai`** — AI analysis of command output with MCP context
 - **`atmos mcp tools <name>`** — directly list tools from any MCP server
 - **`atmos mcp test <name>`** — verify server connectivity and available tools
 
@@ -39,7 +38,7 @@ The following AWS MCP servers are pre-configured in `atmos.yaml`:
 | **aws-knowledge** | Managed AWS knowledge base (remote service)  | No          |
 
 All configured MCP servers are available across all Atmos AI commands — `atmos ai ask`,
-`atmos ai chat`, `atmos ai exec`, and `--ai` flag.
+`atmos ai chat`, and `atmos ai exec`.
 
 ## Prerequisites
 
@@ -226,28 +225,6 @@ atmos ai exec "Look up pricing for m7i.xlarge, r7i.2xlarge, and c7i.xlarge \
 # Documentation research
 atmos ai exec "Find AWS best practices for EKS cluster security, \
   then list the top 5 recommendations with links"
-```
-
-### Using MCP Tools with the `--ai` Flag
-
-When you add `--ai` to any Atmos command, the output is sent to AI for analysis.
-MCP tools provide additional context for the analysis:
-
-```bash
-# Analyze a terraform plan with pricing context
-atmos terraform plan vpc -s prod --ai
-# AI can use aws-pricing to estimate cost impact of the planned changes
-
-# Analyze terraform output with security context
-atmos terraform plan eks -s prod --ai
-# AI can use aws-security to check if the EKS config follows best practices
-
-# Analyze stack configuration with documentation context
-atmos describe stacks -s prod --ai
-# AI can use aws-docs to reference relevant AWS documentation
-
-# Combine with skills for deeper analysis
-atmos terraform plan vpc -s prod --ai --skill atmos-terraform
 ```
 
 ### Directly Exploring MCP Servers

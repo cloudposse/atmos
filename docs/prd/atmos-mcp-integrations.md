@@ -1,7 +1,7 @@
 # Atmos MCP Servers — External MCP Server Management
 
-**Version:** 6.0
-**Last Updated:** 2026-03-27
+**Version:** 1.0
+**Last Updated:** 2026-03-28
 
 ---
 
@@ -202,8 +202,10 @@ pkg/mcp/
 │   ├── config.go          # Server configuration parsing and validation
 │   ├── session.go         # MCP client session (subprocess lifecycle, handshake, tools)
 │   ├── manager.go         # Multi-session manager (start/stop/list)
-│   ├── bridge.go          # External MCP tool → Atmos tools.Tool bridge
+│   ├── bridge.go          # External MCP tool → Atmos tools.Tool bridge (BridgedTool, BridgedToolInfo)
 │   └── register.go        # Starts servers and registers tools in AI registry
+└── router/
+    └── router.go          # Smart server routing (two-pass selection)
 ```
 
 ### Tool Execution Flow
@@ -226,8 +228,8 @@ The AI provider controls which tools are called. Atmos never guesses or infers t
 
 When the AI provider decides to use an external MCP tool:
 
-1. AI responds with `tool_use` requesting e.g. `aws-docs.search_documentation`.
-2. Tool executor looks up `"aws-docs.search_documentation"` in the registry → finds `BridgedTool`.
+1. AI responds with `tool_use` requesting e.g. `aws-docs__search_documentation` (sanitized name).
+2. Tool executor looks up the sanitized name in the registry → finds `BridgedTool`.
 3. `BridgedTool.Execute()` calls `session.CallTool()` using the **original tool name**
    (`"search_documentation"`, without the server prefix).
 4. `Session.CallTool()` sends JSON-RPC over stdio to the running MCP server subprocess.
@@ -237,8 +239,10 @@ When the AI provider decides to use an external MCP tool:
 
 Each `BridgedTool` holds a reference to the specific `Session` it came from. Even with
 multiple MCP servers running, each tool routes to the correct server process. The namespacing
-(`aws-docs.search_documentation`) is only for registry lookup — the actual MCP call uses
-the original tool name that the server understands.
+(`aws-docs__search_documentation`) is only for registry lookup — the actual MCP call uses
+the original tool name that the server understands. Tool names are sanitized to match
+AI provider constraints (`^[a-zA-Z0-9_-]{1,128}$`), and displayed in human-readable
+format (`aws-docs → search_documentation`) via the `BridgedToolInfo` interface.
 
 ### Auth Integration
 
@@ -259,6 +263,7 @@ per-identity and isolated per-realm.
 MCP server startup and tool execution are visible at Info log level:
 
 ```text
+ℹ MCP routing selected 2 of 8 servers: aws-docs, aws-pricing
 ℹ MCP server "aws-docs" started (4 tools)
 ℹ MCP server "aws-pricing" started (7 tools)
 ℹ Registered 11 tools from 2 MCP server(s)
@@ -270,8 +275,8 @@ After the AI responds, tool executions are listed with error details:
 ```text
 ---
 ## Tool Executions (2)
-1. ✅ **aws-docs.search_documentation** (234ms)
-2. ❌ **aws-pricing.get_pricing** (1234ms)
+1. ✅ aws-docs → aws.search_documentation (234ms)
+2. ❌ aws-pricing → get_pricing (1234ms)
    Error: MCP server returned error for tool: credentials expired
 ```
 
@@ -279,7 +284,9 @@ After the AI responds, tool executions are listed with error details:
 
 ## Implementation Summary
 
-### Phase 1: Core Client Infrastructure
+All phases are implemented and shipped.
+
+### Phase 1: Core Client Infrastructure ✅
 
 - `pkg/mcp/client/session.go` — Session lifecycle: Start (subprocess + MCP handshake + tool list), Stop, CallTool, Ping
 - `pkg/mcp/client/manager.go` — Multi-session manager: NewManager, Start/Stop/StopAll, Get/List, Test
@@ -288,29 +295,37 @@ After the AI responds, tool executions are listed with error details:
 - `cmd/mcp/client/tools.go` — `atmos mcp tools <name>` connect, list, disconnect
 - `cmd/mcp/client/test_cmd.go` — `atmos mcp test <name>` full lifecycle test
 
-### Phase 2: Tool Bridge + AI Integration
+### Phase 2: Tool Bridge + AI Integration ✅
 
 - `pkg/mcp/client/bridge.go` — `BridgedTool` implements `tools.Tool` interface with JSON Schema extraction
 - `pkg/mcp/client/register.go` — `RegisterMCPTools` starts servers and registers tools in AI registry
 - `cmd/ai/init.go` — MCP tools registered in both interactive (`chat`, `exec`) and non-interactive (`ask`) paths
 
-### Phase 3: Management Commands
+### Phase 3: Management Commands ✅
 
 - `cmd/mcp/client/status.go` — `atmos mcp status` health table
 - `cmd/mcp/client/restart.go` — `atmos mcp restart <name>` stop + start cycle
 
-### Phase 4: Auth + Toolchain
+### Phase 4: Auth + Toolchain ✅
 
 - `auth_identity` field on `MCPServerConfig` with `AuthEnvProvider` interface
 - `WithAuthManager` and `WithToolchain` start options for credential and binary resolution
 - YAML functions (`!env`, `!exec`, `!repo-root`, `!cwd`) work in env values via `preprocessAtmosYamlFunc`
 
-### Phase 5: Unified Experience
+### Phase 5: Unified Experience ✅
 
 - Auth identity wired in AI commands (creates `AuthEnvProvider` when servers need auth)
 - `atmos mcp generate-config` — emits `.mcp.json` for IDE integration
 - User-facing feedback via `ui.Info`/`ui.Error` for server startup and tool execution
 - Error details displayed for failed tool calls (credential failures, server errors)
+
+### Phase 6: Smart Tool Routing ✅
+
+- `pkg/mcp/router/router.go` — Two-pass server selection using configured AI provider
+- `cmd/ai/init.go` — Server filtering via routing or `--mcp` flag before `RegisterMCPTools`
+- `--mcp` flag on `ask`, `chat`, `exec` commands with `ATMOS_AI_MCP` env var support
+- `pkg/schema/mcp.go` — `MCPRoutingConfig` with `enabled` field (defaults to true)
+- Graceful fallback to all servers on routing failure
 
 ---
 
@@ -324,7 +339,7 @@ After the AI responds, tool executions are listed with error details:
 
 ---
 
-## Phase 6 — Smart Tool Routing (Implemented)
+## Phase 6 — Smart Tool Routing
 
 ### Problem
 
@@ -332,101 +347,29 @@ When many MCP servers are configured (e.g., 8 servers, 96 tools), the full tool 
 payload overwhelms the AI context — increasing latency, cost, and reducing response quality.
 Most queries only need 1-2 servers.
 
-### Industry Approaches
+### Solution
 
-Four established patterns exist for tool selection at scale:
+Two-pass routing with manual override:
 
-#### 1. Two-Pass Router (Industry Standard)
+- **Default:** Before starting MCP servers, send the question + server descriptions to
+  the user's configured AI provider. The AI returns which servers are relevant. Only those
+  servers are started, keeping the tool payload small.
+- **Override:** `--mcp` flag on `ask`, `chat`, `exec` for direct server selection.
 
-Send the question + server descriptions (not full tool schemas) to a fast/cheap model →
-it returns which 1-2 servers are relevant → only start those → send the real query with
-just those tools.
-
-```
-User: "List unused IAM roles"
-  → Pass 1 (fast model, ~200ms): "Which servers? aws-iam, aws-cloudtrail"
-  → Start only aws-iam + aws-cloudtrail (34 tools instead of 96)
-  → Pass 2 (full model): Execute with relevant tools only
-```
-
-**Used by:** Claude Code (tool selection), Cursor, Continue.dev, LangChain, CrewAI.
-
-**Pros:** Automatic, no user knowledge needed, cheap (pass 1 can use haiku).
-**Cons:** Extra latency for the routing call (~200-500ms).
-
-#### 2. Meta-Tool / Progressive Disclosure
-
-Register ONE tool: `discover_tools(query)`. The AI calls it first, it starts the relevant
-servers, returns their tool schemas. Then the AI uses those tools on the next iteration.
-
-```
-AI sees: 10 atmos tools + 1 "discover_mcp_tools" tool
-AI calls: discover_mcp_tools("IAM role analysis")
-  → Starts aws-iam, returns 29 tool schemas
-AI calls: aws-iam → list_roles, etc.
-```
-
-**Used by:** OpenAI Plugins (original design), MCP tool discovery pattern, Semantic Kernel.
-
-**Pros:** Zero config, AI decides, scales to unlimited servers.
-**Cons:** Always costs one extra tool round-trip.
-
-#### 3. Semantic Matching (No LLM Needed)
-
-Embed the question and all server descriptions at startup. Pick top-K servers by cosine
-similarity. No LLM call needed.
-
-**Used by:** RAG-based tool selection, some LangChain agents.
-
-**Pros:** Fast (~10ms), no extra API call.
-**Cons:** Requires embedding model, less accurate than LLM routing.
-
-#### 4. Keyword/Heuristic Routing
-
-Simple keyword matching: "IAM" → aws-iam, "billing"/"cost" → aws-billing,
-"security"/"GuardDuty" → aws-security.
-
-**Pros:** Zero latency, no API calls, deterministic.
-**Cons:** Brittle, misses intent ("who has admin access" → should route to aws-iam).
-
-### Chosen Approach
-
-Two-pass router with manual override (implemented):
-
-- **Default:** Two-pass router using a fast model (Claude Haiku) to select servers
-  from their descriptions. This is the industry standard for making large tool sets practical.
-- **Override:** `--mcp` flag on all `atmos ai` subcommands (`ask`, `chat`, `exec`) for power
-  users who want to skip the routing step and directly specify which servers to use.
-
-### Implementation
-
-**Package:** `pkg/mcp/router/` — stateless routing with `Route()` function.
-
-**Flow:**
+### Routing Flow
 
 ```
 atmos ai ask "List unused IAM roles"
 
-1. Load MCP config (server names + descriptions only)
-2. If --mcp flag provided:
-     → Start only specified servers
-     → Skip routing step
-3. Else if single server configured:
-     → Start it directly (no routing needed)
-4. Else if routing disabled in config:
-     → Start all servers
-5. Else if no question available (chat mode):
-     → Start all servers (question unknown upfront)
-6. Else:
-     → Send to fast model: "Given these servers: {name: description, ...},
-        which are relevant to: {question}? Return server names only."
-     → Parse JSON response → start only selected servers
-     → On any error, fall back to starting all servers
-7. Bridge tools from selected servers
-8. Send question + selected tools to main model
+1. If --mcp flag provided → start only specified servers
+2. Else if single server → start it directly (no routing)
+3. Else if routing disabled → start all servers
+4. Else if no question (chat mode) → start all servers
+5. Else → routing call to select servers → start only selected
+6. On routing error → fall back to all servers
 ```
 
-**Routing configuration** (`atmos.yaml`):
+### Configuration
 
 ```yaml
 mcp:
@@ -434,45 +377,31 @@ mcp:
     enabled: true   # Default: true. Uses the same AI provider and model from ai.default_provider.
 ```
 
-Routing uses the same provider and model the user already configured under `ai.default_provider`.
-No extra model configuration is needed — this avoids hardcoding provider-specific model names
-and keeps UX simple (one model config, not two).
-
-### CLI Interface
-
-The `--mcp` flag is registered on all three `atmos ai` subcommands (`ask`, `chat`, `exec`).
-It supports both repeated flags and comma-separated values:
+### CLI
 
 ```bash
-# Automatic routing (default) — fast model selects relevant servers
+# Automatic routing (default)
 atmos ai ask "List unused IAM roles"
 
-# Manual override — skip routing, use specific servers
+# Manual override
 atmos ai ask --mcp aws-iam,aws-cloudtrail "List unused IAM roles"
-
-# Repeated flags (equivalent to comma-separated)
-atmos ai ask --mcp aws-iam --mcp aws-cloudtrail "List unused IAM roles"
 
 # Works with all AI subcommands
 atmos ai chat --mcp aws-billing
 atmos ai exec --mcp aws-security,aws-iam "audit our security posture"
 
-# Environment variable support
-ATMOS_AI_MCP=aws-iam,aws-billing atmos ai ask "List admin roles and their costs"
+# Environment variable
+ATMOS_AI_MCP=aws-iam,aws-billing atmos ai ask "List admin roles"
 ```
-
-**Chat mode note:** Since `chat` is interactive, the user's question isn't known when
-servers are initialized. Routing is skipped in chat mode — use `--mcp` to filter servers.
 
 ### Design Decisions
 
-- **Graceful fallback:** If routing fails (API error, parse error, model unavailable),
-  all servers start. Never blocks the user.
-- **Single-server optimization:** Routing is skipped when only one MCP server is configured.
-- **Config copy, not mutation:** The routing client creates a shallow copy of config with
-  the fast model, never mutating the original.
-- **Upstream filtering:** Server selection happens before `RegisterMCPTools`, so existing
-  registration code is unchanged.
+- **Graceful fallback:** Routing failures start all servers. Never blocks the user.
+- **Single-server optimization:** Routing skipped when only one server is configured.
+- **Same model, reduced tokens:** Uses the user's configured provider/model with
+  `max_tokens` reduced to 256. No extra model configuration needed.
+- **Upstream filtering:** Server selection happens before `RegisterMCPTools`.
+- **Chat mode:** Routing skipped because the question isn't known upfront. Use `--mcp`.
 
 ---
 
