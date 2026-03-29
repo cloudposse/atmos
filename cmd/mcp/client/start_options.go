@@ -34,25 +34,20 @@ func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.St
 	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
 	if err != nil {
 		log.Debug("Failed to load .tool-versions for MCP toolchain resolution", "error", err)
-		return nil
-	}
-
-	if len(deps) == 0 {
-		// Fall back to component-based resolution.
-		tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
+	} else if len(deps) > 0 {
+		tenv, tenvErr := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
 		if tenvErr == nil && tenv != nil {
 			return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
 		}
-		return nil
+		log.Debug("Failed to create toolchain environment for MCP", "error", tenvErr)
 	}
 
-	tenv, err := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
-	if err != nil {
-		log.Debug("Failed to create toolchain environment for MCP", "error", err)
-		return nil
+	// Fall back to component-based resolution.
+	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
+	if tenvErr == nil && tenv != nil {
+		return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
 	}
-
-	return []mcpclient.StartOption{mcpclient.WithToolchain(tenv)}
+	return nil
 }
 
 // buildAuthOption creates an auth StartOption if any configured server needs credentials.

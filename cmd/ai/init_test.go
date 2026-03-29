@@ -360,3 +360,204 @@ func TestInitializeAIToolsAndExecutor_NilPermCacheUsesSimplePrompter(t *testing.
 	assert.NotNil(t, toolsResult)
 	assert.NotNil(t, toolsResult.Executor)
 }
+
+// TestSelectMCPServers tests all branches of the selectMCPServers function.
+func TestSelectMCPServers(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws":   {Command: "aws-mcp", Description: "AWS tools"},
+		"gcp":   {Command: "gcp-mcp", Description: "GCP tools"},
+		"azure": {Command: "azure-mcp", Description: "Azure tools"},
+	}
+
+	t.Run("manual override with known servers", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+		result := selectMCPServers(atmosConfig, []string{"aws", "gcp"}, "some question")
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "aws")
+		assert.Contains(t, result, "gcp")
+		assert.NotContains(t, result, "azure")
+	})
+
+	t.Run("manual override with unknown server name", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+		// "nonexistent" is not in the servers map - should still return any valid ones.
+		result := selectMCPServers(atmosConfig, []string{"aws", "nonexistent"}, "")
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "aws")
+	})
+
+	t.Run("manual override all unknown returns empty", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+		result := selectMCPServers(atmosConfig, []string{"nonexistent1", "nonexistent2"}, "")
+		assert.Empty(t, result)
+	})
+
+	t.Run("single server no routing needed", func(t *testing.T) {
+		singleServer := map[string]schema.MCPServerConfig{
+			"only": {Command: "only-mcp"},
+		}
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: singleServer,
+			},
+		}
+		result := selectMCPServers(atmosConfig, nil, "some question")
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "only")
+	})
+
+	t.Run("routing disabled returns all servers", func(t *testing.T) {
+		routingDisabled := false
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+				Routing: schema.MCPRoutingConfig{
+					Enabled: &routingDisabled,
+				},
+			},
+		}
+		result := selectMCPServers(atmosConfig, nil, "deploy to AWS")
+		assert.Len(t, result, 3)
+		assert.Equal(t, servers, result)
+	})
+
+	t.Run("empty question returns all servers", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+		// Empty question = chat mode, returns all servers.
+		result := selectMCPServers(atmosConfig, nil, "")
+		assert.Len(t, result, 3)
+		assert.Equal(t, servers, result)
+	})
+
+	t.Run("multiple servers with empty question and routing enabled", func(t *testing.T) {
+		routingEnabled := true
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+				Routing: schema.MCPRoutingConfig{
+					Enabled: &routingEnabled,
+				},
+			},
+		}
+		// Even with routing enabled, empty question returns all.
+		result := selectMCPServers(atmosConfig, nil, "")
+		assert.Len(t, result, 3)
+	})
+}
+
+// TestFilterServersByName tests the filterServersByName function.
+func TestFilterServersByName(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws":   {Command: "aws-mcp"},
+		"gcp":   {Command: "gcp-mcp"},
+		"azure": {Command: "azure-mcp"},
+	}
+
+	t.Run("all names found", func(t *testing.T) {
+		result := filterServersByName(servers, []string{"aws", "gcp", "azure"})
+		assert.Len(t, result, 3)
+		assert.Equal(t, "aws-mcp", result["aws"].Command)
+		assert.Equal(t, "gcp-mcp", result["gcp"].Command)
+		assert.Equal(t, "azure-mcp", result["azure"].Command)
+	})
+
+	t.Run("some names not found", func(t *testing.T) {
+		result := filterServersByName(servers, []string{"aws", "nonexistent"})
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "aws")
+		assert.NotContains(t, result, "nonexistent")
+	})
+
+	t.Run("empty names list", func(t *testing.T) {
+		result := filterServersByName(servers, []string{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("empty servers map", func(t *testing.T) {
+		result := filterServersByName(map[string]schema.MCPServerConfig{}, []string{"aws"})
+		assert.Empty(t, result)
+	})
+
+	t.Run("nil servers map", func(t *testing.T) {
+		result := filterServersByName(nil, []string{"aws"})
+		assert.Empty(t, result)
+	})
+}
+
+// TestSortedServerNames tests the sortedServerNames function.
+func TestSortedServerNames(t *testing.T) {
+	t.Run("multiple servers returned sorted", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"zebra":  {Command: "z"},
+			"apple":  {Command: "a"},
+			"mango":  {Command: "m"},
+			"banana": {Command: "b"},
+		}
+		result := sortedServerNames(servers)
+		assert.Equal(t, []string{"apple", "banana", "mango", "zebra"}, result)
+	})
+
+	t.Run("empty map", func(t *testing.T) {
+		result := sortedServerNames(map[string]schema.MCPServerConfig{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("single server", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"only": {Command: "only-mcp"},
+		}
+		result := sortedServerNames(servers)
+		assert.Equal(t, []string{"only"}, result)
+	})
+}
+
+// TestServersNeedAuth tests the serversNeedAuth function.
+func TestServersNeedAuth(t *testing.T) {
+	t.Run("no servers need auth", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"aws": {Command: "aws-mcp"},
+			"gcp": {Command: "gcp-mcp"},
+		}
+		assert.False(t, serversNeedAuth(servers))
+	})
+
+	t.Run("one server needs auth", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"aws": {Command: "aws-mcp", AuthIdentity: "aws-identity"},
+			"gcp": {Command: "gcp-mcp"},
+		}
+		assert.True(t, serversNeedAuth(servers))
+	})
+
+	t.Run("all servers need auth", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"aws": {Command: "aws-mcp", AuthIdentity: "aws-id"},
+			"gcp": {Command: "gcp-mcp", AuthIdentity: "gcp-id"},
+		}
+		assert.True(t, serversNeedAuth(servers))
+	})
+
+	t.Run("empty map", func(t *testing.T) {
+		assert.False(t, serversNeedAuth(map[string]schema.MCPServerConfig{}))
+	})
+
+	t.Run("nil map", func(t *testing.T) {
+		assert.False(t, serversNeedAuth(nil))
+	})
+}

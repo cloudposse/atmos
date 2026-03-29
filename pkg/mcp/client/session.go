@@ -106,7 +106,12 @@ func (s *Session) Start(ctx context.Context, opts ...StartOption) error {
 	s.status = StatusStarting
 	log.Debug("Starting MCP server", logFieldName, s.name, "command", s.config.Command)
 
-	env := prepareEnv(ctx, s.config, opts)
+	env, err := prepareEnv(ctx, s.config, opts)
+	if err != nil {
+		s.status = StatusError
+		s.lastError = err
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPServerStartFailed, s.name, err)
+	}
 
 	if err := s.connectAndDiscover(ctx, env); err != nil {
 		return err
@@ -117,16 +122,17 @@ func (s *Session) Start(ctx context.Context, opts ...StartOption) error {
 }
 
 // prepareEnv builds the subprocess environment with optional auth credential injection.
-func prepareEnv(ctx context.Context, config *ParsedConfig, opts []StartOption) []string {
+// Returns an error if any start option fails (e.g., auth credential resolution).
+func prepareEnv(ctx context.Context, config *ParsedConfig, opts []StartOption) ([]string, error) {
 	env := buildEnv(config.Env)
 	for _, opt := range opts {
 		var err error
 		env, err = opt(ctx, config, env)
 		if err != nil {
-			log.Warnf("MCP server %q: auth setup failed: %v", config.Name, err)
+			return nil, fmt.Errorf("auth setup failed for %q: %w", config.Name, err)
 		}
 	}
-	return env
+	return env, nil
 }
 
 // connectAndDiscover spawns the MCP server, performs the handshake, and lists tools.
@@ -276,33 +282,67 @@ func WithToolchain(resolver ToolchainResolver) StartOption {
 }
 
 // resolveCommandInEnv looks up a command using the PATH from the given env list.
+// On Windows, also probes PATHEXT extensions (.exe, .cmd, etc.).
 // If the command is already absolute or not found, it returns the original.
 func resolveCommandInEnv(command string, env []string) string {
 	if filepath.IsAbs(command) {
 		return command
 	}
 
-	// Extract PATH from the env list (last entry wins).
-	const pathPrefix = "PATH="
-	var envPATH string
-	for _, e := range env {
-		if strings.HasPrefix(e, pathPrefix) {
-			envPATH = e[len(pathPrefix):]
-		}
-	}
+	envPATH, envPATHEXT := extractEnvVars(env)
 	if envPATH == "" {
 		return command
 	}
 
-	// Search each PATH directory for the command.
+	extensions := buildExtensions(envPATHEXT)
+
+	// Search each PATH directory for the command (with extensions on Windows).
 	for _, dir := range filepath.SplitList(envPATH) {
-		candidate := filepath.Join(dir, command)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate
+		if found := findExecutable(dir, command, extensions); found != "" {
+			return found
 		}
 	}
 
 	return command
+}
+
+// extractEnvVars extracts PATH and PATHEXT from an env list (last entry wins).
+func extractEnvVars(env []string) (string, string) {
+	var envPATH, envPATHEXT string
+	for _, e := range env {
+		if strings.HasPrefix(e, "PATH=") {
+			envPATH = e[len("PATH="):]
+		} else if strings.HasPrefix(e, "PATHEXT=") {
+			envPATHEXT = e[len("PATHEXT="):]
+		}
+	}
+	return envPATH, envPATHEXT
+}
+
+// buildExtensions builds a list of file extensions to try when resolving commands.
+// Always includes empty string (bare name) first, then PATHEXT entries.
+func buildExtensions(pathext string) []string {
+	extensions := []string{""}
+	if pathext == "" {
+		return extensions
+	}
+	for _, ext := range strings.Split(pathext, ";") {
+		if ext != "" {
+			extensions = append(extensions, ext)
+		}
+	}
+	return extensions
+}
+
+// findExecutable checks a directory for a command with any of the given extensions.
+func findExecutable(dir, command string, extensions []string) string {
+	for _, ext := range extensions {
+		candidate := filepath.Join(dir, command+ext)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // buildEnv creates the environment variable list for the subprocess.

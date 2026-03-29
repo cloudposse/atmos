@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -135,7 +137,8 @@ func TestPrepareEnv_NoOpts(t *testing.T) {
 		Command: "echo",
 		Env:     map[string]string{"KEY": "VALUE"},
 	}
-	env := prepareEnv(context.Background(), config, nil)
+	env, err := prepareEnv(context.Background(), config, nil)
+	require.NoError(t, err)
 
 	// Should contain the configured env var.
 	found := false
@@ -154,12 +157,13 @@ func TestPrepareEnv_WithFailingOpt(t *testing.T) {
 		Command: "echo",
 		Env:     map[string]string{},
 	}
-	// An opt that returns an error — should be logged but not fail.
+	// An opt that returns an error — should fail startup.
 	failingOpt := func(_ context.Context, _ *ParsedConfig, env []string) ([]string, error) {
 		return env, assert.AnError
 	}
-	env := prepareEnv(context.Background(), config, []StartOption{failingOpt})
-	assert.NotEmpty(t, env, "env should still be populated despite opt error")
+	_, err := prepareEnv(context.Background(), config, []StartOption{failingOpt})
+	assert.Error(t, err, "prepareEnv should return error when opt fails")
+	assert.Contains(t, err.Error(), "auth setup failed")
 }
 
 func TestPrepareEnv_WithSuccessOpt(t *testing.T) {
@@ -171,7 +175,8 @@ func TestPrepareEnv_WithSuccessOpt(t *testing.T) {
 	appendOpt := func(_ context.Context, _ *ParsedConfig, env []string) ([]string, error) {
 		return append(env, "INJECTED=true"), nil
 	}
-	env := prepareEnv(context.Background(), config, []StartOption{appendOpt})
+	env, err := prepareEnv(context.Background(), config, []StartOption{appendOpt})
+	require.NoError(t, err)
 
 	found := false
 	for _, e := range env {
@@ -233,4 +238,169 @@ func TestManager_Test_WithFailedStart(t *testing.T) {
 	assert.False(t, result.ServerStarted)
 	assert.Error(t, result.Error)
 	assert.ErrorIs(t, result.Error, errUtils.ErrMCPServerStartFailed)
+}
+
+// TestResolveCommandInEnv tests the resolveCommandInEnv function.
+func TestResolveCommandInEnv(t *testing.T) {
+	t.Run("absolute path returned as-is", func(t *testing.T) {
+		absPath := filepath.Join(t.TempDir(), "mybin")
+		result := resolveCommandInEnv(absPath, nil)
+		assert.Equal(t, absPath, result)
+	})
+
+	t.Run("empty PATH returns original command", func(t *testing.T) {
+		env := []string{"HOME=/tmp"}
+		result := resolveCommandInEnv("mycommand", env)
+		assert.Equal(t, "mycommand", result)
+	})
+
+	t.Run("command found in PATH", func(t *testing.T) {
+		dir := t.TempDir()
+		binPath := filepath.Join(dir, "mytool")
+		err := os.WriteFile(binPath, []byte("#!/bin/sh\n"), 0o755)
+		require.NoError(t, err)
+
+		env := []string{"PATH=" + dir}
+		result := resolveCommandInEnv("mytool", env)
+		assert.Equal(t, binPath, result)
+	})
+
+	t.Run("command not found in PATH", func(t *testing.T) {
+		dir := t.TempDir()
+		env := []string{"PATH=" + dir}
+		result := resolveCommandInEnv("nonexistent-cmd-xyz", env)
+		assert.Equal(t, "nonexistent-cmd-xyz", result)
+	})
+
+	t.Run("PATHEXT handling with exe extension", func(t *testing.T) {
+		dir := t.TempDir()
+		binPath := filepath.Join(dir, "mytool.exe")
+		err := os.WriteFile(binPath, []byte("binary"), 0o755)
+		require.NoError(t, err)
+
+		env := []string{
+			"PATH=" + dir,
+			"PATHEXT=.exe;.cmd;.bat",
+		}
+		result := resolveCommandInEnv("mytool", env)
+		assert.Equal(t, binPath, result)
+	})
+
+	t.Run("multiple PATH entries command in second directory", func(t *testing.T) {
+		dir1 := t.TempDir()
+		dir2 := t.TempDir()
+		binPath := filepath.Join(dir2, "secondtool")
+		err := os.WriteFile(binPath, []byte("#!/bin/sh\n"), 0o755)
+		require.NoError(t, err)
+
+		env := []string{"PATH=" + dir1 + string(os.PathListSeparator) + dir2}
+		result := resolveCommandInEnv("secondtool", env)
+		assert.Equal(t, binPath, result)
+	})
+
+	t.Run("directory is skipped not returned as match", func(t *testing.T) {
+		dir := t.TempDir()
+		// Create a directory with the command name - should not match.
+		subdir := filepath.Join(dir, "mydir")
+		err := os.MkdirAll(subdir, 0o755)
+		require.NoError(t, err)
+
+		env := []string{"PATH=" + dir}
+		result := resolveCommandInEnv("mydir", env)
+		assert.Equal(t, "mydir", result)
+	})
+
+	t.Run("last PATH entry wins for env variable", func(t *testing.T) {
+		dir := t.TempDir()
+		binPath := filepath.Join(dir, "tool")
+		err := os.WriteFile(binPath, []byte("#!/bin/sh\n"), 0o755)
+		require.NoError(t, err)
+
+		// Second PATH= entry should override the first.
+		env := []string{
+			"PATH=/nonexistent",
+			"PATH=" + dir,
+		}
+		result := resolveCommandInEnv("tool", env)
+		assert.Equal(t, binPath, result)
+	})
+}
+
+func TestExtractEnvVars(t *testing.T) {
+	t.Run("both PATH and PATHEXT present", func(t *testing.T) {
+		env := []string{"HOME=/tmp", "PATH=/usr/bin", "PATHEXT=.exe;.cmd"}
+		path, pathext := extractEnvVars(env)
+		assert.Equal(t, "/usr/bin", path)
+		assert.Equal(t, ".exe;.cmd", pathext)
+	})
+
+	t.Run("only PATH present", func(t *testing.T) {
+		env := []string{"PATH=/usr/bin"}
+		path, pathext := extractEnvVars(env)
+		assert.Equal(t, "/usr/bin", path)
+		assert.Empty(t, pathext)
+	})
+
+	t.Run("empty env", func(t *testing.T) {
+		path, pathext := extractEnvVars(nil)
+		assert.Empty(t, path)
+		assert.Empty(t, pathext)
+	})
+
+	t.Run("last PATH wins", func(t *testing.T) {
+		env := []string{"PATH=/first", "PATH=/second"}
+		path, _ := extractEnvVars(env)
+		assert.Equal(t, "/second", path)
+	})
+}
+
+func TestBuildExtensions(t *testing.T) {
+	t.Run("empty pathext", func(t *testing.T) {
+		result := buildExtensions("")
+		assert.Equal(t, []string{""}, result)
+	})
+
+	t.Run("with extensions", func(t *testing.T) {
+		result := buildExtensions(".exe;.cmd;.bat")
+		assert.Equal(t, []string{"", ".exe", ".cmd", ".bat"}, result)
+	})
+
+	t.Run("with empty entries", func(t *testing.T) {
+		result := buildExtensions(".exe;;.cmd;")
+		assert.Equal(t, []string{"", ".exe", ".cmd"}, result)
+	})
+}
+
+func TestFindExecutable(t *testing.T) {
+	t.Run("found bare name", func(t *testing.T) {
+		dir := t.TempDir()
+		binPath := filepath.Join(dir, "mytool")
+		require.NoError(t, os.WriteFile(binPath, []byte("bin"), 0o755))
+
+		result := findExecutable(dir, "mytool", []string{""})
+		assert.Equal(t, binPath, result)
+	})
+
+	t.Run("found with extension", func(t *testing.T) {
+		dir := t.TempDir()
+		binPath := filepath.Join(dir, "mytool.exe")
+		require.NoError(t, os.WriteFile(binPath, []byte("bin"), 0o755))
+
+		result := findExecutable(dir, "mytool", []string{"", ".exe"})
+		assert.Equal(t, binPath, result)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		dir := t.TempDir()
+		result := findExecutable(dir, "nonexistent", []string{""})
+		assert.Empty(t, result)
+	})
+
+	t.Run("directory skipped", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "subdir"), 0o755))
+
+		result := findExecutable(dir, "subdir", []string{""})
+		assert.Empty(t, result)
+	})
 }

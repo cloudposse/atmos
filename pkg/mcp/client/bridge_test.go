@@ -1,10 +1,13 @@
 package client
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -241,6 +244,34 @@ func TestBridgedTool_ImplementsBridgedToolInfo(t *testing.T) {
 	assert.True(t, ok, "BridgedTool should implement BridgedToolInfo")
 	assert.Equal(t, "aws-docs", info.ServerName())
 	assert.Equal(t, "search_docs", info.OriginalName())
+}
+
+// TestBridgedTool_Execute_NilSession tests that Execute with a nil session panics
+// rather than silently succeeding. This documents the expected behavior.
+func TestBridgedTool_Execute_NilSession(t *testing.T) {
+	tool := &mcpsdk.Tool{Name: "test_tool", Description: "Test"}
+	bt := NewBridgedTool("test", tool, nil)
+
+	// Execute with nil session should panic (nil pointer dereference).
+	assert.Panics(t, func() {
+		_, _ = bt.Execute(context.Background(), map[string]interface{}{"key": "value"})
+	}, "Execute with nil session should panic")
+}
+
+// TestBridgedTool_Execute_SessionNotRunning tests that Execute returns an error
+// when the session exists but is not running.
+func TestBridgedTool_Execute_SessionNotRunning(t *testing.T) {
+	cfg := &ParsedConfig{Name: "test", Command: "echo"}
+	session := NewSession(cfg)
+
+	tool := &mcpsdk.Tool{Name: "test_tool", Description: "Test"}
+	bt := NewBridgedTool("test", tool, session)
+
+	result, err := bt.Execute(context.Background(), map[string]interface{}{"key": "value"})
+	require.NoError(t, err, "Execute should not return a Go error; it wraps errors in Result")
+	assert.False(t, result.Success)
+	assert.Contains(t, result.Output, "execution failed")
+	assert.ErrorIs(t, result.Error, errUtils.ErrMCPServerNotRunning)
 }
 
 func TestMapJSONSchemaType(t *testing.T) {
