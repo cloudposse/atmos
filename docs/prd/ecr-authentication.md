@@ -903,7 +903,7 @@ jobs:
 - [x] Unit tests for ECR token fetcher (`pkg/auth/cloud/aws/ecr_test.go`)
 - [x] Unit tests for ECR integration (`pkg/auth/integrations/aws/ecr_test.go`)
 - [x] Unit tests for manager integration methods (`pkg/auth/manager_integrations_test.go`)
-- [x] Unit tests for `atmos aws ecr login` command (`cmd/auth_ecr_login_test.go`)
+- [x] Unit tests for `atmos aws ecr login` command (`cmd/aws/ecr/login_test.go`)
 
 ### Phase 6: Documentation
 - [ ] Update `website/docs/cli/commands/auth/login.mdx`

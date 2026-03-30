@@ -46,6 +46,11 @@ Examples:
 }
 
 func executeLoginCommand(cmd *cobra.Command, args []string) error {
+	// Handle positional "help" argument (e.g., "atmos aws ecr login help").
+	if len(args) > 0 && args[0] == "help" {
+		return cmd.Help()
+	}
+
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {

@@ -164,3 +164,10 @@ func TestLoginCmd_ExamplesInLong(t *testing.T) {
 	assert.Contains(t, loginCmd.Long, "atmos aws ecr login --identity dev-admin")
 	assert.Contains(t, loginCmd.Long, "atmos aws ecr login --registry")
 }
+
+func TestLoginCmd_HelpArgIsNotTreatedAsIntegration(t *testing.T) {
+	// Verify "help" positional arg shows help instead of being treated as integration name.
+	// The command should return nil (help was displayed) rather than an integration error.
+	err := executeLoginCommand(loginCmd, []string{"help"})
+	assert.NoError(t, err)
+}
