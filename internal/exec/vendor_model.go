@@ -325,7 +325,7 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, failed bool) {
 	}
 
 	if m.failedPkg > 0 {
-		ui.Successf("Vendored components (success: %d, failed: %d)", len(m.packages)-m.failedPkg, m.failedPkg)
+		ui.Errorf("Vendored components (success: %d, failed: %d)", len(m.packages)-m.failedPkg, m.failedPkg)
 	} else {
 		ui.Successf("Vendored components (success: %d)", len(m.packages))
 	}
