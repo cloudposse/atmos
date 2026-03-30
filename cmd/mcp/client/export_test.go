@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,4 +47,37 @@ func TestMCPJSONConfig_Structure(t *testing.T) {
 	assert.Equal(t, "echo", config.MCPServers["test"].Command)
 	assert.Equal(t, []string{"hello"}, config.MCPServers["test"].Args)
 	assert.Equal(t, "val", config.MCPServers["test"].Env["KEY"])
+}
+
+func TestMCPJSONConfig_Marshal(t *testing.T) {
+	config := mcpJSONConfig{
+		MCPServers: map[string]mcpJSONServer{
+			"aws-docs": {
+				Command: "uvx",
+				Args:    []string{"awslabs.aws-documentation-mcp-server@latest"},
+			},
+			"aws-security": {
+				Command: "atmos",
+				Args:    []string{"auth", "exec", "-i", "readonly", "--", "uvx", "awslabs.well-architected-security-mcp-server@latest"},
+				Env:     map[string]string{"AWS_REGION": "us-east-1"},
+			},
+		},
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+
+	output := string(data)
+	assert.Contains(t, output, `"mcpServers"`)
+	assert.Contains(t, output, `"aws-docs"`)
+	assert.Contains(t, output, `"aws-security"`)
+	assert.Contains(t, output, `"readonly"`)
+	assert.Contains(t, output, `"auth"`)
+	// aws-docs has no env — omitempty should exclude it.
+	assert.NotContains(t, output, `"env": null`)
+}
+
+func TestExportCmd_NoArgs(t *testing.T) {
+	// Verify the command rejects positional arguments.
+	assert.NotNil(t, exportCmd.Args, "Args validator should be set")
 }

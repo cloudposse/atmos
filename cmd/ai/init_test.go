@@ -527,6 +527,32 @@ func TestSortedServerNames(t *testing.T) {
 	})
 }
 
+func TestSelectManualServers(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws":   {Command: "aws-mcp"},
+		"gcp":   {Command: "gcp-mcp"},
+		"azure": {Command: "azure-mcp"},
+	}
+
+	t.Run("all valid", func(t *testing.T) {
+		result := selectManualServers(servers, []string{"aws", "gcp"})
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "aws")
+		assert.Contains(t, result, "gcp")
+	})
+
+	t.Run("some unknown", func(t *testing.T) {
+		result := selectManualServers(servers, []string{"aws", "nonexistent"})
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "aws")
+	})
+
+	t.Run("all unknown", func(t *testing.T) {
+		result := selectManualServers(servers, []string{"fake1", "fake2"})
+		assert.Empty(t, result)
+	})
+}
+
 // TestServersNeedAuth tests the serversNeedAuth function.
 func TestServersNeedAuth(t *testing.T) {
 	t.Run("no servers need auth", func(t *testing.T) {
