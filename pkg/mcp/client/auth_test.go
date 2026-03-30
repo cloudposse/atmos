@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,9 +18,11 @@ type mockAuthProvider struct {
 	preparedEnv []string
 	err         error
 	calledWith  string
+	callCount   int
 }
 
 func (m *mockAuthProvider) PrepareShellEnvironment(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
+	m.callCount++
 	m.calledWith = identityName
 	if m.err != nil {
 		return nil, m.err
@@ -66,11 +69,11 @@ func TestWithAuthManager_NoIdentity_Passthrough(t *testing.T) {
 	result, err := opt(context.Background(), config, env)
 	require.NoError(t, err)
 
-	assert.Equal(t, "", mock.calledWith) // Should not be called.
-	assert.Equal(t, env, result)         // Env unchanged.
+	assert.Zero(t, mock.callCount) // Should not be called.
+	assert.Equal(t, env, result)   // Env unchanged.
 }
 
-func TestWithAuthManager_NilProvider_Passthrough(t *testing.T) {
+func TestWithAuthManager_NilProvider_WithIdentity_ReturnsError(t *testing.T) {
 	opt := WithAuthManager(nil)
 
 	config := &ParsedConfig{
@@ -79,9 +82,23 @@ func TestWithAuthManager_NilProvider_Passthrough(t *testing.T) {
 	}
 	env := []string{"PATH=/usr/bin"}
 
+	_, err := opt(context.Background(), config, env)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerAuthUnavailable)
+}
+
+func TestWithAuthManager_NilProvider_NoIdentity_Passthrough(t *testing.T) {
+	opt := WithAuthManager(nil)
+
+	config := &ParsedConfig{
+		Name:     "aws-docs",
+		Identity: "", // No identity — should pass through.
+	}
+	env := []string{"PATH=/usr/bin"}
+
 	result, err := opt(context.Background(), config, env)
 	require.NoError(t, err)
-	assert.Equal(t, env, result) // Env unchanged.
+	assert.Equal(t, env, result)
 }
 
 func TestWithAuthManager_Error_ReturnsError(t *testing.T) {

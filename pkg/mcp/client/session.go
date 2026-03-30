@@ -231,8 +231,11 @@ type StartOption func(ctx context.Context, config *ParsedConfig, env []string) (
 // the server has identity configured.
 func WithAuthManager(authMgr AuthEnvProvider) StartOption {
 	return func(ctx context.Context, config *ParsedConfig, env []string) ([]string, error) {
-		if config.Identity == "" || authMgr == nil {
+		if config.Identity == "" {
 			return env, nil
+		}
+		if authMgr == nil {
+			return nil, fmt.Errorf("%w: server `%s`, identity `%s`", errUtils.ErrMCPServerAuthUnavailable, config.Name, config.Identity)
 		}
 		log.Debug("Injecting auth credentials for MCP server",
 			logFieldName, config.Name, "identity", config.Identity)
