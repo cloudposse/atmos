@@ -11,7 +11,7 @@ Atmos now supports browser-based OAuth2 authentication as an automatic fallback 
 
 ## What Changed
 
-The `aws/user` identity type gains a new third-tier authentication fallback. When YAML credentials and keychain credentials are both unavailable, Atmos automatically initiates an OAuth2 PKCE flow via the AWS signin service. This provides the same convenient web-based authentication that SSO users already enjoy, without requiring static access keys.
+The `aws/user` identity type gains a new third-tier authentication fallback. When YAML credentials and keychain credentials are both unavailable, Atmos automatically initiates an OAuth2 PKCE flow via the AWS sign-in service. This provides the same convenient web-based authentication that SSO users already enjoy, without requiring static access keys.
 
 The flow supports both interactive terminals (browser opens automatically with a spinner) and non-interactive environments (displays a URL for manual authentication).
 
@@ -20,7 +20,7 @@ The flow supports both interactive terminals (browser opens automatically with a
 No configuration is required. Browser authentication is enabled by default for all `aws/user` identities. When triggered, Atmos:
 
 1. Starts a local callback server on an ephemeral port
-2. Opens your browser to the AWS signin authorization endpoint
+2. Opens your browser to the AWS sign-in authorization endpoint
 3. Exchanges the authorization code for temporary credentials using PKCE
 4. Caches a refresh token for 12-hour session reuse
 
