@@ -56,7 +56,7 @@ var restartCmd = &cobra.Command{
 			return err
 		}
 
-		ui.Successf("Restarted MCP server %q (%d tools available)", name, len(session.Tools()))
+		ui.Successf("Restarted MCP server `%s` (%d tools available)", name, len(session.Tools()))
 
 		// Clean up — MCP servers are subprocess-based and started on-demand by AI commands.
 		// This command verifies the server can restart successfully (stop + start cycle).

@@ -53,7 +53,7 @@ func executeMCPGenerateConfig(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(atmosConfig.MCP.Servers) == 0 {
-		ui.Info("No MCP servers configured. Add servers under 'mcp.servers' in atmos.yaml.")
+		ui.Info("No MCP servers configured. Add servers under `mcp.servers` in `atmos.yaml`.")
 		return nil
 	}
 

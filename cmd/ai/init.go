@@ -171,7 +171,7 @@ func selectMCPServers(atmosConfig *schema.AtmosConfiguration, mcpServerNames []s
 		// Warn about unrecognized server names (typos, removed servers).
 		for _, name := range mcpServerNames {
 			if _, ok := servers[name]; !ok {
-				ui.Warning(fmt.Sprintf("MCP server %q not found in configuration (available: %s)",
+				ui.Warning(fmt.Sprintf("MCP server `%s` not found in configuration (available: %s)",
 					name, strings.Join(sortedServerNames(servers), ", ")))
 			}
 		}

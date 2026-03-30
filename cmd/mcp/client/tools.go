@@ -63,7 +63,7 @@ func executeMCPTools(cmd *cobra.Command, args []string) error {
 
 	tools := session.Tools()
 	if len(tools) == 0 {
-		ui.Info("No tools available from " + name)
+		ui.Info("No tools available from `" + name + "`")
 		return nil
 	}
 

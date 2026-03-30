@@ -77,7 +77,7 @@ func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []S
 			session.SetSuppressStderr(true)
 		}
 		if err := session.Start(ctx, startOpts...); err != nil {
-			ui.Error(fmt.Sprintf("MCP server %q failed to start: %v", session.Name(), err))
+			ui.Error(fmt.Sprintf("MCP server `%s` failed to start: %v", session.Name(), err))
 			continue
 		}
 
@@ -85,13 +85,13 @@ func startAndRegisterTools(mgr *Manager, registry *tools.Registry, startOpts []S
 		serverTools := 0
 		for _, bt := range bridged {
 			if regErr := registry.Register(bt); regErr != nil {
-				ui.Error(fmt.Sprintf("Failed to register MCP tool %q: %v", bt.Name(), regErr))
+				ui.Error(fmt.Sprintf("Failed to register MCP tool `%s`: %v", bt.Name(), regErr))
 				continue
 			}
 			serverTools++
 		}
 		totalTools += serverTools
-		ui.Info(fmt.Sprintf("MCP server %q started (%d tools)", session.Name(), serverTools))
+		ui.Info(fmt.Sprintf("MCP server `%s` started (%d tools)", session.Name(), serverTools))
 	}
 	return totalTools
 }
