@@ -12,7 +12,7 @@ atmos ai skill --help
 atmos lsp --help
 atmos lsp start --help
 atmos mcp --help
-atmos mcp generate-config --help
+atmos mcp export --help
 atmos mcp list --help
 atmos mcp restart --help
 atmos mcp start --help

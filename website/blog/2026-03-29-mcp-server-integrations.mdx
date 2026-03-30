@@ -172,7 +172,7 @@ atmos mcp tools <name>    # List tools from a server
 atmos mcp test <name>     # Test server connectivity
 atmos mcp status          # Show all server statuses
 atmos mcp restart <name>  # Restart a server
-atmos mcp generate-config # Generate .mcp.json for Claude Code / IDE
+atmos mcp export # Generate .mcp.json for Claude Code / IDE
 ```
 
 ## Standard Config Format
@@ -230,7 +230,7 @@ Use the same servers from Claude Code, Cursor, or any MCP-compatible IDE:
 
 ```bash
 # Generate .mcp.json from your atmos.yaml config
-atmos mcp generate-config
+atmos mcp export
 ```
 
 Servers with `identity` are automatically wrapped with `atmos auth exec` for

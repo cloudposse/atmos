@@ -18,4 +18,4 @@ and `atmos ai exec` alongside native Atmos tools.
 - `atmos mcp test` — Test connectivity to an MCP server
 - `atmos mcp status` — Show status of all MCP servers
 - `atmos mcp restart` — Restart an MCP server
-- `atmos mcp generate-config` — Generate `.mcp.json` for IDE integration (Claude Code, Cursor)
+- `atmos mcp export` — Export `.mcp.json` for IDE integration (Claude Code, Cursor)

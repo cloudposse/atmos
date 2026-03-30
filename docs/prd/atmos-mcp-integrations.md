@@ -47,7 +47,7 @@ Atmos supports two complementary approaches for using external MCP servers:
 | **Discovery** | `atmos mcp list/tools/test/status` | Manual (IDE-driven via generated .mcp.json and `atmos mcp test <name>`) |
 
 Both approaches coexist. `atmos.yaml` is the single source of truth:
-`atmos mcp generate-config` emits a `.mcp.json` from the configured servers,
+`atmos mcp export` emits a `.mcp.json` from the configured servers,
 wrapping each with `atmos auth exec` for credential injection.
 
 ### Unified Experience
@@ -70,7 +70,7 @@ Users get:
 
 - `atmos ai ask/chat/exec` — server tools appear alongside native Atmos tools
 - `atmos mcp test aws-pricing` — tests connectivity and authentication
-- `atmos mcp generate-config` — emits `.mcp.json` for Claude Code / IDE
+- `atmos mcp export` — emits `.mcp.json` for Claude Code / IDE
 - `atmos mcp list` — shows all configured servers with status
 
 The `.mcp.json` generation wraps servers with `atmos auth exec`:
@@ -185,7 +185,7 @@ atmos mcp status             # Show live status of all servers
 atmos mcp tools <name>       # List tools from a server
 atmos mcp test <name>        # Test connectivity to a server
 atmos mcp restart <name>     # Restart a server
-atmos mcp generate-config    # Generate .mcp.json for Claude Code / IDE
+atmos mcp export    # Generate .mcp.json for Claude Code / IDE
 ```
 
 ---
@@ -315,7 +315,7 @@ All phases are implemented and shipped.
 ### Phase 5: Unified Experience ✅
 
 - Auth identity wired in AI commands (creates `AuthEnvProvider` when servers need auth)
-- `atmos mcp generate-config` — emits `.mcp.json` for IDE integration
+- `atmos mcp export` — emits `.mcp.json` for IDE integration
 - User-facing feedback via `ui.Info`/`ui.Error` for server startup and tool execution
 - Error details displayed for failed tool calls (credential failures, server errors)
 

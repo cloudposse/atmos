@@ -1,32 +1,32 @@
 ---
-title: atmos mcp generate-config
-sidebar_label: generate-config
+title: atmos mcp export
+sidebar_label: export
 sidebar_class_name: command
-id: generate-config
-description: Generate .mcp.json from atmos.yaml MCP server configuration
+id: export
+description: Export .mcp.json from atmos.yaml MCP server configuration
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
-Use this command to generate a `.mcp.json` file from the MCP servers configured in `atmos.yaml`. This enables Claude Code, Cursor, and other MCP-compatible IDEs to use the same servers.
+Use this command to export a `.mcp.json` file from the MCP servers configured in `atmos.yaml`. This enables Claude Code, Cursor, and other MCP-compatible IDEs to use the same servers.
 </Intro>
 
 <Experimental />
 
-<Screengrab title="atmos mcp generate-config --help" slug="atmos-mcp-generate-config--help" />
+<Screengrab title="atmos mcp export --help" slug="atmos-mcp-export--help" />
 
 ## Description
 
-The `atmos mcp generate-config` command reads all servers from `mcp.servers` in `atmos.yaml` and generates a `.mcp.json` file in the standard format used by Claude Code, Codex CLI, and other MCP-compatible tools.
+The `atmos mcp export` command reads all servers from `mcp.servers` in `atmos.yaml` and exports a `.mcp.json` file in the standard format used by Claude Code, Codex CLI, and other MCP-compatible tools.
 
 Servers with `identity` are automatically wrapped with `atmos auth exec -i <identity> --` so that credentials are injected when the IDE starts the server process.
 
 ## Usage
 
 ```shell
-atmos mcp generate-config [flags]
+atmos mcp export [flags]
 ```
 
 <dl>
@@ -37,11 +37,11 @@ atmos mcp generate-config [flags]
 ### Examples
 
 ```shell
-# Generate .mcp.json in the current directory
-atmos mcp generate-config
+# Export .mcp.json in the current directory
+atmos mcp export
 
-# Generate to a custom path (e.g., for Cursor)
-atmos mcp generate-config --output .cursor/mcp.json
+# Export to a custom path (e.g., for Cursor)
+atmos mcp export --output .cursor/mcp.json
 ```
 
 ### Example Output
@@ -63,7 +63,7 @@ mcp:
       identity: "security-audit"   # Atmos Auth identity (from the auth section)
 ```
 
-The generated `.mcp.json` will be:
+The exported `.mcp.json` will be:
 
 ```json
 {

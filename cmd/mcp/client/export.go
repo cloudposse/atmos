@@ -1,6 +1,7 @@
 package client
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,22 +16,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+//go:embed markdown/atmos_mcp_export.md
+var exportLongMarkdown string
+
 const configFilePermissions = 0o600
 
-var generateConfigCmd = &cobra.Command{
-	Use:   "generate-config",
-	Short: "Generate .mcp.json from atmos.yaml MCP server configuration",
-	Long: `Generate a .mcp.json file from the MCP servers configured in atmos.yaml.
-
-This enables Claude Code, Cursor, and other MCP-compatible IDEs to use the same
-servers configured in atmos.yaml. Servers with identity are wrapped with
-'atmos auth exec' for automatic credential injection.`,
-	RunE: executeMCPGenerateConfig,
+var exportCmd = &cobra.Command{
+	Use:   "export",
+	Short: "Export .mcp.json from atmos.yaml MCP server configuration",
+	Long:  exportLongMarkdown,
+	RunE:  executeMCPExport,
 }
 
 func init() {
-	generateConfigCmd.Flags().StringP("output", "o", ".mcp.json", "Output file path")
-	mcpcmd.McpCmd.AddCommand(generateConfigCmd)
+	exportCmd.Flags().StringP("output", "o", ".mcp.json", "Output file path")
+	mcpcmd.McpCmd.AddCommand(exportCmd)
 }
 
 // mcpJSONConfig represents the .mcp.json file format used by Claude Code and other IDEs.
@@ -45,8 +45,8 @@ type mcpJSONServer struct {
 	Env     map[string]string `json:"env,omitempty"`
 }
 
-func executeMCPGenerateConfig(cmd *cobra.Command, _ []string) error {
-	defer perf.Track(nil, "cmd.mcpGenerateConfig")()
+func executeMCPExport(cmd *cobra.Command, _ []string) error {
+	defer perf.Track(nil, "cmd.mcpExport")()
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return err

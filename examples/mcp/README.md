@@ -98,7 +98,7 @@ atmos mcp tools aws-security
 atmos mcp restart aws-api
 
 # Generate .mcp.json for Claude Code / Cursor / IDE
-atmos mcp generate-config
+atmos mcp export
 ```
 
 ### Smart Server Routing
@@ -449,7 +449,7 @@ Generate a `.mcp.json` file from your `atmos.yaml` configuration for use with Cl
 Cursor, or any MCP-compatible IDE:
 
 ```bash
-atmos mcp generate-config
+atmos mcp export
 ```
 
 This creates a `.mcp.json` file where:
@@ -481,7 +481,7 @@ Example generated output:
 Use `--output` to specify a different file path:
 
 ```bash
-atmos mcp generate-config --output .cursor/mcp.json
+atmos mcp export --output .cursor/mcp.json
 ```
 
 ## See It in Action

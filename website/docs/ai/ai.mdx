@@ -132,8 +132,8 @@ ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc 
   <dt>[`atmos mcp restart`](/cli/commands/mcp/restart)</dt>
   <dd>Restart an external MCP server.</dd>
 
-  <dt>[`atmos mcp generate-config`](/cli/commands/mcp/generate-config)</dt>
-  <dd>Generate `.mcp.json` from `atmos.yaml` for Claude Code / Cursor / IDE integration.</dd>
+  <dt>[`atmos mcp export`](/cli/commands/mcp/export)</dt>
+  <dd>Export `.mcp.json` from `atmos.yaml` for Claude Code / Cursor / IDE integration.</dd>
 </dl>
 
 ## AI Assistants
@@ -198,7 +198,7 @@ atmos mcp list                    # See configured servers
 atmos mcp test aws-docs           # Test connectivity
 atmos mcp tools aws-security      # List available tools
 atmos mcp status                  # Show live status of all servers
-atmos mcp generate-config         # Generate .mcp.json for Claude Code / IDE
+atmos mcp export                  # Export .mcp.json for Claude Code / IDE
 
 # Ask questions — AI auto-routes to the right MCP server
 atmos ai ask "What did we spend on EC2 last month?"     # routes to aws-billing
