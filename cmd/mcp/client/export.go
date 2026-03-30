@@ -25,6 +25,7 @@ var exportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "Export .mcp.json from atmos.yaml MCP server configuration",
 	Long:  exportLongMarkdown,
+	Args:  cobra.NoArgs,
 	RunE:  executeMCPExport,
 }
 

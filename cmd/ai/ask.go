@@ -95,11 +95,10 @@ var askCmd = &cobra.Command{
 			}
 		}
 
-		// Create read-only tool executor (if tools are enabled).
-		// The ask command uses only in-process, read-only tools (no subprocess execution).
+		// Create tool executor (if tools are enabled).
 		var toolExecutor *tools.Executor
 		if !noTools && atmosConfig.AI.Tools.Enabled {
-			toolsResult, toolsErr := initializeAIReadOnlyTools(&atmosConfig, mcpServers, question)
+			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, question)
 			if toolsErr != nil {
 				log.Warn("Failed to initialize tools", "error", toolsErr)
 				// Continue without tools rather than failing.

@@ -200,6 +200,13 @@ func TestFormatStatusRow(t *testing.T) {
 			result:      &mcpclient.TestResult{ServerStarted: true, PingOK: true, ToolCount: 0},
 			expected:    []string{"empty", "running", "0", "Empty"},
 		},
+		{
+			name:        "error with empty description",
+			serverName:  "broken",
+			description: "",
+			result:      &mcpclient.TestResult{ServerStarted: false, Error: errors.New("not found")},
+			expected:    []string{"broken", "error", "0", "(not found)"},
+		},
 	}
 
 	for _, tt := range tests {

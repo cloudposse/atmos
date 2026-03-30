@@ -87,7 +87,10 @@ func formatStatusRow(name, description string, result *mcpclient.TestResult) []s
 		if len(errMsg) > maxErrLen {
 			errMsg = errMsg[:maxErrLen-3] + "..."
 		}
-		desc += " (" + errMsg + ")"
+		if desc != "" {
+			desc += " "
+		}
+		desc += "(" + errMsg + ")"
 	}
 
 	return []string{name, status, toolCount, desc}

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -257,17 +258,7 @@ func TestRenderMCPList_SortByName(t *testing.T) {
 	require.NoError(t, err)
 
 	// aaa-server should appear before zzz-server in the output.
-	idxAAA := indexOfInString(out, "aaa-server")
-	idxZZZ := indexOfInString(out, "zzz-server")
+	idxAAA := strings.Index(out, "aaa-server")
+	idxZZZ := strings.Index(out, "zzz-server")
 	assert.Less(t, idxAAA, idxZZZ, "aaa-server should appear before zzz-server after NAME:asc sort")
-}
-
-// indexOfInString returns the byte index of substr in s, or -1 if not found.
-func indexOfInString(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }

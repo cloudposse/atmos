@@ -87,50 +87,6 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 	}, nil
 }
 
-// aiReadOnlyResult holds the result of read-only AI tools initialization.
-type aiReadOnlyResult struct {
-	Registry *tools.Registry
-	Executor *tools.Executor
-	MCPMgr   *mcpclient.Manager
-}
-
-// initializeAIReadOnlyTools initializes a tool executor with only read-only, in-process tools.
-// Passing mcpServerNames filters which MCP servers to start (empty or nil = auto-route or all).
-// The question parameter is used for automatic routing when mcpServerNames is empty or nil.
-func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) (*aiReadOnlyResult, error) {
-	if !atmosConfig.AI.Tools.Enabled {
-		return nil, errUtils.ErrAIToolsDisabled
-	}
-
-	log.Debug("Initializing read-only AI tools")
-
-	// Create tool registry with only read-only tools.
-	registry := tools.NewRegistry()
-	if err := atmosTools.RegisterReadOnlyTools(registry, atmosConfig); err != nil {
-		log.Warnf("Failed to register read-only Atmos tools: %v", err)
-	}
-
-	// Register external MCP server tools (filtered by routing).
-	mcpMgr := registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
-
-	ui.Info(fmt.Sprintf("AI tools initialized: %d", registry.Count()))
-
-	// Read-only tools don't require permissions, but create a permissive checker just in case.
-	permConfig := &permission.Config{
-		Mode: permission.ModeAllow,
-	}
-	permChecker := permission.NewChecker(permConfig, nil)
-
-	executor := tools.NewExecutor(registry, permChecker, tools.DefaultTimeout)
-	log.Debug("Read-only tool executor initialized")
-
-	return &aiReadOnlyResult{
-		Registry: registry,
-		Executor: executor,
-		MCPMgr:   mcpMgr,
-	}, nil
-}
-
 // registerMCPServerTools registers external MCP server tools with toolchain resolution,
 // auth credential injection, and optional server routing.
 func registerMCPServerTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration, mcpServerNames []string, question string) *mcpclient.Manager {
@@ -167,18 +123,7 @@ func selectMCPServers(atmosConfig *schema.AtmosConfiguration, mcpServerNames []s
 
 	// Manual override via --mcp flag.
 	if len(mcpServerNames) > 0 {
-		filtered := filterServersByName(servers, mcpServerNames)
-		// Warn about unrecognized server names (typos, removed servers).
-		for _, name := range mcpServerNames {
-			if _, ok := servers[name]; !ok {
-				ui.Warning(fmt.Sprintf("MCP server `%s` not found in configuration (available: %s)",
-					name, strings.Join(sortedServerNames(servers), ", ")))
-			}
-		}
-		if len(filtered) > 0 {
-			ui.Info(fmt.Sprintf("MCP servers selected via --mcp flag: %s", strings.Join(mcpServerNames, ", ")))
-		}
-		return filtered
+		return selectManualServers(servers, mcpServerNames)
 	}
 
 	// Single server — no routing needed.
@@ -196,16 +141,46 @@ func selectMCPServers(atmosConfig *schema.AtmosConfiguration, mcpServerNames []s
 		return servers
 	}
 
-	// Two-pass routing with fast model.
+	// Two-pass routing with configured AI provider.
+	return selectRoutedServers(atmosConfig, servers, question)
+}
+
+// selectManualServers filters servers by the --mcp flag, warning about unknown names.
+func selectManualServers(servers map[string]schema.MCPServerConfig, mcpServerNames []string) map[string]schema.MCPServerConfig {
+	filtered := filterServersByName(servers, mcpServerNames)
+	for _, name := range mcpServerNames {
+		if _, ok := servers[name]; !ok {
+			ui.Warning(fmt.Sprintf("MCP server `%s` not found in configuration (available: %s)",
+				name, strings.Join(sortedServerNames(servers), ", ")))
+		}
+	}
+	if len(filtered) > 0 {
+		ui.Info(fmt.Sprintf("MCP servers selected via --mcp flag: %s", strings.Join(mcpServerNames, ", ")))
+	}
+	return filtered
+}
+
+// selectRoutedServers uses the AI provider to select relevant servers, with validation.
+func selectRoutedServers(atmosConfig *schema.AtmosConfiguration, servers map[string]schema.MCPServerConfig, question string) map[string]schema.MCPServerConfig {
 	selected := routeWithAI(atmosConfig, question)
 	if len(selected) == 0 {
 		return servers
 	}
 
-	ui.Info(fmt.Sprintf("MCP routing selected %d of %d servers: %s",
-		len(selected), len(servers), strings.Join(selected, ", ")))
+	filtered := filterServersByName(servers, selected)
+	if len(filtered) == 0 {
+		ui.Warning("MCP routing returned no valid server names, starting all servers")
+		return servers
+	}
+	if len(filtered) != len(selected) {
+		ui.Warning(fmt.Sprintf("MCP routing returned %d unknown server name(s), using %d valid",
+			len(selected)-len(filtered), len(filtered)))
+	}
 
-	return filterServersByName(servers, selected)
+	ui.Info(fmt.Sprintf("MCP routing selected %d of %d servers: %s",
+		len(filtered), len(servers), strings.Join(sortedServerNames(filtered), ", ")))
+
+	return filtered
 }
 
 // routeWithAI uses a fast model to select relevant MCP servers for a question.
@@ -216,9 +191,10 @@ func routeWithAI(atmosConfig *schema.AtmosConfiguration, question string) []stri
 		return nil
 	}
 
-	// Build server info list for routing.
+	// Build server info list in deterministic order for consistent routing prompts.
 	var serverInfos []router.ServerInfo
-	for name, cfg := range atmosConfig.MCP.Servers {
+	for _, name := range sortedServerNames(atmosConfig.MCP.Servers) {
+		cfg := atmosConfig.MCP.Servers[name]
 		serverInfos = append(serverInfos, router.ServerInfo{
 			Name:        name,
 			Description: cfg.Description,
