@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+const statusTimeout = 120 * time.Second
 
 //go:embed markdown/atmos_mcp_status.md
 var statusLongMarkdown string
@@ -46,6 +49,9 @@ var statusCmd = &cobra.Command{
 		if ctx == nil {
 			ctx = context.Background()
 		}
+		// Add timeout to prevent hanging on slow/unresponsive servers.
+		ctx, cancel := context.WithTimeout(ctx, statusTimeout)
+		defer cancel()
 
 		startOpts := buildStartOptions(&atmosConfig)
 		headers := []string{"NAME", "STATUS", "TOOLS", "DESCRIPTION"}

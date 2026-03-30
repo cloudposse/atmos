@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -140,9 +142,11 @@ func (m *mockToolchain) EnvVars() []string {
 }
 
 func TestWithToolchain_ResolvesCommand(t *testing.T) {
+	resolvedPath := filepath.Join("opt", "toolchain", "bin", "uvx")
+	toolchainPATH := "PATH=" + filepath.Join("opt", "toolchain", "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
 	tc := &mockToolchain{
-		resolvedPaths: map[string]string{"uvx": "/opt/toolchain/bin/uvx"},
-		envVars:       []string{"PATH=/opt/toolchain/bin:/usr/bin"},
+		resolvedPaths: map[string]string{"uvx": resolvedPath},
+		envVars:       []string{toolchainPATH},
 	}
 	opt := WithToolchain(tc)
 
@@ -150,17 +154,17 @@ func TestWithToolchain_ResolvesCommand(t *testing.T) {
 		Name:    "aws-eks",
 		Command: "uvx",
 	}
-	env := []string{"HOME=/home/user"}
+	env := []string{"HOME=" + filepath.Join("home", "user")}
 
 	result, err := opt(context.Background(), config, env)
 	require.NoError(t, err)
 
 	// Command should be resolved to absolute path.
-	assert.Equal(t, "/opt/toolchain/bin/uvx", config.Command)
+	assert.Equal(t, resolvedPath, config.Command)
 
 	// Toolchain PATH should be appended to env.
-	assert.Contains(t, result, "PATH=/opt/toolchain/bin:/usr/bin")
-	assert.Contains(t, result, "HOME=/home/user")
+	assert.Contains(t, result, toolchainPATH)
+	assert.Contains(t, result, "HOME="+filepath.Join("home", "user"))
 }
 
 func TestWithToolchain_CommandNotInToolchain(t *testing.T) {

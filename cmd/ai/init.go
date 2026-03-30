@@ -155,7 +155,7 @@ func selectManualServers(servers map[string]schema.MCPServerConfig, mcpServerNam
 		}
 	}
 	if len(filtered) > 0 {
-		ui.Info(fmt.Sprintf("MCP servers selected via --mcp flag: %s", strings.Join(mcpServerNames, ", ")))
+		ui.Info(fmt.Sprintf("MCP servers selected via --mcp flag: %s", strings.Join(sortedServerNames(filtered), ", ")))
 	}
 	return filtered
 }
@@ -266,12 +266,14 @@ func resolveToolchain(atmosConfig *schema.AtmosConfiguration) mcpclient.Toolchai
 		if tenvErr == nil && tenv != nil {
 			return tenv
 		}
+		log.Debug("Failed to create environment from .tool-versions deps", "error", tenvErr)
 	}
 	// Fall back to component-based resolution.
 	tenv, tenvErr := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
 	if tenvErr == nil && tenv != nil {
 		return tenv
 	}
+	log.Debug("Toolchain resolution failed, MCP servers will use system PATH", "error", tenvErr)
 	return nil
 }
 

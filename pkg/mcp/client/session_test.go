@@ -338,16 +338,18 @@ func TestResolveCommandInEnv(t *testing.T) {
 
 func TestExtractEnvVars(t *testing.T) {
 	t.Run("both PATH and PATHEXT present", func(t *testing.T) {
-		env := []string{"HOME=/tmp", "PATH=/usr/bin", "PATHEXT=.exe;.cmd"}
+		testPath := filepath.Join("usr", "bin")
+		env := []string{"HOME=/tmp", "PATH=" + testPath, "PATHEXT=.exe;.cmd"}
 		path, pathext := extractEnvVars(env)
-		assert.Equal(t, "/usr/bin", path)
+		assert.Equal(t, testPath, path)
 		assert.Equal(t, ".exe;.cmd", pathext)
 	})
 
 	t.Run("only PATH present", func(t *testing.T) {
-		env := []string{"PATH=/usr/bin"}
+		testPath := filepath.Join("usr", "bin")
+		env := []string{"PATH=" + testPath}
 		path, pathext := extractEnvVars(env)
-		assert.Equal(t, "/usr/bin", path)
+		assert.Equal(t, testPath, path)
 		assert.Empty(t, pathext)
 	})
 
