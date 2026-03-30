@@ -318,6 +318,8 @@ var (
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
+	ErrMergeNilDst                   = errors.New("merge destination must not be nil")
+	ErrMergeTypeMismatch             = errors.New("cannot override two slices with different type")
 	ErrEncode                        = errors.New("encoding error")
 	ErrDecode                        = errors.New("decoding error")
 
@@ -531,6 +533,8 @@ var (
 	ErrFailedToGetGitHubOIDCToken   = errors.New("failed to get GitHub OIDC token")
 	ErrFailedToUploadInstances      = errors.New("failed to upload instances")
 	ErrFailedToUploadInstanceStatus = errors.New("failed to upload instance status")
+	ErrUploadRetryExhausted         = errors.New("upload failed after all retries")
+	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
 	ErrAPIResponseError             = errors.New("API response error")

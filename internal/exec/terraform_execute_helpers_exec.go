@@ -132,7 +132,7 @@ func executeCommandPipeline(
 
 	if shouldRunTerraformInit(atmosConfig, info) {
 		var err error
-		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile)
+		componentPath, err = executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
 		if err != nil {
 			return err
 		}
@@ -146,7 +146,7 @@ func executeCommandPipeline(
 		return err
 	}
 
-	if err = runWorkspaceSetup(atmosConfig, info, componentPath); err != nil {
+	if err = runWorkspaceSetup(atmosConfig, info, componentPath, opts...); err != nil {
 		return err
 	}
 
@@ -178,20 +178,21 @@ func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 
 // runWorkspaceSetup selects (or creates) the Terraform workspace before the main command
 // runs.  It is a no-op when shouldSkipWorkspaceSetup returns true.
-func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) error {
+func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
 	if shouldSkipWorkspaceSetup(info) {
 		return nil
 	}
 
 	// Default: redirect workspace-select stderr to stdout so it is visible.
-	workspaceSelectRedirectStdErr := "/dev/stdout"
+	redirectStdErr := "/dev/stdout"
 	if info.RedirectStdErr != "" {
-		workspaceSelectRedirectStdErr = info.RedirectStdErr
+		redirectStdErr = info.RedirectStdErr
 	}
 
 	// For data-producing subcommands redirect "Switched to workspace…" to stderr
 	// so it doesn't pollute captured stdout in $() substitutions.
-	var wsOpts []ShellCommandOption
+	// Merge caller-provided opts (e.g., WithEnvironment) with workspace-specific opts.
+	wsOpts := append([]ShellCommandOption{}, opts...)
 	if info.SubCommand == "output" || info.SubCommand == "show" {
 		wsOpts = append(wsOpts, WithStdoutOverride(os.Stderr))
 	}
@@ -203,7 +204,7 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		componentPath,
 		info.ComponentEnvList,
 		info.DryRun,
-		workspaceSelectRedirectStdErr,
+		redirectStdErr,
 		wsOpts...,
 	)
 	if err == nil {
@@ -216,7 +217,14 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return err
 	}
 
-	return ExecuteShellCommand(
+	return createWorkspaceFallback(atmosConfig, info, componentPath, opts...)
+}
+
+// createWorkspaceFallback attempts to create a new workspace when select fails.
+// If workspace creation also fails with exit code 1 and the workspace is already
+// active (stale .terraform/environment file), it proceeds with a warning.
+func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+	newErr := ExecuteShellCommand(
 		*atmosConfig,
 		info.Command,
 		[]string{"workspace", "new", info.TerraformWorkspace},
@@ -224,7 +232,24 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		info.ComponentEnvList,
 		info.DryRun,
 		info.RedirectStdErr,
+		opts...,
 	)
+	if newErr == nil {
+		return nil
+	}
+
+	// If `workspace new` also fails with exit code 1, the workspace may already be the
+	// active workspace (the .terraform/environment file names it) but its state directory
+	// was deleted.  In that case we are already in the correct workspace and can proceed.
+	var newExitCodeErr errUtils.ExitCodeError
+	if errors.As(newErr, &newExitCodeErr) && newExitCodeErr.Code == 1 &&
+		isTerraformCurrentWorkspace(componentPath, info.TerraformWorkspace, info.ComponentEnvList) {
+		log.Warn("Workspace is already active but its state directory is missing; proceeding — subsequent terraform commands may report missing state",
+			"workspace", info.TerraformWorkspace)
+		return nil
+	}
+
+	return newErr
 }
 
 // checkTTYRequirement returns an error when `terraform apply` is invoked without
@@ -302,9 +327,11 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	exitCode := resolveExitCode(err)
 
 	// Upload status only when explicitly requested via --upload-status flag.
+	// Upload failures are logged but never cause the terraform command to fail —
+	// the exit code should reflect the plan/apply result, not telemetry.
 	if uploadStatusFlag && shouldUploadStatus(info) {
 		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode); uploadErr != nil {
-			return uploadErr
+			log.Warn("Failed to upload command status to Atmos Pro. The terraform command result is unaffected.", "error", uploadErr)
 		}
 	}
 

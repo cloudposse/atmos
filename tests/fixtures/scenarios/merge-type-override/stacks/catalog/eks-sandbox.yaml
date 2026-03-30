@@ -1,0 +1,26 @@
+# Sandbox EKS overlay — overrides list vars with different types.
+# This is a common pattern: sandbox clusters disable inherited list-based config
+# by replacing the list with an empty map {}, a scalar, or null.
+import:
+  - catalog/eks-defaults
+
+components:
+  terraform:
+    eks-cluster:
+      vars:
+        # Override list with empty map {} — the primary regression trigger.
+        # Users write {} to mean "clear this list / disable this feature".
+        allowed_accounts: {}
+
+        # Override list with empty list [] — same type, should always work.
+        rbac_roles: []
+
+        # Override nested list inside a map — deep merge of node_groups.
+        node_groups:
+          main:
+            instance_types:
+              - c6a.xlarge
+            kubernetes_taints:
+              - key: CriticalAddonsOnly
+                value: "true"
+                effect: NO_SCHEDULE
