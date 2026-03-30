@@ -7,11 +7,14 @@ import (
 // InstancesUploadRequest represents the data structure for uploading components for drift detection.
 // We call this from "atmos list instances".
 type InstancesUploadRequest struct {
-	RepoURL   string            `json:"repo_url"`
-	RepoName  string            `json:"repo_name"`
-	RepoOwner string            `json:"repo_owner"`
-	RepoHost  string            `json:"repo_host"`
-	Instances []schema.Instance `json:"instances"`
+	RepoURL    string            `json:"repo_url"`
+	RepoName   string            `json:"repo_name"`
+	RepoOwner  string            `json:"repo_owner"`
+	RepoHost   string            `json:"repo_host"`
+	Instances  []schema.Instance `json:"instances"`
+	BatchID    string            `json:"batch_id,omitempty"`
+	BatchIndex *int              `json:"batch_index,omitempty"`
+	BatchTotal *int              `json:"batch_total,omitempty"`
 }
 
 // InstanceStatusUploadRequest represents the data structure for uploading a single instance's status.

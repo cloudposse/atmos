@@ -89,6 +89,7 @@ func TestDescribeAffectedWithInclude(t *testing.T) {
 			true, // processYamlFunctions: true - this triggers !include processing.
 			nil,
 			false,
+			nil, // authManager
 		)
 
 		require.NoError(t, err, "describe affected should not fail when stacks use !include")
@@ -122,6 +123,7 @@ func TestDescribeAffectedWithInclude(t *testing.T) {
 			true,
 			nil,
 			false,
+			nil, // authManager
 		)
 
 		require.NoError(t, err)
@@ -165,6 +167,7 @@ func TestDescribeAffectedWithIncludeSelfComparison(t *testing.T) {
 		true, // processYamlFunctions: true.
 		nil,
 		false,
+		nil, // authManager
 	)
 
 	require.NoError(t, err,
