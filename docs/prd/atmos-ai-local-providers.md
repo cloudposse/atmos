@@ -767,7 +767,7 @@ all tool calls (equivalent to Claude Code's `--dangerously-skip-permissions`).
 4. Atmos passes the config to the CLI tool:
    - Claude Code: `claude -p --mcp-config /tmp/atmos-mcp-config.json --dangerously-skip-permissions`
    - Codex CLI: Generate `~/.codex/config.toml` `[mcp_servers]` entries (planned)
-   - Gemini CLI: `gemini -p --mcp-config /tmp/atmos-mcp-<hash>.json` (if supported)
+   - Gemini CLI: writes `.gemini/settings.json` in temp dir, sets `cmd.Dir`, passes `--yolo`
 5. The CLI tool starts the MCP servers itself (as subprocesses) and manages the tool loop.
 6. Atmos cleans up the temp config file after the CLI tool exits.
 
@@ -899,15 +899,30 @@ This is optional — many use cases only need external MCP servers (AWS billing,
 
 ## References
 
+### Claude Code
+
 - [Claude Code CLI Reference](https://docs.anthropic.com/en/docs/claude-code/cli-reference)
 - [Claude Code Non-Interactive Mode](https://docs.anthropic.com/en/docs/claude-code/cli-usage#non-interactive-mode)
+- [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/claude-agent-sdk)
+
+### OpenAI Codex CLI
+
 - [OpenAI Codex CLI](https://github.com/openai/codex)
 - [Codex CLI Non-Interactive Mode](https://developers.openai.com/codex/noninteractive)
 - [Codex CLI Reference](https://developers.openai.com/codex/cli/reference)
 - [Codex CLI MCP](https://developers.openai.com/codex/mcp)
 - [Codex SDK](https://developers.openai.com/codex/sdk)
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli)
-- [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/claude-agent-sdk)
-- [Atmos AI PRD](./atmos-ai.md) — Current AI architecture
+
+### Gemini CLI
+
+- [Gemini CLI Repository](https://github.com/google-gemini/gemini-cli)
+- [Gemini CLI Configuration](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/configuration.md)
+- [Gemini CLI MCP Server Setup](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md)
+- [Gemini CLI MCP Tutorial](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/tutorials/mcp-setup.md)
+- [GitHub MCP Server — Gemini CLI Install Guide](https://github.com/github/github-mcp-server/blob/main/docs/installation-guides/install-gemini-cli.md)
+
+### Atmos
+
+- [Atmos AI PRD](./atmos-ai.md) — Core AI architecture
 - [Atmos MCP Integrations PRD](./atmos-mcp-integrations.md) — External MCP servers
-- [Atmos AI Global Flag PRD](./atmos-ai-global-flag.md) — `--ai` flag design
+- [Atmos AI Global Flag PRD](./atmos-ai-global-flag.md) — `--ai` and `--skill` flags
