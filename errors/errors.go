@@ -861,11 +861,11 @@ var (
 	ErrECRTokenExpired     = errors.New("ECR authorization token expired")
 	ErrECRRegistryNotFound = errors.New("ECR registry not found")
 	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
-	ErrECRLoginNoArgs      = errors.New("specify an integration name, --identity, or --registry")
+	ErrECRLoginNoArgs      = errors.New("specify an server name, --identity, or --registry")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
 
-	// EKS integration errors.
+	// EKS server errors.
 	ErrEKSDescribeCluster   = errors.New("failed to describe EKS cluster")
 	ErrEKSClusterNotFound   = errors.New("EKS cluster not found")
 	ErrEKSIntegrationFailed = errors.New("EKS integration failed")
@@ -879,7 +879,7 @@ var (
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
 	// CI-related errors.
-	ErrCIDisabled              = errors.New("CI integration is disabled")
+	ErrCIDisabled              = errors.New("CI server is disabled")
 	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
 	ErrCIProviderNotFound      = errors.New("CI provider not found")
 	ErrCIOperationNotSupported = errors.New("operation not supported by CI provider")
@@ -1012,6 +1012,17 @@ var (
 	ErrMCPInvalidJSONRPCVersion = errors.New("invalid JSON-RPC version")
 	ErrMCPInvalidTransport      = errors.New("invalid transport type")
 	ErrMCPUnsupportedTransport  = errors.New("unsupported transport")
+	ErrMCPServerNotFound        = errors.New("MCP server not found in configuration")
+	ErrMCPServerNotRunning      = errors.New("MCP server is not running")
+	ErrMCPServerStartFailed     = errors.New("MCP server failed to start")
+	ErrMCPServerCommandEmpty    = errors.New("MCP server command must not be empty")
+	ErrMCPServerInvalidTimeout  = errors.New("MCP server timeout is invalid")
+	ErrMCPServerToolListFailed  = errors.New("failed to list tools from MCP server")
+	ErrMCPServerToolError       = errors.New("MCP server returned error for tool")
+	ErrMCPConfigWriteFailed     = errors.New("failed to write MCP config file")
+	ErrMCPConfigPermsFailed     = errors.New("failed to set MCP config file permissions")
+	ErrMCPConfigMarshalFailed   = errors.New("failed to marshal MCP config")
+	ErrMCPServerAuthUnavailable = errors.New("MCP server requires identity but auth manager is not available")
 	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
 	ErrLSPConfigNil             = errors.New("LSP config is nil")
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
