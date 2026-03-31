@@ -1,8 +1,8 @@
 # Atmos AI Local Providers — Use Claude Code, Gemini CLI, and OpenAI Codex Instead of API Tokens
 
-**Status:** Draft
-**Version:** 0.1
-**Last Updated:** 2026-03-31
+**Status:** Phase 1-2 Shipped, Phase 3-4 Planned
+**Version:** 1.0
+**Last Updated:** 2026-03-30
 
 ---
 
@@ -660,35 +660,68 @@ ai:
 
 ---
 
+## Tool and MCP Integration — Key Difference from API Providers
+
+With API providers (Anthropic, OpenAI, etc.), Atmos sends tool definitions directly to the
+AI provider and manages the tool execution loop in-process. The AI decides which tools to
+call, Atmos executes them, and sends results back.
+
+**CLI providers cannot receive tool definitions directly.** The CLI subprocess manages its
+own tool loop internally. Atmos has no way to inject custom tool schemas into
+`claude -p` or `codex exec`.
+
+**The solution is MCP pass-through (Phase 3):**
+
+1. Atmos starts `atmos mcp start` as a local MCP server (exposes all native Atmos tools).
+2. Atmos starts any configured external MCP servers (AWS billing, security, etc.).
+3. Atmos generates a temporary `.mcp.json` config pointing to all running MCP servers.
+4. Atmos passes `--mcp-config /tmp/atmos-mcp.json` to `claude -p`.
+5. The CLI tool connects to the MCP servers and can use ALL tools — both native Atmos
+   tools and external MCP tools — through its own tool execution loop.
+
+| Capability | API Providers | CLI Providers (Phase 1-2) | CLI Providers (Phase 3) |
+|------------|---------------|---------------------------|-------------------------|
+| **Atmos tools** (describe, list, validate) | Direct injection | Not available | Via MCP pass-through |
+| **External MCP tools** (AWS, custom) | Via BridgedTool | Not available | Via MCP pass-through |
+| **Tool execution loop** | Atmos-managed | N/A | CLI-managed |
+| **Tool results in output** | Tool Executions section | N/A | Displayed by CLI tool |
+
+Until Phase 3, CLI providers work as **prompt-only** — the AI answers based on the prompt
+text and any context Atmos provides, but cannot call Atmos tools or MCP servers.
+
+---
+
 ## Phased Implementation
 
-### Phase 1: Claude Code Provider (MVP)
+### Phase 1: Claude Code Provider (MVP) ✅ Shipped
 
-- Implement `pkg/ai/agent/claudecode/` with `registry.Client` interface.
+- `pkg/ai/agent/claudecode/` with `registry.Client` interface.
 - Auto-detect `claude` binary via `exec.LookPath`.
-- Support `claude -p --output-format json` invocation.
-- Parse `claudeCodeResponse` JSON.
-- Configuration in `atmos.yaml` under `ai.provider: claude-code`.
+- `claude -p --output-format json` invocation with JSON response parsing.
+- Configuration in `atmos.yaml` under `ai.providers.claude-code`.
 - Error handling: binary not found, auth expired, rate limited.
+- 15 unit tests.
 
-### Phase 2: Codex CLI + Gemini CLI Providers
+### Phase 2: Codex CLI + Gemini CLI Providers ✅ Shipped
 
-- Implement `pkg/ai/agent/codexcli/` with `registry.Client` interface.
-- Auto-detect `codex` binary. Support `codex exec --json` invocation.
-- Parse JSONL event stream to extract final response.
-- Implement `pkg/ai/agent/geminicli/` with `registry.Client` interface.
-- Auto-detect `gemini` binary. Support `gemini -p --output-format json` invocation.
-- Configuration in `atmos.yaml` under `ai.provider: codex-cli` / `gemini-cli`.
+- `pkg/ai/agent/codexcli/` with `registry.Client` interface.
+- Auto-detect `codex` binary. `codex exec --json` invocation with JSONL parsing.
+- `pkg/ai/agent/geminicli/` with `registry.Client` interface.
+- Auto-detect `gemini` binary. `gemini -p --output-format json` invocation.
+- Configuration in `atmos.yaml` under `ai.providers.codex-cli` / `gemini-cli`.
+- 19 unit tests across both providers.
 
-### Phase 3: MCP Pass-Through
+### Phase 3: MCP Pass-Through (Planned)
 
-- Generate temporary MCP config from `ai.mcp.servers`.
+- Generate temporary MCP config from `mcp.servers` in `atmos.yaml`.
+- Start `atmos mcp start` as a local Atmos MCP server.
 - Pass `--mcp-config` to `claude -p` invocations (Claude Code).
 - Pass MCP config via `~/.codex/config.toml` for Codex CLI.
-- All three local providers gain access to configured MCP servers (AWS, Atmos, custom).
-- This combines the MCP Integrations PRD with local providers.
+- All three CLI providers gain access to configured MCP servers (AWS, Atmos, custom).
+- This bridges the gap between CLI providers and the full tool execution available with
+  API providers.
 
-### Phase 4: Auto-Detection and Smart Defaults
+### Phase 4: Auto-Detection and Smart Defaults (Planned)
 
 - Auto-detect installed CLI tools and suggest/use the best available provider.
 - Fallback chain: `claude-code` → `codex-cli` → `gemini-cli` → prompt for API key.
