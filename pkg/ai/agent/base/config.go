@@ -2,8 +2,13 @@
 package base
 
 import (
+	"time"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// DefaultRequestTimeout is the default HTTP request timeout for AI provider API calls.
+const DefaultRequestTimeout = 60 * time.Second
 
 // ProviderDefaults contains default values for a provider.
 type ProviderDefaults struct {

@@ -61,10 +61,3 @@ func registerAll(registry *tools.Registry, toolList []tools.Tool) error {
 	}
 	return nil
 }
-
-// RegisterReadOnlyTools registers only read-only, in-process tools for non-interactive commands like 'ask'.
-// This excludes subprocess-based tools (execute_atmos_command, execute_bash_command) and write tools
-// that are better suited for interactive chat sessions.
-func RegisterReadOnlyTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) error {
-	return registerCoreTools(registry, atmosConfig)
-}
