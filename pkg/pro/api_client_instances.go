@@ -35,7 +35,8 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 	}
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
 
-	// Strip instances to only the fields Atmos Pro needs: component, stack, component_type.
+	// Strip instances to only the fields Atmos Pro needs: component, stack, component_type,
+	// and settings.pro (for drift detection configuration).
 	// This prevents uploading sensitive data (vars can contain secrets, env contains credentials)
 	// and also avoids JSON marshaling errors from map[interface{}]interface{} in nested YAML maps.
 	stripped := make([]schema.Instance, len(dto.Instances))
@@ -44,6 +45,7 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 			Component:     inst.Component,
 			Stack:         inst.Stack,
 			ComponentType: inst.ComponentType,
+			Settings:      stripToProSettings(inst.Settings),
 		}
 	}
 	dto.Instances = stripped
