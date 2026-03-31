@@ -17,7 +17,7 @@ This PRD proposes adding **local CLI providers** that invoke the user's installe
 or `gemini` binary as a subprocess, reusing their existing subscription instead of requiring
 separate API tokens.
 
-**Key Finding:** Both Claude Code (`claude -p`) and Gemini CLI (`gemini -p`) support
+**Key Finding:** Claude Code (`claude -p`), Gemini CLI (`gemini -p`) and OpenAI Codex support
 non-interactive mode with structured JSON output, making subprocess integration
 straightforward. No new protocols or SDKs needed — just `exec.Command` + JSON parsing.
 
