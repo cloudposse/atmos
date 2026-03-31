@@ -670,6 +670,21 @@ call, Atmos executes them, and sends results back.
 own tool loop internally. Atmos has no way to inject custom tool schemas into
 `claude -p` or `codex exec`.
 
+**MCP server routing and registration is skipped for CLI providers.** When a CLI provider
+is selected (`claude-code`, `codex-cli`, `gemini-cli`), Atmos does NOT:
+
+- Call the AI to select relevant MCP servers (no routing call)
+- Start MCP server subprocesses
+- Register MCP tools in the Atmos tool registry
+- Show "MCP routing selected..." or "MCP server started..." messages
+
+This is enforced by `isCLIProvider()` in `cmd/ai/init.go`. The check uses the
+`default_provider` name from `atmos.yaml` to determine if the provider is CLI-based.
+
+Instead, MCP servers are available to CLI providers via **MCP pass-through** (Phase 3) —
+Atmos generates a temp `.mcp.json` and passes it to the CLI tool via `--mcp-config`.
+The CLI tool starts and manages the MCP servers itself.
+
 **The solution is MCP pass-through (Phase 3):**
 
 1. Atmos starts `atmos mcp start` as a local MCP server (exposes all native Atmos tools).

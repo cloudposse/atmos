@@ -117,6 +117,22 @@ func TestCopyEnv(t *testing.T) {
 	assert.False(t, hasC)
 }
 
+func TestCopyEnv_UppercasesKeys(t *testing.T) {
+	// Simulates Viper-lowercased env keys being restored.
+	lowercased := map[string]string{
+		"aws_region":           "us-east-1",
+		"fastmcp_log_level":    "ERROR",
+		"read_operations_only": "true",
+	}
+	result := copyEnv(lowercased)
+	assert.Equal(t, "us-east-1", result["AWS_REGION"])
+	assert.Equal(t, "ERROR", result["FASTMCP_LOG_LEVEL"])
+	assert.Equal(t, "true", result["READ_OPERATIONS_ONLY"])
+	// Original lowercase keys should not exist.
+	_, hasLower := result["aws_region"]
+	assert.False(t, hasLower)
+}
+
 func TestCopyEnv_Nil(t *testing.T) {
 	result := copyEnv(nil)
 	assert.NotNil(t, result)

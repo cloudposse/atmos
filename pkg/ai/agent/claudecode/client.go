@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -42,6 +42,7 @@ type Client struct {
 	model         string
 	mcpServers    map[string]schema.MCPServerConfig // MCP servers to pass through via --mcp-config.
 	toolchainPATH string                            // Toolchain bin PATH for MCP server subprocesses.
+	mcpConfigPath string                            // Pre-generated MCP config file path.
 }
 
 // NewClient creates a new Claude Code CLI client from Atmos configuration.
@@ -83,6 +84,14 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	if len(atmosConfig.MCP.Servers) > 0 {
 		client.mcpServers = atmosConfig.MCP.Servers
 		client.toolchainPATH = resolveToolchainPATH(atmosConfig)
+		// Pre-generate MCP config so we can show the path before "Thinking...".
+		mcpConfigPath, mcpErr := mcpclient.WriteMCPConfigToTempFile(client.mcpServers, client.toolchainPATH)
+		if mcpErr != nil {
+			log.Debug("Failed to generate MCP config for Claude Code", "error", mcpErr)
+		} else {
+			client.mcpConfigPath = mcpConfigPath
+			ui.Info(fmt.Sprintf("MCP servers configured: %d (config: %s)", len(client.mcpServers), mcpConfigPath))
+		}
 	}
 
 	return client, nil
@@ -189,15 +198,9 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 		args = append(args, "--allowedTools", tool)
 	}
 
-	// MCP pass-through: generate temp config and pass to Claude Code.
-	if len(c.mcpServers) > 0 {
-		mcpConfigPath, err := mcpclient.WriteMCPConfigToTempFile(c.mcpServers, c.toolchainPATH)
-		if err != nil {
-			log.Debug("Failed to generate MCP config for Claude Code", "error", err)
-		} else {
-			defer os.Remove(mcpConfigPath)
-			args = append(args, "--mcp-config", mcpConfigPath)
-		}
+	// MCP pass-through: use pre-generated config file.
+	if c.mcpConfigPath != "" {
+		args = append(args, "--mcp-config", c.mcpConfigPath)
 	}
 
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.

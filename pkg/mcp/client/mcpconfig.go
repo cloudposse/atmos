@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -88,11 +89,13 @@ func WriteMCPConfigToTempFile(servers map[string]schema.MCPServerConfig, toolcha
 	return tmpFile, nil
 }
 
-// copyEnv returns a copy of the env map (or a new empty map if nil).
+// copyEnv returns a copy of the env map with keys uppercased.
+// Viper lowercases all YAML map keys, but env vars are conventionally UPPERCASE.
+// This restores the expected casing (e.g., aws_region → AWS_REGION).
 func copyEnv(env map[string]string) map[string]string {
 	result := make(map[string]string, len(env))
 	for k, v := range env {
-		result[k] = v
+		result[strings.ToUpper(k)] = v
 	}
 	return result
 }

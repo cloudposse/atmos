@@ -55,6 +55,7 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 	}
 
 	ui.Info(fmt.Sprintf("AI tools initialized: %d total", registry.Count()))
+	ui.Info(fmt.Sprintf("AI provider: %s", atmosConfig.AI.DefaultProvider))
 
 	// Initialize permission cache for persistent decisions.
 	permCache, err := permission.NewPermissionCache(atmosConfig.BasePath)
