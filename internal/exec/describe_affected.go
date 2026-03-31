@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -349,7 +350,8 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	log.Debug("Creating API client")
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(d.atmosConfig)
 	if err != nil {
-		return err
+		log.Warn("Failed to create Atmos Pro API client for upload. The describe affected result is unaffected.", "error", err)
+		return nil
 	}
 
 	req := dtos.UploadAffectedStacksRequest{
@@ -364,7 +366,14 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 
 	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	return apiClient.UploadAffectedStacks(&req)
+	if uploadErr := apiClient.UploadAffectedStacks(&req); uploadErr != nil {
+		ui.Error("Failed to upload affected stacks to Atmos Pro")
+		return uploadErr
+	}
+
+	ui.Success("Uploaded affected stacks to Atmos Pro")
+
+	return nil
 }
 
 type viewWithScrollProps struct {

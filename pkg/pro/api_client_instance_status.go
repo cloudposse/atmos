@@ -15,6 +15,8 @@ import (
 )
 
 // UploadInstanceStatus uploads the drift detection result status to the pro API.
+// It retries on transient 401/5xx failures with exponential backoff, refreshing
+// the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error {
 	if dto == nil {
 		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, errUtils.ErrNilRequestDTO)
@@ -54,18 +56,22 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "PATCH", targetURL, bytes.NewBuffer(data))
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
-	}
+	// Wrap the HTTP call in retry logic to handle transient 401/5xx failures.
+	err = doWithRetry("UploadInstanceStatus", func() error {
+		req, reqErr := getAuthenticatedRequest(c, "PATCH", targetURL, bytes.NewBuffer(data))
+		if reqErr != nil {
+			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+		}
 
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
-	}
-	defer resp.Body.Close()
+		resp, doErr := c.HTTPClient.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+		if doErr != nil {
+			return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
+		}
+		defer resp.Body.Close()
 
-	if err := handleAPIResponse(resp, "UploadInstanceStatus"); err != nil {
+		return handleAPIResponse(resp, "UploadInstanceStatus")
+	}, c, defaultRetryConfig())
+	if err != nil {
 		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
