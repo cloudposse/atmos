@@ -1434,9 +1434,10 @@ func TestUser_resolveLongLivedCredentials_DetectsSessionCredentials(t *testing.T
 	require.NoError(t, err)
 
 	// Create identity with no YAML credentials (uses keyring).
+	// Disable webflow so prompting is tested (webflow skips prompts).
 	identity, err := NewUserIdentity("test-session-creds-in-keyring", &schema.Identity{
 		Kind:        "aws/user",
-		Credentials: map[string]any{},
+		Credentials: map[string]any{"webflow_enabled": false},
 	})
 	require.NoError(t, err)
 
@@ -1489,9 +1490,10 @@ func TestUser_resolveLongLivedCredentials_PromptWhenMissing(t *testing.T) {
 	ctx := context.Background()
 
 	// Create identity with no YAML credentials and no keyring credentials.
+	// Disable webflow so prompting is tested (webflow skips prompts).
 	identity, err := NewUserIdentity("test-prompt-missing", &schema.Identity{
 		Kind:        "aws/user",
-		Credentials: map[string]any{},
+		Credentials: map[string]any{"webflow_enabled": false},
 	})
 	require.NoError(t, err)
 

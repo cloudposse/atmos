@@ -159,9 +159,11 @@ func (i *userIdentity) resolveLongLivedCredentials(ctx context.Context) (*types.
 
 // resolveCredentialsFromKeyring resolves credentials from keyring with prompting fallback.
 // It validates that keyring contains long-lived credentials (not session tokens).
+// When browser webflow is enabled, credential prompts are skipped so the caller
+// can fall through to browser-based authentication instead.
 func (i *userIdentity) resolveCredentialsFromKeyring(ctx context.Context, yamlMfaArn string) (*types.AWSCredentials, error) {
 	keystoreCreds, keystoreErr := i.credentialsFromStore()
-	allowPrompts := types.AllowPrompts(ctx)
+	allowPrompts := types.AllowPrompts(ctx) && !i.isWebflowEnabled()
 
 	// No keyring credentials - prompt for new ones if allowed.
 	if keystoreErr != nil {
