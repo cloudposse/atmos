@@ -74,6 +74,16 @@ type Plugin interface {
 	GetHookBindings() []HookBinding
 }
 
+// StatusDataProvider is an optional interface that CI plugins can implement
+// to provide structured data for the Atmos Pro status upload.
+// Plugins that don't implement this interface will not contribute CI data.
+type StatusDataProvider interface {
+	// BuildStatusData converts parsed output into a map of key-value pairs
+	// for the Pro status upload. Each component type decides its own keys.
+	// The returned map is serialized as-is into the "ci" field of the upload payload.
+	BuildStatusData(output string, command string) map[string]any
+}
+
 // HookBindings is a slice of HookBinding with helper methods.
 type HookBindings []HookBinding
 
