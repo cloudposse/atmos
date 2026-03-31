@@ -1,0 +1,207 @@
+# Atmos AI with Claude Code CLI Provider
+#
+# Use your Claude Pro/Max subscription instead of API tokens.
+# Claude Code manages the AI conversation and tool execution — Atmos provides
+# infrastructure context and MCP server orchestration with automatic auth.
+#
+# Prerequisites:
+#   - Claude Code installed: brew install claude
+#   - Authenticated: claude auth login
+#   - Python 3.10+ (for AWS MCP servers)
+#
+# Quick start:
+#   atmos ai ask "What stacks do we have?"
+#   atmos ai ask "What did we spend on EC2 last month?"
+#   atmos ai ask --mcp aws-iam "List all admin roles"
+
+base_path: "."
+
+# ---------------------------------------------------------------------------
+# Atmos Toolchain
+# ---------------------------------------------------------------------------
+# Map `uv` to the aqua registry so uvx is available for MCP servers.
+# Install with: atmos toolchain install astral-sh/uv@0.7.12
+toolchain:
+  aliases:
+    uv: astral-sh/uv
+
+# ---------------------------------------------------------------------------
+# MCP Servers
+# ---------------------------------------------------------------------------
+# External MCP servers from the AWS ecosystem. Their tools become available
+# to Claude Code via MCP pass-through — Claude Code connects to each server
+# and can use their tools alongside its built-in tools.
+#
+# When using the claude-code provider, Atmos generates a temporary .mcp.json
+# and passes it to Claude Code via --mcp-config. Auth credentials are injected
+# automatically via `atmos auth exec`.
+mcp:
+  servers:
+    # No credentials needed — accesses public documentation endpoints.
+    aws-docs:
+      command: uvx
+      args:
+        - "awslabs.aws-documentation-mcp-server@latest"
+      env:
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Documentation — search and fetch AWS docs"
+
+    # Managed remote MCP server — no credentials or local installation needed.
+    aws-knowledge:
+      command: uvx
+      args:
+        - "fastmcp"
+        - "run"
+        - "https://knowledge-mcp.global.api.aws"
+      description: "AWS Knowledge — managed AWS knowledge base (remote)"
+
+    # Real-time AWS pricing (all Pricing API calls are free).
+    aws-pricing:
+      command: uvx
+      args:
+        - "awslabs.aws-pricing-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Pricing — real-time pricing and cost analysis"
+      identity: "readonly"  # Atmos Auth identity (from the auth section)
+
+    # Direct AWS CLI access with safety controls.
+    aws-api:
+      command: uvx
+      args:
+        - "awslabs.aws-api-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        READ_OPERATIONS_ONLY: "true"
+        REQUIRE_MUTATION_CONSENT: "true"
+      description: "AWS API — direct AWS CLI access with security controls"
+      identity: "readonly"  # Atmos Auth identity (from the auth section)
+
+    # Well-Architected Security Pillar assessment.
+    aws-security:
+      command: uvx
+      args:
+        - "awslabs.well-architected-security-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Security — Well-Architected security posture assessment"
+      identity: "readonly"  # Atmos Auth identity (from the auth section)
+
+    # Billing summaries, payment history, cost allocation tags.
+    aws-billing:
+      command: uvx
+      args:
+        - "awslabs.billing-cost-management-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS Billing — billing summaries and payment history"
+      identity: "readonly"  # Atmos Auth identity (from the auth section)
+
+    # IAM role/policy analysis (read-only).
+    aws-iam:
+      command: uvx
+      args:
+        - "awslabs.iam-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS IAM — role/policy analysis and access patterns"
+      identity: "readonly"  # Atmos Auth identity (from the auth section)
+
+    # CloudTrail event history and API call auditing.
+    aws-cloudtrail:
+      command: uvx
+      args:
+        - "awslabs.cloudtrail-mcp-server@latest"
+      env:
+        AWS_REGION: "us-east-1"
+        FASTMCP_LOG_LEVEL: "ERROR"
+      description: "AWS CloudTrail — event history and API call auditing"
+      identity: "readonly"  # Atmos Auth identity (from the auth section)
+
+# ---------------------------------------------------------------------------
+# Atmos Auth — automatic credential injection for MCP servers
+# ---------------------------------------------------------------------------
+# Atmos Auth handles SSO authentication once and injects credentials into
+# every MCP server that needs them. No manual aws configure or env vars.
+#
+# Setup:
+#   1. Update the provider and identity settings below to match your AWS org
+#   2. Run: atmos auth login
+#   3. All MCP servers with identity will get credentials automatically
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      start_url: "https://your-org.awsapps.com/start"   # ← Change this
+      region: "us-east-1"
+  identities:
+    readonly:
+      kind: aws/permission-set
+      provider: aws-sso
+      default: true
+      principal:
+        permission_set: "ReadOnlyAccess"                 # ← Change this
+        account:
+          id: "123456789012"                             # ← Change this
+
+# ---------------------------------------------------------------------------
+# AI Configuration — Claude Code CLI Provider
+# ---------------------------------------------------------------------------
+# Uses your locally installed Claude Code binary instead of API tokens.
+# No api_key needed — Claude Code uses your Claude Pro/Max subscription.
+#
+# Docs: https://atmos.tools/cli/configuration/ai
+ai:
+  enabled: true
+  default_provider: "claude-code"
+  timeout_seconds: 120
+  max_tool_iterations: 25
+
+  providers:
+    # Claude Code CLI — uses your Claude Pro/Max subscription.
+    # No API key needed. Claude Code manages auth via OAuth.
+    claude-code:
+      # Path to claude binary (optional, auto-detected from PATH).
+      # binary: /usr/local/bin/claude
+      # Max agentic turns per invocation.
+      max_turns: 10
+      # Budget cap per invocation (USD). 0 = no cap.
+      # max_budget_usd: 1.00
+
+    # Uncomment to add API providers as alternatives:
+    # anthropic:
+    #   model: "claude-sonnet-4-6"
+    #   api_key: !env "ANTHROPIC_API_KEY"
+    #   max_tokens: 4096
+    # openai:
+    #   model: "gpt-5.4"
+    #   api_key: !env "OPENAI_API_KEY"
+
+  tools:
+    enabled: true
+    require_confirmation: true
+    allowed_tools:
+      - atmos_describe_component
+      - atmos_list_stacks
+      - atmos_validate_stacks
+      - read_stack_file
+
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+
+# Minimal stacks config (required for atmos to load).
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*.yaml"
+  excluded_paths: []
+  name_template: "{{ .vars.stage }}"
+
+components:
+  terraform:
+    base_path: components/terraform

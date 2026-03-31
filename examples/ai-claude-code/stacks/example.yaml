@@ -1,0 +1,4 @@
+# Minimal stack for the Claude Code AI example.
+# This file exists so atmos can load configuration.
+vars:
+  stage: dev
