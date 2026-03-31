@@ -7,15 +7,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/dependencies"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -23,12 +29,18 @@ const (
 	ProviderName = "gemini-cli"
 	// DefaultBinary is the default binary name for Gemini CLI.
 	DefaultBinary = "gemini"
+	// Dir and file permissions for MCP settings.
+	settingsDirPerms  = 0o700
+	settingsFilePerms = 0o600
 )
 
 // Client invokes the Gemini CLI in non-interactive mode.
 type Client struct {
-	binaryPath string
-	model      string
+	binaryPath     string
+	model          string
+	mcpServers     map[string]schema.MCPServerConfig
+	toolchainPATH  string
+	mcpSettingsDir string // Temp dir containing .gemini/settings.json for MCP config.
 }
 
 // NewClient creates a new Gemini CLI client from Atmos configuration.
@@ -71,6 +83,21 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 		client.binaryPath = resolved
 	}
 
+	// Capture MCP servers for pass-through (only if configured).
+	if len(atmosConfig.MCP.Servers) > 0 {
+		client.mcpServers = atmosConfig.MCP.Servers
+		client.toolchainPATH = resolveToolchainPATH(atmosConfig)
+		// Generate .gemini/settings.json in a temp directory.
+		settingsDir, err := writeMCPSettingsFile(client.mcpServers, client.toolchainPATH)
+		if err != nil {
+			log.Debug("Failed to generate Gemini MCP settings", "error", err)
+		} else {
+			client.mcpSettingsDir = settingsDir
+			ui.Info(fmt.Sprintf("MCP servers configured: %d (settings: %s)", len(client.mcpServers),
+				filepath.Join(settingsDir, ".gemini", "settings.json")))
+		}
+	}
+
 	return client, nil
 }
 
@@ -83,8 +110,19 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 		args = append(args, "-m", c.model)
 	}
 
+	// Auto-approve tool calls in non-interactive mode.
+	if c.mcpSettingsDir != "" {
+		args = append(args, "--yolo")
+	}
+
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
 	cmd.Stdin = strings.NewReader(message)
+
+	// If MCP settings dir exists, set it as working directory so Gemini CLI
+	// picks up .gemini/settings.json from the project-level config.
+	if c.mcpSettingsDir != "" {
+		cmd.Dir = c.mcpSettingsDir
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -168,9 +206,67 @@ func parseResponse(output []byte) (string, error) {
 		if trimmed != "" {
 			return trimmed, nil
 		}
-		return "", fmt.Errorf("%w: %w", errUtils.ErrCLIProviderParseResponse, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCLIProviderParseResponse, err)
 	}
 	return resp.Result, nil
+}
+
+// geminiSettings is the .gemini/settings.json format for MCP server configuration.
+type geminiSettings struct {
+	MCPServers map[string]mcpclient.MCPJSONServer `json:"mcpServers"`
+}
+
+// writeMCPSettingsFile creates a temp directory with .gemini/settings.json containing MCP config.
+// Returns the temp directory path. Caller should clean up with os.RemoveAll.
+func writeMCPSettingsFile(servers map[string]schema.MCPServerConfig, toolchainPATH string) (string, error) {
+	config := mcpclient.GenerateMCPConfig(servers, toolchainPATH)
+
+	settings := geminiSettings{
+		MCPServers: config.MCPServers,
+	}
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrMCPConfigMarshalFailed, err)
+	}
+
+	// Create temp dir with .gemini subdirectory.
+	tmpDir, err := os.MkdirTemp("", "atmos-gemini-*")
+	if err != nil {
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrMCPConfigWriteFailed, err)
+	}
+
+	geminiDir := filepath.Join(tmpDir, ".gemini")
+	if err := os.MkdirAll(geminiDir, settingsDirPerms); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("%w: mkdir %s: %w", errUtils.ErrMCPConfigWriteFailed, geminiDir, err)
+	}
+
+	settingsFile := filepath.Join(geminiDir, "settings.json")
+	if err := os.WriteFile(settingsFile, append(data, '\n'), settingsFilePerms); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, settingsFile, err)
+	}
+
+	return tmpDir, nil
+}
+
+// resolveToolchainPATH extracts the toolchain bin PATH for MCP server subprocesses.
+func resolveToolchainPATH(atmosConfig *schema.AtmosConfiguration) string {
+	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
+	if err != nil || len(deps) == 0 {
+		return ""
+	}
+	tenv, err := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
+	if err != nil || tenv == nil {
+		return ""
+	}
+	for _, envVar := range tenv.EnvVars() {
+		if strings.HasPrefix(envVar, "PATH=") {
+			return envVar[len("PATH="):]
+		}
+	}
+	return ""
 }
 
 func formatMessages(messages []types.Message) string {

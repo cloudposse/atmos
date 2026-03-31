@@ -2,12 +2,16 @@ package geminicli
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -50,6 +54,51 @@ func TestNewClient_CustomBinary(t *testing.T) {
 	assert.Equal(t, "gemini-2.5-flash", client.model)
 }
 
+func TestNewClient_MCPServers_NotCaptured_WhenEmpty(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{ProviderName: {Binary: "/usr/local/bin/gemini"}},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.Nil(t, client.mcpServers)
+	assert.Empty(t, client.mcpSettingsDir)
+}
+
+func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{ProviderName: {Binary: "/usr/local/bin/gemini"}},
+		},
+		MCP: schema.MCPSettings{
+			Servers: map[string]schema.MCPServerConfig{
+				"aws-docs": {Command: "uvx", Args: []string{"docs@latest"}},
+			},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.Len(t, client.mcpServers, 1)
+	assert.NotEmpty(t, client.mcpSettingsDir)
+
+	// Clean up temp dir.
+	if client.mcpSettingsDir != "" {
+		defer os.RemoveAll(client.mcpSettingsDir)
+	}
+
+	// Verify settings.json was created.
+	settingsFile := filepath.Join(client.mcpSettingsDir, ".gemini", "settings.json")
+	data, err := os.ReadFile(settingsFile)
+	require.NoError(t, err)
+
+	var settings geminiSettings
+	require.NoError(t, json.Unmarshal(data, &settings))
+	assert.Contains(t, settings.MCPServers, "aws-docs")
+}
+
 func TestParseResponse_ValidJSON(t *testing.T) {
 	input := `{"result": "The VPC is configured correctly.", "model": "gemini-2.5-flash"}`
 	result, err := parseResponse([]byte(input))
@@ -87,4 +136,57 @@ func TestGetMaxTokens(t *testing.T) {
 
 func TestProviderName(t *testing.T) {
 	assert.Equal(t, "gemini-cli", ProviderName)
+}
+
+func TestWriteMCPSettingsFile(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"test-server": {Command: "echo", Args: []string{"hello"}},
+		"auth-server": {Command: "uvx", Args: []string{"pkg@latest"}, Identity: "admin"},
+	}
+
+	tmpDir, err := writeMCPSettingsFile(servers, "")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Verify directory structure.
+	settingsFile := filepath.Join(tmpDir, ".gemini", "settings.json")
+	data, err := os.ReadFile(settingsFile)
+	require.NoError(t, err)
+
+	var settings geminiSettings
+	require.NoError(t, json.Unmarshal(data, &settings))
+	assert.Len(t, settings.MCPServers, 2)
+
+	// auth-server should be wrapped with atmos auth exec.
+	authEntry := settings.MCPServers["auth-server"]
+	assert.Equal(t, "atmos", authEntry.Command)
+	assert.Contains(t, authEntry.Args, "auth")
+	assert.Contains(t, authEntry.Args, "-i")
+	assert.Contains(t, authEntry.Args, "admin")
+}
+
+func TestWriteMCPSettingsFile_WithToolchainPATH(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"test": {Command: "uvx", Args: []string{"pkg@latest"}, Env: map[string]string{"KEY": "val"}},
+	}
+
+	tmpDir, err := writeMCPSettingsFile(servers, "/toolchain/bin")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	settingsFile := filepath.Join(tmpDir, ".gemini", "settings.json")
+	data, err := os.ReadFile(settingsFile)
+	require.NoError(t, err)
+
+	var settings struct {
+		MCPServers map[string]mcpclient.MCPJSONServer `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(data, &settings))
+	assert.Contains(t, settings.MCPServers["test"].Env["PATH"], "/toolchain/bin")
+}
+
+func TestResolveToolchainPATH_NoDeps(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := resolveToolchainPATH(atmosConfig)
+	assert.Empty(t, result)
 }

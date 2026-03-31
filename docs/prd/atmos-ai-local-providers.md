@@ -749,8 +749,15 @@ servers. The exported config is exactly what Claude Code needs.
 
 **Implemented for:**
 - ✅ Claude Code: `claude -p --mcp-config <file> --dangerously-skip-permissions`
+- ✅ Gemini CLI: writes `.gemini/settings.json` in a temp dir, sets `cmd.Dir`, passes `--yolo`
 - ⏳ Codex CLI: Needs TOML config format (planned)
-- ⏳ Gemini CLI: Needs investigation (planned)
+
+**Gemini CLI approach:**
+Gemini CLI has no `--mcp-config` flag. Instead, it reads MCP servers from
+`.gemini/settings.json` in the project directory. Atmos creates a temp directory with
+`.gemini/settings.json` containing the MCP config, then sets the subprocess working
+directory to the temp dir so Gemini CLI picks it up. The `--yolo` flag auto-approves
+all tool calls (equivalent to Claude Code's `--dangerously-skip-permissions`).
 
 **Also shipped:**
 - MCP server routing and registration is skipped for CLI providers (`isCLIProvider()`).
