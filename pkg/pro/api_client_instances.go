@@ -35,17 +35,18 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 	}
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
 
-	// Sanitize instance maps to ensure JSON compatibility.
-	// YAML unmarshaling can produce map[interface{}]interface{} in nested settings/vars/env,
-	// which encoding/json cannot marshal. Convert them to map[string]interface{}.
-	for i := range dto.Instances {
-		dto.Instances[i].Settings = sanitizeMapForJSON(dto.Instances[i].Settings)
-		dto.Instances[i].Vars = sanitizeMapForJSON(dto.Instances[i].Vars)
-		dto.Instances[i].Env = sanitizeMapForJSON(dto.Instances[i].Env)
-		dto.Instances[i].Backend = sanitizeMapForJSON(dto.Instances[i].Backend)
-		dto.Instances[i].Source = sanitizeMapForJSON(dto.Instances[i].Source)
-		dto.Instances[i].Metadata = sanitizeMapForJSON(dto.Instances[i].Metadata)
+	// Strip instances to only the fields Atmos Pro needs: component, stack, component_type.
+	// This prevents uploading sensitive data (vars can contain secrets, env contains credentials)
+	// and also avoids JSON marshaling errors from map[interface{}]interface{} in nested YAML maps.
+	stripped := make([]schema.Instance, len(dto.Instances))
+	for i, inst := range dto.Instances {
+		stripped[i] = schema.Instance{
+			Component:     inst.Component,
+			Stack:         inst.Stack,
+			ComponentType: inst.ComponentType,
+		}
 	}
+	dto.Instances = stripped
 
 	// Estimate metadata overhead (everything except the instances array).
 	overheadDTO := dtos.InstancesUploadRequest{
