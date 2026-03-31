@@ -199,6 +199,63 @@ When `mcp.servers` is configured, Atmos automatically:
 | **aws-iam**        | IAM role/policy analysis              | Yes         |
 | **aws-cloudtrail** | Event history and API call auditing   | Yes         |
 
+## See It in Action
+
+> All outputs below are from a real AWS account. Identifiers have been redacted.
+
+```text
+$ atmos ai ask "What is our security posture in us-east-2 region?"
+
+ℹ MCP servers configured: 8 (config: /tmp/atmos-mcp-config.json)
+ℹ AI tools initialized: 16 total
+ℹ AI provider: claude-code
+👽 Thinking...
+
+  ## Security Posture Summary for us-east-2
+
+  ### ✅ Enabled Security Services (2/6)
+
+   GuardDuty - Fully operational
+
+    • Status: ENABLED
+    • Finding frequency: Every 6 hours
+    • Active data sources: CloudTrail, DNS Logs, VPC Flow Logs,
+      S3 Logs, EKS Audit Logs, RDS Login Events
+    • Current findings: None (clean)
+
+   Inspector - Partially enabled
+
+    • Status: ENABLED but no scan types active
+    • EC2 scanning: DISABLED
+    • ECR scanning: DISABLED
+    • Lambda scanning: DISABLED
+
+  ### ❌ Disabled Security Services (4/6)
+
+    1. IAM Access Analyzer - Not configured
+    2. Security Hub - Not enabled
+    3. Trusted Advisor - Error checking status
+    4. Macie - Not enabled
+
+  ### Key Recommendations
+
+   High Priority:
+
+    1. Enable Security Hub for centralized security findings aggregation
+    2. Enable IAM Access Analyzer to identify unintended resource access
+    3. Enable at least one Inspector scan type for vulnerability management
+
+   Medium Priority:
+
+    4. Enable GuardDuty Runtime Monitoring for deeper threat detection
+    5. Enable EBS Malware Protection in GuardDuty
+    6. Enable Macie if you have sensitive data in S3 buckets
+
+   Your security posture is moderate — you have basic threat detection
+   enabled but are missing several important security services for
+   comprehensive protection.
+```
+
 ## Learn More
 
 - [Atmos AI Documentation](https://atmos.tools/ai)

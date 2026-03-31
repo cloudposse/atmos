@@ -1,7 +1,7 @@
 # Atmos AI Local Providers — Use Claude Code, Gemini CLI, and OpenAI Codex Instead of API Tokens
 
-**Status:** Phase 1-2 Shipped, Phase 3-4 Planned
-**Version:** 1.0
+**Status:** Phase 1-3 Shipped (Claude Code), Phase 4 Planned
+**Version:** 1.1
 **Last Updated:** 2026-03-30
 
 ---
@@ -726,22 +726,40 @@ text and any context Atmos provides, but cannot call Atmos tools or MCP servers.
 - Configuration in `atmos.yaml` under `ai.providers.codex-cli` / `gemini-cli`.
 - 19 unit tests across both providers.
 
-### Phase 3: MCP Pass-Through (Planned)
+### Phase 3: MCP Pass-Through ✅ Shipped (Claude Code)
 
 **Goal:** Give CLI providers access to the same MCP tools that API providers have.
 
 **Key insight:** `atmos mcp export` already generates `.mcp.json` with auth-wrapped
-servers. The exported config is exactly what Claude Code and Codex CLI need.
+servers. The exported config is exactly what Claude Code needs.
 
 **How it works:**
 
 1. When a CLI provider is selected and `mcp.servers` is configured in `atmos.yaml`:
-2. Atmos runs `atmos mcp export --output /tmp/atmos-mcp-<hash>.json` internally.
+2. Atmos generates a temp `.mcp.json` via `WriteMCPConfigToTempFile()`.
 3. The exported `.mcp.json` wraps each server with `atmos auth exec -i <identity> --`
    for automatic credential injection (same as IDE integration).
+4. Env var keys are uppercased (Viper lowercases them, but env vars must be UPPERCASE).
+5. Toolchain PATH is injected so `uvx`/`npx` are available to MCP server subprocesses.
+6. Atmos passes `--mcp-config <temp-file> --dangerously-skip-permissions` to Claude Code.
+7. `--dangerously-skip-permissions` is required because `-p` mode is non-interactive
+   and cannot show approval prompts. This is safe because the MCP servers were explicitly
+   configured by the user in `atmos.yaml`.
+8. The temp file is cleaned up after the CLI tool exits.
+
+**Implemented for:**
+- ✅ Claude Code: `claude -p --mcp-config <file> --dangerously-skip-permissions`
+- ⏳ Codex CLI: Needs TOML config format (planned)
+- ⏳ Gemini CLI: Needs investigation (planned)
+
+**Also shipped:**
+- MCP server routing and registration is skipped for CLI providers (`isCLIProvider()`).
+- AI provider name shown in output: `ℹ AI provider: claude-code`.
+- MCP config path shown: `ℹ MCP servers configured: 8 (config: /tmp/atmos-mcp-config.json)`.
+
 4. Atmos passes the config to the CLI tool:
-   - Claude Code: `claude -p --mcp-config /tmp/atmos-mcp-<hash>.json`
-   - Codex CLI: Generate `~/.codex/config.toml` `[mcp_servers]` entries
+   - Claude Code: `claude -p --mcp-config /tmp/atmos-mcp-config.json --dangerously-skip-permissions`
+   - Codex CLI: Generate `~/.codex/config.toml` `[mcp_servers]` entries (planned)
    - Gemini CLI: `gemini -p --mcp-config /tmp/atmos-mcp-<hash>.json` (if supported)
 5. The CLI tool starts the MCP servers itself (as subprocesses) and manages the tool loop.
 6. Atmos cleans up the temp config file after the CLI tool exits.

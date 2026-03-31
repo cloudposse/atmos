@@ -199,8 +199,11 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 	}
 
 	// MCP pass-through: use pre-generated config file.
+	// Skip permissions in non-interactive mode — MCP tools were explicitly configured
+	// by the user in atmos.yaml, so auto-approve their execution.
 	if c.mcpConfigPath != "" {
 		args = append(args, "--mcp-config", c.mcpConfigPath)
+		args = append(args, "--dangerously-skip-permissions")
 	}
 
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
