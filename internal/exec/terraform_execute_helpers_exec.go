@@ -378,7 +378,7 @@ func uploadCommandStatus(
 		return cerr
 	}
 	gitRepo := &git.DefaultGitRepo{}
-	return uploadStatus(info, exitCode, info.Command, metadata, client, gitRepo)
+	return uploadStatus(info, exitCode, info.ComponentType, metadata, client, gitRepo)
 }
 
 // defaultMaxOutputLogBytes is the fallback max size for the output log (3MB pre-encoding).
