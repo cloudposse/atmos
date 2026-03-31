@@ -1,0 +1,340 @@
+---
+title: AI Configuration
+sidebar_label: ai
+sidebar_class_name: command
+id: ai
+description: Configure the Atmos AI assistant in your `atmos.yaml` with providers, skills, tools, and sessions.
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `ai` section of the `atmos.yaml` configures the built-in AI assistant, including providers,
+skills, tool execution, sessions, and project instructions.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
+```
+</File>
+
+<Terminal title="shell">
+```bash
+export ANTHROPIC_API_KEY="your-api-key-here"
+atmos ai chat
+```
+</Terminal>
+
+## Configuration Reference
+
+### Top-Level Structure
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true                         # Enable AI features
+  default_provider: "anthropic"         # Default provider for CLI commands
+  default_skill: "general"              # Default AI skill
+
+  # Provider connections
+  providers:
+    <provider-name>:
+      model: "model-id"
+      api_key: !env "ENV_VAR_NAME"
+      max_tokens: 4096
+      base_url: ""                      # Custom endpoint (optional)
+
+  # Tool execution
+  tools:
+    enabled: true
+    require_confirmation: true
+    allowed_tools: []
+    restricted_tools: []
+    blocked_tools: []
+
+  # Session persistence
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 10
+
+  # Project instructions
+  instructions:
+    enabled: true
+    file: "ATMOS.md"
+
+  # Automatic context discovery
+  context:
+    enabled: true
+    auto_include: ["stacks/**/*.yaml"]
+    exclude: ["**/node_modules/**"]
+    max_files: 100
+    max_size_mb: 10
+
+  # Web search
+  web_search:
+    enabled: false
+
+  # Custom skills
+  skills:
+    <skill-name>:
+      display_name: "Display Name"
+      description: "What this skill does"
+      system_prompt: "..."
+      allowed_tools: []
+```
+</File>
+
+### Global Settings
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Enable or disable AI features (default: `false`)</dd>
+
+  <dt>`default_provider`</dt>
+  <dd>Default AI provider: `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, or `azureopenai`</dd>
+
+  <dt>`default_skill`</dt>
+  <dd>Default skill to activate (default: `general`)</dd>
+
+  <dt>`send_context`</dt>
+  <dd>Automatically send stack configurations to AI for context-aware answers (default: `false`)</dd>
+
+  <dt>`prompt_on_send`</dt>
+  <dd>Prompt user before sending context, even when `send_context` is `true` (default: `true`)</dd>
+
+  <dt>`max_history_messages`</dt>
+  <dd>Maximum conversation messages to keep. Simple message-based limit (default: `0` = unlimited)</dd>
+
+  <dt>`max_history_tokens`</dt>
+  <dd>Maximum tokens in conversation history. More precise, approximate counting (~10-20% accuracy). If both limits are set, whichever is hit first wins (default: `0` = unlimited)</dd>
+
+  <dt>`timeout_seconds`</dt>
+  <dd>Request timeout in seconds (default: `60`)</dd>
+
+  <dt>`max_tool_iterations`</dt>
+  <dd>Maximum number of tool execution loops per AI request. Increase for complex queries that require many tool calls (e.g., IAM audit across multiple regions). Default: `25`</dd>
+
+  <dt>`max_context_files`</dt>
+  <dd>Maximum stack files to send for context (default: `10`)</dd>
+
+  <dt>`max_context_lines`</dt>
+  <dd>Maximum lines per file when sending context (default: `500`)</dd>
+</dl>
+
+### Provider Settings
+
+Each provider in the `providers` map supports:
+
+<dl>
+  <dt>`model`</dt>
+  <dd>Model identifier (defaults vary by provider)</dd>
+
+  <dt>`api_key`</dt>
+  <dd>API key for the provider. Use `!env` to read from an environment variable (e.g., `api_key: !env "ANTHROPIC_API_KEY"`).</dd>
+
+  <dt>`max_tokens`</dt>
+  <dd>Maximum tokens per response. Roughly 1000 tokens = 750 words.</dd>
+
+  <dt>`base_url`</dt>
+  <dd>Custom API endpoint (required for Grok, Azure OpenAI; AWS region for Bedrock)</dd>
+
+  <dt>`timeout_seconds`</dt>
+  <dd>Per-provider request timeout override</dd>
+</dl>
+
+## Multi-Provider Configuration
+
+Atmos supports 7 AI providers. Configure multiple and switch between them with **Ctrl+P** in the TUI,
+or set `default_provider` for CLI commands.
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+  default_provider: "anthropic"
+
+  providers:
+    # Cloud Providers
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
+
+    openai:
+      model: "gpt-5.4"
+      api_key: !env "OPENAI_API_KEY"
+      max_tokens: 4096
+
+    gemini:
+      model: "gemini-2.5-flash"
+      api_key: !env "GEMINI_API_KEY"
+      max_tokens: 8192
+
+    grok:
+      model: "grok-4-latest"
+      api_key: !env "XAI_API_KEY"
+      max_tokens: 4096
+      base_url: "https://api.x.ai/v1"
+
+    # Local Provider (no API key needed)
+    ollama:
+      model: "llama4"
+      base_url: "http://localhost:11434/v1"
+
+    # Enterprise Providers
+    bedrock:
+      model: "anthropic.claude-sonnet-4-6"
+      base_url: "us-east-1"              # AWS region
+
+    azureopenai:
+      model: "gpt-4o"                    # Your Azure deployment name
+      api_key: !env "AZURE_OPENAI_API_KEY"
+      base_url: "https://your-resource.openai.azure.com"
+      api_version: "2025-04-01-preview"
+```
+</File>
+
+## Conversation History Management
+
+By default, Atmos sends full conversation history with each request. For long conversations, this can cause
+rate limiting and higher costs. Three approaches to manage it:
+
+<dl>
+  <dt>**Simple truncation** — `max_history_messages: 20`</dt>
+  <dd>Most users, easy to configure.</dd>
+
+  <dt>**Auto-compact** — `sessions.auto_compact.enabled: true`</dt>
+  <dd>Long conversations, preserves context.</dd>
+
+  <dt>**Both** — Truncation + auto-compact</dt>
+  <dd>Maximum control, safety net.</dd>
+</dl>
+
+Auto-compact summarizes old messages using AI instead of dropping them, preserving important context.
+See [Sessions](/cli/configuration/ai/sessions) for details.
+
+:::warning
+Setting history too low (4-6 messages) causes the AI to lose important context. Start with 20-30.
+:::
+
+## Environment Variables
+
+<Terminal title="shell">
+```bash
+# API Keys (alternative to api_key with !env in config)
+export ATMOS_ANTHROPIC_API_KEY="your-key"
+export ATMOS_OPENAI_API_KEY="your-key"
+export ATMOS_GEMINI_API_KEY="your-key"
+export ATMOS_XAI_API_KEY="your-key"
+
+# Context Control
+export ATMOS_AI_SEND_CONTEXT=true
+```
+</Terminal>
+
+## Verify Configuration
+
+<Terminal title="shell">
+```bash
+atmos ai ask "Hello, are you working?"
+```
+</Terminal>
+
+## Context Discovery
+
+The `context` section controls automatic file discovery for AI context:
+
+<dl>
+  <dt>`context.enabled`</dt>
+  <dd>Enable automatic context loading (default: `true`)</dd>
+
+  <dt>`context.auto_include`</dt>
+  <dd>Glob patterns for files to automatically include (e.g., `["stacks/**/*.yaml"]`)</dd>
+
+  <dt>`context.exclude`</dt>
+  <dd>Glob patterns to exclude from context (e.g., `["**/node_modules/**"]`)</dd>
+
+  <dt>`context.max_files`</dt>
+  <dd>Maximum files to include (default: `100`)</dd>
+
+  <dt>`context.max_size_mb`</dt>
+  <dd>Maximum total size in MB (default: `10`)</dd>
+
+  <dt>`context.follow_gitignore`</dt>
+  <dd>Respect `.gitignore` patterns (default: `true`)</dd>
+
+  <dt>`context.show_files`</dt>
+  <dd>Show included files in UI output (default: `false`)</dd>
+
+  <dt>`context.cache_enabled`</dt>
+  <dd>Cache discovered files for faster subsequent requests (default: `true`)</dd>
+
+  <dt>`context.cache_ttl`</dt>
+  <dd>Cache time-to-live in seconds (default: `300`)</dd>
+</dl>
+
+## Web Search
+
+The `web_search` section enables the AI to search the web for documentation and solutions:
+
+<dl>
+  <dt>`web_search.enabled`</dt>
+  <dd>Enable web search tool (default: `false`)</dd>
+
+  <dt>`web_search.max_results`</dt>
+  <dd>Maximum search results to return (default: `10`)</dd>
+
+  <dt>`web_search.google_api_key`</dt>
+  <dd>Google Custom Search API key (for Google Custom Search)</dd>
+
+  <dt>`web_search.google_cse_id`</dt>
+  <dd>Google Custom Search Engine ID (for Google Custom Search)</dd>
+</dl>
+
+## Security Best Practices
+
+- Never commit API keys to version control -- use environment variables
+- Rotate keys per provider recommendations
+- Set spending limits in provider dashboards
+- Monitor usage to detect anomalies
+
+## Detailed Documentation
+
+### Configuration Reference
+
+- **[Providers](/cli/configuration/ai/providers)** - Provider settings, supported models, cloud/local/enterprise configs
+- **[Tools](/cli/configuration/ai/tools)** - Tool execution settings, available tools, permission modes
+- **[Sessions](/cli/configuration/ai/sessions)** - Session persistence, auto-compact configuration
+- **[Skills](/cli/configuration/ai/skills)** - Custom skill schema, tool access, skill examples
+- **[Instructions](/cli/configuration/ai/instructions)** - Project instructions settings, ATMOS.md sections
+
+### Guides and Concepts
+
+- **[MCP Server](/ai/mcp-server)** - Universal MCP integration for Claude Desktop and other clients (requires separate `mcp.enabled: true`)
+- **[Claude Code Integration](/ai/claude-code-integration)** - IDE integration with Claude Code
+- **[Troubleshooting](/ai/troubleshooting)** - Common issues and solutions
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Ask the AI assistant a question'},
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start an interactive chat session'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+]} />

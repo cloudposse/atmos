@@ -19,7 +19,8 @@ type stubAuthManager struct {
 	defaultIdentity string
 	defaultErr      error
 	whoami          *types.WhoamiInfo
-	envVars         map[string]string // Environment variables to return from GetEnvironmentVariables
+	envVars         map[string]string          // Environment variables to return from GetEnvironmentVariables.
+	identities      map[string]schema.Identity // Identities to return from GetIdentities.
 }
 
 func (s *stubAuthManager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
@@ -54,6 +55,9 @@ func (s *stubAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo {
 }
 func (s *stubAuthManager) ListProviders() []string { return []string{"prov"} }
 func (s *stubAuthManager) GetIdentities() map[string]schema.Identity {
+	if s.identities != nil {
+		return s.identities
+	}
 	return map[string]schema.Identity{}
 }
 

@@ -62,12 +62,16 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "version" {
+		tenv, err := dependencies.ForComponent(&atmosConfig, componentTypeHelmfile, nil, nil)
+		if err != nil {
+			return err
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
-			info.Command,
+			tenv.Resolve(info.Command),
 			[]string{info.SubCommand},
 			"",
-			nil,
+			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr,
 		)
@@ -168,29 +172,11 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Resolve and install component dependencies.
-	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies(componentTypeHelmfile, info.StackSection, info.ComponentSection)
+	tenv, err := dependencies.ForComponent(&atmosConfig, componentTypeHelmfile, info.StackSection, info.ComponentSection)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		return err
 	}
-
-	if len(deps) > 0 {
-		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-		installer := dependencies.NewInstaller(&atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			return fmt.Errorf("failed to install component dependencies: %w", err)
-		}
-
-		// Build PATH with toolchain binaries and add to component environment.
-		// This does NOT modify the global process environment - only the subprocess environment.
-		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
-		if err != nil {
-			return fmt.Errorf("failed to build toolchain PATH: %w", err)
-		}
-
-		// Propagate toolchain PATH into environment for subprocess.
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
-	}
+	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 
 	// Print component variables.
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
@@ -301,10 +287,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 		err = ExecuteShellCommand(
 			atmosConfig,
-			"aws",
+			tenv.Resolve("aws"),
 			awsArgs,
 			componentPath,
-			nil,
+			tenv.EnvVars(),
 			info.DryRun,
 			info.RedirectStdErr,
 		)
@@ -417,6 +403,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		WithEnvironment(info.SanitizedEnv),
 	)
 	if err != nil {
 		return err

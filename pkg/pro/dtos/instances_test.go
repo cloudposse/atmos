@@ -18,7 +18,8 @@ func TestInstanceStatusUploadRequest(t *testing.T) {
 			RepoHost:      "github.com",
 			Component:     "test-component",
 			Stack:         "test-stack",
-			HasDrift:      true,
+			Command:       "plan",
+			ExitCode:      2,
 		}
 
 		assert.Equal(t, "run-123", req.AtmosProRunID)
@@ -29,7 +30,8 @@ func TestInstanceStatusUploadRequest(t *testing.T) {
 		assert.Equal(t, "github.com", req.RepoHost)
 		assert.Equal(t, "test-component", req.Component)
 		assert.Equal(t, "test-stack", req.Stack)
-		assert.True(t, req.HasDrift)
+		assert.Equal(t, "plan", req.Command)
+		assert.Equal(t, 2, req.ExitCode)
 	})
 
 	t.Run("valid request with minimal fields", func(t *testing.T) {
@@ -38,7 +40,8 @@ func TestInstanceStatusUploadRequest(t *testing.T) {
 			RepoOwner: "test-owner",
 			Component: "test-component",
 			Stack:     "test-stack",
-			HasDrift:  false,
+			Command:   "apply",
+			ExitCode:  0,
 		}
 
 		assert.Equal(t, "", req.AtmosProRunID)
@@ -49,7 +52,8 @@ func TestInstanceStatusUploadRequest(t *testing.T) {
 		assert.Equal(t, "", req.RepoHost)
 		assert.Equal(t, "test-component", req.Component)
 		assert.Equal(t, "test-stack", req.Stack)
-		assert.False(t, req.HasDrift)
+		assert.Equal(t, "apply", req.Command)
+		assert.Equal(t, 0, req.ExitCode)
 	})
 }
 

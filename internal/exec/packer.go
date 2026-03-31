@@ -21,6 +21,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const componentTypePacker = "packer"
+
 // PackerFlags represents Packer command-line flags passed to ExecutePacker and ExecutePackerOutput.
 type PackerFlags struct {
 	// Template specifies the Packer template file or directory path.
@@ -61,12 +63,16 @@ func ExecutePacker(
 	}
 
 	if info.SubCommand == "version" {
+		tenv, err := dependencies.ForComponent(&atmosConfig, componentTypePacker, nil, nil)
+		if err != nil {
+			return err
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
-			info.Command,
+			tenv.Resolve(info.Command),
 			[]string{info.SubCommand},
 			"",
-			nil,
+			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr,
 		)
@@ -87,7 +93,7 @@ func ExecutePacker(
 	}
 
 	// Check if the component exists as a Packer component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "packer", info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypePacker, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
@@ -138,7 +144,7 @@ func ExecutePacker(
 		// If still doesn't exist, return the error.
 		if err != nil || !componentPathExists {
 			// Get the base path for the error message, respecting the user's actual config.
-			basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypePacker)
 			return fmt.Errorf("%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
 				errUtils.ErrInvalidComponent,
 				info.ComponentFromArg,
@@ -165,29 +171,11 @@ func ExecutePacker(
 	}
 
 	// Resolve and install component dependencies.
-	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("packer", info.StackSection, info.ComponentSection)
+	tenv, err := dependencies.ForComponent(&atmosConfig, componentTypePacker, info.StackSection, info.ComponentSection)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		return err
 	}
-
-	if len(deps) > 0 {
-		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-		installer := dependencies.NewInstaller(&atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			return fmt.Errorf("failed to install component dependencies: %w", err)
-		}
-
-		// Build PATH with toolchain binaries and add to component environment.
-		// This does NOT modify the global process environment - only the subprocess environment.
-		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
-		if err != nil {
-			return fmt.Errorf("failed to build toolchain PATH: %w", err)
-		}
-
-		// Propagate toolchain PATH into environment for subprocess.
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
-	}
+	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 
 	// Check if the component 'settings.validation' section is specified and validate the component.
 	valid, err := ValidateComponent(
@@ -301,5 +289,6 @@ func ExecutePacker(
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		WithEnvironment(info.SanitizedEnv),
 	)
 }

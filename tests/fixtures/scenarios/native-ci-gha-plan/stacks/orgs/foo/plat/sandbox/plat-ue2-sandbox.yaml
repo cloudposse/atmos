@@ -1,0 +1,16 @@
+import:
+  - catalog/foobar
+  - catalog/foobar-changes
+  - catalog/foobar-fail
+
+vars:
+  environment: ue2
+  namespace: foo
+  stage: sandbox
+  tenant: plat
+
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: "terraform.tfstate"

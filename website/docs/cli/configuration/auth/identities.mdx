@@ -4,17 +4,22 @@ sidebar_position: 3
 sidebar_label: identities
 sidebar_class_name: command
 id: identities
-description: Configure authentication identities including AWS permission sets, assume roles, Azure subscriptions, and GCP service accounts in your `atmos.yaml`.
+description: Configure authentication identities for AWS, Azure, and GCP in your `atmos.yaml`.
 ---
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Identities represent the user accounts or roles available from provider credentials. Configure identities in the `auth.identities` section of your `atmos.yaml`.
 </Intro>
 
-## AWS Permission Set
+<Tabs>
+<TabItem value="aws" label="AWS" default>
+
+## Permission Set
 
 For AWS SSO permission sets.
 
@@ -56,7 +61,7 @@ auth:
   <dd>Numeric account ID (used directly, no lookup required).</dd>
 </dl>
 
-## AWS Assume Role
+## Assume Role
 
 For assuming IAM roles, either directly from a provider or chained from another identity.
 
@@ -93,7 +98,7 @@ auth:
   <dd>Optional. Session name for CloudTrail auditing.</dd>
 </dl>
 
-## AWS Assume Root (Organizations)
+## Assume Root (Organizations)
 
 For centralized root access in AWS Organizations using sts:AssumeRoot. This allows privileged operations on member accounts without enabling root user credentials.
 
@@ -140,7 +145,7 @@ auth:
 AssumeRoot requires AWS Organizations with centralized root access enabled and appropriate permissions on the base identity.
 :::
 
-## AWS User (Break-glass)
+## User (Break-glass)
 
 For static IAM user credentials, typically used for emergency access.
 
@@ -179,7 +184,10 @@ auth:
 Instead of storing credentials in configuration, use `atmos auth user configure` to store them securely in the system keyring.
 :::
 
-## Azure Subscription
+</TabItem>
+<TabItem value="azure" label="Azure">
+
+## Subscription
 
 For targeting a specific Azure subscription using credentials from an Azure provider.
 
@@ -217,7 +225,14 @@ auth:
 
 The Azure subscription identity inherits credentials from the provider and sets subscription-specific environment variables (`AZURE_SUBSCRIPTION_ID`, `ARM_SUBSCRIPTION_ID`, etc.) for Terraform and other Azure tools.
 
-## GCP Service Account
+:::tip
+For a detailed walkthrough with examples, see the [Azure Authentication Tutorial](/tutorials/azure-authentication).
+:::
+
+</TabItem>
+<TabItem value="gcp" label="GCP">
+
+## Service Account
 
 For impersonating a GCP service account using credentials from a GCP provider.
 
@@ -264,7 +279,7 @@ auth:
 
 The service account identity uses the IAM Credentials API to generate access tokens. Requires the base identity to have `roles/iam.serviceAccountTokenCreator` on the target service account.
 
-## GCP Project
+## Project
 
 For setting GCP project context without authentication. Useful for targeting a specific project when credentials come from a provider or parent identity.
 
@@ -301,6 +316,9 @@ auth:
 </dl>
 
 The project identity sets environment variables (`GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_CORE_PROJECT`, `GOOGLE_CLOUD_REGION`, etc.) for Terraform and gcloud tools.
+
+</TabItem>
+</Tabs>
 
 ## Identity Chaining
 
@@ -391,6 +409,8 @@ components:
 </File>
 
 Component auth configuration is deep-merged with global auth. Component identities override global identities with the same name.
+
+For components that need multiple identities authenticated simultaneously, see [Required](/cli/configuration/auth/required).
 
 ## Default Identity
 

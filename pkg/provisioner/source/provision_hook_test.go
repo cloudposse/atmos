@@ -189,6 +189,61 @@ func TestIsWorkdirEnabled(t *testing.T) {
 	}
 }
 
+// TestDetermineSourceTargetDirectory_WorkdirUsesAtmosComponent tests that the JIT source
+// provisioner uses atmos_component (instance name) for the workdir path, not the base component.
+// This prevents workdir mismatch when metadata.component differs from the instance name.
+func TestDetermineSourceTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	componentConfig := map[string]any{
+		"atmos_stack":     "demo-dev",
+		"atmos_component": "demo-cluster-codepipeline-iac",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	// Pass base component name, expect workdir to use atmos_component (instance name).
+	targetDir, isWorkdir, err := determineSourceTargetDirectory(
+		atmosConfig, "terraform", "demo-cluster-codepipeline", componentConfig,
+	)
+	require.NoError(t, err)
+	assert.True(t, isWorkdir)
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
+	assert.Equal(t, expected, targetDir)
+}
+
+// TestDetermineSourceTargetDirectory_WorkdirFallsBackToComponent tests that when
+// atmos_component is not set, the workdir path falls back to the passed component name.
+func TestDetermineSourceTargetDirectory_WorkdirFallsBackToComponent(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	componentConfig := map[string]any{
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	targetDir, isWorkdir, err := determineSourceTargetDirectory(
+		atmosConfig, "terraform", "vpc", componentConfig,
+	)
+	require.NoError(t, err)
+	assert.True(t, isWorkdir)
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc")
+	assert.Equal(t, expected, targetDir)
+}
+
 func TestNeedsProvisioning(t *testing.T) {
 	sourceSpec := &schema.VendorComponentSource{
 		Uri:     "github.com/test/repo//src",
@@ -328,6 +383,75 @@ func TestNeedsProvisioning(t *testing.T) {
 			result, reason := needsProvisioning(path, tt.sourceSpec, true)
 			assert.Equal(t, tt.expected, result)
 			assert.Equal(t, tt.expectedReason, reason)
+		})
+	}
+}
+
+// TestNeedsProvisioning_TTL verifies TTL-based cache expiration triggers re-provisioning.
+func TestNeedsProvisioning_TTL(t *testing.T) {
+	tests := []struct {
+		name          string
+		ttl           string
+		updatedAt     time.Time
+		expected      bool
+		expectExpired bool
+	}{
+		{
+			name:          "TTL zero always expires",
+			ttl:           "0s",
+			updatedAt:     time.Now(),
+			expected:      true,
+			expectExpired: true,
+		},
+		{
+			name:          "TTL 1h with recent update does not expire",
+			ttl:           "1h",
+			updatedAt:     time.Now().Add(-30 * time.Minute),
+			expected:      false,
+			expectExpired: false,
+		},
+		{
+			name:          "TTL 1h with old update expires",
+			ttl:           "1h",
+			updatedAt:     time.Now().Add(-2 * time.Hour),
+			expected:      true,
+			expectExpired: true,
+		},
+		{
+			name:          "no TTL does not expire",
+			ttl:           "",
+			updatedAt:     time.Now().Add(-24 * 365 * time.Hour),
+			expected:      false,
+			expectExpired: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			dirPath := filepath.Join(tempDir, "component")
+			require.NoError(t, os.MkdirAll(dirPath, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dirPath, "main.tf"), []byte("# test"), 0o644))
+
+			// Write metadata with matching version/URI so only TTL matters.
+			metadata := &workdir.WorkdirMetadata{
+				SourceURI:     "github.com/test/repo//src",
+				SourceVersion: "main",
+				UpdatedAt:     tt.updatedAt,
+			}
+			require.NoError(t, workdir.WriteMetadata(dirPath, metadata))
+
+			sourceSpec := &schema.VendorComponentSource{
+				Uri:     "github.com/test/repo//src",
+				Version: "main",
+				TTL:     tt.ttl,
+			}
+
+			result, reason := needsProvisioning(dirPath, sourceSpec, true)
+			assert.Equal(t, tt.expected, result)
+			if tt.expectExpired {
+				assert.Contains(t, reason, "Source cache expired")
+			}
 		})
 	}
 }
@@ -930,6 +1054,277 @@ func TestWriteWorkdirMetadata(t *testing.T) {
 
 // Test writeWorkdirMetadata preserves ContentHash for local sources.
 
+// TestIsSourceCacheExpired tests the TTL cache expiration logic directly.
+func TestIsSourceCacheExpired(t *testing.T) {
+	tests := []struct {
+		name           string
+		ttl            string
+		updatedAt      time.Time
+		expected       bool
+		expectedReason string
+	}{
+		{
+			name:           "zero TTL (0s) always expired",
+			ttl:            "0s",
+			updatedAt:      time.Now(),
+			expected:       true,
+			expectedReason: "Source cache expired (TTL: 0s, always re-pull)",
+		},
+		{
+			name:           "zero TTL (0) always expired",
+			ttl:            "0",
+			updatedAt:      time.Now(),
+			expected:       true,
+			expectedReason: "Source cache expired (TTL: 0, always re-pull)",
+		},
+		{
+			name:           "zero TTL (0m) always expired",
+			ttl:            "0m",
+			updatedAt:      time.Now(),
+			expected:       true,
+			expectedReason: "Source cache expired (TTL: 0m, always re-pull)",
+		},
+		{
+			name:           "zero TTL (0h) always expired",
+			ttl:            "0h",
+			updatedAt:      time.Now(),
+			expected:       true,
+			expectedReason: "Source cache expired (TTL: 0h, always re-pull)",
+		},
+		{
+			name:           "zero TTL (0d) always expired",
+			ttl:            "0d",
+			updatedAt:      time.Now(),
+			expected:       true,
+			expectedReason: "Source cache expired (TTL: 0d, always re-pull)",
+		},
+		{
+			name:      "1h TTL with recent update not expired",
+			ttl:       "1h",
+			updatedAt: time.Now().Add(-30 * time.Minute),
+			expected:  false,
+		},
+		{
+			name:           "1h TTL with old update expired",
+			ttl:            "1h",
+			updatedAt:      time.Now().Add(-2 * time.Hour),
+			expected:       true,
+			expectedReason: "Source cache expired",
+		},
+		{
+			name:           "7d TTL with old update expired",
+			ttl:            "7d",
+			updatedAt:      time.Now().Add(-8 * 24 * time.Hour),
+			expected:       true,
+			expectedReason: "Source cache expired",
+		},
+		{
+			name:      "7d TTL with recent update not expired",
+			ttl:       "7d",
+			updatedAt: time.Now().Add(-3 * 24 * time.Hour),
+			expected:  false,
+		},
+		{
+			name:           "invalid TTL forces re-provision",
+			ttl:            "not-a-duration",
+			updatedAt:      time.Now(),
+			expected:       true,
+			expectedReason: "Invalid source TTL",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expired, reason := isSourceCacheExpired(tt.ttl, tt.updatedAt)
+			assert.Equal(t, tt.expected, expired)
+			if tt.expectedReason != "" {
+				assert.Contains(t, reason, tt.expectedReason)
+			}
+		})
+	}
+}
+
+// TestIsZeroTTL tests zero TTL detection.
+func TestIsZeroTTL(t *testing.T) {
+	tests := []struct {
+		ttl      string
+		expected bool
+	}{
+		{"0", true},
+		{"0s", true},
+		{"0m", true},
+		{"0h", true},
+		{"0d", true},
+		{"1s", false},
+		{"1h", false},
+		{"", false},
+		{"daily", false},
+		{"0x", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.ttl, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isZeroTTL(tt.ttl))
+		})
+	}
+}
+
+// TestNeedsProvisioning_TTLWithInvalidValue verifies that invalid TTL forces re-provisioning.
+func TestNeedsProvisioning_TTLWithInvalidValue(t *testing.T) {
+	tempDir := t.TempDir()
+	dirPath := filepath.Join(tempDir, "component")
+	require.NoError(t, os.MkdirAll(dirPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dirPath, "main.tf"), []byte("# test"), 0o644))
+
+	// Write metadata with matching version/URI.
+	metadata := &workdir.WorkdirMetadata{
+		SourceURI:     "github.com/test/repo//src",
+		SourceVersion: "main",
+		UpdatedAt:     time.Now(),
+	}
+	require.NoError(t, workdir.WriteMetadata(dirPath, metadata))
+
+	sourceSpec := &schema.VendorComponentSource{
+		Uri:     "github.com/test/repo//src",
+		Version: "main",
+		TTL:     "not-a-valid-duration",
+	}
+
+	result, reason := needsProvisioning(dirPath, sourceSpec, true)
+	assert.True(t, result, "invalid TTL should force re-provisioning")
+	assert.Contains(t, reason, "Invalid source TTL")
+}
+
+// TestExtractSource_TTLVariousFormats verifies various valid TTL format strings are accepted.
+func TestExtractSource_TTLVariousFormats(t *testing.T) {
+	formats := []string{"0s", "0", "30s", "5m", "1h", "7d", "30m"}
+
+	for _, ttl := range formats {
+		t.Run(ttl, func(t *testing.T) {
+			componentConfig := map[string]any{
+				"source": map[string]any{
+					"uri":     "github.com/example/repo//module",
+					"version": "main",
+					"ttl":     ttl,
+				},
+			}
+			result, err := ExtractSource(componentConfig)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, ttl, result.TTL)
+		})
+	}
+}
+
+// TestApplyGlobalTTLDefault verifies global TTL default is applied per component type.
+func TestApplyGlobalTTLDefault(t *testing.T) {
+	tests := []struct {
+		name          string
+		sourceTTL     string
+		componentType string
+		atmosConfig   *schema.AtmosConfiguration
+		expectedTTL   string
+	}{
+		{
+			name:          "terraform global TTL applied when source TTL empty",
+			sourceTTL:     "",
+			componentType: "terraform",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Source: &schema.SourceSettings{TTL: "1h"},
+					},
+				},
+			},
+			expectedTTL: "1h",
+		},
+		{
+			name:          "helmfile global TTL applied when source TTL empty",
+			sourceTTL:     "",
+			componentType: "helmfile",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						Source: &schema.SourceSettings{TTL: "30m"},
+					},
+				},
+			},
+			expectedTTL: "30m",
+		},
+		{
+			name:          "packer global TTL applied when source TTL empty",
+			sourceTTL:     "",
+			componentType: "packer",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Packer: schema.Packer{
+						Source: &schema.SourceSettings{TTL: "7d"},
+					},
+				},
+			},
+			expectedTTL: "7d",
+		},
+		{
+			name:          "per-component TTL takes precedence over global",
+			sourceTTL:     "0s",
+			componentType: "terraform",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Source: &schema.SourceSettings{TTL: "1h"},
+					},
+				},
+			},
+			expectedTTL: "0s",
+		},
+		{
+			name:          "no global TTL configured leaves source TTL empty",
+			sourceTTL:     "",
+			componentType: "terraform",
+			atmosConfig:   &schema.AtmosConfiguration{},
+			expectedTTL:   "",
+		},
+		{
+			name:          "nil source settings leaves source TTL empty",
+			sourceTTL:     "",
+			componentType: "terraform",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Source: nil,
+					},
+				},
+			},
+			expectedTTL: "",
+		},
+		{
+			name:          "unknown component type leaves source TTL empty",
+			sourceTTL:     "",
+			componentType: "unknown",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Source: &schema.SourceSettings{TTL: "1h"},
+					},
+				},
+			},
+			expectedTTL: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sourceSpec := &schema.VendorComponentSource{
+				Uri:     "github.com/example/repo//module",
+				Version: "1.0.0",
+				TTL:     tt.sourceTTL,
+			}
+			applyGlobalTTLDefault(sourceSpec, tt.atmosConfig, tt.componentType)
+			assert.Equal(t, tt.expectedTTL, sourceSpec.TTL)
+		})
+	}
+}
+
 func TestWriteWorkdirMetadata_PreservesContentHash(t *testing.T) {
 	tmpDir := t.TempDir()
 	workdirPath := filepath.Join(tmpDir, "workdir")
@@ -958,4 +1353,104 @@ func TestWriteWorkdirMetadata_PreservesContentHash(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "abc123hash", metadata.ContentHash,
 		"ContentHash should be preserved for local sources")
+}
+
+// TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning verifies that once
+// AutoProvisionSource completes within a command invocation (marked via invocationDoneKey),
+// a second call with the same componentConfig is a no-op even with ttl:"0s".
+//
+// This is the regression test for the JIT TTL bug: without the guard, a zero-TTL would
+// cause AutoProvisionSource to delete the workdir on its second call (via the
+// before.terraform.init hook), wiping out varfiles and backend configs written between
+// the two calls and causing the subprocess to fail with "file does not exist" errors.
+func TestAutoProvisionSource_InvocationGuard_PreventsDoubleProvisioning(t *testing.T) {
+	// The guard is checked before any provisioning when invocationDoneKey is set.
+	// A component config with a valid source but the done-key present should return nil
+	// immediately without touching the filesystem.
+	componentConfig := map[string]any{
+		"component":   "null-label",
+		"atmos_stack": "demo",
+		"source": map[string]any{
+			"uri":     "github.com/cloudposse/terraform-null-label.git//",
+			"version": "0.25.0",
+			"ttl":     "0s",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+		// Simulate that this invocation already ran AutoProvisionSource once.
+		invocationDoneKey: struct{}{},
+	}
+
+	// Use a real atmosConfig with base path pointing to a temp dir.
+	// The function should return nil without ever trying to resolve a target dir
+	// or call VendorSource (which would require network access).
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	ctx := t.Context()
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	require.NoError(t, err, "second AutoProvisionSource call with invocationDoneKey set should be a no-op")
+}
+
+// TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning verifies that the
+// invocationDoneKey is written into componentConfig when provisioning is skipped
+// (cache still valid). This ensures the before.terraform.init hook will be a no-op.
+func TestAutoProvisionSource_InvocationGuard_SetAfterProvisioning(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a workdir with valid metadata so needsProvisioning returns false
+	// (TTL not expired, version unchanged).
+	workdirPath := filepath.Join(tmpDir, ".workdir", "terraform", "demo-null-label")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+	// Place a dummy file so isNonEmptyDir returns true.
+	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644))
+	// Write metadata matching the source spec so TTL check is the only gate.
+	meta := &workdir.WorkdirMetadata{
+		SourceURI:     "github.com/cloudposse/terraform-null-label.git//",
+		SourceVersion: "0.25.0",
+		UpdatedAt:     time.Now(), // Fresh — 1h TTL not expired.
+	}
+	require.NoError(t, workdir.WriteMetadata(workdirPath, meta))
+
+	componentConfig := map[string]any{
+		"component":   "null-label",
+		"atmos_stack": "demo",
+		"source": map[string]any{
+			"uri":     "github.com/cloudposse/terraform-null-label.git//",
+			"version": "0.25.0",
+			"ttl":     "1h",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	ctx := t.Context()
+	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
+	require.NoError(t, err)
+
+	// The guard marker must now be present in componentConfig.
+	_, done := componentConfig[invocationDoneKey]
+	assert.True(t, done, "invocationDoneKey should be set in componentConfig after a skipped provision")
 }

@@ -22,6 +22,16 @@ These environment variables configure Atmos behavior and can override settings i
     Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`).
   </dd>
 
+  <dt>`ATMOS_CONFIG`</dt>
+  <dd>
+    Paths to specific configuration files (comma-separated). Equivalent to `--config`.
+  </dd>
+
+  <dt>`ATMOS_CONFIG_PATH`</dt>
+  <dd>
+    Paths to search for Atmos configuration (comma-separated). Equivalent to `--config-path`.
+  </dd>
+
   <dt>`ATMOS_PROFILE`</dt>
   <dd>
     Activate configuration profiles (comma-separated). Equivalent to the `--profile` flag.
@@ -34,11 +44,68 @@ These environment variables configure Atmos behavior and can override settings i
     - **YAML Path:** `base_path`
   </dd>
 
+  <dt>`ATMOS_CHDIR`</dt>
+  <dd>
+    Change the working directory before executing any command. Equivalent to `--chdir`.
+  </dd>
+
   <dt>`ATMOS_VENDOR_BASE_PATH`</dt>
   <dd>
     Path to vendor configuration file or directory containing vendor files.
 
     - **YAML Path:** `vendor.base_path`
+  </dd>
+</dl>
+
+## Version Management
+
+<dl>
+  <dt>`ATMOS_USE_VERSION`</dt>
+  <dd>
+    Specify which version of Atmos to use. If the running version doesn't match,
+    Atmos automatically downloads and re-executes with the requested version.
+    Equivalent to `--use-version`.
+
+    - Example: `ATMOS_USE_VERSION=1.160.0 atmos terraform plan`
+  </dd>
+
+  <dt>`ATMOS_VERSION`</dt>
+  <dd>
+    Convenience alias for `ATMOS_USE_VERSION`.
+  </dd>
+
+  <dt>`ATMOS_VERSION_ENFORCEMENT`</dt>
+  <dd>
+    Version constraint enforcement mode. Controls behavior when version constraints are defined in `atmos.yaml`.
+  </dd>
+</dl>
+
+## Terminal and Output Variables
+
+<dl>
+  <dt>`ATMOS_NO_COLOR`</dt>
+  <dd>
+    Disable colored output. Equivalent to `--no-color`.
+  </dd>
+
+  <dt>`NO_COLOR`</dt>
+  <dd>
+    Standard convention to disable colored output. Recognized alongside `ATMOS_NO_COLOR`.
+  </dd>
+
+  <dt>`ATMOS_FORCE_COLOR`</dt>
+  <dd>
+    Force TrueColor output even when terminal detection says otherwise. Equivalent to `--force-color`.
+  </dd>
+
+  <dt>`ATMOS_FORCE_TTY`</dt>
+  <dd>
+    Force TTY mode for terminal output. Equivalent to `--force-tty`.
+  </dd>
+
+  <dt>`ATMOS_REDIRECT_STDERR`</dt>
+  <dd>
+    Redirect stderr to a file. Equivalent to `--redirect-stderr`.
   </dd>
 </dl>
 
@@ -300,34 +367,330 @@ These environment variables configure Atmos behavior and can override settings i
   </dd>
 </dl>
 
-## Authentication Variables
+## Authentication and Token Injection
 
 <dl>
-  <dt>`ATMOS_GITHUB_TOKEN`</dt>
+  <dt>`GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN`</dt>
   <dd>
-    Bearer token for GitHub API requests, enabling authentication for private repositories.
+    GitHub token for private module downloads and API access. `ATMOS_GITHUB_TOKEN` takes precedence over `GITHUB_TOKEN`.
+    Automatically injected into Terraform environments when `ATMOS_INJECT_GITHUB_TOKEN=true` (default).
   </dd>
 
-  <dt>`ATMOS_GITHUB_USERNAME`</dt>
+  <dt>`ATMOS_INJECT_GITHUB_TOKEN`</dt>
   <dd>
-    GitHub username for OCI registry authentication to ghcr.io.
+    Inject the GitHub token into component environments. Default: `true`. Set to `false` to prevent token injection.
+  </dd>
+
+  <dt>`GITHUB_USERNAME` / `GITHUB_ACTOR` / `ATMOS_GITHUB_USERNAME`</dt>
+  <dd>
+    GitHub username for OCI registry authentication to ghcr.io. `GITHUB_ACTOR` is automatically set in GitHub Actions.
 
     - **YAML Path:** `settings.github_username`
   </dd>
 
-  <dt>`ATMOS_BITBUCKET_TOKEN`</dt>
+  <dt>`GITLAB_TOKEN` / `ATMOS_GITLAB_TOKEN`</dt>
   <dd>
-    App password for Bitbucket API requests.
+    GitLab token for private module downloads.
+  </dd>
+
+  <dt>`ATMOS_INJECT_GITLAB_TOKEN`</dt>
+  <dd>
+    Inject the GitLab token into component environments.
+  </dd>
+
+  <dt>`BITBUCKET_TOKEN` / `ATMOS_BITBUCKET_TOKEN`</dt>
+  <dd>
+    App password for Bitbucket API requests and private module downloads.
+  </dd>
+
+  <dt>`ATMOS_INJECT_BITBUCKET_TOKEN`</dt>
+  <dd>
+    Inject the Bitbucket token into component environments.
   </dd>
 
   <dt>`ATMOS_BITBUCKET_USERNAME`</dt>
   <dd>
     Username for Bitbucket authentication.
   </dd>
+</dl>
 
-  <dt>`ATMOS_GITLAB_TOKEN`</dt>
+## AI Integration
+
+<dl>
+  <dt>`ATMOS_AI`</dt>
   <dd>
-    Personal Access Token (PAT) for GitLab authentication.
+    Enable AI-powered analysis of command output. When `true`, command output is sent to the configured AI provider for analysis.
+    Equivalent to the `--ai` flag. Requires AI configuration in `atmos.yaml`.
+
+    - Example: `ATMOS_AI=true atmos terraform plan vpc -s prod`
+  </dd>
+
+  <dt>`ATMOS_SKILL`</dt>
+  <dd>
+    Specify one or more AI skills for domain-specific analysis context (comma-separated).
+    Equivalent to the `--skill` flag. Requires `ATMOS_AI=true` or `--ai` flag.
+    Each skill's system prompt is prepended to the AI analysis for deeper, domain-aware insights.
+
+    - Example: `ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s prod`
+  </dd>
+
+  <dt>`ANTHROPIC_API_KEY` / `ATMOS_ANTHROPIC_API_KEY`</dt>
+  <dd>
+    API key for the Anthropic Claude AI provider.
+  </dd>
+
+  <dt>`OPENAI_API_KEY` / `ATMOS_OPENAI_API_KEY`</dt>
+  <dd>
+    API key for the OpenAI GPT AI provider.
+  </dd>
+
+  <dt>`GEMINI_API_KEY` / `ATMOS_GEMINI_API_KEY`</dt>
+  <dd>
+    API key for the Google Gemini AI provider.
+  </dd>
+
+  <dt>`XAI_API_KEY` / `ATMOS_XAI_API_KEY`</dt>
+  <dd>
+    API key for the xAI Grok AI provider.
+  </dd>
+
+  <dt>`ATMOS_AI_SEND_CONTEXT`</dt>
+  <dd>
+    Control whether stack configurations are sent to the AI provider for context-aware answers. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_MCP`</dt>
+  <dd>
+    Specify which MCP servers to use (comma-separated). Skips automatic server routing and starts only the specified servers.
+    Equivalent to the `--mcp` flag on `atmos ai ask`, `atmos ai chat`, and `atmos ai exec`.
+
+    - Example: `ATMOS_AI_MCP=aws-iam,aws-billing atmos ai ask "List admin roles and their costs"`
+  </dd>
+
+  <dt>`ATMOS_AI_INCLUDE`</dt>
+  <dd>
+    Add glob patterns to include in AI context (comma-separated). Equivalent to the `--include` flag.
+
+    - Example: `ATMOS_AI_INCLUDE="stacks/**/*.yaml" atmos ai ask "Describe our stacks"`
+  </dd>
+
+  <dt>`ATMOS_AI_EXCLUDE`</dt>
+  <dd>
+    Add glob patterns to exclude from AI context (comma-separated). Equivalent to the `--exclude` flag.
+
+    - Example: `ATMOS_AI_EXCLUDE="**/secrets/**" atmos ai ask "Analyze our config"`
+  </dd>
+
+  <dt>`ATMOS_AI_NO_AUTO_CONTEXT`</dt>
+  <dd>
+    Disable automatic context discovery. Equivalent to the `--no-auto-context` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_NO_TOOLS`</dt>
+  <dd>
+    Disable tool execution for faster, simpler queries. Equivalent to the `--no-tools` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_FORMAT`</dt>
+  <dd>
+    Output format for `atmos ai exec`: `text`, `json`, or `markdown`. Equivalent to the `--format` flag. Default: `text`.
+  </dd>
+
+  <dt>`ATMOS_AI_OUTPUT`</dt>
+  <dd>
+    Output file path for `atmos ai exec`. Equivalent to the `--output` flag. Default: stdout.
+  </dd>
+
+  <dt>`ATMOS_AI_CONTEXT`</dt>
+  <dd>
+    Include stack context in the prompt for `atmos ai exec`. Equivalent to the `--context` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_PROVIDER`</dt>
+  <dd>
+    Override AI provider for `atmos ai exec` (e.g., `anthropic`, `openai`, `gemini`). Equivalent to the `--provider` flag.
+  </dd>
+
+  <dt>`ATMOS_AI_SESSION`</dt>
+  <dd>
+    Session ID for conversation context in `atmos ai exec` and `atmos ai chat`. Equivalent to the `--session` flag.
+  </dd>
+</dl>
+
+## Processing Flags
+
+<dl>
+  <dt>`ATMOS_PROCESS_TEMPLATES`</dt>
+  <dd>
+    Enable/disable Go template processing in Atmos manifests.
+  </dd>
+
+  <dt>`ATMOS_PROCESS_FUNCTIONS`</dt>
+  <dd>
+    Enable/disable YAML function processing in Atmos manifests.
+  </dd>
+
+  <dt>`ATMOS_SKIP`</dt>
+  <dd>
+    Skip processing specific Atmos YAML functions (comma-separated).
+  </dd>
+</dl>
+
+## Terraform Integration
+
+<dl>
+  <dt>`ATMOS_SKIP_INIT`</dt>
+  <dd>
+    Skip `terraform init` before running commands.
+  </dd>
+
+  <dt>`ATMOS_INIT_PASS_VARS`</dt>
+  <dd>
+    Pass the generated varfile to `terraform init`.
+  </dd>
+
+  <dt>`ATMOS_APPEND_USER_AGENT`</dt>
+  <dd>
+    Customize the User-Agent string sent with Terraform requests.
+  </dd>
+
+  <dt>`ATMOS_AUTO_GENERATE_BACKEND_FILE`</dt>
+  <dd>
+    Override the `auto_generate_backend_file` setting from `atmos.yaml`.
+  </dd>
+
+  <dt>`ATMOS_INIT_RUN_RECONFIGURE`</dt>
+  <dd>
+    Override the `init_run_reconfigure` setting from `atmos.yaml`.
+  </dd>
+</dl>
+
+## Atmos Pro
+
+<dl>
+  <dt>`ATMOS_PRO_BASE_URL`</dt>
+  <dd>
+    Atmos Pro API base URL.
+  </dd>
+
+  <dt>`ATMOS_PRO_ENDPOINT`</dt>
+  <dd>
+    Atmos Pro API endpoint.
+  </dd>
+
+  <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
+  <dd>
+    Atmos Pro workspace identifier. Not a secret.
+  </dd>
+
+  <dt>`ATMOS_PRO_TOKEN`</dt>
+  <dd>
+    Bearer token obtained via OIDC token exchange (advanced). See [Pro authentication](/cli/configuration/settings/pro#authentication).
+  </dd>
+
+  <dt>`ATMOS_UPLOAD_STATUS`</dt>
+  <dd>
+    Upload plan status to Atmos Pro after Terraform commands.
+  </dd>
+</dl>
+
+## Telemetry
+
+<dl>
+  <dt>`ATMOS_TELEMETRY_ENABLED`</dt>
+  <dd>
+    Enable anonymous telemetry reporting. Default: `true`.
+  </dd>
+
+  <dt>`ATMOS_TELEMETRY_TOKEN`</dt>
+  <dd>
+    Telemetry authentication token.
+  </dd>
+
+  <dt>`ATMOS_TELEMETRY_ENDPOINT`</dt>
+  <dd>
+    Custom telemetry endpoint URL.
+  </dd>
+</dl>
+
+## Experimental Features
+
+<dl>
+  <dt>`ATMOS_EXPERIMENTAL`</dt>
+  <dd>
+    Control experimental command behavior. Options: `silence`, `disable`, `warn` (default), `error`.
+  </dd>
+</dl>
+
+## Toolchain
+
+<dl>
+  <dt>`ATMOS_TOOL_VERSIONS`</dt>
+  <dd>
+    Path to a tool-versions file for version pinning.
+  </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_PATH`</dt>
+  <dd>
+    Directory where Atmos installs managed tools.
+  </dd>
+</dl>
+
+## XDG Base Directories
+
+<dl>
+  <dt>`ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME`</dt>
+  <dd>
+    Override the cache directory. Default: `~/.cache`.
+  </dd>
+
+  <dt>`ATMOS_XDG_DATA_HOME` / `XDG_DATA_HOME`</dt>
+  <dd>
+    Override the data directory. Default: `~/.local/share`.
+  </dd>
+
+  <dt>`ATMOS_XDG_CONFIG_HOME` / `XDG_CONFIG_HOME`</dt>
+  <dd>
+    Override the config directory. Default: `~/.config`.
+  </dd>
+</dl>
+
+## Git Operations
+
+<dl>
+  <dt>`ATMOS_REPO_PATH`</dt>
+  <dd>
+    Path to the cloned target repository for `describe affected`.
+  </dd>
+
+  <dt>`ATMOS_REF`</dt>
+  <dd>
+    Git reference for comparison in `describe affected`.
+  </dd>
+
+  <dt>`ATMOS_SHA`</dt>
+  <dd>
+    Git commit SHA for comparison in `describe affected`.
+  </dd>
+
+  <dt>`ATMOS_SSH_KEY`</dt>
+  <dd>
+    Path to SSH private key for Git operations.
+  </dd>
+
+  <dt>`ATMOS_SSH_KEY_PASSWORD`</dt>
+  <dd>
+    SSH key encryption password.
+  </dd>
+
+  <dt>`ATMOS_CLONE_TARGET_REF`</dt>
+  <dd>
+    Clone target Git reference for comparison operations.
+  </dd>
+
+  <dt>`ATMOS_INCLUDE_DEPENDENTS`</dt>
+  <dd>
+    Include dependent components in `describe affected` output.
   </dd>
 </dl>
 
@@ -361,6 +724,10 @@ Some commands spawn interactive shells with environment variables set to provide
 ## See Also
 
 - [CLI Configuration](/cli/configuration) — Overview of CLI configuration
-- [Base Path](/cli/configuration#base-path) — Configure base paths
+- [Global Flags](/cli/global-flags) — Flag reference with environment variable equivalents
+- [Environment Variable Injection](/cli/configuration/env) — Configure the `env:` section in `atmos.yaml` to inject variables into tools
+- [Stack Environment Variables](/stacks/env) — Component-level environment variables
+- [AI Configuration](/cli/configuration/ai) — AI provider setup and configuration
+- [Profiles](/cli/configuration/profiles) — Environment-specific configuration overrides
 - [Logs](/cli/configuration/logs) — Configure logging
 - [Profiler](/cli/configuration/profiler) — Configure performance profiling

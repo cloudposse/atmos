@@ -19,7 +19,11 @@
       "plan": {
         "skip_planfile": false
       },
-      "plugin_cache": true
+      "planfiles": {
+        "default": ""
+      },
+      "plugin_cache": true,
+      "ci": {}
     },
     "helmfile": {
       "base_path": "",
@@ -262,5 +266,27 @@
       "format": "",
       "columns": null
     }
-  }
+  },
+  "ci": {
+    "output": {},
+    "summary": {},
+    "checks": {
+      "statuses": {}
+    },
+    "comments": {},
+    "templates": {}
+  },
+  "ai": {
+    "sessions": {
+      "auto_compact": {}
+    },
+    "tools": {},
+    "instructions": {},
+    "web_search": {},
+    "context": {}
+  },
+  "mcp": {
+    "routing": {}
+  },
+  "lsp": {}
 }

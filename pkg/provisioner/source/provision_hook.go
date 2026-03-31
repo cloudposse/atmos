@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -21,11 +22,15 @@ import (
 // HookEventBeforeTerraformInit is the hook event for before terraform init.
 const HookEventBeforeTerraformInit = provisioner.HookEvent("before.terraform.init")
 
-// WorkdirPath is the standard workdir directory name.
-const WorkdirPath = ".workdir"
-
 // DirPermissions is the default permission mode for directories.
 const DirPermissions = 0o755
+
+// invocationDoneKey is the componentConfig key set after AutoProvisionSource completes
+// (whether it provisioned or skipped). It prevents re-provisioning within the same command
+// invocation when the source provisioner is called both from resolveAndProvisionComponentPath
+// and from the before.terraform.init hook (prepareInitExecution). Without this guard a zero
+// TTL deletes the varfiles and backend config written between the two calls.
+const invocationDoneKey = "_atmos_source_provisioned"
 
 func init() {
 	// Register source provisioner to run before terraform init.
@@ -66,7 +71,7 @@ func AutoProvisionSource(
 	componentType string,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
-) error {
+) (retErr error) {
 	defer perf.Track(atmosConfig, "source.AutoProvisionSource")()
 
 	sourceSpec, component, err := extractSourceAndComponent(componentConfig)
@@ -76,6 +81,27 @@ func AutoProvisionSource(
 	if sourceSpec == nil {
 		return nil // No source configured - skip.
 	}
+
+	// Guard against double-invocation within the same command lifecycle.
+	// AutoProvisionSource is called both directly (from resolveAndProvisionComponentPath)
+	// and indirectly via the before.terraform.init hook (from prepareInitExecution).
+	// Without this check a zero TTL would delete varfiles and backend configs that were
+	// written to the workdir between the two calls, causing the subprocess to fail with
+	// "file does not exist" errors.  Once this function completes (provision or skip),
+	// no further provisioning should happen for this invocation.
+	if _, done := componentConfig[invocationDoneKey]; done {
+		return nil
+	}
+	// Mark as complete when this call returns successfully so any subsequent call
+	// (e.g., the before.terraform.init hook) is a no-op for this invocation.
+	defer func() {
+		if retErr == nil {
+			componentConfig[invocationDoneKey] = struct{}{}
+		}
+	}()
+
+	// Apply global TTL default if not set per-component.
+	applyGlobalTTLDefault(sourceSpec, atmosConfig, componentType)
 
 	stack, _ := componentConfig["atmos_stack"].(string)
 
@@ -117,6 +143,27 @@ func AutoProvisionSource(
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 	}
 	return nil
+}
+
+// applyGlobalTTLDefault sets the source TTL from the global config if not already set per-component.
+func applyGlobalTTLDefault(sourceSpec *schema.VendorComponentSource, atmosConfig *schema.AtmosConfiguration, componentType string) {
+	if sourceSpec.TTL != "" {
+		return
+	}
+	switch componentType {
+	case cfg.TerraformComponentType:
+		if atmosConfig.Components.Terraform.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
+		}
+	case cfg.HelmfileComponentType:
+		if atmosConfig.Components.Helmfile.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Helmfile.Source.TTL
+		}
+	case cfg.PackerComponentType:
+		if atmosConfig.Components.Packer.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
+		}
+	}
 }
 
 // extractSourceAndComponent extracts source spec and component name from config.
@@ -191,11 +238,6 @@ func determineSourceTargetDirectory(
 	component string,
 	componentConfig map[string]any,
 ) (string, bool, error) {
-	basePath := atmosConfig.BasePath
-	if basePath == "" {
-		basePath = "."
-	}
-
 	// Check if workdir is enabled.
 	if isWorkdirEnabled(componentConfig) {
 		// Get stack name for workdir path.
@@ -207,9 +249,12 @@ func determineSourceTargetDirectory(
 				Err()
 		}
 
-		// Build workdir path: .workdir/<componentType>/<stack>-<component>/
-		workdirName := fmt.Sprintf("%s-%s", stack, component)
-		workdirPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+		basePath := atmosConfig.BasePath
+		if basePath == "" {
+			basePath = "."
+		}
+
+		workdirPath := workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
 		return workdirPath, true, nil
 	}
 
@@ -263,7 +308,20 @@ func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSourc
 	}
 
 	// Check for version/URI changes.
-	return checkMetadataChanges(metadata, sourceSpec)
+	changed, reason := checkMetadataChanges(metadata, sourceSpec)
+	if changed {
+		return changed, reason
+	}
+
+	// Check TTL-based cache expiration.
+	if sourceSpec.TTL != "" {
+		expired, ttlReason := isSourceCacheExpired(sourceSpec.TTL, metadata.UpdatedAt)
+		if expired {
+			return true, ttlReason
+		}
+	}
+
+	return false, ""
 }
 
 // isNonEmptyDir checks if the path exists, is a directory, and contains at least one entry
@@ -309,6 +367,31 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 	}
 
 	return false, ""
+}
+
+// isSourceCacheExpired checks if the source cache has expired based on TTL.
+// A TTL of "0" or "0s" means always expired (always re-pull).
+func isSourceCacheExpired(ttl string, updatedAt time.Time) (bool, string) {
+	// Handle zero TTL explicitly (always expired).
+	if isZeroTTL(ttl) {
+		return true, fmt.Sprintf("Source cache expired (TTL: %s, always re-pull)", ttl)
+	}
+
+	ttlDuration, err := duration.ParseDuration(ttl)
+	if err != nil {
+		return true, fmt.Sprintf("Invalid source TTL %q; forcing re-provision to avoid stale cache", ttl)
+	}
+
+	if time.Since(updatedAt) > ttlDuration {
+		return true, fmt.Sprintf("Source cache expired (TTL: %s, last updated: %s)",
+			ttl, updatedAt.Format(time.RFC3339))
+	}
+	return false, ""
+}
+
+// isZeroTTL checks if the TTL string represents a zero duration.
+func isZeroTTL(ttl string) bool {
+	return ttl == "0" || ttl == "0s" || ttl == "0m" || ttl == "0h" || ttl == "0d"
 }
 
 // isLocalSource determines if a source URI refers to a local path.

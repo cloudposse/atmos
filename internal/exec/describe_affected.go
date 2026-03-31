@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
@@ -13,12 +15,14 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -34,6 +38,7 @@ type DescribeAffectedCmdArgs struct {
 	IncludeSettings             bool
 	IncludeSpaceliftAdminStacks bool
 	OutputFile                  string
+	GithubOutputFile            string // Output file for $GITHUB_OUTPUT format (key=value).
 	Ref                         string
 	RepoPath                    string
 	SHA                         string
@@ -67,6 +72,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -81,6 +87,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -93,6 +100,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -102,6 +110,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		onlyInStack string,
+		authManager auth.AuthManager,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -152,7 +161,7 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
 
-	if result.Format != "yaml" && result.Format != "json" {
+	if result.Format != "yaml" && result.Format != "json" && result.Format != "matrix" {
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
 	}
 	if result.RepoPath != "" && (result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
@@ -184,6 +193,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"stack":                          &describe.Stack,
 		"format":                         &describe.Format,
 		"file":                           &describe.OutputFile,
+		"output-file":                    &describe.GithubOutputFile,
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
@@ -242,6 +252,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -257,6 +268,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
@@ -270,6 +282,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	}
 	if err != nil {
@@ -278,7 +291,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager)
 		if err != nil {
 			return err
 		}
@@ -294,6 +307,11 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 }
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
+	// Handle matrix format specially - it bypasses the normal view flow.
+	if a.Format == "matrix" {
+		return writeMatrixOutput(affected, a.GithubOutputFile)
+	}
+
 	if a.Query == "" {
 		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
 			return err
@@ -332,7 +350,8 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	log.Debug("Creating API client")
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(d.atmosConfig)
 	if err != nil {
-		return err
+		log.Warn("Failed to create Atmos Pro API client for upload. The describe affected result is unaffected.", "error", err)
+		return nil
 	}
 
 	req := dtos.UploadAffectedStacksRequest{
@@ -347,7 +366,14 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 
 	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	return apiClient.UploadAffectedStacks(&req)
+	if uploadErr := apiClient.UploadAffectedStacks(&req); uploadErr != nil {
+		ui.Error("Failed to upload affected stacks to Atmos Pro")
+		return uploadErr
+	}
+
+	ui.Success("Uploaded affected stacks to Atmos Pro")
+
+	return nil
 }
 
 type viewWithScrollProps struct {
@@ -415,5 +441,72 @@ func viewConfig(v *viewConfigProps) error {
 	if err := v.pageCreator.Run(v.displayName, content); err != nil {
 		return err
 	}
+	return nil
+}
+
+// MatrixOutput represents the GitHub Actions matrix strategy format.
+type MatrixOutput struct {
+	Include []MatrixEntry `json:"include"`
+}
+
+// MatrixEntry represents a single entry in the matrix include array.
+type MatrixEntry struct {
+	Stack         string `json:"stack"`
+	Component     string `json:"component"`
+	ComponentPath string `json:"component_path"`
+	ComponentType string `json:"component_type"`
+}
+
+// convertAffectedToMatrix converts the affected list to GitHub Actions matrix format.
+func convertAffectedToMatrix(affected []schema.Affected) MatrixOutput {
+	matrix := MatrixOutput{
+		Include: make([]MatrixEntry, 0, len(affected)),
+	}
+	for i := range affected {
+		a := &affected[i]
+		entry := MatrixEntry{
+			Stack:         a.Stack,
+			Component:     a.Component,
+			ComponentPath: a.ComponentPath,
+			ComponentType: a.ComponentType,
+		}
+		matrix.Include = append(matrix.Include, entry)
+	}
+	return matrix
+}
+
+// writeMatrixOutput writes the matrix output to stdout or a file.
+// If outputFile is specified (for $GITHUB_OUTPUT), writes in key=value format.
+// Otherwise, writes JSON to stdout.
+func writeMatrixOutput(affected []schema.Affected, outputFile string) error {
+	matrix := convertAffectedToMatrix(affected)
+	matrixJSON, err := json.Marshal(matrix)
+	if err != nil {
+		return fmt.Errorf("failed to marshal matrix output: %w", err)
+	}
+
+	if outputFile != "" {
+		// Write to file in key=value format for $GITHUB_OUTPUT.
+		// Using 0644 permissions - matrix contains only stack/component names, not secrets.
+		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
+		if err != nil {
+			return fmt.Errorf("failed to open output file %s: %w", outputFile, err)
+		}
+		defer f.Close()
+
+		// Write matrix=<json> format.
+		if _, err := fmt.Fprintf(f, "matrix=%s\n", string(matrixJSON)); err != nil {
+			return fmt.Errorf("failed to write to output file %s: %w", outputFile, err)
+		}
+		// Also write count for convenience.
+		if _, err := fmt.Fprintf(f, "affected_count=%d\n", len(affected)); err != nil {
+			return fmt.Errorf("failed to write count to output file %s: %w", outputFile, err)
+		}
+		log.Debug("Wrote matrix output to file", "file", outputFile, "count", len(affected))
+		return nil
+	}
+
+	// Write to stdout.
+	_ = data.Writeln(string(matrixJSON))
 	return nil
 }

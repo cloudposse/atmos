@@ -27,7 +27,8 @@ func init() {
 	describeAffectedCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch. Refer to [10.3 Git Internals Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References) for more details")
 	describeAffectedCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch")
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to the file")
-	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format. (`json` is default)")
+	describeAffectedCmd.PersistentFlags().String("output-file", "", "Write output to file in key=value format (for $GITHUB_OUTPUT)")
+	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: json, yaml, or matrix (for GitHub Actions matrix strategy)")
 	describeAffectedCmd.PersistentFlags().String("ssh-key", "", "Path to PEM-encoded private key to clone private repos using SSH")
 	describeAffectedCmd.PersistentFlags().String("ssh-key-password", "", "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block")
 	describeAffectedCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "Include the Spacelift admin stack of any stack that is affected by config changes")
@@ -72,14 +73,18 @@ func getRunnableDescribeAffectedCmd(
 			}
 		}
 
-		// Get identity from flag and create AuthManager if provided.
-		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
+		// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
+		// When functions are disabled (--process-functions=false), there are no YAML functions
+		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
-		if err != nil {
-			return err
+		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
+		if props.ProcessYamlFunctions || identityExplicit {
+			authManager, authErr := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
+			if authErr != nil {
+				return authErr
+			}
+			props.AuthManager = authManager
 		}
-		props.AuthManager = authManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

@@ -644,6 +644,59 @@ func TestExtractComponentPath(t *testing.T) {
 			component: "vpc",
 			expected:  filepath.FromSlash("/project/components/terraform/vpc"),
 		},
+		{
+			name: "uses nested component_info.component_path",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.FromSlash("/project"),
+			},
+			componentConfig: map[string]any{
+				"component_info": map[string]any{
+					"component_path": filepath.FromSlash("/project/components/terraform/elasticache"),
+				},
+			},
+			component: "elasticache-redis-cluster-1", // Instance name should NOT affect the result.
+			expected:  filepath.FromSlash("/project/components/terraform/elasticache"),
+		},
+		{
+			name: "top-level component_path takes precedence over nested component_info",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.FromSlash("/project"),
+			},
+			componentConfig: map[string]any{
+				"component_path": filepath.FromSlash("/custom/path"),
+				"component_info": map[string]any{
+					"component_path": filepath.FromSlash("/project/components/terraform/elasticache"),
+				},
+			},
+			component: "vpc",
+			expected:  filepath.FromSlash("/custom/path"),
+		},
+		{
+			name: "empty component_info.component_path falls through to default",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.FromSlash("/project"),
+			},
+			componentConfig: map[string]any{
+				"component_info": map[string]any{
+					"component_path": "",
+				},
+			},
+			component: "vpc",
+			expected:  filepath.FromSlash("/project/components/terraform/vpc"),
+		},
+		{
+			name: "component_info without component_path falls through to default",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: filepath.FromSlash("/project"),
+			},
+			componentConfig: map[string]any{
+				"component_info": map[string]any{
+					"component_type": "terraform",
+				},
+			},
+			component: "vpc",
+			expected:  filepath.FromSlash("/project/components/terraform/vpc"),
+		},
 	}
 
 	for _, tt := range tests {

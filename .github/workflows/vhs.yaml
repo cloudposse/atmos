@@ -23,8 +23,10 @@ jobs:
         id: labeled
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          labels=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels | jq -r '.[].name')
+          labels=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" | jq -r '.[].name')
           if [[ $labels =~ "vhs" ]]; then
             echo "labeled=true" >> $GITHUB_OUTPUT
           else
@@ -35,18 +37,22 @@ jobs:
         id: tapes
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          IS_LABELED: ${{ steps.labeled.outputs.labeled }}
         run: |
-          if [[ "${{ steps.labeled.outputs.labeled }}" == "true" ]]; then
+          if [[ "$IS_LABELED" == "true" ]]; then
             echo "files=$(find . -path './build-harness' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)" >> $GITHUB_OUTPUT
           else
-            files=$(gh pr diff --name-only ${{ github.event.pull_request.number }} | (grep '\.tape$' | grep -v '(style|defaults)\.tape$' || true) | cut -d/ -f2-)
+            files=$(gh pr diff --name-only "$PR_NUMBER" | (grep '\.tape$' | grep -v '(style|defaults)\.tape$' || true) | cut -d/ -f2-)
             echo "files=$files" >> $GITHUB_OUTPUT
           fi
 
       - name: Set up matrix
         id: create-matrix
+        env:
+          TAPE_FILES: ${{ steps.tapes.outputs.files }}
         run: |
-          echo "matrix=$(echo -n ${{ steps.tapes.outputs.files }} | jq -R -s -c 'split(" ")')" >> $GITHUB_OUTPUT
+          echo "matrix=$(echo -n "$TAPE_FILES" | jq -R -s -c 'split(" ")')" >> $GITHUB_OUTPUT
 
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
@@ -92,9 +98,12 @@ jobs:
 
       - name: Add Image to Job Summary
         if: steps.auto-commit.outputs.changes_detected == 'true'
+        env:
+          GH_REPO: ${{ github.repository }}
+          COMMIT_HASH: ${{ steps.auto-commit.outputs.commit_hash }}
         run: |
           echo "## Demo GIF" >> $GITHUB_STEP_SUMMARY
-          echo "![Demo GIF](https://github.com/${{ github.repository }}/blob/${{ steps.auto-commit.outputs.commit_hash }}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
+          echo "![Demo GIF](https://github.com/${GH_REPO}/blob/${COMMIT_HASH}/docs/demo.gif?raw=true)" >> $GITHUB_STEP_SUMMARY
 
       - name: No changes
         if: steps.auto-commit.outputs.changes_detected == 'false'

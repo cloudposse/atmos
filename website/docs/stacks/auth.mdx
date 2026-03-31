@@ -15,6 +15,8 @@ The `auth` section configures how Atmos obtains and manages credentials for clou
 ## Use Cases
 
 - **AWS SSO Integration:** Authenticate via AWS IAM Identity Center (SSO) for seamless credential management.
+- **Azure Authentication:** Authenticate via device code flow, OIDC (workload identity), or existing Azure CLI credentials. Supports Azure Commercial, Government (GCC High), and China (Mooncake) clouds via the `cloud_environment` setting.
+- **GCP Authentication:** Authenticate via Application Default Credentials or Workload Identity Federation.
 - **Role Assumption Chains:** Configure multi-account access through role assumption.
 - **Credential Storage:** Securely store and retrieve credentials using system keyrings.
 - **Environment Injection:** Automatically inject credentials as environment variables for components.
@@ -81,7 +83,7 @@ auth:
 
 <dl>
   <dt>`kind`</dt>
-  <dd>Provider type (`aws-sso`, `static`).</dd>
+  <dd>Provider type (e.g., `aws/iam-identity-center`, `azure/device-code`, `azure/oidc`, `azure/cli`, `gcp/adc`, `gcp/workload-identity-federation`).</dd>
 
   <dt>`start_url`</dt>
   <dd>AWS SSO portal URL.</dd>
@@ -134,7 +136,7 @@ auth:
 
 <dl>
   <dt>`kind`</dt>
-  <dd>Identity type (`aws`).</dd>
+  <dd>Identity type (e.g., `aws/permission-set`, `aws/assume-role`, `aws/ambient`, `ambient`, `azure/subscription`, `gcp/service-account`, `gcp/project`).</dd>
 
   <dt>`via.provider`</dt>
   <dd>Provider to use for authentication.</dd>
@@ -271,6 +273,59 @@ auth:
         identity: mgmt-access  # Chain through mgmt-access
       principal:
         name: arn:aws:iam::333333333333:role/TerraformDeployer
+```
+</File>
+
+### Ambient Credentials (IRSA / EC2 Instance Profile / ECS Task Role)
+
+Use the `aws/ambient` identity kind when Atmos runs on infrastructure that already has AWS credentials
+available — such as an EKS pod with IRSA, an EC2 instance with an instance profile, or an ECS task with a task role.
+Unlike other identity kinds, `aws/ambient` does **not** clear credential environment variables or disable IMDS.
+It trusts the AWS SDK's default credential provider chain.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    eks-deployer:
+      kind: aws/ambient
+      principal:
+        region: us-east-1
+```
+</File>
+
+For a generic cloud-agnostic passthrough that simply preserves all environment variables as-is, use `ambient`:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    passthrough:
+      kind: ambient
+```
+</File>
+
+#### Chaining with Assume Role
+
+A common pattern is to use ambient credentials as the base for cross-account role assumption:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    # Use the pod's IRSA credentials as the base
+    pod-base:
+      kind: aws/ambient
+      principal:
+        region: us-east-1
+
+    # Assume a role in another account using the pod's credentials
+    cross-account-deployer:
+      kind: aws/assume-role
+      via:
+        identity: pod-base
+      principal:
+        assume_role: "arn:aws:iam::999999999999:role/TerraformDeployRole"
 ```
 </File>
 
@@ -427,6 +482,9 @@ atmos auth switch prod-admin
 
 ## Related
 
+- [Authentication Providers](/cli/configuration/auth/providers) — Configure AWS, Azure, and GCP providers
+- [Authentication Identities](/cli/configuration/auth/identities) — Configure identities for all cloud providers
+- [Azure Authentication Tutorial](/tutorials/azure-authentication) — Complete Azure auth guide
 - [Environment Variables (env)](/stacks/env)
 - [Settings](/stacks/settings)
 - [Terraform Providers](/stacks/providers)

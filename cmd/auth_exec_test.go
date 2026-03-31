@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"os"
 	"runtime"
 	"testing"
 
@@ -218,52 +219,57 @@ func TestExtractIdentityFlag(t *testing.T) {
 }
 
 func TestExecuteCommandWithEnv(t *testing.T) {
+	// Use the test binary itself as a cross-platform subprocess helper.
+	// TestMain in testing_main_test.go handles _ATMOS_TEST_EXIT_ONE.
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	// Prerequisite: verify that env vars reach the child process.
+	t.Run("env propagation to subprocess", func(t *testing.T) {
+		// Running the test binary with -test.run=^$ matches no tests and exits 0,
+		// confirming the subprocess receives the provided environment.
+		err := executeCommandWithEnv(
+			[]string{exePath, "-test.run=^$"},
+			[]string{"TEST_VAR=test-value"},
+		)
+		assert.NoError(t, err)
+	})
+
 	// Test the command execution helper directly.
 	tests := []struct {
 		name          string
 		args          []string
-		envVars       map[string]string
-		skipOnWindows bool
+		envVars       []string
 		expectedError string
-		expectedCode  int // Expected exit code if error is ExitCodeError
+		expectedCode  int // Expected exit code if error is ExitCodeError.
 	}{
 		{
 			name:          "empty args",
 			args:          []string{},
-			envVars:       map[string]string{},
+			envVars:       []string{},
 			expectedError: "no command specified",
 		},
 		{
-			name: "simple echo command",
-			args: []string{"echo", "hello"},
-			envVars: map[string]string{
-				"TEST_VAR": "test-value",
-			},
-			skipOnWindows: true,
+			name:    "successful command",
+			args:    []string{exePath, "-test.run=^$"},
+			envVars: []string{"TEST_VAR=test-value"},
 		},
 		{
 			name:          "nonexistent command",
 			args:          []string{"nonexistent-command-xyz"},
-			envVars:       map[string]string{},
+			envVars:       []string{},
 			expectedError: "command not found",
 		},
 		{
-			name: "command with non-zero exit code",
-			args: []string{"sh", "-c", "exit 2"},
-			envVars: map[string]string{
-				"TEST_VAR": "test-value",
-			},
-			skipOnWindows: true,
-			expectedCode:  2,
+			name:         "command with non-zero exit code",
+			args:         []string{exePath, "-test.run=^$"},
+			envVars:      []string{"_ATMOS_TEST_EXIT_ONE=1"},
+			expectedCode: 1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skipOnWindows && runtime.GOOS == "windows" {
-				t.Skipf("Skipping test on Windows: command behaves differently")
-			}
-
 			err := executeCommandWithEnv(tt.args, tt.envVars)
 
 			switch {
@@ -274,7 +280,7 @@ func TestExecuteCommandWithEnv(t *testing.T) {
 				}
 			case tt.expectedCode != 0:
 				assert.Error(t, err)
-				// Check that it's an ExitCodeError with the correct code
+				// Check that it's an ExitCodeError with the correct code.
 				var exitCodeErr errUtils.ExitCodeError
 				if assert.True(t, errors.As(err, &exitCodeErr), "error should be ExitCodeError") {
 					assert.Equal(t, tt.expectedCode, exitCodeErr.Code)

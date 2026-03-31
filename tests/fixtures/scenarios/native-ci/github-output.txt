@@ -1,0 +1,44 @@
+has_changes=false
+has_errors=false
+exit_code=0
+summary<<EOF
+
+## No Changes for `mycomponent` in `prod`
+
+<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
+[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-prod-mycomponent)
+<details><summary><a id="result-prod-mycomponent" />Plan: 0 to add, 0 to change, 0 to destroy.</summary>
+
+<br/>
+To reproduce this locally, run:<br/><br/>
+
+```shell
+atmos terraform plan mycomponent -s prod
+```
+
+---
+</details>
+
+EOF
+has_errors=false
+summary<<EOF
+
+## No Changes for `mycomponent` in `prod`
+
+<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
+[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-prod-mycomponent)
+<details><summary><a id="result-prod-mycomponent" />Plan: 0 to add, 0 to change, 0 to destroy.</summary>
+
+<br/>
+To reproduce this locally, run:<br/><br/>
+
+```shell
+atmos terraform plan mycomponent -s prod
+```
+
+---
+</details>
+
+EOF
+exit_code=0
+has_changes=false

@@ -4,7 +4,7 @@ sidebar_position: 2
 sidebar_label: providers
 sidebar_class_name: command
 id: providers
-description: Configure authentication providers for AWS SSO, SAML, GitHub OIDC, and GCP Workload Identity Federation in your `atmos.yaml`.
+description: Configure authentication providers for AWS, Azure, and GCP in your `atmos.yaml`.
 ---
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
@@ -19,7 +19,10 @@ Providers are the upstream systems that Atmos uses to obtain initial credentials
 
 <Experimental />
 
-## AWS IAM Identity Center (SSO)
+<Tabs>
+<TabItem value="aws" label="AWS" default>
+
+## IAM Identity Center (SSO)
 
 The most common provider for AWS organizations using SSO.
 
@@ -101,7 +104,7 @@ These permissions should be attached to the IAM Identity Center permission set t
 
 </details>
 
-## AWS SAML
+## SAML
 
 For organizations using SAML-based identity providers like Okta, Google Apps, or ADFS.
 
@@ -162,7 +165,221 @@ auth:
   <dd>Optional. OIDC audience. Defaults to STS endpoint for the region.</dd>
 </dl>
 
-## GCP Application Default Credentials
+</TabItem>
+<TabItem value="azure" label="Azure">
+
+## Device Code
+
+For interactive browser-based authentication to Azure, similar to `az login --use-device-code`.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    azure-interactive:
+      kind: azure/device-code
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/device-code`.</dd>
+
+  <dt>`spec.tenant_id`</dt>
+  <dd>**Required.** Azure AD tenant ID.</dd>
+
+  <dt>`spec.subscription_id`</dt>
+  <dd>Optional. Default Azure subscription ID.</dd>
+
+  <dt>`spec.location`</dt>
+  <dd>Optional. Default Azure region (e.g., `eastus`, `westeurope`).</dd>
+
+  <dt>`spec.client_id`</dt>
+  <dd>Optional. Azure AD application (client) ID. Defaults to Azure CLI's public client ID.</dd>
+
+  <dt>`spec.cloud_environment`</dt>
+  <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
+</dl>
+
+**How it works:**
+1. Atmos displays a device code and opens `https://microsoft.com/devicelogin`
+2. You enter the code and sign in (with MFA if configured)
+3. Atmos acquires tokens for Azure Resource Manager, Microsoft Graph, and Azure Key Vault
+4. Tokens are cached in `~/.azure/msal_token_cache.json` for Terraform compatibility
+
+:::tip
+For a detailed walkthrough with examples, see the [Azure Authentication Tutorial](/tutorials/azure-authentication).
+:::
+
+## OIDC (Workload Identity Federation)
+
+For CI/CD pipelines using federated identity tokens (GitHub Actions, Azure DevOps, etc.).
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    azure-oidc:
+      kind: azure/oidc
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        client_id: "YOUR_APP_CLIENT_ID"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/oidc`.</dd>
+
+  <dt>`spec.tenant_id`</dt>
+  <dd>**Required.** Azure AD tenant ID.</dd>
+
+  <dt>`spec.client_id`</dt>
+  <dd>**Required.** Azure AD application (client) ID with federated credentials configured.</dd>
+
+  <dt>`spec.subscription_id`</dt>
+  <dd>Optional. Default Azure subscription ID.</dd>
+
+  <dt>`spec.location`</dt>
+  <dd>Optional. Default Azure region.</dd>
+
+  <dt>`spec.audience`</dt>
+  <dd>Optional. OIDC audience for token exchange.</dd>
+
+  <dt>`spec.token_file_path`</dt>
+  <dd>Optional. Path to file containing the OIDC token. If not set, uses environment variables (`ACTIONS_ID_TOKEN_REQUEST_URL` in GitHub Actions).</dd>
+
+  <dt>`spec.cloud_environment`</dt>
+  <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
+</dl>
+
+### GitHub Actions Setup
+
+<File title=".github/workflows/deploy.yaml">
+```yaml
+jobs:
+  deploy:
+    permissions:
+      id-token: write    # Required for OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy with Atmos
+        run: atmos terraform apply mycomponent -s prod
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+```
+</File>
+
+## CLI
+
+For using existing Azure CLI credentials from `az login`.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    azure-existing:
+      kind: azure/cli
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: eastus
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/cli`.</dd>
+
+  <dt>`spec.tenant_id`</dt>
+  <dd>**Required.** Azure AD tenant ID.</dd>
+
+  <dt>`spec.subscription_id`</dt>
+  <dd>Optional. Default Azure subscription ID.</dd>
+
+  <dt>`spec.location`</dt>
+  <dd>Optional. Default Azure region.</dd>
+
+  <dt>`spec.cloud_environment`</dt>
+  <dd>Optional. Azure cloud environment for sovereign clouds. Supported values: `public` (default), `usgovernment` (Azure Government / GCC High), `china` (Azure China / Mooncake). When set, Atmos uses the correct login endpoints, API scopes, and blob storage URLs for the target cloud.</dd>
+</dl>
+
+:::note
+The `azure/cli` provider requires existing Azure CLI credentials. Run `az login` first.
+:::
+
+## Sovereign Clouds (GCC High, China)
+
+Azure sovereign clouds use different authentication endpoints and API scopes than Azure Commercial (public). Set `cloud_environment` in your provider spec to target the correct cloud:
+
+<File title="atmos.yaml (Azure Government / GCC High)">
+```yaml
+auth:
+  providers:
+    azure-gov:
+      kind: azure/device-code
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: usgovvirginia
+        cloud_environment: usgovernment
+```
+</File>
+
+<File title="atmos.yaml (Azure China / Mooncake)">
+```yaml
+auth:
+  providers:
+    azure-china:
+      kind: azure/oidc
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        client_id: "YOUR_APP_CLIENT_ID"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        cloud_environment: china
+```
+</File>
+
+When `cloud_environment` is set, Atmos automatically adjusts:
+- **Login endpoint** (e.g., `login.microsoftonline.us` for GCC High, `login.chinacloudapi.cn` for China)
+- **API scopes** (Azure Resource Manager, Microsoft Graph, KeyVault)
+- **Blob storage URLs** used by `!terraform.state` YAML functions
+- **Portal URLs** for `atmos auth console`
+
+| Cloud | `cloud_environment` | Login Endpoint | Blob Storage Suffix |
+|-------|---------------------|----------------|---------------------|
+| Commercial | `public` (default) | `login.microsoftonline.com` | `blob.core.windows.net` |
+| US Government / GCC High | `usgovernment` | `login.microsoftonline.us` | `blob.core.usgovcloudapi.net` |
+| China (Mooncake) | `china` | `login.chinacloudapi.cn` | `blob.core.chinacloudapi.cn` |
+
+:::tip
+Sovereign cloud support also affects the Terraform azurerm backend. Set `environment` in your backend configuration to match:
+
+```yaml
+backend:
+  azurerm:
+    storage_account_name: mystorageaccount
+    container_name: tfstate
+    key: terraform.tfstate
+    environment: usgovernment  # Matches Terraform azurerm backend "environment" field
+```
+
+This ensures `!terraform.state` YAML functions use the correct blob storage endpoint.
+:::
+
+</TabItem>
+<TabItem value="gcp" label="GCP">
+
+## Application Default Credentials
 
 For local development using existing `gcloud` authentication.
 
@@ -197,7 +414,7 @@ auth:
 The `gcp/adc` provider requires existing Application Default Credentials. Run `gcloud auth application-default login` first.
 :::
 
-## GCP Workload Identity Federation
+## Workload Identity Federation
 
 For CI/CD pipelines using OIDC tokens (e.g., GitHub Actions).
 
@@ -309,6 +526,9 @@ jobs:
 ```
 </File>
 
+</TabItem>
+</Tabs>
+
 ## Multiple Providers
 
 You can configure multiple providers for different use cases and cloud platforms:
@@ -327,6 +547,21 @@ auth:
     aws-github-oidc:
       kind: github/oidc
       region: us-east-1
+
+    # Azure interactive login
+    azure-dev:
+      kind: azure/device-code
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+
+    # Azure OIDC for CI/CD
+    azure-ci:
+      kind: azure/oidc
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        client_id: "YOUR_APP_CLIENT_ID"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
 
     # GCP local development
     gcp-adc:
@@ -417,9 +652,13 @@ atmos --profile platform auth login
 <DocCardList items={[
   {type: 'link', href: '/cli/commands/auth/login', label: 'atmos auth login', description: 'Authenticate with a configured provider'},
   {type: 'link', href: '/cli/commands/auth/validate', label: 'atmos auth validate', description: 'Validate provider configuration'},
-  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open AWS console in browser'},
+  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open cloud console in browser'},
   {type: 'link', href: '/cli/commands/auth/list', label: 'atmos auth list', description: 'List available identities and providers'},
 ]} />
+
+## Tutorials
+
+- [Azure Authentication](/tutorials/azure-authentication) — Complete guide for Azure device code, OIDC, and CLI authentication
 
 ## See Also
 
