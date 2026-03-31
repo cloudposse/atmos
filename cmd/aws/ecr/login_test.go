@@ -1,12 +1,14 @@
 package ecr
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -66,17 +68,15 @@ func TestLoginCmd_MaxOneArg(t *testing.T) {
 }
 
 func TestLoginCmd_NoArgsError(t *testing.T) {
-	// Verify the error type exists and is used.
+	// Verify the error sentinel exists. Behavioral testing requires a full
+	// config + auth manager setup which is covered by integration tests.
 	assert.NotNil(t, errUtils.ErrECRLoginNoArgs)
 }
 
 func TestCreateAuthManager_EmptyConfig(t *testing.T) {
-	// Test with empty but valid config.
+	// Test with nil maps (not empty maps) to verify zero-value behavior.
 	authConfig := &schema.AuthConfig{
-		Realm:        "test-realm",
-		Providers:    map[string]schema.Provider{},
-		Identities:   map[string]schema.Identity{},
-		Integrations: map[string]schema.Integration{},
+		Realm: "test-realm",
 	}
 
 	manager, err := createAuthManager(authConfig, "")
@@ -144,10 +144,8 @@ func TestLoginCmd_CommandStructure(t *testing.T) {
 
 func TestLoginCmd_ParentIsEcrCmd(t *testing.T) {
 	// Verify that login is a child of ecr command.
-	assert.NotNil(t, loginCmd.Parent())
-	if loginCmd.Parent() != nil {
-		assert.Equal(t, "ecr", loginCmd.Parent().Name())
-	}
+	require.NotNil(t, loginCmd.Parent())
+	assert.Equal(t, "ecr", loginCmd.Parent().Name())
 }
 
 func TestLoginCmd_LongDescription(t *testing.T) {
@@ -170,4 +168,26 @@ func TestLoginCmd_HelpArgIsNotTreatedAsIntegration(t *testing.T) {
 	// The command should return nil (help was displayed) rather than an integration error.
 	err := executeLoginCommand(loginCmd, []string{"help"})
 	assert.NoError(t, err)
+}
+
+func TestExecuteWithAuthManager_NoArgs(t *testing.T) {
+	// No identity and no integration — should return ErrECRLoginNoArgs.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm: "test",
+		},
+	}
+	err := executeWithAuthManager(context.Background(), atmosConfig, "", "")
+	assert.ErrorIs(t, err, errUtils.ErrECRLoginNoArgs)
+}
+
+func TestExecuteWithAuthManager_SelectSentinel(t *testing.T) {
+	// __SELECT__ sentinel should return ErrECRIdentitySelect.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm: "test",
+		},
+	}
+	err := executeWithAuthManager(context.Background(), atmosConfig, cfg.IdentityFlagSelectValue, "")
+	assert.ErrorIs(t, err, errUtils.ErrECRIdentitySelect)
 }

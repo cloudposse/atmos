@@ -76,6 +76,11 @@ func executeLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cases 2 & 3 require auth manager.
+	return executeWithAuthManager(ctx, &atmosConfig, identityName, integrationName)
+}
+
+// executeWithAuthManager handles integration and identity-based ECR login modes.
+func executeWithAuthManager(ctx context.Context, atmosConfig *schema.AtmosConfiguration, identityName, integrationName string) error {
 	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
@@ -88,6 +93,10 @@ func executeLoginCommand(cmd *cobra.Command, args []string) error {
 
 	// Case 3: Identity's linked integrations.
 	if identityName != "" {
+		// Reject the interactive selection sentinel; this command requires an explicit name.
+		if identityName == cfg.IdentityFlagSelectValue {
+			return errUtils.ErrECRIdentitySelect
+		}
 		return authManager.ExecuteIdentityIntegrations(ctx, identityName)
 	}
 
@@ -121,7 +130,7 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 
 		result, err := awsCloud.GetAuthorizationToken(ctx, creds, accountID, region)
 		if err != nil {
-			return fmt.Errorf("ECR login failed for %s: %w", registry, err)
+			return fmt.Errorf("%w: %s: %w", errUtils.ErrECRLoginFailed, registry, err)
 		}
 
 		if err := dockerConfig.WriteAuth(registry, result.Username, result.Password); err != nil {
