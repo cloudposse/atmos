@@ -343,7 +343,7 @@ func executeMainTerraformCommand( //nolint:revive // argument-limit: opts variad
 	if uploadStatusFlag && shouldUploadStatus(info) {
 		metadata := buildMetadataForUpload(captureOutput, info, maskedOutput.Bytes())
 		if uploadErr := uploadCommandStatus(atmosConfig, info, exitCode, metadata); uploadErr != nil {
-      log.Warn("Failed to upload command status to Atmos Pro. The terraform command result is unaffected.", "error", uploadErr)
+			log.Warn("Failed to upload command status to Atmos Pro. The terraform command result is unaffected.", "error", uploadErr)
 			return uploadErr
 		}
 	}
