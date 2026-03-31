@@ -354,9 +354,19 @@ func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh 
 	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr))
 	finalModel, err := prog.Run()
 	if err != nil {
+		log.Debug("Bubbletea spinner failed, falling back to simple wait", "error", err)
 		cancel()
+		// Drain the goroutine result. If the callback arrived just before cancel,
+		// the goroutine may have captured the real result instead of a timeout.
 		res := <-tokenCh
-		return res.resp, res.err
+		if !errors.Is(res.err, errUtils.ErrWebflowTimeout) {
+			return res.resp, res.err
+		}
+		// Goroutine got the cancellation — callback hasn't arrived yet.
+		// Fall back to a blocking wait with a fresh timeout.
+		ctx2, cancel2 := context.WithTimeout(context.Background(), webflowCallbackTimeout)
+		defer cancel2()
+		return i.waitForCallbackSimple(ctx2, resultCh, region, verifier, redirectURI)
 	}
 
 	final := finalModel.(webflowSpinnerModel)

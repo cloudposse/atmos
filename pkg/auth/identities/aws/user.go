@@ -113,6 +113,7 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 				return webflowCreds, nil
 			}
 			log.Debug("Browser webflow failed", logKeyIdentity, i.name, "error", webflowErr)
+			return nil, webflowErr
 		}
 		return nil, err
 	}
