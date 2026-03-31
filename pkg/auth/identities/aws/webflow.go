@@ -40,7 +40,7 @@ const (
 	webflowCallbackPath        = "/oauth/callback"
 	webflowCodeVerifierBytes   = 32
 	webflowScope               = "openid"
-	webflowCodeChallengeMethod = "S256"
+	webflowCodeChallengeMethod = "SHA-256"
 	webflowResponseType        = "code"
 	webflowGrantTypeAuthCode   = "authorization_code"
 	webflowGrantTypeRefresh    = "refresh_token"
