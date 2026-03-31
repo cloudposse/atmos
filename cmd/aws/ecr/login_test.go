@@ -191,3 +191,14 @@ func TestExecuteWithAuthManager_SelectSentinel(t *testing.T) {
 	err := executeWithAuthManager(context.Background(), atmosConfig, cfg.IdentityFlagSelectValue, "")
 	assert.ErrorIs(t, err, errUtils.ErrECRIdentitySelect)
 }
+
+func TestExecuteWithAuthManager_MutuallyExclusiveFlags(t *testing.T) {
+	// Both integration name and --identity should be rejected.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm: "test",
+		},
+	}
+	err := executeWithAuthManager(context.Background(), atmosConfig, "some-identity", "some-integration")
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}

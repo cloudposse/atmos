@@ -51,13 +51,6 @@ func executeLoginCommand(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	}
 
-	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
-	}
-	defer perf.Track(&atmosConfig, "aws.ecr.executeLoginCommand")()
-
 	ctx := context.Background()
 
 	// Get flag values (errors are ignored as flags are guaranteed to exist by Cobra).
@@ -70,12 +63,18 @@ func executeLoginCommand(cmd *cobra.Command, args []string) error {
 		integrationName = args[0]
 	}
 
-	// Case 1: Explicit registries (uses current AWS credentials from environment).
+	// Case 1: Explicit registries — no Atmos config needed, uses ambient AWS credentials.
 	if len(registries) > 0 {
 		return executeExplicitRegistries(ctx, registries)
 	}
 
-	// Cases 2 & 3 require auth manager.
+	// Cases 2 & 3 require Atmos config for auth manager.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
+	}
+	defer perf.Track(&atmosConfig, "aws.ecr.executeLoginCommand")()
+
 	return executeWithAuthManager(ctx, &atmosConfig, identityName, integrationName)
 }
 
@@ -84,6 +83,11 @@ func executeWithAuthManager(ctx context.Context, atmosConfig *schema.AtmosConfig
 	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	// Reject ambiguous input: both integration name and --identity provided.
+	if integrationName != "" && identityName != "" {
+		return fmt.Errorf("%w: --identity cannot be combined with an integration argument", errUtils.ErrMutuallyExclusiveFlags)
 	}
 
 	// Case 2: Named integration.
@@ -162,7 +166,7 @@ func createAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (aut
 
 func init() {
 	// Add --identity flag locally since this command is outside the auth command tree.
-	loginCmd.Flags().StringP("identity", "i", "", "Specify the target identity to assume. Use without value to interactively select.")
+	loginCmd.Flags().StringP("identity", "i", "", "Specify the target identity to use for linked integrations.")
 
 	// Set NoOptDefVal to enable optional flag value.
 	// When --identity is used without a value, it will receive IdentityFlagSelectValue.
