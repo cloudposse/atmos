@@ -10,6 +10,7 @@ type AISettings struct {
 	SendContext        bool                         `yaml:"send_context,omitempty" json:"send_context,omitempty" mapstructure:"send_context"`
 	PromptOnSend       bool                         `yaml:"prompt_on_send,omitempty" json:"prompt_on_send,omitempty" mapstructure:"prompt_on_send"`
 	TimeoutSeconds     int                          `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" mapstructure:"timeout_seconds"`
+	MaxToolIterations  int                          `yaml:"max_tool_iterations,omitempty" json:"max_tool_iterations,omitempty" mapstructure:"max_tool_iterations"`
 	MaxContextFiles    int                          `yaml:"max_context_files,omitempty" json:"max_context_files,omitempty" mapstructure:"max_context_files"`
 	MaxContextLines    int                          `yaml:"max_context_lines,omitempty" json:"max_context_lines,omitempty" mapstructure:"max_context_lines"`
 	MaxHistoryMessages int                          `yaml:"max_history_messages,omitempty" json:"max_history_messages,omitempty" mapstructure:"max_history_messages"` // Maximum conversation messages to keep in history (0 = unlimited)

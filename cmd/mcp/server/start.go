@@ -1,7 +1,8 @@
-package mcp
+package server
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,12 +13,15 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -39,33 +43,13 @@ type transportConfig struct {
 	port          int
 }
 
+//go:embed markdown/atmos_mcp_start.md
+var startLongMarkdown string
+
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start Atmos MCP server",
-	Long: `Start an MCP server that exposes Atmos AI tools via the Model Context Protocol.
-
-The MCP server allows AI assistants (Claude Desktop, Claude Code, VSCode, etc.) to access
-Atmos infrastructure management capabilities through a standardized protocol.
-
-The server supports two transport modes:
-- stdio: Standard input/output for local desktop applications (default)
-- http: HTTP with Server-Sent Events (SSE) for remote/cloud clients
-
-Example usage with Claude Desktop (stdio):
-  Add to ~/.config/claude/claude_desktop_config.json:
-  {
-    "mcpServers": {
-      "atmos": {
-        "command": "atmos",
-        "args": ["mcp", "start"]
-      }
-    }
-  }
-
-Example usage with HTTP transport:
-  atmos mcp start --transport http --port 8080
-
-The server runs until interrupted (Ctrl+C) or the client disconnects.`,
+	Long:  startLongMarkdown,
 	Example: `  # Start MCP server with stdio transport (default, for desktop clients)
   atmos mcp start
 
@@ -77,13 +61,20 @@ The server runs until interrupted (Ctrl+C) or the client disconnects.`,
 	RunE: executeMCPServer,
 }
 
-func init() {
-	// Add flags.
-	startCmd.Flags().String("transport", transportStdio, "Transport type: stdio or http")
-	startCmd.Flags().String("host", defaultHTTPHost, "Host to bind HTTP server (only for http transport)")
-	startCmd.Flags().Int("port", defaultHTTPPort, "Port to bind HTTP server (only for http transport)")
+var startParser *flags.StandardParser
 
-	mcpCmd.AddCommand(startCmd)
+func init() {
+	startParser = flags.NewStandardParser(
+		flags.WithStringFlag("transport", "", transportStdio, "Transport type: stdio or http"),
+		flags.WithStringFlag("host", "", defaultHTTPHost, "Host to bind HTTP server (only for http transport)"),
+		flags.WithIntFlag("port", "", defaultHTTPPort, "Port to bind HTTP server (only for http transport)"),
+	)
+	startParser.RegisterFlags(startCmd)
+	if err := startParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	mcpcmd.McpCmd.AddCommand(startCmd)
 }
 
 func executeMCPServer(cmd *cobra.Command, args []string) error {
