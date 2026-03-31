@@ -546,13 +546,12 @@ func startCallbackServer(ctx context.Context, expectedState string) (net.Listene
 func exchangeCodeForCredentials(ctx context.Context, client HTTPClient, region, code, codeVerifier, redirectURI string) (*webflowTokenResponse, error) {
 	defer perf.Track(nil, "aws.exchangeCodeForCredentials")()
 
-	body := map[string]string{
-		"clientId":     webflowOAuthClientID,
-		"grantType":    webflowGrantTypeAuthCode,
-		"code":         code,
-		"codeVerifier": codeVerifier,
-		"redirectUri":  redirectURI,
-	}
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", code)
+	body.Set("code_verifier", codeVerifier)
+	body.Set("redirect_uri", redirectURI)
 
 	return callTokenEndpoint(ctx, client, region, body)
 }
@@ -561,33 +560,29 @@ func exchangeCodeForCredentials(ctx context.Context, client HTTPClient, region, 
 func exchangeRefreshToken(ctx context.Context, client HTTPClient, region, refreshToken string) (*webflowTokenResponse, error) {
 	defer perf.Track(nil, "aws.exchangeRefreshToken")()
 
-	body := map[string]string{
-		"clientId":     webflowOAuthClientID,
-		"grantType":    webflowGrantTypeRefresh,
-		"refreshToken": refreshToken,
-	}
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeRefresh)
+	body.Set("refresh_token", refreshToken)
 
 	return callTokenEndpoint(ctx, client, region, body)
 }
 
 // callTokenEndpoint makes a POST request to the AWS signin token endpoint.
-func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, body map[string]string) (*webflowTokenResponse, error) {
+func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, body url.Values) (*webflowTokenResponse, error) {
 	endpoint := fmt.Sprintf("%s/v1/token", getSigninEndpoint(region))
 
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to marshal request body: %w", errUtils.ErrWebflowTokenExchange, err)
-	}
+	encodedBody := body.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(jsonBody)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(encodedBody))
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create request: %w", errUtils.ErrWebflowTokenExchange, err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	log.Debug("Token exchange request",
 		"endpoint", endpoint,
-		"body", string(jsonBody),
+		"body", encodedBody,
 	)
 
 	resp, err := client.Do(req)

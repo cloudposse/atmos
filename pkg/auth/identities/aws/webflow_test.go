@@ -213,7 +213,7 @@ func TestExchangeCodeForCredentials_Success(t *testing.T) {
 	// Mock token endpoint.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -656,10 +656,10 @@ func TestExchangeRefreshToken_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 
-		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
-		assert.Equal(t, webflowGrantTypeRefresh, body["grantType"])
-		assert.Equal(t, "my-refresh-token", body["refreshToken"])
+		err := r.ParseForm()
+		require.NoError(t, err)
+		assert.Equal(t, webflowGrantTypeRefresh, r.FormValue("grant_type"))
+		assert.Equal(t, "my-refresh-token", r.FormValue("refresh_token"))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -981,11 +981,10 @@ func TestCallTokenEndpoint_InvalidJSON(t *testing.T) {
 		},
 	}
 
-	body := map[string]string{
-		"clientId":  webflowOAuthClientID,
-		"grantType": webflowGrantTypeAuthCode,
-		"code":      "code",
-	}
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", "code")
 
 	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
 	assert.Nil(t, resp)
@@ -1008,11 +1007,10 @@ func TestCallTokenEndpoint_NonOK_NoErrorBody(t *testing.T) {
 		},
 	}
 
-	body := map[string]string{
-		"clientId":  webflowOAuthClientID,
-		"grantType": webflowGrantTypeAuthCode,
-		"code":      "code",
-	}
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", "code")
 
 	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
 	assert.Nil(t, resp)
@@ -1038,11 +1036,10 @@ func TestCallTokenEndpoint_NonOK_WithErrorBody(t *testing.T) {
 		},
 	}
 
-	body := map[string]string{
-		"clientId":  webflowOAuthClientID,
-		"grantType": webflowGrantTypeAuthCode,
-		"code":      "expired-code",
-	}
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", "expired-code")
 
 	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
 	assert.Nil(t, resp)
@@ -1057,11 +1054,10 @@ func TestCallTokenEndpoint_HTTPClientError(t *testing.T) {
 		},
 	}
 
-	body := map[string]string{
-		"clientId":  webflowOAuthClientID,
-		"grantType": webflowGrantTypeAuthCode,
-		"code":      "code",
-	}
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", "code")
 
 	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
 	assert.Nil(t, resp)
@@ -1090,11 +1086,10 @@ func TestCallTokenEndpoint_MissingCredentials(t *testing.T) {
 		},
 	}
 
-	body := map[string]string{
-		"clientId":  webflowOAuthClientID,
-		"grantType": webflowGrantTypeAuthCode,
-		"code":      "code",
-	}
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", "code")
 
 	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
 	assert.Nil(t, resp)
@@ -1669,7 +1664,7 @@ func TestGetSigninEndpoint_Regions(t *testing.T) {
 func TestCallTokenEndpoint_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -1693,11 +1688,10 @@ func TestCallTokenEndpoint_Success(t *testing.T) {
 		},
 	}
 
-	body := map[string]string{
-		"clientId":  webflowOAuthClientID,
-		"grantType": webflowGrantTypeAuthCode,
-		"code":      "auth-code",
-	}
+	body := url.Values{}
+	body.Set("client_id", webflowOAuthClientID)
+	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set("code", "auth-code")
 
 	resp, err := callTokenEndpoint(context.Background(), mockClient, "us-east-2", body)
 	require.NoError(t, err)
