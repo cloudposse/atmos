@@ -79,8 +79,15 @@ func TestStripToProSettings(t *testing.T) {
 		}
 		result := stripToProSettings(settings)
 
-		// Mutate result, verify input unchanged.
+		// result→src isolation: mutate result, verify input unchanged.
 		result["pro"].(map[string]interface{})["enabled"] = false
-		assert.Equal(t, true, settings["pro"].(map[string]any)["enabled"])
+		assert.Equal(t, true, settings["pro"].(map[string]any)["enabled"],
+			"input must not be affected by mutating result")
+
+		// src→result isolation: reset result, mutate input, verify result unchanged.
+		result["pro"].(map[string]interface{})["enabled"] = true
+		settings["pro"].(map[string]any)["enabled"] = false
+		assert.Equal(t, true, result["pro"].(map[string]interface{})["enabled"],
+			"result must not be affected by mutating input")
 	})
 }
