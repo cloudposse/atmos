@@ -256,6 +256,116 @@ $ atmos ai ask "What is our security posture in us-east-2 region?"
    comprehensive protection.
 ```
 
+```text
+$ atmos ai ask "What did we spend on EC2 last month?"
+
+ℹ MCP servers configured: 8 (config: /tmp/atmos-mcp-config.json)
+ℹ AI tools initialized: 16 total
+ℹ AI provider: claude-code
+👽 Thinking...
+
+   Your EC2 spending for February 2026 was $24.72.
+```
+
+### How This Example Works
+
+Here's the complete execution flow for the billing query above:
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│  1. User runs: atmos ai ask "What did we spend on EC2 last month?"  │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  2. Atmos reads atmos.yaml                                          │
+│     • AI provider: claude-code                                      │
+│     • MCP servers: 8 configured (aws-billing, aws-iam, etc.)        │
+│     • Auth identity: "readonly" on servers that need credentials    │
+│     • Toolchain: uv → astral-sh/uv (for uvx binary)                 │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  3. Atmos resolves toolchain                                        │
+│     • Reads .tool-versions → finds uv 0.7.12                        │
+│     • Extracts toolchain bin PATH: ~/.atmos/toolchain/bin/...       │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  4. Atmos generates temp MCP config: /tmp/atmos-mcp-config.json     │
+│                                                                     │
+│     For each MCP server in atmos.yaml:                              │
+│     • Servers WITH identity → wrapped with atmos auth exec:         │
+│       command: "atmos"                                              │
+│       args: ["auth", "exec", "-i", "readonly", "--",                │
+│              "uvx", "awslabs.billing-cost-management-mcp-server"]   │
+│     • Servers WITHOUT identity → command used directly              │
+│     • Toolchain PATH injected into each MCP server's env            │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  5. Atmos invokes Claude Code as a subprocess:                      │
+│                                                                     │
+│     claude -p \                                                     │
+│       --output-format json \                                        │
+│       --max-turns 10 \                                              │
+│       --mcp-config /tmp/atmos-mcp-config.json \                     │
+│       --dangerously-skip-permissions                                │
+│                                                                     │
+│     Prompt sent via stdin: "What did we spend on EC2 last month?"   │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  6. Claude Code reads the MCP config and starts relevant servers    │
+│                                                                     │
+│     Claude Code decides: "I need aws-billing to answer this"        │
+│     → Starts aws-billing MCP server from the config:                │
+│       atmos auth exec -i readonly -- \                              │
+│         uvx awslabs.billing-cost-management-mcp-server@latest       │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  7. `atmos auth exec` handles authentication                        │
+│                                                                     │
+│     • Resolves "readonly" identity through SSO provider chain       │
+│     • Writes credentials to ~/.aws/atmos/<realm>/                   │
+│     • Sets AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE,            │
+│       AWS_PROFILE on the subprocess environment                     │
+│     • Starts the MCP server with authenticated credentials          │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  8. MCP server runs with AWS credentials                            │
+│                                                                     │
+│     • uvx installs awslabs.billing-cost-management-mcp-server       │
+│     • MCP server connects to AWS Cost Explorer API                  │
+│     • Claude Code calls the "cost-explorer" tool via JSON-RPC       │
+│     • Tool returns raw cost data (service line items, amounts)      │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  9. Claude Code AI analyzes the raw data and returns result         │
+│                                                                     │
+│     {                                                               │
+│       "type": "result",                                             │
+│       "result": "Your EC2 spending for February 2026 was $24.72.",  │
+│       "is_error": false                                             │
+│     }                                                               │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  10. Atmos parses the JSON and renders the response                 │
+│                                                                     │
+│      Your EC2 spending for February 2026 was $24.72.                │
+│                                                                     │
+│  11. Atmos cleans up temp MCP config file                           │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key takeaway:** Atmos orchestrates everything — toolchain resolution, MCP config
+generation, auth credential injection — so the user just asks a question and gets
+an answer from real AWS data. Claude Code handles the AI reasoning and tool selection,
+while Atmos handles the infrastructure plumbing and orchestration.
+
 ## Learn More
 
 - [Atmos AI Documentation](https://atmos.tools/ai)
