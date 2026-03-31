@@ -605,18 +605,12 @@ func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, bo
 	if resp.StatusCode != http.StatusOK {
 		var errResp webflowTokenErrorResponse
 		if jsonErr := json.Unmarshal(respBody, &errResp); jsonErr == nil && errResp.Error != "" {
-			return nil, errUtils.Build(errUtils.ErrWebflowTokenExchange).
-				WithExplanationf("AWS signin service returned error: %s", errResp.Error).
-				WithHintf("%s", errResp.ErrorDescription).
-				WithContext("status", fmt.Sprintf("%d", resp.StatusCode)).
-				WithContext("endpoint", endpoint).
-				Err()
+			return nil, fmt.Errorf("%w: %s: %s (HTTP %d, endpoint: %s)",
+				errUtils.ErrWebflowTokenExchange, errResp.Error, errResp.ErrorDescription,
+				resp.StatusCode, endpoint)
 		}
-		return nil, errUtils.Build(errUtils.ErrWebflowTokenExchange).
-			WithExplanationf("AWS signin service returned HTTP %d", resp.StatusCode).
-			WithHint("Ensure you completed authentication in the browser").
-			WithContext("endpoint", endpoint).
-			Err()
+		return nil, fmt.Errorf("%w: HTTP %d (endpoint: %s, body: %s)",
+			errUtils.ErrWebflowTokenExchange, resp.StatusCode, endpoint, string(respBody))
 	}
 
 	var tokenResp webflowTokenResponse
