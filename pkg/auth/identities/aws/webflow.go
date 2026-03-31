@@ -585,6 +585,11 @@ func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, bo
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	log.Debug("Token exchange request",
+		"endpoint", endpoint,
+		"body", string(jsonBody),
+	)
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrWebflowTokenExchange).
@@ -601,6 +606,11 @@ func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, bo
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to read response: %w", errUtils.ErrWebflowTokenExchange, err)
 	}
+
+	log.Debug("Token exchange response",
+		"status", resp.StatusCode,
+		"body", string(respBody),
+	)
 
 	if resp.StatusCode != http.StatusOK {
 		var errResp webflowTokenErrorResponse
