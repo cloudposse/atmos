@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -16,6 +17,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/dependencies"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -31,11 +35,13 @@ const (
 
 // Client invokes the Claude Code CLI in non-interactive mode.
 type Client struct {
-	binaryPath   string
-	maxTurns     int
-	maxBudget    float64
-	allowedTools []string
-	model        string
+	binaryPath    string
+	maxTurns      int
+	maxBudget     float64
+	allowedTools  []string
+	model         string
+	mcpServers    map[string]schema.MCPServerConfig // MCP servers to pass through via --mcp-config.
+	toolchainPATH string                            // Toolchain bin PATH for MCP server subprocesses.
 }
 
 // NewClient creates a new Claude Code CLI client from Atmos configuration.
@@ -73,7 +79,32 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 		client.binaryPath = resolved
 	}
 
+	// Capture MCP servers for pass-through (only if configured).
+	if len(atmosConfig.MCP.Servers) > 0 {
+		client.mcpServers = atmosConfig.MCP.Servers
+		client.toolchainPATH = resolveToolchainPATH(atmosConfig)
+	}
+
 	return client, nil
+}
+
+// resolveToolchainPATH extracts the toolchain bin PATH for MCP server subprocesses.
+func resolveToolchainPATH(atmosConfig *schema.AtmosConfiguration) string {
+	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
+	if err != nil || len(deps) == 0 {
+		return ""
+	}
+	tenv, err := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
+	if err != nil || tenv == nil {
+		return ""
+	}
+	// Extract PATH from toolchain env vars.
+	for _, envVar := range tenv.EnvVars() {
+		if strings.HasPrefix(envVar, "PATH=") {
+			return envVar[len("PATH="):]
+		}
+	}
+	return ""
 }
 
 // SendMessage sends a prompt to Claude Code and returns the response.
@@ -156,6 +187,17 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 
 	for _, tool := range c.allowedTools {
 		args = append(args, "--allowedTools", tool)
+	}
+
+	// MCP pass-through: generate temp config and pass to Claude Code.
+	if len(c.mcpServers) > 0 {
+		mcpConfigPath, err := mcpclient.WriteMCPConfigToTempFile(c.mcpServers, c.toolchainPATH)
+		if err != nil {
+			log.Debug("Failed to generate MCP config for Claude Code", "error", err)
+		} else {
+			defer os.Remove(mcpConfigPath)
+			args = append(args, "--mcp-config", mcpConfigPath)
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.

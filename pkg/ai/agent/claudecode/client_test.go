@@ -211,3 +211,46 @@ func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "claude", DefaultBinary)
 	assert.Equal(t, 5, DefaultMaxTurns)
 }
+
+func TestResolveToolchainPATH_NoDeps(t *testing.T) {
+	// No .tool-versions or toolchain config — should return empty.
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := resolveToolchainPATH(atmosConfig)
+	assert.Empty(t, result)
+}
+
+func TestClient_MCPServers_NotCaptured_WhenEmpty(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				ProviderName: {Binary: "/usr/local/bin/claude"},
+			},
+		},
+		// No MCP servers configured.
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.Nil(t, client.mcpServers)
+	assert.Empty(t, client.toolchainPATH)
+}
+
+func TestClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				ProviderName: {Binary: "/usr/local/bin/claude"},
+			},
+		},
+		MCP: schema.MCPSettings{
+			Servers: map[string]schema.MCPServerConfig{
+				"aws-docs": {Command: "uvx", Args: []string{"docs@latest"}},
+			},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.Len(t, client.mcpServers, 1)
+	assert.Contains(t, client.mcpServers, "aws-docs")
+}

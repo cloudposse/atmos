@@ -713,13 +713,106 @@ text and any context Atmos provides, but cannot call Atmos tools or MCP servers.
 
 ### Phase 3: MCP Pass-Through (Planned)
 
-- Generate temporary MCP config from `mcp.servers` in `atmos.yaml`.
-- Start `atmos mcp start` as a local Atmos MCP server.
-- Pass `--mcp-config` to `claude -p` invocations (Claude Code).
-- Pass MCP config via `~/.codex/config.toml` for Codex CLI.
-- All three CLI providers gain access to configured MCP servers (AWS, Atmos, custom).
-- This bridges the gap between CLI providers and the full tool execution available with
-  API providers.
+**Goal:** Give CLI providers access to the same MCP tools that API providers have.
+
+**Key insight:** `atmos mcp export` already generates `.mcp.json` with auth-wrapped
+servers. The exported config is exactly what Claude Code and Codex CLI need.
+
+**How it works:**
+
+1. When a CLI provider is selected and `mcp.servers` is configured in `atmos.yaml`:
+2. Atmos runs `atmos mcp export --output /tmp/atmos-mcp-<hash>.json` internally.
+3. The exported `.mcp.json` wraps each server with `atmos auth exec -i <identity> --`
+   for automatic credential injection (same as IDE integration).
+4. Atmos passes the config to the CLI tool:
+   - Claude Code: `claude -p --mcp-config /tmp/atmos-mcp-<hash>.json`
+   - Codex CLI: Generate `~/.codex/config.toml` `[mcp_servers]` entries
+   - Gemini CLI: `gemini -p --mcp-config /tmp/atmos-mcp-<hash>.json` (if supported)
+5. The CLI tool starts the MCP servers itself (as subprocesses) and manages the tool loop.
+6. Atmos cleans up the temp config file after the CLI tool exits.
+
+**Auth handling:**
+
+The exported `.mcp.json` already handles auth correctly:
+
+```json
+{
+  "mcpServers": {
+    "aws-billing": {
+      "command": "atmos",
+      "args": ["auth", "exec", "-i", "readonly", "--",
+               "uvx", "awslabs.billing-cost-management-mcp-server@latest"],
+      "env": { "AWS_REGION": "us-east-1" }
+    }
+  }
+}
+```
+
+When the CLI tool (Claude Code) starts this MCP server, `atmos auth exec` handles:
+- SSO authentication via the configured identity chain
+- Writing isolated credential files to `~/.aws/atmos/<realm>/`
+- Setting `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`
+- The MCP server's AWS SDK picks up credentials automatically
+
+**Toolchain:**
+
+When Atmos manages MCP servers directly (API providers), it uses `WithToolchain` to
+prepend the Atmos toolchain PATH to the subprocess environment. This makes `uvx`/`npx`
+available even if not on the system PATH.
+
+When the CLI tool (Claude Code) manages MCP servers via `.mcp.json`, it starts them
+as its own subprocesses — and doesn't know about the Atmos toolchain PATH. If `uvx` is
+only available in the toolchain bin directory, the MCP server will fail to start.
+
+**Solution:** Before generating the temp `.mcp.json`, resolve the toolchain PATH via
+`resolveToolchain()` and inject it into each server's `env` section:
+
+```json
+{
+  "mcpServers": {
+    "aws-billing": {
+      "command": "atmos",
+      "args": ["auth", "exec", "-i", "readonly", "--",
+               "uvx", "awslabs.billing-cost-management-mcp-server@latest"],
+      "env": {
+        "AWS_REGION": "us-east-1",
+        "PATH": "/Users/user/.atmos/toolchain/bin:/usr/local/bin:/usr/bin"
+      }
+    }
+  }
+}
+```
+
+This ensures the CLI tool's MCP subprocess can find `uvx` regardless of whether the
+user has it on the system PATH or only in the Atmos toolchain.
+
+**Implementation:** The `buildMCPJSONEntry` function (or the Phase 3 export logic) should:
+1. Resolve toolchain via `dependencies.LoadToolVersionsDependencies` + `NewEnvironmentFromDeps`.
+2. Extract the toolchain PATH from `resolver.EnvVars()`.
+3. Prepend it to the `PATH` in each server's `env` map.
+4. This is the same logic `WithToolchain` uses, applied at config-generation time
+   instead of subprocess-start time.
+
+**Atmos tools via MCP:**
+
+To expose native Atmos tools (describe_component, list_stacks, etc.) to CLI providers:
+1. Start `atmos mcp start` as a background MCP server process.
+2. Add it to the generated `.mcp.json` as a local server entry.
+3. The CLI tool connects to it alongside the external MCP servers.
+
+This is optional — many use cases only need external MCP servers (AWS billing, security).
+
+**Implementation steps:**
+
+- In `execClaude`/`execCodex`/`execGemini`: check if `mcp.servers` is configured.
+- Resolve toolchain via `resolveToolchain()` and extract toolchain PATH.
+- Generate MCP config using `buildMCPJSONEntry` logic, injecting toolchain PATH into
+  each server's `env.PATH`.
+- Write to temp file, pass `--mcp-config <temp-file>` to the CLI args.
+- Clean up temp file in a `defer`.
+- For Codex CLI: generate TOML format instead of JSON.
+- Optionally start `atmos mcp start` as a local MCP server and add it to the config
+  (for native Atmos tools).
 
 ### Phase 4: Auto-Detection and Smart Defaults (Planned)
 
