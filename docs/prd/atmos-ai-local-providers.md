@@ -1,7 +1,7 @@
 # Atmos AI Local Providers — Use Claude Code, Gemini CLI, and OpenAI Codex Instead of API Tokens
 
-**Status:** Phase 1-3 Shipped (Claude Code), Phase 4 Planned
-**Version:** 1.1
+**Status:** Phase 1-3 Shipped (all 3 providers), Phase 4 Planned
+**Version:** 1.2
 **Last Updated:** 2026-03-30
 
 ---
@@ -750,7 +750,7 @@ servers. The exported config is exactly what Claude Code needs.
 **Implemented for:**
 - ✅ Claude Code: `claude -p --mcp-config <file> --dangerously-skip-permissions`
 - ✅ Gemini CLI: writes `.gemini/settings.json` in a temp dir, sets `cmd.Dir`, passes `--yolo`
-- ⏳ Codex CLI: Needs TOML config format (planned)
+- ✅ Codex CLI: writes `.codex/config.toml` in a temp dir, sets `cmd.Dir`, passes `--full-auto`
 
 **Gemini CLI approach:**
 Gemini CLI has no `--mcp-config` flag. Instead, it reads MCP servers from
@@ -759,6 +759,12 @@ Gemini CLI has no `--mcp-config` flag. Instead, it reads MCP servers from
 directory to the temp dir so Gemini CLI picks it up. The `--yolo` flag auto-approves
 all tool calls (equivalent to Claude Code's `--dangerously-skip-permissions`).
 
+**Codex CLI approach:**
+Codex CLI reads MCP servers from `.codex/config.toml` using TOML `[mcp_servers.<name>]`
+tables. Atmos creates a temp directory with `.codex/config.toml`, generates TOML with
+`command`, `args`, and `[mcp_servers.<name>.env]` sections, then sets the subprocess
+working directory to the temp dir. The `--full-auto` flag auto-approves tool calls.
+
 **Also shipped:**
 - MCP server routing and registration is skipped for CLI providers (`isCLIProvider()`).
 - AI provider name shown in output: `ℹ AI provider: claude-code`.
@@ -766,7 +772,7 @@ all tool calls (equivalent to Claude Code's `--dangerously-skip-permissions`).
 
 4. Atmos passes the config to the CLI tool:
    - Claude Code: `claude -p --mcp-config /tmp/atmos-mcp-config.json --dangerously-skip-permissions`
-   - Codex CLI: Generate `~/.codex/config.toml` `[mcp_servers]` entries (planned)
+   - Codex CLI: writes `.codex/config.toml` in temp dir, sets `cmd.Dir`, passes `--full-auto`
    - Gemini CLI: writes `.gemini/settings.json` in temp dir, sets `cmd.Dir`, passes `--yolo`
 5. The CLI tool starts the MCP servers itself (as subprocesses) and manages the tool loop.
 6. Atmos cleans up the temp config file after the CLI tool exits.
@@ -911,6 +917,8 @@ This is optional — many use cases only need external MCP servers (AWS billing,
 - [Codex CLI Non-Interactive Mode](https://developers.openai.com/codex/noninteractive)
 - [Codex CLI Reference](https://developers.openai.com/codex/cli/reference)
 - [Codex CLI MCP](https://developers.openai.com/codex/mcp)
+- [Codex CLI Configuration Reference](https://developers.openai.com/codex/config-reference)
+- [Codex CLI Advanced Configuration](https://developers.openai.com/codex/config-advanced)
 - [Codex SDK](https://developers.openai.com/codex/sdk)
 
 ### Gemini CLI

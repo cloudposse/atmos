@@ -1,13 +1,18 @@
 package codexcli
 
 import (
+	"bytes"
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -52,6 +57,48 @@ func TestNewClient_CustomBinary(t *testing.T) {
 	assert.True(t, client.fullAuto)
 }
 
+func TestNewClient_MCPServers_NotCaptured_WhenEmpty(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{ProviderName: {Binary: "/usr/local/bin/codex"}},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.Nil(t, client.mcpServers)
+	assert.Empty(t, client.mcpConfigDir)
+}
+
+func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{ProviderName: {Binary: "/usr/local/bin/codex"}},
+		},
+		MCP: schema.MCPSettings{
+			Servers: map[string]schema.MCPServerConfig{
+				"aws-docs": {Command: "uvx", Args: []string{"docs@latest"}},
+			},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.Len(t, client.mcpServers, 1)
+	assert.NotEmpty(t, client.mcpConfigDir)
+
+	if client.mcpConfigDir != "" {
+		defer os.RemoveAll(client.mcpConfigDir)
+	}
+
+	// Verify config.toml was created.
+	configFile := filepath.Join(client.mcpConfigDir, ".codex", "config.toml")
+	data, err := os.ReadFile(configFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "[mcp_servers.aws-docs]")
+	assert.Contains(t, string(data), `command = "uvx"`)
+}
+
 func TestExtractResult_JSONL(t *testing.T) {
 	input := `{"type":"thread.started","session_id":"abc123"}
 {"type":"item.completed","item":{"type":"message","content":[{"type":"text","text":"Analysis complete."}]}}
@@ -92,4 +139,94 @@ func TestGetMaxTokens(t *testing.T) {
 
 func TestProviderName(t *testing.T) {
 	assert.Equal(t, "codex-cli", ProviderName)
+}
+
+func TestWriteMCPConfigTOML(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"test-server": {Command: "echo", Args: []string{"hello"}},
+		"auth-server": {Command: "uvx", Args: []string{"pkg@latest"}, Identity: "admin"},
+	}
+
+	tmpDir, err := writeMCPConfigTOML(servers, "")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	configFile := filepath.Join(tmpDir, ".codex", "config.toml")
+	data, err := os.ReadFile(configFile)
+	require.NoError(t, err)
+	content := string(data)
+
+	// Verify TOML structure.
+	assert.Contains(t, content, "[mcp_servers.test-server]")
+	assert.Contains(t, content, `command = "echo"`)
+	// auth-server should be wrapped with atmos auth exec.
+	assert.Contains(t, content, "[mcp_servers.auth-server]")
+	assert.Contains(t, content, `command = "atmos"`)
+}
+
+func TestWriteMCPConfigTOML_WithToolchainPATH(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"test": {Command: "uvx", Args: []string{"pkg@latest"}, Env: map[string]string{"KEY": "val"}},
+	}
+
+	tmpDir, err := writeMCPConfigTOML(servers, "/toolchain/bin")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	configFile := filepath.Join(tmpDir, ".codex", "config.toml")
+	data, err := os.ReadFile(configFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "/toolchain/bin")
+}
+
+func TestWriteTOMLServer(t *testing.T) {
+	var buf bytes.Buffer
+	srv := mcpclient.MCPJSONServer{
+		Command: "uvx",
+		Args:    []string{"awslabs.billing@latest"},
+		Env:     map[string]string{"AWS_REGION": "us-east-1"},
+	}
+	writeTOMLServer(&buf, "aws-billing", srv)
+	content := buf.String()
+
+	assert.Contains(t, content, "[mcp_servers.aws-billing]")
+	assert.Contains(t, content, `command = "uvx"`)
+	assert.Contains(t, content, `"awslabs.billing@latest"`)
+	assert.Contains(t, content, "[mcp_servers.aws-billing.env]")
+	assert.Contains(t, content, `AWS_REGION = "us-east-1"`)
+}
+
+func TestWriteTOMLServer_NoEnv(t *testing.T) {
+	var buf bytes.Buffer
+	srv := mcpclient.MCPJSONServer{
+		Command: "echo",
+		Args:    []string{"hello"},
+	}
+	writeTOMLServer(&buf, "simple", srv)
+	content := buf.String()
+
+	assert.Contains(t, content, "[mcp_servers.simple]")
+	assert.NotContains(t, content, "[mcp_servers.simple.env]")
+}
+
+func TestWriteTOMLServer_MultipleArgs(t *testing.T) {
+	var buf bytes.Buffer
+	srv := mcpclient.MCPJSONServer{
+		Command: "atmos",
+		Args:    []string{"auth", "exec", "-i", "readonly", "--", "uvx", "pkg@latest"},
+	}
+	writeTOMLServer(&buf, "wrapped", srv)
+	content := buf.String()
+
+	assert.Contains(t, content, `"auth"`)
+	assert.Contains(t, content, `"-i"`)
+	assert.Contains(t, content, `"readonly"`)
+	// Verify args are comma-separated.
+	assert.True(t, strings.Contains(content, ", "), "args should be comma-separated")
+}
+
+func TestResolveToolchainPATH_NoDeps(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := resolveToolchainPATH(atmosConfig)
+	assert.Empty(t, result)
 }
