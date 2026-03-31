@@ -194,13 +194,13 @@ act as an MCP server itself (`codex mcp-server`).
 
 ### Summary of All Local AI Tools
 
-| Tool | Non-Interactive Mode | Structured Output | MCP | Subscription Auth | Free Tier | Feasibility |
-|------|---------------------|-------------------|-----|-------------------|-----------|-------------|
-| Claude Code | `claude -p` | JSON | Client only | Claude Pro/Max | No | **YES — HIGH** |
-| Codex CLI | `codex exec` | JSONL + Schema | Client + Server | ChatGPT Plus/Pro | No | **YES — HIGH** |
-| Gemini CLI | `gemini -p` | JSON | Client | Google account | Yes (1K/day) | **YES — HIGH** |
-| GitHub Copilot CLI | Retired | N/A | N/A | N/A | N/A | NO |
-| Cursor CLI | No programmatic API | N/A | N/A | N/A | N/A | NO |
+| Tool               | Non-Interactive Mode | Structured Output | MCP             | Subscription Auth | Free Tier    | Feasibility    |
+|--------------------|----------------------|-------------------|-----------------|-------------------|--------------|----------------|
+| Claude Code        | `claude -p`          | JSON              | Client only     | Claude Pro/Max    | No           | **YES — HIGH** |
+| Codex CLI          | `codex exec`         | JSONL + Schema    | Client + Server | ChatGPT Plus/Pro  | No           | **YES — HIGH** |
+| Gemini CLI         | `gemini -p`          | JSON              | Client          | Google account    | Yes (1K/day) | **YES — HIGH** |
+| GitHub Copilot CLI | Retired              | N/A               | N/A             | N/A               | N/A          | NO             |
+| Cursor CLI         | No programmatic API  | N/A               | N/A             | N/A               | N/A          | NO             |
 
 ### Claude Agent SDK / Codex SDK — Why NOT to Use Them
 
@@ -228,7 +228,7 @@ bundled copy.
 
 Three new providers join the existing 7-provider registry:
 
-```
+```text
 pkg/ai/agent/
 ├── anthropic/       # (existing) Direct Anthropic API
 ├── openai/          # (existing) Direct OpenAI API
@@ -245,9 +245,17 @@ pkg/ai/agent/
 Each new provider implements the existing `registry.Client` interface by shelling out to
 the CLI binary and parsing JSON/JSONL responses.
 
+**Interface note:** The `registry.Client` interface has 5 methods (`SendMessage`,
+`SendMessageWithTools`, `SendMessageWithHistory`, `SendMessageWithToolsAndHistory`,
+`SendMessageWithSystemPromptAndTools`). CLI providers implement `SendMessage` natively.
+Tool-use methods (`SendMessageWithTools`, etc.) are not supported because the CLI subprocess
+manages its own tool loop internally. These methods return a "not supported" error — the
+executor falls back to `SendMessage` with tool descriptions included in the prompt text.
+For tool execution, MCP pass-through (Phase 3) is the recommended approach.
+
 ### How It Works
 
-```
+```text
 User: atmos ai chat  (with provider: claude-code)
 
 1. Atmos checks: is `claude` on PATH?
@@ -288,56 +296,50 @@ User: atmos ai chat  (with provider: claude-code)
 ```yaml
 # atmos.yaml
 ai:
-  provider: claude-code
-  # No api_key, no api_base_url, no model needed.
+  enabled: true
+  default_provider: claude-code
+  # No api_key, no model needed.
   # Atmos auto-detects the installed claude binary and uses
   # the user's subscription.
 ```
 
-**Explicit configuration:**
+**Explicit configuration** (follows existing `ai.providers.<name>` pattern):
 
 ```yaml
 ai:
-  provider: claude-code
-  claude_code:
-    # Path to claude binary (optional, defaults to exec.LookPath).
-    binary: /usr/local/bin/claude
-    # Max agentic turns per invocation.
-    max_turns: 5
-    # Budget cap per invocation (USD).
-    max_budget_usd: 1.00
-    # Allowed tools for Claude Code to use.
-    allowed_tools:
-      - Read
-      - Glob
-      - Grep
-    # Fallback model when primary is overloaded.
-    fallback_model: sonnet
+  enabled: true
+  default_provider: claude-code
+  providers:
+    claude-code:
+      # Path to claude binary (optional, defaults to exec.LookPath).
+      binary: /usr/local/bin/claude
+      # Max agentic turns per invocation.
+      max_turns: 5
+      # Budget cap per invocation (USD).
+      max_budget_usd: 1.00
+      # Allowed tools for Claude Code to use.
+      allowed_tools:
+        - Read
+        - Glob
+        - Grep
+
+    codex-cli:
+      # Path to codex binary (optional, defaults to exec.LookPath).
+      binary: /usr/local/bin/codex
+      # Model selection.
+      model: gpt-5.4-mini
+      # Approval policy: full-auto runs without prompts.
+      full_auto: true
+
+    gemini-cli:
+      binary: /usr/local/bin/gemini
+      model: gemini-2.5-flash
 ```
 
-```yaml
-ai:
-  provider: codex-cli
-  codex_cli:
-    # Path to codex binary (optional, defaults to exec.LookPath).
-    binary: /usr/local/bin/codex
-    # Model selection.
-    model: gpt-5.4-mini
-    # Approval policy: full-auto runs without prompts.
-    full_auto: true
-    # JSON Schema for structured output validation.
-    output_schema: ""
-```
-
-```yaml
-ai:
-  provider: gemini-cli
-  gemini_cli:
-    binary: /usr/local/bin/gemini
-    model: gemini-2.5-flash
-    # Include component directories for context.
-    include_directories: true
-```
+**Note:** CLI providers use the same `ai.providers.<name>` structure as API providers.
+Fields like `api_key` are simply not needed — the CLI handles auth via its own session.
+CLI-specific fields (`binary`, `max_turns`, `max_budget_usd`, `full_auto`, `allowed_tools`)
+are stored as extended provider config.
 
 ### Provider Implementations
 
@@ -528,19 +530,19 @@ is used, it emits newline-delimited JSON events for incremental processing.
 
 **Gemini CLI key differences from Claude Code:**
 
-| Feature | Claude Code (`claude -p`) | Gemini CLI (`gemini -p`) |
-|---------|--------------------------|-------------------------|
-| **Auth** | OAuth (Claude Pro/Max) | Google Sign-In (free tier available) |
-| **Cost** | $20-200/mo subscription | Free (1K req/day) or API key |
-| **Structured output** | `--json-schema` for validated output | `--output-format json` |
-| **Tool control** | `--allowedTools` flag | N/A |
-| **Budget cap** | `--max-budget-usd` | N/A |
-| **Session resume** | `--resume <session-id>` | N/A |
-| **MCP config** | `--mcp-config file.json` | N/A |
-| **System prompt** | `--append-system-prompt` | N/A (via prompt engineering) |
-| **Model selection** | `--fallback-model` | `-m gemini-2.5-flash` |
-| **Directory context** | N/A (uses MCP/tools) | `--include-directories` |
-| **Max turns** | `--max-turns N` | N/A |
+| Feature               | Claude Code (`claude -p`)            | Gemini CLI (`gemini -p`)             |
+|-----------------------|--------------------------------------|--------------------------------------|
+| **Auth**              | OAuth (Claude Pro/Max)               | Google Sign-In (free tier available) |
+| **Cost**              | $20-200/mo subscription              | Free (1K req/day) or API key         |
+| **Structured output** | `--json-schema` for validated output | `--output-format json`               |
+| **Tool control**      | `--allowedTools` flag                | N/A                                  |
+| **Budget cap**        | `--max-budget-usd`                   | N/A                                  |
+| **Session resume**    | `--resume <session-id>`              | N/A                                  |
+| **MCP config**        | `--mcp-config file.json`             | N/A                                  |
+| **System prompt**     | `--append-system-prompt`             | N/A (via prompt engineering)         |
+| **Model selection**   | `--fallback-model`                   | `-m gemini-2.5-flash`                |
+| **Directory context** | N/A (uses MCP/tools)                 | `--include-directories`              |
+| **Max turns**         | `--max-turns N`                      | N/A                                  |
 
 **When to use which:**
 
@@ -558,13 +560,14 @@ The most powerful usage combines local providers with MCP:
 
 ```yaml
 ai:
-  provider: claude-code
-  mcp:
-    integrations:
-      aws-cost-explorer:
-        command: "uvx"
-        args: ["awslabs.cost-explorer-mcp-server@latest"]
-        auth_identity: "billing-readonly"
+  default_provider: claude-code
+
+mcp:
+  servers:
+    aws-cost-explorer:
+      command: "uvx"
+      args: ["awslabs.cost-explorer-mcp-server@latest"]
+      identity: "billing-readonly"  # Atmos Auth identity (from the auth section)
 ```
 
 When the user runs `atmos ai chat`:
@@ -575,7 +578,7 @@ When the user runs `atmos ai chat`:
 4. Claude Code can use both its built-in tools AND the Atmos MCP tools AND the AWS MCP
    tools — all through the user's Claude Max subscription.
 
-```
+```text
 User's Claude Max subscription
          │
     claude -p --mcp-config atmos-mcp.json
@@ -602,7 +605,7 @@ User's Claude Max subscription
 
 ### Current Flow (API Tokens)
 
-```
+```text
 1. Sign up for Anthropic Console account
 2. Add payment method
 3. Generate API key
@@ -617,7 +620,7 @@ User's Claude Max subscription
 
 ### New Flow (Local Provider)
 
-```
+```text
 1. Install Claude Code: brew install claude  (already done by most users)
 2. Authenticate: claude auth login  (already done by most users)
 3. Configure atmos.yaml:
@@ -630,7 +633,7 @@ User's Claude Max subscription
 
 ### Even Simpler — Auto-Detection
 
-```
+```text
 # If claude is on PATH and no provider is configured:
 ai:
   enabled: true
@@ -641,19 +644,19 @@ ai:
 
 ## Comparison Matrix
 
-| Feature | API Providers (Current) | Claude Code | Codex CLI | Gemini CLI |
-|---------|------------------------|-------------|-----------|------------|
-| **Setup** | API account + key + config | `brew install claude` | `npm i -g @openai/codex` | `npm i -g @google/gemini-cli` |
-| **Auth** | API key in env var | OAuth (subscription) | OAuth or API key | Google Sign-In |
-| **Cost** | Per-token ($3-15/M tokens) | $20-200/mo subscription | $20-200/mo or per-token | Free (1K/day) |
-| **Models** | Configurable | Latest (auto-updates) | gpt-5.4, gpt-5.4-mini | gemini-2.5-flash |
-| **Tool use** | Atmos tools only | Claude tools + MCP | Codex tools + MCP | Gemini tools |
-| **MCP** | N/A | Client only | Client + Server | Client |
-| **Structured output** | Provider-dependent | JSON + schema | JSONL + JSON Schema | JSON |
-| **Session** | Atmos-managed SQLite | Claude-managed | Codex-managed | N/A |
-| **Offline** | No (except Ollama) | No | Yes (`--oss` Ollama) | No |
-| **Rate limits** | API-specific | Subscription tier | Subscription or API | 60/min, 1K/day (free) |
-| **Open source** | N/A | No | Yes (Apache 2.0) | Yes (Apache 2.0) |
+| Feature               | API Providers (Current)    | Claude Code             | Codex CLI                | Gemini CLI                    |
+|-----------------------|----------------------------|-------------------------|--------------------------|-------------------------------|
+| **Setup**             | API account + key + config | `brew install claude`   | `npm i -g @openai/codex` | `npm i -g @google/gemini-cli` |
+| **Auth**              | API key in env var         | OAuth (subscription)    | OAuth or API key         | Google Sign-In                |
+| **Cost**              | Per-token ($3-15/M tokens) | $20-200/mo subscription | $20-200/mo or per-token  | Free (1K/day)                 |
+| **Models**            | Configurable               | Latest (auto-updates)   | gpt-5.4, gpt-5.4-mini    | gemini-2.5-flash              |
+| **Tool use**          | Atmos tools only           | Claude tools + MCP      | Codex tools + MCP        | Gemini tools                  |
+| **MCP**               | N/A                        | Client only             | Client + Server          | Client                        |
+| **Structured output** | Provider-dependent         | JSON + schema           | JSONL + JSON Schema      | JSON                          |
+| **Session**           | Atmos-managed SQLite       | Claude-managed          | Codex-managed            | N/A                           |
+| **Offline**           | No (except Ollama)         | No                      | Yes (`--oss` Ollama)     | No                            |
+| **Rate limits**       | API-specific               | Subscription tier       | Subscription or API      | 60/min, 1K/day (free)         |
+| **Open source**       | N/A                        | No                      | Yes (Apache 2.0)         | Yes (Apache 2.0)              |
 
 ---
 
@@ -711,13 +714,13 @@ ai:
 
 ### Trade-offs
 
-| | API Providers | Local Providers |
-|---|---|---|
-| **Control** | Full control over prompts, tools, tokens | Limited to CLI flags |
-| **Cost predictability** | Pay-per-use (variable) | Fixed subscription (predictable) |
-| **CI/CD** | Works everywhere with env var | Requires CLI installation + auth |
-| **Tool execution** | Atmos tools run in-process | Tools run inside Claude Code process |
-| **Latency** | Direct API call | Subprocess spawn + API call |
+|                         | API Providers                            | Local Providers                      |
+|-------------------------|------------------------------------------|--------------------------------------|
+| **Control**             | Full control over prompts, tools, tokens | Limited to CLI flags                 |
+| **Cost predictability** | Pay-per-use (variable)                   | Fixed subscription (predictable)     |
+| **CI/CD**               | Works everywhere with env var            | Requires CLI installation + auth     |
+| **Tool execution**      | Atmos tools run in-process               | Tools run inside Claude Code process |
+| **Latency**             | Direct API call                          | Subprocess spawn + API call          |
 
 ### Recommended Usage
 
