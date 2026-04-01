@@ -68,7 +68,7 @@ func TestNewClient_MCPServers_NotCaptured_WhenEmpty(t *testing.T) {
 	client, err := NewClient(atmosConfig)
 	require.NoError(t, err)
 	assert.Nil(t, client.mcpServers)
-	assert.Empty(t, client.mcpConfigArgs)
+	assert.False(t, client.hasMCPServers)
 }
 
 func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
@@ -86,12 +86,15 @@ func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
 	client, err := NewClient(atmosConfig)
 	require.NoError(t, err)
 	assert.Len(t, client.mcpServers, 1)
-	assert.NotEmpty(t, client.mcpConfigArgs)
+	assert.True(t, client.hasMCPServers)
 
-	// Verify -c flags contain MCP server config.
-	argsStr := strings.Join(client.mcpConfigArgs, " ")
-	assert.Contains(t, argsStr, "mcp_servers.aws-docs.command")
-	assert.Contains(t, argsStr, "uvx")
+	// Verify config was written and restore it.
+	defer client.restoreGlobalConfig()
+	configPath := codexConfigPath()
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "[mcp_servers.aws-docs]")
+	assert.Contains(t, string(data), `command = "uvx"`)
 }
 
 func TestExtractResult_JSONL_AgentMessage(t *testing.T) {
@@ -149,41 +152,30 @@ func TestProviderName(t *testing.T) {
 	assert.Equal(t, "codex-cli", ProviderName)
 }
 
-func TestBuildMCPConfigArgs(t *testing.T) {
-	servers := map[string]schema.MCPServerConfig{
-		"aws-docs": {Command: "uvx", Args: []string{"docs@latest"}},
-		"auth-srv": {Command: "uvx", Args: []string{"pkg@latest"}, Identity: "admin"},
+func TestWriteAndRestoreGlobalConfig(t *testing.T) {
+	client := &Client{
+		mcpServers: map[string]schema.MCPServerConfig{
+			"test-srv": {Command: "echo", Args: []string{"hello"}},
+		},
 	}
 
-	args := buildMCPConfigArgs(servers, "")
-	argsStr := strings.Join(args, " ")
+	// Write MCP config.
+	require.NoError(t, client.writeMCPToGlobalConfig())
+	defer client.restoreGlobalConfig()
 
-	// aws-docs should be passed directly.
-	assert.Contains(t, argsStr, `mcp_servers.aws-docs.command="uvx"`)
-	assert.Contains(t, argsStr, `mcp_servers.aws-docs.args=["docs@latest"]`)
+	configPath := codexConfigPath()
+	data, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "[mcp_servers.test-srv]")
 
-	// auth-srv should be wrapped with atmos auth exec.
-	assert.Contains(t, argsStr, `mcp_servers.auth-srv.command="atmos"`)
-}
+	// Restore original config.
+	client.restoreGlobalConfig()
 
-func TestBuildMCPConfigArgs_WithEnv(t *testing.T) {
-	servers := map[string]schema.MCPServerConfig{
-		"test": {Command: "uvx", Args: []string{"pkg@latest"}, Env: map[string]string{"AWS_REGION": "us-east-1"}},
+	// If no original existed, file should be removed.
+	if !client.configBackedUp {
+		_, err = os.Stat(configPath)
+		assert.True(t, os.IsNotExist(err))
 	}
-
-	args := buildMCPConfigArgs(servers, "")
-	argsStr := strings.Join(args, " ")
-	assert.Contains(t, argsStr, `mcp_servers.test.env.AWS_REGION="us-east-1"`)
-}
-
-func TestBuildMCPConfigArgs_WithToolchainPATH(t *testing.T) {
-	servers := map[string]schema.MCPServerConfig{
-		"test": {Command: "uvx", Args: []string{"pkg@latest"}},
-	}
-
-	args := buildMCPConfigArgs(servers, "/toolchain/bin")
-	argsStr := strings.Join(args, " ")
-	assert.Contains(t, argsStr, "/toolchain/bin")
 }
 
 func TestWriteMCPConfigTOML(t *testing.T) {

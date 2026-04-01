@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -36,12 +37,14 @@ const (
 
 // Client invokes the OpenAI Codex CLI in non-interactive mode.
 type Client struct {
-	binaryPath    string
-	model         string
-	fullAuto      bool
-	mcpServers    map[string]schema.MCPServerConfig
-	toolchainPATH string
-	mcpConfigArgs []string // -c flags for MCP server config.
+	binaryPath     string
+	model          string
+	fullAuto       bool
+	mcpServers     map[string]schema.MCPServerConfig
+	toolchainPATH  string
+	hasMCPServers  bool   // True if MCP servers were written to ~/.codex/config.toml.
+	originalConfig []byte // Original ~/.codex/config.toml content for restore.
+	configBackedUp bool   // True if original config was backed up.
 }
 
 // NewClient creates a new Codex CLI client from Atmos configuration.
@@ -86,13 +89,18 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	}
 
 	// Capture MCP servers for pass-through (only if configured).
-	// Codex CLI only reads from ~/.codex/config.toml (no project-level config),
-	// so we pass MCP servers via -c flags on the command line.
+	// Codex CLI only reads MCP servers from ~/.codex/config.toml (global config).
+	// -c flag overrides do NOT register MCP servers as tools. We must write to
+	// the global config and restore it after the session.
 	if len(atmosConfig.MCP.Servers) > 0 {
 		client.mcpServers = atmosConfig.MCP.Servers
 		client.toolchainPATH = resolveToolchainPATH(atmosConfig)
-		client.mcpConfigArgs = buildMCPConfigArgs(client.mcpServers, client.toolchainPATH)
-		ui.Info(fmt.Sprintf("MCP servers configured: %d (via -c flags)", len(client.mcpServers)))
+		if err := client.writeMCPToGlobalConfig(); err != nil {
+			ui.Warning(fmt.Sprintf("Failed to write MCP config: %s", err))
+		} else {
+			client.hasMCPServers = true
+			ui.Info(fmt.Sprintf("MCP servers configured: %d (in ~/.codex/config.toml)", len(client.mcpServers)))
+		}
 	}
 
 	return client, nil
@@ -109,14 +117,11 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	// When MCP servers are configured, use --dangerously-bypass-approvals-and-sandbox
 	// because --full-auto only auto-approves file writes, not MCP tool calls.
 	// This is safe because MCP servers were explicitly configured by the user in atmos.yaml.
-	if len(c.mcpConfigArgs) > 0 {
+	if c.hasMCPServers {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 	} else if c.fullAuto {
 		args = append(args, "--full-auto")
 	}
-
-	// Pass MCP server config via -c flags.
-	args = append(args, c.mcpConfigArgs...)
 
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
 	cmd.Stdin = strings.NewReader(message)
@@ -124,6 +129,11 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
+	// Restore original config after Codex exits (regardless of success/failure).
+	if c.hasMCPServers {
+		defer c.restoreGlobalConfig()
+	}
 
 	if err := cmd.Run(); err != nil {
 		stderrStr := stderr.String()
@@ -236,6 +246,58 @@ func extractTextFromEvent(line []byte) string {
 	return ""
 }
 
+// codexConfigPath returns the path to ~/.codex/config.toml.
+func codexConfigPath() string {
+	home, _ := homedir.Dir()
+	return filepath.Join(home, ".codex", "config.toml")
+}
+
+// writeMCPToGlobalConfig writes MCP servers to ~/.codex/config.toml.
+// Backs up the original content for later restore.
+func (c *Client) writeMCPToGlobalConfig() error {
+	configPath := codexConfigPath()
+
+	// Backup existing config.
+	if data, err := os.ReadFile(configPath); err == nil {
+		c.originalConfig = data
+		c.configBackedUp = true
+	}
+
+	// Generate TOML content with MCP servers.
+	mcpConfig := mcpclient.GenerateMCPConfig(c.mcpServers, c.toolchainPATH)
+	var buf bytes.Buffer
+	// Preserve existing non-MCP config.
+	if c.configBackedUp {
+		buf.Write(c.originalConfig)
+		buf.WriteString("\n")
+	}
+	for name, srv := range mcpConfig.MCPServers {
+		writeTOMLServer(&buf, name, srv)
+	}
+
+	// Ensure ~/.codex/ directory exists.
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, configDirPerms); err != nil {
+		return fmt.Errorf("%w: mkdir %s: %w", errUtils.ErrMCPConfigWriteFailed, configDir, err)
+	}
+
+	if err := os.WriteFile(configPath, buf.Bytes(), configFilePerms); err != nil {
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, configPath, err)
+	}
+	return nil
+}
+
+// restoreGlobalConfig restores the original ~/.codex/config.toml content.
+func (c *Client) restoreGlobalConfig() {
+	configPath := codexConfigPath()
+	if c.configBackedUp {
+		_ = os.WriteFile(configPath, c.originalConfig, configFilePerms)
+	} else {
+		// No original config existed — remove the file we created.
+		_ = os.Remove(configPath)
+	}
+}
+
 type codexEvent struct {
 	Type string    `json:"type"`
 	Item codexItem `json:"item"`
@@ -250,30 +312,6 @@ type codexItem struct {
 type codexContent struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
-}
-
-// buildMCPConfigArgs generates -c flags to pass MCP server config to Codex CLI.
-// Codex CLI only reads from ~/.codex/config.toml, so we use -c overrides to inject
-// MCP servers without modifying the user's global config.
-func buildMCPConfigArgs(servers map[string]schema.MCPServerConfig, toolchainPATH string) []string {
-	mcpConfig := mcpclient.GenerateMCPConfig(servers, toolchainPATH)
-	var args []string
-	for name, srv := range mcpConfig.MCPServers {
-		prefix := fmt.Sprintf("mcp_servers.%s", name)
-		args = append(args, "-c", fmt.Sprintf("%s.command=%q", prefix, srv.Command))
-		if len(srv.Args) > 0 {
-			// Format as TOML array: ["arg1", "arg2"].
-			var quoted []string
-			for _, a := range srv.Args {
-				quoted = append(quoted, fmt.Sprintf("%q", a))
-			}
-			args = append(args, "-c", fmt.Sprintf("%s.args=[%s]", prefix, strings.Join(quoted, ", ")))
-		}
-		for k, v := range srv.Env {
-			args = append(args, "-c", fmt.Sprintf("%s.env.%s=%q", prefix, k, v))
-		}
-	}
-	return args
 }
 
 // writeMCPConfigTOML creates a temp directory with .codex/config.toml containing MCP config.
