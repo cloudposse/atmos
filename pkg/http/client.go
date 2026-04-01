@@ -91,14 +91,16 @@ func WithGitHubToken(token string) ClientOption {
 }
 
 // stripAuthOnCrossHostRedirect removes the Authorization header from a redirect request
-// when the target host (host:port) differs from the originating host.
-// Using req.URL.Host (not Hostname) preserves port information so that same-IP
-// different-port redirects are treated as cross-host, matching Go's own redirect policy.
+// when the target origin differs from the originating origin.
+// Both host:port pairs are normalized via normalizeHost so that case differences,
+// trailing FQDN dots, and implicit default ports (80/443) do not cause spurious
+// header drops; non-default ports (e.g. :8443) are preserved and still treated as
+// distinct origins.
 func stripAuthOnCrossHostRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {
 		return errUtils.ErrRedirectLimitExceeded
 	}
-	if len(via) > 0 && req.URL.Host != via[0].URL.Host {
+	if len(via) > 0 && normalizeHost(req.URL.Host) != normalizeHost(via[0].URL.Host) {
 		req.Header.Del("Authorization")
 	}
 	return nil
@@ -254,11 +256,13 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 	//   1. The scheme is "https" (prevent token leakage over plain HTTP).
 	//   2. The host is in the allowed list.
 	//   3. The header is not already set (outermost transport wins on multi-layer composition).
+	// User-Agent is set in the same branch so it is only injected together with
+	// Authorization, leaving caller-supplied Authorization and User-Agent untouched.
 	if scheme == "https" && matcher(host) && t.GitHubToken != "" {
 		if reqClone.Header.Get("Authorization") == "" {
 			reqClone.Header.Set("Authorization", "Bearer "+t.GitHubToken)
+			reqClone.Header.Set("User-Agent", userAgent)
 		}
-		reqClone.Header.Set("User-Agent", userAgent)
 	}
 
 	base := t.Base
