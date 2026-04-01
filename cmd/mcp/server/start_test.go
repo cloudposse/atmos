@@ -3435,7 +3435,7 @@ func TestGetTransportConfig_NonLoopbackRequiresAPIKey(t *testing.T) {
 			cmd.Flags().String("transport", "http", "")
 			cmd.Flags().String("host", host, "")
 			cmd.Flags().Int("port", 8080, "")
-			// No api-key flag registered → defaults to ""
+			cmd.Flags().String("api-key", "", "") // registered but empty — no token provided
 
 			config, err := getTransportConfig(cmd)
 			assert.Error(t, err, "non-loopback HTTP without API key should fail")
@@ -3468,7 +3468,7 @@ func TestGetTransportConfig_APIKeyFromEnv(t *testing.T) {
 	cmd.Flags().String("transport", "http", "")
 	cmd.Flags().String("host", "0.0.0.0", "")
 	cmd.Flags().Int("port", 8080, "")
-	// No api-key flag; should fall back to env var.
+	cmd.Flags().String("api-key", "", "") // registered but empty — falls back to env var
 
 	config, err := getTransportConfig(cmd)
 	assert.NoError(t, err)
@@ -3630,4 +3630,59 @@ func TestInitializeAIComponents_YOLOModeRespected(t *testing.T) {
 	assert.NotNil(t, executor)
 	// The key assertion: no unconditional YOLO override; function should succeed
 	// because the mode is simply read from config (ModeAllow by default).
+}
+
+// TestLogServerInfo_HTTP_Authenticated tests logServerInfo for HTTP transport with authentication.
+func TestLogServerInfo_HTTP_Authenticated(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	// authenticated=true should log "Bearer token required" without panic.
+	require.NotPanics(t, func() {
+		logServerInfo(server, transportHTTP, "0.0.0.0:8080", true, false)
+	})
+}
+
+// TestStartHTTPServer_WithAPIKeyAndAuthenticatedRequest tests startHTTPServer with bearer-token auth.
+// It verifies that: (a) the apiKey branch inside startHTTPServer is exercised, (b) authenticated
+// requests are accepted, and (c) unauthenticated requests are rejected with HTTP 401.
+func TestStartHTTPServer_WithAPIKeyAndAuthenticatedRequest(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	// Find a free port.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+
+	errChan := make(chan error, 1)
+	const apiKey = "test-secret-token"
+	startHTTPServer(server, "127.0.0.1", port, apiKey, errChan)
+
+	// Give the server a moment to start.
+	time.Sleep(100 * time.Millisecond)
+
+	addr := fmt.Sprintf("http://127.0.0.1:%d/sse", port)
+
+	// Authenticated request should NOT receive 401.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, addr, nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.NotEqual(t, http.StatusUnauthorized, resp.StatusCode, "valid token should not be rejected")
+
+	// Unauthenticated request must receive 401.
+	req2, err := http.NewRequestWithContext(t.Context(), http.MethodGet, addr, nil)
+	require.NoError(t, err)
+	resp2, err := http.DefaultClient.Do(req2)
+	require.NoError(t, err)
+	resp2.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp2.StatusCode, "missing token must be rejected")
 }
