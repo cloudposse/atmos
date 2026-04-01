@@ -467,10 +467,10 @@ func TestGetTransportConfig_InvalidTransportErrorType(t *testing.T) {
 // TestGetTransportConfig_VariousHosts tests getTransportConfig with various host formats.
 func TestGetTransportConfig_VariousHosts(t *testing.T) {
 	tests := []struct {
-		name     string
-		host     string
-		apiKey   string
-		wantErr  bool
+		name    string
+		host    string
+		apiKey  string
+		wantErr bool
 	}{
 		{name: "localhost", host: "localhost"},
 		{name: "ipv4_loopback", host: "127.0.0.1"},
