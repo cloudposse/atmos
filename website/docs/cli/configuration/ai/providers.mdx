@@ -12,8 +12,8 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
-The `ai.providers` section configures connections to AI model providers like Anthropic, OpenAI, Google Gemini,
-Grok, Ollama, AWS Bedrock, and Azure OpenAI.
+The `ai.providers` section configures connections to AI model providers. Atmos supports **API providers**
+(Anthropic, OpenAI, Gemini, Grok, Ollama, Bedrock, Azure OpenAI) and **CLI providers** (Claude Code, OpenAI Codex, Gemini CLI) that reuse your existing subscription.
 </Intro>
 
 <Experimental />
@@ -81,6 +81,73 @@ Each provider in the `providers` map supports the following settings:
   <dt>**Azure OpenAI** — `gpt-4o`</dt>
   <dd>API Key / Azure AD authentication. Enterprise compliance, Azure integration.</dd>
 </dl>
+
+## CLI Providers
+
+CLI providers invoke a locally installed AI tool as a subprocess. No API key needed — the CLI tool uses your existing subscription.
+
+<dl>
+  <dt>**Claude Code** — `claude-code`</dt>
+  <dd>Claude Pro/Max subscription. Full MCP support. Best for interactive development.</dd>
+
+  <dt>**OpenAI Codex** — `codex-cli`</dt>
+  <dd>ChatGPT Plus/Pro subscription. Full MCP support. Open source (Apache 2.0).</dd>
+
+  <dt>**Gemini CLI** — `gemini-cli`</dt>
+  <dd>Google account (free tier: 1K req/day). MCP blocked for personal accounts.</dd>
+</dl>
+
+### CLI Provider Settings
+
+In addition to `model`, CLI providers support:
+
+<dl>
+  <dt>`binary`</dt>
+  <dd>Path to the CLI binary. Optional — defaults to `exec.LookPath` (finds it on PATH).</dd>
+
+  <dt>`max_turns`</dt>
+  <dd>Maximum agentic turns per invocation (Claude Code only).</dd>
+
+  <dt>`max_budget_usd`</dt>
+  <dd>Budget cap per invocation in USD (Claude Code only).</dd>
+
+  <dt>`full_auto`</dt>
+  <dd>Enable automatic approval for file writes (Codex CLI only). When MCP servers are configured, `--dangerously-bypass-approvals-and-sandbox` is used automatically.</dd>
+
+  <dt>`allowed_tools`</dt>
+  <dd>List of tools Claude Code is allowed to use (Claude Code only).</dd>
+</dl>
+
+### CLI Provider Examples
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  default_provider: "claude-code"
+  providers:
+    claude-code:
+      max_turns: 10
+      # max_budget_usd: 1.00
+      # allowed_tools: ["Read", "Glob", "Grep"]
+
+    codex-cli:
+      model: "gpt-5.4-mini"
+      full_auto: true
+
+    gemini-cli:
+      model: "gemini-2.5-flash"
+```
+</File>
+
+### MCP Pass-Through
+
+When `mcp.servers` is configured, CLI providers automatically pass MCP servers to the CLI tool:
+
+- **Claude Code:** Temp `.mcp.json` via `--mcp-config`
+- **Codex CLI:** Written to `~/.codex/config.toml` (backup/restore after exit)
+- **Gemini CLI:** Written to `.gemini/settings.json` in cwd (MCP blocked for personal accounts)
+
+Auth-requiring servers are wrapped with `atmos auth exec -i <identity>`. Toolchain PATH and `ATMOS_*` env vars are injected automatically.
 
 ## Provider Comparison
 

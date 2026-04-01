@@ -105,7 +105,9 @@ Usually means an invalid or revoked API key, or insufficient credits. Test the k
 
 ### "Unsupported AI provider"
 
-Valid provider names: `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, `azureopenai`.
+Valid provider names:
+- **API providers:** `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, `azureopenai`
+- **CLI providers:** `claude-code`, `codex-cli`, `gemini-cli`
 
 ### Rate Limiting (429 Errors)
 
@@ -204,6 +206,58 @@ List deployments with `az cognitiveservices account deployment list --name your-
 </dl>
 
 See [AI Providers](/cli/configuration/ai/providers) for full provider documentation.
+
+## CLI Providers
+
+### "CLI provider binary not found"
+
+The CLI tool isn't installed or not on PATH:
+
+<Tabs>
+  <TabItem value="claude-code" label="Claude Code" default>
+    ```bash
+    brew install claude
+    claude auth login
+    ```
+  </TabItem>
+  <TabItem value="codex-cli" label="OpenAI Codex">
+    ```bash
+    npm install -g @openai/codex
+    codex login
+    ```
+  </TabItem>
+  <TabItem value="gemini-cli" label="Gemini CLI">
+    ```bash
+    npm install -g @google/gemini-cli
+    gemini auth login
+    ```
+  </TabItem>
+</Tabs>
+
+Or set an explicit path:
+
+```yaml
+providers:
+  claude-code:
+    binary: /usr/local/bin/claude
+```
+
+### MCP Servers Not Working with Codex CLI
+
+Codex CLI MCP servers don't inherit the parent process environment. If `atmos auth exec` fails with "identity not found", ensure `ATMOS_PROFILE` is exported:
+
+```bash
+export ATMOS_PROFILE=managers  # Or your profile name
+atmos ai ask "What did we spend on EC2?"
+```
+
+Atmos automatically injects `ATMOS_*` env vars into each MCP server's config, but the env var must be set in the shell.
+
+### Gemini CLI MCP Blocked
+
+Gemini CLI blocks MCP for all personal Google accounts (`oauth-personal` auth) regardless of subscription tier. This is a server-side Google restriction.
+
+**Workaround:** Use `claude-code` or `codex-cli` for MCP workflows. Gemini CLI works for prompt-only queries.
 
 ## Sessions
 
