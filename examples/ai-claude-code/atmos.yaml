@@ -12,7 +12,7 @@
 # Quick start:
 #   atmos ai ask "What stacks do we have?"
 #   atmos ai ask "What did we spend on EC2 last month?"
-#   atmos ai ask --mcp aws-iam "List all admin roles"
+#   atmos ai ask "List all IAM roles with admin access"
 
 base_path: "."
 
@@ -158,7 +158,9 @@ auth:
 ai:
   enabled: true
   default_provider: "claude-code"
-  timeout_seconds: 120
+  # MCP servers may take time on first run (uvx downloads packages).
+  # 300s is recommended when using MCP; reduce for prompt-only queries.
+  timeout_seconds: 300
   max_tool_iterations: 25
 
   providers:
@@ -181,6 +183,11 @@ ai:
     #   model: "gpt-5.4"
     #   api_key: !env "OPENAI_API_KEY"
 
+  # Note: The tools section below is for API providers only. CLI providers
+  # (claude-code, codex-cli, gemini-cli) manage their own tools internally
+  # and access external tools via MCP pass-through. These settings are
+  # ignored when using a CLI provider but useful if you switch to an API
+  # provider (e.g., atmos ai ask --provider anthropic "query").
   tools:
     enabled: true
     require_confirmation: true

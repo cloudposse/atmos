@@ -87,11 +87,15 @@ atmos ai ask --provider anthropic "What stacks do we have?"
 
 ### Available CLI Providers
 
-| Provider     | Binary   | Subscription                         | Config Key    |
-|--------------|----------|--------------------------------------|---------------|
-| Claude Code  | `claude` | Claude Pro/Max ($20-200/mo)          | `claude-code` |
-| OpenAI Codex | `codex`  | ChatGPT Plus/Pro ($20-200/mo)        | `codex-cli`   |
-| Gemini CLI   | `gemini` | Google account (free tier available) | `gemini-cli`  |
+| Provider     | Binary   | Subscription                         | Config Key    | MCP Support |
+|--------------|----------|--------------------------------------|---------------|-------------|
+| Claude Code  | `claude` | Claude Pro/Max ($20-200/mo)          | `claude-code` | Full        |
+| OpenAI Codex | `codex`  | ChatGPT Plus/Pro ($20-200/mo)        | `codex-cli`   | Full        |
+| Gemini CLI   | `gemini` | Google account (free tier available) | `gemini-cli`  | Blocked ⚠️  |
+
+> **Note:** Gemini CLI MCP is blocked server-side for all personal Google accounts
+> (`oauth-personal` auth) regardless of subscription tier. Use Claude Code or Codex CLI
+> for MCP workflows.
 
 ## Prerequisites
 
@@ -119,17 +123,15 @@ cd examples/ai-claude-code
 atmos ai ask "What stacks do we have?"
 atmos ai ask "Describe the vpc component"
 
-# Questions that use MCP servers (auto-routed)
+# Questions that use MCP servers
+# Claude Code automatically selects the right MCP server based on the query.
+# All 8 configured servers are passed via --mcp-config.
 atmos ai ask "What did we spend on EC2 last month?"
 atmos ai ask "Is GuardDuty enabled in all regions?"
 atmos ai ask "List all IAM roles with admin access"
 
-# Specify MCP servers directly
-atmos ai ask --mcp aws-billing "Show our billing summary"
-atmos ai ask --mcp aws-iam,aws-cloudtrail "Who accessed the admin role?"
-
-# Interactive chat with MCP tools
-atmos ai chat --mcp aws-billing
+# Interactive chat (all MCP tools available)
+atmos ai chat
 ```
 
 ## How It Works
@@ -137,10 +139,10 @@ atmos ai chat --mcp aws-billing
 ```text
 User: atmos ai ask "What did we spend on EC2 last month?"
 
-1. Atmos selects provider: claude-code
+1. Atmos selects provider: claude-code (CLI provider)
 2. Atmos checks: mcp.servers configured? Yes (8 servers)
-3. Smart routing selects relevant server: aws-billing
-4. Atmos generates temp .mcp.json:
+3. MCP routing is SKIPPED for CLI providers — all 8 servers passed to Claude Code
+4. Atmos generates temp .mcp.json with all servers:
    {
      "mcpServers": {
        "aws-billing": {
@@ -148,13 +150,17 @@ User: atmos ai ask "What did we spend on EC2 last month?"
          "args": ["auth", "exec", "-i", "readonly", "--",
                   "uvx", "awslabs.billing-cost-management-mcp-server@latest"],
          "env": { "AWS_REGION": "us-east-1", "PATH": "/toolchain/bin:..." }
-       }
+       },
+       "aws-docs": { ... },
+       "aws-iam": { ... },
+       ...
      }
    }
 5. Atmos invokes: claude -p --output-format json --mcp-config /tmp/atmos-mcp.json
-6. Claude Code starts the MCP server (with auth credentials)
-7. Claude Code calls aws-billing tools to get cost data
-8. Atmos parses the JSON response and displays it
+6. Claude Code reads the config and decides which MCP server to use
+7. Claude Code starts aws-billing MCP server (with auth credentials)
+8. Claude Code calls billing tools to get cost data
+9. Atmos parses the JSON response and displays it
 ```
 
 ## Configuration
@@ -286,12 +292,13 @@ Here's the complete execution flow for the billing query above:
                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  3. Atmos resolves toolchain                                        │
-│     • Reads .tool-versions → finds uv 0.7.12                        │
+│     • Loads toolchain dependencies (uv → astral-sh/uv)              │
 │     • Extracts toolchain bin PATH: ~/.atmos/toolchain/bin/...       │
 └────────────────────────────┬────────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  4. Atmos generates temp MCP config: /tmp/atmos-mcp-config.json     │
+│     (CLI providers skip MCP routing — ALL servers are included)     │
 │                                                                     │
 │     For each MCP server in atmos.yaml:                              │
 │     • Servers WITH identity → wrapped with atmos auth exec:         │
@@ -299,7 +306,8 @@ Here's the complete execution flow for the billing query above:
 │       args: ["auth", "exec", "-i", "readonly", "--",                │
 │              "uvx", "awslabs.billing-cost-management-mcp-server"]   │
 │     • Servers WITHOUT identity → command used directly              │
-│     • Toolchain PATH injected into each MCP server's env            │
+│     • Toolchain PATH injected into each server's env                │
+│     • Env var keys uppercased                                       │
 └────────────────────────────┬────────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -315,8 +323,9 @@ Here's the complete execution flow for the billing query above:
 └────────────────────────────┬────────────────────────────────────────┘
                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  6. Claude Code reads the MCP config and starts relevant servers    │
+│  6. Claude Code reads the MCP config and connects to servers        │
 │                                                                     │
+│     Claude Code sees all 8 servers and their tools.                 │
 │     Claude Code decides: "I need aws-billing to answer this"        │
 │     → Starts aws-billing MCP server from the config:                │
 │       atmos auth exec -i readonly -- \                              │

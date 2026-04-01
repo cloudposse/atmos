@@ -1,7 +1,7 @@
 # Atmos AI Local Providers — Use Claude Code, Gemini CLI, and OpenAI Codex Instead of API Tokens
 
 **Status:** Phase 1-3 Shipped (all 3 providers), Phase 4 Planned
-**Version:** 1.5
+**Version:** 1.6
 **Last Updated:** 2026-04-01
 
 ---
@@ -162,10 +162,15 @@ codex exec resume --last
 
 Codex CLI emits JSONL (newline-delimited JSON) events:
 ```json
-{"type":"thread.started","session_id":"abc123"}
-{"type":"item.completed","item":{"type":"message","content":[{"type":"text","text":"Analysis..."}]}}
+{"type":"thread.started","thread_id":"019d499a-ca7f-7ec3-af21-5860784b0a11"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Analysis..."}}
 {"type":"turn.completed","usage":{"input_tokens":1200,"output_tokens":450}}
 ```
+
+**Note:** The actual Codex CLI output uses `item.type="agent_message"` with text directly
+on `item.text`, not `item.type="message"` with nested `item.content[].text` as documented
+in the OpenAI API reference. The Atmos parser handles both formats for compatibility.
 
 **Authentication — dual model:**
 - **ChatGPT subscription** (default): `codex login` — usage counts against plan limits
@@ -328,7 +333,9 @@ ai:
       binary: /usr/local/bin/codex
       # Model selection.
       model: gpt-5.4-mini
-      # Approval policy: full-auto runs without prompts.
+      # Approval policy: full-auto for file writes (no MCP).
+      # When MCP servers are configured, --dangerously-bypass-approvals-and-sandbox
+      # is used automatically (full-auto doesn't approve MCP tool calls).
       full_auto: true
 
     gemini-cli:
@@ -407,76 +414,61 @@ type claudeCodeResponse struct {
 // pkg/ai/agent/codexcli/client.go
 
 type Client struct {
-    binaryPath   string
-    model        string
-    fullAuto     bool
-    outputSchema string
+    binaryPath     string
+    model          string
+    fullAuto       bool
+    mcpServers     map[string]schema.MCPServerConfig
+    toolchainPATH  string
+    hasMCPServers  bool   // True if MCP servers were written to ~/.codex/config.toml.
+    originalConfig []byte // Original ~/.codex/config.toml content for restore.
+    configBackedUp bool
 }
 
 func (c *Client) SendMessage(ctx context.Context, prompt string) (string, error) {
-    args := []string{
-        "exec",
-        "--json",
-    }
-    if c.model != "" {
+    args := []string{"exec", "--json"}
+    if c.model != "" && c.model != ProviderName {
         args = append(args, "-m", c.model)
     }
-    if c.fullAuto {
+    // --full-auto only auto-approves file writes, not MCP tool calls.
+    // --dangerously-bypass-approvals-and-sandbox is needed for MCP.
+    if c.hasMCPServers {
+        args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+    } else if c.fullAuto {
         args = append(args, "--full-auto")
-    }
-    if c.outputSchema != "" {
-        args = append(args, "--output-schema", c.outputSchema)
     }
 
     cmd := exec.CommandContext(ctx, c.binaryPath, args...)
     cmd.Stdin = strings.NewReader(prompt)
 
-    output, err := cmd.Output()
-    if err != nil {
-        return "", fmt.Errorf("codex-cli execution failed: %w", err)
+    // Restore ~/.codex/config.toml after Codex exits.
+    if c.hasMCPServers {
+        defer c.restoreGlobalConfig()
     }
 
-    // Codex outputs JSONL events. Extract the final message from the last
-    // item.completed event.
-    return extractCodexResult(output)
+    var stdout, stderr bytes.Buffer
+    cmd.Stdout = &stdout
+    cmd.Stderr = &stderr
+
+    if err := cmd.Run(); err != nil { ... }
+
+    return ExtractResult(stdout.Bytes())
 }
 
-// extractCodexResult parses JSONL output and extracts the final text response.
-func extractCodexResult(output []byte) (string, error) {
+// ExtractResult parses JSONL and extracts text from "agent_message" or "message" events.
+func ExtractResult(output []byte) (string, error) {
     var lastText string
     scanner := bufio.NewScanner(bytes.NewReader(output))
     for scanner.Scan() {
-        var event codexEvent
-        if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
-            continue
-        }
-        if event.Type == "item.completed" && event.Item.Type == "message" {
-            for _, content := range event.Item.Content {
-                if content.Type == "text" {
-                    lastText = content.Text
-                }
-            }
+        if text := extractTextFromEvent(scanner.Bytes()); text != "" {
+            lastText = text
         }
     }
     if lastText == "" {
-        return "", fmt.Errorf("no text response found in codex output")
+        trimmed := strings.TrimSpace(string(output))
+        if trimmed != "" { return trimmed, nil }
+        return "", errUtils.ErrCLIProviderParseResponse
     }
     return lastText, nil
-}
-
-type codexEvent struct {
-    Type  string    `json:"type"`
-    Item  codexItem `json:"item"`
-}
-
-type codexItem struct {
-    Type    string         `json:"type"`
-    Content []codexContent `json:"content"`
-}
-
-type codexContent struct {
-    Type string `json:"type"`
-    Text string `json:"text"`
 }
 ```
 
@@ -514,12 +506,12 @@ func (c *Client) SendMessage(ctx context.Context, prompt string) (string, error)
         return string(output), nil
     }
 
-    return response.Result, nil
+    return response.Response, nil
 }
 
-type geminiCLIResponse struct {
-    Result    string `json:"result"`
-    ModelUsed string `json:"model"`
+type geminiResponse struct {
+    SessionID string `json:"session_id"`
+    Response  string `json:"response"` // Note: "response" not "result".
 }
 ```
 
@@ -683,17 +675,16 @@ This is enforced by `isCLIProvider()` in `cmd/ai/init.go`. The check uses the
 `default_provider` name from `atmos.yaml` to determine if the provider is CLI-based.
 
 Instead, MCP servers are available to CLI providers via **MCP pass-through** (Phase 3) —
-Atmos generates a temp `.mcp.json` and passes it to the CLI tool via `--mcp-config`.
-The CLI tool starts and manages the MCP servers itself.
+Atmos generates a provider-specific MCP config and passes it to the CLI tool. The CLI
+tool starts and manages the MCP servers itself, each with their own approach:
 
-**The solution is MCP pass-through (Phase 3):**
+- **Claude Code**: Temp `.mcp.json` file passed via `--mcp-config` flag.
+- **Codex CLI**: MCP servers written to `~/.codex/config.toml` (backup/restore after exit).
+- **Gemini CLI**: `.gemini/settings.json` written to current working directory.
 
-1. Atmos starts `atmos mcp start` as a local MCP server (exposes all native Atmos tools).
-2. Atmos starts any configured external MCP servers (AWS billing, security, etc.).
-3. Atmos generates a temporary `.mcp.json` config pointing to all running MCP servers.
-4. Atmos passes `--mcp-config /tmp/atmos-mcp.json` to `claude -p`.
-5. The CLI tool connects to the MCP servers and can use ALL tools — both native Atmos
-   tools and external MCP tools — through its own tool execution loop.
+In all cases, MCP servers with `identity` are wrapped with `atmos auth exec -i <identity> --`
+for automatic credential injection. Toolchain PATH and `ATMOS_*` env vars are injected
+so subprocesses can find `uvx`/`npx` and auth config.
 
 | Capability | API Providers | CLI Providers (Phase 1-2) | CLI Providers (Phase 3) |
 |------------|---------------|---------------------------|-------------------------|
@@ -753,7 +744,7 @@ servers. The exported config is exactly what Claude Code needs.
 **Implemented for:**
 - ✅ Claude Code: `claude -p --mcp-config <file> --dangerously-skip-permissions`
 - ⚠️ Gemini CLI: writes `.gemini/settings.json` to cwd, passes `--allowed-mcp-server-names` — **MCP blocked with `oauth-personal` auth** (see Known Limitations)
-- ✅ Codex CLI: passes MCP servers via `-c` flags, uses `--dangerously-bypass-approvals-and-sandbox`
+- ✅ Codex CLI: writes to `~/.codex/config.toml` (backup/restore), uses `--dangerously-bypass-approvals-and-sandbox`
 
 **Gemini CLI approach:**
 Gemini CLI has no `--mcp-config` flag. Instead, it reads MCP servers from
@@ -974,33 +965,21 @@ only available in the toolchain bin directory, the MCP server will fail to start
 This ensures the CLI tool's MCP subprocess can find `uvx` regardless of whether the
 user has it on the system PATH or only in the Atmos toolchain.
 
-**Implementation:** The `buildMCPJSONEntry` function (or the Phase 3 export logic) should:
-1. Resolve toolchain via `dependencies.LoadToolVersionsDependencies` + `NewEnvironmentFromDeps`.
-2. Extract the toolchain PATH from `resolver.EnvVars()`.
-3. Prepend it to the `PATH` in each server's `env` map.
-4. This is the same logic `WithToolchain` uses, applied at config-generation time
-   instead of subprocess-start time.
+**Implementation (shipped):** The `BuildMCPJSONEntry` function in `pkg/mcp/client/mcpconfig.go`:
+1. Resolves toolchain via `dependencies.LoadToolVersionsDependencies` + `NewEnvironmentFromDeps`.
+2. Extracts the toolchain PATH from `resolver.EnvVars()`.
+3. Prepends it to the `PATH` in each server's `env` map via `injectToolchainPATH()`.
+4. Uppercases all env var keys via `copyEnv()` (Viper lowercases YAML keys).
+5. Deduplicates PATH entries via `deduplicatePATH()`.
 
-**Atmos tools via MCP:**
+**Atmos tools via MCP (future):**
 
 To expose native Atmos tools (describe_component, list_stacks, etc.) to CLI providers:
 1. Start `atmos mcp start` as a background MCP server process.
-2. Add it to the generated `.mcp.json` as a local server entry.
+2. Add it to the generated MCP config as a local server entry.
 3. The CLI tool connects to it alongside the external MCP servers.
 
 This is optional — many use cases only need external MCP servers (AWS billing, security).
-
-**Implementation steps:**
-
-- In `execClaude`/`execCodex`/`execGemini`: check if `mcp.servers` is configured.
-- Resolve toolchain via `resolveToolchain()` and extract toolchain PATH.
-- Generate MCP config using `buildMCPJSONEntry` logic, injecting toolchain PATH into
-  each server's `env.PATH`.
-- Write to temp file, pass `--mcp-config <temp-file>` to the CLI args.
-- Clean up temp file in a `defer`.
-- For Codex CLI: generate TOML format instead of JSON.
-- Optionally start `atmos mcp start` as a local MCP server and add it to the config
-  (for native Atmos tools).
 
 ### Phase 4: Auto-Detection and Smart Defaults (Planned)
 
