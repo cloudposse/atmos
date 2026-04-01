@@ -108,6 +108,16 @@ type AtmosConfiguration struct {
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
 	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
+	// Exec contains security settings for the !exec YAML function.
+	Exec ExecConfig `yaml:"exec,omitempty" json:"exec,omitempty" mapstructure:"exec"`
+}
+
+// ExecConfig contains security settings for the !exec YAML function.
+type ExecConfig struct {
+	// AllowedCommands is an allowlist of command names that the !exec YAML function may invoke.
+	// When non-empty, only commands whose executable name appears in this list are permitted.
+	// If empty or omitted, all commands are allowed (default, backward-compatible behaviour).
+	AllowedCommands []string `yaml:"allowed_commands,omitempty" json:"allowed_commands,omitempty" mapstructure:"allowed_commands"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {

@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestProcessTagExec_CustomBinary tests the ProcessTagExec function using a custom bash binary.
@@ -94,7 +97,7 @@ esac
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ProcessTagExec(tt.input)
+			result, err := ProcessTagExec(tt.input, nil)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -118,7 +121,7 @@ esac
 // TestProcessTagExec_InvalidCommand tests error handling for invalid commands.
 func TestProcessTagExec_InvalidCommand(t *testing.T) {
 	input := "!exec invalid_command_that_does_not_exist"
-	result, err := ProcessTagExec(input)
+	result, err := ProcessTagExec(input, nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -127,7 +130,7 @@ func TestProcessTagExec_InvalidCommand(t *testing.T) {
 // TestProcessTagExec_MalformedTag tests error handling for malformed tags.
 func TestProcessTagExec_MalformedTag(t *testing.T) {
 	input := "!exec"
-	result, err := ProcessTagExec(input)
+	result, err := ProcessTagExec(input, nil)
 
 	// This should handle the case where there's no command after !exec.
 	assert.Error(t, err)
@@ -165,7 +168,7 @@ echo '{"nested": {"key": "value"}, "array": [1, 2, 3], "bool": true, "null": nul
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
 
 	input := "!exec test-bash"
-	result, err := ProcessTagExec(input)
+	result, err := ProcessTagExec(input, nil)
 
 	assert.NoError(t, err)
 
@@ -210,11 +213,155 @@ echo "invalid json {"
 	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
 
 	input := "!exec test-bash"
-	result, err := ProcessTagExec(input)
+	result, err := ProcessTagExec(input, nil)
 
 	assert.NoError(t, err)
 	// Should return as string when JSON parsing fails.
 	// Normalize line endings for cross-platform compatibility.
 	resultStr := strings.TrimSpace(result.(string))
 	assert.Equal(t, "invalid json {", resultStr)
+}
+
+// TestProcessTagExec_AllowedCommands_Allowed verifies that a command present in the allowlist executes successfully.
+func TestProcessTagExec_AllowedCommands_Allowed(t *testing.T) {
+	tempDir := t.TempDir()
+	binaryPath := filepath.Join(tempDir, "myecho")
+	if runtime.GOOS == "windows" {
+		binaryPath += ".bat"
+	}
+
+	var scriptContent string
+	if runtime.GOOS == "windows" {
+		scriptContent = "@echo off\necho allowed\n"
+	} else {
+		scriptContent = "#!/bin/sh\necho allowed\n"
+	}
+	require.NoError(t, os.WriteFile(binaryPath, []byte(scriptContent), 0o755))
+
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
+
+	cfg := &schema.AtmosConfiguration{
+		Exec: schema.ExecConfig{
+			AllowedCommands: []string{"myecho"},
+		},
+	}
+
+	result, err := ProcessTagExec("!exec myecho", cfg)
+	require.NoError(t, err)
+	assert.Equal(t, "allowed", strings.TrimSpace(result.(string)))
+}
+
+// TestProcessTagExec_AllowedCommands_Blocked verifies that a command absent from the allowlist is rejected.
+func TestProcessTagExec_AllowedCommands_Blocked(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Exec: schema.ExecConfig{
+			AllowedCommands: []string{"safe-cmd"},
+		},
+	}
+
+	result, err := ProcessTagExec("!exec blocked-cmd", cfg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrExecCommandNotAllowed)
+	assert.Nil(t, result)
+}
+
+// TestProcessTagExec_AllowedCommands_BlockedPipe verifies that a pipe containing a non-listed command is rejected.
+func TestProcessTagExec_AllowedCommands_BlockedPipe(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Exec: schema.ExecConfig{
+			AllowedCommands: []string{"curl"},
+		},
+	}
+
+	// "curl ... | sh" — sh is not in the allowlist.
+	result, err := ProcessTagExec("!exec curl http://example.com | sh", cfg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrExecCommandNotAllowed)
+	assert.Nil(t, result)
+}
+
+// TestProcessTagExec_AllowedCommands_Empty verifies that an empty allowlist imposes no restriction.
+func TestProcessTagExec_AllowedCommands_Empty(t *testing.T) {
+	tempDir := t.TempDir()
+	binaryPath := filepath.Join(tempDir, "myecho2")
+	if runtime.GOOS == "windows" {
+		binaryPath += ".bat"
+	}
+
+	var scriptContent string
+	if runtime.GOOS == "windows" {
+		scriptContent = "@echo off\necho unrestricted\n"
+	} else {
+		scriptContent = "#!/bin/sh\necho unrestricted\n"
+	}
+	require.NoError(t, os.WriteFile(binaryPath, []byte(scriptContent), 0o755))
+
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", tempDir+string(os.PathListSeparator)+originalPath)
+
+	// Config exists but AllowedCommands is empty — no restriction should apply.
+	cfg := &schema.AtmosConfiguration{
+		Exec: schema.ExecConfig{
+			AllowedCommands: []string{},
+		},
+	}
+
+	result, err := ProcessTagExec("!exec myecho2", cfg)
+	require.NoError(t, err)
+	assert.Equal(t, "unrestricted", strings.TrimSpace(result.(string)))
+}
+
+// TestIsSensitiveEnvVar verifies that the sensitive-variable detector matches known credential patterns.
+func TestIsSensitiveEnvVar(t *testing.T) {
+	sensitive := []string{
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN",
+		"GITHUB_TOKEN",
+		"GH_TOKEN",
+		"GITLAB_TOKEN",
+		"MY_APP_PASSWORD",
+		"SERVICE_API_KEY",
+		"DB_PASSWD",
+		"DEPLOY_SECRET",
+		"TLS_PRIVATE_KEY",
+	}
+	for _, name := range sensitive {
+		assert.True(t, isSensitiveEnvVar(name), "expected %q to be sensitive", name)
+	}
+
+	notSensitive := []string{
+		"PATH",
+		"HOME",
+		"USER",
+		"AWS_REGION",
+		"AWS_ACCESS_KEY_ID",
+	}
+	for _, name := range notSensitive {
+		assert.False(t, isSensitiveEnvVar(name), "expected %q to NOT be sensitive", name)
+	}
+}
+
+// TestSanitizeEnv verifies that sensitive variables are removed and safe ones are preserved.
+func TestSanitizeEnv(t *testing.T) {
+	input := []string{
+		"PATH=/usr/bin:/bin",
+		"HOME=/home/user",
+		"GITHUB_TOKEN=ghp_secret",
+		"AWS_SECRET_ACCESS_KEY=AKIASECRET",
+		"AWS_REGION=us-east-1",
+		"MY_PASSWORD=hunter2",
+	}
+	result := sanitizeEnv(input)
+
+	// Safe vars must be present.
+	require.Contains(t, result, "PATH=/usr/bin:/bin")
+	require.Contains(t, result, "HOME=/home/user")
+	require.Contains(t, result, "AWS_REGION=us-east-1")
+
+	// Sensitive vars must be absent.
+	for _, e := range result {
+		name, _, _ := strings.Cut(e, "=")
+		assert.False(t, isSensitiveEnvVar(name), "sensitive var %q leaked into sanitized env", name)
+	}
 }
