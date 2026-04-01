@@ -93,5 +93,3 @@ funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), getEnvFuncM
 
 - Sprig docs: <https://masterminds.github.io/sprig/> — "Hermetic" section
 - CWE-526: <https://cwe.mitre.org/data/definitions/526.html>
-
-
