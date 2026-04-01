@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -210,7 +211,7 @@ func waitForShutdown(sigChan chan os.Signal, errChan chan error, cancel context.
 
 // startStdioServer starts the MCP server with stdio transport.
 func startStdioServer(ctx context.Context, server *mcp.Server, errChan chan error) {
-	logServerInfo(server, transportStdio, "", false)
+	logServerInfo(server, transportStdio, "", false, false)
 	go func() {
 		transport := &mcpsdk.StdioTransport{}
 		errChan <- server.Run(ctx, transport)
@@ -220,7 +221,7 @@ func startStdioServer(ctx context.Context, server *mcp.Server, errChan chan erro
 // startHTTPServer starts the MCP server with HTTP transport.
 func startHTTPServer(server *mcp.Server, host string, port int, apiKey string, errChan chan error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
-	logServerInfo(server, transportHTTP, addr, apiKey != "")
+	logServerInfo(server, transportHTTP, addr, apiKey != "", isLoopbackHost(host))
 	go func() {
 		var handler http.Handler = mcpsdk.NewSSEHandler(func(req *http.Request) *mcpsdk.Server {
 			return server.SDK()
@@ -243,10 +244,17 @@ func startHTTPServer(server *mcp.Server, host string, port int, apiKey string, e
 }
 
 // bearerTokenMiddleware enforces Bearer token authentication on all requests.
+// It uses constant-time comparison to prevent timing-based token enumeration.
 func bearerTokenMiddleware(apiKey string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") || authHeader[len("Bearer "):] != apiKey {
+		const prefix = "Bearer "
+		if !strings.HasPrefix(authHeader, prefix) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		provided := authHeader[len(prefix):]
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(apiKey)) != 1 {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -255,7 +263,7 @@ func bearerTokenMiddleware(apiKey string, next http.Handler) http.Handler {
 }
 
 // logServerInfo displays the server startup information to the user.
-func logServerInfo(server *mcp.Server, transportType, addr string, authenticated bool) {
+func logServerInfo(server *mcp.Server, transportType, addr string, authenticated, loopback bool) {
 	ui.Info("Starting Atmos MCP server...")
 	serverInfo := server.ServerInfo()
 	ui.Writef("  Server: %s v%s\n", serverInfo.Name, serverInfo.Version)
@@ -266,8 +274,10 @@ func logServerInfo(server *mcp.Server, transportType, addr string, authenticated
 		ui.Writef("    - Message endpoint: http://%s/message\n", addr)
 		if authenticated {
 			ui.Info("  Authentication: Bearer token required")
+		} else if loopback {
+			ui.Warning("  Authentication: NONE — endpoints are unauthenticated; use --api-key for production deployments")
 		} else {
-			ui.Warning("  Authentication: NONE — endpoints are unauthenticated; bind to loopback only")
+			ui.Warning("  Authentication: NONE — endpoints are network-accessible without authentication")
 		}
 	} else {
 		ui.Writeln("  Transport: stdio")

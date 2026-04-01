@@ -655,7 +655,7 @@ func TestLogServerInfo_Stdio(t *testing.T) {
 
 	// Call logServerInfo with stdio transport - should not panic and should log messages.
 	require.NotPanics(t, func() {
-		logServerInfo(server, transportStdio, "", false)
+		logServerInfo(server, transportStdio, "", false, false)
 	})
 
 	// Verify server info is accessible.
@@ -1454,21 +1454,21 @@ func TestLogServerInfo_WithMockServer(t *testing.T) {
 	// Test stdio transport - should not panic.
 	t.Run("stdio transport", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportStdio, "", false)
+			logServerInfo(server, transportStdio, "", false, false)
 		})
 	})
 
 	// Test http transport - should not panic.
 	t.Run("http transport", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportHTTP, "localhost:8080", false)
+			logServerInfo(server, transportHTTP, "localhost:8080", false, true)
 		})
 	})
 
 	// Test http transport with different addresses.
 	t.Run("http transport custom address", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportHTTP, "0.0.0.0:3000", false)
+			logServerInfo(server, transportHTTP, "0.0.0.0:3000", false, false)
 		})
 	})
 }
@@ -2028,13 +2028,13 @@ func TestLogServerInfo_TransportMessages(t *testing.T) {
 	// These should not panic and should log different messages.
 	t.Run("stdio", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportStdio, "", false)
+			logServerInfo(server, transportStdio, "", false, false)
 		})
 	})
 
 	t.Run("http", func(t *testing.T) {
 		require.NotPanics(t, func() {
-			logServerInfo(server, transportHTTP, "localhost:8080", false)
+			logServerInfo(server, transportHTTP, "localhost:8080", false, true)
 		})
 	})
 }
@@ -2279,7 +2279,7 @@ func TestLogServerInfo_HTTPTransportDetails(t *testing.T) {
 	for _, addr := range addresses {
 		t.Run(addr, func(t *testing.T) {
 			require.NotPanics(t, func() {
-				logServerInfo(server, transportHTTP, addr, false)
+				logServerInfo(server, transportHTTP, addr, false, false)
 			})
 		})
 	}
@@ -2294,12 +2294,12 @@ func TestLogServerInfo_StdioTransportDetails(t *testing.T) {
 
 	// Test with empty address (stdio doesn't use address).
 	require.NotPanics(t, func() {
-		logServerInfo(server, transportStdio, "", false)
+		logServerInfo(server, transportStdio, "", false, false)
 	})
 
 	// Test with non-empty address (should still work, just ignored).
 	require.NotPanics(t, func() {
-		logServerInfo(server, transportStdio, "ignored:1234", false)
+		logServerInfo(server, transportStdio, "ignored:1234", false, false)
 	})
 }
 
@@ -3565,7 +3565,7 @@ func TestBearerTokenMiddleware(t *testing.T) {
 				req.Header.Set("Authorization", tt.authHeader)
 			}
 
-			rr := &responseRecorder{code: http.StatusOK}
+			rr := newResponseRecorder()
 			handler.ServeHTTP(rr, req)
 			assert.Equal(t, tt.expectedStatus, rr.code)
 		})
@@ -3574,10 +3574,15 @@ func TestBearerTokenMiddleware(t *testing.T) {
 
 // responseRecorder is a minimal http.ResponseWriter for testing.
 type responseRecorder struct {
-	code int
+	code    int
+	headers http.Header
 }
 
-func (r *responseRecorder) Header() http.Header         { return make(http.Header) }
+func newResponseRecorder() *responseRecorder {
+	return &responseRecorder{code: http.StatusOK, headers: make(http.Header)}
+}
+
+func (r *responseRecorder) Header() http.Header         { return r.headers }
 func (r *responseRecorder) Write(b []byte) (int, error) { return len(b), nil }
 func (r *responseRecorder) WriteHeader(code int)        { r.code = code }
 
