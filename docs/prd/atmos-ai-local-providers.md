@@ -1,7 +1,7 @@
 # Atmos AI Local Providers — Use Claude Code, Gemini CLI, and OpenAI Codex Instead of API Tokens
 
 **Status:** Phase 1-3 Shipped (all 3 providers), Phase 4 Planned
-**Version:** 1.3
+**Version:** 1.4
 **Last Updated:** 2026-04-01
 
 ---
@@ -538,7 +538,7 @@ is used, it emits newline-delimited JSON events for incremental processing.
 | **Tool control**      | `--allowedTools` flag                | N/A                                  |
 | **Budget cap**        | `--max-budget-usd`                   | N/A                                  |
 | **Session resume**    | `--resume <session-id>`              | N/A                                  |
-| **MCP config**        | `--mcp-config file.json`             | N/A                                  |
+| **MCP config**        | `--mcp-config file.json`             | `.gemini/settings.json` (blocked ⚠️) |
 | **System prompt**     | `--append-system-prompt`             | N/A (via prompt engineering)         |
 | **Model selection**   | `--fallback-model`                   | `-m gemini-2.5-flash`                |
 | **Directory context** | N/A (uses MCP/tools)                 | `--include-directories`              |
@@ -702,8 +702,10 @@ The CLI tool starts and manages the MCP servers itself.
 | **Tool execution loop** | Atmos-managed | N/A | CLI-managed |
 | **Tool results in output** | Tool Executions section | N/A | Displayed by CLI tool |
 
-Until Phase 3, CLI providers work as **prompt-only** — the AI answers based on the prompt
-text and any context Atmos provides, but cannot call Atmos tools or MCP servers.
+Phase 3 MCP pass-through is shipped for Claude Code and Codex CLI. Gemini CLI has the
+implementation complete but MCP is blocked server-side for personal Google accounts (see
+Known Limitations). Without MCP pass-through, CLI providers work as **prompt-only** — the
+AI answers based on the prompt text and any context Atmos provides.
 
 ---
 
@@ -727,7 +729,7 @@ text and any context Atmos provides, but cannot call Atmos tools or MCP servers.
 - Configuration in `atmos.yaml` under `ai.providers.codex-cli` / `gemini-cli`.
 - 19 unit tests across both providers.
 
-### Phase 3: MCP Pass-Through ✅ Shipped (Claude Code)
+### Phase 3: MCP Pass-Through ✅ Shipped (Claude Code, Codex CLI)
 
 **Goal:** Give CLI providers access to the same MCP tools that API providers have.
 
@@ -751,7 +753,7 @@ servers. The exported config is exactly what Claude Code needs.
 **Implemented for:**
 - ✅ Claude Code: `claude -p --mcp-config <file> --dangerously-skip-permissions`
 - ⚠️ Gemini CLI: writes `.gemini/settings.json` to cwd, passes `--allowed-mcp-server-names` — **MCP blocked with `oauth-personal` auth** (see Known Limitations)
-- ✅ Codex CLI: writes `.codex/config.toml` in a temp dir, sets `cmd.Dir`, passes `--full-auto`
+- ✅ Codex CLI: passes MCP servers via `-c` flags, uses `--dangerously-bypass-approvals-and-sandbox`
 
 **Gemini CLI approach:**
 Gemini CLI has no `--mcp-config` flag. Instead, it reads MCP servers from
@@ -852,22 +854,50 @@ leveraging the free personal Google account tier. For MCP-enabled workflows, use
 their subscription-based auth.
 
 **Codex CLI approach:**
-Codex CLI reads MCP servers from `.codex/config.toml` using TOML `[mcp_servers.<name>]`
-tables. Atmos creates a temp directory with `.codex/config.toml`, generates TOML with
-`command`, `args`, and `[mcp_servers.<name>.env]` sections, then sets the subprocess
-working directory to the temp dir. The `--full-auto` flag auto-approves tool calls.
+Codex CLI only reads MCP servers from `~/.codex/config.toml` (no project-level config
+discovery). To avoid modifying the user's global config, Atmos passes MCP servers via
+`-c` command-line flag overrides:
+
+```bash
+codex exec --json --dangerously-bypass-approvals-and-sandbox \
+  -c 'mcp_servers.aws-docs.command="uvx"' \
+  -c 'mcp_servers.aws-docs.args=["awslabs.aws-documentation-mcp-server@latest"]' \
+  -c 'mcp_servers.aws-docs.env.FASTMCP_LOG_LEVEL="ERROR"' \
+  -c 'mcp_servers.aws-docs.env.PATH="/toolchain/bin:/usr/bin"'
+```
+
+**Key findings during Codex CLI MCP testing (2026-04-01):**
+
+1. **`--full-auto` does NOT auto-approve MCP tool calls** — it only auto-approves file
+   writes and shell commands. MCP tool calls require explicit approval or
+   `--dangerously-bypass-approvals-and-sandbox`. This is safe because MCP servers are
+   explicitly configured by the user in `atmos.yaml`.
+
+2. **Codex CLI output format differs from API docs** — The JSONL events use
+   `item.type="agent_message"` with text directly on `item.text`, not the documented
+   `item.type="message"` with nested `item.content[].text` array. `ExtractResult()`
+   handles both formats.
+
+3. **Project-level `.codex/config.toml` is not supported** — Codex CLI only reads from
+   `~/.codex/config.toml`. The initial temp-dir approach (writing `.codex/config.toml`
+   and setting `cmd.Dir`) did not work.
+
+4. **`uvx` must be on PATH** — When `uvx` is only available in the Atmos toolchain,
+   the PATH env var must be injected into each MCP server's config. The `buildMCPConfigArgs()`
+   function handles this via toolchain PATH resolution.
 
 **Also shipped:**
 - MCP server routing and registration is skipped for CLI providers (`isCLIProvider()`).
-- AI provider name shown in output: `ℹ AI provider: claude-code`.
-- MCP config path shown: `ℹ MCP servers configured: 8 (config: /tmp/atmos-mcp-config.json)`.
+- AI provider name shown in output: `ℹ AI provider: codex-cli`.
+- MCP server count shown: `ℹ MCP servers configured: 8 (via -c flags)`.
 
-4. Atmos passes the config to the CLI tool:
-   - Claude Code: `claude -p --mcp-config /tmp/atmos-mcp-config.json --dangerously-skip-permissions`
-   - Codex CLI: writes `.codex/config.toml` in temp dir, sets `cmd.Dir`, passes `--full-auto`
-   - Gemini CLI: writes `.gemini/settings.json` in temp dir, sets `cmd.Dir`, passes `--yolo`
-5. The CLI tool starts the MCP servers itself (as subprocesses) and manages the tool loop.
-6. Atmos cleans up the temp config file after the CLI tool exits.
+**Summary of MCP config delivery per provider:**
+
+| Provider | Config Method | Approval Flag | Config Location |
+|---|---|---|---|
+| Claude Code | `--mcp-config <temp-file>` | `--dangerously-skip-permissions` | Temp `.mcp.json` file |
+| Codex CLI | `-c` flag overrides | `--dangerously-bypass-approvals-and-sandbox` | Command line |
+| Gemini CLI | `.gemini/settings.json` in cwd | `--approval-mode auto_edit` | Current working directory |
 
 **Auth handling:**
 
