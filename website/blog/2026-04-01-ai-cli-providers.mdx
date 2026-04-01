@@ -1,0 +1,186 @@
+---
+slug: ai-cli-providers
+title: "Use Claude Code, Codex CLI, or Gemini CLI as Atmos AI Providers"
+authors: [aknysh]
+tags: [feature]
+---
+
+import File from '@site/src/components/File'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+Atmos AI now supports **CLI providers** — invoke your locally installed Claude Code, OpenAI Codex, or
+Gemini CLI as AI backends. No API keys needed. Just use your existing subscription.
+
+<!--truncate-->
+
+## Why This Matters
+
+Until now, using Atmos AI required purchasing API tokens from a provider and configuring keys.
+Many developers already have Claude Code or Codex installed with active subscriptions
+(Claude Max, ChatGPT Pro, or Gemini's free tier). CLI providers let you reuse that investment:
+
+- **No API keys** — the CLI tool handles auth via its own subscription
+- **No per-token billing** — included in your existing plan
+- **Full MCP support** — Claude Code and Codex CLI can use all your configured MCP servers
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+  default_provider: "claude-code"  # or "codex-cli" or "gemini-cli"
+  providers:
+    claude-code:
+      max_turns: 10
+```
+</File>
+
+```bash
+brew install claude && claude auth login
+atmos ai ask "What did we spend on EC2 last month?"
+```
+
+That's it. Atmos detects the binary, generates an MCP config with auth wrapping, and passes
+everything to Claude Code. You get answers from real AWS data using your subscription.
+
+## Available CLI Providers
+
+| Provider | Binary | Subscription | MCP Support |
+|---|---|---|---|
+| Claude Code | `claude` | Claude Pro/Max ($20-200/mo) | Full |
+| OpenAI Codex | `codex` | ChatGPT Plus/Pro ($20-200/mo) | Full |
+| Gemini CLI | `gemini` | Google account (free tier) | Blocked for personal accounts |
+
+All three providers work for prompt-only queries. For MCP-enabled workflows (AWS billing,
+security, IAM, etc.), use Claude Code or Codex CLI.
+
+## MCP Pass-Through
+
+When `mcp.servers` is configured, Atmos automatically passes MCP servers to the CLI tool.
+Each provider uses its native config format:
+
+- **Claude Code** — temp `.mcp.json` via `--mcp-config`
+- **Codex CLI** — `~/.codex/config.toml` (backup/restore after exit)
+- **Gemini CLI** — `.gemini/settings.json` in cwd
+
+Auth-requiring servers are wrapped with `atmos auth exec -i <identity>`. Toolchain PATH
+and `ATMOS_*` env vars are injected automatically.
+
+## See It in Action
+
+> All outputs below are from a real AWS account.
+
+### Claude Code — Security Posture
+
+```text
+$ atmos ai ask "What is our security posture in us-east-2 region?"
+
+ℹ MCP servers configured: 8 (config: /tmp/atmos-mcp-config.json)
+ℹ AI provider: claude-code
+👽 Thinking...
+
+  ## Security Posture Summary for us-east-2
+
+  ### ✅ Enabled Security Services (2/6)
+
+   GuardDuty - Fully operational
+
+    • Status: ENABLED
+    • Finding frequency: Every 6 hours
+    • Active data sources: CloudTrail, DNS Logs, VPC Flow Logs,
+      S3 Logs, EKS Audit Logs, RDS Login Events
+    • Current findings: None (clean)
+
+   Inspector - Partially enabled
+
+    • Status: ENABLED but no scan types active
+
+  ### ❌ Disabled Security Services (4/6)
+
+    1. IAM Access Analyzer - Not configured
+    2. Security Hub - Not enabled
+    3. Trusted Advisor - Error checking status
+    4. Macie - Not enabled
+
+  ### Key Recommendations
+
+   High Priority:
+    1. Enable Security Hub for centralized findings aggregation
+    2. Enable IAM Access Analyzer
+    3. Enable at least one Inspector scan type
+
+   Your security posture is moderate — you have basic threat detection
+   enabled but are missing several important security services.
+```
+
+### Codex CLI — EC2 Billing
+
+```text
+$ atmos ai ask "What did we spend on EC2 last month in each region?"
+
+ℹ MCP servers configured: 8 (in ~/.codex/config.toml)
+ℹ AI provider: codex-cli
+👽 Thinking...
+
+   For last month, I used the previous calendar month:
+   March 1, 2026 through April 1, 2026.
+
+   EC2 spend by region:
+
+    • us-east-2: $88.10
+
+   Cost Explorer returned only us-east-2 for Amazon Elastic Compute
+   Cloud - Compute, so that appears to be the only region with EC2
+   spend in that period. AWS also marked the result as Estimated,
+   which is normal on April 1, 2026 while billing finalizes.
+```
+
+Both providers automatically selected the right MCP server (`aws-security` and `aws-billing`)
+and returned answers from real AWS data — no manual server selection needed.
+
+## Configuration
+
+You can mix CLI and API providers in the same config and switch between them:
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  default_provider: "claude-code"
+  providers:
+    claude-code:
+      max_turns: 10
+    codex-cli:
+      full_auto: true
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+```
+</File>
+
+```bash
+# Uses claude-code (default)
+atmos ai ask "What stacks do we have?"
+
+# Override to codex-cli
+atmos ai ask --provider codex-cli "What did we spend on EC2?"
+
+# Override to API provider
+atmos ai ask --provider anthropic "Describe the vpc component"
+```
+
+## Try It
+
+<ActionCard title="Example: AI with Claude Code">
+    Complete example with Claude Code CLI provider, 8 AWS MCP servers, and automatic auth.
+    <div>
+      <PrimaryCTA to="/examples/ai-claude-code">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Learn More
+
+- [AI Documentation](/ai)
+- [AI Providers Configuration](/cli/configuration/ai/providers)
+- [MCP Configuration](/cli/configuration/mcp)
