@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -140,22 +139,7 @@ func TestGetMaxTokens(t *testing.T) {
 	assert.Equal(t, 0, client.GetMaxTokens())
 }
 
-func TestFormatMessages(t *testing.T) {
-	messages := []types.Message{
-		{Role: types.RoleUser, Content: "What stacks do we have?"},
-		{Role: types.RoleAssistant, Content: "You have 4 stacks."},
-		{Role: types.RoleUser, Content: "Describe the vpc component."},
-	}
-	result := formatMessages(messages)
-	assert.Contains(t, result, "What stacks do we have?")
-	assert.Contains(t, result, "Assistant: You have 4 stacks.")
-	assert.Contains(t, result, "Describe the vpc component.")
-}
-
-func TestFormatMessages_Empty(t *testing.T) {
-	result := formatMessages(nil)
-	assert.Empty(t, result)
-}
+// formatMessages tests are in pkg/ai/agent/base/messages_tools_test.go (FormatMessagesAsPrompt).
 
 func TestApplyProviderConfig_Nil(t *testing.T) {
 	client := &Client{maxTurns: 5}
@@ -213,12 +197,7 @@ func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, 5, DefaultMaxTurns)
 }
 
-func TestResolveToolchainPATH_NoDeps(t *testing.T) {
-	// No .tool-versions or toolchain config — should return empty.
-	atmosConfig := &schema.AtmosConfiguration{}
-	result := resolveToolchainPATH(atmosConfig)
-	assert.Empty(t, result)
-}
+// resolveToolchainPATH tests are in pkg/ai/agent/base/config_test.go (ResolveToolchainPATH).
 
 func TestClient_MCPServers_NotCaptured_WhenEmpty(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
@@ -269,26 +248,6 @@ func TestParseResponse_EmptyResult(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-func TestFormatMessages_SingleUser(t *testing.T) {
-	messages := []types.Message{
-		{Role: types.RoleUser, Content: "Hello"},
-	}
-	result := formatMessages(messages)
-	assert.Equal(t, "Hello", result)
-}
-
-func TestFormatMessages_SkipsUnknownRoles(t *testing.T) {
-	messages := []types.Message{
-		{Role: types.RoleUser, Content: "Hello"},
-		{Role: "system", Content: "System message"},
-		{Role: types.RoleAssistant, Content: "Hi"},
-	}
-	result := formatMessages(messages)
-	assert.Contains(t, result, "Hello")
-	assert.Contains(t, result, "Assistant: Hi")
-	assert.NotContains(t, result, "System message")
-}
-
 func TestNewClient_MCPConfigPath_SetWhenServersConfigured(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
@@ -311,6 +270,71 @@ func TestNewClient_MCPConfigPath_SetWhenServersConfigured(t *testing.T) {
 	if client.mcpConfigPath != "" {
 		_ = os.Remove(client.mcpConfigPath)
 	}
+}
+
+func TestBuildArgs_Basic(t *testing.T) {
+	client := &Client{maxTurns: 5}
+	args := client.buildArgs("")
+	assert.Contains(t, args, "-p")
+	assert.Contains(t, args, "--output-format")
+	assert.Contains(t, args, "--max-turns")
+	assert.Contains(t, args, "5")
+	assert.NotContains(t, args, "--max-budget-usd")
+	assert.NotContains(t, args, "--append-system-prompt")
+	assert.NotContains(t, args, "--mcp-config")
+}
+
+func TestBuildArgs_WithBudget(t *testing.T) {
+	client := &Client{maxTurns: 5, maxBudget: 2.50}
+	args := client.buildArgs("")
+	assert.Contains(t, args, "--max-budget-usd")
+	assert.Contains(t, args, "2.50")
+}
+
+func TestBuildArgs_WithSystemPrompt(t *testing.T) {
+	client := &Client{maxTurns: 5}
+	args := client.buildArgs("You are an expert")
+	assert.Contains(t, args, "--append-system-prompt")
+	assert.Contains(t, args, "You are an expert")
+}
+
+func TestBuildArgs_WithAllowedTools(t *testing.T) {
+	client := &Client{maxTurns: 5, allowedTools: []string{"Read", "Glob"}}
+	args := client.buildArgs("")
+	// Each tool gets its own --allowedTools flag.
+	toolCount := 0
+	for _, a := range args {
+		if a == "--allowedTools" {
+			toolCount++
+		}
+	}
+	assert.Equal(t, 2, toolCount)
+	assert.Contains(t, args, "Read")
+	assert.Contains(t, args, "Glob")
+}
+
+func TestBuildArgs_WithMCPConfig(t *testing.T) {
+	client := &Client{maxTurns: 5, mcpConfigPath: "/tmp/mcp.json"}
+	args := client.buildArgs("")
+	assert.Contains(t, args, "--mcp-config")
+	assert.Contains(t, args, "/tmp/mcp.json")
+	assert.Contains(t, args, "--dangerously-skip-permissions")
+}
+
+func TestBuildArgs_AllOptions(t *testing.T) {
+	client := &Client{
+		maxTurns:      10,
+		maxBudget:     1.00,
+		allowedTools:  []string{"Read"},
+		mcpConfigPath: "/tmp/mcp.json",
+	}
+	args := client.buildArgs("system prompt")
+	assert.Contains(t, args, "--max-turns")
+	assert.Contains(t, args, "--max-budget-usd")
+	assert.Contains(t, args, "--append-system-prompt")
+	assert.Contains(t, args, "--allowedTools")
+	assert.Contains(t, args, "--mcp-config")
+	assert.Contains(t, args, "--dangerously-skip-permissions")
 }
 
 func TestNewClient_DefaultMaxTurns(t *testing.T) {

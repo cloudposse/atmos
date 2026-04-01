@@ -908,7 +908,7 @@ PATH = "/toolchain/bin:/usr/local/bin:/usr/bin"
 |---|---|---|---|
 | Claude Code | `--mcp-config <temp-file>` | `--dangerously-skip-permissions` | Temp `.mcp.json` file |
 | Codex CLI | Write to `~/.codex/config.toml` | `--dangerously-bypass-approvals-and-sandbox` | Global config (backup/restore) |
-| Gemini CLI | `.gemini/settings.json` in cwd | `--approval-mode auto_edit` | Current working directory |
+| Gemini CLI | `.gemini/settings.json` in cwd | `--approval-mode auto_edit` | Current working directory (backup/restore) |
 
 **Auth handling:**
 

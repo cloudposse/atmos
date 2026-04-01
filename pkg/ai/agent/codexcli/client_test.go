@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ai/types"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -72,6 +71,9 @@ func TestNewClient_MCPServers_NotCaptured_WhenEmpty(t *testing.T) {
 }
 
 func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
+	// Use temp HOME to avoid touching real ~/.codex/config.toml.
+	t.Setenv("HOME", t.TempDir())
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			Enabled:   true,
@@ -153,6 +155,9 @@ func TestProviderName(t *testing.T) {
 }
 
 func TestWriteAndRestoreGlobalConfig(t *testing.T) {
+	// Use temp HOME to avoid touching real ~/.codex/config.toml.
+	t.Setenv("HOME", t.TempDir())
+
 	client := &Client{
 		mcpServers: map[string]schema.MCPServerConfig{
 			"test-srv": {Command: "echo", Args: []string{"hello"}},
@@ -168,14 +173,10 @@ func TestWriteAndRestoreGlobalConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "[mcp_servers.test-srv]")
 
-	// Restore original config.
+	// Restore — no original existed, file should be removed.
 	client.restoreGlobalConfig()
-
-	// If no original existed, file should be removed.
-	if !client.configBackedUp {
-		_, err = os.Stat(configPath)
-		assert.True(t, os.IsNotExist(err))
-	}
+	_, err = os.Stat(configPath)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestWriteMCPConfigTOML(t *testing.T) {
@@ -268,27 +269,49 @@ func TestSendMessageWithToolsAndHistory_NotSupported(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrCLIProviderToolsNotSupported)
 }
 
-func TestFormatMessages(t *testing.T) {
-	messages := []types.Message{
-		{Role: types.RoleUser, Content: "What stacks?"},
-		{Role: types.RoleAssistant, Content: "You have 4."},
-		{Role: types.RoleUser, Content: "Describe vpc."},
-	}
-	result := formatMessages(messages)
-	assert.Contains(t, result, "What stacks?")
-	assert.Contains(t, result, "Assistant: You have 4.")
-	assert.Contains(t, result, "Describe vpc.")
+// formatMessages tests are in pkg/ai/agent/base/messages_tools_test.go (FormatMessagesAsPrompt).
+
+// resolveToolchainPATH tests are in pkg/ai/agent/base/config_test.go (ResolveToolchainPATH).
+
+func TestBuildArgs_Basic(t *testing.T) {
+	client := &Client{}
+	args := client.buildArgs()
+	assert.Equal(t, "exec", args[0])
+	assert.Contains(t, args, "--json")
+	assert.NotContains(t, args, "--full-auto")
+	assert.NotContains(t, args, "--dangerously-bypass-approvals-and-sandbox")
 }
 
-func TestFormatMessages_Empty(t *testing.T) {
-	result := formatMessages(nil)
-	assert.Empty(t, result)
+func TestBuildArgs_WithModel(t *testing.T) {
+	client := &Client{model: "gpt-5.4-mini"}
+	args := client.buildArgs()
+	assert.Contains(t, args, "-m")
+	assert.Contains(t, args, "gpt-5.4-mini")
 }
 
-func TestResolveToolchainPATH_NoDeps(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	result := resolveToolchainPATH(atmosConfig)
-	assert.Empty(t, result)
+func TestBuildArgs_ModelSameAsProvider(t *testing.T) {
+	client := &Client{model: ProviderName}
+	args := client.buildArgs()
+	assert.NotContains(t, args, "-m")
+}
+
+func TestBuildArgs_FullAuto(t *testing.T) {
+	client := &Client{fullAuto: true}
+	args := client.buildArgs()
+	assert.Contains(t, args, "--full-auto")
+}
+
+func TestBuildArgs_MCPOverridesFullAuto(t *testing.T) {
+	client := &Client{fullAuto: true, hasMCPServers: true}
+	args := client.buildArgs()
+	assert.Contains(t, args, "--dangerously-bypass-approvals-and-sandbox")
+	assert.NotContains(t, args, "--full-auto")
+}
+
+func TestBuildArgs_MCPWithoutFullAuto(t *testing.T) {
+	client := &Client{hasMCPServers: true}
+	args := client.buildArgs()
+	assert.Contains(t, args, "--dangerously-bypass-approvals-and-sandbox")
 }
 
 func TestCollectAtmosEnvVars(t *testing.T) {

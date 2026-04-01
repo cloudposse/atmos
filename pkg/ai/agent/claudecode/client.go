@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -16,7 +17,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
-	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -74,7 +74,7 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 			return nil, errUtils.Build(errUtils.ErrCLIProviderBinaryNotFound).
 				WithContext("provider", ProviderName).
 				WithContext("binary", DefaultBinary).
-				WithHint(fmt.Sprintf("Install Claude Code: brew install %s", DefaultBinary)).
+				WithHint("Install Claude Code: brew install --cask claude-code").
 				Err()
 		}
 		client.binaryPath = resolved
@@ -83,7 +83,7 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	// Capture MCP servers for pass-through (only if configured).
 	if len(atmosConfig.MCP.Servers) > 0 {
 		client.mcpServers = atmosConfig.MCP.Servers
-		client.toolchainPATH = resolveToolchainPATH(atmosConfig)
+		client.toolchainPATH = base.ResolveToolchainPATH(atmosConfig)
 		// Pre-generate MCP config so we can show the path before "Thinking...".
 		mcpConfigPath, mcpErr := mcpclient.WriteMCPConfigToTempFile(client.mcpServers, client.toolchainPATH)
 		if mcpErr != nil {
@@ -95,25 +95,6 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	}
 
 	return client, nil
-}
-
-// resolveToolchainPATH extracts the toolchain bin PATH for MCP server subprocesses.
-func resolveToolchainPATH(atmosConfig *schema.AtmosConfiguration) string {
-	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
-	if err != nil || len(deps) == 0 {
-		return ""
-	}
-	tenv, err := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
-	if err != nil || tenv == nil {
-		return ""
-	}
-	// Extract PATH from toolchain env vars.
-	for _, envVar := range tenv.EnvVars() {
-		if strings.HasPrefix(envVar, "PATH=") {
-			return envVar[len("PATH="):]
-		}
-	}
-	return ""
 }
 
 // SendMessage sends a prompt to Claude Code and returns the response.
@@ -132,7 +113,7 @@ func (c *Client) SendMessageWithTools(_ context.Context, _ string, _ []tools.Too
 func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
 	defer perf.Track(nil, "claudecode.Client.SendMessageWithHistory")()
 
-	prompt := formatMessages(messages)
+	prompt := base.FormatMessagesAsPrompt(messages)
 	return c.execClaude(ctx, prompt, "")
 }
 
@@ -151,7 +132,7 @@ func (c *Client) SendMessageWithSystemPromptAndTools(
 ) (*types.Response, error) {
 	defer perf.Track(nil, "claudecode.Client.SendMessageWithSystemPromptAndTools")()
 
-	prompt := formatMessages(messages)
+	prompt := base.FormatMessagesAsPrompt(messages)
 	combined := systemPrompt
 	if atmosMemory != "" {
 		combined += "\n\n" + atmosMemory
@@ -178,8 +159,8 @@ func (c *Client) GetMaxTokens() int {
 	return 0
 }
 
-// execClaude runs the claude CLI and returns the result text.
-func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (string, error) {
+// buildArgs constructs the CLI arguments for claude -p invocation.
+func (c *Client) buildArgs(systemPrompt string) []string {
 	args := []string{
 		"-p",
 		"--output-format", "json",
@@ -199,12 +180,17 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 	}
 
 	// MCP pass-through: use pre-generated config file.
-	// Skip permissions in non-interactive mode — MCP tools were explicitly configured
-	// by the user in atmos.yaml, so auto-approve their execution.
 	if c.mcpConfigPath != "" {
 		args = append(args, "--mcp-config", c.mcpConfigPath)
 		args = append(args, "--dangerously-skip-permissions")
 	}
+
+	return args
+}
+
+// execClaude runs the claude CLI and returns the result text.
+func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (string, error) {
+	args := c.buildArgs(systemPrompt)
 
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
 	cmd.Stdin = strings.NewReader(prompt)
@@ -213,10 +199,15 @@ func (c *Client) execClaude(ctx context.Context, prompt, systemPrompt string) (s
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	// Clean up temp MCP config file after Claude Code exits.
+	if c.mcpConfigPath != "" {
+		defer os.Remove(c.mcpConfigPath)
+	}
+
 	if err := cmd.Run(); err != nil {
 		stderrStr := stderr.String()
 		if stderrStr != "" {
-			return "", fmt.Errorf("%w: %s: %s", errUtils.ErrCLIProviderExecFailed, ProviderName, stderrStr)
+			return "", fmt.Errorf("%w: %s: %s: %w", errUtils.ErrCLIProviderExecFailed, ProviderName, stderrStr, err)
 		}
 		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrCLIProviderExecFailed, ProviderName, err)
 	}
@@ -273,18 +264,4 @@ func applyProviderConfig(client *Client, providerConfig *schema.AIProviderConfig
 	if len(providerConfig.AllowedTools) > 0 {
 		client.allowedTools = providerConfig.AllowedTools
 	}
-}
-
-// formatMessages concatenates conversation messages into a single prompt.
-func formatMessages(messages []types.Message) string {
-	var parts []string
-	for _, msg := range messages {
-		switch msg.Role {
-		case types.RoleUser:
-			parts = append(parts, msg.Content)
-		case types.RoleAssistant:
-			parts = append(parts, "Assistant: "+msg.Content)
-		}
-	}
-	return strings.Join(parts, "\n\n")
 }

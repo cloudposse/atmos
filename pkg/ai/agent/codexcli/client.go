@@ -18,7 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
-	"github.com/cloudposse/atmos/pkg/dependencies"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -94,7 +94,7 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	// the global config and restore it after the session.
 	if len(atmosConfig.MCP.Servers) > 0 {
 		client.mcpServers = atmosConfig.MCP.Servers
-		client.toolchainPATH = resolveToolchainPATH(atmosConfig)
+		client.toolchainPATH = base.ResolveToolchainPATH(atmosConfig)
 		if err := client.writeMCPToGlobalConfig(); err != nil {
 			ui.Warning(fmt.Sprintf("Failed to write MCP config: %s", err))
 		} else {
@@ -106,22 +106,27 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	return client, nil
 }
 
-// SendMessage sends a prompt to Codex CLI and returns the response.
-func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
-	defer perf.Track(nil, "codexcli.Client.SendMessage")()
-
+// buildArgs constructs the CLI arguments for codex exec invocation.
+func (c *Client) buildArgs() []string {
 	args := []string{"exec", "--json"}
 	if c.model != "" && c.model != ProviderName {
 		args = append(args, "-m", c.model)
 	}
 	// When MCP servers are configured, use --dangerously-bypass-approvals-and-sandbox
 	// because --full-auto only auto-approves file writes, not MCP tool calls.
-	// This is safe because MCP servers were explicitly configured by the user in atmos.yaml.
 	if c.hasMCPServers {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 	} else if c.fullAuto {
 		args = append(args, "--full-auto")
 	}
+	return args
+}
+
+// SendMessage sends a prompt to Codex CLI and returns the response.
+func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
+	defer perf.Track(nil, "codexcli.Client.SendMessage")()
+
+	args := c.buildArgs()
 
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
 	cmd.Stdin = strings.NewReader(message)
@@ -138,7 +143,7 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	if err := cmd.Run(); err != nil {
 		stderrStr := stderr.String()
 		if stderrStr != "" {
-			return "", fmt.Errorf("%w: %s: %s", errUtils.ErrCLIProviderExecFailed, ProviderName, stderrStr)
+			return "", fmt.Errorf("%w: %s: %s: %w", errUtils.ErrCLIProviderExecFailed, ProviderName, stderrStr, err)
 		}
 		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrCLIProviderExecFailed, ProviderName, err)
 	}
@@ -155,7 +160,7 @@ func (c *Client) SendMessageWithTools(_ context.Context, _ string, _ []tools.Too
 func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
 	defer perf.Track(nil, "codexcli.Client.SendMessageWithHistory")()
 
-	return c.SendMessage(ctx, formatMessages(messages))
+	return c.SendMessage(ctx, base.FormatMessagesAsPrompt(messages))
 }
 
 // SendMessageWithToolsAndHistory is not supported.
@@ -173,7 +178,7 @@ func (c *Client) SendMessageWithSystemPromptAndTools(
 ) (*types.Response, error) {
 	defer perf.Track(nil, "codexcli.Client.SendMessageWithSystemPromptAndTools")()
 
-	prompt := formatMessages(messages)
+	prompt := base.FormatMessagesAsPrompt(messages)
 	if systemPrompt != "" {
 		prompt = systemPrompt + "\n\n" + prompt
 	}
@@ -332,10 +337,14 @@ func (c *Client) writeMCPToGlobalConfig() error {
 func (c *Client) restoreGlobalConfig() {
 	configPath := codexConfigPath()
 	if c.configBackedUp {
-		_ = os.WriteFile(configPath, c.originalConfig, configFilePerms)
+		if err := os.WriteFile(configPath, c.originalConfig, configFilePerms); err != nil {
+			log.Debug("Failed to restore codex config", "path", configPath, "error", err)
+		}
 	} else {
 		// No original config existed — remove the file we created.
-		_ = os.Remove(configPath)
+		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+			log.Debug("Failed to remove codex config", "path", configPath, "error", err)
+		}
 	}
 }
 
@@ -407,35 +416,4 @@ func writeTOMLServer(buf *bytes.Buffer, name string, srv mcpclient.MCPJSONServer
 		}
 	}
 	fmt.Fprint(buf, "\n")
-}
-
-// resolveToolchainPATH extracts the toolchain bin PATH for MCP server subprocesses.
-func resolveToolchainPATH(atmosConfig *schema.AtmosConfiguration) string {
-	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
-	if err != nil || len(deps) == 0 {
-		return ""
-	}
-	tenv, err := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
-	if err != nil || tenv == nil {
-		return ""
-	}
-	for _, envVar := range tenv.EnvVars() {
-		if strings.HasPrefix(envVar, "PATH=") {
-			return envVar[len("PATH="):]
-		}
-	}
-	return ""
-}
-
-func formatMessages(messages []types.Message) string {
-	var parts []string
-	for _, msg := range messages {
-		switch msg.Role {
-		case types.RoleUser:
-			parts = append(parts, msg.Content)
-		case types.RoleAssistant:
-			parts = append(parts, "Assistant: "+msg.Content)
-		}
-	}
-	return strings.Join(parts, "\n\n")
 }

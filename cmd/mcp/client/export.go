@@ -114,8 +114,8 @@ func buildMCPJSONEntry(_ string, serverCfg *schema.MCPServerConfig) mcpJSONServe
 // uppercaseEnvKeys returns a copy of the env map with all keys uppercased.
 // Viper lowercases all YAML map keys, but env vars are conventionally UPPERCASE.
 func uppercaseEnvKeys(env map[string]string) map[string]string {
-	if len(env) == 0 {
-		return env
+	if env == nil {
+		return nil
 	}
 	result := make(map[string]string, len(env))
 	for k, v := range env {

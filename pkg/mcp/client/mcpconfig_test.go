@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,6 +12,9 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// sep is the OS-specific PATH list separator (":" on Unix, ";" on Windows).
+var sep = string(os.PathListSeparator)
 
 func TestBuildMCPJSONEntry_NoAuth(t *testing.T) {
 	cfg := &schema.MCPServerConfig{
@@ -84,6 +88,13 @@ func TestGenerateMCPConfig(t *testing.T) {
 	assert.Equal(t, "atmos", config.MCPServers["aws-iam"].Command) // Wrapped with auth.
 }
 
+func TestGenerateMCPConfig_EmptyServers(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{}
+	config := GenerateMCPConfig(servers, "")
+	assert.NotNil(t, config.MCPServers)
+	assert.Empty(t, config.MCPServers)
+}
+
 func TestWriteMCPConfigToTempFile(t *testing.T) {
 	servers := map[string]schema.MCPServerConfig{
 		"test-server": {Command: "echo", Args: []string{"hello"}},
@@ -101,10 +112,12 @@ func TestWriteMCPConfigToTempFile(t *testing.T) {
 	assert.Len(t, config.MCPServers, 1)
 	assert.Equal(t, "echo", config.MCPServers["test-server"].Command)
 
-	// Check file permissions.
-	info, err := os.Stat(tmpFile)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	// Check file permissions (skip on Windows — no Unix-style permissions).
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(tmpFile)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }
 
 func TestCopyEnv(t *testing.T) {
@@ -140,6 +153,12 @@ func TestCopyEnv_Nil(t *testing.T) {
 }
 
 func TestDeduplicatePATH(t *testing.T) {
+	// Use os.PathListSeparator-aware paths for cross-platform compatibility.
+	// On Windows, PATH uses ";" as separator; on Unix, ":".
+	join := func(parts ...string) string {
+		return strings.Join(parts, sep)
+	}
+
 	tests := []struct {
 		name     string
 		input    string
@@ -147,23 +166,23 @@ func TestDeduplicatePATH(t *testing.T) {
 	}{
 		{
 			name:     "no duplicates",
-			input:    "/usr/bin:/usr/local/bin:/opt/bin",
-			expected: "/usr/bin:/usr/local/bin:/opt/bin",
+			input:    join("/usr/bin", "/usr/local/bin", "/opt/bin"),
+			expected: join("/usr/bin", "/usr/local/bin", "/opt/bin"),
 		},
 		{
 			name:     "duplicates removed",
-			input:    "/toolchain/bin:/usr/bin:/toolchain/bin:/usr/bin",
-			expected: "/toolchain/bin:/usr/bin",
+			input:    join("/toolchain/bin", "/usr/bin", "/toolchain/bin", "/usr/bin"),
+			expected: join("/toolchain/bin", "/usr/bin"),
 		},
 		{
 			name:     "empty entries removed",
-			input:    "/usr/bin::/usr/local/bin:",
-			expected: "/usr/bin:/usr/local/bin",
+			input:    "/usr/bin" + sep + sep + "/usr/local/bin" + sep,
+			expected: join("/usr/bin", "/usr/local/bin"),
 		},
 		{
 			name:     "preserves order",
-			input:    "/c:/a:/b:/a:/c",
-			expected: "/c:/a:/b",
+			input:    join("/cc", "/aa", "/bb", "/aa", "/cc"),
+			expected: join("/cc", "/aa", "/bb"),
 		},
 		{
 			name:     "empty string",
@@ -180,11 +199,14 @@ func TestDeduplicatePATH(t *testing.T) {
 }
 
 func TestInjectToolchainPATH_Deduplicates(t *testing.T) {
+	existingPATH := strings.Join([]string{"/usr/bin", "/usr/local/bin"}, sep)
+	toolchainPATH := strings.Join([]string{"/toolchain/bin", "/usr/bin"}, sep)
+
 	env := map[string]string{
-		"PATH": "/usr/bin:/usr/local/bin",
+		"PATH": existingPATH,
 	}
 	// Toolchain PATH includes a dir already in the existing PATH.
-	injectToolchainPATH(env, "/toolchain/bin:/usr/bin")
+	injectToolchainPATH(env, toolchainPATH)
 	path := env["PATH"]
 	// /usr/bin should appear only once.
 	count := strings.Count(path, "/usr/bin")

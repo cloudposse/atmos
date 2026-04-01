@@ -103,7 +103,7 @@ In addition to `model`, CLI providers support:
 
 <dl>
   <dt>`binary`</dt>
-  <dd>Path to the CLI binary. Optional — defaults to `exec.LookPath` (finds it on PATH).</dd>
+  <dd>Path to the CLI binary. Optional — defaults to finding it on PATH.</dd>
 
   <dt>`max_turns`</dt>
   <dd>Maximum agentic turns per invocation (Claude Code only).</dd>
@@ -145,7 +145,7 @@ When `mcp.servers` is configured, CLI providers automatically pass MCP servers t
 
 - **Claude Code:** Temp `.mcp.json` via `--mcp-config`
 - **Codex CLI:** Written to `~/.codex/config.toml` (backup/restore after exit)
-- **Gemini CLI:** Written to `.gemini/settings.json` in cwd (MCP blocked for personal accounts)
+- **Gemini CLI:** Written to `.gemini/settings.json` in cwd (backup/restore, MCP blocked for personal accounts)
 
 Auth-requiring servers are wrapped with `atmos auth exec -i <identity>`. Toolchain PATH and `ATMOS_*` env vars are injected automatically.
 

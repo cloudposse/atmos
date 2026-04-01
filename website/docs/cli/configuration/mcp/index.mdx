@@ -217,7 +217,7 @@ When using a CLI provider (`claude-code`, `codex-cli`, `gemini-cli`), MCP server
 |---|---|---|
 | Claude Code | `--mcp-config` temp file | Full support |
 | Codex CLI | `~/.codex/config.toml` (backup/restore) | `ATMOS_*` env vars injected |
-| Gemini CLI | `.gemini/settings.json` in cwd | MCP blocked for personal Google accounts |
+| Gemini CLI | `.gemini/settings.json` in cwd (backup/restore) | MCP blocked for personal Google accounts |
 
 :::tip
 For CLI providers, `ATMOS_PROFILE` must be exported in your shell for auth-requiring MCP servers to work:

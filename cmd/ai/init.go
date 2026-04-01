@@ -48,7 +48,7 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 	}
 
 	// Register external MCP server tools (filtered by routing).
-	// Skip for CLI providers — they handle MCP via --mcp-config pass-through.
+	// Skip for CLI providers — they handle MCP via provider-specific pass-through.
 	var mcpMgr *mcpclient.Manager
 	if !isCLIProvider(atmosConfig.AI.DefaultProvider) {
 		mcpMgr = registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
@@ -298,7 +298,7 @@ func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthE
 }
 
 // cliProviders lists providers that invoke a local CLI binary as a subprocess.
-// These providers handle MCP via --mcp-config pass-through, not via the Atmos tool registry.
+// These providers handle MCP via provider-specific pass-through, not via the Atmos tool registry.
 var cliProviders = map[string]bool{
 	"claude-code": true,
 	"codex-cli":   true,

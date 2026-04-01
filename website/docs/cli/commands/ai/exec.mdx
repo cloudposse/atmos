@@ -89,7 +89,7 @@ The prompt can be provided as:
 </dl>
 
 :::tip Smart MCP Routing
-When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your prompt using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
+When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your prompt using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`, `gemini-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
 :::
 
 ## Exit Codes
