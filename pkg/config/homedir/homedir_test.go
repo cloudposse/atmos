@@ -787,7 +787,7 @@ func TestGetHomeFromEnv(t *testing.T) {
 		defer func() { homeEnvName = orig }()
 		homeEnvName = "home"
 
-		t.Setenv("HOME", "")     // make sure the standard HOME is not used
+		t.Setenv("HOME", "") // make sure the standard HOME is not used
 		t.Setenv("home", "/plan9/homedir")
 		assert.Equal(t, "/plan9/homedir", getHomeFromEnv(),
 			"getHomeFromEnv must read the lowercase 'home' env var when homeEnvName is 'home'.")
