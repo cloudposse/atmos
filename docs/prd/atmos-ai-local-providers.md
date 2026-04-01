@@ -1039,7 +1039,7 @@ This is optional — many use cases only need external MCP servers (AWS billing,
 
 - [Claude Code CLI Reference](https://docs.anthropic.com/en/docs/claude-code/cli-reference)
 - [Claude Code Non-Interactive Mode](https://docs.anthropic.com/en/docs/claude-code/cli-usage#non-interactive-mode)
-- [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk)
+- [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents/agent-sdk)
 
 ### OpenAI Codex CLI
 
