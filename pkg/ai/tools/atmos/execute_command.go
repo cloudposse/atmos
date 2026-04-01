@@ -9,14 +9,38 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// destructiveTerraformSubcmds is the set of Terraform subcommands that modify infrastructure state.
+// These operations are never auto-executed; they require ModePrompt with explicit user confirmation.
+var destructiveTerraformSubcmds = map[string]bool{
+	"apply":        true,
+	"destroy":      true,
+	"import":       true,
+	"force-unlock": true,
+}
+
+// destructiveTerraformStateSubcmds is the set of "terraform state" subcommands that modify state.
+var destructiveTerraformStateSubcmds = map[string]bool{
+	"rm":   true,
+	"mv":   true,
+	"push": true,
+}
+
+// destructiveTerraformWorkspaceSubcmds is the set of "terraform workspace" subcommands that modify state.
+var destructiveTerraformWorkspaceSubcmds = map[string]bool{
+	"new":    true,
+	"delete": true,
+}
+
 // ExecuteAtmosCommandTool executes any Atmos CLI command.
 type ExecuteAtmosCommandTool struct {
-	atmosConfig *schema.AtmosConfiguration
-	binaryPath  string
+	atmosConfig    *schema.AtmosConfiguration
+	binaryPath     string
+	permissionMode permission.Mode
 }
 
 // NewExecuteAtmosCommandTool creates a new Atmos command execution tool.
@@ -28,9 +52,17 @@ func NewExecuteAtmosCommandTool(atmosConfig *schema.AtmosConfiguration) *Execute
 	}
 
 	return &ExecuteAtmosCommandTool{
-		atmosConfig: atmosConfig,
-		binaryPath:  binary,
+		atmosConfig:    atmosConfig,
+		binaryPath:     binary,
+		permissionMode: permission.ModePrompt, // default to safest mode
 	}
+}
+
+// NewExecuteAtmosCommandToolWithPermission creates a new Atmos command execution tool with explicit permission mode.
+func NewExecuteAtmosCommandToolWithPermission(atmosConfig *schema.AtmosConfiguration, mode permission.Mode) *ExecuteAtmosCommandTool {
+	t := NewExecuteAtmosCommandTool(atmosConfig)
+	t.permissionMode = mode
+	return t
 }
 
 // Name returns the tool name.
@@ -40,7 +72,13 @@ func (t *ExecuteAtmosCommandTool) Name() string {
 
 // Description returns the tool description.
 func (t *ExecuteAtmosCommandTool) Description() string {
-	return "LAST RESORT: Execute an Atmos CLI command as a subprocess. Only use this for commands that do NOT have a dedicated tool. Do NOT use this for: listing stacks (use atmos_list_stacks), describing components (use atmos_describe_component), describing affected (use atmos_describe_affected), or validating stacks (use atmos_validate_stacks). Use this only for commands like 'terraform plan', 'terraform apply', 'workflow', etc."
+	return "LAST RESORT: Execute an Atmos CLI command as a subprocess. Only use this for commands that do NOT have a dedicated tool. " +
+		"Do NOT use this for: listing stacks (use atmos_list_stacks), describing components (use atmos_describe_component), " +
+		"describing affected (use atmos_describe_affected), or validating stacks (use atmos_validate_stacks). " +
+		"Safe read-only commands such as 'terraform plan', 'terraform show', 'terraform output', 'describe', and 'list' are supported. " +
+		"State-modifying Terraform operations (apply, destroy, import, state rm/mv/push, force-unlock, workspace new/delete) " +
+		"are forwarded to the permission system for explicit user confirmation only when the permission mode is ModePrompt; " +
+		"in all other modes (allow, deny, yolo) these operations are blocked at the tool layer."
 }
 
 // Parameters returns the tool parameters.
@@ -48,11 +86,40 @@ func (t *ExecuteAtmosCommandTool) Parameters() []tools.Parameter {
 	return []tools.Parameter{
 		{
 			Name:        "command",
-			Description: "The Atmos command to execute (without the 'atmos' prefix). Examples: 'terraform plan vpc -s prod-us-east-1', 'terraform apply vpc -s prod-us-east-1', 'workflow deploy'.",
+			Description: "The Atmos command to execute (without the 'atmos' prefix). Examples: 'terraform plan vpc -s prod-us-east-1', 'terraform show vpc -s prod-us-east-1', 'workflow deploy'. State-modifying commands (apply, destroy, import, etc.) require ModePrompt permission mode.",
 			Type:        tools.ParamTypeString,
 			Required:    true,
 		},
 	}
+}
+
+// isDestructiveAtmosCommand reports whether args represent a state-modifying Terraform operation.
+func isDestructiveAtmosCommand(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+
+	if strings.ToLower(args[0]) != "terraform" {
+		return false
+	}
+
+	subCmd := strings.ToLower(args[1])
+
+	if destructiveTerraformSubcmds[subCmd] {
+		return true
+	}
+
+	if subCmd == "state" && len(args) >= 3 {
+		stateSubCmd := strings.ToLower(args[2])
+		return destructiveTerraformStateSubcmds[stateSubCmd]
+	}
+
+	if subCmd == "workspace" && len(args) >= 3 {
+		wsSubCmd := strings.ToLower(args[2])
+		return destructiveTerraformWorkspaceSubcmds[wsSubCmd]
+	}
+
+	return false
 }
 
 // Execute runs the Atmos command and returns the output.
@@ -75,6 +142,20 @@ func (t *ExecuteAtmosCommandTool) Execute(ctx context.Context, params map[string
 			Success: false,
 			Error:   errUtils.ErrAICommandEmpty,
 		}, nil
+	}
+
+	// Validate subcommand: block state-modifying operations unless the permission mode
+	// explicitly requires user confirmation (ModePrompt). This prevents prompt-injection
+	// and LLM-jacking attacks from triggering destructive operations automatically.
+	if isDestructiveAtmosCommand(args) {
+		if t.permissionMode != permission.ModePrompt {
+			log.Warnf("Blocked destructive Atmos command in non-interactive mode: atmos %s", command)
+			return &tools.Result{
+				Success: false,
+				Error:   fmt.Errorf("%w: atmos %s", errUtils.ErrAICommandDestructive, command),
+			}, nil
+		}
+		log.Warnf("Destructive Atmos command will require user confirmation: atmos %s", command)
 	}
 
 	// Create the command using the resolved binary path.
@@ -108,7 +189,7 @@ func (t *ExecuteAtmosCommandTool) RequiresPermission() bool {
 
 // IsRestricted returns true if this tool is always restricted.
 func (t *ExecuteAtmosCommandTool) IsRestricted() bool {
-	// Check if this is a destructive command.
-	// Apply, destroy, and workflow commands are always restricted.
-	return false // Permission system will handle per-command restrictions.
+	// Permission system will handle per-command restrictions.
+	return false
 }
+
