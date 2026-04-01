@@ -10,6 +10,7 @@ var (
 	ErrSkillAlreadyInstalled = errors.New("skill already installed")
 	ErrInvalidSource         = errors.New("invalid skill source")
 	ErrDownloadFailed        = errors.New("skill download failed")
+	ErrSkillHashMismatch     = errors.New("skill content hash mismatch — skill files may have been tampered with")
 
 	// Validation errors.
 	ErrInvalidMetadata     = errors.New("invalid skill metadata")
