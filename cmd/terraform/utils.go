@@ -383,6 +383,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		return executeAffectedCommand(parentCmd, args, &info)
 	}
 	if isMultiComponentExecution(&info) {
+		if info.All {
+			log.Debug("Routing to ExecuteTerraformAll (dependency-ordered --all)")
+			return e.ExecuteTerraformAll(&info)
+		}
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
 		return e.ExecuteTerraformQuery(&info)
 	}
