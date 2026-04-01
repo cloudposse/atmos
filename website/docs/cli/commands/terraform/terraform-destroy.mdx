@@ -10,7 +10,7 @@ import Terminal from '@site/src/components/Terminal'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
-Use this command to destroy Terraform-managed infrastructure for an Atmos component in a stack. This operation removes all resources managed by the component.
+Use this command to destroy Terraform-managed infrastructure for an Atmos component in a stack, or across multiple components using the same multi-component flags as `plan`, `apply`, and `deploy`. Destroys respect dependency order: dependents are destroyed before their dependencies.
 </Intro>
 
 <DemoVideo id="terraform-destroy" title="atmos terraform destroy" showCaption={false} />
@@ -25,6 +25,12 @@ Execute the `terraform destroy` command like this:
 atmos terraform destroy <component> -s <stack> [options]
 ```
 
+For multiple components (for example `--all` scoped to one stack):
+
+```shell
+atmos terraform destroy --all -s <stack> [options]
+```
+
 This command creates a plan to destroy all resources managed by the given configuration and state, and then applies that plan.
 
 :::info Atmos Enhancements
@@ -34,6 +40,7 @@ Atmos enhances the destroy command with:
 - **Automatic variable file generation and passing**
 - Backend configuration
 - Component validation and locking support
+- **Multi-component destroys** (`--all`, `--affected`, `--components`, `--query`) run in **reverse dependency order** when `settings.depends_on` is set
 :::
 
 ## Configuration
@@ -75,6 +82,16 @@ atmos terraform destroy vpc -s dev -auto-approve
 atmos terraform destroy vpc -s dev -target=aws_instance.web
 ```
 
+### Destroy All Components in a Stack
+
+```shell
+# Preview order and commands (strongly recommended)
+atmos terraform destroy --all -s dev --dry-run
+
+# Destroy every Terraform component in the stack (use with extreme caution)
+atmos terraform destroy --all -s dev -auto-approve
+```
+
 ## Arguments
 
 <dl>
@@ -109,6 +126,79 @@ atmos terraform destroy vpc -s dev -target=aws_instance.web
         atmos terraform destroy vpc -s dev --dry-run
         ```
     </dd>
+
+    <dt>`--affected` <em>(optional)</em></dt>
+    <dd>
+        Destroy only components affected by changes in the repository (requires git). Components are processed in reverse dependency order.
+
+        ```shell
+        atmos terraform destroy --affected -s dev
+        ```
+    </dd>
+
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Destroy every Terraform component in the stack given by `--stack` / `-s`. Order follows reverse dependency order when components declare `settings.depends_on`.
+
+        ```shell
+        atmos terraform destroy --all -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Multi-Component Operations
+
+Execute `terraform destroy` across multiple components using the same filtering model as [`atmos terraform apply`](/cli/commands/terraform/apply). All flags can be combined with `--dry-run` to preview which components would run and in what order.
+
+:::warning
+Multi-component destroys are destructive. Always use `--dry-run` first and ensure stack and scope are correct.
+:::
+
+### Destroy All Components in a Stack
+
+`--all` uses dependency-ordered execution and **requires** `--stack` / `-s`:
+
+```shell
+# Preview destroys for every Terraform component in the stack
+atmos terraform destroy --all -s prod --dry-run
+
+# Actually destroy (use with extreme caution)
+atmos terraform destroy --all -s prod -auto-approve
+```
+
+To run every component in a stack **without** `--all`, `atmos terraform destroy -s <stack>` is still supported, but execution order follows map iteration (not dependency order). Prefer `--all -s <stack>` when components use `settings.depends_on`.
+
+### Destroy Affected Components
+
+Destroy only components affected by git changes. Processing order is reverse dependency order:
+
+```shell
+atmos terraform destroy --affected
+atmos terraform destroy --affected -s prod
+atmos terraform destroy --affected --include-dependents
+```
+
+### Destroy Specific Components or by Query
+
+Same as apply: use `--components` or `--query` (see [`atmos terraform apply` multi-component flags](/cli/commands/terraform/apply#multi-component-flags)).
+
+### Multi-Component Flags
+
+<dl>
+    <dt>`--all`</dt>
+    <dd>Destroy every Terraform component in the stack specified by `--stack` / `-s`. Uses reverse dependency order from `settings.depends_on`.</dd>
+
+    <dt>`--affected`</dt>
+    <dd>Destroy components affected by git changes in reverse dependency order. Supports flags from [`atmos describe affected`](/cli/commands/describe/affected).</dd>
+
+    <dt>`--components`</dt>
+    <dd>Destroy specific components by name (comma-separated or repeated flag).</dd>
+
+    <dt>`--query`</dt>
+    <dd>Destroy components matching a YQ expression against component configuration.</dd>
+
+    <dt>`--include-dependents`</dt>
+    <dd>With `--affected`, also destroy components that depend on affected components, recursively.</dd>
 </dl>
 
 ## Native Terraform Flags
