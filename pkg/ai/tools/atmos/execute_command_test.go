@@ -111,24 +111,27 @@ func TestExecuteAtmosCommandTool_Execute_FailedCommand(t *testing.T) {
 }
 
 func TestExecuteAtmosCommandTool_Execute_ValidCommand(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
 
 	tool := NewExecuteAtmosCommandTool(config)
-	// Override binary to a known command for testing (not the test binary).
-	tool.binaryPath = "echo"
+	// Use the test binary itself as a cross-platform "success" command.
+	// _ATMOS_TEST_EXIT_ZERO=1 causes TestMain to exit(0) immediately.
+	tool.binaryPath = exePath
+	t.Setenv("_ATMOS_TEST_EXIT_ZERO", "1")
 	ctx := context.Background()
 
-	// Test with echo which always works.
 	result, err := tool.Execute(ctx, map[string]interface{}{
 		"command": "hello world",
 	})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.True(t, result.Success)
-	assert.Contains(t, result.Output, "hello world")
 }
 
 // TestIsDestructiveAtmosCommand verifies the helper correctly classifies commands.
@@ -171,6 +174,21 @@ func TestIsDestructiveAtmosCommand(t *testing.T) {
 		{"single arg", []string{"terraform"}, false},
 		{"terraform state without subcommand", []string{"terraform", "state"}, false},
 		{"terraform workspace without subcommand", []string{"terraform", "workspace"}, false},
+		{"all embedded flags no subcommand", []string{"terraform", "--chdir=."}, false},
+		{"all space-sep flags no subcommand", []string{"terraform", "--chdir", "."}, false},
+
+		// Flags before the subcommand — both embedded (--flag=value) and space-separated (--flag value).
+		// firstNonFlag skips flag tokens and their values to reach the real subcommand.
+		{"embedded --chdir before apply", []string{"terraform", "--chdir=.", "apply", "vpc"}, true},
+		{"space-sep --chdir before apply", []string{"terraform", "--chdir", ".", "apply", "vpc"}, true},
+		{"space-sep -s flag before apply", []string{"terraform", "-s", "prod", "apply", "vpc"}, true},
+		{"space-sep --stack flag before apply", []string{"terraform", "--stack", "prod", "apply", "vpc"}, true},
+		{"embedded --chdir before state rm", []string{"terraform", "--chdir=.", "state", "rm", "module.vpc"}, true},
+		{"space-sep -s before state rm", []string{"terraform", "-s", "prod", "state", "rm", "module.vpc"}, true},
+		{"space-sep --chdir before workspace delete", []string{"terraform", "--chdir", ".", "workspace", "delete", "prod"}, true},
+		{"embedded --chdir before plan (safe)", []string{"terraform", "--chdir=.", "plan", "vpc"}, false},
+		{"space-sep --chdir before plan (safe)", []string{"terraform", "--chdir", ".", "plan", "vpc"}, false},
+		{"space-sep -s before state list (safe)", []string{"terraform", "-s", "prod", "state", "list"}, false},
 	}
 
 	for _, tc := range tests {
@@ -230,17 +248,22 @@ func TestExecuteAtmosCommandTool_DestructiveBlocked(t *testing.T) {
 // state-modifying commands are NOT blocked when permission mode is ModePrompt,
 // allowing the upstream permission system to prompt for confirmation.
 func TestExecuteAtmosCommandTool_DestructiveAllowedInPromptMode(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
 	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	tool := NewExecuteAtmosCommandToolWithPermission(config, permission.ModePrompt)
-	// Use echo consistent with the existing ValidCommand test in this file.
-	tool.binaryPath = "echo"
+	// Use the test binary as a cross-platform success command.
+	// _ATMOS_TEST_EXIT_ZERO=1 causes TestMain to exit(0) immediately.
+	tool.binaryPath = exePath
+	t.Setenv("_ATMOS_TEST_EXIT_ZERO", "1")
 
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
 		"command": "terraform apply vpc -s prod",
 	})
 
 	require.NoError(t, err)
-	// echo always succeeds; we just verify the command was NOT blocked by the validator.
+	// Verify the command was NOT blocked by the validator.
 	assert.True(t, result.Success, "destructive command should not be pre-blocked in ModePrompt")
 }
 
@@ -265,13 +288,19 @@ func TestExecuteAtmosCommandTool_SafeCommandsAlwaysAllowed(t *testing.T) {
 		"list stacks",
 	}
 
-	// Use echo consistent with the existing ValidCommand test in this file.
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
 	for _, mode := range modes {
 		for _, cmd := range safeCmds {
 			t.Run(string(mode)+"/"+cmd, func(t *testing.T) {
 				config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 				tool := NewExecuteAtmosCommandToolWithPermission(config, mode)
-				tool.binaryPath = "echo"
+				// Use the test binary as a cross-platform subprocess.
+				// _ATMOS_TEST_EXIT_ONE=1 causes it to exit(1); the test only
+				// verifies the validator did NOT block with ErrAICommandDestructive.
+				tool.binaryPath = exePath
+				t.Setenv("_ATMOS_TEST_EXIT_ONE", "1")
 
 				result, err := tool.Execute(context.Background(), map[string]interface{}{
 					"command": cmd,
@@ -286,5 +315,40 @@ func TestExecuteAtmosCommandTool_SafeCommandsAlwaysAllowed(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestPermissionModeFromConfig verifies that permissionModeFromConfig derives the correct mode
+// from the atmos configuration, mirroring the global permission-checker setup.
+func TestPermissionModeFromConfig(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		wantMode permission.Mode
+	}{
+		{"nil config defaults to ModePrompt", nil, permission.ModePrompt},
+		{"zero-value config defaults to ModePrompt", &schema.AtmosConfiguration{}, permission.ModePrompt},
+		{"RequireConfirmation nil defaults to ModePrompt", &schema.AtmosConfiguration{
+			AI: schema.AISettings{Tools: schema.AIToolSettings{RequireConfirmation: nil}},
+		}, permission.ModePrompt},
+		{"RequireConfirmation true → ModePrompt", &schema.AtmosConfiguration{
+			AI: schema.AISettings{Tools: schema.AIToolSettings{RequireConfirmation: &trueVal}},
+		}, permission.ModePrompt},
+		{"RequireConfirmation false → ModeAllow", &schema.AtmosConfiguration{
+			AI: schema.AISettings{Tools: schema.AIToolSettings{RequireConfirmation: &falseVal}},
+		}, permission.ModeAllow},
+		{"YOLOMode true → ModeYOLO (overrides RequireConfirmation)", &schema.AtmosConfiguration{
+			AI: schema.AISettings{Tools: schema.AIToolSettings{YOLOMode: true, RequireConfirmation: &falseVal}},
+		}, permission.ModeYOLO},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := permissionModeFromConfig(tc.config)
+			assert.Equal(t, tc.wantMode, got)
+		})
 	}
 }

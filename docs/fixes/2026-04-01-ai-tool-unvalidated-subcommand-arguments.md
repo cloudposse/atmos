@@ -19,7 +19,7 @@ as arguments, with no validation of which subcommands or flags were being reques
 An AI agent under a prompt-injection or LLM-jacking attack could be induced to run
 state-modifying Terraform operations such as:
 
-```
+```shell
 terraform apply vpc -s prod -var-file=/etc/passwd
 terraform destroy vpc -s prod --auto-approve
 terraform state rm module.vpc

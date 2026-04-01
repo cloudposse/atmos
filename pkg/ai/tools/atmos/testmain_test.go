@@ -11,8 +11,12 @@ import (
 //
 // Supported env vars:
 //
+//	_ATMOS_TEST_EXIT_ZERO=1 — exit 0 immediately (simulates a successful command).
 //	_ATMOS_TEST_EXIT_ONE=1  — exit 1 immediately (simulates a failed command).
 func TestMain(m *testing.M) {
+	if os.Getenv("_ATMOS_TEST_EXIT_ZERO") == "1" {
+		os.Exit(0)
+	}
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
 	}
