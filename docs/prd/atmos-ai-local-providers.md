@@ -787,15 +787,48 @@ controlled at three levels:
 **Gemini CLI MCP — Known Limitation with `oauth-personal` auth:**
 
 When using `oauth-personal` authentication (the default for personal `@gmail.com` accounts),
-Gemini CLI routes all requests through Google's internal proxy project. **Google has disabled
-the MCP feature flag on this proxy for personal accounts.** This is a server-side restriction
-that cannot be overridden locally.
+Gemini CLI routes all requests through Google's internal proxy project (`splendid-syntax-pf16k`).
+**Google has disabled the MCP feature flag on this proxy for all personal accounts.** This is
+a server-side restriction that cannot be overridden by any local configuration.
 
-Symptoms:
+**This restriction is based on account type, not subscription tier.** Even users paying for
+Gemini Advanced or Gemini 3 Pro are affected — the paid subscription controls model quality
+and rate limits, but the MCP feature gate is an orthogonal infrastructure decision by Google.
+All `@gmail.com` accounts route through the same proxy regardless of tier.
+
+**How Gemini CLI authentication works:**
+
+Gemini CLI supports three authentication modes, each with different infrastructure paths:
+
+| Auth Mode | Account Type | MCP Support | How It Works |
+|---|---|---|---|
+| `oauth-personal` | Personal `@gmail.com` (free or paid) | **Blocked** | Routes through Google's internal proxy with MCP feature flag disabled |
+| `gemini-api-key` | AI Studio API key (any account) | **Works** | Direct API calls to Gemini API, bypasses the proxy entirely |
+| Google Workspace | Managed `@company.com` accounts | **Admin-controlled** | Routes through org proxy, admin can enable/disable MCP |
+
+The `oauth-personal` mode is the default when running `gemini auth login` with a personal
+Google account. The proxy it uses (`cloudcode-pa.googleapis.com`) handles all personal
+account traffic and has MCP disabled at the infrastructure level — there is no user-facing
+setting, admin console, or environment variable that can override this.
+
+**Symptoms:**
 - `gemini mcp list` returns exit code 52: "MCP is disabled by your administrator"
+- The error message says "please request an update to the settings at: https://goo.gle/manage-gemini-cli"
+  but that link redirects to `https://geminicli.com/` — a dead end for personal accounts
+- Gemini CLI can **read** `.gemini/settings.json` and **see** configured MCP server names,
+  but the servers are never loaded as tools (verified: `totalCalls: 0` in response stats)
 - No local settings file, environment variable, or admin console can fix this
-- The link in the error message (`https://goo.gle/manage-gemini-cli`) points to an
-  internal GCP project that is inaccessible to end users
+
+**What we verified during investigation (2026-04-01):**
+- `~/.gemini/settings.json` has `"selectedType": "oauth-personal"` (personal Gmail account)
+- No system settings file exists at `/Library/Application Support/GeminiCli/settings.json`
+- No `GEMINI_CLI_SYSTEM_SETTINGS_PATH` env var is set
+- The working directory IS in `~/.gemini/trustedFolders.json` (Trusted Folders is not the issue)
+- `.gemini/settings.json` in cwd has correct `mcpServers` format with all servers
+- Gemini CLI version 0.28.2
+- `gemini -p "List available MCP tool names"` returns server names (reads settings.json via
+  `read_file` tool) but `stats.tools.totalCalls: 0` — no MCP tools were actually invoked
+- Adding `"admin": { "mcp": { "enabled": true } }` to user settings has no effect
 
 **Workaround — switch to API key auth:**
 1. Get a Gemini API key from [AI Studio](https://aistudio.google.com/app/apikey)
@@ -806,6 +839,12 @@ Symptoms:
 `gemini` API provider (which Atmos already supports) — it uses the same models and the
 same API billing. The key value proposition of `gemini-cli` (free tier with personal
 Google account, no API tokens needed) is lost when switching to API key auth.
+
+**Future outlook:** This restriction may be lifted in a future Gemini CLI release as Google
+rolls out MCP support more broadly. The implementation on the Atmos side is complete —
+`.gemini/settings.json` is generated correctly with auth wrapping, toolchain PATH, and
+uppercased env vars. Once Google enables MCP for personal accounts, it should work
+without any changes to Atmos.
 
 **Recommendation:** Use `gemini-cli` provider for prompt-only queries (no MCP) when
 leveraging the free personal Google account tier. For MCP-enabled workflows, use
@@ -936,12 +975,14 @@ This is optional — many use cases only need external MCP servers (AWS billing,
    Atmos needs to handle format evolution gracefully.
 5. **Rate limits** — Subscription rate limits may be lower than API rate limits for
    high-volume usage.
-6. **Gemini CLI MCP blocked with free tier** — Google disables MCP on the server-side
-   proxy for `oauth-personal` (personal Google account) auth. MCP servers configured in
-   `.gemini/settings.json` are visible to Gemini but cannot be invoked as tools.
+6. **Gemini CLI MCP blocked for all personal accounts** — Google disables MCP on the
+   server-side proxy for `oauth-personal` auth. This affects ALL personal `@gmail.com`
+   accounts regardless of subscription tier (free, Gemini Advanced, Gemini 3 Pro) —
+   the restriction is based on account type, not payment level. MCP servers configured
+   in `.gemini/settings.json` are visible to Gemini but cannot be invoked as tools.
    Switching to `gemini-api-key` auth enables MCP but makes the provider functionally
-   equivalent to the existing `gemini` API provider, losing the free-tier benefit.
-   The `gemini-cli` provider works for prompt-only queries without MCP.
+   equivalent to the existing `gemini` API provider. The `gemini-cli` provider works
+   for prompt-only queries without MCP. See Phase 3 section for full details.
 
 ### Trade-offs
 
