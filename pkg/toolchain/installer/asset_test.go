@@ -967,11 +967,11 @@ func TestBuildTemplateData_WindowsArmEmulation(t *testing.T) {
 // TestAssetTemplateFuncs_EnvBlocked verifies that env and expandenv are not available
 // in asset URL templates, preventing exfiltration of process environment variables (CWE-526).
 func TestAssetTemplateFuncs_EnvBlocked(t *testing.T) {
-funcs := assetTemplateFuncs()
+	funcs := assetTemplateFuncs()
 
-_, hasEnv := funcs["env"]
-assert.False(t, hasEnv, "env function must not be available in asset templates (CWE-526)")
+	_, hasEnv := funcs["env"]
+	assert.False(t, hasEnv, "env function must not be available in asset templates (CWE-526)")
 
-_, hasExpandEnv := funcs["expandenv"]
-assert.False(t, hasExpandEnv, "expandenv function must not be available in asset templates (CWE-526)")
+	_, hasExpandEnv := funcs["expandenv"]
+	assert.False(t, hasExpandEnv, "expandenv function must not be available in asset templates (CWE-526)")
 }
