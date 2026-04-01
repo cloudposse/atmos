@@ -14,7 +14,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -35,32 +34,17 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 	}
 	endpoint := fmt.Sprintf("%s/%s/instances", c.BaseURL, c.BaseAPIEndpoint)
 
-	// Strip instances to only the fields Atmos Pro needs: component, stack, component_type,
-	// and settings.pro (for drift detection configuration).
-	// This prevents uploading sensitive data (vars can contain secrets, env contains credentials)
-	// and also avoids JSON marshaling errors from map[interface{}]interface{} in nested YAML maps.
-	stripped := make([]schema.Instance, len(dto.Instances))
-	for i, inst := range dto.Instances {
-		stripped[i] = schema.Instance{
-			Component:     inst.Component,
-			Stack:         inst.Stack,
-			ComponentType: inst.ComponentType,
-			Settings:      stripToProSettings(inst.Settings),
-		}
-	}
-	dto.Instances = stripped
-
 	// Estimate metadata overhead (everything except the instances array).
 	overheadDTO := dtos.InstancesUploadRequest{
 		RepoURL:   dto.RepoURL,
 		RepoName:  dto.RepoName,
 		RepoOwner: dto.RepoOwner,
 		RepoHost:  dto.RepoHost,
-		Instances: []schema.Instance{},
+		Instances: []dtos.UploadInstance{},
 	}
 	overhead := metadataOverhead(overheadDTO)
 
-	return sendChunked(dto.Instances, c.MaxPayloadBytes, overhead, func(chunk []schema.Instance, batch *BatchInfo) error {
+	return sendChunked(dto.Instances, c.MaxPayloadBytes, overhead, func(chunk []dtos.UploadInstance, batch *BatchInfo) error {
 		chunkDTO := &dtos.InstancesUploadRequest{
 			RepoURL:   dto.RepoURL,
 			RepoName:  dto.RepoName,
