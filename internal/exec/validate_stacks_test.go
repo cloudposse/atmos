@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -60,91 +59,12 @@ func TestValidateStacksWithMergeContext(t *testing.T) {
 	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(absPath, "components", "helmfile")
 	atmosConfig.PackerDirAbsolutePath = filepath.Join(absPath, "components", "packer")
 
-	// Test 1: Validate stacks with type mismatch - should get enhanced error message
-	t.Run("type mismatch with context", func(t *testing.T) {
-		// This should fail due to type mismatch between array and string for subnets
+	// Test 1: Validate stacks with type overrides — should succeed.
+	// The fixture has list→string overrides which are technically misconfigurations
+	// but must work (WithOverride semantics: src always wins regardless of type).
+	t.Run("type override succeeds", func(t *testing.T) {
 		err := ValidateStacks(atmosConfig)
-
-		// Require an error to be returned
-		assert.NotNil(t, err, "Expected validation to fail with type mismatch error")
-		if err == nil {
-			t.Fatal("Expected validation to fail but it passed")
-		}
-
-		errStr := err.Error()
-
-		// Assert that the error contains the expected merge error
-		assert.Contains(t, errStr, "cannot override two slices with different type", "Should contain the original merge error")
-
-		// Assert that the error contains context information
-		assert.Contains(t, errStr, "File being processed:", "Error should contain file processing context")
-		assert.Contains(t, errStr, "Import chain:", "Error should contain import chain")
-
-		// Assert that the error mentions some relevant files from the test case
-		// Note: ValidateStacks processes all stack files, so we may see various files
-		hasRelevantFiles := strings.Contains(errStr, "base.yaml") ||
-			strings.Contains(errStr, "override.yaml") ||
-			strings.Contains(errStr, "test-environment.yaml") ||
-			strings.Contains(errStr, "deep-merge-test.yaml") ||
-			strings.Contains(errStr, "complex-import-chain.yaml")
-		assert.True(t, hasRelevantFiles, "Error should mention at least one relevant stack file")
-
-		// Check for deduplication within individual error blocks.
-		// ValidateStacks processes multiple stack files and each file that encounters a type
-		// mismatch adds its own context block to the combined error. Count the number of
-		// "File being processed:" occurrences to establish how many error blocks are present,
-		// then verify context tokens appear at most once per block (+1 as defensive padding).
-		fileCount := strings.Count(errStr, "File being processed:")
-		require.Positive(t, fileCount, "Should have at least one file error block")
-
-		// Self-validate the block counter: "File being processed:" must not appear more
-		// often than there are stack YAML files in the fixture (an independent count).
-		// If a deduplication bug doubled the counter, fileCount would be inflated, making
-		// maxOccurrences too large and letting doubled contextToken occurrences slip through.
-		// Use absPath (already resolved above) for CWD-independent counting.
-		var fixtureFileCount int
-		walkErr := filepath.WalkDir(filepath.Join(absPath, "stacks"), func(_ string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d == nil {
-				return nil
-			}
-			if !d.IsDir() && strings.HasSuffix(d.Name(), ".yaml") {
-				fixtureFileCount++
-			}
-			return nil
-		})
-		require.NoError(t, walkErr, "failed to scan stacks fixture at %s", filepath.Join(absPath, "stacks"))
-		// Fail loudly if the fixture is empty or the path is wrong — a silent 0 would
-		// disable the independence check and make it a no-op.
-		require.Positive(t, fixtureFileCount, "stacks fixture must contain YAML files — check absPath: %s", filepath.Join(absPath, "stacks"))
-		if fileCount > fixtureFileCount+1 {
-			t.Errorf("\"File being processed:\" appears %d times but stacks fixture has only %d YAML files — possible block-counter duplication bug", fileCount, fixtureFileCount)
-		}
-
-		// A correct implementation produces exactly one occurrence of each context token per
-		// error block (one per erroring file). Allowing fileCount+1 adds a single defensive
-		// tolerance for any summary lines that repeat a token.  The important property is that
-		// the bound scales with fileCount, so the check catches 2× duplication bugs regardless
-		// of how large the fixture grows — unlike a fixed cap of 3 that would cause false
-		// failures the moment the fixture has 4+ erroring files.
-		maxOccurrences := fileCount + 1
-		contextTokens := []string{
-			// "File being processed:" is the block counter used above — do not re-validate here.
-			// Its presence is already asserted by assert.Contains (line 68) and require.Positive.
-			"**Likely cause:**",
-			"**Debug hint:**",
-			"Import chain:", // must not be duplicated within a single error block
-		}
-		for _, token := range contextTokens {
-			count := strings.Count(errStr, token)
-			if count > maxOccurrences {
-				t.Errorf("Token %q appears %d times but expected at most %d (one per error block)", token, count, maxOccurrences)
-			}
-		}
-
-		t.Logf("Error contains proper context information: %s", errStr)
+		assert.NoError(t, err, "ValidateStacks should succeed — type overrides are allowed (WithOverride semantics)")
 	})
 }
 
@@ -210,9 +130,10 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 		expectedParts []string
 	}{
 		{
-			name: "type mismatch error formatting",
+			name: "type override succeeds without error",
 			setupFunc: func() error {
-				// Simulate what happens during validate stacks
+				// The fixture has type overrides (list→string) which now succeed
+				// under WithOverride semantics.
 				absPath := validateStacksTestDataDir(t)
 
 				atmosConfig := &schema.AtmosConfiguration{
@@ -223,16 +144,9 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 					},
 				}
 
-				// This should trigger our enhanced error formatting
 				return ValidateStacks(atmosConfig)
 			},
-			expectedParts: []string{
-				"merge",                // Core error operation
-				"override",             // Specific merge issue
-				"type",                 // Type mismatch indicator
-				"File being processed", // Context information
-				"Import chain",         // Import tracking
-			},
+			expectedParts: nil, // No error expected — type overrides succeed.
 		},
 	}
 
@@ -259,10 +173,8 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 				return
 			}
 
-			// If no expected parts, just log the error if it exists
-			if err != nil {
-				t.Logf("Error occurred: %v", err)
-			}
+			// If no expected parts, assert success.
+			assert.NoError(t, err, "Expected no error when expectedParts is nil")
 		})
 	}
 }

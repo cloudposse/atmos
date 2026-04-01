@@ -127,6 +127,9 @@ ai:
   <dt>`timeout_seconds`</dt>
   <dd>Request timeout in seconds (default: `60`)</dd>
 
+  <dt>`max_tool_iterations`</dt>
+  <dd>Maximum number of tool execution loops per AI request. Increase for complex queries that require many tool calls (e.g., IAM audit across multiple regions). Default: `25`</dd>
+
   <dt>`max_context_files`</dt>
   <dd>Maximum stack files to send for context (default: `10`)</dd>
 
