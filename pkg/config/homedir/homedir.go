@@ -171,6 +171,13 @@ var darwinHomeDirFunc = getDarwinHomeDir
 // and dash.
 var shellHomeDirFunc = shellHomeDir
 
+// testHookDirAfterReadUnlock, when non-nil, is called in Dir() after releasing
+// the read lock and before acquiring the write lock. Used only in tests to
+// exercise the double-check locking path (lines 202-204): a test can hold the
+// write lock here and pre-populate homedirCache so Dir() sees a non-empty cache
+// when it eventually acquires the write lock.
+var testHookDirAfterReadUnlock func()
+
 // Dir returns the home directory for the executing user.
 //
 // This uses an OS-specific method for discovering the home directory.
@@ -190,6 +197,17 @@ func Dir() (string, error) {
 
 	if !disableCache && cached != "" {
 		return cached, nil
+	}
+
+	if testHookDirAfterReadUnlock != nil {
+		// The hook is intentionally called AFTER the read-lock is released and
+		// BEFORE the write-lock is acquired. Tests use this window to populate
+		// homedirCache (under the write lock inside the hook) so that Dir()'s
+		// subsequent write-lock acquisition finds a non-empty cache, deterministically
+		// exercising the double-check path at line 213. The hook itself acquires and
+		// fully releases the write lock before returning, so there is no data race:
+		// Dir() only accesses homedirCache after acquiring cacheLock.Lock() below.
+		testHookDirAfterReadUnlock()
 	}
 
 	cacheLock.Lock()
@@ -303,17 +321,19 @@ func dirUnix() (string, error) {
 	return getHomeFromShell()
 }
 
+// homeEnvName is the name of the environment variable that holds the home
+// directory path. On Plan 9 it is "home" (lowercase); on every other platform
+// it is "HOME". Stored as a variable so tests can override it to simulate Plan 9
+// behaviour on any platform.
+var homeEnvName = "HOME"
+
 func getHomeFromEnv() string {
-	homeEnv := "HOME"
-	if runtime.GOOS == "plan9" {
-		homeEnv = "home" // On Plan 9, env vars are lowercase
-	}
 	// TrimSpace for consistency with dirWindows(), which also trims env vars.
 	// A whitespace-only value is treated the same as an empty value.
 	// Strip wrapping quotes for parity with dirWindows: some shell init scripts
 	// or environment managers write HOME="~/path" or HOME="/home/user" with
 	// literal surrounding quotes.
-	home := strings.TrimSpace(os.Getenv(homeEnv))
+	home := strings.TrimSpace(os.Getenv(homeEnvName))
 	return strings.Trim(home, `"'`)
 }
 

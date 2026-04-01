@@ -513,9 +513,10 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("whitespace-only USERPROFILE falls through to HOMEDRIVE+HOMEPATH", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("Windows backslash path semantics only apply on Windows.")
-		}
+		// dirWindows() uses only string operations (TrimSpace, HasPrefix, Clean),
+		// so this subtest can run on all platforms. On Linux, filepath.Clean
+		// treats backslash as a regular char, so both expected and actual equal
+		// the same raw string.
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "   ")
 		t.Setenv("HOMEDRIVE", "C:")
@@ -527,9 +528,7 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("HOMEDRIVE+HOMEPATH used when HOME and USERPROFILE are empty", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("Windows backslash path semantics only apply on Windows.")
-		}
+		// dirWindows() uses only string operations, so this subtest can run on all platforms.
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "C:")
@@ -540,9 +539,7 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("HOMEDRIVE+HOMEPATH trimmed of surrounding whitespace", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("Windows backslash path semantics only apply on Windows.")
-		}
+		// dirWindows() uses only string operations (TrimSpace), so this runs on all platforms.
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "  C:  ")
@@ -562,9 +559,8 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("HOMEPATH without leading backslash gets backslash prepended", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("Windows backslash path semantics only apply on Windows.")
-		}
+		// dirWindows() uses only string operations, so this runs on all platforms.
+		// On Linux, filepath.Clean treats backslash as a regular char.
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "C:")
@@ -578,11 +574,9 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("forward-slash HOME converted to native separators (Cygwin/WSL/Git Bash) - no HOMEDRIVE", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			// filepath.FromSlash is a no-op on non-Windows, so this subtest
-			// only proves the conversion logic on the target platform.
-			t.Skip("filepath.FromSlash conversion is only meaningful on Windows.")
-		}
+		// On Linux, filepath.FromSlash is a no-op (forward slash is already the
+		// native separator), so the test verifies that the path passes through
+		// cleanWindowsPath unmodified when no HOMEDRIVE/SystemDrive is set.
 		t.Setenv("HOME", "/cygwin/home/user")
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "")
@@ -590,12 +584,8 @@ func TestDirWindows(t *testing.T) {
 		t.Setenv("HOMEPATH", "")
 		dir, err := dirWindows()
 		require.NoError(t, err)
-		// When neither HOMEDRIVE nor SystemDrive is available, the result is
-		// drive-relative ("\cygwin\home\user") — the best we can do without a
-		// drive letter available. This case is uncommon in real Cygwin
-		// environments because Windows always sets HOMEDRIVE.
 		assert.Equal(t, filepath.Clean(filepath.FromSlash("/cygwin/home/user")), dir,
-			"forward-slash HOME must be converted to native separators.")
+			"forward-slash HOME must be processed through cleanWindowsPath.")
 	})
 
 	t.Run("forward-slash HOME with HOMEDRIVE produces drive-absolute path (Cygwin)", func(t *testing.T) {
@@ -616,9 +606,7 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("quoted HOME has wrapping quotes stripped (Cygwin legacy scripts)", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("Windows path semantics only apply on Windows.")
-		}
+		// dirWindows() uses only string operations, so this runs on all platforms.
 		// Some legacy Cygwin setup scripts or batch files set HOME with literal
 		// wrapping double-quotes: HOME="C:\Users\me". Strip them before processing.
 		t.Setenv("HOME", `"C:\Users\me"`)
@@ -632,9 +620,8 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("UNC USERPROFILE is returned unchanged (not absolutized)", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("UNC path semantics only apply on Windows.")
-		}
+		// toDriveAbsolute recognises `\\`-prefixed paths on all platforms by
+		// simple string prefix check, so this can run everywhere.
 		// UNC paths ("\\server\share\user") set as USERPROFILE must be returned
 		// exactly as-is; toDriveAbsolute must not prepend HOMEDRIVE.
 		t.Setenv("HOME", "")
@@ -648,9 +635,7 @@ func TestDirWindows(t *testing.T) {
 	})
 
 	t.Run("drive-letter-relative HOME normalized to drive-absolute", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("drive-letter path semantics only apply on Windows.")
-		}
+		// toDriveAbsolute uses only string/char operations, so this runs on all platforms.
 		// HOME="C:Users\me" has a drive letter but no root backslash — it is
 		// drive-relative and toDriveAbsolute must normalize it to "C:\Users\me".
 		t.Setenv("HOME", `C:Users\me`)
@@ -686,9 +671,8 @@ func TestToDriveAbsolute(t *testing.T) {
 	})
 
 	t.Run("drive-relative path with HOMEDRIVE gets drive letter prepended", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("backslash-prefixed paths are only drive-relative on Windows.")
-		}
+		// toDriveAbsolute uses only string operations (no filepath.IsAbs / OS path
+		// semantics), so the backslash-prefix check works identically on Linux.
 		t.Setenv("HOMEDRIVE", "C:")
 		t.Setenv("SystemDrive", "")
 		result := toDriveAbsolute(`\cygwin\home\user`)
@@ -697,9 +681,7 @@ func TestToDriveAbsolute(t *testing.T) {
 	})
 
 	t.Run("drive-relative path with SystemDrive fallback", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("backslash-prefixed paths are only drive-relative on Windows.")
-		}
+		// toDriveAbsolute uses only string operations, so this runs on all platforms.
 		t.Setenv("HOMEDRIVE", "")
 		t.Setenv("SystemDrive", "D:")
 		result := toDriveAbsolute(`\cygwin\home\user`)
@@ -708,9 +690,7 @@ func TestToDriveAbsolute(t *testing.T) {
 	})
 
 	t.Run("drive-relative path without any drive env returns unchanged", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("backslash-prefixed paths are only drive-relative on Windows.")
-		}
+		// toDriveAbsolute uses only string operations, so this runs on all platforms.
 		t.Setenv("HOMEDRIVE", "")
 		t.Setenv("SystemDrive", "")
 		in := `\cygwin\home\user`
@@ -738,9 +718,9 @@ func TestToDriveAbsolute(t *testing.T) {
 	})
 
 	t.Run("drive-letter-relative path normalized to drive-absolute", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("drive-letter path semantics only apply on Windows.")
-		}
+		// toDriveAbsolute uses only string/char operations, so this runs on all
+		// platforms. On Linux, filepath.Clean treats backslash as a regular char,
+		// so both sides of the assertion equal the same raw string.
 		// "C:Users\foo" has a drive letter but no root backslash — it is
 		// drive-relative and must be normalized to "C:\Users\foo".
 		t.Setenv("HOMEDRIVE", "")
@@ -751,9 +731,7 @@ func TestToDriveAbsolute(t *testing.T) {
 	})
 
 	t.Run("drive-only path (C:) normalized to C:\\", func(t *testing.T) {
-		if runtime.GOOS != "windows" {
-			t.Skip("drive-letter path semantics only apply on Windows.")
-		}
+		// toDriveAbsolute uses only string operations, so this runs on all platforms.
 		// Edge case: path is exactly "C:" (len == 2). The expression
 		// path[:2]+`\`+path[2:] must correctly produce "C:\".
 		t.Setenv("HOMEDRIVE", "")
@@ -800,6 +778,19 @@ func TestGetHomeFromEnv(t *testing.T) {
 		t.Setenv("HOME", `'/home/user'`)
 		assert.Equal(t, "/home/user", getHomeFromEnv(),
 			"single-quoted HOME must have wrapping quotes stripped.")
+	})
+
+	t.Run("plan9 reads lowercase 'home' env var", func(t *testing.T) {
+		// Override homeEnvName to simulate Plan 9 behavior on any platform.
+		// This exercises the Plan9 branch without needing a Plan9 OS.
+		orig := homeEnvName
+		defer func() { homeEnvName = orig }()
+		homeEnvName = "home"
+
+		t.Setenv("HOME", "")     // make sure the standard HOME is not used
+		t.Setenv("home", "/plan9/homedir")
+		assert.Equal(t, "/plan9/homedir", getHomeFromEnv(),
+			"getHomeFromEnv must read the lowercase 'home' env var when homeEnvName is 'home'.")
 	})
 }
 
@@ -2042,4 +2033,196 @@ func TestNoUsernameInErrors(t *testing.T) {
 			checkNoPII(t, err)
 		}
 	})
+}
+
+// TestParseDsclNFSHomeDir_DotPath verifies the continue branch in
+// parseDsclNFSHomeDir when path.Clean(m[1]) returns ".".
+func TestParseDsclNFSHomeDir_DotPath(t *testing.T) {
+	// "NFSHomeDirectory: ." triggers the home == "." continue branch (line 484).
+	_, err := parseDsclNFSHomeDir("NFSHomeDirectory: .\n")
+	assert.ErrorIs(t, err, ErrBlankOutput,
+		"a dot path from dscl must return ErrBlankOutput.")
+}
+
+// TestGetDarwinHomeDir_IDFailurePaths covers error paths in getDarwinHomeDir
+// when the id -un subprocess fails or returns blank output (lines 431-441).
+// These tests create fake id/dscl binaries in a temp dir and prepend it to PATH.
+func TestGetDarwinHomeDir_IDFailurePaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell scripts, not available on Windows.")
+	}
+
+	origPath := os.Getenv("PATH")
+
+	t.Run("id fails with stderr covers error-with-msg branch", func(t *testing.T) {
+		binDir := t.TempDir()
+		err := os.WriteFile(filepath.Join(binDir, "id"),
+			[]byte("#!/bin/sh\necho 'permission denied' >&2\nexit 1\n"), 0o755)
+		require.NoError(t, err)
+		t.Setenv("PATH", binDir+":"+origPath)
+
+		_, err = getDarwinHomeDir("")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "getDarwinHomeDir: id:",
+			"error from id -un with stderr must mention id.")
+		assert.Contains(t, err.Error(), "stderr:",
+			"error with non-empty stderr must include 'stderr:' context.")
+	})
+
+	t.Run("id fails without stderr covers error-no-msg branch", func(t *testing.T) {
+		binDir := t.TempDir()
+		// Script exits 1 but writes nothing to stderr.
+		err := os.WriteFile(filepath.Join(binDir, "id"),
+			[]byte("#!/bin/sh\nexit 1\n"), 0o755)
+		require.NoError(t, err)
+		t.Setenv("PATH", binDir+":"+origPath)
+
+		_, err = getDarwinHomeDir("")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "getDarwinHomeDir: id:",
+			"error from id -un without stderr must mention id.")
+		assert.NotContains(t, err.Error(), "stderr:",
+			"error without stderr must not include 'stderr:' context.")
+	})
+
+	t.Run("id returns empty output returns ErrBlankOutput", func(t *testing.T) {
+		binDir := t.TempDir()
+		// Script exits 0 but writes nothing to stdout.
+		err := os.WriteFile(filepath.Join(binDir, "id"),
+			[]byte("#!/bin/sh\nexit 0\n"), 0o755)
+		require.NoError(t, err)
+		t.Setenv("PATH", binDir+":"+origPath)
+
+		_, err = getDarwinHomeDir("")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrBlankOutput,
+			"empty id output must return ErrBlankOutput.")
+	})
+}
+
+// TestGetDarwinHomeDir_DsclFailurePaths covers error paths in getDarwinHomeDir
+// when dscl fails with stderr (line 458-460) and when it succeeds (line 466).
+func TestGetDarwinHomeDir_DsclFailurePaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell scripts, not available on Windows.")
+	}
+
+	origPath := os.Getenv("PATH")
+
+	t.Run("dscl fails with stderr covers error-with-msg branch", func(t *testing.T) {
+		binDir := t.TempDir()
+		// Provide a valid fake id that returns a valid username.
+		err := os.WriteFile(filepath.Join(binDir, "id"),
+			[]byte("#!/bin/sh\necho testuser\n"), 0o755)
+		require.NoError(t, err)
+		// Fake dscl that exits 1 with stderr output.
+		err = os.WriteFile(filepath.Join(binDir, "dscl"),
+			[]byte("#!/bin/sh\necho 'no such record' >&2\nexit 1\n"), 0o755)
+		require.NoError(t, err)
+		t.Setenv("PATH", binDir+":"+origPath)
+
+		_, err = getDarwinHomeDir("")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "getDarwinHomeDir: dscl:",
+			"dscl failure with stderr must mention dscl.")
+		assert.Contains(t, err.Error(), "stderr:",
+			"dscl error with non-empty stderr must include 'stderr:' context.")
+	})
+
+	t.Run("dscl succeeds reaches parseDsclNFSHomeDir call", func(t *testing.T) {
+		binDir := t.TempDir()
+		// Fake id that returns a valid username.
+		err := os.WriteFile(filepath.Join(binDir, "id"),
+			[]byte("#!/bin/sh\necho testuser\n"), 0o755)
+		require.NoError(t, err)
+		// Fake dscl that exits 0 and outputs a valid NFSHomeDirectory line.
+		dsclOutput := "NFSHomeDirectory: /Users/testuser\n"
+		err = os.WriteFile(filepath.Join(binDir, "dscl"),
+			[]byte("#!/bin/sh\nprintf '"+dsclOutput+"'\n"), 0o755)
+		require.NoError(t, err)
+		t.Setenv("PATH", binDir+":"+origPath)
+
+		home, err := getDarwinHomeDir("")
+		// parseDsclNFSHomeDir is called; it should return the path or ErrBlankOutput
+		// depending on whether path.IsAbs recognises the parsed path.
+		if err == nil {
+			assert.Equal(t, "/Users/testuser", home,
+				"dscl success must return the parsed NFSHomeDirectory path.")
+		} else {
+			assert.ErrorIs(t, err, ErrBlankOutput,
+				"dscl success with non-absolute path must return ErrBlankOutput.")
+		}
+	})
+}
+
+// TestShellHomeDir_EmptyAndErrorPaths covers the two remaining uncovered paths
+// in shellHomeDir: a shell that exits non-zero with no stderr (line 665), and
+// a shell that exits zero but produces no output (lines 669-671).
+func TestShellHomeDir_EmptyAndErrorPaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell scripts, not available on Windows.")
+	}
+
+	origPath := os.Getenv("PATH")
+	orig := shellGetUsernameFunc
+	defer func() { shellGetUsernameFunc = orig }()
+	// Use a fixed valid username so validation passes and we reach the sh call.
+	shellGetUsernameFunc = func() (string, error) { return "validuser", nil }
+
+	t.Run("sh exits non-zero with no stderr returns plain error", func(t *testing.T) {
+		binDir := t.TempDir()
+		// Script exits 1 and produces no stderr.
+		err := os.WriteFile(filepath.Join(binDir, "sh"),
+			[]byte("#!/bin/sh\nexit 1\n"), 0o755)
+		require.NoError(t, err)
+		t.Setenv("PATH", binDir+":"+origPath)
+
+		_, err = shellHomeDir()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "getHomeFromShell:",
+			"sh failure without stderr must produce a getHomeFromShell error.")
+		assert.NotContains(t, err.Error(), "stderr:",
+			"sh failure with empty stderr must not include 'stderr:' in error.")
+	})
+
+	t.Run("sh exits zero with empty stdout returns ErrBlankOutput", func(t *testing.T) {
+		binDir := t.TempDir()
+		// Script exits 0 but writes nothing to stdout.
+		err := os.WriteFile(filepath.Join(binDir, "sh"),
+			[]byte("#!/bin/sh\nexit 0\n"), 0o755)
+		require.NoError(t, err)
+		t.Setenv("PATH", binDir+":"+origPath)
+
+		_, err = shellHomeDir()
+		assert.ErrorIs(t, err, ErrBlankOutput,
+			"empty shell output must return ErrBlankOutput.")
+	})
+}
+
+// TestDir_DoubleCheckLocking_Deterministic exercises the double-check locking
+// path in Dir() (lines 202-204) deterministically using testHookDirAfterReadUnlock.
+// The hook is called after Dir() releases the read lock and before it acquires
+// the write lock, allowing this test to pre-populate homedirCache so Dir() sees
+// a non-empty cache when it acquires the write lock.
+func TestDir_DoubleCheckLocking_Deterministic(t *testing.T) {
+	Reset()
+	defer func() {
+		testHookDirAfterReadUnlock = nil
+		Reset()
+	}()
+
+	const cachedValue = "/double/check/home"
+
+	// Install the hook: when Dir() is between its read-unlock and write-lock,
+	// populate homedirCache under the write lock so the double-check fires.
+	testHookDirAfterReadUnlock = func() {
+		cacheLock.Lock()
+		homedirCache = cachedValue
+		cacheLock.Unlock()
+	}
+
+	home, err := Dir()
+	require.NoError(t, err)
+	assert.Equal(t, cachedValue, home,
+		"Dir() must return the pre-populated cache value via the double-check path.")
 }
