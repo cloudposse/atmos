@@ -312,22 +312,33 @@ func TestProcessTagExec_AllowedCommands_Empty(t *testing.T) {
 	assert.Equal(t, "unrestricted", strings.TrimSpace(result.(string)))
 }
 
-// TestIsSensitiveEnvVar verifies that the sensitive-variable detector matches known credential patterns.
+// TestIsSensitiveEnvVar verifies that the sensitive-variable detector matches all known
+// credential patterns (prefixes and suffixes) and correctly passes safe variables.
 func TestIsSensitiveEnvVar(t *testing.T) {
-	sensitive := []string{
-		"AWS_SECRET_ACCESS_KEY",
-		"AWS_SESSION_TOKEN",
-		"GITHUB_TOKEN",
-		"GH_TOKEN",
-		"GITLAB_TOKEN",
-		"MY_APP_PASSWORD",
-		"SERVICE_API_KEY",
-		"DB_PASSWD",
-		"DEPLOY_SECRET",
-		"TLS_PRIVATE_KEY",
+	// Each entry documents which pattern it exercises.
+	sensitive := []struct {
+		name    string
+		pattern string
+	}{
+		{"AWS_SECRET_ACCESS_KEY", "prefix AWS_SECRET_"},
+		{"AWS_SECRET_ANYTHING", "prefix AWS_SECRET_"},
+		{"AWS_SESSION_TOKEN", "suffix _TOKEN"},
+		{"GITHUB_TOKEN", "suffix _TOKEN"},
+		{"GH_TOKEN", "suffix _TOKEN"},
+		{"GITLAB_TOKEN", "suffix _TOKEN"},
+		{"VAULT_TOKEN", "suffix _TOKEN"},
+		{"MY_APP_PASSWORD", "suffix _PASSWORD"},
+		{"DB_PASSWORD", "suffix _PASSWORD"},
+		{"SERVICE_API_KEY", "suffix _API_KEY"},
+		{"MY_API_KEY", "suffix _API_KEY"},
+		{"DB_PASSWD", "suffix _PASSWD"},
+		{"DEPLOY_SECRET", "suffix _SECRET"},
+		{"MY_SECRET", "suffix _SECRET"},
+		{"TLS_PRIVATE_KEY", "suffix _PRIVATE_KEY"},
+		{"SSH_PRIVATE_KEY", "suffix _PRIVATE_KEY"},
 	}
-	for _, name := range sensitive {
-		assert.True(t, isSensitiveEnvVar(name), "expected %q to be sensitive", name)
+	for _, tc := range sensitive {
+		assert.True(t, isSensitiveEnvVar(tc.name), "expected %q (pattern: %s) to be sensitive", tc.name, tc.pattern)
 	}
 
 	notSensitive := []string{
@@ -336,6 +347,8 @@ func TestIsSensitiveEnvVar(t *testing.T) {
 		"USER",
 		"AWS_REGION",
 		"AWS_ACCESS_KEY_ID",
+		"TOKENIZE",     // does not end with _TOKEN
+		"MY_PASSWORDS", // does not end with _PASSWORD
 	}
 	for _, name := range notSensitive {
 		assert.False(t, isSensitiveEnvVar(name), "expected %q to NOT be sensitive", name)
@@ -364,4 +377,81 @@ func TestSanitizeEnv(t *testing.T) {
 		name, _, _ := strings.Cut(e, "=")
 		assert.False(t, isSensitiveEnvVar(name), "sensitive var %q leaked into sanitized env", name)
 	}
+}
+
+// TestExtractCommandNamesFromShell verifies that the shell AST parser correctly extracts
+// command names and identifies dynamic (non-literal) command references.
+func TestExtractCommandNamesFromShell(t *testing.T) {
+	tests := []struct {
+		name       string
+		cmd        string
+		wantNames  []string
+		wantLitAll bool // expected allLiteral return value
+		wantErr    bool
+	}{
+		{
+			name:       "single literal command",
+			cmd:        "echo hello",
+			wantNames:  []string{"echo"},
+			wantLitAll: true,
+		},
+		{
+			name:       "pipe with two literal commands",
+			cmd:        "curl http://example.com | sh",
+			wantNames:  []string{"curl", "sh"},
+			wantLitAll: true,
+		},
+		{
+			name:       "dynamic command via variable",
+			cmd:        "$CMD arg",
+			wantNames:  nil,  // no literal names extracted
+			wantLitAll: false, // allLiteral must be false
+		},
+		{
+			name:       "command substitution in pipeline position",
+			cmd:        "echo $(date +%Y)",
+			wantNames:  []string{"echo", "date"},
+			wantLitAll: true, // both echo and date are literals
+		},
+		{
+			name:       "dynamic command via substitution",
+			cmd:        "$(get_cmd) arg",
+			wantNames:  []string{"get_cmd"}, // get_cmd inside $() is a literal, but the outer call is dynamic
+			wantLitAll: false,               // the outer command $(get_cmd) is not a static literal
+		},
+		{
+			name:    "invalid shell syntax",
+			cmd:     "echo <<<",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			names, allLiteral, err := extractCommandNamesFromShell(tt.cmd)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantNames, names)
+			assert.Equal(t, tt.wantLitAll, allLiteral)
+		})
+	}
+}
+
+// TestProcessTagExec_AllowedCommands_DynamicCommandBlocked verifies that a dynamic command
+// reference (e.g. $VAR) is rejected when an allowlist is configured.
+func TestProcessTagExec_AllowedCommands_DynamicCommandBlocked(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Exec: schema.ExecConfig{
+			AllowedCommands: []string{"echo"},
+		},
+	}
+
+	// $SOME_CMD is a dynamic command — cannot be statically verified against allowlist.
+	result, err := ProcessTagExec("!exec $SOME_CMD hello", cfg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrExecCommandNotAllowed)
+	assert.Nil(t, result)
 }
