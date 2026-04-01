@@ -389,7 +389,7 @@ const defaultMaxOutputLogBytes = 3 * 1024 * 1024
 func buildCIStatusData(info *schema.ConfigAndStacksInfo, maskedOutput []byte) map[string]any {
 	defer perf.Track(nil, "exec.buildCIStatusData")()
 
-	data := ci.BuildStatusData(info.Command, string(maskedOutput), info.SubCommand)
+	data := ci.BuildStatusData(info.ComponentType, string(maskedOutput), info.SubCommand)
 	if data == nil {
 		return nil
 	}

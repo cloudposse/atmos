@@ -457,8 +457,9 @@ func TestUploadStatusWithCIData(t *testing.T) {
 func TestBuildCIStatusData(t *testing.T) {
 	t.Run("returns nil for unknown component type", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			Command:    "unknown",
-			SubCommand: "plan",
+			ComponentType: "unknown",
+			Command:       "unknown",
+			SubCommand:    "plan",
 		}
 		result := buildCIStatusData(info, []byte("some output"))
 		assert.Nil(t, result)
@@ -468,13 +469,32 @@ func TestBuildCIStatusData(t *testing.T) {
 		// The terraform plugin is auto-registered via init().
 		// We need to import the package to trigger registration.
 		info := &schema.ConfigAndStacksInfo{
-			Command:    "terraform",
-			SubCommand: "plan",
+			ComponentType: "terraform",
+			Command:       "terraform",
+			SubCommand:    "plan",
 		}
 		output := []byte("Plan: 2 to add, 1 to change, 0 to destroy.")
 		result := buildCIStatusData(info, output)
 
 		// If terraform plugin is registered, we should get data.
+		if result != nil {
+			assert.Contains(t, result, "output_log")
+			assert.Contains(t, result, "has_changes")
+		}
+	})
+
+	t.Run("returns CI data when command differs from component type", func(t *testing.T) {
+		// When using tofu as the command, ComponentType is still "terraform"
+		// and the plugin should be found by ComponentType, not Command.
+		info := &schema.ConfigAndStacksInfo{
+			ComponentType: "terraform",
+			Command:       "tofu",
+			SubCommand:    "plan",
+		}
+		output := []byte("Plan: 1 to add, 0 to change, 0 to destroy.")
+		result := buildCIStatusData(info, output)
+
+		// Plugin lookup uses ComponentType ("terraform"), not Command ("tofu").
 		if result != nil {
 			assert.Contains(t, result, "output_log")
 			assert.Contains(t, result, "has_changes")
