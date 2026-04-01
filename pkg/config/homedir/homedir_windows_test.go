@@ -55,8 +55,9 @@ func TestExpand_WindowsBackslashSubdir_BuildTagged(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
+	prev := GetDisableCache()
 	SetDisableCache(true)
-	defer SetDisableCache(false)
+	defer SetDisableCache(prev)
 
 	result, err := Expand(`~\subdir\file.txt`)
 	require.NoError(t, err)

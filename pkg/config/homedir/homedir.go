@@ -45,6 +45,14 @@ func SetDisableCache(v bool) {
 	cacheLock.Unlock()
 }
 
+// GetDisableCache returns the current DisableCache flag in a thread-safe manner.
+func GetDisableCache() bool {
+	cacheLock.RLock()
+	v := DisableCache
+	cacheLock.RUnlock()
+	return v
+}
+
 var (
 	homedirCache           string
 	cacheLock              sync.RWMutex
@@ -77,9 +85,10 @@ var (
 
 	// dsclNFSHomeDirRe matches a dscl NFSHomeDirectory output line tolerating
 	// any amount of leading whitespace before the key and any whitespace
-	// after the colon. It captures the first non-whitespace token which
-	// is always the home directory path in well-formed dscl output.
-	dsclNFSHomeDirRe = regexp.MustCompile(`^\s*NFSHomeDirectory:\s*(\S+)`)
+	// after the colon. It captures the rest of the line including any spaces
+	// in the path (e.g. "/Users/John Doe"). The caller trims trailing
+	// whitespace after extraction.
+	dsclNFSHomeDirRe = regexp.MustCompile(`^\s*NFSHomeDirectory:\s*(.+)$`)
 
 	// externalCmdTimeout is the maximum time allowed for external subprocess
 	// calls (id, dscl, sh). A conservative default prevents Dir()/Expand()
@@ -433,10 +442,6 @@ func cleanWindowsPath(path string) string {
 // and obtained the username; passing it here avoids a second OS user lookup.
 // When cachedUsername is empty, getDarwinHomeDir falls back to id -un.
 func getDarwinHomeDir(cachedUsername string) (string, error) {
-	// Create a single context shared by all external commands in this function.
-	ctx, cancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
-	defer cancel()
-
 	var username string
 	if cachedUsername != "" {
 		// Reuse the username from the dirUnix caller — no second currentUserFunc call.
@@ -444,8 +449,12 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 	} else {
 		// Fall back to id -un when no cached username is available (e.g., when
 		// called directly from tests via darwinHomeDirFunc).
+		// Use a dedicated context so a slow id lookup does not consume the dscl
+		// deadline; each external command gets its own full timeout budget.
+		idCtx, idCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
+		defer idCancel()
 		var whoOut, whoErr bytes.Buffer
-		whoCmd := exec.CommandContext(ctx, "id", "-un")
+		whoCmd := exec.CommandContext(idCtx, "id", "-un")
 		whoCmd.Stdout = &whoOut
 		whoCmd.Stderr = &whoErr
 		if err := whoCmd.Run(); err != nil {
@@ -468,9 +477,14 @@ func getDarwinHomeDir(cachedUsername string) (string, error) {
 		return "", fmt.Errorf("getDarwinHomeDir: %w", err)
 	}
 
+	// Each external command gets its own full timeout budget so that a slow
+	// id lookup above does not reduce the time available for dscl here.
+	dsclCtx, dsclCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
+	defer dsclCancel()
+
 	// Query the directory service without a shell pipeline or sed.
 	var out, dsErr bytes.Buffer
-	dsCmd := exec.CommandContext(ctx, "dscl", "-q", ".", "-read", "/Users/"+username, "NFSHomeDirectory")
+	dsCmd := exec.CommandContext(dsclCtx, "dscl", "-q", ".", "-read", "/Users/"+username, "NFSHomeDirectory")
 	dsCmd.Stdout = &out
 	dsCmd.Stderr = &dsErr
 	if err := dsCmd.Run(); err != nil {
@@ -500,7 +514,9 @@ func parseDsclNFSHomeDir(output string) (string, error) {
 		// dscl always emits POSIX paths, so use the path package (not
 		// path/filepath) for cleaning and absolute-path detection.  Using
 		// filepath on Windows would misclassify "/Users/alice" as relative.
-		home := path.Clean(m[1])
+		// TrimSpace removes any trailing whitespace or carriage returns that
+		// the (.+)$ capture group may include.
+		home := path.Clean(strings.TrimSpace(m[1]))
 		if home == "" || home == "." {
 			continue
 		}

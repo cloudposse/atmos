@@ -169,9 +169,9 @@ func TestShellHomeDir(t *testing.T) {
 			"user)paren",
 			"user\ttab",
 		}
+		orig := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = orig }()
 		for _, name := range metacharNames {
-			orig := shellGetUsernameFunc
-			defer func() { shellGetUsernameFunc = orig }()
 			shellGetUsernameFunc = func() (string, error) { return name, nil }
 			_, err := shellHomeDir()
 			require.Error(t, err, "username %q should be rejected", name)
@@ -185,9 +185,9 @@ func TestShellHomeDir(t *testing.T) {
 		// would cause `printf '%s\n' ~-username` to potentially expand to
 		// $OLDPWD. The username validation must reject these to prevent silent wrong results.
 		leadingSpecial := []string{"-user", "-", "--", "+user", "+"}
+		orig := shellGetUsernameFunc
+		defer func() { shellGetUsernameFunc = orig }()
 		for _, name := range leadingSpecial {
-			orig := shellGetUsernameFunc
-			defer func() { shellGetUsernameFunc = orig }()
 			shellGetUsernameFunc = func() (string, error) { return name, nil }
 			_, err := shellHomeDir()
 			require.Error(t, err, "username %q starting with '-' or '+' must be rejected", name)
@@ -1010,9 +1010,7 @@ func TestShellGetUsernameFunc_StderrContext(t *testing.T) {
 	os.Setenv("PATH", binDir+string(os.PathListSeparator)+origPath)
 	os.Setenv("USER", "") // Disable USER env fallback
 
-	orig := shellGetUsernameFunc
-	// Temporarily restore the real shellGetUsernameFunc to test the real impl.
-	shellGetUsernameFunc = orig
+	// Call the real shellGetUsernameFunc directly to test the real impl.
 	_, err := shellGetUsernameFunc()
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrIDUnavailable)
