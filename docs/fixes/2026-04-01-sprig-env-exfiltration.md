@@ -5,6 +5,8 @@
 **Files fixed:**
 - `internal/exec/template_utils.go` (cached sprig funcmap, `getSprigFuncMap`)
 - `pkg/locals/resolver.go` (locals template rendering, line ~456)
+- `pkg/toolchain/installer/asset.go` (asset URL template rendering)
+- `pkg/toolchain/registry/aqua/aqua.go` (Aqua registry asset templates — previously used manual deletes, now hermetic)
 
 ---
 
@@ -74,7 +76,8 @@ from the developer running atmos.
 
 ## Fix
 
-Replace `sprig.FuncMap()` with `sprig.HermeticTxtFuncMap()` in both rendering paths:
+Replace `sprig.FuncMap()` / `sprig.TxtFuncMap()` with `sprig.HermeticTxtFuncMap()` in all
+three template rendering paths:
 
 ```go
 // internal/exec/template_utils.go — after
@@ -84,11 +87,18 @@ sprigFuncMapCacheOnce.Do(func() {
 
 // pkg/locals/resolver.go — after
 tmpl, err := template.New(localName).Funcs(sprig.HermeticTxtFuncMap()).Parse(strVal)
+
+// pkg/toolchain/installer/asset.go — after (previously used TxtFuncMap with no manual cleanup)
+funcs := sprig.HermeticTxtFuncMap()
+
+// pkg/toolchain/registry/aqua/aqua.go — after (previously used TxtFuncMap + manual deletes)
+funcs := sprig.HermeticTxtFuncMap()
+// No need to delete env/expandenv/getHostByName — HermeticTxtFuncMap omits them already
 ```
 
-`HermeticTxtFuncMap` excludes `env`, `expandenv`, and other functions with external
-side-effects, while keeping all pure string, math, date, list, dict, and encoding functions
-that templates legitimately need.
+`HermeticTxtFuncMap` excludes `env`, `expandenv`, and `getHostByName` (and any other
+functions with external side-effects), while keeping all pure string, math, date, list,
+dict, and encoding functions that templates legitimately need.
 
 ---
 
