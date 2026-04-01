@@ -38,13 +38,17 @@ const (
 	logKeyTemplate = "template"
 )
 
-// getSprigFuncMap returns a cached copy of the sprig function map.
+// getSprigFuncMap returns a cached copy of the sprig hermetic function map.
 // Sprig function maps are expensive to create (173MB+ allocations) and immutable,
 // so we cache and reuse them across template operations.
 // This optimization reduces heap allocations by ~3.76% (173MB) per profile run.
+//
+// We use HermeticTxtFuncMap instead of FuncMap to exclude env/expandenv, which
+// would allow stack templates from untrusted sources to read arbitrary process
+// environment variables (CWE-526).
 func getSprigFuncMap() template.FuncMap {
 	sprigFuncMapCacheOnce.Do(func() {
-		sprigFuncMapCache = sprig.FuncMap()
+		sprigFuncMapCache = sprig.HermeticTxtFuncMap()
 	})
 	return sprigFuncMapCache
 }

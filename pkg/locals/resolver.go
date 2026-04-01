@@ -453,7 +453,10 @@ func (r *Resolver) resolveString(strVal, localName string) (any, error) {
 	context["locals"] = r.resolved
 
 	// Parse and execute the template.
-	tmpl, err := template.New(localName).Funcs(sprig.FuncMap()).Parse(strVal)
+	// HermeticTxtFuncMap is used instead of FuncMap to exclude env/expandenv, which
+	// would allow stack templates from untrusted sources to read arbitrary process
+	// environment variables (CWE-526).
+	tmpl, err := template.New(localName).Funcs(sprig.HermeticTxtFuncMap()).Parse(strVal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template for local %q in %s: %w", localName, r.filePath, err)
 	}
