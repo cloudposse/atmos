@@ -97,6 +97,21 @@ func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
 | `false`                      | `ModeAllow` | `ModeAllow` |
 | `yolo_mode: true`            | `ModeYOLO` | `ModeYOLO` |
 
+> **Note (MCP server):** The table above shows the behavior of `getPermissionMode()` alone.
+> However, `cmd/mcp/server/start.go` also builds a `permission.Config` struct whose `YOLOMode`
+> field is checked by `CheckPermission()` **before** the `Mode` field.  A previous version of
+> the code unconditionally forced `permConfig.YOLOMode = true` in `initializeAIComponents`,
+> which bypassed `getPermissionMode()` entirely for MCP servers.  That unconditional override
+> has been removed as part of this fix.  `permConfig.YOLOMode` now mirrors
+> `atmosConfig.AI.Tools.YOLOMode`, consistent with the rest of the permission pipeline.
+>
+> To guarantee deterministic behavior in MCP environments, operators should explicitly configure
+> their intent in `atmos.yaml`:
+>
+> - **Disable prompting entirely:** set `yolo_mode: true` or `require_confirmation: false`
+> - **Require prompting:** set `require_confirmation: true` (or leave unset — the default is
+>   now `ModePrompt`)
+
 Users who want to opt out of prompting must now **explicitly** set `require_confirmation: false`
 in their `atmos.yaml`:
 
@@ -111,8 +126,8 @@ ai:
 
 ## Files Changed
 
-- `cmd/mcp/server/start.go` — `getPermissionMode()` default changed from `ModeAllow` to `ModePrompt`
-- `cmd/mcp/server/start_test.go` — updated test cases expecting `ModeAllow` for nil config to expect `ModePrompt`
+- `cmd/mcp/server/start.go` — `getPermissionMode()` default changed from `ModeAllow` to `ModePrompt`; removed unconditional `permConfig.YOLOMode = true` override in `initializeAIComponents`
+- `cmd/mcp/server/start_test.go` — updated test cases expecting `ModeAllow` for nil config to expect `ModePrompt`; renamed `TestInitializeAIComponents_YOLOModeOverride` to `TestInitializeAIComponents_YOLOModeRespected`
 
 ---
 

@@ -279,8 +279,6 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 		BlockedTools:    atmosConfig.AI.Tools.BlockedTools,
 		YOLOMode:        atmosConfig.AI.Tools.YOLOMode,
 	}
-	// Use YOLO mode for MCP to avoid blocking on prompts (client handles permissions).
-	permConfig.YOLOMode = true
 	permChecker := permission.NewChecker(permConfig, permission.NewCLIPrompter())
 
 	// Create tool executor.

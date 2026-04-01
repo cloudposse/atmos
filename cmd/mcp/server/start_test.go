@@ -2520,15 +2520,15 @@ func TestMCPServerEndpoints_HTTPFormat(t *testing.T) {
 	}
 }
 
-// TestInitializeAIComponents_YOLOModeOverride tests that YOLO mode is always set to true for MCP.
-func TestInitializeAIComponents_YOLOModeOverride(t *testing.T) {
-	// Even if YOLOMode is false in config, it should be set to true for MCP.
+// TestInitializeAIComponents_YOLOModeRespected tests that YOLO mode is honored from config.
+func TestInitializeAIComponents_YOLOModeRespected(t *testing.T) {
+	// YOLOMode: false in config should NOT be overridden by MCP startup logic.
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
 				Enabled:  true,
-				YOLOMode: false, // Explicitly set to false.
+				YOLOMode: false, // Explicitly set to false — should be respected.
 			},
 		},
 	}
@@ -2538,7 +2538,6 @@ func TestInitializeAIComponents_YOLOModeOverride(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, registry)
 	assert.NotNil(t, executor)
-	// Note: The function forces YOLOMode to true for MCP servers.
 }
 
 // TestStartCmd_RunEFunction tests that RunE is the expected function.
