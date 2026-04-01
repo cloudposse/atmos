@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -366,8 +367,11 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	log.Debug("Preparing upload affected stacks request", "req", req)
 
 	if uploadErr := apiClient.UploadAffectedStacks(&req); uploadErr != nil {
-		log.Warn("Failed to upload affected stacks to Atmos Pro. The describe affected result is unaffected.", "error", uploadErr)
+		ui.Error("Failed to upload affected stacks to Atmos Pro")
+		return uploadErr
 	}
+
+	ui.Success("Uploaded affected stacks to Atmos Pro")
 
 	return nil
 }
