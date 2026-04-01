@@ -67,6 +67,11 @@ func TestWriteFileAtomicWindows_RemoveBeforeRename(t *testing.T) {
 
 // TestWriteFileAtomicWindows_ModePreserved verifies that WriteFileAtomicWindows sets the
 // requested file permissions on the written file.
+//
+// On Windows, Go maps permission modes to either writable (0o666) or read-only (0o444).
+// Any mode that includes write bits (e.g., 0o644) is stored as 0o666; modes without
+// write bits (e.g., 0o444) are stored as 0o444.  This test verifies that a writable
+// mode is correctly reflected after the write.
 func TestWriteFileAtomicWindows_ModePreserved(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "mode-check.txt")
@@ -76,5 +81,7 @@ func TestWriteFileAtomicWindows_ModePreserved(t *testing.T) {
 
 	info, err := os.Stat(filePath)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "file permissions must match requested mode")
+	// Windows maps any mode with write bits (0o644) to 0o666 (fully writable).
+	// Only read-only modes (0o444) survive the round-trip as-is on Windows.
+	assert.Equal(t, os.FileMode(0o666), info.Mode().Perm(), "file should be writable (0o666) on Windows when mode 0o644 is requested")
 }
