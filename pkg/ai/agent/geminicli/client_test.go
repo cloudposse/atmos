@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -183,6 +184,27 @@ func TestWriteMCPSettingsFile_WithToolchainPATH(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(data, &settings))
 	assert.Contains(t, settings.MCPServers["test"].Env["PATH"], "/toolchain/bin")
+}
+
+func TestSendMessageWithToolsAndHistory_NotSupported(t *testing.T) {
+	client := &Client{binaryPath: "gemini"}
+	_, err := client.SendMessageWithToolsAndHistory(context.Background(), nil, nil)
+	assert.ErrorIs(t, err, errUtils.ErrCLIProviderToolsNotSupported)
+}
+
+func TestFormatMessages(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "What stacks?"},
+		{Role: types.RoleAssistant, Content: "You have 4."},
+	}
+	result := formatMessages(messages)
+	assert.Contains(t, result, "What stacks?")
+	assert.Contains(t, result, "Assistant: You have 4.")
+}
+
+func TestFormatMessages_Empty(t *testing.T) {
+	result := formatMessages(nil)
+	assert.Empty(t, result)
 }
 
 func TestResolveToolchainPATH_NoDeps(t *testing.T) {

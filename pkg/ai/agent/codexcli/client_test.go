@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -223,6 +224,29 @@ func TestWriteTOMLServer_MultipleArgs(t *testing.T) {
 	assert.Contains(t, content, `"readonly"`)
 	// Verify args are comma-separated.
 	assert.True(t, strings.Contains(content, ", "), "args should be comma-separated")
+}
+
+func TestSendMessageWithToolsAndHistory_NotSupported(t *testing.T) {
+	client := &Client{binaryPath: "codex"}
+	_, err := client.SendMessageWithToolsAndHistory(context.Background(), nil, nil)
+	assert.ErrorIs(t, err, errUtils.ErrCLIProviderToolsNotSupported)
+}
+
+func TestFormatMessages(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "What stacks?"},
+		{Role: types.RoleAssistant, Content: "You have 4."},
+		{Role: types.RoleUser, Content: "Describe vpc."},
+	}
+	result := formatMessages(messages)
+	assert.Contains(t, result, "What stacks?")
+	assert.Contains(t, result, "Assistant: You have 4.")
+	assert.Contains(t, result, "Describe vpc.")
+}
+
+func TestFormatMessages_Empty(t *testing.T) {
+	result := formatMessages(nil)
+	assert.Empty(t, result)
 }
 
 func TestResolveToolchainPATH_NoDeps(t *testing.T) {
