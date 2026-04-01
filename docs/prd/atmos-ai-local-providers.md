@@ -1,8 +1,8 @@
 # Atmos AI Local Providers — Use Claude Code, Gemini CLI, and OpenAI Codex Instead of API Tokens
 
 **Status:** Phase 1-3 Shipped (all 3 providers), Phase 4 Planned
-**Version:** 1.2
-**Last Updated:** 2026-03-30
+**Version:** 1.3
+**Last Updated:** 2026-04-01
 
 ---
 
@@ -198,7 +198,7 @@ act as an MCP server itself (`codex mcp-server`).
 |--------------------|----------------------|-------------------|-----------------|-------------------|--------------|----------------|
 | Claude Code        | `claude -p`          | JSON              | Client only     | Claude Pro/Max    | No           | **YES — HIGH** |
 | Codex CLI          | `codex exec`         | JSONL + Schema    | Client + Server | ChatGPT Plus/Pro  | No           | **YES — HIGH** |
-| Gemini CLI         | `gemini -p`          | JSON              | Client          | Google account    | Yes (1K/day) | **YES — HIGH** |
+| Gemini CLI         | `gemini -p`          | JSON              | Client ⚠️       | Google account    | Yes (1K/day) | **YES — HIGH** |
 | GitHub Copilot CLI | Retired              | N/A               | N/A             | N/A               | N/A          | NO             |
 | Cursor CLI         | No programmatic API  | N/A               | N/A             | N/A               | N/A          | NO             |
 
@@ -551,8 +551,9 @@ is used, it emits newline-delimited JSON events for incremental processing.
 - **Codex CLI** — Best for OpenAI users with ChatGPT Plus/Pro subscriptions. Full MCP
   support (client + server), JSON Schema output validation, open source, local model
   support via Ollama.
-- **Gemini CLI** — Best for cost-conscious users (free tier), quick queries, and
-  environments where Google auth is already available. Simpler but effective.
+- **Gemini CLI** — Best for cost-conscious users (free tier), quick prompt-only queries,
+  and environments where Google auth is already available. MCP servers are not available
+  with the free `oauth-personal` tier — use Claude Code or Codex CLI for MCP workflows.
 
 ### MCP Integration — Best of Both Worlds
 
@@ -650,8 +651,8 @@ ai:
 | **Auth**              | API key in env var         | OAuth (subscription)    | OAuth or API key         | Google Sign-In                |
 | **Cost**              | Per-token ($3-15/M tokens) | $20-200/mo subscription | $20-200/mo or per-token  | Free (1K/day)                 |
 | **Models**            | Configurable               | Latest (auto-updates)   | gpt-5.4, gpt-5.4-mini    | gemini-2.5-flash              |
-| **Tool use**          | Atmos tools only           | Claude tools + MCP      | Codex tools + MCP        | Gemini tools                  |
-| **MCP**               | N/A                        | Client only             | Client + Server          | Client                        |
+| **Tool use**          | Atmos tools only           | Claude tools + MCP      | Codex tools + MCP        | Gemini built-in tools only    |
+| **MCP**               | N/A                        | Client only             | Client + Server          | Blocked with free tier ⚠️     |
 | **Structured output** | Provider-dependent         | JSON + schema           | JSONL + JSON Schema      | JSON                          |
 | **Session**           | Atmos-managed SQLite       | Claude-managed          | Codex-managed            | N/A                           |
 | **Offline**           | No (except Ollama)         | No                      | Yes (`--oss` Ollama)     | No                            |
@@ -749,7 +750,7 @@ servers. The exported config is exactly what Claude Code needs.
 
 **Implemented for:**
 - ✅ Claude Code: `claude -p --mcp-config <file> --dangerously-skip-permissions`
-- ✅ Gemini CLI: writes `.gemini/settings.json` in a temp dir, sets `cmd.Dir`, passes `--yolo`
+- ⚠️ Gemini CLI: writes `.gemini/settings.json` to cwd, passes `--allowed-mcp-server-names` — **MCP blocked with `oauth-personal` auth** (see Known Limitations)
 - ✅ Codex CLI: writes `.codex/config.toml` in a temp dir, sets `cmd.Dir`, passes `--full-auto`
 
 **Gemini CLI approach:**
@@ -783,12 +784,33 @@ controlled at three levels:
    - Untrusted folders block: MCP servers, workspace settings, tool auto-accept
    - Atmos writes to cwd (trusted by user) instead of temp dirs to avoid this
 
-**If MCP/YOLO is blocked by Google Workspace admin:**
-- Go to [Google Admin Console](https://admin.google.com) → Apps → Additional Google services
-- Enable MCP and YOLO for Gemini CLI users
-- Alternatively, authenticate with a personal Google account (`gemini auth logout` then
-  `gemini auth login` with a `@gmail.com` account) — personal accounts have no restrictions
-- The free tier (1K requests/day) works with personal accounts
+**Gemini CLI MCP — Known Limitation with `oauth-personal` auth:**
+
+When using `oauth-personal` authentication (the default for personal `@gmail.com` accounts),
+Gemini CLI routes all requests through Google's internal proxy project. **Google has disabled
+the MCP feature flag on this proxy for personal accounts.** This is a server-side restriction
+that cannot be overridden locally.
+
+Symptoms:
+- `gemini mcp list` returns exit code 52: "MCP is disabled by your administrator"
+- No local settings file, environment variable, or admin console can fix this
+- The link in the error message (`https://goo.gle/manage-gemini-cli`) points to an
+  internal GCP project that is inaccessible to end users
+
+**Workaround — switch to API key auth:**
+1. Get a Gemini API key from [AI Studio](https://aistudio.google.com/app/apikey)
+2. Set `selectedType: "gemini-api-key"` in `~/.gemini/settings.json`
+3. Set `GEMINI_API_KEY` env var
+
+**However**, using an API key makes `gemini-cli` functionally equivalent to the existing
+`gemini` API provider (which Atmos already supports) — it uses the same models and the
+same API billing. The key value proposition of `gemini-cli` (free tier with personal
+Google account, no API tokens needed) is lost when switching to API key auth.
+
+**Recommendation:** Use `gemini-cli` provider for prompt-only queries (no MCP) when
+leveraging the free personal Google account tier. For MCP-enabled workflows, use
+`claude-code` (recommended) or `codex-cli` instead — both have full MCP support with
+their subscription-based auth.
 
 **Codex CLI approach:**
 Codex CLI reads MCP servers from `.codex/config.toml` using TOML `[mcp_servers.<name>]`
@@ -914,6 +936,12 @@ This is optional — many use cases only need external MCP servers (AWS billing,
    Atmos needs to handle format evolution gracefully.
 5. **Rate limits** — Subscription rate limits may be lower than API rate limits for
    high-volume usage.
+6. **Gemini CLI MCP blocked with free tier** — Google disables MCP on the server-side
+   proxy for `oauth-personal` (personal Google account) auth. MCP servers configured in
+   `.gemini/settings.json` are visible to Gemini but cannot be invoked as tools.
+   Switching to `gemini-api-key` auth enables MCP but makes the provider functionally
+   equivalent to the existing `gemini` API provider, losing the free-tier benefit.
+   The `gemini-cli` provider works for prompt-only queries without MCP.
 
 ### Trade-offs
 
@@ -927,9 +955,10 @@ This is optional — many use cases only need external MCP servers (AWS billing,
 
 ### Recommended Usage
 
-- **Interactive development** → Claude Code provider (subscription, rich features)
+- **Interactive development with MCP** → Claude Code provider (subscription, rich features, full MCP)
 - **CI/CD pipelines** → API providers (env var auth, no interactive login)
-- **Cost-conscious users** → Gemini CLI provider (free tier)
+- **Cost-conscious users (no MCP)** → Gemini CLI provider (free tier, prompt-only)
+- **MCP with OpenAI** → Codex CLI provider (ChatGPT subscription, full MCP client + server)
 - **Enterprise** → API providers or Bedrock (compliance, audit trails)
 
 ---
