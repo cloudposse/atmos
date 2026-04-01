@@ -404,7 +404,7 @@ func TestExtractCommandNamesFromShell(t *testing.T) {
 		{
 			name:       "dynamic command via variable",
 			cmd:        "$CMD arg",
-			wantNames:  nil,  // no literal names extracted
+			wantNames:  nil,   // no literal names extracted
 			wantLitAll: false, // allLiteral must be false
 		},
 		{
