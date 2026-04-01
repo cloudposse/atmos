@@ -192,4 +192,3 @@ func (t *ExecuteAtmosCommandTool) IsRestricted() bool {
 	// Permission system will handle per-command restrictions.
 	return false
 }
-

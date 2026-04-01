@@ -288,4 +288,3 @@ func TestExecuteAtmosCommandTool_SafeCommandsAlwaysAllowed(t *testing.T) {
 		}
 	}
 }
-
