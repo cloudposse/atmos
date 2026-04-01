@@ -51,16 +51,12 @@ func TestResolveBase_PullRequest_Opened(t *testing.T) {
 }
 
 func TestResolveBase_PullRequest_Closed(t *testing.T) {
+	// For merged PRs, resolves HEAD~1 (parent of the merge/current commit).
 	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 	t.Setenv("GITHUB_BASE_REF", "main")
 
 	eventPayload := map[string]any{
 		"action": "closed",
-		"pull_request": map[string]any{
-			"base": map[string]any{
-				"sha": "abc123def456789012345678901234567890abcd",
-			},
-		},
 	}
 	eventPath := writeEventPayload(t, eventPayload)
 	t.Setenv("GITHUB_EVENT_PATH", eventPath)
@@ -70,9 +66,8 @@ func TestResolveBase_PullRequest_Closed(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Empty(t, res.Ref)
-	assert.Equal(t, "abc123def456789012345678901234567890abcd", res.SHA)
-	assert.Equal(t, "event.pull_request.base.sha", res.Source)
+	assert.NotEmpty(t, res.SHA, "should resolve HEAD~1 SHA")
+	assert.Contains(t, res.Source, "HEAD~1")
 	assert.Equal(t, "pull_request", res.EventType)
 }
 
@@ -251,51 +246,8 @@ func TestResolveBase_Push_ForcePush(t *testing.T) {
 	}
 }
 
-// TestExtractClosedPRBase_EdgeCases tests edge cases for extractClosedPRBase.
-func TestExtractClosedPRBase_EdgeCases(t *testing.T) {
-	t.Run("missing pull_request key", func(t *testing.T) {
-		payload := map[string]any{"action": "closed"}
-		res := extractClosedPRBase(payload, "pull_request")
-		assert.Nil(t, res)
-	})
-
-	t.Run("missing base key", func(t *testing.T) {
-		payload := map[string]any{
-			"action":       "closed",
-			"pull_request": map[string]any{"head": map[string]any{"sha": "abc"}},
-		}
-		res := extractClosedPRBase(payload, "pull_request")
-		assert.Nil(t, res)
-	})
-
-	t.Run("empty SHA", func(t *testing.T) {
-		payload := map[string]any{
-			"action": "closed",
-			"pull_request": map[string]any{
-				"base": map[string]any{"sha": ""},
-			},
-		}
-		res := extractClosedPRBase(payload, "pull_request")
-		assert.Nil(t, res)
-	})
-
-	t.Run("valid SHA", func(t *testing.T) {
-		payload := map[string]any{
-			"action": "closed",
-			"pull_request": map[string]any{
-				"base": map[string]any{"sha": "abc123def456789012345678901234567890abcd"},
-			},
-		}
-		res := extractClosedPRBase(payload, "pull_request")
-		require.NotNil(t, res)
-		assert.Equal(t, "abc123def456789012345678901234567890abcd", res.SHA)
-		assert.Equal(t, "event.pull_request.base.sha", res.Source)
-	})
-}
-
-// TestResolveBase_PullRequest_Closed_MissingBaseSHA tests fallback when closed PR payload
-// has no base SHA.
-func TestResolveBase_PullRequest_Closed_MissingBaseSHA(t *testing.T) {
+// TestResolveBase_PullRequest_Closed_ResolvesParentCommit tests that merged PRs resolve HEAD~1.
+func TestResolveBase_PullRequest_Closed_ResolvesParentCommit(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 	t.Setenv("GITHUB_BASE_REF", "develop")
 
@@ -311,9 +263,9 @@ func TestResolveBase_PullRequest_Closed_MissingBaseSHA(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	// Should fall back to GITHUB_BASE_REF.
-	assert.Equal(t, "refs/remotes/origin/develop", res.Ref)
-	assert.Equal(t, "GITHUB_BASE_REF", res.Source)
+	// In a real git repo (like during tests), HEAD~1 succeeds.
+	assert.NotEmpty(t, res.SHA)
+	assert.Contains(t, res.Source, "HEAD~1")
 }
 
 // TestResolveBase_Push_EmptyBefore tests push with empty before SHA.

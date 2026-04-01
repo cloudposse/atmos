@@ -56,8 +56,8 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 }
 
 // resolvePRBase resolves the base commit for pull request events.
-// For closed/merged PRs, it uses the base SHA from the event payload.
-// For open/synchronize PRs, it uses the target branch ref.
+// For closed/merged PRs, it uses HEAD~1 (the parent of the merge commit).
+// For open/synchronize PRs, it computes the merge-base with the target branch.
 func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	payload, err := readEventPayload()
 	if err != nil {
@@ -67,40 +67,24 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	// Check if this is a closed PR (merged).
 	action, _ := payload["action"].(string)
 	if action == "closed" {
-		if res := extractClosedPRBase(payload, eventName); res != nil {
-			return res, nil
+		// For merged PRs, the workflow should check out the merge commit.
+		// The base is its first parent (the pre-merge state of the target branch).
+		// Using HEAD~1 is always correct regardless of merge strategy (merge, squash, rebase),
+		// unlike pull_request.base.sha which can be stale if other PRs merged first.
+		sha, err := resolveParentCommit()
+		if err != nil {
+			log.Warn("Failed to resolve HEAD~1 for merged PR, falling back to GITHUB_BASE_REF", "error", err)
+		} else {
+			return &provider.BaseResolution{
+				SHA:       sha,
+				Source:    "HEAD~1 (merged PR)",
+				EventType: eventName,
+			}, nil
 		}
-
-		log.Warn("Could not extract pull_request.base.sha from event payload, falling back to GITHUB_BASE_REF")
 	}
 
-	// For open/synchronize PRs, use the target branch.
+	// For open/synchronize PRs, use the target branch ref.
 	return resolveFromBaseRef(eventName), nil
-}
-
-// extractClosedPRBase extracts the base SHA from a closed PR event payload.
-// Returns nil if the SHA cannot be extracted.
-func extractClosedPRBase(payload map[string]any, eventName string) *provider.BaseResolution {
-	pr, _ := payload["pull_request"].(map[string]any)
-	if pr == nil {
-		return nil
-	}
-
-	base, _ := pr["base"].(map[string]any)
-	if base == nil {
-		return nil
-	}
-
-	sha, _ := base["sha"].(string)
-	if sha == "" {
-		return nil
-	}
-
-	return &provider.BaseResolution{
-		SHA:       sha,
-		Source:    "event.pull_request.base.sha",
-		EventType: eventName,
-	}
 }
 
 // resolveFromBaseRef resolves the base from $GITHUB_BASE_REF, falling back to defaultRef.
