@@ -101,32 +101,33 @@ atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks  # Mu
     </div>
 </ActionCard>
 
-## Providers
+## AI Providers
 
 Atmos supports two types of AI providers:
 
 **API providers** call the provider's API directly with purchased tokens. Atmos manages the tool execution loop in-process.
 
-| Provider | Config Key | Auth |
-|---|---|---|
-| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` |
-| OpenAI | `openai` | `OPENAI_API_KEY` |
-| Google Gemini | `gemini` | `GEMINI_API_KEY` |
-| Grok (xAI) | `grok` | `XAI_API_KEY` |
-| AWS Bedrock | `bedrock` | AWS IAM credentials |
-| Azure OpenAI | `azureopenai` | `AZURE_OPENAI_API_KEY` |
-| Ollama | `ollama` | None (local) |
+| Provider      | Config Key    | Auth                   |
+|---------------|---------------|------------------------|
+| Anthropic     | `anthropic`   | `ANTHROPIC_API_KEY`    |
+| OpenAI        | `openai`      | `OPENAI_API_KEY`       |
+| Google Gemini | `gemini`      | `GEMINI_API_KEY`       |
+| Grok (xAI)    | `grok`        | `XAI_API_KEY`          |
+| AWS Bedrock   | `bedrock`     | AWS IAM credentials    |
+| Azure OpenAI  | `azureopenai` | `AZURE_OPENAI_API_KEY` |
+| Ollama        | `ollama`      | None (local)           |
 
-**CLI providers** invoke a locally installed AI tool as a subprocess, reusing your existing subscription. The CLI tool manages its own tool execution loop, and MCP servers are passed through for tool access.
+**CLI providers** invoke a locally installed AI tool as a subprocess, reusing your existing subscription.
+The CLI tool manages its own tool execution loop, and MCP servers are passed through for tool access.
 
-| Provider | Config Key | Binary | Auth | MCP |
-|---|---|---|---|---|
-| Claude Code | `claude-code` | `claude` | Claude Pro/Max subscription | Full |
-| OpenAI Codex | `codex-cli` | `codex` | ChatGPT Plus/Pro subscription | Full |
-| Gemini CLI | `gemini-cli` | `gemini` | Google account (free tier) | Blocked for personal accounts |
+| Provider     | Config Key    | Binary   | Auth                          | MCP                           |
+|--------------|---------------|----------|-------------------------------|-------------------------------|
+| Claude Code  | `claude-code` | `claude` | Claude Pro/Max subscription   | Full                          |
+| OpenAI Codex | `codex-cli`   | `codex`  | ChatGPT Plus/Pro subscription | Full                          |
+| Gemini CLI   | `gemini-cli`  | `gemini` | Google account (free tier)    | Blocked for personal accounts |
 
 :::tip When to use which
-- **Interactive development with MCP** — `claude-code` or `codex-cli` (subscription, full MCP)
+- **Interactive development with MCP** — `claude-code` or `codex-cli` (subscription, full MCP), or any of the API providers
 - **CI/CD pipelines** — API providers (env var auth, no interactive login)
 - **Cost-conscious** — `gemini-cli` (free tier, prompt-only)
 - **Enterprise** — `bedrock` or `azureopenai` (compliance, audit trails)
@@ -255,7 +256,7 @@ in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos t
 only the servers relevant to your question using a lightweight routing call. This keeps tool payloads small
 and responses fast. Use the `--mcp` flag to override and specify servers directly.
 
-**MCP Pass-Through** — With CLI providers (`claude-code`, `codex-cli`), all configured MCP servers are
+**MCP Pass-Through** — With CLI AI providers (`claude-code`, `codex-cli`), all configured MCP servers are
 passed to the CLI tool via its native config format. The CLI tool decides which servers to use.
 Smart routing is skipped — the AI model handles server selection internally.
 
