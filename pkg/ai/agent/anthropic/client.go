@@ -3,6 +3,7 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -67,9 +68,15 @@ func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, err
 	// Extract Anthropic-specific cache settings.
 	cache := extractCacheConfig(atmosConfig)
 
-	// Create Anthropic client.
+	// Create Anthropic client with timeout matching atmos config.
+	// Default 60s, configurable via ai.timeout_seconds.
+	requestTimeout := base.DefaultRequestTimeout
+	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
+		requestTimeout = time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
+	}
 	client := anthropic.NewClient(
 		option.WithAPIKey(apiKey),
+		option.WithRequestTimeout(requestTimeout),
 	)
 
 	return &SimpleClient{

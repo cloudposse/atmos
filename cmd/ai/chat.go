@@ -58,6 +58,8 @@ var chatCmd = &cobra.Command{
 			return err
 		}
 
+		mcpServers := v.GetStringSlice("mcp")
+
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -128,9 +130,15 @@ var chatCmd = &cobra.Command{
 		// Initialize tool registry and executor if tools are enabled.
 		var executor *tools.Executor
 		if atmosConfig.AI.Tools.Enabled {
-			_, executor, err = initializeAIToolsAndExecutor(&atmosConfig)
-			if err != nil {
-				log.Warnf("Failed to initialize AI tools: %v", err)
+			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, "")
+			if toolsErr != nil {
+				log.Warnf("Failed to initialize AI tools: %v", toolsErr)
+			}
+			if toolsResult != nil {
+				executor = toolsResult.Executor
+				if toolsResult.MCPMgr != nil {
+					defer toolsResult.MCPMgr.StopAll() //nolint:errcheck // Best-effort MCP server cleanup.
+				}
 			}
 		}
 
@@ -179,7 +187,9 @@ func init() {
 	// Create parser with chat-specific flags using functional options.
 	chatParser = flags.NewStandardParser(
 		flags.WithStringFlag("session", "", "", "Resume or create a named session"),
+		flags.WithStringSliceFlag("mcp", "", nil, "MCP servers to use (comma-separated, skips auto-routing)"),
 		flags.WithEnvVars("session", "ATMOS_AI_SESSION"),
+		flags.WithEnvVars("mcp", "ATMOS_AI_MCP"),
 	)
 
 	// Register flags on the command.
