@@ -68,7 +68,7 @@ func TestNewClient_MCPServers_NotCaptured_WhenEmpty(t *testing.T) {
 	client, err := NewClient(atmosConfig)
 	require.NoError(t, err)
 	assert.Nil(t, client.mcpServers)
-	assert.Empty(t, client.mcpConfigDir)
+	assert.Empty(t, client.mcpConfigArgs)
 }
 
 func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
@@ -86,21 +86,28 @@ func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
 	client, err := NewClient(atmosConfig)
 	require.NoError(t, err)
 	assert.Len(t, client.mcpServers, 1)
-	assert.NotEmpty(t, client.mcpConfigDir)
+	assert.NotEmpty(t, client.mcpConfigArgs)
 
-	if client.mcpConfigDir != "" {
-		defer os.RemoveAll(client.mcpConfigDir)
-	}
-
-	// Verify config.toml was created.
-	configFile := filepath.Join(client.mcpConfigDir, ".codex", "config.toml")
-	data, err := os.ReadFile(configFile)
-	require.NoError(t, err)
-	assert.Contains(t, string(data), "[mcp_servers.aws-docs]")
-	assert.Contains(t, string(data), `command = "uvx"`)
+	// Verify -c flags contain MCP server config.
+	argsStr := strings.Join(client.mcpConfigArgs, " ")
+	assert.Contains(t, argsStr, "mcp_servers.aws-docs.command")
+	assert.Contains(t, argsStr, "uvx")
 }
 
-func TestExtractResult_JSONL(t *testing.T) {
+func TestExtractResult_JSONL_AgentMessage(t *testing.T) {
+	// Actual Codex CLI output format: item.type is "agent_message" with text directly on item.
+	input := `{"type":"thread.started","thread_id":"019d499a-ca7f-7ec3-af21-5860784b0a11"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Analysis complete."}}
+{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":50}}`
+
+	result, err := ExtractResult([]byte(input))
+	require.NoError(t, err)
+	assert.Equal(t, "Analysis complete.", result)
+}
+
+func TestExtractResult_JSONL_MessageFormat(t *testing.T) {
+	// API-style format: item.type is "message" with nested content array.
 	input := `{"type":"thread.started","session_id":"abc123"}
 {"type":"item.completed","item":{"type":"message","content":[{"type":"text","text":"Analysis complete."}]}}
 {"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":50}}`
@@ -140,6 +147,43 @@ func TestGetMaxTokens(t *testing.T) {
 
 func TestProviderName(t *testing.T) {
 	assert.Equal(t, "codex-cli", ProviderName)
+}
+
+func TestBuildMCPConfigArgs(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws-docs": {Command: "uvx", Args: []string{"docs@latest"}},
+		"auth-srv": {Command: "uvx", Args: []string{"pkg@latest"}, Identity: "admin"},
+	}
+
+	args := buildMCPConfigArgs(servers, "")
+	argsStr := strings.Join(args, " ")
+
+	// aws-docs should be passed directly.
+	assert.Contains(t, argsStr, `mcp_servers.aws-docs.command="uvx"`)
+	assert.Contains(t, argsStr, `mcp_servers.aws-docs.args=["docs@latest"]`)
+
+	// auth-srv should be wrapped with atmos auth exec.
+	assert.Contains(t, argsStr, `mcp_servers.auth-srv.command="atmos"`)
+}
+
+func TestBuildMCPConfigArgs_WithEnv(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"test": {Command: "uvx", Args: []string{"pkg@latest"}, Env: map[string]string{"AWS_REGION": "us-east-1"}},
+	}
+
+	args := buildMCPConfigArgs(servers, "")
+	argsStr := strings.Join(args, " ")
+	assert.Contains(t, argsStr, `mcp_servers.test.env.AWS_REGION="us-east-1"`)
+}
+
+func TestBuildMCPConfigArgs_WithToolchainPATH(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"test": {Command: "uvx", Args: []string{"pkg@latest"}},
+	}
+
+	args := buildMCPConfigArgs(servers, "/toolchain/bin")
+	argsStr := strings.Join(args, " ")
+	assert.Contains(t, argsStr, "/toolchain/bin")
 }
 
 func TestWriteMCPConfigTOML(t *testing.T) {

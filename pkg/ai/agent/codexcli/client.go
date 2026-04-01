@@ -18,7 +18,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/dependencies"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -42,7 +41,7 @@ type Client struct {
 	fullAuto      bool
 	mcpServers    map[string]schema.MCPServerConfig
 	toolchainPATH string
-	mcpConfigDir  string // Temp dir containing .codex/config.toml for MCP config.
+	mcpConfigArgs []string // -c flags for MCP server config.
 }
 
 // NewClient creates a new Codex CLI client from Atmos configuration.
@@ -87,18 +86,13 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	}
 
 	// Capture MCP servers for pass-through (only if configured).
+	// Codex CLI only reads from ~/.codex/config.toml (no project-level config),
+	// so we pass MCP servers via -c flags on the command line.
 	if len(atmosConfig.MCP.Servers) > 0 {
 		client.mcpServers = atmosConfig.MCP.Servers
 		client.toolchainPATH = resolveToolchainPATH(atmosConfig)
-		// Generate .codex/config.toml in a temp directory.
-		configDir, err := writeMCPConfigTOML(client.mcpServers, client.toolchainPATH)
-		if err != nil {
-			log.Debug("Failed to generate Codex MCP config", "error", err)
-		} else {
-			client.mcpConfigDir = configDir
-			ui.Info(fmt.Sprintf("MCP servers configured: %d (config: %s)", len(client.mcpServers),
-				filepath.Join(configDir, ".codex", "config.toml")))
-		}
+		client.mcpConfigArgs = buildMCPConfigArgs(client.mcpServers, client.toolchainPATH)
+		ui.Info(fmt.Sprintf("MCP servers configured: %d (via -c flags)", len(client.mcpServers)))
 	}
 
 	return client, nil
@@ -112,18 +106,20 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	if c.model != "" && c.model != ProviderName {
 		args = append(args, "-m", c.model)
 	}
-	if c.fullAuto {
+	// When MCP servers are configured, use --dangerously-bypass-approvals-and-sandbox
+	// because --full-auto only auto-approves file writes, not MCP tool calls.
+	// This is safe because MCP servers were explicitly configured by the user in atmos.yaml.
+	if len(c.mcpConfigArgs) > 0 {
+		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+	} else if c.fullAuto {
 		args = append(args, "--full-auto")
 	}
 
+	// Pass MCP server config via -c flags.
+	args = append(args, c.mcpConfigArgs...)
+
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
 	cmd.Stdin = strings.NewReader(message)
-
-	// If MCP config dir exists, set it as working directory so Codex CLI
-	// picks up .codex/config.toml from the project-level config.
-	if c.mcpConfigDir != "" {
-		cmd.Dir = c.mcpConfigDir
-	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -193,20 +189,15 @@ func (c *Client) GetModel() string { return c.model }
 func (c *Client) GetMaxTokens() int { return 0 }
 
 // ExtractResult parses JSONL output and extracts the final text response.
+// Codex CLI emits JSONL events. The response text is in "item.completed" events
+// where item.type is "agent_message" (text in item.text directly) or "message"
+// (text in item.content[].text array).
 func ExtractResult(output []byte) (string, error) {
 	var lastText string
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
-		var event codexEvent
-		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
-			continue
-		}
-		if event.Type == "item.completed" && event.Item.Type == "message" {
-			for _, content := range event.Item.Content {
-				if content.Type == "text" {
-					lastText = content.Text
-				}
-			}
+		if text := extractTextFromEvent(scanner.Bytes()); text != "" {
+			lastText = text
 		}
 	}
 	if lastText == "" {
@@ -220,6 +211,31 @@ func ExtractResult(output []byte) (string, error) {
 	return lastText, nil
 }
 
+// extractTextFromEvent extracts text from a single JSONL event line.
+// Returns empty string if the event is not an item.completed with text content.
+func extractTextFromEvent(line []byte) string {
+	var event codexEvent
+	if err := json.Unmarshal(line, &event); err != nil {
+		return ""
+	}
+	if event.Type != "item.completed" {
+		return ""
+	}
+	// Codex CLI uses "agent_message" type with text directly on the item.
+	if event.Item.Type == "agent_message" && event.Item.Text != "" {
+		return event.Item.Text
+	}
+	// Also handle "message" type with nested content array (API format).
+	if event.Item.Type == "message" {
+		for _, content := range event.Item.Content {
+			if content.Type == "text" {
+				return content.Text
+			}
+		}
+	}
+	return ""
+}
+
 type codexEvent struct {
 	Type string    `json:"type"`
 	Item codexItem `json:"item"`
@@ -227,12 +243,37 @@ type codexEvent struct {
 
 type codexItem struct {
 	Type    string         `json:"type"`
-	Content []codexContent `json:"content"`
+	Text    string         `json:"text,omitempty"`    // Direct text for agent_message type.
+	Content []codexContent `json:"content,omitempty"` // Nested content for message type.
 }
 
 type codexContent struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
+}
+
+// buildMCPConfigArgs generates -c flags to pass MCP server config to Codex CLI.
+// Codex CLI only reads from ~/.codex/config.toml, so we use -c overrides to inject
+// MCP servers without modifying the user's global config.
+func buildMCPConfigArgs(servers map[string]schema.MCPServerConfig, toolchainPATH string) []string {
+	mcpConfig := mcpclient.GenerateMCPConfig(servers, toolchainPATH)
+	var args []string
+	for name, srv := range mcpConfig.MCPServers {
+		prefix := fmt.Sprintf("mcp_servers.%s", name)
+		args = append(args, "-c", fmt.Sprintf("%s.command=%q", prefix, srv.Command))
+		if len(srv.Args) > 0 {
+			// Format as TOML array: ["arg1", "arg2"].
+			var quoted []string
+			for _, a := range srv.Args {
+				quoted = append(quoted, fmt.Sprintf("%q", a))
+			}
+			args = append(args, "-c", fmt.Sprintf("%s.args=[%s]", prefix, strings.Join(quoted, ", ")))
+		}
+		for k, v := range srv.Env {
+			args = append(args, "-c", fmt.Sprintf("%s.env.%s=%q", prefix, k, v))
+		}
+	}
+	return args
 }
 
 // writeMCPConfigTOML creates a temp directory with .codex/config.toml containing MCP config.
