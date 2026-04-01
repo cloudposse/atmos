@@ -103,11 +103,32 @@ func copyEnv(env map[string]string) map[string]string {
 const envPATH = "PATH"
 
 // injectToolchainPATH prepends the toolchain PATH to the existing PATH in env.
+// Deduplicates PATH entries to avoid bloated env variables.
 func injectToolchainPATH(env map[string]string, toolchainPATH string) {
+	var basePATH string
 	if existing, ok := env[envPATH]; ok && existing != "" {
-		env[envPATH] = toolchainPATH + string(os.PathListSeparator) + existing
+		basePATH = existing
 	} else {
-		// Prepend to system PATH.
-		env[envPATH] = toolchainPATH + string(os.PathListSeparator) + os.Getenv(envPATH) //nolint:forbidigo // Need system PATH as base for toolchain prepend.
+		basePATH = os.Getenv(envPATH) //nolint:forbidigo // Need system PATH as base for toolchain prepend.
 	}
+
+	// Combine toolchain PATH + base PATH and deduplicate.
+	combined := toolchainPATH + string(os.PathListSeparator) + basePATH
+	env[envPATH] = deduplicatePATH(combined)
+}
+
+// deduplicatePATH removes duplicate entries from a PATH string while preserving order.
+func deduplicatePATH(pathStr string) string {
+	seen := make(map[string]bool)
+	var unique []string
+	for _, dir := range filepath.SplitList(pathStr) {
+		if dir == "" {
+			continue
+		}
+		if !seen[dir] {
+			seen[dir] = true
+			unique = append(unique, dir)
+		}
+	}
+	return strings.Join(unique, string(os.PathListSeparator))
 }

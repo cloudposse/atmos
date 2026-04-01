@@ -138,3 +138,57 @@ func TestCopyEnv_Nil(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Empty(t, result)
 }
+
+func TestDeduplicatePATH(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no duplicates",
+			input:    "/usr/bin:/usr/local/bin:/opt/bin",
+			expected: "/usr/bin:/usr/local/bin:/opt/bin",
+		},
+		{
+			name:     "duplicates removed",
+			input:    "/toolchain/bin:/usr/bin:/toolchain/bin:/usr/bin",
+			expected: "/toolchain/bin:/usr/bin",
+		},
+		{
+			name:     "empty entries removed",
+			input:    "/usr/bin::/usr/local/bin:",
+			expected: "/usr/bin:/usr/local/bin",
+		},
+		{
+			name:     "preserves order",
+			input:    "/c:/a:/b:/a:/c",
+			expected: "/c:/a:/b",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := deduplicatePATH(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestInjectToolchainPATH_Deduplicates(t *testing.T) {
+	env := map[string]string{
+		"PATH": "/usr/bin:/usr/local/bin",
+	}
+	// Toolchain PATH includes a dir already in the existing PATH.
+	injectToolchainPATH(env, "/toolchain/bin:/usr/bin")
+	path := env["PATH"]
+	// /usr/bin should appear only once.
+	count := strings.Count(path, "/usr/bin")
+	assert.Equal(t, 1, count, "PATH should not contain duplicate /usr/bin entries")
+	// Toolchain should be first.
+	assert.True(t, strings.HasPrefix(path, "/toolchain/bin"))
+}
