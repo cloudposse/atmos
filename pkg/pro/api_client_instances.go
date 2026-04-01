@@ -14,7 +14,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -41,11 +40,11 @@ func (c *AtmosProAPIClient) UploadInstances(dto *dtos.InstancesUploadRequest) er
 		RepoName:  dto.RepoName,
 		RepoOwner: dto.RepoOwner,
 		RepoHost:  dto.RepoHost,
-		Instances: []schema.Instance{},
+		Instances: []dtos.UploadInstance{},
 	}
 	overhead := metadataOverhead(overheadDTO)
 
-	return sendChunked(dto.Instances, c.MaxPayloadBytes, overhead, func(chunk []schema.Instance, batch *BatchInfo) error {
+	return sendChunked(dto.Instances, c.MaxPayloadBytes, overhead, func(chunk []dtos.UploadInstance, batch *BatchInfo) error {
 		chunkDTO := &dtos.InstancesUploadRequest{
 			RepoURL:   dto.RepoURL,
 			RepoName:  dto.RepoName,
