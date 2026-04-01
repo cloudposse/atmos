@@ -455,3 +455,19 @@ func TestProcessTagExec_AllowedCommands_DynamicCommandBlocked(t *testing.T) {
 	assert.ErrorIs(t, err, ErrExecCommandNotAllowed)
 	assert.Nil(t, result)
 }
+
+// TestProcessTagExec_AllowedCommands_InvalidSyntax verifies that a command with invalid shell
+// syntax is rejected (with ErrExecCommandNotAllowed) when an allowlist is configured.
+func TestProcessTagExec_AllowedCommands_InvalidSyntax(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Exec: schema.ExecConfig{
+			AllowedCommands: []string{"echo"},
+		},
+	}
+
+	// "echo <<<" is invalid POSIX shell syntax — the parser will error.
+	result, err := ProcessTagExec("!exec echo <<<", cfg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrExecCommandNotAllowed)
+	assert.Nil(t, result)
+}
