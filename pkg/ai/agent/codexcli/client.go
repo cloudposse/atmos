@@ -246,6 +246,42 @@ func extractTextFromEvent(line []byte) string {
 	return ""
 }
 
+// injectAtmosEnvVars adds ATMOS_* environment variables from the current process
+// into each MCP server's env. Codex CLI MCP servers don't inherit the parent
+// environment, so auth-related vars (ATMOS_PROFILE, ATMOS_BASE_PATH, etc.)
+// must be explicitly passed.
+func injectAtmosEnvVars(config *mcpclient.MCPJSONConfig) {
+	atmosVars := collectAtmosEnvVars()
+	if len(atmosVars) == 0 {
+		return
+	}
+	for name, srv := range config.MCPServers {
+		if srv.Env == nil {
+			srv.Env = make(map[string]string)
+		}
+		for k, v := range atmosVars {
+			// Don't overwrite explicitly configured values.
+			if _, exists := srv.Env[k]; !exists {
+				srv.Env[k] = v
+			}
+		}
+		config.MCPServers[name] = srv
+	}
+}
+
+// collectAtmosEnvVars returns all ATMOS_* env vars from the current process.
+func collectAtmosEnvVars() map[string]string {
+	result := make(map[string]string)
+	for _, env := range os.Environ() {
+		if strings.HasPrefix(env, "ATMOS_") {
+			if idx := strings.IndexByte(env, '='); idx > 0 {
+				result[env[:idx]] = env[idx+1:]
+			}
+		}
+	}
+	return result
+}
+
 // codexConfigPath returns the path to ~/.codex/config.toml.
 func codexConfigPath() string {
 	home, _ := homedir.Dir()
@@ -265,6 +301,11 @@ func (c *Client) writeMCPToGlobalConfig() error {
 
 	// Generate TOML content with MCP servers.
 	mcpConfig := mcpclient.GenerateMCPConfig(c.mcpServers, c.toolchainPATH)
+
+	// Codex CLI MCP servers don't inherit the parent process environment.
+	// Inject ATMOS_* env vars so auth and config discovery work correctly.
+	injectAtmosEnvVars(mcpConfig)
+
 	var buf bytes.Buffer
 	// Preserve existing non-MCP config.
 	if c.configBackedUp {
