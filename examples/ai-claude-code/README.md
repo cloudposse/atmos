@@ -42,7 +42,7 @@ ai:
   default_provider: "claude-code"
   providers:
     claude-code:
-      max_turns: 10                        # ← No API key needed
+      max_turns: 10
 ```
 
 **Setup:** `brew install claude` + `claude auth login` → Done.
@@ -365,6 +365,13 @@ Here's the complete execution flow for the billing query above:
 generation, auth credential injection — so the user just asks a question and gets
 an answer from real AWS data. Claude Code handles the AI reasoning and tool selection,
 while Atmos handles the infrastructure plumbing and orchestration.
+
+## Related Examples
+
+- **[MCP Server Integrations](../mcp/)** — Same MCP servers managed directly by Atmos
+  (API provider approach). Atmos handles the tool execution loop instead of Claude Code.
+- **[AI with API Providers](../ai/)** — Multi-provider AI configuration with sessions,
+  tools, and custom skills (without MCP servers).
 
 ## Learn More
 

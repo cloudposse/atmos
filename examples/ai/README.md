@@ -47,13 +47,20 @@ atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform --skill atmos-
 ATMOS_AI=true ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s ue1-prod
 ```
 
+## Related Examples
+
+- **[AI with Claude Code CLI Provider](../ai-claude-code/)** — Use your Claude Pro/Max
+  subscription instead of API tokens. Includes MCP server pass-through for AWS tools.
+- **[MCP Server Integrations](../mcp/)** — Connect Atmos to external AWS MCP servers
+  for billing, security, IAM, and documentation queries.
+
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `atmos.yaml` | Atmos configuration with AI provider settings |
-| `ATMOS.md` | Project instructions the AI reads automatically |
-| `stacks/deploy/` | Environment-specific stack files |
-| `stacks/mixins/` | Shared region and stage configuration |
-| `components/terraform/` | Mock Terraform components (VPC, Transit Gateway) |
-| `workflows/ai-demo.yaml` | Workflow demonstrating AI usage |
+| File                     | Purpose                                          |
+|--------------------------|--------------------------------------------------|
+| `atmos.yaml`             | Atmos configuration with AI provider settings    |
+| `ATMOS.md`               | Project instructions the AI reads automatically  |
+| `stacks/deploy/`         | Environment-specific stack files                 |
+| `stacks/mixins/`         | Shared region and stage configuration            |
+| `components/terraform/`  | Mock Terraform components (VPC, Transit Gateway) |
+| `workflows/ai-demo.yaml` | Workflow demonstrating AI usage                  |

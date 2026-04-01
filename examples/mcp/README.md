@@ -546,6 +546,22 @@ $ atmos mcp test aws-security
 ✓ Server responds to ping
 ```
 
+### Check status of all servers
+
+```text
+$ atmos mcp status
+      NAME       STATUS   TOOLS                        DESCRIPTION
+─────────────────────────────────────────────────────────────────────────────────────────
+ aws-api         running  2      AWS API — direct AWS CLI access with security controls
+ aws-billing     running  25     AWS Billing — billing summaries and payment history
+ aws-cloudtrail  running  5      AWS CloudTrail — event history and API call auditing
+ aws-docs        running  4      AWS Documentation — search and fetch AWS docs
+ aws-iam         running  29     AWS IAM — role/policy analysis and access patterns
+ aws-knowledge   running  6      AWS Knowledge — managed AWS knowledge base (remote)
+ aws-pricing     running  9      AWS Pricing — real-time pricing and cost analysis
+ aws-security    running  6      AWS Security — Well-Architected security posture assessment
+```
+
 ### Ask AI with MCP tools
 
 ```text
@@ -600,6 +616,7 @@ $ atmos ai ask "How do I configure S3 bucket lifecycle rules?"
 
 ```text
 $ atmos ai ask "Show our billing summary for the past 2 months"
+
 ℹ MCP routing selected 1 of 8 servers: aws-billing
 ℹ MCP server "aws-billing" started (25 tools)
 ℹ Registered 25 tools from 1 MCP server(s)
@@ -675,6 +692,7 @@ $ atmos ai ask "Show our billing summary for the past 2 months"
 
 ```text
 $ atmos ai ask "Is GuardDuty enabled in all regions?"
+
 ℹ MCP routing selected 2 of 8 servers: aws-api, aws-security
 ℹ MCP server "aws-api" started (2 tools)
 ℹ MCP server "aws-security" started (6 tools)
@@ -732,6 +750,7 @@ $ atmos ai ask "Is GuardDuty enabled in all regions?"
 
 ```text
 $ atmos ai ask "List all IAM roles with admin access"
+
 ℹ MCP routing selected 1 of 8 servers: aws-iam
 ℹ MCP server "aws-iam" started (29 tools)
 ℹ Registered 29 tools from 1 MCP server(s)
@@ -782,21 +801,105 @@ $ atmos ai ask "List all IAM roles with admin access"
   2. ✅ aws-iam → list_policies (174ms)
 ```
 
-### Check status of all servers
+### How This Example Works
+
+Here's the complete execution flow for the IAM audit query above
+(using an API provider like Anthropic):
 
 ```text
-$ atmos mcp status
-      NAME       STATUS   TOOLS                        DESCRIPTION
-─────────────────────────────────────────────────────────────────────────────────────────
- aws-api         running  2      AWS API — direct AWS CLI access with security controls
- aws-billing     running  25     AWS Billing — billing summaries and payment history
- aws-cloudtrail  running  5      AWS CloudTrail — event history and API call auditing
- aws-docs        running  4      AWS Documentation — search and fetch AWS docs
- aws-iam         running  29     AWS IAM — role/policy analysis and access patterns
- aws-knowledge   running  6      AWS Knowledge — managed AWS knowledge base (remote)
- aws-pricing     running  9      AWS Pricing — real-time pricing and cost analysis
- aws-security    running  6      AWS Security — Well-Architected security posture assessment
+┌─────────────────────────────────────────────────────────────────────┐
+│  1. User runs: atmos ai ask "List all IAM roles with admin access"  │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  2. Atmos reads atmos.yaml                                          │
+│     • AI provider: anthropic (API-based)                            │
+│     • MCP servers: 8 configured                                     │
+│     • Auth identity: "readonly" on credential-requiring servers     │
+│     • Toolchain: uv → astral-sh/uv (for uvx binary)                 │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  3. Smart MCP routing                                               │
+│                                                                     │
+│     Atmos sends server names + descriptions to the AI provider:     │
+│     "Which servers are relevant to: List all IAM roles?"            │
+│     AI responds: ["aws-iam"]                                        │
+│     → Only aws-iam is started (29 tools)                            │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  4. Atmos starts the aws-iam MCP server                             │
+│                                                                     │
+│     • Resolves uvx via toolchain PATH                               │
+│     • atmos auth exec -i readonly -- uvx awslabs.iam-mcp-server     │
+│     • Auth injects AWS credentials (SSO → role assumption)          │
+│     • MCP handshake: server reports 29 available tools              │
+│     • Tools registered as BridgedTools in Atmos AI tool registry    │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  5. Atmos sends prompt + tool definitions to AI provider            │
+│                                                                     │
+│     • Prompt: "List all IAM roles with admin access"                │
+│     • Tools: 10 native Atmos tools + 29 aws-iam MCP tools           │
+│     • System prompt + ATMOS.md instructions                         │
+│     → Anthropic API call with all tool schemas                      │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  6. AI decides which tools to call                                  │
+│                                                                     │
+│     AI responds with StopReason: "tool_use"                         │
+│     Tool calls requested:                                           │
+│       1. aws-iam → list_roles                                       │
+│       2. aws-iam → list_policies                                    │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  7. Atmos executes the tool calls via MCP                           │
+│                                                                     │
+│     For each tool call:                                             │
+│     • BridgedTool looks up the Session for aws-iam                  │
+│     • Sends JSON-RPC request over stdio to the MCP server           │
+│     • MCP server calls AWS IAM API (list-roles, list-policies)      │
+│     • Returns raw IAM data (role names, ARNs, policies, trusts)     │
+│     • Atmos records: ✅ aws-iam → list_roles (314ms)                │
+│     • Atmos records: ✅ aws-iam → list_policies (174ms)             │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  8. Atmos sends tool results back to AI provider                    │
+│                                                                     │
+│     AI receives raw IAM data and analyzes it:                       │
+│     • Cross-references roles with AdministratorAccess policy        │
+│     • Identifies 4 roles with admin access                          │
+│     • Generates security recommendations                            │
+│     AI responds with StopReason: "end_turn" + final text            │
+└────────────────────────────┬────────────────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  9. Atmos renders the response                                      │
+│                                                                     │
+│     • Markdown-formatted IAM audit results                          │
+│     • Tool Executions section with timing                           │
+│     • MCP server stopped and cleaned up                             │
+└─────────────────────────────────────────────────────────────────────┘
 ```
+
+**Key difference from CLI AI providers:** With API AI providers (Anthropic, OpenAI, etc.),
+Atmos manages the entire tool execution loop — it starts MCP servers, sends tool
+definitions to the AI, executes tool calls, and sends results back. The AI never
+touches the MCP servers directly. With CLI providers (Claude Code, Codex, Gemini),
+the CLI tool manages its own tool loop via MCP pass-through.
+
+## Related Examples
+
+- **[AI with Claude Code CLI Provider](../ai-claude-code/)** — Use your Claude Pro/Max
+  subscription instead of API tokens. Claude Code manages MCP servers via pass-through
+  instead of Atmos managing them directly.
+- **[AI with API Providers](../ai/)** — Multi-provider AI configuration with sessions,
+  tools, and custom skills (without MCP servers).
 
 ## Learn More
 
