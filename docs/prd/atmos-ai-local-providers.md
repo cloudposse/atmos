@@ -754,10 +754,41 @@ servers. The exported config is exactly what Claude Code needs.
 
 **Gemini CLI approach:**
 Gemini CLI has no `--mcp-config` flag. Instead, it reads MCP servers from
-`.gemini/settings.json` in the project directory. Atmos creates a temp directory with
-`.gemini/settings.json` containing the MCP config, then sets the subprocess working
-directory to the temp dir so Gemini CLI picks it up. The `--yolo` flag auto-approves
-all tool calls (equivalent to Claude Code's `--dangerously-skip-permissions`).
+`.gemini/settings.json` in the project directory. Atmos writes `.gemini/settings.json`
+in the **current working directory** (not a temp dir) because Gemini CLI's Trusted Folders
+feature blocks MCP servers in untrusted directories. The `--approval-mode auto_edit` flag
+is used instead of `--yolo` because Google Workspace admin policies may block YOLO mode.
+Server names are passed via `--allowed-mcp-server-names` to explicitly enable them.
+
+**Gemini CLI — Trusted Folders and admin restrictions:**
+
+Gemini CLI has a security feature called "Trusted Folders" that blocks MCP servers,
+YOLO mode, and workspace settings in untrusted directories. Enterprise settings are
+controlled at three levels:
+
+1. **System settings** (highest precedence):
+   - macOS: `/Library/Application Support/GeminiCli/settings.json`
+   - Linux: `/etc/gemini-cli/settings.json`
+   - Override via `GEMINI_CLI_SYSTEM_SETTINGS_PATH` env var
+   - Can set `security.disableYoloMode: true` and control `mcp.allowed` list
+
+2. **Google Workspace admin policies:**
+   When authenticated with a managed Google Workspace account, the admin may enforce:
+   - MCP disabled: `"MCP is disabled by your administrator"`
+   - YOLO disabled: `"YOLO mode is disabled by secureModeEnabled setting"`
+   - These cannot be overridden locally — requires admin action
+
+3. **Folder trust:**
+   - Trust is stored in `~/.gemini/trustedFolders.json`
+   - Untrusted folders block: MCP servers, workspace settings, tool auto-accept
+   - Atmos writes to cwd (trusted by user) instead of temp dirs to avoid this
+
+**If MCP/YOLO is blocked by Google Workspace admin:**
+- Go to [Google Admin Console](https://admin.google.com) → Apps → Additional Google services
+- Enable MCP and YOLO for Gemini CLI users
+- Alternatively, authenticate with a personal Google account (`gemini auth logout` then
+  `gemini auth login` with a `@gmail.com` account) — personal accounts have no restrictions
+- The free tier (1K requests/day) works with personal accounts
 
 **Codex CLI approach:**
 Codex CLI reads MCP servers from `.codex/config.toml` using TOML `[mcp_servers.<name>]`

@@ -65,10 +65,16 @@ func TestNewClient_MCPServers_NotCaptured_WhenEmpty(t *testing.T) {
 	client, err := NewClient(atmosConfig)
 	require.NoError(t, err)
 	assert.Nil(t, client.mcpServers)
-	assert.Empty(t, client.mcpSettingsDir)
+	assert.Nil(t, client.mcpServers)
 }
 
 func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
+	// Change to temp dir so writeMCPSettingsInCwd doesn't pollute the package dir.
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { _ = os.Chdir(origDir) }()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
 			Enabled:   true,
@@ -83,15 +89,9 @@ func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
 	client, err := NewClient(atmosConfig)
 	require.NoError(t, err)
 	assert.Len(t, client.mcpServers, 1)
-	assert.NotEmpty(t, client.mcpSettingsDir)
 
-	// Clean up temp dir.
-	if client.mcpSettingsDir != "" {
-		defer os.RemoveAll(client.mcpSettingsDir)
-	}
-
-	// Verify settings.json was created.
-	settingsFile := filepath.Join(client.mcpSettingsDir, ".gemini", "settings.json")
+	// Verify settings.json was created in cwd.
+	settingsFile := filepath.Join(tmpDir, ".gemini", "settings.json")
 	data, err := os.ReadFile(settingsFile)
 	require.NoError(t, err)
 
@@ -101,7 +101,7 @@ func TestNewClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
 }
 
 func TestParseResponse_ValidJSON(t *testing.T) {
-	input := `{"result": "The VPC is configured correctly.", "model": "gemini-2.5-flash"}`
+	input := `{"session_id": "abc123", "response": "The VPC is configured correctly."}`
 	result, err := parseResponse([]byte(input))
 	require.NoError(t, err)
 	assert.Equal(t, "The VPC is configured correctly.", result)
@@ -139,18 +139,20 @@ func TestProviderName(t *testing.T) {
 	assert.Equal(t, "gemini-cli", ProviderName)
 }
 
-func TestWriteMCPSettingsFile(t *testing.T) {
+func TestWriteMCPSettingsInCwd(t *testing.T) {
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { _ = os.Chdir(origDir) }()
+
 	servers := map[string]schema.MCPServerConfig{
 		"test-server": {Command: "echo", Args: []string{"hello"}},
 		"auth-server": {Command: "uvx", Args: []string{"pkg@latest"}, Identity: "admin"},
 	}
 
-	tmpDir, err := writeMCPSettingsFile(servers, "")
+	settingsFile, err := writeMCPSettingsInCwd(servers, "")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
 
-	// Verify directory structure.
-	settingsFile := filepath.Join(tmpDir, ".gemini", "settings.json")
 	data, err := os.ReadFile(settingsFile)
 	require.NoError(t, err)
 
@@ -166,16 +168,19 @@ func TestWriteMCPSettingsFile(t *testing.T) {
 	assert.Contains(t, authEntry.Args, "admin")
 }
 
-func TestWriteMCPSettingsFile_WithToolchainPATH(t *testing.T) {
+func TestWriteMCPSettingsInCwd_WithToolchainPATH(t *testing.T) {
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	defer func() { _ = os.Chdir(origDir) }()
+
 	servers := map[string]schema.MCPServerConfig{
 		"test": {Command: "uvx", Args: []string{"pkg@latest"}, Env: map[string]string{"KEY": "val"}},
 	}
 
-	tmpDir, err := writeMCPSettingsFile(servers, "/toolchain/bin")
+	settingsFile, err := writeMCPSettingsInCwd(servers, "/toolchain/bin")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
 
-	settingsFile := filepath.Join(tmpDir, ".gemini", "settings.json")
 	data, err := os.ReadFile(settingsFile)
 	require.NoError(t, err)
 

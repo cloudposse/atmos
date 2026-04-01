@@ -84,17 +84,17 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	}
 
 	// Capture MCP servers for pass-through (only if configured).
+	// Write .gemini/settings.json in the current working directory (not a temp dir)
+	// because Gemini CLI's Trusted Folders feature blocks MCP in untrusted directories.
 	if len(atmosConfig.MCP.Servers) > 0 {
 		client.mcpServers = atmosConfig.MCP.Servers
 		client.toolchainPATH = resolveToolchainPATH(atmosConfig)
-		// Generate .gemini/settings.json in a temp directory.
-		settingsDir, err := writeMCPSettingsFile(client.mcpServers, client.toolchainPATH)
+		settingsFile, err := writeMCPSettingsInCwd(client.mcpServers, client.toolchainPATH)
 		if err != nil {
 			log.Debug("Failed to generate Gemini MCP settings", "error", err)
 		} else {
-			client.mcpSettingsDir = settingsDir
-			ui.Info(fmt.Sprintf("MCP servers configured: %d (settings: %s)", len(client.mcpServers),
-				filepath.Join(settingsDir, ".gemini", "settings.json")))
+			client.mcpSettingsDir = "" // Not needed — settings written to cwd.
+			ui.Info(fmt.Sprintf("MCP servers configured: %d (settings: %s)", len(client.mcpServers), settingsFile))
 		}
 	}
 
@@ -105,37 +105,43 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
 	defer perf.Track(nil, "geminicli.Client.SendMessage")()
 
-	args := []string{"-p", "--output-format", "json"}
+	args := []string{
+		"--prompt", message,
+		"--output-format", "json",
+	}
 	if c.model != "" && c.model != ProviderName {
 		args = append(args, "-m", c.model)
 	}
+	// Use auto_edit approval mode — less aggressive than --yolo but allows
+	// read/edit tools without prompts. Falls back gracefully if admin blocks it.
+	args = append(args, "--approval-mode", "auto_edit")
 
-	// Auto-approve tool calls in non-interactive mode.
-	if c.mcpSettingsDir != "" {
-		args = append(args, "--yolo")
+	// Explicitly allow configured MCP servers by name.
+	if len(c.mcpServers) > 0 {
+		var serverNames []string
+		for name := range c.mcpServers {
+			serverNames = append(serverNames, name)
+		}
+		args = append(args, "--allowed-mcp-server-names", strings.Join(serverNames, ","))
 	}
 
 	cmd := exec.CommandContext(ctx, c.binaryPath, args...) //nolint:gosec // Binary path is from user config or exec.LookPath.
-	cmd.Stdin = strings.NewReader(message)
-
-	// If MCP settings dir exists, set it as working directory so Gemini CLI
-	// picks up .gemini/settings.json from the project-level config.
-	if c.mcpSettingsDir != "" {
-		cmd.Dir = c.mcpSettingsDir
-	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		stderrStr := stderr.String()
-		if stderrStr != "" {
-			return "", fmt.Errorf("%w: %s: %s", errUtils.ErrCLIProviderExecFailed, ProviderName, stderrStr)
+		// Filter stderr to find meaningful error lines (skip deprecation warnings).
+		errMsg := filterStderr(stderr.String())
+		if errMsg != "" {
+			return "", fmt.Errorf("%w: %s: %s", errUtils.ErrCLIProviderExecFailed, ProviderName, errMsg)
 		}
 		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrCLIProviderExecFailed, ProviderName, err)
 	}
 
+	// If stdout is empty but stderr has content, Gemini may have succeeded
+	// but only wrote to stderr (e.g., deprecation warnings). Try stdout first.
 	return parseResponse(stdout.Bytes())
 }
 
@@ -193,11 +199,11 @@ func (c *Client) GetMaxTokens() int { return 0 }
 
 // geminiResponse is the JSON output from `gemini -p --output-format json`.
 type geminiResponse struct {
-	Result    string `json:"result"`
-	ModelUsed string `json:"model"`
+	SessionID string `json:"session_id"`
+	Response  string `json:"response"`
 }
 
-// parseResponse extracts the result text from Gemini CLI JSON output.
+// parseResponse extracts the response text from Gemini CLI JSON output.
 func parseResponse(output []byte) (string, error) {
 	var resp geminiResponse
 	if err := json.Unmarshal(output, &resp); err != nil {
@@ -208,7 +214,14 @@ func parseResponse(output []byte) (string, error) {
 		}
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCLIProviderParseResponse, err)
 	}
-	return resp.Result, nil
+	if resp.Response == "" {
+		trimmed := strings.TrimSpace(string(output))
+		if trimmed != "" {
+			return trimmed, nil
+		}
+		return "", errUtils.ErrCLIProviderParseResponse
+	}
+	return resp.Response, nil
 }
 
 // geminiSettings is the .gemini/settings.json format for MCP server configuration.
@@ -216,9 +229,11 @@ type geminiSettings struct {
 	MCPServers map[string]mcpclient.MCPJSONServer `json:"mcpServers"`
 }
 
-// writeMCPSettingsFile creates a temp directory with .gemini/settings.json containing MCP config.
-// Returns the temp directory path. Caller should clean up with os.RemoveAll.
-func writeMCPSettingsFile(servers map[string]schema.MCPServerConfig, toolchainPATH string) (string, error) {
+// writeMCPSettingsInCwd writes .gemini/settings.json in the current working directory.
+// Gemini CLI's Trusted Folders feature blocks MCP servers in untrusted directories,
+// so we write to cwd (which the user has already trusted) instead of a temp dir.
+// Returns the settings file path.
+func writeMCPSettingsInCwd(servers map[string]schema.MCPServerConfig, toolchainPATH string) (string, error) {
 	config := mcpclient.GenerateMCPConfig(servers, toolchainPATH)
 
 	settings := geminiSettings{
@@ -230,25 +245,17 @@ func writeMCPSettingsFile(servers map[string]schema.MCPServerConfig, toolchainPA
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrMCPConfigMarshalFailed, err)
 	}
 
-	// Create temp dir with .gemini subdirectory.
-	tmpDir, err := os.MkdirTemp("", "atmos-gemini-*")
-	if err != nil {
-		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrMCPConfigWriteFailed, err)
-	}
-
-	geminiDir := filepath.Join(tmpDir, ".gemini")
+	geminiDir := filepath.Join(".", ".gemini")
 	if err := os.MkdirAll(geminiDir, settingsDirPerms); err != nil {
-		_ = os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("%w: mkdir %s: %w", errUtils.ErrMCPConfigWriteFailed, geminiDir, err)
 	}
 
 	settingsFile := filepath.Join(geminiDir, "settings.json")
 	if err := os.WriteFile(settingsFile, append(data, '\n'), settingsFilePerms); err != nil {
-		os.RemoveAll(tmpDir)
 		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, settingsFile, err)
 	}
 
-	return tmpDir, nil
+	return settingsFile, nil
 }
 
 // resolveToolchainPATH extracts the toolchain bin PATH for MCP server subprocesses.
@@ -267,6 +274,31 @@ func resolveToolchainPATH(atmosConfig *schema.AtmosConfiguration) string {
 		}
 	}
 	return ""
+}
+
+// filterStderr removes common non-error lines from stderr (deprecation warnings, info messages).
+func filterStderr(stderr string) string {
+	var meaningful []string
+	for _, line := range strings.Split(stderr, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		// Skip Node.js deprecation warnings.
+		if strings.Contains(trimmed, "DeprecationWarning") || strings.Contains(trimmed, "--trace-deprecation") {
+			continue
+		}
+		// Skip YOLO mode info messages.
+		if strings.Contains(trimmed, "YOLO mode") {
+			continue
+		}
+		// Skip credential cache messages.
+		if strings.Contains(trimmed, "Loaded cached credentials") {
+			continue
+		}
+		meaningful = append(meaningful, trimmed)
+	}
+	return strings.Join(meaningful, "\n")
 }
 
 func formatMessages(messages []types.Message) string {
