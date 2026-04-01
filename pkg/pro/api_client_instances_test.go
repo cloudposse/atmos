@@ -12,7 +12,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestUploadInstances(t *testing.T) {
@@ -30,7 +29,7 @@ func TestUploadInstances(t *testing.T) {
 		RepoName:  "repo",
 		RepoOwner: "org",
 		RepoHost:  "github.com",
-		Instances: []schema.Instance{
+		Instances: []dtos.UploadInstance{
 			{
 				Component:     "vpc",
 				Stack:         "tenant1-ue2-dev",
@@ -41,12 +40,6 @@ func TestUploadInstances(t *testing.T) {
 							"enabled": true,
 						},
 					},
-				},
-				Vars: map[string]any{
-					"environment": "dev",
-					"tenant":      "tenant1",
-					"region":      "ue2",
-					"cidr_block":  "10.0.0.0/16",
 				},
 			},
 			{
@@ -59,13 +52,6 @@ func TestUploadInstances(t *testing.T) {
 							"enabled": true,
 						},
 					},
-				},
-				Vars: map[string]any{
-					"environment":        "dev",
-					"tenant":             "tenant1",
-					"region":             "ue2",
-					"cluster_name":       "tenant1-ue2-dev",
-					"kubernetes_version": "1.27",
 				},
 			},
 		},
@@ -99,7 +85,7 @@ func TestUploadInstances_Error(t *testing.T) {
 		RepoName:  "repo",
 		RepoOwner: "org",
 		RepoHost:  "github.com",
-		Instances: []schema.Instance{
+		Instances: []dtos.UploadInstance{
 			{
 				Component:     "vpc",
 				Stack:         "tenant1-ue2-dev",
@@ -110,12 +96,6 @@ func TestUploadInstances_Error(t *testing.T) {
 							"enabled": true,
 						},
 					},
-				},
-				Vars: map[string]any{
-					"environment": "dev",
-					"tenant":      "tenant1",
-					"region":      "ue2",
-					"cidr_block":  "10.0.0.0/16",
 				},
 			},
 			{
@@ -128,13 +108,6 @@ func TestUploadInstances_Error(t *testing.T) {
 							"enabled": true,
 						},
 					},
-				},
-				Vars: map[string]any{
-					"environment":        "dev",
-					"tenant":             "tenant1",
-					"region":             "ue2",
-					"cluster_name":       "tenant1-ue2-dev",
-					"kubernetes_version": "1.27",
 				},
 			},
 		},
