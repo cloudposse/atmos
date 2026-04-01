@@ -39,8 +39,8 @@ export const roadmapConfig = {
     { id: 'q2-2025', label: 'Q2 2025', status: 'completed' },
     { id: 'q3-2025', label: 'Q3 2025', status: 'completed' },
     { id: 'q4-2025', label: 'Q4 2025', status: 'completed' },
-    { id: 'q1-2026', label: 'Q1 2026', status: 'current' },
-    { id: 'q2-2026', label: 'Q2 2026', status: 'planned' },
+    { id: 'q1-2026', label: 'Q1 2026', status: 'completed' },
+    { id: 'q2-2026', label: 'Q2 2026', status: 'current' },
   ],
 
   featured: [
@@ -500,8 +500,8 @@ export const roadmapConfig = {
       tagline: 'AI-powered infrastructure management',
       description:
         'An intelligent assistant built directly into Atmos CLI that understands your infrastructure-as-code. Unlike general-purpose AI assistants, Atmos AI has deep understanding of Atmos stacks, components, inheritance patterns, and infrastructure workflows.',
-      progress: 100,
-      status: 'shipped',
+      progress: 96,
+      status: 'in-progress',
       milestones: [
         { label: 'Multi-provider AI support (7 providers)', status: 'shipped', quarter: 'q1-2026', docs: '/ai/providers', changelog: 'introducing-atmos-ai', description: 'Support for Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok, Ollama (local), AWS Bedrock, and Azure OpenAI.', benefits: 'Choose the right AI for your needs—cloud, local, or enterprise. Switch providers mid-conversation.' },
         { label: 'Interactive AI chat (`atmos ai chat`)', status: 'shipped', quarter: 'q1-2026', docs: '/cli/commands/ai/chat', changelog: 'introducing-atmos-ai', description: 'Interactive terminal chat with persistent sessions, markdown rendering, and conversation history.', benefits: 'Have natural conversations about your infrastructure. Context is preserved across sessions.' },
@@ -521,6 +521,10 @@ export const roadmapConfig = {
         { label: 'AI example with documentation', status: 'shipped', quarter: 'q1-2026', changelog: 'introducing-atmos-ai', description: 'Complete example in examples/ai/ demonstrating all AI features with inline documentation links.', benefits: 'Learn AI features from working examples. Quick start for new users.' },
         { label: 'Global `--ai` flag for AI-powered command analysis', status: 'shipped', quarter: 'q1-2026', docs: '/cli/global-flags', changelog: 'ai-powered-analysis-with-global-ai-flag', description: 'Add --ai to any Atmos command to get instant AI-powered analysis of output. Errors get explained with fixes, successful plans get summarized.', benefits: 'Zero-friction AI integration—just add --ai to any command. No workflow changes required.', category: 'featured', priority: 'high' },
         { label: 'External MCP server connections', status: 'shipped', quarter: 'q1-2026', docs: '/cli/configuration/mcp', changelog: 'mcp-server-integrations', description: 'Connect Atmos to external MCP servers (AWS, GCP, Azure, custom). Configure servers in atmos.yaml, and their tools become available in atmos ai chat, ask, and exec. Includes Atmos Auth credential injection and Atmos Toolchain prerequisite management.', benefits: 'Use 100+ ecosystem MCP servers without custom code. AWS pricing, security, docs, and API tools available in AI conversations.', category: 'featured', priority: 'high' },
+        { label: 'Claude Code CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', description: 'Native Claude Code CLI provider (`claude-code`) that spawns the claude binary with full MCP pass-through support.', benefits: 'Use Claude Code from atmos ai chat with your existing Claude Code setup. MCP servers configured in atmos.yaml are available automatically.' },
+        { label: 'OpenAI Codex CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', description: 'Native OpenAI Codex CLI provider (`codex-cli`) with MCP pass-through and ATMOS_* env var injection for MCP servers.', benefits: 'Use Codex CLI from atmos ai chat. MCP server environment receives Atmos context automatically via ATMOS_* variables.' },
+        { label: 'Gemini CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', description: 'Native Gemini CLI provider (`gemini-cli`) that spawns the gemini binary for terminal-based AI interaction.', benefits: 'Use Google Gemini CLI from atmos ai chat without extra configuration.' },
+        { label: 'MCP pass-through for CLI providers', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', description: 'MCP server configurations defined in atmos.yaml are passed through to Claude Code and Codex CLI providers automatically.', benefits: 'One MCP configuration works across all CLI providers. No duplicate server definitions per tool.' },
         { label: 'Agent marketplace', status: 'planned', quarter: 'q2-2026', docs: '/ai/agent-marketplace', description: 'Install community-created specialized agents from GitHub repositories.', benefits: 'Extend AI capabilities with community agents. Share agents across teams.' },
       ],
       issues: [],

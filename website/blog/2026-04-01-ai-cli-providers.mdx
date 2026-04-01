@@ -47,23 +47,23 @@ everything to Claude Code. You get answers from real AWS data using your subscri
 
 ## Available CLI Providers
 
-| Provider | Binary | Subscription | MCP Support |
-|---|---|---|---|
-| Claude Code | `claude` | Claude Pro/Max ($20-200/mo) | Full |
-| OpenAI Codex | `codex` | ChatGPT Plus/Pro ($20-200/mo) | Full |
-| Gemini CLI | `gemini` | Google account (free tier) | Blocked for personal accounts |
+| Provider     | Binary   | Subscription                  | MCP Support                   |
+|--------------|----------|-------------------------------|-------------------------------|
+| Claude Code  | `claude` | Claude Pro/Max ($20-200/mo)   | Full                          |
+| OpenAI Codex | `codex`  | ChatGPT Plus/Pro ($20-200/mo) | Full                          |
+| Gemini CLI   | `gemini` | Google account (free tier)    | Blocked for personal accounts |
 
 All three providers work for prompt-only queries. For MCP-enabled workflows (AWS billing,
 security, IAM, etc.), use Claude Code or Codex CLI.
 
 ## MCP Pass-Through
 
-When `mcp.servers` is configured, Atmos automatically passes MCP servers to the CLI tool.
+When `mcp.servers` is configured in `atmos.yaml`, Atmos automatically passes MCP servers to the CLI tool.
 Each provider uses its native config format:
 
 - **Claude Code** — temp `.mcp.json` via `--mcp-config`
 - **Codex CLI** — `~/.codex/config.toml` (backup/restore after exit)
-- **Gemini CLI** — `.gemini/settings.json` in cwd
+- **Gemini CLI** — `.gemini/settings.json` in `cwd`
 
 Auth-requiring servers are wrapped with `atmos auth exec -i <identity>`. Toolchain PATH
 and `ATMOS_*` env vars are injected automatically.

@@ -217,3 +217,83 @@ func TestResolveToolchainPATH_NoDeps(t *testing.T) {
 	result := resolveToolchainPATH(atmosConfig)
 	assert.Empty(t, result)
 }
+
+func TestFilterStderr_DeprecationWarnings(t *testing.T) {
+	stderr := `(node:1234) [DEP0040] DeprecationWarning: The punycode module is deprecated.
+(Use node --trace-deprecation ... to show where the warning was created)
+Loaded cached credentials.
+Actual error message here`
+	result := filterStderr(stderr)
+	assert.Equal(t, "Actual error message here", result)
+}
+
+func TestFilterStderr_YOLOMode(t *testing.T) {
+	stderr := "YOLO mode enabled\nSome real error"
+	result := filterStderr(stderr)
+	assert.Equal(t, "Some real error", result)
+}
+
+func TestFilterStderr_AllFiltered(t *testing.T) {
+	stderr := `(node:1234) DeprecationWarning: something
+Loaded cached credentials.
+YOLO mode enabled`
+	result := filterStderr(stderr)
+	assert.Empty(t, result)
+}
+
+func TestFilterStderr_EmptyInput(t *testing.T) {
+	result := filterStderr("")
+	assert.Empty(t, result)
+}
+
+func TestFilterStderr_MeaningfulOnly(t *testing.T) {
+	stderr := "Error: authentication failed\nConnection refused"
+	result := filterStderr(stderr)
+	assert.Equal(t, "Error: authentication failed\nConnection refused", result)
+}
+
+func TestParseResponse_JSONWithResponseField(t *testing.T) {
+	input := `{"session_id": "abc123", "response": "The VPC is configured."}`
+	result, err := parseResponse([]byte(input))
+	require.NoError(t, err)
+	assert.Equal(t, "The VPC is configured.", result)
+}
+
+func TestParseResponse_WhitespaceOnly(t *testing.T) {
+	_, err := parseResponse([]byte("   \n  \t  "))
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCLIProviderParseResponse)
+}
+
+func TestFormatMessages_SingleMessage(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "test"},
+	}
+	result := formatMessages(messages)
+	assert.Equal(t, "test", result)
+}
+
+func TestFormatMessages_SkipsUnknownRoles(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello"},
+		{Role: "system", Content: "ignored"},
+		{Role: types.RoleAssistant, Content: "Hi"},
+	}
+	result := formatMessages(messages)
+	assert.Contains(t, result, "Hello")
+	assert.Contains(t, result, "Assistant: Hi")
+	assert.NotContains(t, result, "ignored")
+}
+
+func TestNewClient_DefaultModel(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{ProviderName: {Binary: "/usr/local/bin/gemini"}},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	// Model defaults to provider name when no model is specified.
+	assert.Equal(t, ProviderName, client.model)
+}

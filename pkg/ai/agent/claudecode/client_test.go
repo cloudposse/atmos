@@ -2,6 +2,7 @@ package claudecode
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -253,4 +254,75 @@ func TestClient_MCPServers_Captured_WhenConfigured(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, client.mcpServers, 1)
 	assert.Contains(t, client.mcpServers, "aws-docs")
+}
+
+func TestParseResponse_WhitespaceOnly(t *testing.T) {
+	_, err := parseResponse([]byte("   \n  \t  "))
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCLIProviderParseResponse)
+}
+
+func TestParseResponse_EmptyResult(t *testing.T) {
+	input := `{"type": "result", "result": "", "is_error": false}`
+	result, err := parseResponse([]byte(input))
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestFormatMessages_SingleUser(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello"},
+	}
+	result := formatMessages(messages)
+	assert.Equal(t, "Hello", result)
+}
+
+func TestFormatMessages_SkipsUnknownRoles(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello"},
+		{Role: "system", Content: "System message"},
+		{Role: types.RoleAssistant, Content: "Hi"},
+	}
+	result := formatMessages(messages)
+	assert.Contains(t, result, "Hello")
+	assert.Contains(t, result, "Assistant: Hi")
+	assert.NotContains(t, result, "System message")
+}
+
+func TestNewClient_MCPConfigPath_SetWhenServersConfigured(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				ProviderName: {Binary: "/usr/local/bin/claude"},
+			},
+		},
+		MCP: schema.MCPSettings{
+			Servers: map[string]schema.MCPServerConfig{
+				"test": {Command: "echo", Args: []string{"hello"}},
+			},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.NotEmpty(t, client.mcpConfigPath)
+
+	// Clean up temp file.
+	if client.mcpConfigPath != "" {
+		_ = os.Remove(client.mcpConfigPath)
+	}
+}
+
+func TestNewClient_DefaultMaxTurns(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled: true,
+			Providers: map[string]*schema.AIProviderConfig{
+				ProviderName: {Binary: "/usr/local/bin/claude"},
+			},
+		},
+	}
+	client, err := NewClient(atmosConfig)
+	require.NoError(t, err)
+	assert.Equal(t, DefaultMaxTurns, client.maxTurns)
 }
