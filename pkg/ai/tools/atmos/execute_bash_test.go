@@ -80,11 +80,15 @@ func TestExecuteBashCommandTool_Execute_EmptyCommand_WhitespaceOnly(t *testing.T
 // ---------------------------------------------------------------------------
 
 func TestExecuteBashCommandTool_Execute_ValidCommand(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows")
-	}
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
-	result, err := tool.Execute(context.Background(), map[string]interface{}{"command": "echo hello"})
+	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "echoargs")
+
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
+	result, err := tool.Execute(context.Background(), map[string]interface{}{
+		"command": quoteCmdArg(exe) + " hello",
+	})
 	require.NoError(t, err)
 	assert.True(t, result.Success)
 	assert.Contains(t, result.Output, "hello")
@@ -95,17 +99,19 @@ func TestExecuteBashCommandTool_Execute_ValidCommand(t *testing.T) {
 // inside single quotes are passed as a single token (spaces preserved, shell
 // operators treated as literals).
 func TestExecuteBashCommandTool_Execute_SingleQuotedArgs(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows")
-	}
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
-	// shell.Fields("echo 'hello world'", nil) -> ["echo", "hello world"]
+	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "echoargs")
+
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
+	// shell.Fields("<exe> 'hello world'", nil) -> [exe, "hello world"]
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
-		"command": "echo 'hello world'",
+		"command": quoteCmdArg(exe) + " 'hello world'",
 	})
 	require.NoError(t, err)
 	require.True(t, result.Success, "exit_code=%v output=%q err=%v", result.Data["exit_code"], result.Output, result.Error)
-	// The argument is a single token "hello world"; echo outputs it without extra quotes.
+	// The argument is a single token "hello world"; echoargs outputs it without extra quotes.
 	assert.Contains(t, result.Output, "hello world")
 	assert.NotContains(t, result.Output, "'hello", "shell quotes must be stripped by the tokenizer")
 }
@@ -113,12 +119,14 @@ func TestExecuteBashCommandTool_Execute_SingleQuotedArgs(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_DoubleQuotedArgs verifies double-quoted
 // arguments with embedded spaces work correctly.
 func TestExecuteBashCommandTool_Execute_DoubleQuotedArgs(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows")
-	}
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "echoargs")
+
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
-		"command": `echo "hello world"`,
+		"command": quoteCmdArg(exe) + ` "hello world"`,
 	})
 	require.NoError(t, err)
 	require.True(t, result.Success)
@@ -131,10 +139,13 @@ func TestExecuteBashCommandTool_Execute_DoubleQuotedArgs(t *testing.T) {
 // command.  This is the key regression test for the false-positive metacharacter
 // check that the previous implementation imposed on raw command strings.
 func TestExecuteBashCommandTool_Execute_QuotedOperatorsAreAllowed(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows")
-	}
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "echoargs")
+
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
+	exeQ := quoteCmdArg(exe)
 
 	cases := []struct {
 		name    string
@@ -143,28 +154,28 @@ func TestExecuteBashCommandTool_Execute_QuotedOperatorsAreAllowed(t *testing.T) 
 	}{
 		{
 			name:    "semicolon in single quotes",
-			command: "echo 'a;b'",
+			command: exeQ + " 'a;b'",
 			wantOut: "a;b",
 		},
 		{
 			name:    "double-ampersand in double quotes",
-			command: `echo "a&&b"`,
+			command: exeQ + ` "a&&b"`,
 			wantOut: "a&&b",
 		},
 		{
 			name:    "pipe in single quotes",
-			command: "echo 'a|b'",
+			command: exeQ + " 'a|b'",
 			wantOut: "a|b",
 		},
 		{
 			name:    "redirect in single quotes",
-			command: "echo 'a>b'",
+			command: exeQ + " 'a>b'",
 			wantOut: "a>b",
 		},
 		{
 			// git commit -m "fix: support a && b" is a realistic user command.
-			name:    "double-quoted git commit message with &&",
-			command: `echo "fix: support a && b"`,
+			name:    "double-quoted message with &&",
+			command: exeQ + ` "fix: support a && b"`,
 			wantOut: "fix: support a && b",
 		},
 	}
@@ -182,28 +193,31 @@ func TestExecuteBashCommandTool_Execute_QuotedOperatorsAreAllowed(t *testing.T) 
 // TestExecuteBashCommandTool_Execute_WorkingDirectory tests that working_dir is
 // respected when it is within the base path.
 func TestExecuteBashCommandTool_Execute_WorkingDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows")
-	}
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "pwd")
 
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
-		"command":     "pwd",
-		"working_dir": "/tmp",
+		"command":     quoteCmdArg(exe),
+		"working_dir": dir,
 	})
 	require.NoError(t, err)
 	assert.True(t, result.Success)
-	assert.Contains(t, result.Output, "/tmp")
-	assert.Equal(t, "/tmp", result.Data["working_dir"])
+	assert.Contains(t, result.Output, dir)
+	assert.Equal(t, dir, result.Data["working_dir"])
 }
 
 func TestExecuteBashCommandTool_Execute_CommandFails(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows")
-	}
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "exitone")
+
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
-		"command": "ls /nonexistent/directory",
+		"command": quoteCmdArg(exe),
 	})
 	assert.NoError(t, err) // Execute itself does not fail.
 	assert.False(t, result.Success)
@@ -215,7 +229,8 @@ func TestExecuteBashCommandTool_Execute_GitCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping on Windows")
 	}
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	dir := t.TempDir()
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{"command": "git --version"})
 	require.NoError(t, err)
 	require.True(t, result.Success)
@@ -225,18 +240,21 @@ func TestExecuteBashCommandTool_Execute_GitCommand(t *testing.T) {
 
 // TestExecuteBashCommandTool_Execute_ResultData checks the Data map fields.
 func TestExecuteBashCommandTool_Execute_ResultData(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows")
-	}
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "echoargs")
+
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
+	cmd := quoteCmdArg(exe) + " hello"
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
-		"command":     "echo hello",
-		"working_dir": "/tmp",
+		"command":     cmd,
+		"working_dir": dir,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, "echo hello", result.Data["command"])
-	assert.Equal(t, "/tmp", result.Data["working_dir"])
+	assert.Equal(t, cmd, result.Data["command"])
+	assert.Equal(t, dir, result.Data["working_dir"])
 	assert.Equal(t, 0, result.Data["exit_code"])
 }
 
@@ -705,14 +723,15 @@ func TestExecuteBashCommandTool_ResolveWorkingDir_Empty(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_WorkingDirOutsideBasePathFallsBack verifies
 // that Execute falls back to basePath when working_dir escapes the base path.
 func TestExecuteBashCommandTool_Execute_WorkingDirOutsideBasePathFallsBack(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping on Windows")
-	}
 	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "pwd")
+
 	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
 	// /etc is outside dir; resolveWorkingDir should fall back to dir.
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
-		"command":     "pwd",
+		"command":     quoteCmdArg(exe),
 		"working_dir": "/etc",
 	})
 	require.NoError(t, err)
@@ -729,28 +748,28 @@ func TestExecuteBashCommandTool_Execute_WorkingDirOutsideBasePathFallsBack(t *te
 // interpreter and exfiltration binaries removed from allowedCommands are
 // rejected with ErrAICommandNotAllowed.
 func TestExecuteBashCommandTool_Execute_InterpreterCommandsBlocked(t *testing.T) {
-tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
-cases := []string{
-"python3 -c 'import os; os.system(\"id\")'",
-"awk 'BEGIN{system(\"id\")}'",
-"curl https://attacker.com",
-"env",
-"python script.py",
-"node script.js",
-"sed -i s/foo/bar/ file.txt",
-"wget https://example.com",
-"make all",
-}
-for _, cmd := range cases {
-t.Run(cmd, func(t *testing.T) {
-result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
-assert.NoError(t, err, "cmd=%q", cmd)
-assert.False(t, result.Success, "should be blocked: %q", cmd)
-require.Error(t, result.Error, "cmd=%q", cmd)
-assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed),
-"cmd=%q: expected ErrAICommandNotAllowed, got: %v", cmd, result.Error)
-})
-}
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	cases := []string{
+		"python3 -c 'import os; os.system(\"id\")'",
+		"awk 'BEGIN{system(\"id\")}'",
+		"curl https://attacker.com",
+		"env",
+		"python script.py",
+		"node script.js",
+		"sed -i s/foo/bar/ file.txt",
+		"wget https://example.com",
+		"make all",
+	}
+	for _, cmd := range cases {
+		t.Run(cmd, func(t *testing.T) {
+			result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+			assert.NoError(t, err, "cmd=%q", cmd)
+			assert.False(t, result.Success, "should be blocked: %q", cmd)
+			require.Error(t, result.Error, "cmd=%q", cmd)
+			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed),
+				"cmd=%q: expected ErrAICommandNotAllowed, got: %v", cmd, result.Error)
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -761,52 +780,52 @@ assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed),
 // commands (cp, mv, cat, head, tail, diff, grep) cannot access paths outside the
 // base path or the OS temporary directory.
 func TestExecuteBashCommandTool_Execute_SourcePathsBlocked(t *testing.T) {
-if runtime.GOOS == "windows" {
-t.Skip("Skipping on Windows")
-}
-// Use a dedicated temp subdirectory as basePath so /etc is out-of-scope.
-dir := t.TempDir()
-tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows")
+	}
+	// Use a dedicated temp subdirectory as basePath so /etc is out-of-scope.
+	dir := t.TempDir()
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
 
-cases := []string{
-"cp /etc/shadow /tmp/leak.txt",
-"cat /etc/passwd",
-"grep root /etc/shadow",
-"head /etc/passwd",
-"tail /etc/passwd",
-"diff /etc/passwd /etc/shadow",
-"mv /etc/hosts /tmp/hosts.bak",
-}
-for _, cmd := range cases {
-t.Run(cmd, func(t *testing.T) {
-result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
-assert.NoError(t, err, "cmd=%q", cmd)
-assert.False(t, result.Success, "should be blocked: %q", cmd)
-require.Error(t, result.Error, "cmd=%q", cmd)
-assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandPathNotAllowed),
-"cmd=%q: expected ErrAICommandPathNotAllowed, got: %v", cmd, result.Error)
-})
-}
+	cases := []string{
+		"cp /etc/shadow /tmp/leak.txt",
+		"cat /etc/passwd",
+		"grep root /etc/shadow",
+		"head /etc/passwd",
+		"tail /etc/passwd",
+		"diff /etc/passwd /etc/shadow",
+		"mv /etc/hosts /tmp/hosts.bak",
+	}
+	for _, cmd := range cases {
+		t.Run(cmd, func(t *testing.T) {
+			result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+			assert.NoError(t, err, "cmd=%q", cmd)
+			assert.False(t, result.Success, "should be blocked: %q", cmd)
+			require.Error(t, result.Error, "cmd=%q", cmd)
+			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandPathNotAllowed),
+				"cmd=%q: expected ErrAICommandPathNotAllowed, got: %v", cmd, result.Error)
+		})
+	}
 }
 
 // TestExecuteBashCommandTool_Execute_SourcePathsAllowed verifies that read-type
 // commands are permitted when all path arguments are within the base path.
 func TestExecuteBashCommandTool_Execute_SourcePathsAllowed(t *testing.T) {
-if runtime.GOOS == "windows" {
-t.Skip("Skipping on Windows")
-}
-dir := t.TempDir()
-// Create a test file to read.
-target := filepath.Join(dir, "readme.txt")
-require.NoError(t, os.WriteFile(target, []byte("hello\n"), 0o600))
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows")
+	}
+	dir := t.TempDir()
+	// Create a test file to read.
+	target := filepath.Join(dir, "readme.txt")
+	require.NoError(t, os.WriteFile(target, []byte("hello\n"), 0o600))
 
-tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
-result, err := tool.Execute(context.Background(), map[string]interface{}{
-"command": "cat " + target,
-})
-require.NoError(t, err)
-require.True(t, result.Success, "cat of in-scope file must succeed (exit=%v): %v", result.Data["exit_code"], result.Error)
-assert.Contains(t, result.Output, "hello")
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	result, err := tool.Execute(context.Background(), map[string]interface{}{
+		"command": "cat " + target,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success, "cat of in-scope file must succeed (exit=%v): %v", result.Data["exit_code"], result.Error)
+	assert.Contains(t, result.Output, "hello")
 }
 
 // ---------------------------------------------------------------------------
@@ -816,38 +835,38 @@ assert.Contains(t, result.Output, "hello")
 // TestExecuteBashCommandTool_Execute_BypassFlagsBlocked verifies that interpreter
 // bypass flags (-c, --eval, -e, --exec) are rejected for build/package tools.
 func TestExecuteBashCommandTool_Execute_BypassFlagsBlocked(t *testing.T) {
-tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
-cases := []string{
-"npm --exec id",
-"npm -c ls",
-"yarn --exec id",
-"pip -e /some/path",
-"pip3 --exec id",
-}
-for _, cmd := range cases {
-t.Run(cmd, func(t *testing.T) {
-result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
-assert.NoError(t, err, "cmd=%q", cmd)
-assert.False(t, result.Success, "should be blocked: %q", cmd)
-require.Error(t, result.Error, "cmd=%q", cmd)
-assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
-"cmd=%q: expected ErrAICommandBlacklisted, got: %v", cmd, result.Error)
-})
-}
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	cases := []string{
+		"npm --exec id",
+		"npm -c ls",
+		"yarn --exec id",
+		"pip -e /some/path",
+		"pip3 --exec id",
+	}
+	for _, cmd := range cases {
+		t.Run(cmd, func(t *testing.T) {
+			result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+			assert.NoError(t, err, "cmd=%q", cmd)
+			assert.False(t, result.Success, "should be blocked: %q", cmd)
+			require.Error(t, result.Error, "cmd=%q", cmd)
+			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
+				"cmd=%q: expected ErrAICommandBlacklisted, got: %v", cmd, result.Error)
+		})
+	}
 }
 
 // TestExecuteBashCommandTool_Execute_GoRunStdinBlocked verifies that "go run -"
 // (stdin execution) is rejected.
 func TestExecuteBashCommandTool_Execute_GoRunStdinBlocked(t *testing.T) {
-tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
-result, err := tool.Execute(context.Background(), map[string]interface{}{
-"command": "go run -",
-})
-assert.NoError(t, err)
-assert.False(t, result.Success)
-require.Error(t, result.Error)
-assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
-"go run stdin must be blocked: %v", result.Error)
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	result, err := tool.Execute(context.Background(), map[string]interface{}{
+		"command": "go run -",
+	})
+	assert.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Error(t, result.Error)
+	assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
+		"go run stdin must be blocked: %v", result.Error)
 }
 
 // ---------------------------------------------------------------------------
@@ -857,25 +876,25 @@ assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
 // TestExecuteBashCommandTool_Execute_Timeout verifies that the internal command
 // timeout kills a long-running process and returns Success=false.
 func TestExecuteBashCommandTool_Execute_Timeout(t *testing.T) {
-if runtime.GOOS == "windows" {
-t.Skip("Skipping on Windows")
-}
-dir := t.TempDir()
-tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
-// Shorten the timeout so the test completes in ~1 second instead of 30.
-tool.commandTimeout = 1 * time.Second
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows")
+	}
+	dir := t.TempDir()
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	// Shorten the timeout so the test completes in ~1 second instead of 30.
+	tool.commandTimeout = 1 * time.Second
 
-start := time.Now()
-result, err := tool.Execute(context.Background(), map[string]interface{}{
-"command": "sleep 60",
-})
-elapsed := time.Since(start)
+	start := time.Now()
+	result, err := tool.Execute(context.Background(), map[string]interface{}{
+		"command": "sleep 60",
+	})
+	elapsed := time.Since(start)
 
-assert.NoError(t, err, "Execute must not return a Go error on timeout")
-assert.False(t, result.Success, "timed-out command should not succeed")
-assert.Error(t, result.Error)
-// The command should be killed well within 5 seconds.
-assert.Less(t, elapsed, 5*time.Second, "timed-out command should complete quickly; elapsed=%v", elapsed)
+	assert.NoError(t, err, "Execute must not return a Go error on timeout")
+	assert.False(t, result.Success, "timed-out command should not succeed")
+	assert.Error(t, result.Error)
+	// The command should be killed well within 5 seconds.
+	assert.Less(t, elapsed, 5*time.Second, "timed-out command should complete quickly; elapsed=%v", elapsed)
 }
 
 // ---------------------------------------------------------------------------
@@ -885,62 +904,65 @@ assert.Less(t, elapsed, 5*time.Second, "timed-out command should complete quickl
 // TestExecuteBashCommandTool_Execute_UnquotedDollarBlocked verifies that commands
 // containing unquoted environment variable references are rejected.
 func TestExecuteBashCommandTool_Execute_UnquotedDollarBlocked(t *testing.T) {
-tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
-cases := []string{
-"echo $HOME",
-"grep $PATTERN file.txt",
-`echo "price is $5"`,
-"ls $PWD",
-}
-for _, cmd := range cases {
-t.Run(cmd, func(t *testing.T) {
-result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
-assert.NoError(t, err, "cmd=%q", cmd)
-assert.False(t, result.Success, "should be blocked: %q", cmd)
-require.Error(t, result.Error, "cmd=%q", cmd)
-assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandVarExpansion),
-"cmd=%q: expected ErrAICommandVarExpansion, got: %v", cmd, result.Error)
-})
-}
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	cases := []string{
+		"echo $HOME",
+		"grep $PATTERN file.txt",
+		`echo "price is $5"`,
+		"ls $PWD",
+	}
+	for _, cmd := range cases {
+		t.Run(cmd, func(t *testing.T) {
+			result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+			assert.NoError(t, err, "cmd=%q", cmd)
+			assert.False(t, result.Success, "should be blocked: %q", cmd)
+			require.Error(t, result.Error, "cmd=%q", cmd)
+			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandVarExpansion),
+				"cmd=%q: expected ErrAICommandVarExpansion, got: %v", cmd, result.Error)
+		})
+	}
 }
 
 // TestExecuteBashCommandTool_Execute_SingleQuotedDollarAllowed verifies that '$'
 // inside single quotes is treated as a literal character and does not block the
 // command.
 func TestExecuteBashCommandTool_Execute_SingleQuotedDollarAllowed(t *testing.T) {
-if runtime.GOOS == "windows" {
-t.Skip("Skipping on Windows")
-}
-tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
-result, err := tool.Execute(context.Background(), map[string]interface{}{
-"command": "echo 'hello $world'",
-})
-require.NoError(t, err)
-require.True(t, result.Success, "single-quoted $ should not be blocked (exit=%v): %v", result.Data["exit_code"], result.Error)
-assert.Contains(t, result.Output, "$world", "single-quoted $ must pass through as literal")
+	dir := t.TempDir()
+	exe := testHelperBin(t)
+	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "echoargs")
+
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	tool.allowedCmds = testHelperAllowed(t)
+	// The command contains '$' inside single quotes; it must NOT be blocked.
+	result, err := tool.Execute(context.Background(), map[string]interface{}{
+		"command": quoteCmdArg(exe) + " 'hello $world'",
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success, "single-quoted $ should not be blocked (exit=%v): %v", result.Data["exit_code"], result.Error)
+	assert.Contains(t, result.Output, "$world", "single-quoted $ must pass through as literal")
 }
 
 // TestContainsUnquotedDollar exercises containsUnquotedDollar directly.
 func TestContainsUnquotedDollar(t *testing.T) {
-mustBlock := []string{
-"echo $HOME",
-"ls $PWD",
-`echo "price $5"`,
-"grep $PATTERN file",
-}
-for _, s := range mustBlock {
-assert.True(t, containsUnquotedDollar(s), "should detect unquoted $ in %q", s)
-}
+	mustBlock := []string{
+		"echo $HOME",
+		"ls $PWD",
+		`echo "price $5"`,
+		"grep $PATTERN file",
+	}
+	for _, s := range mustBlock {
+		assert.True(t, containsUnquotedDollar(s), "should detect unquoted $ in %q", s)
+	}
 
-mustAllow := []string{
-"echo hello",
-"echo 'hello $world'",
-"git commit -m 'cost is $5'",
-"grep pattern file.txt",
-}
-for _, s := range mustAllow {
-assert.False(t, containsUnquotedDollar(s), "should NOT detect unquoted $ in %q", s)
-}
+	mustAllow := []string{
+		"echo hello",
+		"echo 'hello $world'",
+		"git commit -m 'cost is $5'",
+		"grep pattern file.txt",
+	}
+	for _, s := range mustAllow {
+		assert.False(t, containsUnquotedDollar(s), "should NOT detect unquoted $ in %q", s)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -950,13 +972,13 @@ assert.False(t, containsUnquotedDollar(s), "should NOT detect unquoted $ in %q",
 // TestValidateCommand_WithCustomAllowed exercises validateCommand in isolation
 // using caller-supplied allow/block maps, confirming the function is stateless.
 func TestValidateCommand_WithCustomAllowed(t *testing.T) {
-customAllowed := map[string]bool{"testcmd": true}
-customBlocked := map[string]bool{}
+	customAllowed := map[string]bool{"testcmd": true}
+	customBlocked := map[string]bool{}
 
-result := validateCommand([]string{"testcmd", "arg"}, "testcmd arg", customAllowed, customBlocked)
-assert.Nil(t, result, "command in custom allow-list should not be blocked")
+	result := validateCommand([]string{"testcmd", "arg"}, "testcmd arg", customAllowed, customBlocked)
+	assert.Nil(t, result, "command in custom allow-list should not be blocked")
 
-result = validateCommand([]string{"notallowed"}, "notallowed", customAllowed, customBlocked)
-require.NotNil(t, result)
-assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed))
+	result = validateCommand([]string{"notallowed"}, "notallowed", customAllowed, customBlocked)
+	require.NotNil(t, result)
+	assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed))
 }

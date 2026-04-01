@@ -118,7 +118,8 @@ var sourceScopedCommands = map[string]bool{
 // ExecuteBashCommandTool executes commands directly (no shell intermediary).
 type ExecuteBashCommandTool struct {
 	atmosConfig    *schema.AtmosConfiguration
-	commandTimeout time.Duration // defaults to execTimeout (30 s); override in tests.
+	commandTimeout time.Duration   // defaults to execTimeout (30 s); override in tests.
+	allowedCmds    map[string]bool // when non-nil, overrides the package-level allowedCommands; for tests only.
 }
 
 // NewExecuteBashCommandTool creates a new direct command execution tool.
@@ -241,6 +242,16 @@ func resolveArg(arg, workingDir string) string {
 	return absPath
 }
 
+// effectiveAllowedCmds returns the caller-supplied override allowlist when set,
+// falling back to the package-level allowedCommands.  The override is used only
+// in tests to allow the test binary itself to be the executed program.
+func (t *ExecuteBashCommandTool) effectiveAllowedCmds() map[string]bool {
+	if t.allowedCmds != nil {
+		return t.allowedCmds
+	}
+	return allowedCommands
+}
+
 // validateCommand checks that the (already-tokenized) command is permitted and
 // safe.  Validation order:
 //
@@ -252,7 +263,9 @@ func resolveArg(arg, workingDir string) string {
 // Path-scope validation for rm and read-type commands is performed separately by
 // validateRmPaths and validateSourcePaths after the working directory is resolved.
 func validateCommand(args []string, command string, allowedCmds map[string]bool, blockedCmds map[string]bool) *tools.Result {
-	baseCommand := args[0]
+	// Normalize to the basename so that full-path invocations like /bin/rm or
+	// /usr/bin/git are matched against the same allow/block lists as bare names.
+	baseCommand := filepath.Base(args[0])
 
 	// 1. Enforce the explicit allow-list before any other check.
 	if !allowedCmds[baseCommand] {
@@ -476,7 +489,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 		}, nil
 	}
 
-	if errResult := validateCommand(args, command, allowedCommands, blacklistedCommands); errResult != nil {
+	if errResult := validateCommand(args, command, t.effectiveAllowedCmds(), blacklistedCommands); errResult != nil {
 		return errResult, nil
 	}
 
