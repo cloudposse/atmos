@@ -62,6 +62,54 @@ func TestExecuteAtmosCommandTool_Execute_EmptyCommand(t *testing.T) {
 	assert.Error(t, result.Error)
 }
 
+// TestExecuteAtmosCommandTool_Execute_WhitespaceCommand verifies that a command string
+// consisting entirely of whitespace is treated as an empty command (len(args)==0 branch).
+func TestExecuteAtmosCommandTool_Execute_WhitespaceCommand(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	tool := NewExecuteAtmosCommandTool(config)
+	ctx := context.Background()
+
+	result, err := tool.Execute(ctx, map[string]interface{}{
+		"command": "   ",
+	})
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Error(t, result.Error)
+}
+
+// TestExecuteAtmosCommandTool_Execute_FailedCommand verifies the error path when
+// the subprocess exits with a non-zero exit code (err != nil after CombinedOutput).
+func TestExecuteAtmosCommandTool_Execute_FailedCommand(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	// _ATMOS_TEST_EXIT_ONE=1 causes TestMain to exit(1) immediately when this test
+	// binary is re-invoked as a subprocess, giving us a non-zero exit without any
+	// Unix-only helper binaries.
+	t.Setenv("_ATMOS_TEST_EXIT_ONE", "1")
+
+	config := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	tool := NewExecuteAtmosCommandTool(config)
+	tool.binaryPath = exePath
+	ctx := context.Background()
+
+	result, ferr := tool.Execute(ctx, map[string]interface{}{
+		"command": "some-arg",
+	})
+
+	require.NoError(t, ferr)
+	assert.False(t, result.Success)
+	require.Error(t, result.Error)
+	assert.Contains(t, result.Error.Error(), "exit")
+}
+
 func TestExecuteAtmosCommandTool_Execute_ValidCommand(t *testing.T) {
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),

@@ -72,13 +72,13 @@ func (t *ExecuteAtmosCommandTool) Name() string {
 
 // Description returns the tool description.
 func (t *ExecuteAtmosCommandTool) Description() string {
-	return "LAST RESORT: Execute an Atmos CLI command as a subprocess. Only use this for commands that do NOT have a dedicated tool. " +
+	return "LAST RESORT: Execute an Atmos CLI command as a subprocess. " +
+		"Only use this for commands that do NOT have a dedicated tool. " +
 		"Do NOT use this for: listing stacks (use atmos_list_stacks), describing components (use atmos_describe_component), " +
 		"describing affected (use atmos_describe_affected), or validating stacks (use atmos_validate_stacks). " +
-		"Safe read-only commands such as 'terraform plan', 'terraform show', 'terraform output', 'describe', and 'list' are supported. " +
-		"State-modifying Terraform operations (apply, destroy, import, state rm/mv/push, force-unlock, workspace new/delete) " +
-		"are forwarded to the permission system for explicit user confirmation only when the permission mode is ModePrompt; " +
-		"in all other modes (allow, deny, yolo) these operations are blocked at the tool layer."
+		"Safe read-only commands (terraform plan, show, output, validate, state list, workspace list, describe, list) are always allowed. " +
+		"State-modifying operations (terraform apply, destroy, import, force-unlock, state rm/mv/push, workspace new/delete) " +
+		"require ModePrompt for user confirmation; all other modes block them at the tool layer."
 }
 
 // Parameters returns the tool parameters.
