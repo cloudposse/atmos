@@ -36,7 +36,7 @@ AVAILABLE COMMANDS
       help                                   Help about any command
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
-      mcp [command] [EXPERIMENTAL]           Manage Model Context Protocol (MCP) server
+      mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections
       packer [command]                       Manage packer-based machine images for multiple platforms
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles

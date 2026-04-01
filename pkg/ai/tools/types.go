@@ -60,6 +60,15 @@ type Result struct {
 	Data    map[string]interface{} `json:"data,omitempty"`
 }
 
+// BridgedToolInfo is an optional interface for tools that originate from external servers (e.g., MCP).
+// Tools implementing this interface provide human-readable names for display.
+type BridgedToolInfo interface {
+	// ServerName returns the server that provides this tool.
+	ServerName() string
+	// OriginalName returns the tool's original name (before sanitization).
+	OriginalName() string
+}
+
 // Category represents a tool category.
 type Category string
 
