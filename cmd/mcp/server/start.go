@@ -5,9 +5,11 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -41,6 +43,7 @@ type transportConfig struct {
 	transportType string
 	host          string
 	port          int
+	apiKey        string
 }
 
 //go:embed markdown/atmos_mcp_start.md
@@ -68,6 +71,7 @@ func init() {
 		flags.WithStringFlag("transport", "", transportStdio, "Transport type: stdio or http"),
 		flags.WithStringFlag("host", "", defaultHTTPHost, "Host to bind HTTP server (only for http transport)"),
 		flags.WithIntFlag("port", "", defaultHTTPPort, "Port to bind HTTP server (only for http transport)"),
+		flags.WithStringFlag("api-key", "", "", "Bearer token for HTTP transport authentication (also read from ATMOS_MCP_API_KEY; required when --host is a non-loopback address)"),
 	)
 	startParser.RegisterFlags(startCmd)
 	if err := startParser.BindToViper(viper.GetViper()); err != nil {
@@ -107,7 +111,7 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	case transportStdio:
 		startStdioServer(ctx, server, errChan)
 	case transportHTTP:
-		startHTTPServer(server, config.host, config.port, errChan)
+		startHTTPServer(server, config.host, config.port, config.apiKey, errChan)
 	default:
 		return fmt.Errorf("%w: %s", errUtils.ErrMCPUnsupportedTransport, config.transportType)
 	}
@@ -121,17 +125,39 @@ func getTransportConfig(cmd *cobra.Command) (*transportConfig, error) {
 	transportType, _ := cmd.Flags().GetString("transport")
 	host, _ := cmd.Flags().GetString("host")
 	port, _ := cmd.Flags().GetInt("port")
+	apiKey, _ := cmd.Flags().GetString("api-key")
+
+	// Fall back to ATMOS_MCP_API_KEY environment variable when the flag is not set.
+	if apiKey == "" {
+		apiKey = os.Getenv("ATMOS_MCP_API_KEY")
+	}
 
 	// Validate transport type.
 	if transportType != transportStdio && transportType != transportHTTP {
 		return nil, fmt.Errorf("%w: %s (must be 'stdio' or 'http')", errUtils.ErrMCPInvalidTransport, transportType)
 	}
 
+	// For HTTP transport, enforce an API key when binding to a non-loopback address.
+	if transportType == transportHTTP && !isLoopbackHost(host) && apiKey == "" {
+		return nil, fmt.Errorf("%w: --api-key (or ATMOS_MCP_API_KEY) is required when --host is a non-loopback address", errUtils.ErrMCPHTTPAuthRequired)
+	}
+
 	return &transportConfig{
 		transportType: transportType,
 		host:          host,
 		port:          port,
+		apiKey:        apiKey,
 	}, nil
+}
+
+// isLoopbackHost reports whether host resolves to a loopback address only.
+// It accepts "localhost", IPv4 loopback (127.x.x.x), and IPv6 loopback (::1).
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // setupMCPServer initializes the MCP server with all required components.
@@ -184,7 +210,7 @@ func waitForShutdown(sigChan chan os.Signal, errChan chan error, cancel context.
 
 // startStdioServer starts the MCP server with stdio transport.
 func startStdioServer(ctx context.Context, server *mcp.Server, errChan chan error) {
-	logServerInfo(server, transportStdio, "")
+	logServerInfo(server, transportStdio, "", false)
 	go func() {
 		transport := &mcpsdk.StdioTransport{}
 		errChan <- server.Run(ctx, transport)
@@ -192,13 +218,17 @@ func startStdioServer(ctx context.Context, server *mcp.Server, errChan chan erro
 }
 
 // startHTTPServer starts the MCP server with HTTP transport.
-func startHTTPServer(server *mcp.Server, host string, port int, errChan chan error) {
+func startHTTPServer(server *mcp.Server, host string, port int, apiKey string, errChan chan error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
-	logServerInfo(server, transportHTTP, addr)
+	logServerInfo(server, transportHTTP, addr, apiKey != "")
 	go func() {
-		handler := mcpsdk.NewSSEHandler(func(req *http.Request) *mcpsdk.Server {
+		var handler http.Handler = mcpsdk.NewSSEHandler(func(req *http.Request) *mcpsdk.Server {
 			return server.SDK()
 		}, nil)
+
+		if apiKey != "" {
+			handler = bearerTokenMiddleware(apiKey, handler)
+		}
 
 		httpServer := &http.Server{
 			Addr:              addr,
@@ -212,8 +242,20 @@ func startHTTPServer(server *mcp.Server, host string, port int, errChan chan err
 	}()
 }
 
+// bearerTokenMiddleware enforces Bearer token authentication on all requests.
+func bearerTokenMiddleware(apiKey string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") || authHeader[len("Bearer "):] != apiKey {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // logServerInfo displays the server startup information to the user.
-func logServerInfo(server *mcp.Server, transportType, addr string) {
+func logServerInfo(server *mcp.Server, transportType, addr string, authenticated bool) {
 	ui.Info("Starting Atmos MCP server...")
 	serverInfo := server.ServerInfo()
 	ui.Writef("  Server: %s v%s\n", serverInfo.Name, serverInfo.Version)
@@ -222,6 +264,11 @@ func logServerInfo(server *mcp.Server, transportType, addr string) {
 		ui.Writef("  Transport: HTTP (listening on %s)\n", addr)
 		ui.Writef("    - SSE endpoint: http://%s/sse\n", addr)
 		ui.Writef("    - Message endpoint: http://%s/message\n", addr)
+		if authenticated {
+			ui.Info("  Authentication: Bearer token required")
+		} else {
+			ui.Warning("  Authentication: NONE — endpoints are unauthenticated; bind to loopback only")
+		}
 	} else {
 		ui.Writeln("  Transport: stdio")
 	}
@@ -279,8 +326,6 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 		BlockedTools:    atmosConfig.AI.Tools.BlockedTools,
 		YOLOMode:        atmosConfig.AI.Tools.YOLOMode,
 	}
-	// Use YOLO mode for MCP to avoid blocking on prompts (client handles permissions).
-	permConfig.YOLOMode = true
 	permChecker := permission.NewChecker(permConfig, permission.NewCLIPrompter())
 
 	// Create tool executor.
