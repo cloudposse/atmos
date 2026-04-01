@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -476,13 +477,16 @@ func parseDsclNFSHomeDir(output string) (string, error) {
 		if m == nil {
 			continue
 		}
-		home := filepath.Clean(m[1])
+		// dscl always emits POSIX paths, so use the path package (not
+		// path/filepath) for cleaning and absolute-path detection.  Using
+		// filepath on Windows would misclassify "/Users/alice" as relative.
+		home := path.Clean(m[1])
 		if home == "" || home == "." {
 			continue
 		}
 		// Require an absolute path: a relative result from dscl would be
 		// a malformed record and must not be returned to callers.
-		if !filepath.IsAbs(home) {
+		if !path.IsAbs(home) {
 			return "", ErrBlankOutput
 		}
 		return home, nil
