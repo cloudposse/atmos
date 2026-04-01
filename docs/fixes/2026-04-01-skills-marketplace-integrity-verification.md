@@ -168,9 +168,9 @@ A tampered skill emits a warning and is skipped; it is never loaded into the LLM
 
 ## Backward Compatibility
 
-* `registry.json` gains a new `content_hash` key per skill entry.  
+* `registry.json` gains a new `content_hash` key per skill entry.
   Older Atmos versions that do not know about this field will silently ignore it (JSON
-  `omitempty` / unknown-field tolerance).  
+  `omitempty` / unknown-field tolerance).
 * Skills already installed before this fix have `content_hash: ""`. The load path treats
   an empty hash as "no verification required", so existing installations continue to work.
 * Users who want integrity protection for already-installed skills should reinstall them:
