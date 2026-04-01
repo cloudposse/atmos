@@ -190,7 +190,7 @@ func TestGetPermissionMode(t *testing.T) {
 		{
 			name:         "default mode (no settings)",
 			atmosConfig:  createTestAtmosConfig(false, nil),
-			expectedMode: permission.ModeAllow,
+			expectedMode: permission.ModePrompt,
 		},
 		{
 			name:         "yolo takes precedence over require confirmation",
@@ -348,7 +348,7 @@ func TestGetPermissionMode_NilPointers(t *testing.T) {
 	atmosConfig := createTestAtmosConfig(false, nil)
 
 	mode := getPermissionMode(atmosConfig)
-	assert.Equal(t, permission.ModeAllow, mode)
+	assert.Equal(t, permission.ModePrompt, mode)
 }
 
 // TestWaitForShutdown_SignalReceived tests waitForShutdown when a signal is received.
@@ -541,7 +541,7 @@ func TestGetPermissionMode_AllCombinations(t *testing.T) {
 		{
 			name:         "all_defaults",
 			yoloMode:     false,
-			expectedMode: permission.ModeAllow,
+			expectedMode: permission.ModePrompt,
 		},
 		{
 			name:         "yolo_mode_only",
@@ -570,19 +570,19 @@ func TestGetPermissionMode_AllCombinations(t *testing.T) {
 			name:         "with_allowed_tools",
 			yoloMode:     false,
 			allowedTools: []string{"tool1", "tool2"},
-			expectedMode: permission.ModeAllow,
+			expectedMode: permission.ModePrompt,
 		},
 		{
 			name:            "with_restricted_tools",
 			yoloMode:        false,
 			restrictedTools: []string{"tool1", "tool2"},
-			expectedMode:    permission.ModeAllow,
+			expectedMode:    permission.ModePrompt,
 		},
 		{
 			name:         "with_blocked_tools",
 			yoloMode:     false,
 			blockedTools: []string{"tool1", "tool2"},
-			expectedMode: permission.ModeAllow,
+			expectedMode: permission.ModePrompt,
 		},
 	}
 
@@ -846,7 +846,7 @@ func TestGetPermissionMode_EmptyConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	mode := getPermissionMode(atmosConfig)
-	assert.Equal(t, permission.ModeAllow, mode, "empty config should default to ModeAllow")
+	assert.Equal(t, permission.ModePrompt, mode, "empty config should default to ModePrompt")
 }
 
 // TestInitializeAIComponents_ReturnsCorrectTypes tests that initializeAIComponents returns the correct types.
@@ -1338,7 +1338,7 @@ func TestGetPermissionMode_WithRequireConfirmationNilAndFalseYOLO(t *testing.T) 
 	}
 
 	mode := getPermissionMode(atmosConfig)
-	assert.Equal(t, permission.ModeAllow, mode)
+	assert.Equal(t, permission.ModePrompt, mode)
 }
 
 // TestStartCmd_Server tests that the start command integrates properly with parent.
@@ -1806,7 +1806,7 @@ func TestGetPermissionMode_FullCoverage(t *testing.T) {
 			name:                "yolo_mode_false_confirmation_nil",
 			yoloMode:            false,
 			requireConfirmation: nil,
-			expected:            permission.ModeAllow,
+			expected:            permission.ModePrompt,
 		},
 	}
 
