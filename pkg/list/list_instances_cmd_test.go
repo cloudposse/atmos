@@ -122,7 +122,16 @@ func TestListInstancesCommandLogic(t *testing.T) {
 			if tc.upload {
 				api := &mockAPI{err: tc.uploadErr}
 				proDeps := filterProEnabledInstances(list)
-				dto := dtos.InstancesUploadRequest{Instances: proDeps}
+				uploadDeps := make([]dtos.UploadInstance, len(proDeps))
+				for i, inst := range proDeps {
+					uploadDeps[i] = dtos.UploadInstance{
+						Component:     inst.Component,
+						Stack:         inst.Stack,
+						ComponentType: inst.ComponentType,
+						Settings:      extractProSettings(inst.Settings),
+					}
+				}
+				dto := dtos.InstancesUploadRequest{Instances: uploadDeps}
 				err = api.UploadInstances(&dto)
 				if tc.expectError {
 					assert.Error(t, err)
