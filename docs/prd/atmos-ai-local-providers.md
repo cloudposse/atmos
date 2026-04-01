@@ -1039,7 +1039,7 @@ This is optional — many use cases only need external MCP servers (AWS billing,
 
 - [Claude Code CLI Reference](https://docs.anthropic.com/en/docs/claude-code/cli-reference)
 - [Claude Code Non-Interactive Mode](https://docs.anthropic.com/en/docs/claude-code/cli-usage#non-interactive-mode)
-- [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/claude-agent-sdk)
+- [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk)
 
 ### OpenAI Codex CLI
 
@@ -1054,7 +1054,7 @@ This is optional — many use cases only need external MCP servers (AWS billing,
 ### Gemini CLI
 
 - [Gemini CLI Repository](https://github.com/google-gemini/gemini-cli)
-- [Gemini CLI Configuration](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/configuration.md)
+- [Gemini CLI Configuration](https://geminicli.com/docs/get-started/configuration)
 - [Gemini CLI MCP Server Setup](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md)
 - [Gemini CLI MCP Tutorial](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/tutorials/mcp-setup.md)
 - [GitHub MCP Server — Gemini CLI Install Guide](https://github.com/github/github-mcp-server/blob/main/docs/installation-guides/install-gemini-cli.md)
