@@ -40,12 +40,15 @@ func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter 
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
 	}
 
+	// CliConfigPath is the directory containing atmos.yaml, not the file itself.
+	atmosConfigFile := filepath.Join(atmosConfig.CliConfigPath, "atmos.yaml")
+
 	migCtx := &migrate.MigrationContext{
 		AtmosConfig:     &atmosConfig,
 		StacksBasePath:  atmosConfig.Stacks.BasePath,
 		ProfilesPath:    "profiles",
 		ExistingAuth:    &atmosConfig.Auth,
-		AtmosConfigPath: atmosConfig.CliConfigPath,
+		AtmosConfigPath: atmosConfigFile,
 	}
 
 	// Discover account map.
@@ -54,8 +57,8 @@ func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter 
 		return nil, err
 	}
 
-	// Discover SSO config.
-	migCtx.SSOConfig, err = discoverSSOConfig(migCtx.StacksBasePath, fs, prompter)
+	// Discover SSO config, using existing auth config as a source of defaults.
+	migCtx.SSOConfig, err = discoverSSOConfig(migCtx.StacksBasePath, &atmosConfig.Auth, fs, prompter)
 	if err != nil {
 		return nil, err
 	}
@@ -119,14 +122,28 @@ func discoverAccountMap(base string, fs migrate.FileSystem, prompter migrate.Pro
 }
 
 // discoverSSOConfig searches known paths for aws-sso.yaml and parses it.
-// If the file is not found or cannot be parsed, creates an empty config and prompts for required values.
-func discoverSSOConfig(base string, fs migrate.FileSystem, prompter migrate.Prompter) (*migrate.SSOConfig, error) {
+// It also checks the existing auth config in atmos.yaml for SSO provider details
+// (start_url, region, provider name) before prompting the user.
+func discoverSSOConfig(base string, existingAuth *schema.AuthConfig, fs migrate.FileSystem, prompter migrate.Prompter) (*migrate.SSOConfig, error) {
 	defer perf.Track(nil, "awssso.discoverSSOConfig")()
 
 	ssoCfg := &migrate.SSOConfig{
 		AccountAssignments: make(map[string]map[string][]string),
 	}
 
+	// First, extract defaults from existing auth config in atmos.yaml.
+	if existingAuth != nil {
+		for name, provider := range existingAuth.Providers {
+			if provider.Kind == "aws/iam-identity-center" {
+				ssoCfg.ProviderName = name
+				ssoCfg.StartURL = provider.StartURL
+				ssoCfg.Region = provider.Region
+				break
+			}
+		}
+	}
+
+	// Then try to parse aws-sso.yaml for account assignments.
 	found := findExistingFiles(ssoConfigSearchPaths(base), fs)
 	if len(found) > 0 {
 		filePath := found[0]
@@ -141,13 +158,21 @@ func discoverSSOConfig(base string, fs migrate.FileSystem, prompter migrate.Prom
 		if readErr == nil {
 			parsed, parseErr := parseSSOConfig(data)
 			if parseErr == nil {
-				ssoCfg = parsed
+				// Merge: keep existing auth values if parsed file doesn't have them.
+				if parsed.StartURL != "" {
+					ssoCfg.StartURL = parsed.StartURL
+				}
+				if parsed.Region != "" {
+					ssoCfg.Region = parsed.Region
+				}
+				if len(parsed.AccountAssignments) > 0 {
+					ssoCfg.AccountAssignments = parsed.AccountAssignments
+				}
 			}
-			// If parse fails, continue with empty config — user will be prompted.
 		}
 	}
 
-	// Prompt for SSO start URL if not found in the file.
+	// Only prompt for values still missing after checking both sources.
 	if ssoCfg.StartURL == "" {
 		url, promptErr := prompter.Input("Enter your AWS SSO start URL", "")
 		if promptErr != nil {
@@ -156,7 +181,6 @@ func discoverSSOConfig(base string, fs migrate.FileSystem, prompter migrate.Prom
 		ssoCfg.StartURL = url
 	}
 
-	// Prompt for SSO region if not found in the file.
 	if ssoCfg.Region == "" {
 		region, promptErr := prompter.Input("Enter your AWS SSO region", "us-east-1")
 		if promptErr != nil {
@@ -165,12 +189,13 @@ func discoverSSOConfig(base string, fs migrate.FileSystem, prompter migrate.Prom
 		ssoCfg.Region = region
 	}
 
-	// Prompt for provider name with a default.
-	providerName, err := prompter.Input("Enter SSO provider name", "sso")
-	if err != nil {
-		return nil, fmt.Errorf("prompting for provider name: %w", err)
+	if ssoCfg.ProviderName == "" {
+		providerName, err := prompter.Input("Enter SSO provider name", "sso")
+		if err != nil {
+			return nil, fmt.Errorf("prompting for provider name: %w", err)
+		}
+		ssoCfg.ProviderName = providerName
 	}
-	ssoCfg.ProviderName = providerName
 
 	return ssoCfg, nil
 }

@@ -271,7 +271,7 @@ func TestDiscoverSSOConfig_Found(t *testing.T) {
 	// Provider name prompt.
 	mockPrompter.EXPECT().Input("Enter SSO provider name", "sso").Return("sso", nil)
 
-	result, err := discoverSSOConfig(base, mockFS, mockPrompter)
+	result, err := discoverSSOConfig(base, nil, mockFS, mockPrompter)
 	require.NoError(t, err)
 	assert.Equal(t, "https://myorg.awsapps.com/start", result.StartURL)
 	assert.Equal(t, "eu-west-1", result.Region)
@@ -306,7 +306,7 @@ func TestDiscoverSSOConfig_MissingURLAndRegion_PromptsUser(t *testing.T) {
 	mockPrompter.EXPECT().Input("Enter your AWS SSO region", "us-east-1").Return("us-east-1", nil)
 	mockPrompter.EXPECT().Input("Enter SSO provider name", "sso").Return("my-sso", nil)
 
-	result, err := discoverSSOConfig(base, mockFS, mockPrompter)
+	result, err := discoverSSOConfig(base, nil, mockFS, mockPrompter)
 	require.NoError(t, err)
 	assert.Equal(t, "https://prompted.awsapps.com/start", result.StartURL)
 	assert.Equal(t, "us-east-1", result.Region)
@@ -339,7 +339,7 @@ func TestDiscoverSSOConfig_MultipleFound_PromptsSelect(t *testing.T) {
 	mockFS.EXPECT().ReadFile(path2).Return(ssoData, nil)
 	mockPrompter.EXPECT().Input("Enter SSO provider name", "sso").Return("sso", nil)
 
-	result, err := discoverSSOConfig(base, mockFS, mockPrompter)
+	result, err := discoverSSOConfig(base, nil, mockFS, mockPrompter)
 	require.NoError(t, err)
 	assert.Equal(t, "https://selected.awsapps.com/start", result.StartURL)
 	assert.Equal(t, "ap-southeast-1", result.Region)
