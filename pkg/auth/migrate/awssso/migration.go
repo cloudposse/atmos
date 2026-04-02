@@ -81,43 +81,70 @@ func ssoConfigSearchPaths(base string) []string {
 }
 
 // discoverAccountMap searches known paths for account-map.yaml and parses it.
+// If the file is not found or cannot be parsed, returns an empty map rather than failing.
+// Individual steps will handle missing account data by prompting the user.
 func discoverAccountMap(base string, fs migrate.FileSystem, prompter migrate.Prompter) (map[string]string, error) {
 	defer perf.Track(nil, "awssso.discoverAccountMap")()
 
 	found := findExistingFiles(accountMapSearchPaths(base), fs)
+	if len(found) == 0 {
+		// No account-map file found — return empty map.
+		// Steps that need account data will prompt the user.
+		return make(map[string]string), nil
+	}
 
-	filePath, err := resolveFilePath(found, prompter, "account-map.yaml")
-	if err != nil {
-		return nil, err
+	filePath := found[0]
+	if len(found) > 1 {
+		selected, err := prompter.Select("Multiple account-map files found. Select one", found)
+		if err != nil {
+			return make(map[string]string), nil
+		}
+		filePath = selected
 	}
 
 	data, err := fs.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("reading account map file %s: %w", filePath, err)
+		// Cannot read file — return empty map gracefully.
+		return make(map[string]string), nil
 	}
 
-	return parseAccountMap(data)
+	result, err := parseAccountMap(data)
+	if err != nil {
+		// File exists but format doesn't match — return empty map gracefully.
+		// The file may use a different structure (e.g., component config vs stack vars).
+		return make(map[string]string), nil
+	}
+
+	return result, nil
 }
 
 // discoverSSOConfig searches known paths for aws-sso.yaml and parses it.
+// If the file is not found or cannot be parsed, creates an empty config and prompts for required values.
 func discoverSSOConfig(base string, fs migrate.FileSystem, prompter migrate.Prompter) (*migrate.SSOConfig, error) {
 	defer perf.Track(nil, "awssso.discoverSSOConfig")()
 
+	ssoCfg := &migrate.SSOConfig{
+		AccountAssignments: make(map[string]map[string][]string),
+	}
+
 	found := findExistingFiles(ssoConfigSearchPaths(base), fs)
+	if len(found) > 0 {
+		filePath := found[0]
+		if len(found) > 1 {
+			selected, selectErr := prompter.Select("Multiple aws-sso.yaml files found. Select one", found)
+			if selectErr == nil {
+				filePath = selected
+			}
+		}
 
-	filePath, err := resolveFilePath(found, prompter, "aws-sso.yaml")
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := fs.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("reading SSO config file %s: %w", filePath, err)
-	}
-
-	ssoCfg, err := parseSSOConfig(data)
-	if err != nil {
-		return nil, err
+		data, readErr := fs.ReadFile(filePath)
+		if readErr == nil {
+			parsed, parseErr := parseSSOConfig(data)
+			if parseErr == nil {
+				ssoCfg = parsed
+			}
+			// If parse fails, continue with empty config — user will be prompted.
+		}
 	}
 
 	// Prompt for SSO start URL if not found in the file.

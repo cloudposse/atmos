@@ -228,7 +228,7 @@ func TestDiscoverAccountMap_Found(t *testing.T) {
 	assert.Equal(t, "210987654321", result["prod"])
 }
 
-func TestDiscoverAccountMap_NotFound_PromptsUser(t *testing.T) {
+func TestDiscoverAccountMap_NotFound_ReturnsEmptyMap(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
@@ -237,23 +237,12 @@ func TestDiscoverAccountMap_NotFound_PromptsUser(t *testing.T) {
 
 	base := filepath.Join("stacks")
 
-	// No paths exist.
+	// No paths exist — returns empty map gracefully.
 	mockFS.EXPECT().Exists(gomock.Any()).Return(false).Times(3)
-
-	// User provides a custom path.
-	customPath := filepath.Join("custom", "accounts.yaml")
-	mockPrompter.EXPECT().Input("Could not find account-map.yaml. Enter the path", "").Return(customPath, nil)
-
-	accountData := []byte(`vars:
-  account_map:
-    custom-acct: "999888777666"
-`)
-	mockFS.EXPECT().ReadFile(customPath).Return(accountData, nil)
 
 	result, err := discoverAccountMap(base, mockFS, mockPrompter)
 	require.NoError(t, err)
-	require.Len(t, result, 1)
-	assert.Equal(t, "999888777666", result["custom-acct"])
+	assert.Empty(t, result)
 }
 
 func TestDiscoverSSOConfig_Found(t *testing.T) {
