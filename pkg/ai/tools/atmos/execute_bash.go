@@ -115,6 +115,43 @@ var sourceScopedCommands = map[string]bool{
 	"grep": true,
 }
 
+// blockedSubcommands maps binary names to sets of subcommands that are never
+// permitted.  These subcommands can execute arbitrary code, download untrusted
+// packages, or perform write/network operations outside the safe read-only
+// inspection use case.
+var blockedSubcommands = map[string]map[string]bool{
+	"git": {
+		"commit":    true,
+		"push":      true,
+		"clone":     true,
+		"submodule": true,
+		"remote":    true,
+		"config":    true,
+	},
+	"npm": {
+		"exec":    true,
+		"run":     true,
+		"scripts": true,
+	},
+	"yarn": {
+		"run":  true,
+		"exec": true,
+	},
+	"pip": {
+		"install":  true,
+		"download": true,
+	},
+	"pip3": {
+		"install":  true,
+		"download": true,
+	},
+	"go": {
+		"test":     true,
+		"generate": true,
+		"get":      true,
+	},
+}
+
 // ExecuteBashCommandTool executes commands directly (no shell intermediary).
 type ExecuteBashCommandTool struct {
 	atmosConfig    *schema.AtmosConfiguration
@@ -242,6 +279,21 @@ func resolveArg(arg, workingDir string) string {
 	return absPath
 }
 
+// isPathLike reports whether s looks like a file-system path: an absolute path,
+// a relative path starting with "./" or "../" (or the Windows equivalents ".\\"
+// and "..\\"), or a string containing the OS path separator.  The check is
+// intentionally conservative so that command arguments that are not paths
+// (e.g., search patterns, format strings) are not misclassified and subjected
+// to an unnecessary scope check.
+func isPathLike(s string) bool {
+	return filepath.IsAbs(s) ||
+		strings.HasPrefix(s, "./") ||
+		strings.HasPrefix(s, "../") ||
+		strings.HasPrefix(s, `.\\`) ||
+		strings.HasPrefix(s, `..\\`) ||
+		strings.ContainsRune(s, filepath.Separator)
+}
+
 // effectiveAllowedCmds returns the caller-supplied override allowlist when set,
 // falling back to the package-level allowedCommands.  The override is used only
 // in tests to allow the test binary itself to be the executed program.
@@ -276,7 +328,21 @@ func validateCommand(args []string, command string, allowedCmds map[string]bool,
 		}
 	}
 
-	// 2. Defense-in-depth: deny explicitly blacklisted commands even if they are
+	// 2. Block dangerous subcommands for package managers, build tools, and VCS
+	// binaries that can execute arbitrary code, download untrusted packages, or
+	// perform write/network operations.
+	if subBlocked, hasBlocked := blockedSubcommands[baseCommand]; hasBlocked && len(args) > 1 {
+		sub := args[1]
+		if subBlocked[sub] {
+			log.Warnf("Blocked dangerous subcommand %q for command: %s", sub, command)
+			return &tools.Result{
+				Success: false,
+				Error:   fmt.Errorf("%w: %s %s", errUtils.ErrAICommandBlacklisted, baseCommand, sub),
+			}
+		}
+	}
+
+	// 3. Defense-in-depth: deny explicitly blacklisted commands even if they are
 	// ever added to allowedCmds by mistake.
 	if blockedCmds[baseCommand] {
 		log.Warnf("Blocked blacklisted command: %s", baseCommand)
@@ -294,7 +360,7 @@ func validateCommand(args []string, command string, allowedCmds map[string]bool,
 		}
 	}
 
-	// 3. Block inline-execution flags for tools that could otherwise be used as
+	// 4. Block inline-execution flags for tools that could otherwise be used as
 	// interpreter escape hatches.
 	if bypassCheckedCommands[baseCommand] {
 		for _, arg := range args[1:] {
@@ -325,7 +391,7 @@ func validateCommand(args []string, command string, allowedCmds map[string]bool,
 		}
 	}
 
-	// 4. Allow "rm" for single-file deletions, but block recursive and directory-removal flags.
+	// 5. Allow "rm" for single-file deletions, but block recursive and directory-removal flags.
 	if baseCommand == "rm" {
 		for _, arg := range args[1:] {
 			if isRmRecursiveFlag(arg) {
@@ -361,6 +427,25 @@ func (t *ExecuteBashCommandTool) validateRmPaths(args []string, workingDir strin
 
 	for _, arg := range args[1:] {
 		if strings.HasPrefix(arg, "-") {
+			// Handle --flag=value form: the value part may be a path (e.g., --backup=suffix
+			// is not a path, but guard against future flags that embed paths).
+			if eqIdx := strings.Index(arg, "="); eqIdx > 0 {
+				val := arg[eqIdx+1:]
+				if val != "" && isPathLike(val) {
+					absPath := resolveArg(val, workingDir)
+					relToBase, errBase := filepath.Rel(basePath, absPath)
+					relToTmp, errTmp := filepath.Rel(tmpDir, absPath)
+					withinBase := errBase == nil && !strings.HasPrefix(relToBase, "..")
+					withinTmp := errTmp == nil && !strings.HasPrefix(relToTmp, "..")
+					if !withinBase && !withinTmp {
+						log.Warnf("Blocked rm of path outside allowed scope: %s (basePath=%s, tmpDir=%s)", absPath, basePath, tmpDir)
+						return &tools.Result{
+							Success: false,
+							Error:   errUtils.ErrAICommandRmNotAllowed,
+						}
+					}
+				}
+			}
 			continue // flags are already checked by validateCommand.
 		}
 
@@ -404,7 +489,32 @@ func (t *ExecuteBashCommandTool) validateSourcePaths(args []string, workingDir s
 
 	for _, arg := range args[1:] {
 		if strings.HasPrefix(arg, "-") {
+			// Handle --flag=value form: the value part may be a path that needs
+			// scope validation (e.g., cp --target-directory=/etc/shadow src).
+			if eqIdx := strings.Index(arg, "="); eqIdx > 0 {
+				val := arg[eqIdx+1:]
+				if val != "" && isPathLike(val) {
+					absPath := resolveArg(val, workingDir)
+					relToBase, errBase := filepath.Rel(basePath, absPath)
+					relToTmp, errTmp := filepath.Rel(tmpDir, absPath)
+					withinBase := errBase == nil && !strings.HasPrefix(relToBase, "..")
+					withinTmp := errTmp == nil && !strings.HasPrefix(relToTmp, "..")
+					if !withinBase && !withinTmp {
+						log.Warnf("Blocked access to path outside allowed scope: %s (basePath=%s)", absPath, basePath)
+						return &tools.Result{
+							Success: false,
+							Error:   errUtils.ErrAICommandPathNotAllowed,
+						}
+					}
+				}
+			}
 			continue // flags are already validated by validateCommand.
+		}
+
+		// Positional arg: only apply scope check to path-like values to avoid
+		// misclassifying search patterns or other non-path arguments.
+		if !isPathLike(arg) {
+			continue
 		}
 
 		absPath := resolveArg(arg, workingDir)
@@ -429,37 +539,48 @@ func (t *ExecuteBashCommandTool) validateSourcePaths(args []string, workingDir s
 
 // resolveWorkingDir determines the working directory for command execution.
 // The resolved directory must be within the tool's base path; if it is not,
-// the base path is used as a fallback and a warning is logged.  Symlinks in
-// the provided path are resolved before the scope check to prevent symlink-
-// based path traversal attacks.
+// the base path is used as a fallback and a warning is logged.  Both the
+// configured base path and the candidate working directory are symlink-resolved
+// before the scope check so that the comparison works correctly on systems
+// where paths contain symlinks (e.g., /var → /private/var on macOS).
 func (t *ExecuteBashCommandTool) resolveWorkingDir(params map[string]interface{}) string {
-	basePath := t.atmosConfig.BasePath
+	rawBase := t.atmosConfig.BasePath
+	// Normalize the configured base path to its symlink-resolved, clean form.
+	// If EvalSymlinks fails (e.g., the path does not yet exist), fall back to
+	// filepath.Clean so the comparison is at least consistently canonicalized.
+	normalizedBase := filepath.Clean(rawBase)
+	if realBase, err := filepath.EvalSymlinks(normalizedBase); err == nil {
+		normalizedBase = realBase
+	}
+
 	wd, ok := params["working_dir"].(string)
 	if !ok || wd == "" {
-		return basePath
+		return rawBase
 	}
 
 	var resolved string
 	if !filepath.IsAbs(wd) {
-		// Relative paths are joined against basePath, guaranteeing they are
-		// within it (unless ".." traversal is used, caught by Rel below).
-		resolved = filepath.Join(basePath, wd)
+		// Relative paths are joined against normalizedBase so that subsequent
+		// EvalSymlinks resolves the full canonical path correctly.
+		resolved = filepath.Join(normalizedBase, wd)
 	} else {
 		resolved = wd
 	}
 
 	// Resolve symlinks to prevent symlink-based path traversal attacks.
 	// Only resolve when the path actually exists; non-existent paths fall back
-	// to basePath via the Rel check below.
+	// to rawBase via the Rel check below.
 	if realPath, err := filepath.EvalSymlinks(resolved); err == nil {
 		resolved = realPath
+	} else {
+		resolved = filepath.Clean(resolved)
 	}
 
-	// Validate that the resolved directory is within the base path.
-	rel, err := filepath.Rel(basePath, resolved)
+	// Validate that the resolved directory is within the normalized base path.
+	rel, err := filepath.Rel(normalizedBase, resolved)
 	if err != nil || strings.HasPrefix(rel, "..") {
-		log.Warnf("Working directory %q is outside the base path %q; falling back to base path", resolved, basePath)
-		return basePath
+		log.Warnf("Working directory %q is outside the base path %q; falling back to base path", resolved, rawBase)
+		return rawBase
 	}
 	return resolved
 }
@@ -543,7 +664,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 
 	output, err := cmd.CombinedOutput()
 
-	exitCode := 0
+	exitCode := -1 // sentinel: -1 means process never ran (launch failure)
 	if cmd.ProcessState != nil {
 		exitCode = cmd.ProcessState.ExitCode()
 	}

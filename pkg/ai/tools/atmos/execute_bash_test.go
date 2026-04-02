@@ -696,28 +696,47 @@ func TestIsRmRecursiveFlag(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestExecuteBashCommandTool_ResolveWorkingDir_Relative(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/base"})
-	assert.Equal(t, "/base/subdir", tool.resolveWorkingDir(map[string]interface{}{"working_dir": "subdir"}))
+	base := t.TempDir()
+	// Resolve symlinks in base so expected == actual (e.g., macOS /var→/private/var).
+	if real, err := filepath.EvalSymlinks(base); err == nil {
+		base = real
+	}
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: base})
+	got := tool.resolveWorkingDir(map[string]interface{}{"working_dir": "subdir"})
+	assert.Equal(t, filepath.Join(base, "subdir"), got)
 }
 
 // TestExecuteBashCommandTool_ResolveWorkingDir_Absolute_WithinBasePath verifies
 // that an absolute path within the base path is returned as-is.
 func TestExecuteBashCommandTool_ResolveWorkingDir_Absolute_WithinBasePath(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/base"})
-	assert.Equal(t, "/base/sub", tool.resolveWorkingDir(map[string]interface{}{"working_dir": "/base/sub"}))
+	base := t.TempDir()
+	if real, err := filepath.EvalSymlinks(base); err == nil {
+		base = real
+	}
+	sub := filepath.Join(base, "sub")
+	require.NoError(t, os.Mkdir(sub, 0o755))
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: base})
+	got := tool.resolveWorkingDir(map[string]interface{}{"working_dir": sub})
+	assert.Equal(t, sub, got)
 }
 
 // TestExecuteBashCommandTool_ResolveWorkingDir_Absolute_OutsideBasePath verifies
 // that an absolute path outside the base path falls back to the base path.
 func TestExecuteBashCommandTool_ResolveWorkingDir_Absolute_OutsideBasePath(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/base"})
-	got := tool.resolveWorkingDir(map[string]interface{}{"working_dir": "/etc"})
-	assert.Equal(t, "/base", got, "path outside basePath should fall back to basePath")
+	base := t.TempDir()
+	if real, err := filepath.EvalSymlinks(base); err == nil {
+		base = real
+	}
+	outside := filepath.Dir(base) // parent directory — guaranteed to be outside base.
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: base})
+	got := tool.resolveWorkingDir(map[string]interface{}{"working_dir": outside})
+	assert.Equal(t, base, got, "path outside basePath should fall back to basePath")
 }
 
 func TestExecuteBashCommandTool_ResolveWorkingDir_Empty(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/base"})
-	assert.Equal(t, "/base", tool.resolveWorkingDir(map[string]interface{}{}))
+	base := t.TempDir()
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: base})
+	assert.Equal(t, base, tool.resolveWorkingDir(map[string]interface{}{}))
 }
 
 // TestExecuteBashCommandTool_Execute_WorkingDirOutsideBasePathFallsBack verifies
@@ -981,4 +1000,79 @@ func TestValidateCommand_WithCustomAllowed(t *testing.T) {
 	result = validateCommand([]string{"notallowed"}, "notallowed", customAllowed, customBlocked)
 	require.NotNil(t, result)
 	assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandNotAllowed))
+}
+
+// ---------------------------------------------------------------------------
+// Dangerous subcommand blocking tests
+// ---------------------------------------------------------------------------
+
+// TestExecuteBashCommandTool_Execute_DangerousSubcommandsBlocked verifies that
+// subcommands capable of executing arbitrary code, downloading untrusted
+// packages, or performing write/network operations are rejected with
+// ErrAICommandBlacklisted.
+func TestExecuteBashCommandTool_Execute_DangerousSubcommandsBlocked(t *testing.T) {
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: os.TempDir()})
+	cases := []string{
+		"git commit -m 'test'",
+		"git push origin main",
+		"git clone https://github.com/foo/bar",
+		"git submodule update",
+		"git remote add origin https://x.com",
+		"git config user.email test@test.com",
+		"npm exec virus.js",
+		"npm run build",
+		"yarn run test",
+		"yarn exec cmd",
+		"pip install requests",
+		"pip download requests",
+		"pip3 install requests",
+		"pip3 download requests",
+		"go test ./...",
+		"go generate ./...",
+		"go get github.com/foo/bar",
+	}
+	for _, cmd := range cases {
+		t.Run(cmd, func(t *testing.T) {
+			result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+			assert.NoError(t, err, "cmd=%q", cmd)
+			assert.False(t, result.Success, "should be blocked: %q", cmd)
+			require.Error(t, result.Error, "cmd=%q", cmd)
+			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandBlacklisted),
+				"cmd=%q: expected ErrAICommandBlacklisted, got: %v", cmd, result.Error)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// --flag=value embedded-path scope tests
+// ---------------------------------------------------------------------------
+
+// TestExecuteBashCommandTool_Execute_FlagEmbeddedPathBlocked verifies that path
+// values embedded in --flag=value arguments (e.g., --target-directory=/etc) are
+// subject to the same scope checks as positional path arguments.
+func TestExecuteBashCommandTool_Execute_FlagEmbeddedPathBlocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows: POSIX paths are not valid")
+	}
+	dir := t.TempDir()
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: dir})
+	src := filepath.Join(dir, "src.txt")
+	require.NoError(t, os.WriteFile(src, []byte("data"), 0o644))
+
+	cases := []string{
+		// cp --target-directory embeds a destination path.
+		"cp --target-directory=/etc/shadow " + src,
+		// grep --include value looks like a path (/etc/passwd).
+		"grep --file=/etc/passwd pattern",
+	}
+	for _, cmd := range cases {
+		t.Run(cmd, func(t *testing.T) {
+			result, err := tool.Execute(context.Background(), map[string]interface{}{"command": cmd})
+			assert.NoError(t, err, "cmd=%q", cmd)
+			assert.False(t, result.Success, "should be blocked: %q", cmd)
+			require.Error(t, result.Error, "cmd=%q", cmd)
+			assert.True(t, errors.Is(result.Error, errUtils.ErrAICommandPathNotAllowed),
+				"cmd=%q: expected ErrAICommandPathNotAllowed, got: %v", cmd, result.Error)
+		})
+	}
 }
