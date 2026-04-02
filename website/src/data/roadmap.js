@@ -39,8 +39,8 @@ export const roadmapConfig = {
     { id: 'q2-2025', label: 'Q2 2025', status: 'completed' },
     { id: 'q3-2025', label: 'Q3 2025', status: 'completed' },
     { id: 'q4-2025', label: 'Q4 2025', status: 'completed' },
-    { id: 'q1-2026', label: 'Q1 2026', status: 'current' },
-    { id: 'q2-2026', label: 'Q2 2026', status: 'planned' },
+    { id: 'q1-2026', label: 'Q1 2026', status: 'completed' },
+    { id: 'q2-2026', label: 'Q2 2026', status: 'current' },
   ],
 
   featured: [
@@ -153,6 +153,18 @@ export const roadmapConfig = {
       pr: 2216,
       changelog: 'instance-status-upload',
     },
+    {
+      id: 'chunked-stack-uploads',
+      icon: 'RiUploadCloudLine',
+      title: 'Chunked Uploads for Large Payloads',
+      tagline: 'No size limit on stack uploads to Atmos Pro',
+      description: 'CLI automatically chunks large affected stack and instance payloads into multiple requests with batch metadata for server-side reassembly. Configurable threshold via max_payload_bytes in atmos.yaml.',
+      benefits: 'Eliminates HTTP 413 errors for large infrastructure repositories. No practical upper limit on the number of stacks or instances uploaded to Atmos Pro.',
+      status: 'shipped',
+      quarter: 'q1-2026',
+      pr: 2251,
+      changelog: 'chunked-stack-uploads',
+    },
   ],
 
   initiatives: [
@@ -163,7 +175,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 85,
+      progress: 89,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.', category: 'featured', priority: 'high' },
@@ -191,7 +203,9 @@ export const roadmapConfig = {
         { label: 'Native Okta Authentication (Device Code Flow)', status: 'planned', quarter: 'q1-2026', prd: 'okta-auth-identity', description: 'Native Okta authentication using OAuth 2.0 Device Authorization Grant. Enables Okta as a central IdP for AWS, Azure, and GCP federation, plus direct Okta API access for Terraform.', benefits: 'Use Okta as your single identity hub. Authenticate once with Okta and federate to any cloud. No browser automation or SAML complexity.' },
         { label: 'Support for `atmos auth` with GitHub Apps', status: 'planned', quarter: 'q1-2026', pr: 1683, description: 'GitHub App authentication for fine-grained repository access and elevated rate limits.', benefits: 'Higher API rate limits and granular permissions for automation that interacts with GitHub.' },
         { label: 'Identity selection for stores', status: 'shipped', quarter: 'q1-2026', pr: 2099, changelog: 'store-identity-support', description: 'Stores can authenticate using atmos auth identities instead of default credential chains.', benefits: 'Use the same identity system for stores as for Terraform. No separate credential management for secrets access.' },
+        { label: 'Required identities for multi-account components', status: 'shipped', quarter: 'q1-2026', changelog: 'auth-required-concurrent-identities', description: 'Identities marked required: true are automatically authenticated without prompting. The default identity stays primary; required non-default identities are authenticated as secondary and written to the shared credentials file.', benefits: 'Multi-account Terraform patterns with provider aliases work in CI with OIDC. No manual credential setup for hub-spoke networking or cross-account deployments.' },
         { label: 'Isolated browser sessions for multi-account console access', status: 'shipped', quarter: 'q1-2026', pr: 2229, changelog: 'auth-console-isolated-sessions', prd: 'auth-console-isolated-sessions', description: 'Open multiple cloud provider consoles simultaneously in isolated Chrome browser contexts, one per identity, without logout conflicts.', benefits: 'Work in multiple AWS accounts at the same time. No more logging out to switch between consoles.' },
+        { label: 'Ambient credential support (IRSA/IMDS/ECS)', status: 'shipped', quarter: 'q1-2026', pr: 2254, changelog: 'ambient-credential-support', prd: 'ambient-identity', description: 'Two new identity kinds: generic `ambient` passthrough and AWS-specific `aws/ambient` that resolves credentials from IRSA, EC2 instance profiles, and ECS task roles via the default credential chain.', benefits: 'Run Atmos natively in EKS, EC2, and ECS without additional auth configuration. Chain with assume-role for cross-account access.', category: 'featured', priority: 'high' },
       ],
       issues: [],
       prs: [
@@ -378,7 +392,7 @@ export const roadmapConfig = {
       tagline: 'Native CI/CD support — local = CI',
       description:
         'CI pipelines shouldn\'t require complicated workflows, custom actions, and shell commands just to run what should be a one liner. They should just work. What works locally should work identically in CI with minimal configuration.',
-      progress: 80,
+      progress: 85,
       status: 'in-progress',
       milestones: [
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
@@ -386,6 +400,7 @@ export const roadmapConfig = {
         { label: 'Easily share Terraform outputs between GitHub Actions steps', status: 'shipped', quarter: 'q1-2026', pr: 1985, docs: '/cli/commands/terraform/output', changelog: 'github-output-format', description: 'Native --format=github option writes Terraform outputs directly to $GITHUB_OUTPUT, with automatic heredoc handling for multiline values—no jq parsing or manual heredoc construction required.', category: 'featured', priority: 'high', benefits: 'Pass outputs between workflow steps naturally. Complex values like JSON configs just work.' },
         { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'CLI auto-detects CI environments and generates rich job summaries with resource badges, collapsible diffs, and status checks. Replaces separate actions like github-action-atmos-terraform-plan.', category: 'featured', priority: 'high', benefits: 'No wrapper scripts needed. Same command works locally and in CI. Ships with GitHub Actions support; provider architecture enables future GitLab and Azure DevOps support.' },
         { label: 'Detect deleted components in affected stacks', status: 'shipped', quarter: 'q1-2026', pr: 2063, docs: '/cli/commands/describe/affected', changelog: 'describe-affected-deleted-detection', description: 'Automatically detect components and stacks that have been deleted in the current branch compared to the target branch. Enables CI/CD pipelines to trigger terraform destroy workflows for removed infrastructure.', category: 'featured', priority: 'high', benefits: 'CI/CD pipelines can now separate apply and destroy workflows automatically. No more orphaned cloud resources from removed components.' },
+        { label: 'Zero-config CI base detection for describe affected', status: 'shipped', quarter: 'q1-2026', pr: 2241, docs: '/cli/commands/describe/affected', changelog: 'describe-affected-auto-detection', description: 'Automatic base commit resolution from CI environment variables. The --base flag replaces --ref/--sha, and CI providers auto-detect the comparison point for pull requests, pushes, and merge groups.', category: 'featured', priority: 'high', benefits: 'No more shell expression gymnastics in CI workflows. Just run atmos describe affected and it does the right thing.' },
       ],
       issues: [],
       prs: [
@@ -433,7 +448,7 @@ export const roadmapConfig = {
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. In 2026, critical high-complexity functions are being refactored with 100% coverage. Embracing AI-assisted development while maintaining high standards.',
-      progress: 80,
+      progress: 86,
       status: 'in-progress',
       milestones: [
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Test coverage improved from less than 20% to 74% over the course of 2025.', category: 'featured', priority: 'high', benefits: 'Fewer regressions reach users. Changes can be made confidently knowing tests catch issues.' },
@@ -446,6 +461,8 @@ export const roadmapConfig = {
         { label: 'Terraform command registry', status: 'in-progress', quarter: 'q4-2025', pr: 1891, changelog: 'terraform-command-registry-pattern', description: 'Centralized Terraform command configuration for consistent behavior across CI and local.', benefits: 'Terraform commands behave identically everywhere. CI matches local exactly.' },
         { label: 'Multiple terraform output formats', status: 'shipped', quarter: 'q4-2025', description: 'Export terraform outputs in multiple formats (JSON, YAML, HCL, env, dotenv, bash, CSV, TSV) with options for uppercase keys and nested value flattening.', benefits: 'Integrate terraform outputs directly into CI workflows. Export to GitHub Actions env format, source as bash exports, or pipe as CSV without jq gymnastics.' },
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.', category: 'featured', priority: 'high', benefits: 'Even more confidence in changes. Edge cases are covered before users hit them.' },
+        { label: '3.5× faster deep merge (hot-path)', status: 'shipped', quarter: 'q1-2026', pr: 2201, changelog: 'faster-deep-merge', description: 'Replace the reflection-based mergo pre-copy loop with a single-pass, reflection-free native merge for the hot path. Reduces N full pre-copies per merge to 1 and eliminates mergo reflection overhead. Note: mergo is still used in merge_yaml_functions.go and devcontainer/config_loader.go — full removal is tracked separately.', benefits: 'Faster atmos describe component, terraform plan, apply, and any command that reads stacks. Impact scales with stack depth and import chain length.' },
+        { label: 'Migrate remaining mergo call-sites; drop mergo', status: 'in-progress', quarter: 'q2-2026', issue: 2242, description: 'Migrate merge_yaml_functions.go and devcontainer/config_loader.go from dario.cat/mergo to the native deep-merge. Once complete, remove the mergo dependency entirely.', benefits: 'Fully reflection-free merge path. Simpler dependency tree and one fewer transitive vulnerability surface.' },
         { label: 'processArgsAndFlags refactored: 100% coverage', status: 'shipped', quarter: 'q1-2026', pr: 2225, changelog: 'process-args-flags-refactor', description: 'The highest-cyclomatic-complexity function refactored using a table-driven DRY pattern (26 flag definitions in a single table). All helper functions — parseFlagValue, parseIdentityFlag, parseFromPlanFlag — achieve 100% unit test coverage.', benefits: 'Flag parsing is now fully tested and maintainable. Adding a new CLI flag is a single table entry instead of 7-8 lines of copy-paste code.' },
         { label: 'Refactor ExecuteTerraform (cyclomatic complexity 160→26)', status: 'shipped', quarter: 'q1-2026', pr: 2226, changelog: 'refactoring-executeterraform-for-testability', category: 'featured', description: 'Extracted 26 focused helper functions from the ExecuteTerraform monolith, reducing cyclomatic complexity from 160 to 26 and adding 100+ unit tests with zero infrastructure required.', benefits: 'Safer changes to the core terraform execution pipeline. Bugs in auth, workspace, or plan-file handling are caught by pure unit tests before they reach users.' },
         { label: 'Reduce ExecuteDescribeStacks complexity 98%', status: 'shipped', quarter: 'q1-2026', pr: 2204, changelog: 'describe-stacks-complexity-reduction', description: 'Broke down ExecuteDescribeStacks (cyclomatic 247 → 10, cognitive 1252 → 22) into 19 focused helper functions with 47 unit tests at 100% coverage for all pure helpers.', benefits: 'Easier to read, test, and extend the core stack processing pipeline. New component types can be added in one line.' },
@@ -484,7 +501,7 @@ export const roadmapConfig = {
       tagline: 'AI-powered infrastructure management',
       description:
         'An intelligent assistant built directly into Atmos CLI that understands your infrastructure-as-code. Unlike general-purpose AI assistants, Atmos AI has deep understanding of Atmos stacks, components, inheritance patterns, and infrastructure workflows.',
-      progress: 94,
+      progress: 96,
       status: 'in-progress',
       milestones: [
         { label: 'Multi-provider AI support (7 providers)', status: 'shipped', quarter: 'q1-2026', docs: '/ai/providers', changelog: 'introducing-atmos-ai', description: 'Support for Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok, Ollama (local), AWS Bedrock, and Azure OpenAI.', benefits: 'Choose the right AI for your needs—cloud, local, or enterprise. Switch providers mid-conversation.' },
@@ -504,7 +521,34 @@ export const roadmapConfig = {
         { label: 'CI/CD integration via atmos ai exec', status: 'shipped', quarter: 'q1-2026', docs: '/ai', changelog: 'introducing-atmos-ai', description: 'CI/CD integration via atmos ai exec command for automated PR reviews, security scans, and cost analysis.', benefits: 'Automated AI-powered PR reviews. Security scanning in CI/CD pipelines.' },
         { label: 'AI example with documentation', status: 'shipped', quarter: 'q1-2026', changelog: 'introducing-atmos-ai', description: 'Complete example in examples/ai/ demonstrating all AI features with inline documentation links.', benefits: 'Learn AI features from working examples. Quick start for new users.' },
         { label: 'Global `--ai` flag for AI-powered command analysis', status: 'shipped', quarter: 'q1-2026', docs: '/cli/global-flags', changelog: 'ai-powered-analysis-with-global-ai-flag', description: 'Add --ai to any Atmos command to get instant AI-powered analysis of output. Errors get explained with fixes, successful plans get summarized.', benefits: 'Zero-friction AI integration—just add --ai to any command. No workflow changes required.', category: 'featured', priority: 'high' },
+        { label: 'External MCP server connections', status: 'shipped', quarter: 'q1-2026', docs: '/cli/configuration/mcp', changelog: 'mcp-server-integrations', description: 'Connect Atmos to external MCP servers (AWS, GCP, Azure, custom). Configure servers in atmos.yaml, and their tools become available in atmos ai chat, ask, and exec. Includes Atmos Auth credential injection and Atmos Toolchain prerequisite management.', benefits: 'Use 100+ ecosystem MCP servers without custom code. AWS pricing, security, docs, and API tools available in AI conversations.', category: 'featured', priority: 'high' },
+        { label: 'Claude Code CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', pr: 2280, description: 'Native Claude Code CLI provider (`claude-code`) that spawns the claude binary with full MCP pass-through support.', benefits: 'Use Claude Code from atmos ai chat with your existing Claude Code setup. MCP servers configured in atmos.yaml are available automatically.' },
+        { label: 'OpenAI Codex CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', pr: 2280, description: 'Native OpenAI Codex CLI provider (`codex-cli`) with MCP pass-through and ATMOS_* env var injection for MCP servers.', benefits: 'Use Codex CLI from atmos ai chat. MCP server environment receives Atmos context automatically via ATMOS_* variables.' },
+        { label: 'Gemini CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', pr: 2280, description: 'Native Gemini CLI provider (`gemini-cli`) that spawns the gemini binary for terminal-based AI interaction.', benefits: 'Use Google Gemini CLI from atmos ai chat without extra configuration.' },
+        { label: 'MCP pass-through for CLI providers', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', pr: 2280, description: 'MCP server configurations defined in atmos.yaml are passed through to Claude Code and Codex CLI providers automatically.', benefits: 'One MCP configuration works across all CLI providers. No duplicate server definitions per tool.' },
         { label: 'Agent marketplace', status: 'planned', quarter: 'q2-2026', docs: '/ai/agent-marketplace', description: 'Install community-created specialized agents from GitHub repositories.', benefits: 'Extend AI capabilities with community agents. Share agents across teams.' },
+      ],
+      issues: [],
+      prs: [],
+    },
+    {
+      id: 'mcp-integrations',
+      icon: 'RiPlugLine',
+      title: 'MCP Server Integrations',
+      tagline: 'Connect Atmos AI to the MCP ecosystem',
+      description:
+        'Model Context Protocol (MCP) servers expose cloud provider APIs, documentation, and tooling as AI-callable tools. This initiative connects Atmos to external MCP servers—AWS, GCP, Azure, and community-built servers—making their capabilities available inside atmos ai chat, ask, and exec without custom code.',
+      progress: 100,
+      status: 'shipped',
+      milestones: [
+        { label: 'Core MCP client infrastructure', status: 'shipped', quarter: 'q1-2026', pr: 2267, changelog: 'mcp-server-integrations', description: 'Session lifecycle management, multi-session manager, and config parsing with validation. Session.go, manager.go, and config.go in pkg/mcp/client/ handle server startup, stdio transport, and graceful shutdown.', benefits: 'Connect to any stdio-based MCP server from atmos.yaml configuration. Sessions are managed automatically.' },
+        { label: 'MCP tool bridge and AI integration', status: 'shipped', quarter: 'q1-2026', pr: 2267, changelog: 'mcp-server-integrations', description: 'BridgedTool implements the tools.Tool interface, enabling MCP server tools to appear alongside native Atmos AI tools. Includes tool name sanitization for AI provider compatibility and registration in the AI tool registry.', benefits: 'MCP tools are indistinguishable from native tools in AI conversations. No special syntax needed to use them.' },
+        { label: 'MCP management commands', status: 'shipped', quarter: 'q1-2026', pr: 2267, changelog: 'mcp-server-integrations', description: 'Five new CLI commands: `atmos mcp list`, `atmos mcp tools`, `atmos mcp test`, `atmos mcp status`, and `atmos mcp restart`. All commands use themed table output consistent with other Atmos commands.', benefits: 'Inspect, test, and manage MCP server connections from the CLI. Diagnose connectivity issues without editing config files.' },
+        { label: 'Auth and toolchain integration', status: 'shipped', quarter: 'q1-2026', pr: 2267, changelog: 'mcp-server-integrations', description: 'The `auth_identity` field injects Atmos-managed credentials into MCP server environment. Toolchain resolution handles `uvx` and `npx` prerequisites. YAML functions are evaluated in env values for dynamic configuration.', benefits: 'MCP servers receive the correct credentials automatically. No manual credential setup for AWS or GCP MCP servers.' },
+        { label: 'IDE integration via export', status: 'shipped', quarter: 'q1-2026', pr: 2267, changelog: 'mcp-server-integrations', description: '`atmos mcp export` produces a `.mcp.json` file compatible with Claude Code, Cursor, and other MCP-aware IDEs. Auth-wrapped servers use `atmos auth exec` to inject credentials into IDE-launched server processes.', benefits: 'IDEs get the same MCP servers configured in atmos.yaml without duplicate configuration. One source of truth for all MCP tooling.' },
+        { label: 'Smart tool routing with --mcp flag', status: 'shipped', quarter: 'q1-2026', pr: 2267, changelog: 'mcp-server-integrations', description: 'Two-pass server selection uses the configured AI provider to pick the best MCP server for each tool call. The `--mcp` flag on ask/chat/exec and `ATMOS_AI_MCP` env var control server selection. Graceful fallback ensures commands work even when MCP servers are unavailable.', benefits: 'AI automatically picks the right MCP server for each task. Override server selection when needed.' },
+        { label: 'Human-readable tool names in AI output', status: 'shipped', quarter: 'q1-2026', pr: 2267, changelog: 'mcp-server-integrations', description: 'BridgedToolInfo interface exposes display names for MCP tools. MarkdownFormatter shows tool executions in `atmos ai ask` output using clean names instead of raw MCP identifiers. cleanToolName normalizes namespace separators.', benefits: 'AI output clearly shows which MCP tool was called with readable names. Easier to understand what actions AI took.' },
+        { label: 'MCP example with AWS servers', status: 'shipped', quarter: 'q1-2026', pr: 2267, changelog: 'mcp-server-integrations', description: 'Complete example in examples/mcp/ demonstrating 8 AWS MCP servers: billing, pricing, security, IAM, CloudTrail, documentation, knowledge base, and AWS API. Includes auth, toolchain, and AI configuration.', benefits: 'Start using MCP with AWS in minutes. Example covers the most common AWS use cases with working configuration.' },
       ],
       issues: [],
       prs: [],

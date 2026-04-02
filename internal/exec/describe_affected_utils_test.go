@@ -893,6 +893,7 @@ func TestExecuteDescribeAffected(t *testing.T) {
 				tc.processYamlFunctions,
 				tc.skip,
 				false,
+				nil,
 			)
 
 			if tc.expectedErr != "" {
@@ -1234,6 +1235,7 @@ func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 			false,
 			nil,
 			false,
+			nil,
 		)
 
 		assert.Error(t, err)
@@ -1270,6 +1272,7 @@ func TestExecuteDescribeAffectedRemoteRepoHeadError(t *testing.T) {
 			false,
 			nil,
 			false,
+			nil,
 		)
 
 		assert.Error(t, err)

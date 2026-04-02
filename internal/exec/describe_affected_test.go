@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,11 +9,17 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing"
 	cp "github.com/otiai10/copy"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -115,15 +122,15 @@ func TestDescribeAffected(t *testing.T) {
 		return false
 	}
 
-	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRepoPath = func(atmosConfig *schema.AtmosConfiguration, targetRefPath string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefClone = func(atmosConfig *schema.AtmosConfiguration, ref, sha, sshKeyPath, sshKeyPassword string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -132,7 +139,7 @@ func TestDescribeAffected(t *testing.T) {
 	}
 
 	d.atmosConfig = &schema.AtmosConfiguration{}
-	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string) error {
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings bool, processTemplates bool, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager) error {
 		return nil
 	}
 	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
@@ -232,6 +239,7 @@ func TestExecuteDescribeAffectedWithTargetRepoPath(t *testing.T) {
 		false,
 		nil,
 		false,
+		nil,
 	)
 	assert.Nil(t, err)
 
@@ -315,6 +323,7 @@ func TestDescribeAffectedWithTemplatesAndFunctions(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -337,6 +346,7 @@ func TestDescribeAffectedWithoutTemplatesAndFunctions(t *testing.T) {
 		false,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -394,6 +404,7 @@ func TestDescribeAffectedWithExcludeLocked(t *testing.T) {
 		true,
 		nil,
 		true,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -573,6 +584,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -583,6 +595,7 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 		true,
 		nil,
 		"",
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -712,6 +725,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		false,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -722,6 +736,7 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 		false,
 		nil,
 		"",
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -903,6 +918,7 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -912,7 +928,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 		true,
 		true,
 		nil,
-		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.
+		onlyInStack, // Filter dependents to only show those in "ue1-network" stack.,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1012,6 +1029,7 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 	err = addDependentsToAffected(
@@ -1021,7 +1039,8 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 		true,
 		true,
 		nil,
-		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.
+		onlyInStack, // Filter dependents to only show those in "uw2-network" stack.,
+		nil,
 	)
 	require.NoError(t, err)
 	// Order-agnostic equality on struct slices.
@@ -1057,6 +1076,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		true,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1069,6 +1089,7 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 		true,
 		nil,
 		onlyInStack,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1214,6 +1235,7 @@ func TestDescribeAffectedNewComponentInBase(t *testing.T) {
 		false, // processYamlFunctions - disable to avoid !terraform.state issues
 		nil,
 		false,
+		nil,
 	)
 
 	// The test should pass - new components in BASE should be handled gracefully.
@@ -1267,6 +1289,7 @@ func TestDescribeAffectedNewComponentInBaseWithYamlFunctions(t *testing.T) {
 		true, // processYamlFunctions - this triggers the bug
 		nil,
 		false,
+		nil,
 	)
 	// FIXED BEHAVIOR: The fix passes atmosConfig through the YAML function chain to
 	// ExecuteDescribeComponent, so component lookups use BASE paths correctly.
@@ -1332,6 +1355,7 @@ func TestDescribeAffectedSourceVersionChange(t *testing.T) {
 		false, // processYamlFunctions - don't need YAML functions for this test
 		nil,
 		false,
+		nil,
 	)
 	// Check if there was an error.
 	require.NoError(t, err)
@@ -1413,6 +1437,7 @@ func TestDescribeAffectedDeletedComponentDetection(t *testing.T) {
 		false, // processYamlFunctions - don't need YAML functions for this test
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1514,6 +1539,7 @@ func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
 		false,
 		nil,
 		false,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -1528,4 +1554,525 @@ func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
 
 	// Should find only the monitoring component deleted.
 	assert.Equal(t, 1, deletedCount, "with stack filter ue1-staging, should find only 1 deleted component")
+}
+
+// TestConvertAffectedToMatrix tests converting affected components to GitHub Actions matrix format.
+func TestConvertAffectedToMatrix(t *testing.T) {
+	t.Run("empty affected list", func(t *testing.T) {
+		matrix := convertAffectedToMatrix([]schema.Affected{})
+		assert.NotNil(t, matrix.Include)
+		assert.Empty(t, matrix.Include)
+	})
+
+	t.Run("single affected", func(t *testing.T) {
+		affected := []schema.Affected{
+			{
+				Stack:         "ue1-dev",
+				Component:     "vpc",
+				ComponentPath: filepath.Join("components", "terraform", "vpc"),
+				ComponentType: "terraform",
+			},
+		}
+		matrix := convertAffectedToMatrix(affected)
+		require.Len(t, matrix.Include, 1)
+		assert.Equal(t, "ue1-dev", matrix.Include[0].Stack)
+		assert.Equal(t, "vpc", matrix.Include[0].Component)
+		assert.Equal(t, filepath.Join("components", "terraform", "vpc"), matrix.Include[0].ComponentPath)
+		assert.Equal(t, "terraform", matrix.Include[0].ComponentType)
+	})
+
+	t.Run("multiple affected", func(t *testing.T) {
+		affected := []schema.Affected{
+			{
+				Stack:         "ue1-dev",
+				Component:     "vpc",
+				ComponentPath: filepath.Join("components", "terraform", "vpc"),
+				ComponentType: "terraform",
+			},
+			{
+				Stack:         "ue1-staging",
+				Component:     "eks",
+				ComponentPath: filepath.Join("components", "terraform", "eks"),
+				ComponentType: "terraform",
+			},
+		}
+		matrix := convertAffectedToMatrix(affected)
+		require.Len(t, matrix.Include, 2)
+		assert.Equal(t, "ue1-dev", matrix.Include[0].Stack)
+		assert.Equal(t, "eks", matrix.Include[1].Component)
+	})
+}
+
+// TestWriteMatrixOutput_File tests writing matrix output to a file.
+func TestWriteMatrixOutput_File(t *testing.T) {
+	t.Run("writes matrix and count to file", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "github_output")
+		affected := []schema.Affected{
+			{
+				Stack:         "ue1-dev",
+				Component:     "vpc",
+				ComponentPath: filepath.Join("components", "terraform", "vpc"),
+				ComponentType: "terraform",
+			},
+		}
+		err := writeMatrixOutput(affected, outputFile)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+
+		lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+		require.Len(t, lines, 2)
+		assert.True(t, strings.HasPrefix(lines[0], "matrix="))
+		assert.Equal(t, "affected_count=1", lines[1])
+
+		// Verify JSON is valid.
+		matrixJSON := strings.TrimPrefix(lines[0], "matrix=")
+		var matrix MatrixOutput
+		err = json.Unmarshal([]byte(matrixJSON), &matrix)
+		require.NoError(t, err)
+		require.Len(t, matrix.Include, 1)
+		assert.Equal(t, "vpc", matrix.Include[0].Component)
+	})
+
+	t.Run("empty affected writes empty include", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "github_output")
+		err := writeMatrixOutput([]schema.Affected{}, outputFile)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), `"include":[]`)
+		assert.Contains(t, string(content), "affected_count=0")
+	})
+
+	t.Run("file open error", func(t *testing.T) {
+		err := writeMatrixOutput([]schema.Affected{}, filepath.Join(t.TempDir(), "nonexistent", "file"))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to open output file")
+	})
+}
+
+// TestWriteMatrixOutput_Stdout tests writing matrix output to stdout.
+func TestWriteMatrixOutput_Stdout(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
+	err = writeMatrixOutput([]schema.Affected{
+		{
+			Stack:         "ue1-dev",
+			Component:     "vpc",
+			ComponentPath: filepath.Join("components", "terraform", "vpc"),
+			ComponentType: "terraform",
+		},
+	}, "")
+	assert.NoError(t, err)
+}
+
+// TestResolveBaseFromCI tests CI base auto-detection.
+func TestResolveBaseFromCI(t *testing.T) {
+	t.Run("no CI provider detected", func(t *testing.T) {
+		// Reset provider registry to ensure clean state.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+
+		// Clear CI env vars to ensure no provider is detected.
+		t.Setenv("GITHUB_ACTIONS", "")
+		t.Setenv("CI", "")
+		t.Setenv("ATMOS_CI_BASE_REF", "")
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveBaseFromCI(describe)
+		assert.Empty(t, describe.Ref)
+		assert.Empty(t, describe.SHA)
+	})
+
+	t.Run("GitHub Actions PR event detected", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+		t.Setenv("GITHUB_BASE_REF", "main")
+
+		eventPayload := `{"action": "synchronize"}`
+		eventPath := filepath.Join(t.TempDir(), "event.json")
+		err := os.WriteFile(eventPath, []byte(eventPayload), 0o644)
+		require.NoError(t, err)
+		t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveBaseFromCI(describe)
+		assert.Equal(t, "refs/remotes/origin/main", describe.Ref)
+		assert.Empty(t, describe.SHA)
+	})
+
+	t.Run("GitHub Actions push event with before SHA", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "push")
+
+		eventPayload := `{"before": "abc123def456789012345678901234567890abcd", "forced": false}`
+		eventPath := filepath.Join(t.TempDir(), "event.json")
+		err := os.WriteFile(eventPath, []byte(eventPayload), 0o644)
+		require.NoError(t, err)
+		t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveBaseFromCI(describe)
+		assert.Empty(t, describe.Ref)
+		assert.Equal(t, "abc123def456789012345678901234567890abcd", describe.SHA)
+	})
+
+	t.Run("ResolveBase returns error logs warning", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "push")
+		// Missing GITHUB_EVENT_PATH causes ResolveBase to error.
+		t.Setenv("GITHUB_EVENT_PATH", "")
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveBaseFromCI(describe)
+		// Should not populate anything on error.
+		assert.Empty(t, describe.Ref)
+		assert.Empty(t, describe.SHA)
+	})
+
+	t.Run("ResolveBase returns nil", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveBaseFromCI(describe)
+		// workflow_dispatch returns default ref, not nil.
+		assert.Equal(t, "refs/remotes/origin/HEAD", describe.Ref)
+	})
+}
+
+// newDescribeAffectedFlagSet creates a pflag.FlagSet with all flags used by SetDescribeAffectedFlagValueInCliArgs.
+func newDescribeAffectedFlagSet() *pflag.FlagSet {
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.String("base", "", "")
+	flags.String("ref", "", "")
+	flags.String("sha", "", "")
+	flags.String("repo-path", "", "")
+	flags.String("ssh-key", "", "")
+	flags.String("ssh-key-password", "", "")
+	flags.Bool("include-spacelift-admin-stacks", false, "")
+	flags.Bool("include-dependents", false, "")
+	flags.Bool("include-settings", false, "")
+	flags.Bool("upload", false, "")
+	flags.Bool("clone-target-ref", false, "")
+	flags.Bool("process-templates", true, "")
+	flags.Bool("process-functions", true, "")
+	flags.StringSlice("skip", nil, "")
+	flags.String("pager", "", "")
+	flags.String("stack", "", "")
+	flags.String("format", "json", "")
+	flags.String("file", "", "")
+	flags.String("output-file", "", "")
+	flags.String("query", "", "")
+	flags.Bool("verbose", false, "")
+	flags.Bool("exclude-locked", false, "")
+	return flags
+}
+
+// TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution tests the --base flag resolution logic.
+func TestSetDescribeAffectedFlagValueInCliArgs_BaseResolution(t *testing.T) {
+	// Clear CI env vars so auto-detect doesn't interfere.
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("CI", "")
+
+	t.Run("base with SHA populates SHA field", func(t *testing.T) {
+		flags := newDescribeAffectedFlagSet()
+		err := flags.Set("base", "abc123def456789012345678901234567890abcd")
+		require.NoError(t, err)
+
+		describe := &DescribeAffectedCmdArgs{CLIConfig: &schema.AtmosConfiguration{}}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Equal(t, "abc123def456789012345678901234567890abcd", describe.SHA)
+		assert.Empty(t, describe.Ref)
+		assert.Equal(t, "abc123def456789012345678901234567890abcd", describe.Base)
+	})
+
+	t.Run("base with ref populates Ref field", func(t *testing.T) {
+		flags := newDescribeAffectedFlagSet()
+		err := flags.Set("base", "main")
+		require.NoError(t, err)
+
+		describe := &DescribeAffectedCmdArgs{CLIConfig: &schema.AtmosConfiguration{}}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Equal(t, "main", describe.Ref)
+		assert.Empty(t, describe.SHA)
+		assert.Equal(t, "main", describe.Base)
+	})
+
+	t.Run("CI auto-detect when enabled and no explicit base", func(t *testing.T) {
+		// Reset and register provider for this test only.
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "merge_group")
+		t.Setenv("GITHUB_BASE_REF", "main")
+
+		flags := newDescribeAffectedFlagSet()
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Enabled: true,
+				},
+			},
+		}
+		SetDescribeAffectedFlagValueInCliArgs(flags, describe)
+
+		assert.Equal(t, "refs/remotes/origin/main", describe.Ref)
+	})
+}
+
+// TestExecute_MatrixFormat tests the matrix format code path through Execute.
+func TestExecute_MatrixFormat(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
+	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{}}
+	d.IsTTYSupportForStdout = func() bool {
+		return false
+	}
+	d.executeDescribeAffectedWithTargetRefCheckout = func(
+		atmosConfig *schema.AtmosConfiguration,
+		ref, sha string,
+		includeSpaceliftAdminStacks, includeSettings bool,
+		stack string, processTemplates, processYamlFunctions bool,
+		skip []string, excludeLocked bool,
+		authManager auth.AuthManager,
+	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+		return []schema.Affected{
+			{
+				Stack:         "ue1-dev",
+				Component:     "vpc",
+				ComponentPath: filepath.Join("components", "terraform", "vpc"),
+				ComponentType: "terraform",
+			},
+		}, nil, nil, "", nil
+	}
+	d.addDependentsToAffected = func(atmosConfig *schema.AtmosConfiguration, affected *[]schema.Affected, includeSettings, processTemplates, processFunctions bool, skip []string, onlyInStack string, authManager auth.AuthManager) error {
+		return nil
+	}
+	d.printOrWriteToFile = func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+		return nil
+	}
+
+	t.Run("matrix to stdout", func(t *testing.T) {
+		err := d.Execute(&DescribeAffectedCmdArgs{
+			Format:    "matrix",
+			CLIConfig: &schema.AtmosConfiguration{},
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("matrix to file", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "github_output")
+		err := d.Execute(&DescribeAffectedCmdArgs{
+			Format:           "matrix",
+			GithubOutputFile: outputFile,
+			CLIConfig:        &schema.AtmosConfiguration{},
+		})
+		assert.NoError(t, err)
+
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "matrix=")
+		assert.Contains(t, string(content), "affected_count=1")
+	})
+}
+
+// TestDescribeAffectedDeletedComponentWithDependents tests that deleted components
+// don't crash when IncludeDependents is enabled. Deleted components don't exist in
+// HEAD, so attempting to resolve their dependents causes "invalid component" errors.
+// The fix skips dependent resolution for deleted components.
+func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedDeletedDetectionTest(t, "stacks-with-deleted-component")
+
+	// Run describe affected to get the affected list (including deleted components).
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,  // processTemplates
+		false, // processYamlFunctions
+		nil,
+		false,
+		nil,
+	)
+	require.NoError(t, err)
+
+	// Verify we have deleted components in the list.
+	var deletedCount int
+	for _, a := range affected {
+		if a.Deleted {
+			deletedCount++
+		}
+	}
+	require.Greater(t, deletedCount, 0, "should have at least one deleted component before testing dependents")
+
+	// This is the critical test: addDependentsToAffected should NOT crash
+	// when the affected list contains deleted components.
+	// Before the fix, this would fail with "invalid component" error because
+	// it tried to resolve deleted components against HEAD where they don't exist.
+	err = addDependentsToAffected(
+		&atmosConfig,
+		&affected,
+		true,
+		true,
+		false,
+		nil,
+		"",
+		nil,
+	)
+	require.NoError(t, err, "addDependentsToAffected should not crash on deleted components")
+
+	// Verify deleted components have empty dependents (they can't have dependents in HEAD).
+	for _, a := range affected {
+		if a.Deleted {
+			assert.Empty(t, a.Dependents, "deleted component %s in %s should have empty dependents", a.Component, a.Stack)
+		}
+	}
+
+	t.Logf("Successfully processed %d deleted components with dependents enabled", deletedCount)
+}
+
+// TestUploadRejectsPushEvent verifies that --upload errors when the CI event is not a pull_request.
+func TestUploadRejectsPushEvent(t *testing.T) {
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main~1", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Format:      "json",
+			CIEventType: "push",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pull_request")
+	assert.Contains(t, err.Error(), "push")
+}
+
+// TestUploadAllowsPullRequestEvent verifies that --upload does not error for pull_request events.
+// Note: the actual upload call requires an API client, so we only verify the event validation passes.
+func TestUploadAllowsPullRequestEvent(t *testing.T) {
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	// This will fail at the API client creation step (no env vars set), but the event
+	// validation should pass — it should NOT return ErrUploadRequiresPullRequestEvent.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:          true,
+			Format:          "json",
+			CIEventType:     "pull_request",
+			HeadSHAOverride: "cccccccccccccccccccccccccccccccccccccccc",
+			CLIConfig:       &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{},
+	)
+	// Should NOT be an event validation error. It may be nil (API client creation
+	// logs a warning and returns nil) or some other error, but not our sentinel.
+	if err != nil {
+		assert.NotContains(t, err.Error(), "pull_request event")
+	}
+}
+
+// TestUploadNoEventTypeAllowed verifies that --upload works when CIEventType is empty
+// (e.g., when not using CI auto-detection, or using explicit --ref/--sha flags).
+func TestUploadNoEventTypeAllowed(t *testing.T) {
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	// Empty CIEventType means no CI auto-detection — should not block upload.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Format:      "json",
+			CIEventType: "",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{},
+	)
+	// Should NOT be an event validation error.
+	if err != nil {
+		assert.NotContains(t, err.Error(), "pull_request event")
+	}
 }

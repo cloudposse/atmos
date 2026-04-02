@@ -318,6 +318,8 @@ var (
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
+	ErrMergeNilDst                   = errors.New("merge destination must not be nil")
+	ErrMergeTypeMismatch             = errors.New("cannot override two slices with different type")
 	ErrEncode                        = errors.New("encoding error")
 	ErrDecode                        = errors.New("decoding error")
 
@@ -531,6 +533,8 @@ var (
 	ErrFailedToGetGitHubOIDCToken   = errors.New("failed to get GitHub OIDC token")
 	ErrFailedToUploadInstances      = errors.New("failed to upload instances")
 	ErrFailedToUploadInstanceStatus = errors.New("failed to upload instance status")
+	ErrUploadRetryExhausted         = errors.New("upload failed after all retries")
+	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
 	ErrAPIResponseError             = errors.New("API response error")
@@ -587,13 +591,14 @@ var (
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 
 	// Terraform execution errors.
-	ErrTerraformExecFailed = errors.New("terraform execution failed")
-	ErrDescribeAffected    = errors.New("describe affected failed")
-	ErrDescribeStacks      = errors.New("describe stacks failed")
-	ErrBuildDepGraph       = errors.New("build dependency graph failed")
-	ErrTopologicalOrder    = errors.New("topological sort failed")
-	ErrFormatForLogging    = errors.New("format affected for logging failed")
-	ErrQueryEvaluation     = errors.New("query evaluation failed")
+	ErrTerraformExecFailed            = errors.New("terraform execution failed")
+	ErrDescribeAffected               = errors.New("describe affected failed")
+	ErrUploadRequiresPullRequestEvent = errors.New("upload requires a pull_request event")
+	ErrDescribeStacks                 = errors.New("describe stacks failed")
+	ErrBuildDepGraph                  = errors.New("build dependency graph failed")
+	ErrTopologicalOrder               = errors.New("topological sort failed")
+	ErrFormatForLogging               = errors.New("format affected for logging failed")
+	ErrQueryEvaluation                = errors.New("query evaluation failed")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
@@ -857,11 +862,13 @@ var (
 	ErrECRTokenExpired     = errors.New("ECR authorization token expired")
 	ErrECRRegistryNotFound = errors.New("ECR registry not found")
 	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
-	ErrECRLoginNoArgs      = errors.New("specify an integration name, --identity, or --registry")
+	ErrECRLoginNoArgs      = errors.New("specify an server name, --identity, or --registry")
+	ErrECRLoginFailed      = errors.New("ECR login failed")
+	ErrECRIdentitySelect   = errors.New("interactive identity selection is not supported for this command; specify an identity name with --identity=<name>")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
 
-	// EKS integration errors.
+	// EKS server errors.
 	ErrEKSDescribeCluster   = errors.New("failed to describe EKS cluster")
 	ErrEKSClusterNotFound   = errors.New("EKS cluster not found")
 	ErrEKSIntegrationFailed = errors.New("EKS integration failed")
@@ -875,7 +882,7 @@ var (
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
 	// CI-related errors.
-	ErrCIDisabled              = errors.New("CI integration is disabled")
+	ErrCIDisabled              = errors.New("CI server is disabled")
 	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
 	ErrCIProviderNotFound      = errors.New("CI provider not found")
 	ErrCIOperationNotSupported = errors.New("operation not supported by CI provider")
@@ -1008,6 +1015,12 @@ var (
 	ErrAISecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv")
 	ErrAISecurityAnalysisFailed   = errors.New("AI analysis of security findings failed")
 
+	// CLI provider errors.
+	ErrCLIProviderBinaryNotFound    = errors.New("CLI provider binary not found on PATH")
+	ErrCLIProviderExecFailed        = errors.New("CLI provider execution failed")
+	ErrCLIProviderParseResponse     = errors.New("failed to parse CLI provider response")
+	ErrCLIProviderToolsNotSupported = errors.New("tool execution not supported for CLI providers; use MCP pass-through instead")
+
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")
 	ErrWebSearchParseFailed = errors.New("failed to parse web search results")
@@ -1019,6 +1032,17 @@ var (
 	ErrMCPInvalidJSONRPCVersion = errors.New("invalid JSON-RPC version")
 	ErrMCPInvalidTransport      = errors.New("invalid transport type")
 	ErrMCPUnsupportedTransport  = errors.New("unsupported transport")
+	ErrMCPServerNotFound        = errors.New("MCP server not found in configuration")
+	ErrMCPServerNotRunning      = errors.New("MCP server is not running")
+	ErrMCPServerStartFailed     = errors.New("MCP server failed to start")
+	ErrMCPServerCommandEmpty    = errors.New("MCP server command must not be empty")
+	ErrMCPServerInvalidTimeout  = errors.New("MCP server timeout is invalid")
+	ErrMCPServerToolListFailed  = errors.New("failed to list tools from MCP server")
+	ErrMCPServerToolError       = errors.New("MCP server returned error for tool")
+	ErrMCPConfigWriteFailed     = errors.New("failed to write MCP config file")
+	ErrMCPConfigPermsFailed     = errors.New("failed to set MCP config file permissions")
+	ErrMCPConfigMarshalFailed   = errors.New("failed to marshal MCP config")
+	ErrMCPServerAuthUnavailable = errors.New("MCP server requires identity but auth manager is not available")
 	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
 	ErrLSPConfigNil             = errors.New("LSP config is nil")
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")

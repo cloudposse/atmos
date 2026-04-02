@@ -285,6 +285,8 @@
     "web_search": {},
     "context": {}
   },
-  "mcp": {},
+  "mcp": {
+    "routing": {}
+  },
   "lsp": {}
 }

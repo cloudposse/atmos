@@ -10,6 +10,7 @@ type AISettings struct {
 	SendContext        bool                         `yaml:"send_context,omitempty" json:"send_context,omitempty" mapstructure:"send_context"`
 	PromptOnSend       bool                         `yaml:"prompt_on_send,omitempty" json:"prompt_on_send,omitempty" mapstructure:"prompt_on_send"`
 	TimeoutSeconds     int                          `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" mapstructure:"timeout_seconds"`
+	MaxToolIterations  int                          `yaml:"max_tool_iterations,omitempty" json:"max_tool_iterations,omitempty" mapstructure:"max_tool_iterations"`
 	MaxContextFiles    int                          `yaml:"max_context_files,omitempty" json:"max_context_files,omitempty" mapstructure:"max_context_files"`
 	MaxContextLines    int                          `yaml:"max_context_lines,omitempty" json:"max_context_lines,omitempty" mapstructure:"max_context_lines"`
 	MaxHistoryMessages int                          `yaml:"max_history_messages,omitempty" json:"max_history_messages,omitempty" mapstructure:"max_history_messages"` // Maximum conversation messages to keep in history (0 = unlimited)
@@ -29,6 +30,13 @@ type AIProviderConfig struct {
 	MaxTokens int              `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
 	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"` // For Ollama or custom endpoints
 	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"`   // Token caching settings
+
+	// CLI provider fields (for claude-code, codex-cli, gemini-cli).
+	Binary       string   `yaml:"binary,omitempty" json:"binary,omitempty" mapstructure:"binary"`
+	MaxTurns     int      `yaml:"max_turns,omitempty" json:"max_turns,omitempty" mapstructure:"max_turns"`
+	MaxBudgetUSD float64  `yaml:"max_budget_usd,omitempty" json:"max_budget_usd,omitempty" mapstructure:"max_budget_usd"`
+	AllowedTools []string `yaml:"allowed_tools,omitempty" json:"allowed_tools,omitempty" mapstructure:"allowed_tools"`
+	FullAuto     bool     `yaml:"full_auto,omitempty" json:"full_auto,omitempty" mapstructure:"full_auto"`
 }
 
 // AICacheSettings contains token caching configuration.

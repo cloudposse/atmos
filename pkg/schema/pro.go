@@ -2,11 +2,12 @@ package schema
 
 // ProSettings contains Atmos Pro integration configuration.
 type ProSettings struct {
-	BaseURL     string             `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`
-	Endpoint    string             `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
-	Token       string             `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
-	WorkspaceID string             `yaml:"workspace_id,omitempty" json:"workspace_id,omitempty" mapstructure:"workspace_id"`
-	GithubOIDC  GithubOIDCSettings `yaml:"github_oidc,omitempty" json:"github_oidc,omitempty" mapstructure:"github_oidc"`
+	BaseURL         string             `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`
+	Endpoint        string             `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
+	Token           string             `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
+	WorkspaceID     string             `yaml:"workspace_id,omitempty" json:"workspace_id,omitempty" mapstructure:"workspace_id"`
+	GithubOIDC      GithubOIDCSettings `yaml:"github_oidc,omitempty" json:"github_oidc,omitempty" mapstructure:"github_oidc"`
+	MaxPayloadBytes int                `yaml:"max_payload_bytes,omitempty" json:"max_payload_bytes,omitempty" mapstructure:"max_payload_bytes"`
 }
 
 // GithubOIDCSettings contains GitHub OIDC token configuration.
