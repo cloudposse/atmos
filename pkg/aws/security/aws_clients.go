@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/aws/identity"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // SecurityHubAPI defines the subset of AWS Security Hub API used by this package.
@@ -34,6 +35,7 @@ type awsClientCache struct {
 	tagging       map[string]TaggingAPI
 	securityHubFn func(cfg aws.Config) SecurityHubAPI
 	taggingFn     func(cfg aws.Config) TaggingAPI
+	authContext   *schema.AWSAuthContext // Atmos Auth context for credential injection.
 }
 
 // newAWSClientCache creates a new client cache with default factory functions.
@@ -50,6 +52,11 @@ func newAWSClientCache() *awsClientCache {
 	}
 }
 
+// WithAuthContext sets the Atmos Auth context for credential injection.
+func (c *awsClientCache) WithAuthContext(authCtx *schema.AWSAuthContext) {
+	c.authContext = authCtx
+}
+
 // getSecurityHubClient returns a cached or new Security Hub client for the given region.
 func (c *awsClientCache) getSecurityHubClient(ctx context.Context, region string) (SecurityHubAPI, error) {
 	defer perf.Track(nil, "security.awsClientCache.getSecurityHubClient")()
@@ -61,7 +68,7 @@ func (c *awsClientCache) getSecurityHubClient(ctx context.Context, region string
 		return client, nil
 	}
 
-	cfg, err := identity.LoadConfig(ctx, region, "", 0)
+	cfg, err := identity.LoadConfigWithAuth(ctx, region, "", 0, c.authContext)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +91,7 @@ func (c *awsClientCache) getTaggingClient(ctx context.Context, region string) (T
 		return client, nil
 	}
 
-	cfg, err := identity.LoadConfig(ctx, region, "", 0)
+	cfg, err := identity.LoadConfigWithAuth(ctx, region, "", 0, c.authContext)
 	if err != nil {
 		return nil, err
 	}

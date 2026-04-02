@@ -81,7 +81,7 @@ func (t *ComplianceReportTool) Execute(ctx context.Context, params map[string]in
 	}
 
 	// Fetch compliance status.
-	fetcher := security.NewFindingFetcher(&atmosConfig)
+	fetcher := security.NewFindingFetcher(&atmosConfig, nil)
 	report, err := fetcher.FetchComplianceStatus(ctx, framework, stack)
 	if err != nil {
 		return &tools.Result{Success: false, Error: err}, err

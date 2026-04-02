@@ -25,13 +25,19 @@ type ComponentMapper interface {
 }
 
 // NewComponentMapper creates a ComponentMapper that uses both tag-based and heuristic strategies.
-func NewComponentMapper(atmosConfig *schema.AtmosConfiguration) ComponentMapper {
+// If authCtx is non-nil, AWS clients will use Atmos Auth credentials.
+func NewComponentMapper(atmosConfig *schema.AtmosConfiguration, authCtx *schema.AWSAuthContext) ComponentMapper {
 	defer perf.Track(nil, "security.NewComponentMapper")()
+
+	clients := newAWSClientCache()
+	if authCtx != nil {
+		clients.WithAuthContext(authCtx)
+	}
 
 	return &dualPathMapper{
 		atmosConfig: atmosConfig,
 		tagMapping:  resolveTagMapping(atmosConfig),
-		clients:     newAWSClientCache(),
+		clients:     clients,
 		tagCache:    make(map[string]*tagLookupResult),
 	}
 }

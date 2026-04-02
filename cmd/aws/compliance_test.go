@@ -140,6 +140,7 @@ func TestComplianceReportAllFlagsRegistered(t *testing.T) {
 		{"format flag", "format", "markdown", "string"},
 		{"file flag", "file", "", "string"},
 		{"controls flag", "controls", "", "string"},
+		{"identity flag", "identity", "", "string"},
 	}
 
 	for _, tt := range tests {
@@ -161,6 +162,7 @@ func TestComplianceReportFlagShorthand(t *testing.T) {
 	}{
 		{"stack shorthand", "stack", "s"},
 		{"format shorthand", "format", "f"},
+		{"identity shorthand", "identity", "i"},
 	}
 
 	for _, tt := range tests {

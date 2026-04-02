@@ -91,7 +91,7 @@ func (t *ListFindingsTool) Execute(ctx context.Context, params map[string]interf
 	opts := parseFindingsQueryParams(params)
 
 	// Fetch and map findings.
-	fetcher := security.NewFindingFetcher(&atmosConfig)
+	fetcher := security.NewFindingFetcher(&atmosConfig, nil)
 	findings, err := fetcher.FetchFindings(ctx, &opts)
 	if err != nil {
 		return &tools.Result{Success: false, Error: err}, err
@@ -104,7 +104,7 @@ func (t *ListFindingsTool) Execute(ctx context.Context, params map[string]interf
 		}, nil
 	}
 
-	mapper := security.NewComponentMapper(&atmosConfig)
+	mapper := security.NewComponentMapper(&atmosConfig, nil)
 	findings, err = mapper.MapFindings(ctx, findings)
 	if err != nil {
 		return &tools.Result{Success: false, Error: err}, err

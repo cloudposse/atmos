@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/aws/security"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestParseOutputFormat(t *testing.T) {
@@ -469,6 +470,7 @@ func TestSecurityAnalyzeAllFlagsRegistered(t *testing.T) {
 		{"file flag", "file", "", "string"},
 		{"max-findings flag", "max-findings", "50", "int"},
 		{"region flag", "region", "", "string"},
+		{"identity flag", "identity", "", "string"},
 	}
 
 	for _, tt := range tests {
@@ -491,6 +493,7 @@ func TestSecurityAnalyzeFlagShorthand(t *testing.T) {
 		{"stack shorthand", "stack", "s"},
 		{"component shorthand", "component", "c"},
 		{"format shorthand", "format", "f"},
+		{"identity shorthand", "identity", "i"},
 	}
 
 	for _, tt := range tests {
@@ -521,4 +524,11 @@ func TestSeverityMapCompleteness(t *testing.T) {
 func TestDefaultMaxFindings(t *testing.T) {
 	// Verify the default constant matches expectations.
 	assert.Equal(t, 50, defaultMaxFindings, "defaultMaxFindings should be 50")
+}
+
+func TestResolveAuthContext_EmptyIdentity(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	authCtx, err := resolveAuthContext(atmosConfig, "")
+	require.NoError(t, err)
+	assert.Nil(t, authCtx)
 }

@@ -104,7 +104,7 @@ func (t *AnalyzeFindingTool) Execute(ctx context.Context, params map[string]inte
 // mapAndAnalyzeFinding maps a finding to its component and runs AI analysis.
 func mapAndAnalyzeFinding(ctx context.Context, atmosConfig *schema.AtmosConfiguration, finding *security.Finding, componentSource, stackConfig string) (*tools.Result, error) {
 	// Map the finding to a component.
-	mapper := security.NewComponentMapper(atmosConfig)
+	mapper := security.NewComponentMapper(atmosConfig, nil)
 	mapping, _ := mapper.MapFinding(ctx, finding)
 	finding.Mapping = mapping
 
@@ -142,7 +142,7 @@ func mapAndAnalyzeFinding(ctx context.Context, atmosConfig *schema.AtmosConfigur
 
 // fetchFindingByID fetches a specific finding by its ID.
 func fetchFindingByID(ctx context.Context, atmosConfig *schema.AtmosConfiguration, findingID string) (*security.Finding, error) {
-	fetcher := security.NewFindingFetcher(atmosConfig)
+	fetcher := security.NewFindingFetcher(atmosConfig, nil)
 	opts := security.QueryOptions{
 		Severity:    []security.Severity{security.SeverityCritical, security.SeverityHigh, security.SeverityMedium, security.SeverityLow, security.SeverityInformational},
 		MaxFindings: security.MaxFindingsForLookup,

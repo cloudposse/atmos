@@ -88,7 +88,7 @@ func fetchAndDescribeFinding(ctx context.Context, atmosConfig *schema.AtmosConfi
 	}
 
 	// Map the finding to component.
-	mapper := security.NewComponentMapper(atmosConfig)
+	mapper := security.NewComponentMapper(atmosConfig, nil)
 	mapping, _ := mapper.MapFinding(ctx, finding)
 	finding.Mapping = mapping
 

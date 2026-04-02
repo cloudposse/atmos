@@ -61,6 +61,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		maxFindings := v.GetInt("max-findings")
 		useAI := v.GetBool("ai")
 		region := v.GetString("region")
+		identityFlag := v.GetString("identity")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -112,10 +113,20 @@ var securityAnalyzeCmd = &cobra.Command{
 			}
 		}
 
+		// Resolve Atmos Auth identity (from --identity flag or config).
+		identityName := identityFlag
+		if identityName == "" {
+			identityName = atmosConfig.AWS.Security.Identity
+		}
+		authCtx, err := resolveAuthContext(&atmosConfig, identityName)
+		if err != nil {
+			return err
+		}
+
 		// Validate AWS credentials early before attempting any API calls.
 		credCtx, credCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer credCancel()
-		if err := validateAWSCredentials(credCtx, region); err != nil {
+		if err := validateAWSCredentials(credCtx, region, authCtx); err != nil {
 			return err
 		}
 
@@ -151,7 +162,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		if outputFormat == security.FormatMarkdown {
 			ui.Writef("🔍 Fetching security findings...\n")
 		}
-		fetcher := security.NewFindingFetcher(&atmosConfig)
+		fetcher := security.NewFindingFetcher(&atmosConfig, authCtx)
 		findings, err := fetcher.FetchFindings(ctx, &opts)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
@@ -168,7 +179,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		if outputFormat == security.FormatMarkdown {
 			ui.Writef("🗺️  Mapping %d findings to Atmos components...\n", len(findings))
 		}
-		mapper := security.NewComponentMapper(&atmosConfig)
+		mapper := security.NewComponentMapper(&atmosConfig, authCtx)
 		findings, err = mapper.MapFindings(ctx, findings)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityMappingFailed, err)
@@ -234,7 +245,9 @@ func init() {
 		flags.WithStringFlag("file", "", "", "Write output to file instead of stdout"),
 		flags.WithIntFlag("max-findings", "", defaultMaxFindings, "Maximum findings to analyze"),
 		flags.WithStringFlag("region", "", "", "AWS region override"),
+		flags.WithStringFlag("identity", "i", "", "Atmos Auth identity for AWS credentials"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
+		flags.WithEnvVars("identity", "ATMOS_AWS_SECURITY_IDENTITY"),
 		flags.WithEnvVars("format", "ATMOS_AWS_SECURITY_FORMAT"),
 		flags.WithEnvVars("max-findings", "ATMOS_AWS_SECURITY_MAX_FINDINGS"),
 		flags.WithEnvVars("region", "ATMOS_AWS_SECURITY_REGION"),

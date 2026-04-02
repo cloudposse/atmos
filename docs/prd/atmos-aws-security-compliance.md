@@ -1061,6 +1061,29 @@ for error handling and reference `aws.security.enabled` config.
     Remaining uncovered: RunE handlers (require real AWS), `validateAWSCredentials` (requires
     real STS), `init` panic branches (unreachable). Coverage: `pkg/aws/security/` at 91.0%.
 
+22. **Atmos Auth identity integration** — ✅ Added `identity` field to `AWSSecuritySettings`
+    schema. When set, the security commands use Atmos Auth to obtain AWS credentials for the
+    specified identity (e.g., targeting the `core-security` delegated admin account where
+    Security Hub aggregates all findings). This follows the same pattern as MCP server
+    `identity` field. Also added `--identity` / `-i` CLI flag to both commands for runtime
+    override. The identity is passed through to `identity.LoadConfig()` which resolves it
+    through the Atmos Auth provider chain (SSO → role assumption → isolated credentials).
+
+    ```yaml
+    aws:
+      security:
+        enabled: true
+        identity: "security-readonly"  # Atmos Auth identity from auth section
+    ```
+
+    ```bash
+    # Use identity from config
+    atmos aws security analyze --stack prod-us-east-1
+
+    # Override identity at runtime
+    atmos aws security analyze --stack prod-us-east-1 --identity security-admin
+    ```
+
 ### Remaining Work (Future PRs)
 
 - **Terraform state search (Path B Strategy 1)** — Implement state file scanning for tagless

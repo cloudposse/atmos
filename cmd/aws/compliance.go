@@ -54,6 +54,7 @@ var complianceReportCmd = &cobra.Command{
 		formatStr := v.GetString("format")
 		fileOutput := v.GetString("file")
 		controlsStr := v.GetString("controls")
+		identityFlag := v.GetString("identity")
 
 		// Parse comma-separated control IDs into a set for filtering.
 		controlFilter := parseControlFilter(controlsStr)
@@ -87,10 +88,20 @@ var complianceReportCmd = &cobra.Command{
 			}
 		}
 
+		// Resolve Atmos Auth identity (from --identity flag or config).
+		identityName := identityFlag
+		if identityName == "" {
+			identityName = atmosConfig.AWS.Security.Identity
+		}
+		authCtx, err := resolveAuthContext(&atmosConfig, identityName)
+		if err != nil {
+			return err
+		}
+
 		// Validate AWS credentials early before attempting any API calls.
 		credCtx, credCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer credCancel()
-		if err := validateAWSCredentials(credCtx, ""); err != nil {
+		if err := validateAWSCredentials(credCtx, "", authCtx); err != nil {
 			return err
 		}
 
@@ -138,7 +149,7 @@ var complianceReportCmd = &cobra.Command{
 			output = f
 		}
 
-		fetcher := security.NewFindingFetcher(&atmosConfig)
+		fetcher := security.NewFindingFetcher(&atmosConfig, authCtx)
 		renderer := security.NewReportRenderer(outputFormat)
 
 		for _, fw := range frameworks {
@@ -180,7 +191,9 @@ func init() {
 		flags.WithStringFlag("format", "f", "markdown", "Output format: markdown, json, yaml, csv"),
 		flags.WithStringFlag("file", "", "", "Write output to file instead of stdout"),
 		flags.WithStringFlag("controls", "", "", "Specific control IDs to check"),
+		flags.WithStringFlag("identity", "i", "", "Atmos Auth identity for AWS credentials"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
+		flags.WithEnvVars("identity", "ATMOS_AWS_SECURITY_IDENTITY"),
 		flags.WithEnvVars("framework", "ATMOS_AWS_COMPLIANCE_FRAMEWORK"),
 		flags.WithEnvVars("format", "ATMOS_AWS_COMPLIANCE_FORMAT"),
 	)

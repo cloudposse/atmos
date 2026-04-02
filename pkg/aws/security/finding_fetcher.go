@@ -26,12 +26,18 @@ type FindingFetcher interface {
 }
 
 // NewFindingFetcher creates a FindingFetcher based on the configured security sources.
-func NewFindingFetcher(atmosConfig *schema.AtmosConfiguration) FindingFetcher {
+// If authCtx is non-nil, AWS clients will use Atmos Auth credentials.
+func NewFindingFetcher(atmosConfig *schema.AtmosConfiguration, authCtx *schema.AWSAuthContext) FindingFetcher {
 	defer perf.Track(nil, "security.NewFindingFetcher")()
+
+	clients := newAWSClientCache()
+	if authCtx != nil {
+		clients.WithAuthContext(authCtx)
+	}
 
 	return &awsFindingFetcher{
 		atmosConfig: atmosConfig,
-		clients:     newAWSClientCache(),
+		clients:     clients,
 		cache:       NewFindingsCache(),
 	}
 }
