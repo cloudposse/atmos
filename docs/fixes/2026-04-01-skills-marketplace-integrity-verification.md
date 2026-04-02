@@ -67,10 +67,11 @@ files at install time provides an independent defence layer.
 
 ## Fix
 
-### 1. `ErrSkillHashMismatch` sentinel (`errors.go`)
+### 1. `ErrSkillHashMismatch` and `ErrSymlinkNotAllowed` sentinels (`errors.go`)
 
 ```go
 ErrSkillHashMismatch = errors.New("skill content hash mismatch — skill files may have been tampered with")
+ErrSymlinkNotAllowed = errors.New("symlinks are not allowed in skill directories")
 ```
 
 ### 2. `ContentHash` field in `InstalledSkill` (`local_registry.go`)
@@ -89,6 +90,8 @@ verification (legacy path).
 
 * Walks all files under `skillDir` in deterministic lexicographic order.
 * Skips the `.git` directory entirely.
+* **Rejects symlinks** — returns `ErrSymlinkNotAllowed` when a symlink entry is encountered,
+  preventing directory-escape via crafted skill packages.
 * Feeds `\x00<forward-slash-relative-path>\x00<file-content>` into a `sha256.New()` hasher
   for each file — the path prefix prevents a content-only collision between files whose
   bytes happen to be identical.
@@ -158,9 +161,10 @@ A tampered skill emits a warning and is skipped; it is never loaded into the LLM
 | `TestComputeSkillHash_Deterministic` | Same directory → same hash on repeated calls |
 | `TestComputeSkillHash_DifferentContentDifferentHash` | Different content → different hash |
 | `TestComputeSkillHash_SkipsGitDir` | Adding a `.git` directory does not change the hash |
+| `TestComputeSkillHash_RejectsSymlinks` | Symlinks in skill directory return `ErrSymlinkNotAllowed` |
 | `TestVerifySkillHash_Success` | Correct hash passes verification |
 | `TestVerifySkillHash_Mismatch` | Wrong hash returns `ErrSkillHashMismatch` |
-| `TestInstall_ContentHashStoredInRegistry` | After `Install`, registry entry has non-empty 64-char `ContentHash` |
+| `TestInstall_ContentHashStoredInRegistry` | After `Install`, in-memory registry entry has 64-char `ContentHash`; disk round-trip (re-instantiate installer via `NewInstaller`) confirms the same hash is persisted in `registry.json` |
 | `TestLoadInstalledSkills_TamperedSkillSkipped` | Modifying `SKILL.md` after install causes the skill to be skipped on load |
 | `TestLoadInstalledSkills_LegacySkillWithoutHash` | Skills with empty `ContentHash` (legacy) still load without error |
 

@@ -11,6 +11,7 @@ var (
 	ErrInvalidSource         = errors.New("invalid skill source")
 	ErrDownloadFailed        = errors.New("skill download failed")
 	ErrSkillHashMismatch     = errors.New("skill content hash mismatch — skill files may have been tampered with")
+	ErrSymlinkNotAllowed     = errors.New("symlinks are not allowed in skill directories")
 
 	// Validation errors.
 	ErrInvalidMetadata     = errors.New("invalid skill metadata")

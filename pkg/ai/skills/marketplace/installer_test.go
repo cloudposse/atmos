@@ -1627,6 +1627,21 @@ func TestComputeSkillHash_SkipsGitDir(t *testing.T) {
 	assert.Equal(t, hashBefore, hashAfter, ".git directory must not affect the content hash")
 }
 
+func TestComputeSkillHash_RejectsSymlinks(t *testing.T) {
+	skillDir := createTestSkillDir(t)
+
+	// Create a symlink inside the skill directory.
+	target := filepath.Join(skillDir, "SKILL.md")
+	link := filepath.Join(skillDir, "link.md")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip("symlinks not supported on this platform:", err)
+	}
+
+	_, err := computeSkillHash(skillDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSymlinkNotAllowed, "symlinks in skill directories must be rejected")
+}
+
 func TestVerifySkillHash_Success(t *testing.T) {
 	skillDir := createTestSkillDir(t)
 
@@ -1672,6 +1687,16 @@ func TestInstall_ContentHashStoredInRegistry(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, skill.ContentHash, "ContentHash must be set after installation")
 	assert.Len(t, skill.ContentHash, 64, "ContentHash must be a valid SHA-256 hex digest")
+
+	// Disk round-trip: re-create the installer to reload registry.json from disk and
+	// verify the ContentHash was actually persisted (not just held in memory).
+	installer2, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	skill2, err := installer2.Get("test-skill")
+	require.NoError(t, err)
+	assert.Equal(t, skill.ContentHash, skill2.ContentHash, "ContentHash must be persisted to registry.json")
+	assert.Len(t, skill2.ContentHash, 64, "persisted ContentHash must be a valid SHA-256 hex digest")
 }
 
 func TestLoadInstalledSkills_TamperedSkillSkipped(t *testing.T) {

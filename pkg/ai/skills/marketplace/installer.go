@@ -175,6 +175,10 @@ func computeSkillHash(skillDir string) (string, error) {
 			}
 			return nil
 		}
+		// Reject symlinks — they could point outside the skill directory.
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", ErrSymlinkNotAllowed, path)
+		}
 		relPath, relErr := filepath.Rel(skillDir, path)
 		if relErr != nil {
 			return fmt.Errorf("failed to get relative path: %w", relErr)
