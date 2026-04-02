@@ -591,13 +591,14 @@ var (
 	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
 
 	// Terraform execution errors.
-	ErrTerraformExecFailed = errors.New("terraform execution failed")
-	ErrDescribeAffected    = errors.New("describe affected failed")
-	ErrDescribeStacks      = errors.New("describe stacks failed")
-	ErrBuildDepGraph       = errors.New("build dependency graph failed")
-	ErrTopologicalOrder    = errors.New("topological sort failed")
-	ErrFormatForLogging    = errors.New("format affected for logging failed")
-	ErrQueryEvaluation     = errors.New("query evaluation failed")
+	ErrTerraformExecFailed            = errors.New("terraform execution failed")
+	ErrDescribeAffected               = errors.New("describe affected failed")
+	ErrUploadRequiresPullRequestEvent = errors.New("upload requires a pull_request event")
+	ErrDescribeStacks                 = errors.New("describe stacks failed")
+	ErrBuildDepGraph                  = errors.New("build dependency graph failed")
+	ErrTopologicalOrder               = errors.New("topological sort failed")
+	ErrFormatForLogging               = errors.New("format affected for logging failed")
+	ErrQueryEvaluation                = errors.New("query evaluation failed")
 
 	// Cache-related errors.
 	ErrCacheLocked    = errors.New("cache file is locked")
