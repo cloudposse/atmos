@@ -3,7 +3,6 @@
 package homedir
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
