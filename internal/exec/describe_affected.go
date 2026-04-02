@@ -55,6 +55,8 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 	ExcludeLocked               bool
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
+	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -268,6 +270,8 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 
 	describe.Ref = resolution.Ref
 	describe.SHA = resolution.SHA
+	describe.HeadSHAOverride = resolution.HeadSHA
+	describe.CIEventType = resolution.EventType
 
 	base := resolution.SHA
 	if base == "" {
@@ -390,7 +394,20 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	if !args.Upload {
 		return nil
 	}
-	// Parse the repo URL
+
+	// Validate that the CI event is a pull_request event when uploading.
+	// Atmos Pro only processes pull_request webhooks, so push events cannot be correlated.
+	if args.CIEventType != "" && args.CIEventType != "pull_request" && args.CIEventType != "pull_request_target" {
+		return errUtils.Build(
+			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request events", errUtils.ErrUploadRequiresPullRequestEvent, args.CIEventType),
+		).
+			WithHint("Ensure your workflow triggers on pull_request events when using --upload.").
+			WithHint("Push events and other event types are not supported for Atmos Pro uploads.").
+			WithHint("See https://atmos.tools/integrations/pro for supported CI configurations.").
+			Err()
+	}
+
+	// Parse the repo URL.
 	gitURL, err := giturl.NewGitURL(repoUrl)
 	if err != nil {
 		return err
@@ -403,8 +420,17 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return nil
 	}
 
+	// Use the PR head SHA from the CI event payload when available.
+	// This ensures the upload SHA matches what Atmos Pro indexed from the webhook,
+	// regardless of which commit the workflow has checked out (e.g., merge commit vs PR head).
+	headSHA := headHead.Hash().String()
+	if args.HeadSHAOverride != "" {
+		headSHA = args.HeadSHAOverride
+		log.Debug("Using PR head SHA for upload correlation", "headSHA", headSHA, "localHEAD", headHead.Hash().String())
+	}
+
 	req := dtos.UploadAffectedStacksRequest{
-		HeadSHA:   headHead.Hash().String(),
+		HeadSHA:   headSHA,
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
 		RepoName:  gitURL.GetRepoName(),

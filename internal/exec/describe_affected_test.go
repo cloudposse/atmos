@@ -1973,3 +1973,106 @@ func TestDescribeAffectedDeletedComponentWithDependents(t *testing.T) {
 
 	t.Logf("Successfully processed %d deleted components with dependents enabled", deletedCount)
 }
+
+// TestUploadRejectsPushEvent verifies that --upload errors when the CI event is not a pull_request.
+func TestUploadRejectsPushEvent(t *testing.T) {
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main~1", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Format:      "json",
+			CIEventType: "push",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{},
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pull_request")
+	assert.Contains(t, err.Error(), "push")
+}
+
+// TestUploadAllowsPullRequestEvent verifies that --upload does not error for pull_request events.
+// Note: the actual upload call requires an API client, so we only verify the event validation passes.
+func TestUploadAllowsPullRequestEvent(t *testing.T) {
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	// This will fail at the API client creation step (no env vars set), but the event
+	// validation should pass — it should NOT return ErrUploadRequiresPullRequestEvent.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:          true,
+			Format:          "json",
+			CIEventType:     "pull_request",
+			HeadSHAOverride: "cccccccccccccccccccccccccccccccccccccccc",
+			CLIConfig:       &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{},
+	)
+	// Should NOT be an event validation error. It may be nil (API client creation
+	// logs a warning and returns nil) or some other error, but not our sentinel.
+	if err != nil {
+		assert.NotContains(t, err.Error(), "pull_request event")
+	}
+}
+
+// TestUploadNoEventTypeAllowed verifies that --upload works when CIEventType is empty
+// (e.g., when not using CI auto-detection, or using explicit --ref/--sha flags).
+func TestUploadNoEventTypeAllowed(t *testing.T) {
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	// Empty CIEventType means no CI auto-detection — should not block upload.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Format:      "json",
+			CIEventType: "",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{},
+	)
+	// Should NOT be an event validation error.
+	if err != nil {
+		assert.NotContains(t, err.Error(), "pull_request event")
+	}
+}

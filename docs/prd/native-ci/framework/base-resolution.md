@@ -64,37 +64,89 @@ ResolveBase() (*BaseResolution, error)
 
 ## FR-12: GitHub Actions Base Resolution
 
-**Requirement**: The GitHub provider resolves the base commit from GitHub Actions environment variables and event payload.
+**Requirement**: The GitHub provider resolves the base commit from GitHub Actions environment variables and event payload. For pull request events, the primary strategy is `git merge-base` — the only approach that is correct regardless of checkout strategy and merge method.
 
-**Event Resolution Matrix**:
+### Why merge-base is the gold standard
 
-| Event | Action | Base | Type | Source |
-|-------|--------|------|------|--------|
-| `pull_request` | opened / synchronize | `refs/remotes/origin/$GITHUB_BASE_REF` | ref | `GITHUB_BASE_REF` |
-| `pull_request` | closed (merged) | `event.pull_request.base.sha` | SHA | `$GITHUB_EVENT_PATH` |
-| `pull_request_target` | any | `refs/remotes/origin/$GITHUB_BASE_REF` | ref | `GITHUB_BASE_REF` |
-| `push` | normal | `event.before` | SHA | `$GITHUB_EVENT_PATH` |
-| `push` | force-push (`event.forced`) | `HEAD~1` | SHA | git resolution |
-| `merge_group` | any | `refs/remotes/origin/$GITHUB_BASE_REF` | ref | `GITHUB_BASE_REF` |
-| other | any | `refs/remotes/origin/HEAD` | ref | default |
+The purpose of base resolution is to answer: "what is the fork point — the commit where this PR's changes diverge from the target branch?" This determines which stacks are affected by the PR. `git merge-base HEAD origin/<target>` answers this question correctly in all scenarios.
 
-**Environment Variables Used**:
-- `GITHUB_EVENT_NAME` — event type routing
-- `GITHUB_BASE_REF` — PR target branch
-- `GITHUB_EVENT_PATH` — path to JSON event payload file
+### Rejected approaches
 
-**Event Payload Fields Read**:
-- `action` — PR action (opened, synchronize, closed)
-- `pull_request.base.sha` — base commit SHA for closed PRs
-- `before` — previous HEAD SHA for push events
-- `forced` — whether push was a force-push
+**`HEAD~1` (parent of checked-out commit)**:
+- Only correct when the workflow checks out the **merge commit** (not the PR head) AND the merge strategy is merge or squash.
+- **Breaks for rebase merges with multiple commits**: `merge_commit_sha` points to the tip of the rebased commits, so `HEAD~1` is the previous rebased commit — not the target branch state.
+- **Breaks entirely when the workflow checks out `head.sha`**: `HEAD~1` is the parent commit on the PR branch, which for multi-commit PRs is just the second-to-last PR commit — completely wrong.
+- **Breaks the Atmos Pro upload correlation**: Atmos Pro indexes by `event.pull_request.head.sha` from the webhook. If the workflow checks out the merge commit (required for HEAD~1 to work), the upload SHA doesn't match what Atmos Pro expects. This creates conflicting requirements — you can't satisfy both HEAD~1 correctness and Atmos Pro SHA correlation with the same checkout.
 
-**Validation**:
-- PR open/sync: resolves to `refs/remotes/origin/main` when `GITHUB_BASE_REF=main`
-- PR closed/merged: resolves to the base SHA from event payload
-- Push: resolves to `before` SHA from event payload
-- Force-push: falls back to `HEAD~1` when `forced=true`
-- Missing `$GITHUB_EVENT_PATH`: returns error (file should always exist in GitHub Actions)
+**`event.pull_request.base.sha` (from webhook payload)**:
+- Points to the correct branch but can be **stale**: if other PRs merge into the target branch between when the PR was created/updated and when it merges, `base.sha` points to an older commit on the target branch.
+- In practice, the staleness means the diff may include changes from other PRs that merged in the interim, producing false positives in affected detection.
+- For open PRs this is less of an issue (the PR is rebased/synced regularly), but for closed/merged PRs the staleness window can be significant.
+
+### Merge-base approach
+
+`git merge-base HEAD origin/<target_branch>` computes the common ancestor. This is correct regardless of:
+- **What's checked out** — works with `head.sha`, merge commit, or any other ref.
+- **Merge strategy** — merge, squash, or rebase all produce correct results.
+- **Number of commits** — single or multi-commit PRs are handled identically.
+- **Target branch movement** — if other PRs merged into the target, merge-base still finds the true fork point.
+
+**Limitation**: merge-base requires the target branch ref (`origin/<target>`) to be available locally. In shallow CI checkouts, this may not be fetched. The fallback chain handles this gracefully.
+
+**Edge case**: if the workflow checks out the merge commit, HEAD is *on* the target branch, so `merge-base(HEAD, origin/main) == HEAD`. This is detected (merge-base == HEAD hash) and falls through to the next strategy.
+
+### Implementation: generic utility + provider-specific extraction
+
+The merge-base computation itself is provider-agnostic and lives in `pkg/git/` as a shared utility. The GitHub provider is responsible only for extracting the target branch name from GitHub-specific sources (`event.pull_request.base.ref`, `GITHUB_BASE_REF`).
+
+### Fallback chain for pull request events
+
+Each strategy is tried in order; the first success is used:
+
+1. **`git merge-base(HEAD, origin/<target>)`** — gold standard. Target branch extracted from `event.pull_request.base.ref` (payload) or `GITHUB_BASE_REF` (env var). Skipped if merge-base equals HEAD (merge commit checkout).
+2. **`HEAD~1`** — fallback for closed/merged PRs when merge-base fails (e.g., shallow checkout without target branch). Correct when the merge commit is checked out with merge/squash strategy.
+3. **`GITHUB_BASE_REF` ref** — last resort. Returns the ref directly for downstream tree-to-tree comparison.
+
+### Atmos Pro upload correlation
+
+For `--upload` mode, the CLI also extracts `event.pull_request.head.sha` from the event payload. This SHA is used as the `HeadSHA` in the upload request, ensuring it matches what Atmos Pro indexed from the webhook — regardless of which commit the workflow has checked out locally.
+
+Push events are rejected when `--upload` is set, since Atmos Pro only processes `pull_request` webhooks and cannot correlate push event uploads.
+
+### Event Resolution Matrix
+
+| Event | Action | Primary Strategy | Fallback | Type | Source |
+|-------|--------|-----------------|----------|------|--------|
+| `pull_request` | opened / synchronize | `merge-base(HEAD, origin/<target>)` | `GITHUB_BASE_REF` ref | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
+| `pull_request` | closed (merged) | `merge-base(HEAD, origin/<target>)` | `HEAD~1` → `GITHUB_BASE_REF` ref | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
+| `pull_request_target` | any | `merge-base(HEAD, origin/<target>)` | `GITHUB_BASE_REF` ref | SHA or ref | `event.pull_request.base.ref` → `git merge-base` |
+| `push` | normal | `event.before` | — | SHA | `$GITHUB_EVENT_PATH` |
+| `push` | force-push (`event.forced`) | `HEAD~1` | `origin/HEAD` ref | SHA or ref | git resolution |
+| `merge_group` | any | `refs/remotes/origin/$GITHUB_BASE_REF` | — | ref | `GITHUB_BASE_REF` |
+| other | any | `refs/remotes/origin/HEAD` | — | ref | default |
+
+### Environment Variables Used
+
+- `GITHUB_EVENT_NAME` — event type routing.
+- `GITHUB_BASE_REF` — PR target branch (fallback when payload extraction fails).
+- `GITHUB_EVENT_PATH` — path to JSON event payload file.
+
+### Event Payload Fields Read
+
+- `action` — PR action (opened, synchronize, closed).
+- `pull_request.base.ref` — target branch name for merge-base computation.
+- `pull_request.head.sha` — PR head commit SHA for Atmos Pro upload correlation.
+- `before` — previous HEAD SHA for push events.
+- `forced` — whether push was a force-push.
+
+### Validation
+
+- PR open/sync: merge-base resolves to the fork-point SHA; falls back to `refs/remotes/origin/main` in shallow checkout.
+- PR closed/merged: merge-base resolves to the fork-point SHA; falls back to HEAD~1, then `GITHUB_BASE_REF`.
+- Push: resolves to `before` SHA from event payload.
+- Force-push: falls back to `HEAD~1` when `forced=true`.
+- Missing `$GITHUB_EVENT_PATH`: returns error (file should always exist in GitHub Actions).
+- `--upload` + push event: returns error with actionable hints.
 
 ## FR-13: Generic Provider Base Resolution
 

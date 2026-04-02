@@ -11,6 +11,11 @@ type BaseResolution struct {
 	// SHA is a git commit hash. Mutually exclusive with Ref.
 	SHA string
 
+	// HeadSHA is the PR head commit SHA for upload correlation with Atmos Pro.
+	// Populated for pull_request events from event.pull_request.head.sha.
+	// Empty for non-PR events (push, merge_group, etc.).
+	HeadSHA string
+
 	// Source describes where the base was resolved from (for logging).
 	Source string
 
