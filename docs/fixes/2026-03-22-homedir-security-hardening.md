@@ -107,6 +107,9 @@ that include subprocess stderr in error messages: `shellGetUsernameFunc` (id/who
 
 - Added `compile-plan9` job to `.github/workflows/test.yml`:
   `GOOS=plan9 go build ./pkg/config/homedir/...` — compile-only guard against Plan 9 bit-rot
+- Added `test-homedir-macos` job to `.github/workflows/test.yml` (macOS runner):
+  runs `go build ./pkg/config/homedir/...` and `go test ./pkg/config/homedir/... -race`
+  to exercise real `dscl`/darwin paths; closes the "not addressed" gap noted in the audit table.
 
 ### Windows CI Test Fix
 
@@ -160,7 +163,7 @@ Score improvement: **93/100 → 95/100** (UNC bug fixed, dscl hardened, coverage
 | 2 | 🟠 High | Drive-letter-relative (`C:Users\me`) not normalized to absolute | ✅ Fixed — `toDriveAbsolute` normalizes `C:foo` → `C:\foo` |
 | 3 | 🟡 Medium | `dscl` parser brittle — `CutPrefix` misses leading spaces | ✅ Fixed — `strings.TrimSpace(line)` before `CutPrefix`; extracted to `parseDsclNFSHomeDir` with 9 table-driven tests |
 | 4 | 🟡 Medium | dscl result not verified absolute | ✅ Fixed — `filepath.IsAbs` guard added; relative result → `ErrBlankOutput` |
-| 5 | 🟠 High | No macOS CI job for real `dscl` happy path | ⚠️ Not addressed — requires macOS runner; DI hook tests cover all code paths |
+| 5 | 🟠 High | No macOS CI job for real `dscl` happy path | ✅ Addressed — test-homedir-macos job runs go test ./pkg/config/homedir/... -race on a macOS runner |
 | 6 | 🟡 Medium | `shellGetUsernameFunc` drops one stderr when both `id` and `whoami` fail | ✅ Fixed — both messages included: `(id: …; whoami: …)` |
 | 7 | 🟡 Medium | No Windows `Expand("~\\subdir\\file.txt")` test | ✅ Added `TestExpand_WindowsBackslashSubdir` (Windows-only) |
 | 8 | 🟡 Medium | Comment says "callers always receive fully-qualified path" but drive-relative is possible | ✅ Fixed — comment updated to accurately describe behavior when no drive env is set |

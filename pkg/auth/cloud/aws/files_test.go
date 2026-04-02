@@ -17,7 +17,7 @@ import (
 
 // TestMain disables homedir caching to prevent cached values from affecting test isolation.
 func TestMain(m *testing.M) {
-	homedir.DisableCache = true
+	homedir.SetDisableCache(true)
 	os.Exit(m.Run())
 }
 

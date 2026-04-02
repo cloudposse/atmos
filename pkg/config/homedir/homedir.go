@@ -29,26 +29,26 @@ import (
 	"time"
 )
 
-// DisableCache will disable caching of the home directory. Caching is enabled
-// by default. For concurrent programs, prefer SetDisableCache which acquires
-// the internal lock; direct assignment is safe only before any Dir calls.
-var DisableCache bool
+// disableCache will disable caching of the home directory. Caching is enabled
+// by default. Use SetDisableCache to modify this value safely from concurrent
+// goroutines; the accessor acquires the internal lock before reading or writing.
+var disableCache bool
 
-// SetDisableCache sets the DisableCache flag in a thread-safe manner by
+// SetDisableCache sets the disableCache flag in a thread-safe manner by
 // acquiring the internal cache lock before writing. It is safe to call from
 // any goroutine, including concurrent callers of Dir or Expand. For best
 // results, call it before any parallel Dir calls are in flight so that all
 // callers observe the same setting.
 func SetDisableCache(v bool) {
 	cacheLock.Lock()
-	DisableCache = v
+	disableCache = v
 	cacheLock.Unlock()
 }
 
-// GetDisableCache returns the current DisableCache flag in a thread-safe manner.
+// GetDisableCache returns the current disableCache flag in a thread-safe manner.
 func GetDisableCache() bool {
 	cacheLock.RLock()
-	v := DisableCache
+	v := disableCache
 	cacheLock.RUnlock()
 	return v
 }
@@ -192,19 +192,19 @@ var testHookDirAfterReadUnlock func()
 // This uses an OS-specific method for discovering the home directory.
 // An error is returned if a home directory cannot be detected.
 //
-// Thread safety: Dir is safe for concurrent use. DisableCache is read under
+// Thread safety: Dir is safe for concurrent use. disableCache is read under
 // cacheLock (an internal sync.RWMutex), so concurrent reads are safe. Direct
-// writes to the DisableCache package variable are unsafe when called concurrently
+// writes to the disableCache package variable are unsafe when called concurrently
 // with Dir — use the exported SetDisableCache helper instead, which acquires
 // cacheLock before writing, ensuring the write is serialized with any concurrent
 // readers inside Dir.
 func Dir() (string, error) {
 	cacheLock.RLock()
-	disableCache := DisableCache
+	dcache := disableCache
 	cached := homedirCache
 	cacheLock.RUnlock()
 
-	if !disableCache && cached != "" {
+	if !dcache && cached != "" {
 		return cached, nil
 	}
 
@@ -224,9 +224,9 @@ func Dir() (string, error) {
 
 	// Re-check after acquiring the write lock: another goroutine may have
 	// already populated the cache between our read-unlock and write-lock.
-	// Re-read DisableCache under the write lock for a consistent view.
-	disableCache = DisableCache
-	if !disableCache && homedirCache != "" {
+	// Re-read disableCache under the write lock for a consistent view.
+	dcache = disableCache
+	if !dcache && homedirCache != "" {
 		return homedirCache, nil
 	}
 
@@ -242,10 +242,10 @@ func Dir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Only write to the cache when caching is enabled. If DisableCache is true,
+	// Only write to the cache when caching is enabled. If disableCache is true,
 	// skip the write to prevent a stale entry from poisoning the cache for
 	// future callers that have caching enabled.
-	if !disableCache {
+	if !dcache {
 		homedirCache = result
 	}
 	return result, nil
@@ -617,7 +617,10 @@ var shellGetUsernameFunc = func() (string, error) {
 	// This handles: id not installed (ErrNotFound), NSS/LDAP errors (exit 1),
 	// and any other transient failure where the binary exists but misbehaves.
 	if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
-		return u, nil
+		if err := validateUsername(u); err == nil {
+			return u, nil
+		}
+		// $USER is set but invalid; fall through to whoami.
 	}
 	whoamiCtx, whoamiCancel := context.WithTimeout(context.Background(), getExternalCmdTimeout())
 	defer whoamiCancel()

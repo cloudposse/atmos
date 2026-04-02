@@ -39,10 +39,4 @@ func TestGetDarwinHomeDir_RealDscl(t *testing.T) {
 	require.NoError(t, err, "getDarwinHomeDir must succeed when dscl is available.")
 	assert.True(t, filepath.IsAbs(home), "getDarwinHomeDir must return an absolute path; got %q.", home)
 	assert.NotEmpty(t, home, "getDarwinHomeDir must return a non-empty path.")
-
-	// Sanity: the returned path should contain the username (not guaranteed for
-	// network-mounted home dirs, so only assert when it looks like a local path).
-	if len(home) > 1 && os.PathSeparator == '/' {
-		assert.NotEqual(t, ".", filepath.Clean(home), "returned home path must not be '.'.")
-	}
 }

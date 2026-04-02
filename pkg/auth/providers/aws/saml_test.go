@@ -950,8 +950,8 @@ func TestSAMLProvider_Paths(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
 
 	// Disable homedir cache to ensure our test environment is used.
-	homedir.DisableCache = true
-	t.Cleanup(func() { homedir.DisableCache = false })
+	homedir.SetDisableCache(true)
+	t.Cleanup(func() { homedir.SetDisableCache(false) })
 
 	provider, err := NewSAMLProvider("test-saml", &schema.Provider{
 		Kind:   "aws/saml",

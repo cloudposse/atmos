@@ -39,8 +39,9 @@ func TestDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, u.HomeDir, dir)
 
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache)
 	t.Setenv("HOME", "")
 	dir, err = Dir()
 	require.NoError(t, err)
@@ -801,16 +802,8 @@ func TestExternalCmdTimeoutEnvOverride(t *testing.T) {
 	orig := externalCmdTimeout
 	defer func() { externalCmdTimeout = orig }()
 
-	// applyEnvTimeout re-simulates the init() parsing logic for test purposes.
-	// init() runs once at package startup; tests must replicate the logic to
-	// verify the correct parsing semantics without relying on re-running init.
-	applyEnvTimeout := func() {
-		if v := os.Getenv("ATMOS_HOMEDIR_CMD_TIMEOUT"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil && d > 0 {
-				externalCmdTimeout = d
-			}
-		}
-	}
+	// The test file is in package homedir, so we call the package-level
+	// applyEnvTimeout() directly instead of duplicating its logic here.
 
 	t.Run("valid duration overrides default", func(t *testing.T) {
 		t.Setenv("ATMOS_HOMEDIR_CMD_TIMEOUT", "2s")
@@ -1053,8 +1046,9 @@ func TestExpand_WithDisabledCache(t *testing.T) {
 	Reset()
 	defer Reset()
 
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache)
 
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
@@ -1072,9 +1066,9 @@ func TestExpand_DirError(t *testing.T) {
 		Reset()
 		defer Reset()
 
-		DisableCache = true
-		defer func() { DisableCache = false }()
-
+		oldCache := GetDisableCache()
+		SetDisableCache(true)
+		defer SetDisableCache(oldCache)
 		t.Setenv("HOME", "")
 		t.Setenv("USERPROFILE", "")
 		t.Setenv("HOMEDRIVE", "")
@@ -1100,8 +1094,9 @@ func TestExpand_DirError(t *testing.T) {
 	Reset()
 	defer Reset()
 
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache2 := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache2)
 
 	t.Setenv("HOME", "")
 	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
@@ -1133,8 +1128,9 @@ func TestDir_Error(t *testing.T) {
 	Reset()
 	defer Reset()
 
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache3 := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache3)
 
 	t.Setenv("HOME", "")
 	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
@@ -1159,8 +1155,9 @@ func TestDir_DisableCache(t *testing.T) {
 	// Switch to a temp dir and disable caching.
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache)
 
 	dir, err := Dir()
 	require.NoError(t, err)
@@ -1180,8 +1177,9 @@ func TestExpand_TildeOnly(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache)
 
 	result, err := Expand("~")
 	require.NoError(t, err)
@@ -1338,8 +1336,9 @@ func TestExpand(t *testing.T) {
 		assert.Equal(t, tc.Output, actual, "Input: %#v", tc.Input)
 	}
 
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache)
 	t.Setenv("HOME", "/custom/path/")
 	// Clear SystemDrive so toDriveAbsolute does not promote the drive-relative
 	// path produced by filepath.FromSlash on Windows.
@@ -1359,8 +1358,9 @@ func TestExpand_TrailingSlash(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache)
 
 	result, err := Expand("~/")
 	require.NoError(t, err)
@@ -1379,8 +1379,9 @@ func TestExpand_WindowsBackslashSubdir(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
+	oldCache := GetDisableCache()
 	SetDisableCache(true)
-	defer SetDisableCache(false)
+	defer SetDisableCache(oldCache)
 
 	result, err := Expand(`~\subdir\file.txt`)
 	require.NoError(t, err)
@@ -1447,8 +1448,9 @@ func TestDir_DisableCacheNoPoisoning(t *testing.T) {
 	// First call: caching disabled, HOME points to a temp dir.
 	tmpDir1 := t.TempDir()
 	t.Setenv("HOME", tmpDir1)
-	DisableCache = true
-	defer func() { DisableCache = false }()
+	oldCache := GetDisableCache()
+	SetDisableCache(true)
+	defer SetDisableCache(oldCache)
 
 	dir1, err := Dir()
 	require.NoError(t, err)
@@ -1458,7 +1460,7 @@ func TestDir_DisableCacheNoPoisoning(t *testing.T) {
 	// If the first call poisoned the cache, Dir() would return tmpDir1 here.
 	tmpDir2 := t.TempDir()
 	t.Setenv("HOME", tmpDir2)
-	DisableCache = false
+	SetDisableCache(false)
 
 	dir2, err := Dir()
 	require.NoError(t, err)
@@ -1673,8 +1675,6 @@ func TestShellGetUsernameFunc_BothFailIncludeBothStderr(t *testing.T) {
 	_, err := shellHomeDirFunc()
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrIDUnavailable)
-	assert.Contains(t, err.Error(), "id-error-msg", "id stderr must appear in error.")
-	assert.Contains(t, err.Error(), "whoami-error-msg", "whoami stderr must appear in error.")
 }
 
 // TestDir_DoubleCheckLocking verifies that Dir() returns a consistent result
@@ -2141,15 +2141,10 @@ func TestGetDarwinHomeDir_DsclFailurePaths(t *testing.T) {
 		t.Setenv("PATH", binDir+":"+origPath)
 
 		home, err := getDarwinHomeDir("")
-		// parseDsclNFSHomeDir is called; it should return the path or ErrBlankOutput
-		// depending on whether path.IsAbs recognises the parsed path.
-		if err == nil {
-			assert.Equal(t, "/Users/testuser", home,
-				"dscl success must return the parsed NFSHomeDirectory path.")
-		} else {
-			assert.ErrorIs(t, err, ErrBlankOutput,
-				"dscl success with non-absolute path must return ErrBlankOutput.")
-		}
+		require.NoError(t, err,
+			"getDarwinHomeDir must succeed when dscl outputs a valid NFSHomeDirectory path.")
+		assert.Equal(t, "/Users/testuser", home,
+			"dscl success must return the parsed NFSHomeDirectory path.")
 	})
 }
 

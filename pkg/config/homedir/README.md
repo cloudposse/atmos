@@ -71,8 +71,9 @@ Use the thread-safe `SetDisableCache()` function:
 
 ```go
 func TestSomethingWithCustomHome(t *testing.T) {
+    original := homedir.GetDisableCache()
     homedir.SetDisableCache(true)
-    defer homedir.SetDisableCache(false)
+    defer homedir.SetDisableCache(original)
 
     t.Setenv("HOME", t.TempDir())
 
@@ -81,16 +82,16 @@ func TestSomethingWithCustomHome(t *testing.T) {
 }
 ```
 
-Or assign the unexported `DisableCache` directly **before** any concurrent `Dir` calls
+Or assign the unexported `disableCache` indirectly via `SetDisableCache` **before** any concurrent `Dir` calls
 (safe at package init / `TestMain` level, but not during concurrent access):
 
 ```go
-homedir.DisableCache = true   // safe only if no goroutines are calling Dir yet
+homedir.SetDisableCache(true) // use SetDisableCache; direct field access is not available
 ```
 
 > **Thread safety:** `SetDisableCache` acquires the internal cache lock and is safe from
-> any goroutine. Direct assignment to `DisableCache` is **not** protected by a lock and
-> must only be done before any parallel `Dir` calls begin.
+> any goroutine. The `disableCache` package variable is unexported; always use `SetDisableCache`
+> and `GetDisableCache` to read or write it.
 
 ### Reset cache
 
