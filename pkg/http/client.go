@@ -133,8 +133,10 @@ func WithGitHubHostMatcher(matcher func(string) bool) ClientOption {
 	defer perf.Track(nil, "http.WithGitHubHostMatcher")()
 
 	return func(c *DefaultClient) {
-		// Walk the transport chain and apply the matcher to every
-		// GitHubAuthenticatedTransport layer (handles nested compositions).
+		// Walk contiguous GitHubAuthenticatedTransport layers at the top of the
+		// transport chain and apply the matcher to each one.  The loop stops as
+		// soon as a non-GitHubAuthenticatedTransport is encountered because all
+		// auth layers are always contiguous at the outermost position in the chain.
 		t := c.client.Transport
 		for t != nil {
 			if authTransport, ok := t.(*GitHubAuthenticatedTransport); ok {

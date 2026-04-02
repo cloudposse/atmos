@@ -317,6 +317,10 @@ func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 	afterLen := GlobCacheLen()
 	assert.LessOrEqual(t, afterLen, defaultGlobCacheMaxEntries, "LRU cache must not exceed max capacity")
 
+	// The eviction counter must have incremented at least once before any re-insertion.
+	evictions := GlobCacheEvictions()
+	assert.Positive(t, evictions, "eviction counter must increment when LRU capacity is exceeded")
+
 	// Verify that the seed entry was specifically evicted.
 	assert.False(t, GlobCacheContains(seedPattern), "seed entry must have been evicted by LRU")
 
@@ -327,10 +331,6 @@ func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 	assert.True(t, GlobCacheContains(seedPattern), "seed entry must be back in cache after re-fetch")
 	// Repopulating should evict another entry, incrementing the counter further.
 	assert.Greater(t, GlobCacheEvictions(), evictionsBefore, "re-inserting seed must evict another entry")
-
-	// The eviction counter must have incremented at least once.
-	evictions := GlobCacheEvictions()
-	assert.Positive(t, evictions, "eviction counter must increment when LRU capacity is exceeded")
 }
 
 // TestGetGlobMatches_TTL_Expiry verifies that a stale cache entry (past TTL)
