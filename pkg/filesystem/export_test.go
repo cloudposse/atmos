@@ -45,6 +45,17 @@ func GlobCacheLen() int {
 	return globMatchesLRU.Len()
 }
 
+// GlobCacheContains reports whether the given pattern currently has an entry in
+// the glob LRU cache (regardless of TTL expiry).  It is intended for use in
+// tests that need to verify whether a specific key was evicted.
+func GlobCacheContains(pattern string) bool {
+	normalizedPattern := filepath.ToSlash(pattern)
+	globMatchesLRUMu.RLock()
+	defer globMatchesLRUMu.RUnlock()
+	_, ok := globMatchesLRU.Get(normalizedPattern)
+	return ok
+}
+
 // GlobCacheEvictions returns the total number of LRU evictions since the last cache reset.
 // This counter is incremented atomically by the LRU eviction callback.
 func GlobCacheEvictions() int64 {

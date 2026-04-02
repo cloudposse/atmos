@@ -54,7 +54,7 @@ func TestGetSeparated_DefensiveCopy(t *testing.T) {
 	assert.Equal(t, "-var", got2[0], "GetSeparated should return a defensive copy")
 }
 
-func TestGetSeparated_ReturnsEmptySliceForEmpty(t *testing.T) {
+func TestGetSeparated_ReturnsNilForEmptyInput(t *testing.T) {
 	t.Cleanup(func() { ResetSeparated() })
 
 	// SetSeparated with empty slice: append([]string(nil), []string{}...) returns nil.

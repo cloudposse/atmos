@@ -92,6 +92,8 @@ func WithGitHubToken(token string) ClientOption {
 
 // stripAuthOnCrossHostRedirect removes the Authorization header from a redirect request
 // when the target origin differs from the originating origin.
+// The origin is compared as (scheme, normalized-host:port) so that scheme downgrades
+// (e.g. https → http) and host or port changes all trigger header removal.
 // Both host:port pairs are normalized via normalizeHost so that case differences,
 // trailing FQDN dots, and implicit default ports (80/443) do not cause spurious
 // header drops; non-default ports (e.g. :8443) are preserved and still treated as
@@ -100,8 +102,11 @@ func stripAuthOnCrossHostRedirect(req *http.Request, via []*http.Request) error 
 	if len(via) >= 10 {
 		return errUtils.ErrRedirectLimitExceeded
 	}
-	if len(via) > 0 && normalizeHost(req.URL.Host) != normalizeHost(via[0].URL.Host) {
-		req.Header.Del("Authorization")
+	if len(via) > 0 {
+		if req.URL.Scheme != via[0].URL.Scheme ||
+			normalizeHost(req.URL.Host) != normalizeHost(via[0].URL.Host) {
+			req.Header.Del("Authorization")
+		}
 	}
 	return nil
 }
@@ -128,8 +133,16 @@ func WithGitHubHostMatcher(matcher func(string) bool) ClientOption {
 	defer perf.Track(nil, "http.WithGitHubHostMatcher")()
 
 	return func(c *DefaultClient) {
-		if authTransport, ok := c.client.Transport.(*GitHubAuthenticatedTransport); ok {
-			authTransport.hostMatcher = matcher
+		// Walk the transport chain and apply the matcher to every
+		// GitHubAuthenticatedTransport layer (handles nested compositions).
+		t := c.client.Transport
+		for t != nil {
+			if authTransport, ok := t.(*GitHubAuthenticatedTransport); ok {
+				authTransport.hostMatcher = matcher
+				t = authTransport.Base
+			} else {
+				break
+			}
 		}
 	}
 }

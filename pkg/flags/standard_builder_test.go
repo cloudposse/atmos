@@ -54,7 +54,7 @@ func TestStandardOptionsBuilder_WithStack(t *testing.T) {
 			// Parse and verify
 			v := viper.New()
 			v.Set("stack", "prod")
-			_ = parser.BindToViper(v)
+			require.NoError(t, parser.BindToViper(v))
 
 			interpreter, err := parser.Parse(context.Background(), []string{})
 			require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestStandardOptionsBuilder_WithComponent(t *testing.T) {
 			// Parse and verify
 			v := viper.New()
 			v.Set("component", "vpc")
-			_ = parser.BindToViper(v)
+			require.NoError(t, parser.BindToViper(v))
 
 			interpreter, err := parser.Parse(context.Background(), []string{})
 			require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestStandardOptionsBuilder_WithFormat(t *testing.T) {
 			} else {
 				v.Set("format", tt.defaultValue)
 			}
-			_ = parser.BindToViper(v)
+			require.NoError(t, parser.BindToViper(v))
 
 			interpreter, err := parser.Parse(context.Background(), []string{})
 			require.NoError(t, err)
@@ -180,7 +180,7 @@ func TestStandardOptionsBuilder_WithFile(t *testing.T) {
 	// Parse and verify
 	v := viper.New()
 	v.Set("file", "/tmp/output.yaml")
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	interpreter, err := parser.Parse(context.Background(), []string{})
 	require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestStandardOptionsBuilder_WithProcessTemplates(t *testing.T) {
 			} else {
 				v.Set("process-templates", tt.defaultValue)
 			}
-			_ = parser.BindToViper(v)
+			require.NoError(t, parser.BindToViper(v))
 
 			interpreter, err := parser.Parse(context.Background(), []string{})
 			require.NoError(t, err)
@@ -290,7 +290,7 @@ func TestStandardOptionsBuilder_WithProcessFunctions(t *testing.T) {
 			} else {
 				v.Set("process-functions", tt.defaultValue)
 			}
-			_ = parser.BindToViper(v)
+			require.NoError(t, parser.BindToViper(v))
 
 			interpreter, err := parser.Parse(context.Background(), []string{})
 			require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestStandardOptionsBuilder_WithSkip(t *testing.T) {
 			if len(tt.viperValue) > 0 {
 				v.Set("skip", tt.viperValue)
 			}
-			_ = parser.BindToViper(v)
+			require.NoError(t, parser.BindToViper(v))
 
 			interpreter, err := parser.Parse(context.Background(), []string{})
 			require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestStandardOptionsBuilder_WithDryRun(t *testing.T) {
 			// Parse and verify
 			v := viper.New()
 			v.Set("dry-run", tt.viperValue)
-			_ = parser.BindToViper(v)
+			require.NoError(t, parser.BindToViper(v))
 
 			interpreter, err := parser.Parse(context.Background(), []string{})
 			require.NoError(t, err)
@@ -411,7 +411,7 @@ func TestStandardOptionsBuilder_WithQuery(t *testing.T) {
 	// Parse and verify
 	v := viper.New()
 	v.Set("query", ".components.vpc")
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	interpreter, err := parser.Parse(context.Background(), []string{})
 	require.NoError(t, err)
@@ -452,7 +452,7 @@ func TestStandardOptionsBuilder_WithProvenance(t *testing.T) {
 			// Parse and verify
 			v := viper.New()
 			v.Set("provenance", tt.viperValue)
-			_ = parser.BindToViper(v)
+			require.NoError(t, parser.BindToViper(v))
 
 			interpreter, err := parser.Parse(context.Background(), []string{})
 			require.NoError(t, err)
@@ -506,7 +506,7 @@ func TestStandardOptionsBuilder_ComplexCommand(t *testing.T) {
 	v.Set("skip", []string{"atmos.Component"})
 	v.Set("query", ".components")
 	v.Set("provenance", true)
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	// Positional args
 	interpreter, err := parser.Parse(context.Background(), []string{"vpc"})
@@ -535,7 +535,7 @@ func TestStandardOptionsBuilder_EnvironmentVariables(t *testing.T) {
 	parser.RegisterFlags(cmd)
 
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	// Set environment variables.
 	t.Setenv("ATMOS_STACK", "staging")
@@ -660,7 +660,7 @@ func TestStandardOptionsBuilder_WithTimeout(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser.RegisterFlags(cmd)
 		v := viper.New()
-		_ = parser.BindToViper(v)
+		require.NoError(t, parser.BindToViper(v))
 
 		opts, err := parser.Parse(context.Background(), []string{})
 		require.NoError(t, err)
@@ -673,7 +673,7 @@ func TestStandardOptionsBuilder_WithTimeout(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser.RegisterFlags(cmd)
 		v := viper.New()
-		_ = parser.BindToViper(v)
+		require.NoError(t, parser.BindToViper(v))
 
 		opts, err := parser.Parse(context.Background(), []string{"--timeout", "60"})
 		require.NoError(t, err)
@@ -707,7 +707,7 @@ func TestStandardOptionsBuilder_WithLogin(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--login"})
 	require.NoError(t, err)
@@ -727,7 +727,7 @@ func TestStandardOptionsBuilder_WithProvider(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--provider", "aws"})
 	require.NoError(t, err)
@@ -747,7 +747,7 @@ func TestStandardOptionsBuilder_WithProviders(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--providers", "aws,gcp"})
 	require.NoError(t, err)
@@ -767,7 +767,7 @@ func TestStandardOptionsBuilder_WithIdentities(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--identities", "role1,role2"})
 	require.NoError(t, err)
@@ -787,7 +787,7 @@ func TestStandardOptionsBuilder_WithAll(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--all"})
 	require.NoError(t, err)
@@ -807,7 +807,7 @@ func TestStandardOptionsBuilder_WithEverything(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--everything"})
 	require.NoError(t, err)
@@ -834,7 +834,7 @@ func TestStandardOptionsBuilder_WithRef(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser.RegisterFlags(cmd)
 		v := viper.New()
-		_ = parser.BindToViper(v)
+		require.NoError(t, parser.BindToViper(v))
 
 		opts, err := parser.Parse(context.Background(), []string{})
 		require.NoError(t, err)
@@ -847,7 +847,7 @@ func TestStandardOptionsBuilder_WithRef(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser.RegisterFlags(cmd)
 		v := viper.New()
-		_ = parser.BindToViper(v)
+		require.NoError(t, parser.BindToViper(v))
 
 		opts, err := parser.Parse(context.Background(), []string{"--ref", "v1.0.0"})
 		require.NoError(t, err)
@@ -868,7 +868,7 @@ func TestStandardOptionsBuilder_WithSha(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--sha", "abc123def"})
 	require.NoError(t, err)
@@ -914,7 +914,7 @@ func TestStandardOptionsBuilder_WithSSHKeyPassword(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--ssh-key-password", "s3cr3t"})
 	require.NoError(t, err)
@@ -934,7 +934,7 @@ func TestStandardOptionsBuilder_WithIncludeSpaceliftAdminStacks(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--include-spacelift-admin-stacks"})
 	require.NoError(t, err)
@@ -954,7 +954,7 @@ func TestStandardOptionsBuilder_WithIncludeDependents(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--include-dependents"})
 	require.NoError(t, err)
@@ -974,7 +974,7 @@ func TestStandardOptionsBuilder_WithIncludeSettings(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--include-settings"})
 	require.NoError(t, err)
@@ -994,7 +994,7 @@ func TestStandardOptionsBuilder_WithUpload(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--upload"})
 	require.NoError(t, err)
@@ -1014,7 +1014,7 @@ func TestStandardOptionsBuilder_WithCloneTargetRef(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--clone-target-ref"})
 	require.NoError(t, err)
@@ -1034,7 +1034,7 @@ func TestStandardOptionsBuilder_WithExcludeLocked(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--exclude-locked"})
 	require.NoError(t, err)
@@ -1054,7 +1054,7 @@ func TestStandardOptionsBuilder_WithComponents(t *testing.T) {
 
 	// Verify that the parsed value is propagated correctly.
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"--components", "vpc", "--components", "rds"})
 	require.NoError(t, err)
@@ -1083,7 +1083,7 @@ func TestStandardOptionsBuilder_WithOutput(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser.RegisterFlags(cmd)
 		v := viper.New()
-		_ = parser.BindToViper(v)
+		require.NoError(t, parser.BindToViper(v))
 
 		opts, err := parser.Parse(context.Background(), []string{})
 		require.NoError(t, err)
@@ -1096,7 +1096,7 @@ func TestStandardOptionsBuilder_WithOutput(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser.RegisterFlags(cmd)
 		v := viper.New()
-		_ = parser.BindToViper(v)
+		require.NoError(t, parser.BindToViper(v))
 
 		opts, err := parser.Parse(context.Background(), []string{"--output", "yaml"})
 		require.NoError(t, err)
@@ -1124,7 +1124,7 @@ func TestStandardOptionsBuilder_WithPositionalArgs(t *testing.T) {
 	parser.RegisterFlags(cmd)
 
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"vpc"})
 	require.NoError(t, err)

@@ -147,8 +147,9 @@ func init() {
 // GetGlobMatches tries to read and return the Glob matches content from the cache if it exists,
 // otherwise it finds and returns all files matching the pattern, stores the files in the cache and returns the files.
 //
-// Contract: the returned slice is always non-nil (never nil). An empty result is returned as []string{}, not nil.
-// This guarantee holds for both cache hits and misses, allowing callers to safely use len(result) without a nil check.
+// Contract: when err == nil, the returned slice is non-nil; an empty result is returned as []string{}, not nil.
+// On error (err != nil), the returned slice is nil.  Callers should check err first, then use len(result) == 0
+// to detect no matches.
 //
 // Migration note: if your code uses "if result == nil" to detect no matches, update it to "if len(result) == 0".
 // Callers should always use len(result) == 0 to detect no matches, not a nil comparison.

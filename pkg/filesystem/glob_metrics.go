@@ -27,19 +27,27 @@ var globExpvarOnce sync.Once
 //   - atmos_glob_cache_len       – current number of entries in the cache
 func RegisterGlobCacheExpvars() {
 	globExpvarOnce.Do(func() {
-		expvar.Publish("atmos_glob_cache_hits", expvar.Func(func() any {
-			return atomic.LoadInt64(&globMatchesHits)
-		}))
-		expvar.Publish("atmos_glob_cache_misses", expvar.Func(func() any {
-			return atomic.LoadInt64(&globMatchesMisses)
-		}))
-		expvar.Publish("atmos_glob_cache_evictions", expvar.Func(func() any {
-			return atomic.LoadInt64(&globMatchesEvictions)
-		}))
-		expvar.Publish("atmos_glob_cache_len", expvar.Func(func() any {
-			globMatchesLRUMu.RLock()
-			defer globMatchesLRUMu.RUnlock()
-			return globMatchesLRU.Len()
-		}))
+		if expvar.Get("atmos_glob_cache_hits") == nil {
+			expvar.Publish("atmos_glob_cache_hits", expvar.Func(func() any {
+				return atomic.LoadInt64(&globMatchesHits)
+			}))
+		}
+		if expvar.Get("atmos_glob_cache_misses") == nil {
+			expvar.Publish("atmos_glob_cache_misses", expvar.Func(func() any {
+				return atomic.LoadInt64(&globMatchesMisses)
+			}))
+		}
+		if expvar.Get("atmos_glob_cache_evictions") == nil {
+			expvar.Publish("atmos_glob_cache_evictions", expvar.Func(func() any {
+				return atomic.LoadInt64(&globMatchesEvictions)
+			}))
+		}
+		if expvar.Get("atmos_glob_cache_len") == nil {
+			expvar.Publish("atmos_glob_cache_len", expvar.Func(func() any {
+				globMatchesLRUMu.RLock()
+				defer globMatchesLRUMu.RUnlock()
+				return globMatchesLRU.Len()
+			}))
+		}
 	})
 }

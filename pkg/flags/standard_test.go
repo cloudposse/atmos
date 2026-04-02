@@ -1508,7 +1508,7 @@ func TestStandardParser_SetPositionalArgs(t *testing.T) {
 	parser.RegisterFlags(cmd)
 
 	v := viper.New()
-	_ = parser.BindToViper(v)
+	require.NoError(t, parser.BindToViper(v))
 
 	opts, err := parser.Parse(context.Background(), []string{"vpc"})
 	require.NoError(t, err)

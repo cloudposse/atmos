@@ -59,18 +59,20 @@ func TestGetGlobMatches_CacheIsolation(t *testing.T) {
 
 	first, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
+	require.Positive(t, len(first), "expected at least one match for pattern %q", pattern)
+
+	// Save the original value before mutating.
+	originalFirst := first[0]
 
 	// Mutate the returned slice.
-	if len(first) > 0 {
-		first[0] = "mutated"
-	}
+	first[0] = "mutated"
 
 	// Second call should still return the original value.
 	second, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
-	if len(second) > 0 {
-		assert.NotEqual(t, "mutated", second[0])
-	}
+	require.Positive(t, len(second), "expected at least one match for pattern %q on second call", pattern)
+	assert.NotEqual(t, "mutated", second[0], "cache must return an independent copy")
+	assert.Equal(t, originalFirst, second[0], "second call must return the original path")
 }
 
 // TestGetGlobMatches_NonExistentBaseDir verifies that GetGlobMatches returns an
@@ -315,6 +317,17 @@ func TestGetGlobMatches_LRU_Eviction(t *testing.T) {
 	afterLen := GlobCacheLen()
 	assert.LessOrEqual(t, afterLen, defaultGlobCacheMaxEntries, "LRU cache must not exceed max capacity")
 
+	// Verify that the seed entry was specifically evicted.
+	assert.False(t, GlobCacheContains(seedPattern), "seed entry must have been evicted by LRU")
+
+	// Repopulate the seed entry and confirm it causes a cache miss (was not present before).
+	evictionsBefore := GlobCacheEvictions()
+	_, err = GetGlobMatches(seedPattern)
+	require.NoError(t, err)
+	assert.True(t, GlobCacheContains(seedPattern), "seed entry must be back in cache after re-fetch")
+	// Repopulating should evict another entry, incrementing the counter further.
+	assert.Greater(t, GlobCacheEvictions(), evictionsBefore, "re-inserting seed must evict another entry")
+
 	// The eviction counter must have incremented at least once.
 	evictions := GlobCacheEvictions()
 	assert.Positive(t, evictions, "eviction counter must increment when LRU capacity is exceeded")
@@ -403,12 +416,13 @@ func TestGetGlobMatches_HitMissCounters(t *testing.T) {
 // TestGetGlobMatches_EmptyResultCachingDisabled verifies that when
 // ATMOS_FS_GLOB_CACHE_EMPTY=0 is set, empty results are not cached.
 func TestGetGlobMatches_EmptyResultCachingDisabled(t *testing.T) {
+	// Register cleanup BEFORE t.Setenv so it runs after env is restored (LIFO):
+	// env restore (from t.Setenv) runs first, then ResetGlobMatchesCache runs with
+	// the original env in place.
+	t.Cleanup(ResetGlobMatchesCache)
 	// Set the env var BEFORE applying config.
 	t.Setenv("ATMOS_FS_GLOB_CACHE_EMPTY", "0")
 	ApplyGlobCacheConfigForTest()
-	// Only reset cache in cleanup; t.Setenv restores the env var (LIFO) so subsequent
-	// tests that call ApplyGlobCacheConfigForTest() will see the restored unset value.
-	t.Cleanup(ResetGlobMatchesCache)
 
 	assert.False(t, GlobCacheEmptyEnabled(), "empty caching must be disabled when env var is 0")
 
@@ -472,12 +486,10 @@ func TestGetGlobMatches_RaceStress(t *testing.T) {
 // TestGetGlobMatches_EnvTTL verifies that ATMOS_FS_GLOB_CACHE_TTL is honoured.
 // A very short TTL means entries expire immediately, so every call is a miss.
 func TestGetGlobMatches_EnvTTL(t *testing.T) {
+	// Register cleanup BEFORE t.Setenv so it runs after env is restored (LIFO).
+	t.Cleanup(ResetGlobMatchesCache)
 	t.Setenv("ATMOS_FS_GLOB_CACHE_TTL", "1ns")
 	ApplyGlobCacheConfigForTest()
-	// Only reset the cache (not the config) in cleanup; the env restore from
-	// t.Setenv runs after this cleanup (LIFO), so ApplyGlobCacheConfigForTest
-	// in another test's setup will pick up the restored (empty) value.
-	t.Cleanup(ResetGlobMatchesCache)
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ttl.yaml"), []byte(""), 0o644))
@@ -556,62 +568,57 @@ func TestApplyGlobCacheConfig_InvalidInputsClamped(t *testing.T) {
 		wantMaxEntries int
 	}
 
-	const (
-		defaultTTL        = 5 * time.Minute
-		defaultMaxEntries = 1024
-	)
-
 	cases := []testCase{
 		// Zero values should fall back to defaults.
 		{
 			name:           "zero_TTL_falls_back_to_default",
 			ttlEnv:         "0s",
-			wantTTL:        defaultTTL,
-			wantMaxEntries: defaultMaxEntries,
+			wantTTL:        defaultGlobCacheTTL,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		{
 			name:           "zero_maxEntries_falls_back_to_default",
 			maxEntriesEnv:  "0",
-			wantTTL:        defaultTTL,
-			wantMaxEntries: defaultMaxEntries,
+			wantTTL:        defaultGlobCacheTTL,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		// Negative values should fall back to defaults.
 		{
 			name:           "negative_TTL_falls_back_to_default",
 			ttlEnv:         "-1m",
-			wantTTL:        defaultTTL,
-			wantMaxEntries: defaultMaxEntries,
+			wantTTL:        defaultGlobCacheTTL,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		{
 			name:           "negative_maxEntries_falls_back_to_default",
 			maxEntriesEnv:  "-5",
-			wantTTL:        defaultTTL,
-			wantMaxEntries: defaultMaxEntries,
+			wantTTL:        defaultGlobCacheTTL,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		// Unparseable values should fall back to defaults.
 		{
 			name:           "invalid_TTL_string_falls_back_to_default",
 			ttlEnv:         "not-a-duration",
-			wantTTL:        defaultTTL,
-			wantMaxEntries: defaultMaxEntries,
+			wantTTL:        defaultGlobCacheTTL,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		{
 			name:           "invalid_maxEntries_string_falls_back_to_default",
 			maxEntriesEnv:  "not-a-number",
-			wantTTL:        defaultTTL,
-			wantMaxEntries: defaultMaxEntries,
+			wantTTL:        defaultGlobCacheTTL,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		// Valid values should be accepted.
 		{
 			name:           "valid_TTL_accepted",
 			ttlEnv:         "10m",
 			wantTTL:        10 * time.Minute,
-			wantMaxEntries: defaultMaxEntries,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		{
 			name:           "valid_maxEntries_accepted",
 			maxEntriesEnv:  "256",
-			wantTTL:        defaultTTL,
+			wantTTL:        defaultGlobCacheTTL,
 			wantMaxEntries: 256,
 		},
 		// Values below the minimum should be clamped up, not rejected.
@@ -619,42 +626,48 @@ func TestApplyGlobCacheConfig_InvalidInputsClamped(t *testing.T) {
 			name:           "TTL_below_minimum_clamped_to_1s",
 			ttlEnv:         "100ms",
 			wantTTL:        time.Second,
-			wantMaxEntries: defaultMaxEntries,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		{
 			name:           "TTL_500ms_clamped_to_1s",
 			ttlEnv:         "500ms",
 			wantTTL:        time.Second,
-			wantMaxEntries: defaultMaxEntries,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 		{
 			name:           "maxEntries_below_minimum_clamped_to_16",
 			maxEntriesEnv:  "5",
-			wantTTL:        defaultTTL,
+			wantTTL:        defaultGlobCacheTTL,
 			wantMaxEntries: 16,
 		},
 		{
 			name:           "maxEntries_15_clamped_to_16",
 			maxEntriesEnv:  "15",
-			wantTTL:        defaultTTL,
+			wantTTL:        defaultGlobCacheTTL,
 			wantMaxEntries: 16,
 		},
 		{
 			name:           "maxEntries_exactly_16_accepted",
 			maxEntriesEnv:  "16",
-			wantTTL:        defaultTTL,
+			wantTTL:        defaultGlobCacheTTL,
 			wantMaxEntries: 16,
 		},
 		{
 			name:           "TTL_exactly_1s_accepted",
 			ttlEnv:         "1s",
 			wantTTL:        time.Second,
-			wantMaxEntries: defaultMaxEntries,
+			wantMaxEntries: defaultGlobCacheMaxEntries,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Register cleanup BEFORE t.Setenv so it runs after env is restored (LIFO):
+			// ApplyGlobCacheConfigForTest re-reads env (now restored) to reset config.
+			t.Cleanup(func() {
+				ApplyGlobCacheConfigForTest()
+				ResetGlobMatchesCache()
+			})
 			if tc.ttlEnv != "" {
 				t.Setenv("ATMOS_FS_GLOB_CACHE_TTL", tc.ttlEnv)
 			}
@@ -662,10 +675,6 @@ func TestApplyGlobCacheConfig_InvalidInputsClamped(t *testing.T) {
 				t.Setenv("ATMOS_FS_GLOB_CACHE_MAX_ENTRIES", tc.maxEntriesEnv)
 			}
 			ApplyGlobCacheConfigForTest()
-			t.Cleanup(func() {
-				ApplyGlobCacheConfigForTest()
-				ResetGlobMatchesCache()
-			})
 
 			assert.Equal(t, tc.wantTTL, GlobCacheTTL(), "TTL mismatch for env TTL=%q", tc.ttlEnv)
 			assert.Equal(t, tc.wantMaxEntries, GlobCacheMaxEntries(), "MaxEntries mismatch for env MAX=%q", tc.maxEntriesEnv)

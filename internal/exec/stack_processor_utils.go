@@ -1103,9 +1103,12 @@ func processYAMLConfigFileWithContextInternal(
 						)
 						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
 					} else {
-						// err == nil but importMatches is an empty slice (not nil): pkg/filesystem.GetGlobMatches
-						// guarantees a non-nil result, so the old "else if importMatches == nil" check was dead
-						// code. We reach this branch when no files matched and the call returned ([]string{}, nil).
+						// err == nil but importMatches is an empty or nil slice: u.GetGlobMatches
+						// (from pkg/utils) can return (nil, nil) when the underlying glob returns
+						// an empty non-nil slice, or (nil, err) for missing directories and glob
+						// errors. The len(importMatches) == 0 check above catches both cases,
+						// so we reach this branch when no files matched and the call returned
+						// (nil, nil) or ([]string{}, nil).
 						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
 							imp,
 							relativeFilePath,

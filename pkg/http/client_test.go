@@ -1015,9 +1015,7 @@ func TestWithGitHubHostMatcher_Precedence(t *testing.T) {
 				}, nil
 			})
 
-			if tc.gitHubAPIURL != "" {
-				t.Setenv("GITHUB_API_URL", tc.gitHubAPIURL)
-			}
+			t.Setenv("GITHUB_API_URL", tc.gitHubAPIURL)
 
 			opts := []ClientOption{
 				WithTransport(mockTransport),
