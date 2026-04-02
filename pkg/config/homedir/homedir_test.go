@@ -1094,9 +1094,9 @@ func TestExpand_DirError(t *testing.T) {
 	Reset()
 	defer Reset()
 
-	oldCache2 := GetDisableCache()
+	oldCache := GetDisableCache()
 	SetDisableCache(true)
-	defer SetDisableCache(oldCache2)
+	defer SetDisableCache(oldCache)
 
 	t.Setenv("HOME", "")
 	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
@@ -1128,9 +1128,9 @@ func TestDir_Error(t *testing.T) {
 	Reset()
 	defer Reset()
 
-	oldCache3 := GetDisableCache()
+	oldCache := GetDisableCache()
 	SetDisableCache(true)
-	defer SetDisableCache(oldCache3)
+	defer SetDisableCache(oldCache)
 
 	t.Setenv("HOME", "")
 	currentUserFunc = func() (*user.User, error) { return nil, errors.New("mock failure") }
