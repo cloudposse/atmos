@@ -747,6 +747,15 @@ var (
 	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
 	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
 
+	// Migration errors.
+	ErrMigrationPrerequisitesNotMet = errors.New("migration prerequisites not met")
+	ErrMigrationNotApplicable       = errors.New("migration is not applicable to this project")
+	ErrMigrationStepFailed          = errors.New("migration step failed")
+	ErrMigrationAborted             = errors.New("migration aborted by user")
+	ErrSSOConfigNotFound            = errors.New("aws-sso configuration not found")
+	ErrAccountMapNotFound           = errors.New("account map configuration not found")
+	ErrAwsTeamsDetected             = errors.New("aws-teams/aws-team-roles detected; SSO migration not applicable")
+
 	// Realm errors.
 	ErrFailedToComputeRealm = errors.New("failed to compute realm")
 	ErrInvalidRealm         = errors.New("invalid realm value")
