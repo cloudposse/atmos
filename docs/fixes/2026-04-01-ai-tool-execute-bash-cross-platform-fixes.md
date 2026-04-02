@@ -12,7 +12,59 @@
 
 ## Issues Fixed
 
-### 1. Nil `ProcessState` panic in `ExecuteAtmosCommandTool` (`execute_command.go`)
+### 1. macOS symlink path escaping scope check (`execute_bash.go`)
+
+**Symptom:** `TestExecuteBashCommandTool_Execute_SourcePathsAllowed` and any use of `cat`,
+`cp`, `mv`, `head`, `tail`, `diff`, `grep`, or `rm` with a path inside the project base
+directory fails on macOS with:
+
+```text
+command path argument is outside the allowed scope
+```
+
+**Root Cause:** On macOS, `/var` is a symlink to `/private/var`. When `resolveArg`
+calls `filepath.EvalSymlinks` on the file argument, it resolves the full real path
+(e.g., `/private/var/folders/.../readme.txt`). But `basePath` and `tmpDir` were
+left as unresolved symlink paths (e.g., `/var/folders/...`). The subsequent
+`filepath.Rel(basePath, absPath)` comparison then produced `../../private/var/...`
+which starts with `..`, causing the scope check to fail.
+
+The same issue existed in both `validateSourcePaths` and `validateRmPaths`.
+
+Additionally, the `rm` path-scope guard and the `sourceScopedCommands` lookup used
+`args[0]` directly rather than `filepath.Base(args[0])`, so full-path invocations
+like `/bin/cat file` would skip the scope check entirely.
+
+**Fix:** In both validation functions, resolve symlinks on `basePath` and `tmpDir`
+before computing `filepath.Rel`. Changed scope guards to use `filepath.Base(args[0])`
+to be consistent with `validateCommand`:
+
+```go
+// Resolve symlinks in basePath and tmpDir so that the scope comparison works
+// correctly on systems where the temp directory contains symlinks
+// (e.g., /var → /private/var on macOS).
+if realBase, err := filepath.EvalSymlinks(basePath); err == nil {
+    basePath = realBase
+}
+tmpDir := os.TempDir()
+if realTmp, err := filepath.EvalSymlinks(tmpDir); err == nil {
+    tmpDir = realTmp
+}
+```
+
+```go
+// Before:
+if args[0] == "rm" { ... }
+if sourceScopedCommands[args[0]] { ... }
+
+// After:
+if filepath.Base(args[0]) == "rm" { ... }
+if sourceScopedCommands[filepath.Base(args[0])] { ... }
+```
+
+---
+
+### 2. Nil `ProcessState` panic in `ExecuteAtmosCommandTool` (`execute_command.go`)
 
 **Symptom:** Calling `execute_atmos_command` with a binary that fails to start (e.g., binary
 not found, invalid working directory) panics at runtime:

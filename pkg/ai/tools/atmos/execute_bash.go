@@ -348,7 +348,16 @@ func validateCommand(args []string, command string, allowedCmds map[string]bool,
 // symlink-based path traversal attacks.
 func (t *ExecuteBashCommandTool) validateRmPaths(args []string, workingDir string) *tools.Result {
 	basePath := t.atmosConfig.BasePath
+	// Resolve symlinks in basePath and tmpDir so that the scope comparison works
+	// correctly on systems where the temp directory contains symlinks
+	// (e.g., /var → /private/var on macOS).
+	if realBase, err := filepath.EvalSymlinks(basePath); err == nil {
+		basePath = realBase
+	}
 	tmpDir := os.TempDir()
+	if realTmp, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = realTmp
+	}
 
 	for _, arg := range args[1:] {
 		if strings.HasPrefix(arg, "-") {
@@ -382,7 +391,16 @@ func (t *ExecuteBashCommandTool) validateRmPaths(args []string, workingDir strin
 // Symlinks are resolved before the scope check to prevent path traversal attacks.
 func (t *ExecuteBashCommandTool) validateSourcePaths(args []string, workingDir string) *tools.Result {
 	basePath := t.atmosConfig.BasePath
+	// Resolve symlinks in basePath and tmpDir so that the scope comparison works
+	// correctly on systems where the temp directory contains symlinks
+	// (e.g., /var → /private/var on macOS).
+	if realBase, err := filepath.EvalSymlinks(basePath); err == nil {
+		basePath = realBase
+	}
 	tmpDir := os.TempDir()
+	if realTmp, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = realTmp
+	}
 
 	for _, arg := range args[1:] {
 		if strings.HasPrefix(arg, "-") {
@@ -496,7 +514,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 	workingDir := t.resolveWorkingDir(params)
 
 	// Enforce path-scope for rm: targets must be within basePath or os.TempDir().
-	if args[0] == "rm" {
+	if filepath.Base(args[0]) == "rm" {
 		if errResult := t.validateRmPaths(args, workingDir); errResult != nil {
 			return errResult, nil
 		}
@@ -504,7 +522,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 
 	// Enforce path-scope for read-type commands: source and destination paths
 	// must be within basePath or os.TempDir().
-	if sourceScopedCommands[args[0]] {
+	if sourceScopedCommands[filepath.Base(args[0])] {
 		if errResult := t.validateSourcePaths(args, workingDir); errResult != nil {
 			return errResult, nil
 		}
