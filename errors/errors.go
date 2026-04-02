@@ -1014,6 +1014,7 @@ var (
 	ErrAISecurityInvalidFramework = errors.New("invalid compliance framework: valid values are cis-aws, pci-dss, soc2, hipaa, nist")
 	ErrAISecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv")
 	ErrAISecurityAnalysisFailed   = errors.New("AI analysis of security findings failed")
+	ErrAWSCredentialsNotValid     = errors.New("AWS credentials are not configured or have expired")
 
 	// CLI provider errors.
 	ErrCLIProviderBinaryNotFound    = errors.New("CLI provider binary not found on PATH")

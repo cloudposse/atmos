@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -52,6 +53,10 @@ var complianceReportCmd = &cobra.Command{
 		framework := v.GetString("framework")
 		formatStr := v.GetString("format")
 		fileOutput := v.GetString("file")
+		controlsStr := v.GetString("controls")
+
+		// Parse comma-separated control IDs into a set for filtering.
+		controlFilter := parseControlFilter(controlsStr)
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -82,10 +87,18 @@ var complianceReportCmd = &cobra.Command{
 			}
 		}
 
+		// Validate AWS credentials early before attempting any API calls.
+		credCtx, credCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer credCancel()
+		if err := validateAWSCredentials(credCtx, ""); err != nil {
+			return err
+		}
+
 		log.Debug("Running compliance report",
 			"stack", stack,
 			"framework", framework,
 			"format", formatStr,
+			"controls", controlsStr,
 		)
 
 		// Create context with timeout.
@@ -141,6 +154,11 @@ var complianceReportCmd = &cobra.Command{
 				continue
 			}
 
+			// Filter report to specific control IDs if --controls was provided.
+			if len(controlFilter) > 0 {
+				report = filterComplianceReport(report, controlFilter)
+			}
+
 			if err := renderer.RenderComplianceReport(output, report); err != nil {
 				return err
 			}
@@ -177,6 +195,47 @@ func init() {
 
 	complianceCmd.AddCommand(complianceReportCmd)
 	awsCmd.AddCommand(complianceCmd)
+}
+
+// parseControlFilter parses a comma-separated list of control IDs into a set.
+// Returns nil if the input is empty, meaning no filtering should be applied.
+func parseControlFilter(controlsStr string) map[string]bool {
+	controlsStr = strings.TrimSpace(controlsStr)
+	if controlsStr == "" {
+		return nil
+	}
+	filter := make(map[string]bool)
+	for _, id := range strings.Split(controlsStr, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			filter[id] = true
+		}
+	}
+	return filter
+}
+
+// filterComplianceReport returns a copy of the report containing only the controls
+// whose IDs match the given filter set. Counts are recalculated accordingly.
+func filterComplianceReport(report *security.ComplianceReport, controlFilter map[string]bool) *security.ComplianceReport {
+	filtered := make([]security.ComplianceControl, 0, len(report.FailingDetails))
+	for _, ctrl := range report.FailingDetails {
+		if controlFilter[ctrl.ControlID] {
+			filtered = append(filtered, ctrl)
+		}
+	}
+
+	// Build a new report with recalculated counts.
+	filteredReport := *report
+	filteredReport.FailingDetails = filtered
+	filteredReport.FailingControls = len(filtered)
+	filteredReport.TotalControls = len(filtered) + report.PassingControls
+	if filteredReport.TotalControls > 0 {
+		const percentMultiplier = 100
+		filteredReport.ScorePercent = float64(report.PassingControls) / float64(filteredReport.TotalControls) * percentMultiplier
+	} else {
+		filteredReport.ScorePercent = 0
+	}
+	return &filteredReport
 }
 
 // validateFramework checks that the framework name is valid.

@@ -190,9 +190,15 @@ func (f *awsFindingFetcher) FetchComplianceStatus(ctx context.Context, framework
 		return nil, err
 	}
 
+	// Count total controls for this standard to compute accurate compliance score.
+	totalControls, err := f.countTotalControls(ctx, client, standardARN)
+	if err != nil {
+		log.Debug("Failed to count total controls, falling back to failing count", "error", err)
+		totalControls = 0
+	}
+
 	// Build compliance report from findings.
-	report := buildComplianceReport(findings, framework, title, stack)
-	_ = standardARN // Used for standard resolution above.
+	report := buildComplianceReport(findings, framework, title, stack, totalControls)
 
 	// Store report in cache.
 	f.cache.SetCompliance(framework, stack, report)
@@ -419,8 +425,39 @@ func frameworkToTitle(framework string) string {
 	return framework
 }
 
+// controlsPageSize is the max results per DescribeStandardsControls API call.
+const controlsPageSize = 100
+
+// countTotalControls paginates through DescribeStandardsControls to count all controls for a standard.
+func (f *awsFindingFetcher) countTotalControls(ctx context.Context, client SecurityHubAPI, subscriptionARN string) (int, error) {
+	defer perf.Track(nil, "security.awsFindingFetcher.countTotalControls")()
+
+	var total int
+	var nextToken *string
+
+	for {
+		output, err := client.DescribeStandardsControls(ctx, &securityhub.DescribeStandardsControlsInput{
+			StandardsSubscriptionArn: &subscriptionARN,
+			MaxResults:               aws.Int32(controlsPageSize),
+			NextToken:                nextToken,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("%w: DescribeStandardsControls: %w", errUtils.ErrAISecurityFetchFailed, err)
+		}
+
+		total += len(output.Controls)
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return total, nil
+}
+
 // buildComplianceReport constructs a ComplianceReport from Security Hub findings.
-func buildComplianceReport(findings []Finding, framework, title, stack string) *ComplianceReport {
+func buildComplianceReport(findings []Finding, framework, title, stack string, totalControls int) *ComplianceReport {
 	report := &ComplianceReport{
 		GeneratedAt:    time.Now().UTC(),
 		Stack:          stack,
@@ -451,9 +488,16 @@ func buildComplianceReport(findings []Finding, framework, title, stack string) *
 	}
 
 	report.FailingControls = len(report.FailingDetails)
-	// Total controls is estimated from failing + a reasonable pass ratio.
-	// The actual total comes from DescribeStandardsControls which requires the subscription ARN.
-	report.TotalControls = report.FailingControls
+
+	// Use the actual total from DescribeStandardsControls when available.
+	// Fall back to failing count if the API total is unavailable or less than failing.
+	if totalControls >= report.FailingControls {
+		report.TotalControls = totalControls
+	} else {
+		report.TotalControls = report.FailingControls
+	}
+
+	report.PassingControls = report.TotalControls - report.FailingControls
 	if report.TotalControls > 0 {
 		report.ScorePercent = float64(report.PassingControls) / float64(report.TotalControls) * percentMultiplier
 	}

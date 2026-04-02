@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,6 +18,7 @@ import (
 type mockSecurityHubClient struct {
 	findings  []shtypes.AwsSecurityFinding
 	standards []shtypes.StandardsSubscription
+	controls  []shtypes.StandardsControl
 	err       error
 }
 
@@ -39,7 +41,12 @@ func (m *mockSecurityHubClient) GetEnabledStandards(_ context.Context, _ *securi
 }
 
 func (m *mockSecurityHubClient) DescribeStandardsControls(_ context.Context, _ *securityhub.DescribeStandardsControlsInput, _ ...func(*securityhub.Options)) (*securityhub.DescribeStandardsControlsOutput, error) {
-	return &securityhub.DescribeStandardsControlsOutput{}, nil
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &securityhub.DescribeStandardsControlsOutput{
+		Controls: m.controls,
+	}, nil
 }
 
 func TestNormalizeSecurityHubFinding(t *testing.T) {
@@ -250,6 +257,14 @@ func TestFrameworkToStandardID(t *testing.T) {
 }
 
 func TestFetchComplianceStatus_WithMock(t *testing.T) {
+	// Create 10 mock controls to simulate the total standard controls.
+	var controls []shtypes.StandardsControl
+	for i := 0; i < 10; i++ {
+		controls = append(controls, shtypes.StandardsControl{
+			StandardsControlArn: aws.String(fmt.Sprintf("arn:aws:securityhub:us-east-1:123:control/cis-aws/%d", i+1)),
+		})
+	}
+
 	mock := &mockSecurityHubClient{
 		findings: []shtypes.AwsSecurityFinding{
 			{
@@ -273,6 +288,7 @@ func TestFetchComplianceStatus_WithMock(t *testing.T) {
 				StandardsArn: aws.String("arn:aws:securityhub:::standards/cis-aws-foundations-benchmark/v/1.2.0"),
 			},
 		},
+		controls: controls,
 	}
 
 	fetcher := &awsFindingFetcher{
@@ -289,6 +305,9 @@ func TestFetchComplianceStatus_WithMock(t *testing.T) {
 	assert.Equal(t, "CIS AWS Foundations Benchmark", report.FrameworkTitle)
 	assert.Equal(t, "prod-ue1", report.Stack)
 	assert.Equal(t, 1, report.FailingControls)
+	assert.Equal(t, 10, report.TotalControls)
+	assert.Equal(t, 9, report.PassingControls)
+	assert.InDelta(t, 90.0, report.ScorePercent, 0.01)
 }
 
 func TestFetchComplianceStatus_UnknownFramework(t *testing.T) {
@@ -597,11 +616,14 @@ func TestBuildComplianceReport(t *testing.T) {
 		},
 	}
 
-	report := buildComplianceReport(findings, "cis-aws", "CIS AWS Foundations Benchmark", "prod-us-east-1")
+	report := buildComplianceReport(findings, "cis-aws", "CIS AWS Foundations Benchmark", "prod-us-east-1", 20)
 
 	assert.Equal(t, "cis-aws", report.Framework)
 	assert.Equal(t, "CIS AWS Foundations Benchmark", report.FrameworkTitle)
 	assert.Equal(t, "prod-us-east-1", report.Stack)
 	assert.Equal(t, 2, report.FailingControls) // Deduplicated by control ID.
 	assert.Len(t, report.FailingDetails, 2)
+	assert.Equal(t, 20, report.TotalControls)
+	assert.Equal(t, 18, report.PassingControls)
+	assert.InDelta(t, 90.0, report.ScorePercent, 0.01)
 }

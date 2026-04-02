@@ -1,7 +1,7 @@
 # Atmos AWS Security & Compliance - Product Requirements Document
 
 **Status:** Phase 1-5 Complete, Remaining Work Planned
-**Version:** 0.6
+**Version:** 0.7
 **Last Updated:** 2026-04-02
 
 ---
@@ -1035,6 +1035,32 @@ for error handling and reference `aws.security.enabled` config.
     The flag is now inherited by all subcommands. Currently consumed by `atmos aws security analyze`;
     future PR will extend to all commands for AI-powered output analysis.
 
+### Bug Fixes and Improvements (2026-04-02)
+
+18. **`--controls` flag wired up** — ✅ The `--controls` flag in `atmos aws compliance report`
+    was registered but not used. Now parses comma-separated control IDs, filters the compliance
+    report to only matching controls, and recalculates score. Added `parseControlFilter()` and
+    `filterComplianceReport()` functions in `cmd/aws/compliance.go`.
+
+19. **Compliance `total_controls` fix** — ✅ `TotalControls` was set equal to `FailingControls`,
+    making `PassingControls` always 0 and `ScorePercent` always 0%. Fixed by adding
+    `countTotalControls()` in `finding_fetcher.go` that paginates through
+    `DescribeStandardsControls` API to get the actual total. Graceful fallback to failing count
+    on API error. `buildComplianceReport()` now accepts `totalControls` parameter.
+
+20. **AWS credential validation** — ✅ Added early credential check via STS `GetCallerIdentity`
+    before the pipeline starts in both `security.go` and `compliance.go`. New shared helper
+    `validateAWSCredentials()` in `cmd/aws/credentials.go`. Uses error builder pattern with
+    `ErrAWSCredentialsNotValid` sentinel and actionable hints (check config, run `aws sts
+    get-caller-identity`, run `atmos auth login`).
+
+21. **Test coverage improvement** — ✅ Added 30+ new tests across `security_test.go` and
+    `compliance_test.go`. All testable functions now at 100% coverage. Tests cover: all flag
+    parsing edge cases, error sentinel types, severity/source/format/framework validation,
+    report building with various inputs, control filtering, shorthand aliases.
+    Remaining uncovered: RunE handlers (require real AWS), `validateAWSCredentials` (requires
+    real STS), `init` panic branches (unreachable). Coverage: `pkg/aws/security/` at 91.0%.
+
 ### Remaining Work (Future PRs)
 
 - **Terraform state search (Path B Strategy 1)** — Implement state file scanning for tagless
@@ -1042,8 +1068,6 @@ for error handling and reference `aws.security.enabled` config.
 - **AI-assisted inference (Path B Strategy 4)** — Send unmapped findings to AI for component
   inference when heuristic strategies fail.
 - **Integration tests** — End-to-end tests with real AWS API calls (requires test account).
-- **`cmd/aws/` coverage improvement** — RunE handlers need integration-level tests to improve
-  from 33.5% coverage.
 
 ### Post-Implementation Analysis (2026-04-02)
 
@@ -1162,6 +1186,7 @@ The following sentinel errors are defined in `errors/errors.go` (lines 946-955):
 | `ErrAISecurityInvalidFramework` | `invalid compliance framework value` | User passes unknown framework                                            |
 | `ErrAISecurityInvalidFormat`    | `invalid output format value`        | User passes unknown format (not markdown/json/yaml/csv)                  |
 | `ErrAISecurityAnalysisFailed`   | `AI analysis failed`                 | AI provider returns an error during analysis                             |
+| `ErrAWSCredentialsNotValid`     | `AWS credentials not configured/expired` | STS GetCallerIdentity fails before pipeline starts               |
 
 ### Error Wrapping Pattern
 
@@ -1221,15 +1246,17 @@ Mock generation uses `go.uber.org/mock/mockgen` with `//go:generate` directives:
 
 | Test File                                   | Tests | Coverage | Notes                                                     |
 |---------------------------------------------|-------|----------|-----------------------------------------------------------|
-| `pkg/aws/security/finding_fetcher_test.go`  | Yes   | ~92%     | Mocked AWS SDK clients                                    |
-| `pkg/aws/security/component_mapper_test.go` | Yes   | ~90%     | Tag-based and heuristic mapping paths                     |
-| `pkg/aws/security/report_renderer_test.go`  | Yes   | ~95%     | All four output formats                                   |
-| `pkg/aws/security/analyzer_test.go`         | Yes   | ~88%     | Manual mock `mockAIClient` for AI provider                |
-| `pkg/aws/security/cache_test.go`            | Yes   | ~90%     | Cache TTL, invalidation, concurrency                      |
-| `cmd/aws/security_test.go`                  | 37    | ~34%     | Parse functions, report building, subcommand registration |
-| `cmd/aws/compliance_test.go`                | 9     | ~34%     | Framework validation, subcommand registration             |
+| `pkg/aws/security/finding_fetcher_test.go`  | 17+   | ~92%     | Mocked AWS SDK clients, total controls fix                |
+| `pkg/aws/security/component_mapper_test.go` | 11    | ~90%     | Tag-based and heuristic mapping paths                     |
+| `pkg/aws/security/report_renderer_test.go`  | 18    | ~95%     | All four output formats                                   |
+| `pkg/aws/security/analyzer_test.go`         | 15    | ~88%     | Manual mock `mockAIClient` for AI provider                |
+| `pkg/aws/security/cache_test.go`            | 9     | ~90%     | Cache TTL, invalidation, concurrency                      |
+| `cmd/aws/security_test.go`                  | 50+   | 100%*    | All parsing, validation, flags, report building           |
+| `cmd/aws/compliance_test.go`                | 25+   | 100%*    | Framework validation, control filtering, flags            |
 
-**Overall coverage:** `pkg/aws/security/` at 91.8%, `cmd/aws/` at 33.5%.
+\* All testable functions at 100%. RunE handlers and `validateAWSCredentials` require real AWS and are excluded.
+
+**Overall coverage:** `pkg/aws/security/` at 91.0%, `cmd/aws/` testable functions at 100%.
 
 ### Testing Approach
 

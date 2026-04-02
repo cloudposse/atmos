@@ -112,6 +112,13 @@ var securityAnalyzeCmd = &cobra.Command{
 			}
 		}
 
+		// Validate AWS credentials early before attempting any API calls.
+		credCtx, credCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer credCancel()
+		if err := validateAWSCredentials(credCtx, region); err != nil {
+			return err
+		}
+
 		opts := security.QueryOptions{
 			Stack:       stack,
 			Component:   component,
