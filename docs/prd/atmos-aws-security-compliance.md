@@ -1,8 +1,8 @@
 # Atmos AWS Security & Compliance - Product Requirements Document
 
-**Status:** In Progress
-**Version:** 0.5
-**Last Updated:** 2026-03-10
+**Status:** Phase 1-5 Complete, Remaining Work Planned
+**Version:** 0.6
+**Last Updated:** 2026-04-02
 
 ---
 
@@ -87,7 +87,7 @@ notifications, or compliance reporting tools.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│                 atmos aws security analyze <stack>                    │
+│                 atmos aws security analyze <stack>                  │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐   │
@@ -1037,9 +1037,6 @@ for error handling and reference `aws.security.enabled` config.
 
 ### Remaining Work (Future PRs)
 
-- **Global `--ai` integration with all commands** — When `--ai` is passed to any command, send
-  command output to AI provider for analysis/description. Requires intercepting command output
-  in `cmd/root.go` PersistentPostRun.
 - **Terraform state search (Path B Strategy 1)** — Implement state file scanning for tagless
   mapping. Reuse `!terraform.state` infrastructure.
 - **AI-assisted inference (Path B Strategy 4)** — Send unmapped findings to AI for component
@@ -1047,8 +1044,101 @@ for error handling and reference `aws.security.enabled` config.
 - **Integration tests** — End-to-end tests with real AWS API calls (requires test account).
 - **`cmd/aws/` coverage improvement** — RunE handlers need integration-level tests to improve
   from 33.5% coverage.
-- **Interactive AI Q&A** — `atmos ai chat` with security context for follow-up questions about
-  findings.
+
+### Post-Implementation Analysis (2026-04-02)
+
+Since this PRD was written (2026-03-10), several features shipped that overlap with or
+complement this implementation.
+
+#### AWS MCP Security Server — Detailed Research
+
+The `awslabs.well-architected-security-mcp-server` exposes 6 tools:
+
+| Tool | What It Does | Returns Findings? |
+|---|---|---|
+| `CheckSecurityServices` | Checks if GuardDuty, SecurityHub, Inspector, Access Analyzer, Macie, Trusted Advisor are **enabled** | No — only enabled/disabled status |
+| `GetSecurityFindings` | Fetches **actual finding objects** from GuardDuty, SecurityHub, Inspector, Access Analyzer, Macie, Trusted Advisor | **Yes — full raw finding objects** |
+| `GetStoredSecurityContext` | Returns cached results from a previous `CheckSecurityServices` call | No |
+| `CheckStorageEncryption` | Checks S3, EBS, RDS, DynamoDB, EFS encryption status via Resource Explorer | No — pass/fail per resource |
+| `CheckNetworkSecurity` | Checks ELB, VPC, API Gateway, CloudFront TLS compliance | No — pass/fail per resource |
+| `ListServicesInRegion` | Enumerates which AWS services have resources in a region | No |
+
+**Key finding:** `GetSecurityFindings` calls the same AWS APIs we call (`securityhub:GetFindings`,
+`guardduty:GetFindings`, `inspector2:ListFindings`) and returns **complete raw finding objects** —
+not just counts or posture scores. Default filter: last 30 days, HIGH/CRITICAL severity, up
+to 100 findings per service.
+
+Other AWS MCP servers:
+- `iam-mcp-server` — Full IAM CRUD (list/create/delete users, roles, policies). Read-write, not findings-focused.
+- `cloudtrail-mcp-server` — CloudTrail event lookup + Lake SQL queries. Returns audit log records, not findings.
+
+No separate `securityhub-mcp-server` was ever published — Security Hub access is inside
+`well-architected-security-mcp-server`.
+
+#### Decision: Use Our Own Implementation
+
+We evaluated three approaches and chose **direct AWS SDK calls** over MCP delegation:
+
+**Approach A (chosen): Direct AWS SDK calls in `pkg/aws/security/`**
+- Full control over filtering (severity, source, compliance framework, max findings)
+- No external dependencies (no `uvx`, no MCP server subprocess)
+- Same AWS APIs, fewer layers
+- Finding-to-code mapping happens in the same process with access to Atmos internals
+
+**Approach B (rejected): Delegate finding retrieval to the AWS MCP server**
+- Install MCP server → start subprocess → JSON-RPC over stdio → parse response
+- Hardcoded defaults in MCP server (30 days, 100 findings, HIGH/CRITICAL only)
+- Extra dependency on `uvx` and the MCP server package
+- Still need our code for the mapping step (MCP server has no Atmos knowledge)
+- More moving parts: subprocess lifecycle, health checks, error handling
+- No benefit over direct SDK calls — same APIs underneath
+
+**Approach C (rejected): Mixed — MCP for fetching, our code for mapping**
+- Combines worst of both: MCP complexity for fetching + custom code for mapping
+- The mapping step needs Atmos-internal data (stacks, components, state files)
+  that only runs in-process, so we'd still write most of the code ourselves
+- MCP server adds a subprocess, stdio protocol, and JSON-RPC overhead for
+  the same data we can get with a direct SDK call
+
+**Rationale:** The AWS MCP server is useful for conversational ad-hoc queries via
+`atmos ai ask` ("is GuardDuty enabled?", "show me critical findings"). But for
+structured, filterable, mappable finding analysis, direct SDK calls are simpler,
+faster, and give us full control. The finding-to-code mapping — our unique value —
+requires Atmos-internal data that no external MCP server can access.
+
+#### Comparison: Our Code vs AWS MCP Server
+
+| Capability | AWS MCP Server | Our `pkg/aws/security/` |
+|---|---|---|
+| Fetch raw findings | Yes | Yes |
+| Filter by severity/source | Hardcoded defaults | User-configurable |
+| Compliance framework filtering | No | Yes (CIS, PCI-DSS, SOC2, HIPAA, NIST) |
+| **Map finding → Atmos component** | **No** | **Yes (tag-based + heuristic)** |
+| **Map finding → Terraform source** | **No** | **Yes** |
+| **Map finding → stack config** | **No** | **Yes** |
+| Generate remediation with IaC context | No | Yes (with `--ai`) |
+| Output formats (JSON/YAML/CSV/MD) | No (raw API response) | Yes (all four) |
+| Caching | No | Yes |
+| Works without AI provider | Needs AI to interpret raw data | Yes (pure CLI output) |
+| External dependencies | uvx + MCP server package | None (AWS SDK only) |
+
+#### Complementary Usage
+
+**MCP servers** are best for conversational, ad-hoc security queries:
+```bash
+atmos ai ask "Is GuardDuty enabled in all regions?"
+atmos ai ask "Show me the top 5 critical findings"
+atmos ai chat --mcp aws-security
+```
+
+**Our commands** are best for structured, actionable analysis:
+```bash
+atmos aws security analyze --stack prod-us-east-1
+atmos aws security analyze --stack prod-us-east-1 --ai
+atmos aws compliance report --framework cis-aws --format json
+```
+
+Both can coexist in the same `atmos.yaml` — they serve different workflows.
 
 ---
 
