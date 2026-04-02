@@ -38,7 +38,7 @@ ai:
 </File>
 
 ```bash
-brew install claude && claude auth login
+brew install --cask claude-code && claude auth login
 atmos ai ask "What did we spend on EC2 last month?"
 ```
 
@@ -63,14 +63,14 @@ Each provider uses its native config format:
 
 - **Claude Code** — temp `.mcp.json` via `--mcp-config`
 - **Codex CLI** — `~/.codex/config.toml` (backup/restore after exit)
-- **Gemini CLI** — `.gemini/settings.json` in `cwd`
+- **Gemini CLI** — `.gemini/settings.json` in the current working directory
 
 Auth-requiring servers are wrapped with `atmos auth exec -i <identity>`. Toolchain PATH
 and `ATMOS_*` env vars are injected automatically.
 
 ## See It in Action
 
-> All outputs below are from a real AWS account.
+> Outputs below are from a production setup with 8 AWS MCP servers configured.
 
 ### Claude Code — Security Posture
 
@@ -173,7 +173,7 @@ atmos ai ask --provider anthropic "Describe the vpc component"
 ## Try It
 
 <ActionCard title="Example: AI with Claude Code">
-    Complete example with Claude Code CLI provider, 8 AWS MCP servers, and automatic auth.
+    Complete example with Claude Code CLI provider, AWS MCP servers, and automatic auth.
     <div>
       <PrimaryCTA to="/examples/ai-claude-code">Browse Example</PrimaryCTA>
     </div>
