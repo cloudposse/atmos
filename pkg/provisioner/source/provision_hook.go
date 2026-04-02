@@ -25,6 +25,13 @@ const HookEventBeforeTerraformInit = provisioner.HookEvent("before.terraform.ini
 // DirPermissions is the default permission mode for directories.
 const DirPermissions = 0o755
 
+// invocationDoneKey is the componentConfig key set after AutoProvisionSource completes
+// (whether it provisioned or skipped). It prevents re-provisioning within the same command
+// invocation when the source provisioner is called both from resolveAndProvisionComponentPath
+// and from the before.terraform.init hook (prepareInitExecution). Without this guard a zero
+// TTL deletes the varfiles and backend config written between the two calls.
+const invocationDoneKey = "_atmos_source_provisioned"
+
 func init() {
 	// Register source provisioner to run before terraform init.
 	// This enables JIT (Just-in-Time) source vendoring on first use.
@@ -64,7 +71,7 @@ func AutoProvisionSource(
 	componentType string,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
-) error {
+) (retErr error) {
 	defer perf.Track(atmosConfig, "source.AutoProvisionSource")()
 
 	sourceSpec, component, err := extractSourceAndComponent(componentConfig)
@@ -74,6 +81,24 @@ func AutoProvisionSource(
 	if sourceSpec == nil {
 		return nil // No source configured - skip.
 	}
+
+	// Guard against double-invocation within the same command lifecycle.
+	// AutoProvisionSource is called both directly (from resolveAndProvisionComponentPath)
+	// and indirectly via the before.terraform.init hook (from prepareInitExecution).
+	// Without this check a zero TTL would delete varfiles and backend configs that were
+	// written to the workdir between the two calls, causing the subprocess to fail with
+	// "file does not exist" errors.  Once this function completes (provision or skip),
+	// no further provisioning should happen for this invocation.
+	if _, done := componentConfig[invocationDoneKey]; done {
+		return nil
+	}
+	// Mark as complete when this call returns successfully so any subsequent call
+	// (e.g., the before.terraform.init hook) is a no-op for this invocation.
+	defer func() {
+		if retErr == nil {
+			componentConfig[invocationDoneKey] = struct{}{}
+		}
+	}()
 
 	// Apply global TTL default if not set per-component.
 	applyGlobalTTLDefault(sourceSpec, atmosConfig, componentType)

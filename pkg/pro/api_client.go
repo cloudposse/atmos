@@ -28,7 +28,6 @@ const (
 	logKeyURL                        = "url"
 	logKeyOperation                  = "operation"
 	logKeyRequest                    = "request"
-	errMessageFormat                 = "%w: %s" // Error format for wrapping with message
 	logKeyStatus                     = "status"
 	logKeySuccess                    = "success"
 	logKeyTraceID                    = "trace_id"
@@ -92,6 +91,11 @@ type AtmosProAPIClient struct {
 	BaseAPIEndpoint string
 	BaseURL         string
 	HTTPClient      *http.Client
+	// atmosConfig is stored for token refresh on 401 retries. Nil when created via NewAtmosProAPIClient.
+	atmosConfig *schema.AtmosConfiguration
+	// useOIDC indicates the client was created via OIDC exchange (not a static token),
+	// meaning token refresh is possible on 401 errors.
+	useOIDC         bool
 	MaxPayloadBytes int // Configurable max payload size before chunking. 0 uses default.
 }
 
@@ -144,14 +148,17 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 		return nil, fmt.Errorf("%w: environment variable: %s", errUtils.ErrOIDCWorkspaceIDRequired, cfg.AtmosProWorkspaceIDEnvVarName)
 	}
 
-	// Exchange OIDC token for Atmos token
+	// Exchange OIDC token for Atmos token.
 	apiToken, err = exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspaceID)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrOIDCTokenExchangeFailed, err)
 	}
 
 	client := NewAtmosProAPIClient(baseURL, baseAPIEndpoint, apiToken)
+	client.atmosConfig = atmosConfig
+	client.useOIDC = true
 	client.MaxPayloadBytes = maxPayloadBytes
+
 	return client, nil
 }
 
@@ -167,10 +174,39 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 	return req, nil
 }
 
+// RefreshToken re-exchanges the OIDC token for a fresh Atmos Pro JWT.
+// This is used by retry logic when a 401 suggests the original JWT was signed
+// by a different deployment instance. Returns a no-op nil error when the client
+// was created with a static token (no OIDC).
+func (c *AtmosProAPIClient) RefreshToken() error {
+	if !c.useOIDC || c.atmosConfig == nil {
+		// Static token — nothing to refresh.
+		return nil
+	}
+
+	oidcToken, err := getGitHubOIDCToken(c.atmosConfig.Settings.Pro.GithubOIDC)
+	if err != nil {
+		return errors.Join(errUtils.ErrTokenRefreshFailed, err)
+	}
+
+	workspaceID := c.atmosConfig.Settings.Pro.WorkspaceID
+	newToken, err := exchangeOIDCTokenForAtmosToken(c.BaseURL, c.BaseAPIEndpoint, oidcToken, workspaceID)
+	if err != nil {
+		return errors.Join(errUtils.ErrTokenRefreshFailed, err)
+	}
+
+	c.APIToken = newToken
+	log.Debug("Refreshed Atmos Pro API token via OIDC re-exchange.")
+
+	return nil
+}
+
 // UploadAffectedStacks uploads information about affected stacks.
 // Large payloads are automatically split into chunks to stay within server body size limits.
+// Each chunk is retried on transient 401/5xx failures with exponential backoff, refreshing
+// the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksRequest) error {
-	url := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
+	endpoint := fmt.Sprintf("%s/%s/affected-stacks", c.BaseURL, c.BaseAPIEndpoint)
 
 	// Estimate metadata overhead (everything except the stacks array).
 	overheadDTO := dtos.UploadAffectedStacksRequest{
@@ -199,7 +235,7 @@ func (c *AtmosProAPIClient) UploadAffectedStacks(dto *dtos.UploadAffectedStacksR
 			chunkDTO.BatchIndex = &batch.BatchIndex
 			chunkDTO.BatchTotal = &batch.BatchTotal
 		}
-		return c.sendAffectedStacksRequest(url, chunkDTO)
+		return c.sendAffectedStacksRequest(endpoint, chunkDTO)
 	})
 }
 
@@ -210,20 +246,24 @@ func (c *AtmosProAPIClient) sendAffectedStacksRequest(url string, dto *dtos.Uplo
 		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
-	}
-
 	log.Debug("Uploading affected components and stacks.", logKeyURL, url)
 
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
-	}
-	defer resp.Body.Close()
+	// Wrap the HTTP call in retry logic to handle transient 401/5xx failures.
+	err = doWithRetry("UploadAffectedStacks", func() error {
+		req, reqErr := getAuthenticatedRequest(c, "POST", url, bytes.NewBuffer(data))
+		if reqErr != nil {
+			return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+		}
 
-	if err := handleAPIResponse(resp, "UploadAffectedStacks"); err != nil {
+		resp, doErr := c.HTTPClient.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+		if doErr != nil {
+			return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
+		}
+		defer resp.Body.Close()
+
+		return handleAPIResponse(resp, "UploadAffectedStacks")
+	}, c, defaultRetryConfig())
+	if err != nil {
 		return errors.Join(errUtils.ErrFailedToUploadStacks, err)
 	}
 
@@ -256,23 +296,33 @@ func (c *AtmosProAPIClient) doStackLockAction(params *schema.StackLockActionPara
 	}
 
 	if err := json.Unmarshal(b, params.Out); err != nil {
+		// If we can't parse the response as JSON, provide enriched errors for error status codes
+		// so users still get troubleshooting hints on lock/unlock failures.
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			enrichedErr := errUtils.Build(errUtils.ErrFailedToUnmarshalAPIResponse).
+				WithCausef("HTTP status: %s", resp.Status).
+				WithContext("operation", params.Op).
+				WithHint("The API returned an unexpected response format. See troubleshooting: https://atmos-pro.com/docs/learn/troubleshooting").
+				Err()
+			return errors.Join(params.WrapErr, enrichedErr)
+		}
 		return errors.Join(errUtils.ErrFailedToUnmarshalAPIResponse, err)
 	}
 
-	// Log the structured response for debugging and check success
-	// We need to use type assertion to access the embedded AtmosApiResponse
+	// Log the structured response for debugging and check success.
+	// We need to use type assertion to access the embedded AtmosApiResponse.
 	switch responseData := params.Out.(type) {
 	case *dtos.LockStackResponse:
 		logProAPIResponse(params.Op, responseData.AtmosApiResponse)
 		if !responseData.Success {
-			errorMsg := logAndReturnProAPIError(params.Op, responseData.AtmosApiResponse)
-			return fmt.Errorf(errMessageFormat, params.WrapErr, errorMsg)
+			return errors.Join(params.WrapErr,
+				buildProAPIError(params.Op, resp.StatusCode, responseData.AtmosApiResponse))
 		}
 	case *dtos.UnlockStackResponse:
 		logProAPIResponse(params.Op, responseData.AtmosApiResponse)
 		if !responseData.Success {
-			errorMsg := logAndReturnProAPIError(params.Op, responseData.AtmosApiResponse)
-			return fmt.Errorf(errMessageFormat, params.WrapErr, errorMsg)
+			return errors.Join(params.WrapErr,
+				buildProAPIError(params.Op, resp.StatusCode, responseData.AtmosApiResponse))
 		}
 	}
 
@@ -322,9 +372,10 @@ func (c *AtmosProAPIClient) UnlockStack(dto *dtos.UnlockStackRequest) (dtos.Unlo
 }
 
 // handleAPIResponse processes the HTTP response and logs detailed information including trace IDs and error messages.
-// It returns an error if the response indicates failure.
+// It returns an *APIError (which implements error) if the response indicates failure, allowing callers
+// to inspect the HTTP status code for retry decisions.
 func handleAPIResponse(resp *http.Response, operation string) error {
-	// Read the response body
+	// Read the response body.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToReadResponseBody, err)
@@ -332,28 +383,88 @@ func handleAPIResponse(resp *http.Response, operation string) error {
 
 	var apiResponse dtos.AtmosApiResponse
 
-	// Try to unmarshal the response to get structured data
+	// Try to unmarshal the response to get structured data.
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		// If we can't parse the response as JSON, handle based on status code
+		// If we can't parse the response as JSON, handle based on status code.
 		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
-			return fmt.Errorf("%w: HTTP status: %s", errUtils.ErrFailedToUnmarshalAPIResponse, resp.Status)
+			enrichedErr := errUtils.Build(errUtils.ErrFailedToUnmarshalAPIResponse).
+				WithCausef("HTTP status: %s", resp.Status).
+				WithContext("operation", operation).
+				WithHint("The API returned an unexpected response format. See troubleshooting: https://atmos-pro.com/docs/learn/troubleshooting").
+				Err()
+			return &APIError{
+				StatusCode: resp.StatusCode,
+				Operation:  operation,
+				Err:        enrichedErr,
+			}
 		}
-		// For successful responses that can't be parsed, just return nil
+		// For successful responses that can't be parsed, just return nil.
 		return nil
 	}
 
-	// Log the structured response for debugging (only if we successfully unmarshaled)
+	// Log the structured response for debugging (only if we successfully unmarshaled).
 	logProAPIResponse(operation, apiResponse)
 
 	// For successful HTTP responses, trust the status code over the Success field
-	// (some APIs might return minimal responses without the Success field)
+	// (some APIs might return minimal responses without the Success field).
 	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
 		return nil
 	}
 
-	// For error HTTP responses, return an error
+	// For error HTTP responses, return an *APIError with the status code so retry logic
+	// can distinguish retryable (401, 5xx) from non-retryable (400, 403, 404) failures.
+	return &APIError{
+		StatusCode: resp.StatusCode,
+		Operation:  operation,
+		Err:        buildProAPIError(operation, resp.StatusCode, apiResponse),
+	}
+}
+
+// buildProAPIError creates an enriched error with status-specific hints and documentation links.
+// The statusCode should be the HTTP transport status (resp.StatusCode) as the canonical source.
+// When unavailable, apiResponse.Status is used as a fallback.
+func buildProAPIError(operation string, statusCode int, apiResponse dtos.AtmosApiResponse) error {
+	// Normalize: prefer the transport status code, but fall back to apiResponse.Status if needed.
+	if statusCode == 0 {
+		statusCode = apiResponse.Status
+	}
+	if apiResponse.Status == 0 {
+		apiResponse.Status = statusCode
+	}
+
 	errorMsg := logAndReturnProAPIError(operation, apiResponse)
-	return fmt.Errorf(errMessageFormat, errUtils.ErrAPIResponseError, errorMsg)
+
+	builder := errUtils.Build(errUtils.ErrAPIResponseError).
+		WithCausef("%s", errorMsg).
+		WithContext("operation", operation).
+		WithContext("status", statusCode)
+
+	if apiResponse.TraceID != "" {
+		builder = builder.WithContext("trace_id", apiResponse.TraceID)
+	}
+
+	// Add status-specific hints with targeted documentation links.
+	// Each hint is self-contained (each renders with its own lightbulb icon).
+	switch statusCode {
+	case http.StatusForbidden:
+		builder = builder.
+			WithHint("Permissions are configured per-repository in Atmos Pro. Check that this repo has the required permissions: https://atmos-pro.com/docs/learn/permissions").
+			WithHint("For a working example of a properly configured setup, see the quickstart: https://atmos-pro.com/docs/install")
+	case http.StatusUnauthorized:
+		builder = builder.
+			WithHint("The API token may be expired or invalid. If using GitHub OIDC, ensure the workflow has `id-token: write` permission: https://atmos-pro.com/docs/configure/github-workflows").
+			WithHint("Learn how Atmos Pro authentication works: https://atmos-pro.com/docs/learn/authentication")
+	case http.StatusNotFound:
+		builder = builder.
+			WithHint("Verify the workspace ID is correct, the repository has been imported, and the Atmos Pro GitHub App is installed: https://atmos-pro.com/docs/install")
+	default:
+		if statusCode >= http.StatusInternalServerError {
+			builder = builder.
+				WithHint("This is a server-side error. If the problem persists, contact support with the `trace_id` from above: https://atmos-pro.com/docs/learn/troubleshooting")
+		}
+	}
+
+	return builder.Err()
 }
 
 // getGitHubOIDCToken retrieves an OIDC token from GitHub Actions.
@@ -484,12 +595,21 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 
 	var tokenResp dtos.ExchangeGitHubOIDCTokenResponse
 	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		// If we can't parse the response as JSON, provide enriched errors for error status codes.
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+			enrichedErr := errUtils.Build(errUtils.ErrFailedToDecodeTokenResponse).
+				WithCausef("HTTP status: %s", resp.Status).
+				WithContext("operation", "ExchangeOIDCToken").
+				WithHint("The API returned an unexpected response format. See troubleshooting: https://atmos-pro.com/docs/learn/troubleshooting").
+				Err()
+			return "", errors.Join(errUtils.ErrFailedToExchangeOIDCToken, enrichedErr)
+		}
 		return "", errors.Join(errUtils.ErrFailedToDecodeTokenResponse, err)
 	}
 
 	if !tokenResp.Success {
-		errMsg := logAndReturnProAPIError("ExchangeOIDCToken", tokenResp.AtmosApiResponse)
-		return "", fmt.Errorf(errMessageFormat, errUtils.ErrFailedToExchangeOIDCToken, errMsg)
+		return "", errors.Join(errUtils.ErrFailedToExchangeOIDCToken,
+			buildProAPIError("ExchangeOIDCToken", resp.StatusCode, tokenResp.AtmosApiResponse))
 	}
 
 	return tokenResp.Data.Token, nil
