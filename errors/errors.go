@@ -984,7 +984,7 @@ var (
 	ErrAICommandRmNotAllowed        = errors.New("rm with recursive or directory-removal flags is not allowed")
 	ErrAICommandPathNotAllowed      = errors.New("command path argument is outside the allowed scope")
 	ErrAICommandVarExpansion        = errors.New("environment variable references are not supported; use literal values")
-	ErrAICommandShellInjection      = errors.New("command contains shell metacharacters that could enable injection; use separate commands instead")
+	ErrAICommandShellInjection      = errors.New("unquoted shell operators are not permitted; use literal values or quote arguments")
 	ErrAILSPNotEnabled              = errors.New("LSP is not enabled")
 	ErrAIFileDoesNotExist           = errors.New("file does not exist")
 	ErrAIConfigNil                  = errors.New("cannot switch provider: atmosConfig is nil")
