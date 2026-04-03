@@ -386,9 +386,12 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	log.Debug("Affected components and stacks:")
 
-	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
-	if err != nil {
-		return err
+	// When uploading, suppress the large JSON dump unless verbose mode or file output is requested.
+	if !args.Upload || args.Verbose || args.OutputFile != "" {
+		err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
+		if err != nil {
+			return err
+		}
 	}
 
 	if !args.Upload {
@@ -446,7 +449,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return uploadErr
 	}
 
-	ui.Success("Uploaded affected stacks to Atmos Pro")
+	ui.Success(fmt.Sprintf("Uploaded %d affected component(s) to Atmos Pro", len(affected)))
 
 	return nil
 }
