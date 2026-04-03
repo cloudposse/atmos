@@ -55,7 +55,7 @@ func (r *markdownRenderer) RenderSecurityReport(w io.Writer, report *Report) err
 	}
 	sb.WriteString("\n\n---\n\n")
 
-	renderFindingsBySeverity(&sb, report.Findings)
+	renderFindingsBySeverity(&sb, report.Findings, report.GroupFindings)
 
 	// Summary table.
 	sb.WriteString("## Summary\n\n")
@@ -314,14 +314,23 @@ func renderFindingMarkdown(sb *strings.Builder, f *Finding, num int) {
 // mdNewline is the newline string used in Markdown rendering.
 const mdNewline = "\n"
 
-// renderFindingsBySeverity groups findings by severity, then collapses duplicates.
-func renderFindingsBySeverity(sb *strings.Builder, allFindings []Finding) {
+// renderFindingsBySeverity groups findings by severity.
+// When groupDuplicates is true, findings with the same title are collapsed.
+func renderFindingsBySeverity(sb *strings.Builder, allFindings []Finding, groupDuplicates bool) {
 	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInformational} {
 		findings := filterBySeverity(allFindings, sev)
 		if len(findings) == 0 {
 			continue
 		}
 		fmt.Fprintf(sb, "## %s Findings (%d)\n\n", sev, len(findings))
+
+		if !groupDuplicates {
+			for i := range findings {
+				renderFindingMarkdown(sb, &findings[i], i+1)
+			}
+			continue
+		}
+
 		groups := groupByTitle(findings)
 		for i, group := range groups {
 			if len(group) == 1 {

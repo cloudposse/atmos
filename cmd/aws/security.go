@@ -65,6 +65,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		useAI := v.GetBool("ai")
 		region := v.GetString("region")
 		identityFlag := v.GetString("identity")
+		noGroup := v.GetBool("no-group")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -221,6 +222,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		// Build report.
 		tagMapping := &atmosConfig.AWS.Security.TagMapping
 		report := buildSecurityReport(findings, stack, component, tagMapping)
+		report.GroupFindings = !noGroup
 
 		// Determine output destination.
 		output := os.Stdout
@@ -273,6 +275,7 @@ func init() {
 		flags.WithIntFlag("max-findings", "", defaultMaxFindings, "Maximum findings to analyze"),
 		flags.WithStringFlag("region", "", "", "AWS region override"),
 		flags.WithStringFlag("identity", "i", "", "Atmos Auth identity for AWS credentials"),
+		flags.WithBoolFlag("no-group", "", false, "Disable grouping of duplicate findings"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("identity", "ATMOS_AWS_SECURITY_IDENTITY"),
 		flags.WithEnvVars("format", "ATMOS_AWS_SECURITY_FORMAT"),

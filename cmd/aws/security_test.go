@@ -471,6 +471,7 @@ func TestSecurityAnalyzeAllFlagsRegistered(t *testing.T) {
 		{"max-findings flag", "max-findings", "50", "int"},
 		{"region flag", "region", "", "string"},
 		{"identity flag", "identity", "", "string"},
+		{"no-group flag", "no-group", "false", "bool"},
 	}
 
 	for _, tt := range tests {
