@@ -109,7 +109,7 @@ func mapAndAnalyzeFinding(ctx context.Context, atmosConfig *schema.AtmosConfigur
 	finding.Mapping = mapping
 
 	// Run AI analysis.
-	analyzer, err := security.NewFindingAnalyzer(ctx, atmosConfig)
+	analyzer, err := security.NewFindingAnalyzer(ctx, atmosConfig, nil, nil)
 	if err != nil {
 		return &tools.Result{
 			Success: false,

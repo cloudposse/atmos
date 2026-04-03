@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -347,14 +350,16 @@ func TestReadComponentSource(t *testing.T) {
 	})
 
 	t.Run("reads main.tf content", func(t *testing.T) {
+		compPath := filepath.Join("components", "terraform", "vpc")
+		expectedPath := filepath.Join(compPath, "main.tf")
 		readFile = func(path string) ([]byte, error) {
-			if path == "/components/terraform/vpc/main.tf" {
+			if filepath.Clean(path) == filepath.Clean(expectedPath) {
 				return []byte("resource \"aws_vpc\" \"main\" {}"), nil
 			}
 			return nil, os.ErrNotExist
 		}
 
-		result := readComponentSource("/components/terraform/vpc")
+		result := readComponentSource(compPath)
 		assert.Equal(t, "resource \"aws_vpc\" \"main\" {}", result)
 	})
 
@@ -363,7 +368,7 @@ func TestReadComponentSource(t *testing.T) {
 			return nil, os.ErrNotExist
 		}
 
-		result := readComponentSource("/nonexistent/path")
+		result := readComponentSource(filepath.Join("nonexistent", "path"))
 		assert.Empty(t, result)
 	})
 
@@ -376,7 +381,7 @@ func TestReadComponentSource(t *testing.T) {
 			return largeContent, nil
 		}
 
-		result := readComponentSource("/components/terraform/large")
+		result := readComponentSource(filepath.Join("components", "terraform", "large"))
 		assert.Contains(t, result, "... (truncated)")
 		assert.Less(t, len(result), 15000)
 	})
@@ -624,4 +629,151 @@ func TestRemediationSchema_JSONRoundTrip(t *testing.T) {
 	assert.Equal(t, remediation.RiskLevel, decoded.RiskLevel)
 	assert.Equal(t, remediation.References, decoded.References)
 	require.Len(t, decoded.CodeChanges, 1)
+}
+
+// mockToolAwareClient simulates an API provider that supports tools.
+type mockToolAwareClient struct {
+	responses []string // Responses for each iteration.
+	callIdx   int
+}
+
+func (m *mockToolAwareClient) SendMessage(_ context.Context, _ string) (string, error) {
+	return m.currentResponse(), nil
+}
+
+func (m *mockToolAwareClient) SendMessageWithTools(_ context.Context, _ string, _ []tools.Tool) (*types.Response, error) {
+	return &types.Response{Content: m.currentResponse()}, nil
+}
+
+func (m *mockToolAwareClient) SendMessageWithHistory(_ context.Context, _ []types.Message) (string, error) {
+	return m.currentResponse(), nil
+}
+
+func (m *mockToolAwareClient) SendMessageWithToolsAndHistory(_ context.Context, _ []types.Message, _ []tools.Tool) (*types.Response, error) {
+	return &types.Response{Content: m.currentResponse()}, nil
+}
+
+func (m *mockToolAwareClient) SendMessageWithSystemPromptAndTools(_ context.Context, _ string, _ string, _ []types.Message, _ []tools.Tool) (*types.Response, error) {
+	resp := m.currentResponse()
+	m.callIdx++
+	return &types.Response{Content: resp, StopReason: types.StopReasonEndTurn}, nil
+}
+
+func (m *mockToolAwareClient) GetModel() string  { return "test-api-model" }
+func (m *mockToolAwareClient) GetMaxTokens() int { return 4096 }
+
+func (m *mockToolAwareClient) currentResponse() string {
+	if m.callIdx < len(m.responses) {
+		return m.responses[m.callIdx]
+	}
+	return ""
+}
+
+// mockCLIClient simulates a CLI provider that rejects tools.
+type mockCLIClient struct {
+	response string
+}
+
+func (m *mockCLIClient) SendMessage(_ context.Context, _ string) (string, error) {
+	return m.response, nil
+}
+
+func (m *mockCLIClient) SendMessageWithTools(_ context.Context, _ string, _ []tools.Tool) (*types.Response, error) {
+	return nil, errUtils.ErrCLIProviderToolsNotSupported
+}
+
+func (m *mockCLIClient) SendMessageWithHistory(_ context.Context, _ []types.Message) (string, error) {
+	return m.response, nil
+}
+
+func (m *mockCLIClient) SendMessageWithToolsAndHistory(_ context.Context, _ []types.Message, _ []tools.Tool) (*types.Response, error) {
+	return nil, errUtils.ErrCLIProviderToolsNotSupported
+}
+
+func (m *mockCLIClient) SendMessageWithSystemPromptAndTools(_ context.Context, _ string, _ string, _ []types.Message, _ []tools.Tool) (*types.Response, error) {
+	return nil, errUtils.ErrCLIProviderToolsNotSupported
+}
+
+func (m *mockCLIClient) GetModel() string  { return "claude-code" }
+func (m *mockCLIClient) GetMaxTokens() int { return 0 }
+
+func TestAnalyzeWithTools_APIProvider(t *testing.T) {
+	client := &mockToolAwareClient{
+		responses: []string{"### Root Cause\n\nMissing encryption.\n\n### Risk\n\nlow"},
+	}
+
+	analyzer := &aiAnalyzer{
+		client:      client,
+		atmosConfig: &schema.AtmosConfiguration{},
+		// No tool registry — should still work (falls back to simple).
+	}
+
+	finding := &Finding{
+		ID:    "tool-test-001",
+		Title: "Test finding",
+		Mapping: &ComponentMapping{
+			Component: "vpc",
+			Stack:     "prod",
+			Mapped:    true,
+		},
+	}
+
+	remediation, err := analyzer.AnalyzeFinding(context.Background(), finding, "", "")
+	require.NoError(t, err)
+	assert.Contains(t, remediation.RootCause, "Missing encryption")
+	assert.Equal(t, "low", remediation.RiskLevel)
+}
+
+func TestAnalyzeWithTools_CLIProviderFallback(t *testing.T) {
+	client := &mockCLIClient{
+		response: "### Root Cause\n\nBucket is public.\n\n### Deploy\n\n`atmos terraform apply s3 -s prod`\n\n### Risk\n\nhigh",
+	}
+
+	// Create a minimal tool registry to trigger the tools path.
+	reg := tools.NewRegistry()
+	executor := tools.NewExecutor(reg, nil, 0)
+
+	analyzer := &aiAnalyzer{
+		client:       client,
+		atmosConfig:  &schema.AtmosConfiguration{},
+		toolRegistry: reg,
+		toolExecutor: executor,
+	}
+
+	finding := &Finding{
+		ID:    "cli-test-001",
+		Title: "S3 public bucket",
+		Mapping: &ComponentMapping{
+			Component: "s3",
+			Stack:     "prod",
+			Mapped:    true,
+		},
+	}
+
+	// CLI provider rejects tools → falls back to simple.
+	remediation, err := analyzer.AnalyzeFinding(context.Background(), finding, "", "")
+	require.NoError(t, err)
+	assert.Contains(t, remediation.RootCause, "Bucket is public")
+	assert.Equal(t, "atmos terraform apply s3 -s prod", remediation.DeployCommand)
+	assert.Equal(t, "high", remediation.RiskLevel)
+}
+
+func TestIsToolsNotSupported(t *testing.T) {
+	assert.True(t, isToolsNotSupported(errUtils.ErrCLIProviderToolsNotSupported))
+	assert.True(t, isToolsNotSupported(fmt.Errorf("tools not supported")))
+	assert.False(t, isToolsNotSupported(nil))
+	assert.False(t, isToolsNotSupported(fmt.Errorf("some other error")))
+}
+
+func TestAnalyzeSimple_Fallback(t *testing.T) {
+	client := &mockAIClient{response: "Simple analysis response."}
+	analyzer := &aiAnalyzer{
+		client:      client,
+		atmosConfig: &schema.AtmosConfiguration{},
+	}
+
+	finding := &Finding{ID: "simple-001", Title: "Test"}
+	remediation, err := analyzer.analyzeSimple(context.Background(), finding, "test prompt")
+	require.NoError(t, err)
+	assert.Contains(t, remediation.Description, "Simple analysis response")
 }

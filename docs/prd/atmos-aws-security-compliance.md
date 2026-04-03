@@ -1186,6 +1186,22 @@ for error handling and reference `aws.security.enabled` config.
     - How to generate specific `atmos terraform apply` commands
     - How to reference Terraform resource names and variable changes
 
+26. **Multi-turn tool-aware AI analysis** — ✅ The analyzer now supports two modes:
+
+    **API providers (multi-turn):** Uses `SendMessageWithSystemPromptAndTools` with the
+    full Atmos tool registry. The AI can call `atmos_describe_component`,
+    `read_component_file`, `read_stack_file`, `atmos_list_stacks` etc. to gather more
+    context before generating remediation. The tool loop runs up to 10 iterations.
+
+    **CLI providers (single-prompt):** Detects `ErrCLIProviderToolsNotSupported` and falls
+    back to enriched single-prompt mode with pre-fetched component source and stack config.
+
+    This means API providers can:
+    1. See the finding → call `atmos_describe_component` to get full resolved config
+    2. Read `variables.tf` to understand available variables
+    3. Check related components and dependencies
+    4. Generate remediation based on actual data, not just `main.tf`
+
 ### Remaining Work (Future PRs)
 
 - **Terraform state search (Path B Strategy 1)** — Implement state file scanning for tagless

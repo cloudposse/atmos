@@ -13,6 +13,9 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
+	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	"github.com/cloudposse/atmos/pkg/aws/security"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -195,7 +198,16 @@ var securityAnalyzeCmd = &cobra.Command{
 			if outputFormat == security.FormatMarkdown {
 				ui.Writef("🤖 Analyzing findings with AI...\n")
 			}
-			analyzer, analyzerErr := security.NewFindingAnalyzer(ctx, &atmosConfig)
+
+			// Initialize read-only tools for multi-turn analysis (API providers).
+			// CLI providers fall back to single-prompt mode automatically.
+			var toolReg *tools.Registry
+			var toolExec *tools.Executor
+			if atmosConfig.AI.Tools.Enabled {
+				toolReg, toolExec = initReadOnlyTools(&atmosConfig)
+			}
+
+			analyzer, analyzerErr := security.NewFindingAnalyzer(ctx, &atmosConfig, toolReg, toolExec)
 			if analyzerErr != nil {
 				log.Debug("AI analyzer creation failed, skipping AI analysis", "error", analyzerErr)
 			} else {
@@ -365,3 +377,21 @@ func parseSeverities(severityStr string, defaults []string) ([]security.Severity
 
 // Finding is a type alias for the security package Finding type (used in buildSecurityReport).
 type Finding = security.Finding
+
+// initReadOnlyTools creates a read-only tool registry and executor for AI security analysis.
+// Returns nil, nil if tool setup fails (analysis falls back to single-prompt mode).
+func initReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.Registry, *tools.Executor) {
+	registry := tools.NewRegistry()
+	if err := atmosTools.RegisterTools(registry, atmosConfig, nil); err != nil {
+		log.Debug("Failed to register tools for security analysis", "error", err)
+		return nil, nil
+	}
+
+	// Read-only tools don't require permissions.
+	permConfig := &permission.Config{Mode: permission.ModeAllow}
+	permChecker := permission.NewChecker(permConfig, nil)
+	executor := tools.NewExecutor(registry, permChecker, tools.DefaultTimeout)
+
+	log.Debug("Initialized tools for security analysis", "count", registry.Count())
+	return registry, executor
+}
