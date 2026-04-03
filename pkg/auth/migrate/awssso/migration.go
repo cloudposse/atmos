@@ -235,7 +235,9 @@ func resolveFilePath(found []string, prompter migrate.Prompter, fileName string)
 }
 
 // parseAccountMap extracts account name-to-ID mappings from account-map YAML content.
-// It looks for vars.full_account_map first, then falls back to vars.account_map.
+// It searches multiple YAML paths for vars containing full_account_map or account_map:
+//   - vars.full_account_map / vars.account_map (top-level)
+//   - components.terraform.account-map.vars.full_account_map (component-level)
 func parseAccountMap(data []byte) (map[string]string, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("account map file is empty")
@@ -246,51 +248,38 @@ func parseAccountMap(data []byte) (map[string]string, error) {
 		return nil, fmt.Errorf("parsing account map YAML: %w", err)
 	}
 
-	vars, ok := raw["vars"]
-	if !ok {
-		return nil, fmt.Errorf("account map YAML missing 'vars' key")
-	}
+	// Collect all candidate vars maps to search.
+	varsCandidates := findVarsCandidates(raw, "account-map")
 
-	varsMap, ok := vars.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("account map 'vars' is not a map")
-	}
-
-	// Try full_account_map first, then account_map.
-	var accountData interface{}
-	for _, key := range []string{"full_account_map", "account_map"} {
-		if v, exists := varsMap[key]; exists {
-			accountData = v
-			break
+	// Search each candidate for account map data.
+	for _, varsMap := range varsCandidates {
+		for _, key := range []string{"full_account_map", "account_map"} {
+			if v, exists := varsMap[key]; exists {
+				accountMap, ok := v.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				result := make(map[string]string, len(accountMap))
+				keys := make([]string, 0, len(accountMap))
+				for k := range accountMap {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+				for _, k := range keys {
+					result[k] = fmt.Sprintf("%v", accountMap[k])
+				}
+				return result, nil
+			}
 		}
 	}
 
-	if accountData == nil {
-		return nil, fmt.Errorf("account map YAML missing 'vars.full_account_map' or 'vars.account_map'")
-	}
-
-	accountMap, ok := accountData.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("account map data is not a map")
-	}
-
-	result := make(map[string]string, len(accountMap))
-	// Sort keys for deterministic output.
-	keys := make([]string, 0, len(accountMap))
-	for k := range accountMap {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		result[k] = fmt.Sprintf("%v", accountMap[k])
-	}
-
-	return result, nil
+	return nil, fmt.Errorf("account map YAML missing 'vars.full_account_map' or 'vars.account_map'")
 }
 
 // parseSSOConfig extracts SSO configuration from aws-sso YAML content.
-// It reads vars.account_assignments and optionally vars.start_url and vars.region.
+// It searches multiple YAML paths for vars containing account_assignments:
+//   - vars.account_assignments (top-level)
+//   - components.terraform.aws-sso.vars.account_assignments (component-level)
 func parseSSOConfig(data []byte) (*migrate.SSOConfig, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("SSO config file is empty")
@@ -301,40 +290,43 @@ func parseSSOConfig(data []byte) (*migrate.SSOConfig, error) {
 		return nil, fmt.Errorf("parsing SSO config YAML: %w", err)
 	}
 
-	vars, ok := raw["vars"]
-	if !ok {
-		return nil, fmt.Errorf("SSO config YAML missing 'vars' key")
+	// Collect all candidate vars maps to search.
+	varsCandidates := findVarsCandidates(raw, "aws-sso")
+
+	ssoCfg := &migrate.SSOConfig{
+		AccountAssignments: make(map[string]map[string][]string),
 	}
 
-	varsMap, ok := vars.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("SSO config 'vars' is not a map")
+	// Search each candidate for SSO-related vars.
+	for _, varsMap := range varsCandidates {
+		if v, exists := varsMap["start_url"]; exists && ssoCfg.StartURL == "" {
+			ssoCfg.StartURL = fmt.Sprintf("%v", v)
+		}
+		if v, exists := varsMap["region"]; exists && ssoCfg.Region == "" {
+			ssoCfg.Region = fmt.Sprintf("%v", v)
+		}
+
+		if assignData, exists := varsMap["account_assignments"]; exists && len(ssoCfg.AccountAssignments) == 0 {
+			parsed, err := parseAccountAssignments(assignData)
+			if err != nil {
+				return nil, err
+			}
+			ssoCfg.AccountAssignments = parsed
+		}
 	}
 
-	ssoCfg := &migrate.SSOConfig{}
+	return ssoCfg, nil
+}
 
-	// Extract optional start_url and region.
-	if v, exists := varsMap["start_url"]; exists {
-		ssoCfg.StartURL = fmt.Sprintf("%v", v)
-	}
-	if v, exists := varsMap["region"]; exists {
-		ssoCfg.Region = fmt.Sprintf("%v", v)
-	}
-
-	// Parse account_assignments.
-	assignData, ok := varsMap["account_assignments"]
-	if !ok {
-		// No assignments is valid; return config with empty assignments.
-		ssoCfg.AccountAssignments = make(map[string]map[string][]string)
-		return ssoCfg, nil
-	}
-
+// parseAccountAssignments parses the account_assignments structure:
+// group -> permission-set -> []accounts.
+func parseAccountAssignments(assignData interface{}) (map[string]map[string][]string, error) {
 	assignMap, ok := assignData.(map[string]interface{})
 	if !ok {
 		return nil, fmt.Errorf("account_assignments is not a map")
 	}
 
-	ssoCfg.AccountAssignments = make(map[string]map[string][]string, len(assignMap))
+	result := make(map[string]map[string][]string, len(assignMap))
 
 	for group, permData := range assignMap {
 		permMap, ok := permData.(map[string]interface{})
@@ -342,7 +334,7 @@ func parseSSOConfig(data []byte) (*migrate.SSOConfig, error) {
 			return nil, fmt.Errorf("account_assignments[%s] is not a map", group)
 		}
 
-		ssoCfg.AccountAssignments[group] = make(map[string][]string, len(permMap))
+		result[group] = make(map[string][]string, len(permMap))
 
 		for perm, accountsData := range permMap {
 			accountsList, ok := accountsData.([]interface{})
@@ -354,9 +346,45 @@ func parseSSOConfig(data []byte) (*migrate.SSOConfig, error) {
 			for _, a := range accountsList {
 				accounts = append(accounts, fmt.Sprintf("%v", a))
 			}
-			ssoCfg.AccountAssignments[group][perm] = accounts
+			result[group][perm] = accounts
 		}
 	}
 
-	return ssoCfg, nil
+	return result, nil
+}
+
+// findVarsCandidates returns all vars maps found at known YAML paths.
+// It searches:
+//   - raw["vars"] (top-level)
+//   - raw["components"]["terraform"][componentName]["vars"] (component-level)
+func findVarsCandidates(raw map[string]interface{}, componentName string) []map[string]interface{} {
+	var candidates []map[string]interface{}
+
+	// Top-level vars.
+	if vars, ok := raw["vars"]; ok {
+		if varsMap, ok := vars.(map[string]interface{}); ok {
+			candidates = append(candidates, varsMap)
+		}
+	}
+
+	// Component-level vars: components.terraform.<componentName>.vars.
+	if components, ok := raw["components"]; ok {
+		if compMap, ok := components.(map[string]interface{}); ok {
+			if terraform, ok := compMap["terraform"]; ok {
+				if tfMap, ok := terraform.(map[string]interface{}); ok {
+					if comp, ok := tfMap[componentName]; ok {
+						if compCfg, ok := comp.(map[string]interface{}); ok {
+							if vars, ok := compCfg["vars"]; ok {
+								if varsMap, ok := vars.(map[string]interface{}); ok {
+									candidates = append(candidates, varsMap)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return candidates
 }

@@ -99,7 +99,7 @@ func TestParseAccountMap_MissingVars(t *testing.T) {
 
 	_, err := parseAccountMap(data)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "missing 'vars'")
+	assert.Contains(t, err.Error(), "missing")
 }
 
 func TestParseAccountMap_MissingKeys(t *testing.T) {
@@ -185,9 +185,11 @@ func TestParseSSOConfig_MissingVars(t *testing.T) {
   foo: bar
 `)
 
-	_, err := parseSSOConfig(data)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "missing 'vars'")
+	result, err := parseSSOConfig(data)
+	require.NoError(t, err)
+	// No vars found — returns empty config with no assignments.
+	assert.Empty(t, result.AccountAssignments)
+	assert.Empty(t, result.StartURL)
 }
 
 func TestParseSSOConfig_MalformedYAML(t *testing.T) {
