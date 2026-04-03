@@ -1,7 +1,6 @@
 package awssso
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,17 +31,20 @@ func TestNewAWSSSOSteps(t *testing.T) {
 	assert.Equal(t, "cleanup-legacy-auth", steps[5].Name())
 }
 
-func TestParseAccountMap(t *testing.T) {
+func TestExtractAccountMap_FullAccountMap(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`vars:
-  full_account_map:
-    core-root: "111111111111"
-    core-audit: "222222222222"
-    dev-sandbox: "333333333333"
-`)
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"full_account_map": map[string]any{
+				"core-root":   "111111111111",
+				"core-audit":  "222222222222",
+				"dev-sandbox": "333333333333",
+			},
+		},
+	}
 
-	result, err := parseAccountMap(data)
+	result, err := extractAccountMap(componentSection)
 	require.NoError(t, err)
 	require.Len(t, result, 3)
 	assert.Equal(t, "111111111111", result["core-root"])
@@ -50,299 +52,188 @@ func TestParseAccountMap(t *testing.T) {
 	assert.Equal(t, "333333333333", result["dev-sandbox"])
 }
 
-func TestParseAccountMap_AlternateKey(t *testing.T) {
+func TestExtractAccountMap_AccountMapFallback(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`vars:
-  account_map:
-    prod: "444444444444"
-    staging: "555555555555"
-`)
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"account_map": map[string]any{
+				"prod":    "444444444444",
+				"staging": "555555555555",
+			},
+		},
+	}
 
-	result, err := parseAccountMap(data)
+	result, err := extractAccountMap(componentSection)
 	require.NoError(t, err)
 	require.Len(t, result, 2)
 	assert.Equal(t, "444444444444", result["prod"])
 	assert.Equal(t, "555555555555", result["staging"])
 }
 
-func TestParseAccountMap_FullAccountMapTakesPrecedence(t *testing.T) {
+func TestExtractAccountMap_FullAccountMapTakesPrecedence(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`vars:
-  full_account_map:
-    primary: "111111111111"
-  account_map:
-    fallback: "999999999999"
-`)
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"full_account_map": map[string]any{
+				"primary": "111111111111",
+			},
+			"account_map": map[string]any{
+				"fallback": "999999999999",
+			},
+		},
+	}
 
-	result, err := parseAccountMap(data)
+	result, err := extractAccountMap(componentSection)
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	assert.Equal(t, "111111111111", result["primary"])
 }
 
-func TestParseAccountMap_EmptyData(t *testing.T) {
+func TestExtractAccountMap_NoVars(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseAccountMap([]byte{})
+	componentSection := map[string]any{
+		"settings": map[string]any{},
+	}
+
+	_, err := extractAccountMap(componentSection)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "empty")
+	assert.Contains(t, err.Error(), "no vars")
 }
 
-func TestParseAccountMap_MissingVars(t *testing.T) {
+func TestExtractAccountMap_MissingKeys(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`settings:
-  foo: bar
-`)
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"other_key": "value",
+		},
+	}
 
-	_, err := parseAccountMap(data)
+	_, err := extractAccountMap(componentSection)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "missing")
 }
 
-func TestParseAccountMap_MissingKeys(t *testing.T) {
+func TestExtractSSOFromComponent(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`vars:
-  other_key:
-    foo: bar
-`)
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"start_url": "https://example.awsapps.com/start",
+			"region":    "us-west-2",
+			"account_assignments": map[string]any{
+				"DevOps": map[string]any{
+					"TerraformApplyAccess": []any{"core-root", "core-audit"},
+					"AdministratorAccess":  []any{"core-root"},
+				},
+				"Developers": map[string]any{
+					"TerraformPlanAccess": []any{"core-root"},
+				},
+			},
+		},
+	}
 
-	_, err := parseAccountMap(data)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "missing 'vars.full_account_map' or 'vars.account_map'")
+	ssoCfg := &migrate.SSOConfig{
+		AccountAssignments: make(map[string]map[string][]string),
+	}
+
+	extractSSOFromComponent(componentSection, ssoCfg)
+
+	assert.Equal(t, "https://example.awsapps.com/start", ssoCfg.StartURL)
+	assert.Equal(t, "us-west-2", ssoCfg.Region)
+	require.Len(t, ssoCfg.AccountAssignments, 2)
+	require.Len(t, ssoCfg.AccountAssignments["DevOps"]["TerraformApplyAccess"], 2)
+	assert.Equal(t, "core-root", ssoCfg.AccountAssignments["DevOps"]["TerraformApplyAccess"][0])
+	assert.Equal(t, "core-audit", ssoCfg.AccountAssignments["DevOps"]["TerraformApplyAccess"][1])
+	require.Len(t, ssoCfg.AccountAssignments["DevOps"]["AdministratorAccess"], 1)
+	require.Len(t, ssoCfg.AccountAssignments["Developers"]["TerraformPlanAccess"], 1)
 }
 
-func TestParseAccountMap_MalformedYAML(t *testing.T) {
+func TestExtractSSOFromComponent_NoAssignments(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`{invalid yaml:::`)
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"start_url": "https://example.awsapps.com/start",
+		},
+	}
 
-	_, err := parseAccountMap(data)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing account map YAML")
+	ssoCfg := &migrate.SSOConfig{
+		AccountAssignments: make(map[string]map[string][]string),
+	}
+
+	extractSSOFromComponent(componentSection, ssoCfg)
+
+	assert.Equal(t, "https://example.awsapps.com/start", ssoCfg.StartURL)
+	assert.Empty(t, ssoCfg.AccountAssignments)
 }
 
-func TestParseSSOConfig(t *testing.T) {
+func TestExtractSSOFromComponent_PreservesExistingValues(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`vars:
-  start_url: "https://example.awsapps.com/start"
-  region: "us-west-2"
-  account_assignments:
-    DevOps:
-      TerraformApplyAccess:
-        - core-root
-        - core-audit
-      AdministratorAccess:
-        - core-root
-    Developers:
-      TerraformPlanAccess:
-        - core-root
-`)
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"start_url": "https://new.awsapps.com/start",
+			"region":    "us-east-1",
+		},
+	}
 
-	result, err := parseSSOConfig(data)
-	require.NoError(t, err)
-	assert.Equal(t, "https://example.awsapps.com/start", result.StartURL)
-	assert.Equal(t, "us-west-2", result.Region)
-	require.Len(t, result.AccountAssignments, 2)
-	require.Len(t, result.AccountAssignments["DevOps"]["TerraformApplyAccess"], 2)
-	assert.Equal(t, "core-root", result.AccountAssignments["DevOps"]["TerraformApplyAccess"][0])
-	assert.Equal(t, "core-audit", result.AccountAssignments["DevOps"]["TerraformApplyAccess"][1])
-	require.Len(t, result.AccountAssignments["DevOps"]["AdministratorAccess"], 1)
-	assert.Equal(t, "core-root", result.AccountAssignments["DevOps"]["AdministratorAccess"][0])
-	require.Len(t, result.AccountAssignments["Developers"]["TerraformPlanAccess"], 1)
-	assert.Equal(t, "core-root", result.AccountAssignments["Developers"]["TerraformPlanAccess"][0])
+	// SSO config already has values from atmos.yaml auth config.
+	ssoCfg := &migrate.SSOConfig{
+		StartURL:           "https://existing.awsapps.com/start",
+		Region:             "eu-west-1",
+		AccountAssignments: make(map[string]map[string][]string),
+	}
+
+	extractSSOFromComponent(componentSection, ssoCfg)
+
+	// Existing values should NOT be overwritten.
+	assert.Equal(t, "https://existing.awsapps.com/start", ssoCfg.StartURL)
+	assert.Equal(t, "eu-west-1", ssoCfg.Region)
 }
 
-func TestParseSSOConfig_NoAssignments(t *testing.T) {
+func TestExtractSSOFromComponent_NoVars(t *testing.T) {
 	t.Parallel()
 
-	data := []byte(`vars:
-  start_url: "https://example.awsapps.com/start"
-`)
+	componentSection := map[string]any{
+		"settings": map[string]any{},
+	}
 
-	result, err := parseSSOConfig(data)
-	require.NoError(t, err)
-	assert.Equal(t, "https://example.awsapps.com/start", result.StartURL)
-	assert.Empty(t, result.AccountAssignments)
+	ssoCfg := &migrate.SSOConfig{
+		AccountAssignments: make(map[string]map[string][]string),
+	}
+
+	// Should not panic or error — just log and return.
+	extractSSOFromComponent(componentSection, ssoCfg)
+	assert.Empty(t, ssoCfg.StartURL)
 }
 
-func TestParseSSOConfig_EmptyData(t *testing.T) {
+func TestParseAccountAssignments(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseSSOConfig([]byte{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "empty")
-}
+	assignData := map[string]interface{}{
+		"DevOps": map[string]interface{}{
+			"TerraformApplyAccess": []interface{}{"core-root", "dev"},
+		},
+		"Readers": map[string]interface{}{
+			"TerraformPlanAccess": []interface{}{"prod"},
+		},
+	}
 
-func TestParseSSOConfig_MissingVars(t *testing.T) {
-	t.Parallel()
-
-	data := []byte(`settings:
-  foo: bar
-`)
-
-	result, err := parseSSOConfig(data)
-	require.NoError(t, err)
-	// No vars found — returns empty config with no assignments.
-	assert.Empty(t, result.AccountAssignments)
-	assert.Empty(t, result.StartURL)
-}
-
-func TestParseSSOConfig_MalformedYAML(t *testing.T) {
-	t.Parallel()
-
-	data := []byte(`{invalid yaml:::`)
-
-	_, err := parseSSOConfig(data)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing SSO config YAML")
-}
-
-func TestDiscoverAccountMap_Found(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mockFS := mocks.NewMockFileSystem(ctrl)
-	mockPrompter := mocks.NewMockPrompter(ctrl)
-
-	base := filepath.Join("stacks")
-	expectedPath := filepath.Join(base, "catalog", "account-map.yaml")
-	accountData := []byte(`vars:
-  full_account_map:
-    dev: "123456789012"
-    prod: "210987654321"
-`)
-
-	// First path does not exist, second path exists.
-	mockFS.EXPECT().Exists(filepath.Join(base, "mixins", "account-map.yaml")).Return(false)
-	mockFS.EXPECT().Exists(expectedPath).Return(true)
-	mockFS.EXPECT().Exists(filepath.Join(base, "catalog", "account-map", "account-map.yaml")).Return(false)
-	mockFS.EXPECT().ReadFile(expectedPath).Return(accountData, nil)
-
-	result, err := discoverAccountMap(base, mockFS, mockPrompter)
+	result, err := parseAccountAssignments(assignData)
 	require.NoError(t, err)
 	require.Len(t, result, 2)
-	assert.Equal(t, "123456789012", result["dev"])
-	assert.Equal(t, "210987654321", result["prod"])
+	assert.Equal(t, []string{"core-root", "dev"}, result["DevOps"]["TerraformApplyAccess"])
+	assert.Equal(t, []string{"prod"}, result["Readers"]["TerraformPlanAccess"])
 }
 
-func TestDiscoverAccountMap_NotFound_ReturnsEmptyMap(t *testing.T) {
+func TestParseAccountAssignments_NotAMap(t *testing.T) {
 	t.Parallel()
 
-	ctrl := gomock.NewController(t)
-	mockFS := mocks.NewMockFileSystem(ctrl)
-	mockPrompter := mocks.NewMockPrompter(ctrl)
-
-	base := filepath.Join("stacks")
-
-	// No paths exist — returns empty map gracefully.
-	mockFS.EXPECT().Exists(gomock.Any()).Return(false).Times(3)
-
-	result, err := discoverAccountMap(base, mockFS, mockPrompter)
-	require.NoError(t, err)
-	assert.Empty(t, result)
-}
-
-func TestDiscoverSSOConfig_Found(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mockFS := mocks.NewMockFileSystem(ctrl)
-	mockPrompter := mocks.NewMockPrompter(ctrl)
-
-	base := filepath.Join("stacks")
-	expectedPath := filepath.Join(base, "catalog", "aws-sso.yaml")
-	ssoData := []byte(`vars:
-  start_url: "https://myorg.awsapps.com/start"
-  region: "eu-west-1"
-  account_assignments:
-    Engineers:
-      ReadOnlyAccess:
-        - dev
-`)
-
-	// First path exists.
-	mockFS.EXPECT().Exists(expectedPath).Return(true)
-	mockFS.EXPECT().Exists(filepath.Join(base, "catalog", "aws-sso", "aws-sso.yaml")).Return(false)
-	mockFS.EXPECT().ReadFile(expectedPath).Return(ssoData, nil)
-
-	// Provider name prompt.
-	mockPrompter.EXPECT().Input("Enter SSO provider name", "sso").Return("sso", nil)
-
-	result, err := discoverSSOConfig(base, nil, mockFS, mockPrompter)
-	require.NoError(t, err)
-	assert.Equal(t, "https://myorg.awsapps.com/start", result.StartURL)
-	assert.Equal(t, "eu-west-1", result.Region)
-	assert.Equal(t, "sso", result.ProviderName)
-	require.Len(t, result.AccountAssignments, 1)
-	require.Len(t, result.AccountAssignments["Engineers"]["ReadOnlyAccess"], 1)
-	assert.Equal(t, "dev", result.AccountAssignments["Engineers"]["ReadOnlyAccess"][0])
-}
-
-func TestDiscoverSSOConfig_MissingURLAndRegion_PromptsUser(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mockFS := mocks.NewMockFileSystem(ctrl)
-	mockPrompter := mocks.NewMockPrompter(ctrl)
-
-	base := filepath.Join("stacks")
-	expectedPath := filepath.Join(base, "catalog", "aws-sso.yaml")
-	ssoData := []byte(`vars:
-  account_assignments:
-    Team:
-      ViewAccess:
-        - staging
-`)
-
-	mockFS.EXPECT().Exists(expectedPath).Return(true)
-	mockFS.EXPECT().Exists(filepath.Join(base, "catalog", "aws-sso", "aws-sso.yaml")).Return(false)
-	mockFS.EXPECT().ReadFile(expectedPath).Return(ssoData, nil)
-
-	// Prompts for missing start_url and region.
-	mockPrompter.EXPECT().Input("Enter your AWS SSO start URL", "").Return("https://prompted.awsapps.com/start", nil)
-	mockPrompter.EXPECT().Input("Enter your AWS SSO region", "us-east-1").Return("us-east-1", nil)
-	mockPrompter.EXPECT().Input("Enter SSO provider name", "sso").Return("my-sso", nil)
-
-	result, err := discoverSSOConfig(base, nil, mockFS, mockPrompter)
-	require.NoError(t, err)
-	assert.Equal(t, "https://prompted.awsapps.com/start", result.StartURL)
-	assert.Equal(t, "us-east-1", result.Region)
-	assert.Equal(t, "my-sso", result.ProviderName)
-}
-
-func TestDiscoverSSOConfig_MultipleFound_PromptsSelect(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mockFS := mocks.NewMockFileSystem(ctrl)
-	mockPrompter := mocks.NewMockPrompter(ctrl)
-
-	base := filepath.Join("stacks")
-	path1 := filepath.Join(base, "catalog", "aws-sso.yaml")
-	path2 := filepath.Join(base, "catalog", "aws-sso", "aws-sso.yaml")
-
-	// Both paths exist.
-	mockFS.EXPECT().Exists(path1).Return(true)
-	mockFS.EXPECT().Exists(path2).Return(true)
-
-	// User selects the second path.
-	mockPrompter.EXPECT().Select("Multiple aws-sso.yaml files found. Select one", []string{path1, path2}).Return(path2, nil)
-
-	ssoData := []byte(`vars:
-  start_url: "https://selected.awsapps.com/start"
-  region: "ap-southeast-1"
-  account_assignments: {}
-`)
-	mockFS.EXPECT().ReadFile(path2).Return(ssoData, nil)
-	mockPrompter.EXPECT().Input("Enter SSO provider name", "sso").Return("sso", nil)
-
-	result, err := discoverSSOConfig(base, nil, mockFS, mockPrompter)
-	require.NoError(t, err)
-	assert.Equal(t, "https://selected.awsapps.com/start", result.StartURL)
-	assert.Equal(t, "ap-southeast-1", result.Region)
+	_, err := parseAccountAssignments("not a map")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a map")
 }

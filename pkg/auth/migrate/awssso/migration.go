@@ -7,9 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"gopkg.in/yaml.v3"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -31,7 +30,8 @@ func NewAWSSSOSteps(migCtx *migrate.MigrationContext, fs migrate.FileSystem) []m
 	}
 }
 
-// BuildMigrationContext loads atmos config and discovers SSO/account-map files.
+// BuildMigrationContext loads atmos config and uses atmos stack resolution
+// to discover SSO and account-map component configuration.
 func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter migrate.Prompter) (*migrate.MigrationContext, error) {
 	defer perf.Track(nil, "awssso.BuildMigrationContext")()
 
@@ -53,15 +53,16 @@ func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter 
 		AtmosConfigPath: atmosConfigFile,
 	}
 
-	// Discover account map.
-	migCtx.AccountMap, err = discoverAccountMap(migCtx.StacksBasePath, fs, prompter)
+	// Use atmos stack resolution to discover component configs.
+	migCtx.AccountMap, err = discoverAccountMapViaStacks(&atmosConfig)
 	if err != nil {
-		return nil, err
+		log.Debug("Failed to discover account map via stacks", "error", err)
+		migCtx.AccountMap = make(map[string]string)
 	}
 	log.Debug("Discovered account map", "accounts", len(migCtx.AccountMap))
 
-	// Discover SSO config, using existing auth config as a source of defaults.
-	migCtx.SSOConfig, err = discoverSSOConfig(migCtx.StacksBasePath, &atmosConfig.Auth, fs, prompter)
+	// Discover SSO config via stacks, with existing auth config as defaults.
+	migCtx.SSOConfig, err = discoverSSOConfigViaStacks(&atmosConfig, &atmosConfig.Auth, prompter)
 	if err != nil {
 		return nil, err
 	}
@@ -74,70 +75,35 @@ func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter 
 	return migCtx, nil
 }
 
-// accountMapSearchPaths returns the candidate paths for account-map.yaml discovery.
-func accountMapSearchPaths(base string) []string {
-	return []string{
-		filepath.Join(base, "mixins", "account-map.yaml"),
-		filepath.Join(base, "catalog", "account-map.yaml"),
-		filepath.Join(base, "catalog", "account-map", "account-map.yaml"),
-	}
-}
+// discoverAccountMapViaStacks uses atmos describe stacks to find an account-map
+// component and extract the full_account_map or account_map from its vars.
+func discoverAccountMapViaStacks(atmosConfig *schema.AtmosConfiguration) (map[string]string, error) {
+	defer perf.Track(nil, "awssso.discoverAccountMapViaStacks")()
 
-// ssoConfigSearchPaths returns the candidate paths for aws-sso.yaml discovery.
-func ssoConfigSearchPaths(base string) []string {
-	return []string{
-		filepath.Join(base, "catalog", "aws-sso.yaml"),
-		filepath.Join(base, "catalog", "aws-sso", "aws-sso.yaml"),
-	}
-}
-
-// discoverAccountMap searches known paths for account-map.yaml and parses it.
-// If the file is not found or cannot be parsed, returns an empty map rather than failing.
-// Individual steps will handle missing account data by prompting the user.
-func discoverAccountMap(base string, fs migrate.FileSystem, prompter migrate.Prompter) (map[string]string, error) {
-	defer perf.Track(nil, "awssso.discoverAccountMap")()
-
-	searchPaths := accountMapSearchPaths(base)
-	log.Debug("Searching for account-map.yaml", "paths", searchPaths)
-
-	found := findExistingFiles(searchPaths, fs)
-	if len(found) == 0 {
-		log.Debug("No account-map file found in search paths")
-		return make(map[string]string), nil
-	}
-
-	filePath := found[0]
-	log.Debug("Found account-map file(s)", "paths", found)
-	if len(found) > 1 {
-		selected, err := prompter.Select("Multiple account-map files found. Select one", found)
-		if err != nil {
-			return make(map[string]string), nil
-		}
-		filePath = selected
-	}
-
-	data, err := fs.ReadFile(filePath)
+	componentName := "account-map"
+	stack, err := findStackWithComponent(atmosConfig, componentName)
 	if err != nil {
-		log.Debug("Cannot read account-map file", "path", filePath, "error", err)
-		return make(map[string]string), nil
+		return nil, fmt.Errorf("finding stack with %s component: %w", componentName, err)
 	}
-	log.Debug("Read account-map file", "path", filePath, "bytes", len(data))
+	if stack == "" {
+		log.Debug("No stack found with account-map component")
+		return nil, fmt.Errorf("no stack contains component %q", componentName)
+	}
 
-	result, err := parseAccountMap(data)
+	log.Debug("Found account-map component", "stack", stack)
+
+	componentSection, err := describeComponentRaw(atmosConfig, componentName, stack)
 	if err != nil {
-		log.Debug("Failed to parse account-map file", "path", filePath, "error", err)
-		return make(map[string]string), nil
+		return nil, fmt.Errorf("describing %s in stack %s: %w", componentName, stack, err)
 	}
 
-	log.Debug("Parsed account map", "accounts", len(result))
-	return result, nil
+	return extractAccountMap(componentSection)
 }
 
-// discoverSSOConfig searches known paths for aws-sso.yaml and parses it.
-// It also checks the existing auth config in atmos.yaml for SSO provider details
-// (start_url, region, provider name) before prompting the user.
-func discoverSSOConfig(base string, existingAuth *schema.AuthConfig, fs migrate.FileSystem, prompter migrate.Prompter) (*migrate.SSOConfig, error) {
-	defer perf.Track(nil, "awssso.discoverSSOConfig")()
+// discoverSSOConfigViaStacks uses atmos describe stacks to find an aws-sso
+// component and extract account_assignments from its vars.
+func discoverSSOConfigViaStacks(atmosConfig *schema.AtmosConfiguration, existingAuth *schema.AuthConfig, prompter migrate.Prompter) (*migrate.SSOConfig, error) {
+	defer perf.Track(nil, "awssso.discoverSSOConfigViaStacks")()
 
 	ssoCfg := &migrate.SSOConfig{
 		AccountAssignments: make(map[string]map[string][]string),
@@ -159,48 +125,24 @@ func discoverSSOConfig(base string, existingAuth *schema.AuthConfig, fs migrate.
 		}
 	}
 
-	// Then try to parse aws-sso.yaml for account assignments.
-	searchPaths := ssoConfigSearchPaths(base)
-	log.Debug("Searching for aws-sso.yaml", "paths", searchPaths)
+	// Find aws-sso component via stacks.
+	componentName := "aws-sso"
+	stack, err := findStackWithComponent(atmosConfig, componentName)
+	if err != nil {
+		log.Debug("Error finding stack with aws-sso component", "error", err)
+	}
 
-	found := findExistingFiles(searchPaths, fs)
-	if len(found) > 0 {
-		log.Debug("Found aws-sso.yaml file(s)", "paths", found)
-		filePath := found[0]
-		if len(found) > 1 {
-			selected, selectErr := prompter.Select("Multiple aws-sso.yaml files found. Select one", found)
-			if selectErr == nil {
-				filePath = selected
-			}
-		}
+	if stack != "" {
+		log.Debug("Found aws-sso component", "stack", stack)
 
-		data, readErr := fs.ReadFile(filePath)
-		if readErr != nil {
-			log.Debug("Cannot read aws-sso.yaml", "path", filePath, "error", readErr)
+		componentSection, descErr := describeComponentRaw(atmosConfig, componentName, stack)
+		if descErr != nil {
+			log.Debug("Failed to describe aws-sso component", "stack", stack, "error", descErr)
 		} else {
-			log.Debug("Read aws-sso.yaml", "path", filePath, "bytes", len(data))
-			parsed, parseErr := parseSSOConfig(data)
-			if parseErr != nil {
-				log.Debug("Failed to parse aws-sso.yaml", "path", filePath, "error", parseErr)
-			} else {
-				log.Debug("Parsed aws-sso.yaml",
-					"start_url", parsed.StartURL,
-					"region", parsed.Region,
-					"groups", len(parsed.AccountAssignments))
-				// Merge: keep existing auth values if parsed file doesn't have them.
-				if parsed.StartURL != "" {
-					ssoCfg.StartURL = parsed.StartURL
-				}
-				if parsed.Region != "" {
-					ssoCfg.Region = parsed.Region
-				}
-				if len(parsed.AccountAssignments) > 0 {
-					ssoCfg.AccountAssignments = parsed.AccountAssignments
-				}
-			}
+			extractSSOFromComponent(componentSection, ssoCfg)
 		}
 	} else {
-		log.Debug("No aws-sso.yaml found in search paths")
+		log.Debug("No stack found with aws-sso component")
 	}
 
 	// Only prompt for values still missing after checking both sources.
@@ -221,9 +163,9 @@ func discoverSSOConfig(base string, existingAuth *schema.AuthConfig, fs migrate.
 	}
 
 	if ssoCfg.ProviderName == "" {
-		providerName, err := prompter.Input("Enter SSO provider name", "sso")
-		if err != nil {
-			return nil, fmt.Errorf("prompting for provider name: %w", err)
+		providerName, inputErr := prompter.Input("Enter SSO provider name", "sso")
+		if inputErr != nil {
+			return nil, fmt.Errorf("prompting for provider name: %w", inputErr)
 		}
 		ssoCfg.ProviderName = providerName
 	}
@@ -231,122 +173,139 @@ func discoverSSOConfig(base string, existingAuth *schema.AuthConfig, fs migrate.
 	return ssoCfg, nil
 }
 
-// findExistingFiles returns the subset of paths that exist on the filesystem.
-func findExistingFiles(paths []string, fs migrate.FileSystem) []string {
-	var found []string
-	for _, p := range paths {
-		if fs.Exists(p) {
-			found = append(found, p)
-		}
+// findStackWithComponent uses ExecuteDescribeStacks to find the first stack
+// that contains the given component.
+func findStackWithComponent(atmosConfig *schema.AtmosConfiguration, component string) (string, error) {
+	defer perf.Track(nil, "awssso.findStackWithComponent")()
+
+	stacks, err := exec.ExecuteDescribeStacks(
+		atmosConfig,
+		"",                    // filterByStack — search all.
+		[]string{component},   // components — filter to this component.
+		[]string{"terraform"}, // componentTypes.
+		[]string{"vars"},      // sections — we only need vars.
+		true,                  // ignoreMissingFiles.
+		false,                 // processTemplates.
+		false,                 // processYamlFunctions.
+		false,                 // includeEmptyStacks.
+		nil,                   // skip.
+		nil,                   // authManager.
+	)
+	if err != nil {
+		return "", err
 	}
-	return found
+
+	// Return the first stack that has this component.
+	for stackName := range stacks {
+		log.Debug("Stack contains component", "stack", stackName, "component", component)
+		return stackName, nil
+	}
+
+	return "", nil
 }
 
-// resolveFilePath picks a single file path from candidates or prompts the user.
-func resolveFilePath(found []string, prompter migrate.Prompter, fileName string) (string, error) {
-	switch len(found) {
-	case 0:
-		path, err := prompter.Input(fmt.Sprintf("Could not find %s. Enter the path", fileName), "")
-		if err != nil {
-			return "", fmt.Errorf("prompting for %s path: %w", fileName, err)
-		}
-		if path == "" {
-			return "", fmt.Errorf("no path provided for %s", fileName)
-		}
-		return path, nil
-	case 1:
-		return found[0], nil
-	default:
-		selected, err := prompter.Select(fmt.Sprintf("Multiple %s files found. Select one", fileName), found)
-		if err != nil {
-			return "", fmt.Errorf("selecting %s: %w", fileName, err)
-		}
-		return selected, nil
-	}
+// describeComponentRaw uses ExecuteDescribeComponent to get the fully resolved
+// component config without processing templates or YAML functions.
+func describeComponentRaw(atmosConfig *schema.AtmosConfiguration, component, stack string) (map[string]any, error) {
+	defer perf.Track(nil, "awssso.describeComponentRaw")()
+
+	return exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 }
 
-// parseAccountMap extracts account name-to-ID mappings from account-map YAML content.
-// It searches multiple YAML paths for vars containing full_account_map or account_map:
-//   - vars.full_account_map / vars.account_map (top-level)
-//   - components.terraform.account-map.vars.full_account_map (component-level)
-func parseAccountMap(data []byte) (map[string]string, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("account map file is empty")
+// extractAccountMap extracts account name-to-ID mappings from a described
+// account-map component section.
+func extractAccountMap(componentSection map[string]any) (map[string]string, error) {
+	vars, ok := componentSection["vars"]
+	if !ok {
+		return nil, fmt.Errorf("account-map component has no vars")
 	}
 
-	var raw map[string]interface{}
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parsing account map YAML: %w", err)
+	varsMap, ok := vars.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("account-map vars is not a map")
 	}
 
-	// Collect all candidate vars maps to search.
-	varsCandidates := findVarsCandidates(raw, "account-map")
+	// Log available var keys for debugging.
+	varKeys := make([]string, 0, len(varsMap))
+	for k := range varsMap {
+		varKeys = append(varKeys, k)
+	}
+	log.Debug("account-map vars keys", "keys", varKeys)
 
-	// Search each candidate for account map data.
-	for _, varsMap := range varsCandidates {
-		for _, key := range []string{"full_account_map", "account_map"} {
-			if v, exists := varsMap[key]; exists {
-				accountMap, ok := v.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				result := make(map[string]string, len(accountMap))
-				keys := make([]string, 0, len(accountMap))
-				for k := range accountMap {
-					keys = append(keys, k)
-				}
-				sort.Strings(keys)
-				for _, k := range keys {
-					result[k] = fmt.Sprintf("%v", accountMap[k])
-				}
-				return result, nil
+	// Try full_account_map first, then account_map.
+	for _, key := range []string{"full_account_map", "account_map"} {
+		if v, exists := varsMap[key]; exists {
+			accountMap, ok := v.(map[string]any)
+			if !ok {
+				log.Debug("Account map key is not a map", "key", key)
+				continue
 			}
+
+			result := make(map[string]string, len(accountMap))
+			keys := make([]string, 0, len(accountMap))
+			for k := range accountMap {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				result[k] = fmt.Sprintf("%v", accountMap[k])
+			}
+
+			log.Debug("Extracted account map", "key", key, "accounts", len(result))
+			return result, nil
 		}
 	}
 
-	return nil, fmt.Errorf("account map YAML missing 'vars.full_account_map' or 'vars.account_map'")
+	return nil, fmt.Errorf("account-map vars missing full_account_map or account_map")
 }
 
-// parseSSOConfig extracts SSO configuration from aws-sso YAML content.
-// It searches multiple YAML paths for vars containing account_assignments:
-//   - vars.account_assignments (top-level)
-//   - components.terraform.aws-sso.vars.account_assignments (component-level)
-func parseSSOConfig(data []byte) (*migrate.SSOConfig, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("SSO config file is empty")
+// extractSSOFromComponent extracts SSO config from a described aws-sso component.
+func extractSSOFromComponent(componentSection map[string]any, ssoCfg *migrate.SSOConfig) {
+	vars, ok := componentSection["vars"]
+	if !ok {
+		log.Debug("aws-sso component has no vars")
+		return
 	}
 
-	var raw map[string]interface{}
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parsing SSO config YAML: %w", err)
+	varsMap, ok := vars.(map[string]any)
+	if !ok {
+		log.Debug("aws-sso vars is not a map")
+		return
 	}
 
-	// Collect all candidate vars maps to search.
-	varsCandidates := findVarsCandidates(raw, "aws-sso")
+	// Log available var keys for debugging.
+	varKeys := make([]string, 0, len(varsMap))
+	for k := range varsMap {
+		varKeys = append(varKeys, k)
+	}
+	log.Debug("aws-sso vars keys", "keys", varKeys)
 
-	ssoCfg := &migrate.SSOConfig{
-		AccountAssignments: make(map[string]map[string][]string),
+	// Extract optional start_url and region.
+	if v, exists := varsMap["start_url"]; exists && ssoCfg.StartURL == "" {
+		ssoCfg.StartURL = fmt.Sprintf("%v", v)
+	}
+	if v, exists := varsMap["region"]; exists && ssoCfg.Region == "" {
+		ssoCfg.Region = fmt.Sprintf("%v", v)
 	}
 
-	// Search each candidate for SSO-related vars.
-	for _, varsMap := range varsCandidates {
-		if v, exists := varsMap["start_url"]; exists && ssoCfg.StartURL == "" {
-			ssoCfg.StartURL = fmt.Sprintf("%v", v)
+	// Extract account_assignments.
+	if assignData, exists := varsMap["account_assignments"]; exists && len(ssoCfg.AccountAssignments) == 0 {
+		parsed, err := parseAccountAssignments(assignData)
+		if err != nil {
+			log.Debug("Failed to parse account_assignments from component", "error", err)
+			return
 		}
-		if v, exists := varsMap["region"]; exists && ssoCfg.Region == "" {
-			ssoCfg.Region = fmt.Sprintf("%v", v)
-		}
-
-		if assignData, exists := varsMap["account_assignments"]; exists && len(ssoCfg.AccountAssignments) == 0 {
-			parsed, err := parseAccountAssignments(assignData)
-			if err != nil {
-				return nil, err
-			}
-			ssoCfg.AccountAssignments = parsed
-		}
+		ssoCfg.AccountAssignments = parsed
+		log.Debug("Extracted account assignments from aws-sso component", "groups", len(parsed))
 	}
-
-	return ssoCfg, nil
 }
 
 // parseAccountAssignments parses the account_assignments structure:
@@ -382,69 +341,4 @@ func parseAccountAssignments(assignData interface{}) (map[string]map[string][]st
 	}
 
 	return result, nil
-}
-
-// findVarsCandidates returns all vars maps found at known YAML paths.
-// It searches:
-//   - raw["vars"] (top-level)
-//   - raw["components"]["terraform"][componentName]["vars"] (component-level)
-func findVarsCandidates(raw map[string]interface{}, componentName string) []map[string]interface{} {
-	var candidates []map[string]interface{}
-
-	// Log top-level keys for debugging.
-	topKeys := make([]string, 0, len(raw))
-	for k := range raw {
-		topKeys = append(topKeys, k)
-	}
-	log.Debug("YAML top-level keys", "component", componentName, "keys", topKeys)
-
-	// Top-level vars.
-	if vars, ok := raw["vars"]; ok {
-		if varsMap, ok := vars.(map[string]interface{}); ok {
-			varKeys := make([]string, 0, len(varsMap))
-			for k := range varsMap {
-				varKeys = append(varKeys, k)
-			}
-			log.Debug("Found top-level vars", "keys", varKeys)
-			candidates = append(candidates, varsMap)
-		}
-	}
-
-	// Component-level vars: components.terraform.<componentName>.vars.
-	if components, ok := raw["components"]; ok {
-		if compMap, ok := components.(map[string]interface{}); ok {
-			if terraform, ok := compMap["terraform"]; ok {
-				if tfMap, ok := terraform.(map[string]interface{}); ok {
-					if comp, ok := tfMap[componentName]; ok {
-						if compCfg, ok := comp.(map[string]interface{}); ok {
-							if vars, ok := compCfg["vars"]; ok {
-								if varsMap, ok := vars.(map[string]interface{}); ok {
-									varKeys := make([]string, 0, len(varsMap))
-									for k := range varsMap {
-										varKeys = append(varKeys, k)
-									}
-									log.Debug("Found component-level vars",
-										"component", componentName, "keys", varKeys)
-									candidates = append(candidates, varsMap)
-								}
-							} else {
-								log.Debug("Component found but no 'vars' key", "component", componentName)
-							}
-						}
-					} else {
-						// Log available terraform components for debugging.
-						tfCompNames := make([]string, 0, len(tfMap))
-						for k := range tfMap {
-							tfCompNames = append(tfCompNames, k)
-						}
-						log.Debug("Component not found in terraform section",
-							"component", componentName, "available", tfCompNames)
-					}
-				}
-			}
-		}
-	}
-
-	log.Debug("Vars candidates found", "component", componentName, "count", len(candidates))
-	return candidates
 }
