@@ -1076,8 +1076,25 @@ for error handling and reference `aws.security.enabled` config.
         identity: "security-readonly"  # Atmos Auth identity from auth section
     ```
 
+23. **Default region configuration** — ✅ Added `region` field to `AWSSecuritySettings` schema.
+    This sets the default AWS region for Security Hub queries (typically the finding aggregation
+    region). The `--region` CLI flag overrides it. The `resolveRegion()` function now checks:
+    CLI flag → config region → default (`us-east-1`).
+
+    The combination of `identity` + `region` means users configure once and query always:
+    - `identity` determines **which account** (delegated admin with aggregated findings)
+    - `region` determines **which region** (Security Hub aggregation region)
+
+    ```yaml
+    aws:
+      security:
+        enabled: true
+        identity: "security-readonly"  # Atmos Auth identity → security account
+        region: "us-east-2"            # Security Hub aggregation region
+    ```
+
     ```bash
-    # Use identity from config
+    # Use identity + region from config (no extra flags needed)
     atmos aws security analyze --stack prod-us-east-1
 
     # Override identity at runtime

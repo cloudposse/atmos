@@ -576,22 +576,33 @@ func TestReachedLimit(t *testing.T) {
 }
 
 func TestResolveRegion(t *testing.T) {
-	fetcher := &awsFindingFetcher{atmosConfig: &schema.AtmosConfiguration{}}
+	t.Run("override wins", func(t *testing.T) {
+		fetcher := &awsFindingFetcher{atmosConfig: &schema.AtmosConfiguration{}}
+		assert.Equal(t, "eu-west-1", fetcher.resolveRegion("eu-west-1"))
+	})
 
-	tests := []struct {
-		name     string
-		override string
-		want     string
-	}{
-		{"with override", "eu-west-1", "eu-west-1"},
-		{"empty falls to default", "", "us-east-1"},
-	}
+	t.Run("config region used when no override", func(t *testing.T) {
+		fetcher := &awsFindingFetcher{atmosConfig: &schema.AtmosConfiguration{
+			AWS: schema.AWSSettings{
+				Security: schema.AWSSecuritySettings{Region: "us-east-2"},
+			},
+		}}
+		assert.Equal(t, "us-east-2", fetcher.resolveRegion(""))
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, fetcher.resolveRegion(tt.override))
-		})
-	}
+	t.Run("override wins over config", func(t *testing.T) {
+		fetcher := &awsFindingFetcher{atmosConfig: &schema.AtmosConfiguration{
+			AWS: schema.AWSSettings{
+				Security: schema.AWSSecuritySettings{Region: "us-east-2"},
+			},
+		}}
+		assert.Equal(t, "eu-west-1", fetcher.resolveRegion("eu-west-1"))
+	})
+
+	t.Run("falls to default when no config or override", func(t *testing.T) {
+		fetcher := &awsFindingFetcher{atmosConfig: &schema.AtmosConfiguration{}}
+		assert.Equal(t, "us-east-1", fetcher.resolveRegion(""))
+	})
 }
 
 func TestBuildComplianceReport(t *testing.T) {

@@ -4,6 +4,7 @@ package schema
 type AWSSecuritySettings struct {
 	Enabled         bool                  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Identity        string                `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"` // Atmos Auth identity for AWS credential injection.
+	Region          string                `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`       // Default AWS region (e.g., Security Hub aggregation region).
 	Sources         AWSSecuritySources    `yaml:"sources,omitempty" json:"sources,omitempty" mapstructure:"sources"`
 	DefaultSeverity []string              `yaml:"default_severity,omitempty" json:"default_severity,omitempty" mapstructure:"default_severity"` // Default severity filter (e.g., ["CRITICAL", "HIGH"]).
 	MaxFindings     int                   `yaml:"max_findings,omitempty" json:"max_findings,omitempty" mapstructure:"max_findings"`             // Maximum findings per analysis run (controls AI costs).

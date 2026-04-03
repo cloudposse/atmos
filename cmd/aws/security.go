@@ -113,6 +113,11 @@ var securityAnalyzeCmd = &cobra.Command{
 			}
 		}
 
+		// Resolve region (from --region flag or config).
+		if region == "" {
+			region = atmosConfig.AWS.Security.Region
+		}
+
 		// Resolve Atmos Auth identity (from --identity flag or config).
 		identityName := identityFlag
 		if identityName == "" {

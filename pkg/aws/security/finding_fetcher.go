@@ -217,7 +217,10 @@ func (f *awsFindingFetcher) resolveRegion(override string) string {
 	if override != "" {
 		return override
 	}
-	// Fall back to a sensible default.
+	// Fall back to config region, then auth context region, then default.
+	if f.atmosConfig.AWS.Security.Region != "" {
+		return f.atmosConfig.AWS.Security.Region
+	}
 	return "us-east-1"
 }
 

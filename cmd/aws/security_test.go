@@ -558,3 +558,19 @@ func TestSecuritySettingsIdentityField_Empty(t *testing.T) {
 	}
 	assert.Empty(t, settings.Identity)
 }
+
+func TestSecuritySettingsRegionField(t *testing.T) {
+	settings := schema.AWSSecuritySettings{
+		Enabled:  true,
+		Identity: "security-readonly",
+		Region:   "us-east-2",
+	}
+	assert.Equal(t, "us-east-2", settings.Region)
+}
+
+func TestSecuritySettingsRegionField_Empty(t *testing.T) {
+	settings := schema.AWSSecuritySettings{
+		Enabled: true,
+	}
+	assert.Empty(t, settings.Region)
+}
