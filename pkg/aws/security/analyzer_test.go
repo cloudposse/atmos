@@ -777,3 +777,215 @@ func TestAnalyzeSimple_Fallback(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, remediation.Description, "Simple analysis response")
 }
+
+func TestFindingDedupKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		finding  *Finding
+		expected string
+	}{
+		{
+			name: "with mapping",
+			finding: &Finding{
+				Title: "Open SG",
+				Mapping: &ComponentMapping{
+					Component: "vpc",
+					Stack:     "ue2-dev",
+				},
+			},
+			expected: "Open SG|vpc|ue2-dev",
+		},
+		{
+			name: "nil mapping",
+			finding: &Finding{
+				Title: "No mapping",
+			},
+			expected: "No mapping||",
+		},
+		{
+			name: "same title different component",
+			finding: &Finding{
+				Title: "Open SG",
+				Mapping: &ComponentMapping{
+					Component: "rds",
+					Stack:     "ue2-dev",
+				},
+			},
+			expected: "Open SG|rds|ue2-dev",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, findingDedupKey(tt.finding))
+		})
+	}
+}
+
+func TestAnalyzeFindings_DeduplicatesSameTitle(t *testing.T) {
+	callCount := 0
+	client := &mockAIClient{
+		response: "**Root Cause:** Open security group\n\n**Risk:** High",
+	}
+
+	// Override readFile to avoid filesystem access.
+	originalReadFile := readFile
+	readFile = func(_ string) ([]byte, error) {
+		return []byte("resource \"aws_security_group\" {}"), nil
+	}
+	t.Cleanup(func() { readFile = originalReadFile })
+
+	countingClient := &countingMockClient{
+		inner:     client,
+		callCount: &callCount,
+	}
+	analyzer := &aiAnalyzer{
+		client:      countingClient,
+		atmosConfig: &schema.AtmosConfiguration{},
+	}
+
+	// 4 findings with the same title and component — should only trigger 1 AI call.
+	findings := []Finding{
+		{
+			ID:    "finding-1",
+			Title: "EC2.18 Security groups should only allow unrestricted incoming traffic",
+			Mapping: &ComponentMapping{
+				Component:     "rds/example",
+				Stack:         "plat-use2-dev",
+				ComponentPath: "/components/terraform/rds",
+				Mapped:        true,
+			},
+		},
+		{
+			ID:    "finding-2",
+			Title: "EC2.18 Security groups should only allow unrestricted incoming traffic",
+			Mapping: &ComponentMapping{
+				Component:     "rds/example",
+				Stack:         "plat-use2-dev",
+				ComponentPath: "/components/terraform/rds",
+				Mapped:        true,
+			},
+		},
+		{
+			ID:    "finding-3",
+			Title: "EC2.18 Security groups should only allow unrestricted incoming traffic",
+			Mapping: &ComponentMapping{
+				Component:     "rds/example",
+				Stack:         "plat-use2-dev",
+				ComponentPath: "/components/terraform/rds",
+				Mapped:        true,
+			},
+		},
+		{
+			ID:    "finding-4",
+			Title: "EC2.18 Security groups should only allow unrestricted incoming traffic",
+			Mapping: &ComponentMapping{
+				Component:     "rds/example",
+				Stack:         "plat-use2-dev",
+				ComponentPath: "/components/terraform/rds",
+				Mapped:        true,
+			},
+		},
+	}
+
+	result, err := analyzer.AnalyzeFindings(context.Background(), findings)
+	require.NoError(t, err)
+	assert.Len(t, result, 4)
+
+	// Only 1 AI call should have been made despite 4 findings.
+	assert.Equal(t, 1, callCount)
+
+	// All findings should share the same remediation.
+	for i := range result {
+		require.NotNil(t, result[i].Remediation, "finding %d should have remediation", i)
+		assert.Contains(t, result[i].Remediation.RootCause, "Open security group")
+	}
+}
+
+func TestAnalyzeFindings_DifferentTitlesAnalyzedSeparately(t *testing.T) {
+	callCount := 0
+	client := &mockAIClient{
+		response: "**Root Cause:** Test\n\n**Risk:** Low",
+	}
+
+	originalReadFile := readFile
+	readFile = func(_ string) ([]byte, error) {
+		return []byte("resource \"aws_s3_bucket\" {}"), nil
+	}
+	t.Cleanup(func() { readFile = originalReadFile })
+
+	countingClient := &countingMockClient{
+		inner:     client,
+		callCount: &callCount,
+	}
+	analyzer := &aiAnalyzer{
+		client:      countingClient,
+		atmosConfig: &schema.AtmosConfiguration{},
+	}
+
+	// 2 findings with different titles — should trigger 2 AI calls.
+	findings := []Finding{
+		{
+			ID:    "finding-a",
+			Title: "S3 bucket without encryption",
+			Mapping: &ComponentMapping{
+				Component:     "s3-bucket",
+				Stack:         "ue2-dev",
+				ComponentPath: "/components/terraform/s3",
+				Mapped:        true,
+			},
+		},
+		{
+			ID:    "finding-b",
+			Title: "S3 bucket without versioning",
+			Mapping: &ComponentMapping{
+				Component:     "s3-bucket",
+				Stack:         "ue2-dev",
+				ComponentPath: "/components/terraform/s3",
+				Mapped:        true,
+			},
+		},
+	}
+
+	result, err := analyzer.AnalyzeFindings(context.Background(), findings)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+	assert.Equal(t, 2, callCount)
+}
+
+func TestIsRetryableAIError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{name: "nil error", err: nil, expected: false},
+		{name: "529 overloaded", err: fmt.Errorf("status 529: overloaded"), expected: true},
+		{name: "overloaded message", err: fmt.Errorf("API is overloaded"), expected: true},
+		{name: "429 rate limit", err: fmt.Errorf("status 429: rate limit exceeded"), expected: true},
+		{name: "rate limit text", err: fmt.Errorf("rate limit exceeded"), expected: true},
+		{name: "500 server error", err: fmt.Errorf("status 500"), expected: true},
+		{name: "502 bad gateway", err: fmt.Errorf("status 502"), expected: true},
+		{name: "503 unavailable", err: fmt.Errorf("status 503"), expected: true},
+		{name: "auth error", err: fmt.Errorf("status 401: unauthorized"), expected: false},
+		{name: "bad request", err: fmt.Errorf("status 400: bad request"), expected: false},
+		{name: "generic error", err: fmt.Errorf("something went wrong"), expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isRetryableAIError(tt.err))
+		})
+	}
+}
+
+func TestAiRetryConfig(t *testing.T) {
+	cfg := aiRetryConfig()
+	require.NotNil(t, cfg.MaxAttempts)
+	assert.Equal(t, aiRetryMaxAttempts, *cfg.MaxAttempts)
+	assert.Equal(t, schema.BackoffExponential, cfg.BackoffStrategy)
+	require.NotNil(t, cfg.InitialDelay)
+	assert.Equal(t, aiRetryBaseDelay, *cfg.InitialDelay)
+	require.NotNil(t, cfg.MaxDelay)
+	assert.Equal(t, aiRetryMaxDelay, *cfg.MaxDelay)
+}

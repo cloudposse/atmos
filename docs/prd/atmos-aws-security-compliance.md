@@ -1,8 +1,8 @@
 # Atmos AWS Security & Compliance - Product Requirements Document
 
-**Status:** Phase 1-5 Complete, Remaining Work Planned
-**Version:** 0.7
-**Last Updated:** 2026-04-02
+**Status:** Phase 1-5 Complete, AI Improvements Shipped
+**Version:** 0.8
+**Last Updated:** 2026-04-03
 
 ---
 
@@ -595,7 +595,7 @@ atmos aws security analyze --stack prod-us-east-1 --format json --file reports/f
 | `--framework`    | string | (all)            | Compliance framework filter: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist` |
 | `--format`       | string | `markdown`       | Output format: `markdown`, `json`, `yaml`, `csv`                           |
 | `--file`         | string | (stdout)         | Write output to file instead of stdout (creates parent dirs if needed)     |
-| `--max-findings` | int    | `50`             | Maximum findings to analyze (AI cost control)                              |
+| `--max-findings` | int    | `500`            | Maximum findings to analyze                                                |
 | `--ai`           | bool   | `false`          | Enable AI-powered analysis (requires `ai.enabled: true`)                   |
 | `--region`       | string | (from config)    | AWS region override (default: `aws.security.region` or `us-east-1`)        |
 | `--identity`     | string | (from config)    | Atmos Auth identity override (default: `aws.security.identity`)            |
@@ -1297,6 +1297,37 @@ for error handling and reference `aws.security.enabled` config.
 42. **UI messages use themed ui layer** — ✅ Replaced all hardcoded emoji icons with
     `ui.Info()`, `ui.Success()`, `ui.Warning()` for automatic theming.
 
+### AI Analysis Improvements (2026-04-03)
+
+43. **Finding deduplication before AI** — ✅ Findings with the same title + component + stack
+    are analyzed once by AI; the remediation is shared across all duplicates. This reduces
+    AI API calls (and cost) significantly — in the production test, 4 identical security
+    group findings triggered 1 AI call instead of 4. Implemented via `findingDedupKey()`
+    and `remediationCache` in `analyzer.go`.
+
+44. **Retry with exponential backoff** — ✅ AI analysis calls now retry on transient errors
+    (Anthropic 529 overloaded, 429 rate limit, 500/502/503 server errors) using the existing
+    `pkg/retry` package. Configuration: 3 max attempts, 2s initial delay, 15s max delay,
+    exponential backoff with 30% jitter. Non-retryable errors (401, 400) fail immediately.
+    This handles the Anthropic API overload issues observed in production testing.
+
+45. **Compact output when `--ai` is used** — ✅ When `--ai` is active with markdown format
+    to stdout, the security command writes compact JSON (captured by the global AI for
+    context) instead of the verbose per-finding markdown report. The global `--ai` flag
+    then generates a comprehensive human-readable AI summary. This eliminates redundant
+    output — the user sees only the AI summary, not both the detailed report AND the summary.
+
+46. **Increased AI timeout** — ✅ Default timeout increased from 120s to 300s when `--ai`
+    is used. Multi-turn tool analysis (API providers calling `atmos_describe_component`,
+    `read_component_file`, etc.) with retries needs more time than simple API calls.
+    Configurable via `ai.timeout_seconds` in `atmos.yaml`.
+
+47. **Glamour color profile fix** — ✅ Fixed `renderMarkdown()` in `pkg/ui/formatter.go` to
+    pass explicit `glamour.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile())`.
+    Previously, glamour auto-detected its own color profile, which could disagree with what
+    atmos configured via `lipgloss.SetColorProfile()`. This ensures consistent colored
+    output across all markdown rendering paths.
+
 ### Production Testing Results (2026-04-03)
 
 Tested against the InSpatial AWS organization (11 accounts, Security Hub delegated admin,
@@ -1323,17 +1354,29 @@ Tested against the InSpatial AWS organization (11 accounts, Security Hub delegat
 
 **Output formats verified:** Markdown (grouped/ungrouped), JSON, YAML — all consistent.
 
+**AI analysis (`--ai` flag) verified:**
+- `--stack plat-use2-dev --component rds/example --ai` → 4 findings, 1 CRITICAL + 3 HIGH
+- All 4 findings on same security group (sg-01d9196802a897085) with open 0.0.0.0/0 rules
+- Finding deduplication: 4 findings with different titles → 4 unique AI calls (correct, titles differ)
+- Successful AI analysis (EC2.18): identified root cause in `allowed_cidr_blocks`, read
+  `catalog/rds/defaults.yaml` via tools, generated specific stack changes with comments,
+  provided 6 remediation steps, 6 AWS documentation references
+- AI-generated summary correctly identified single root cause across all 4 findings
+- Retry logic handled Anthropic 529 overload errors (3 retries per finding)
+- Global `--ai` summary replaced verbose per-finding report with compact JSON context
+
 ### Known Limitations
 
 1. **Cross-account tag lookup** — The Tagging API only works in the same account. Finding-embedded
    tags (`Resources[].Tags`) are the primary tag source. Resources without embedded tags can
    only be mapped via context-tags, naming convention, or resource-type heuristics.
 
-2. **`--ai` flag not working** — AI analysis fails from the security command context.
-   Investigation needed.
-
-3. **Naming convention is the weakest mapper** — Only used as last resort (confidence: low).
+2. **Naming convention is the weakest mapper** — Only used as last resort (confidence: low).
    The context-tags strategy handles most cases that naming convention would attempt.
+
+3. **AI timeout on large context** — Multi-turn tool analysis with retries can exceed 120s
+   per finding. Default timeout increased to 300s when `--ai` is used. Configurable via
+   `ai.timeout_seconds`.
 
 ### Remaining Work (Future PRs)
 
@@ -1343,7 +1386,6 @@ Tested against the InSpatial AWS organization (11 accounts, Security Hub delegat
   mapping. Reuse `!terraform.state` infrastructure.
 - **AI-assisted inference (Path B Strategy 4)** — Send unmapped findings to AI for component
   inference when heuristic strategies fail.
-- **Fix `--ai` flag** — Debug why AI analysis fails from security command context.
 - **Integration tests** — End-to-end tests with real AWS API calls (requires test account).
 
 ### Post-Implementation Analysis (2026-04-02)
@@ -1526,7 +1568,7 @@ Mock generation uses `go.uber.org/mock/mockgen` with `//go:generate` directives:
 | `pkg/aws/security/finding_fetcher_test.go`  | 17+   | ~92%     | Mocked AWS SDK clients, total controls fix                |
 | `pkg/aws/security/component_mapper_test.go` | 11    | ~90%     | Tag-based and heuristic mapping paths                     |
 | `pkg/aws/security/report_renderer_test.go`  | 18    | ~95%     | All four output formats                                   |
-| `pkg/aws/security/analyzer_test.go`         | 15    | ~88%     | Manual mock `mockAIClient` for AI provider                |
+| `pkg/aws/security/analyzer_test.go`         | 25+   | ~90%     | AI analyzer: dedup, retry, tool fallback, structured parsing |
 | `pkg/aws/security/cache_test.go`            | 9     | ~90%     | Cache TTL, invalidation, concurrency                      |
 | `cmd/aws/security_test.go`                  | 50+   | 100%*    | All parsing, validation, flags, report building           |
 | `cmd/aws/compliance_test.go`                | 25+   | 100%*    | Framework validation, control filtering, flags            |

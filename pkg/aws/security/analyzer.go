@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	ai "github.com/cloudposse/atmos/pkg/ai"
@@ -16,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -33,6 +35,14 @@ type FindingAnalyzer interface {
 
 // maxAnalysisIterations is the maximum tool call iterations for multi-turn analysis.
 const maxAnalysisIterations = 10
+
+// AI retry configuration for transient errors (529 overload, timeouts).
+const (
+	aiRetryMaxAttempts = 3
+	aiRetryBaseDelay   = 2 * time.Second
+	aiRetryMaxDelay    = 15 * time.Second
+	aiRetryJitter      = 0.3
+)
 
 // aiAnalyzer implements FindingAnalyzer using an AI client for root cause analysis and remediation.
 type aiAnalyzer struct {
@@ -70,18 +80,69 @@ func newFindingAnalyzerWithClient(client registry.Client, atmosConfig *schema.At
 }
 
 // AnalyzeFinding analyzes a single finding with component context and returns AI-generated remediation.
+// Retries automatically on transient errors (API overload, timeouts).
 func (a *aiAnalyzer) AnalyzeFinding(ctx context.Context, finding *Finding, componentSource string, stackConfig string) (*Remediation, error) {
 	defer perf.Track(nil, "security.aiAnalyzer.AnalyzeFinding")()
 
 	prompt := buildAnalysisPrompt(finding, componentSource, stackConfig)
 
-	// Try multi-turn tool analysis for API providers.
-	if a.toolRegistry != nil && a.toolExecutor != nil {
-		return a.analyzeWithTools(ctx, finding, prompt)
-	}
+	var result *Remediation
+	retryCfg := aiRetryConfig()
 
-	// Fall back to single-prompt analysis (CLI providers or no tools).
-	return a.analyzeSimple(ctx, finding, prompt)
+	err := retry.WithPredicate(ctx, &retryCfg, func() error {
+		var analyzeErr error
+		// Try multi-turn tool analysis for API providers.
+		if a.toolRegistry != nil && a.toolExecutor != nil {
+			result, analyzeErr = a.analyzeWithTools(ctx, finding, prompt)
+		} else {
+			// Fall back to single-prompt analysis (CLI providers or no tools).
+			result, analyzeErr = a.analyzeSimple(ctx, finding, prompt)
+		}
+		return analyzeErr
+	}, isRetryableAIError)
+
+	return result, err
+}
+
+// aiRetryConfig returns the retry configuration for AI analysis calls.
+func aiRetryConfig() schema.RetryConfig {
+	maxAttempts := aiRetryMaxAttempts
+	baseDelay := aiRetryBaseDelay
+	maxDelay := aiRetryMaxDelay
+	multiplier := 2.0
+	jitter := aiRetryJitter
+	return schema.RetryConfig{
+		MaxAttempts:     &maxAttempts,
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &baseDelay,
+		MaxDelay:        &maxDelay,
+		Multiplier:      &multiplier,
+		RandomJitter:    &jitter,
+	}
+}
+
+// isRetryableAIError returns true for transient AI errors that warrant a retry.
+func isRetryableAIError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// Anthropic 529 (overloaded).
+	if strings.Contains(msg, "529") || strings.Contains(msg, "overloaded") {
+		log.Debug("AI call failed with transient error, retrying", "error", msg)
+		return true
+	}
+	// Rate limit.
+	if strings.Contains(msg, "429") || strings.Contains(msg, "rate limit") {
+		log.Debug("AI call rate limited, retrying", "error", msg)
+		return true
+	}
+	// Server errors.
+	if strings.Contains(msg, "500") || strings.Contains(msg, "502") || strings.Contains(msg, "503") {
+		log.Debug("AI call got server error, retrying", "error", msg)
+		return true
+	}
+	return false
 }
 
 // analyzeWithTools uses multi-turn tool execution for API providers.
@@ -175,12 +236,25 @@ func (a *aiAnalyzer) analyzeSimple(ctx context.Context, finding *Finding, prompt
 }
 
 // AnalyzeFindings analyzes multiple findings in batch, skipping unmapped findings.
+// Duplicate findings (same title + component) are analyzed once and share the remediation.
 func (a *aiAnalyzer) AnalyzeFindings(ctx context.Context, findings []Finding) ([]Finding, error) {
 	defer perf.Track(nil, "security.aiAnalyzer.AnalyzeFindings")()
+
+	// Cache remediation results by dedup key to avoid redundant AI calls.
+	remediationCache := make(map[string]*Remediation)
 
 	for i := range findings {
 		// Skip findings that are not mapped to a component.
 		if findings[i].Mapping == nil || !findings[i].Mapping.Mapped {
+			continue
+		}
+
+		// Check if we already analyzed an identical finding (same title + component + stack).
+		key := findingDedupKey(&findings[i])
+		if cached, ok := remediationCache[key]; ok {
+			log.Debug("Reusing cached AI analysis for duplicate finding",
+				"finding_id", findings[i].ID, "dedup_key", key)
+			findings[i].Remediation = cached
 			continue
 		}
 
@@ -190,16 +264,28 @@ func (a *aiAnalyzer) AnalyzeFindings(ctx context.Context, findings []Finding) ([
 		remediation, err := a.AnalyzeFinding(ctx, &findings[i], componentSource, stackConfig)
 		if err != nil {
 			// Log error but continue with remaining findings.
-			findings[i].Remediation = &Remediation{
+			remediation = &Remediation{
 				Description: fmt.Sprintf("AI analysis failed: %s", err.Error()),
 				RiskLevel:   "unknown",
 			}
-			continue
 		}
 		findings[i].Remediation = remediation
+		remediationCache[key] = remediation
 	}
 
 	return findings, nil
+}
+
+// findingDedupKey returns a key for deduplicating findings before AI analysis.
+// Findings with the same title, component, and stack share the same root cause and remediation.
+func findingDedupKey(f *Finding) string {
+	component := ""
+	stack := ""
+	if f.Mapping != nil {
+		component = f.Mapping.Component
+		stack = f.Mapping.Stack
+	}
+	return f.Title + "|" + component + "|" + stack
 }
 
 // buildAnalysisPrompt constructs the data portion of the AI prompt for analyzing a security finding.

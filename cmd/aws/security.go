@@ -163,7 +163,12 @@ var securityAnalyzeCmd = &cobra.Command{
 		)
 
 		// Create context with timeout.
-		timeoutSeconds := 120
+		// AI analysis with multi-turn tools and retries needs more time than simple API calls.
+		defaultTimeout := 120
+		if useAI {
+			defaultTimeout = 300
+		}
+		timeoutSeconds := defaultTimeout
 		if atmosConfig.AI.TimeoutSeconds > 0 {
 			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
