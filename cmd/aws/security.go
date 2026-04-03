@@ -181,9 +181,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		}
 
 		if len(findings) == 0 {
-			if outputFormat == security.FormatMarkdown {
-				ui.Writef("✅ No security findings match the specified filters.\n")
-			}
+			ui.Writef("✅ No security findings match the specified filters. No report written.\n")
 			return nil
 		}
 
@@ -202,13 +200,9 @@ var securityAnalyzeCmd = &cobra.Command{
 		// findings are mapped to components/stacks via tags or heuristics.
 		if stack != "" || component != "" {
 			findings = filterByStackAndComponent(findings, stack, component)
-			if outputFormat == security.FormatMarkdown {
-				ui.Writef("🔎 Filtered to %d findings matching stack=%q component=%q\n", len(findings), stack, component)
-			}
+			ui.Writef("🔎 Filtered to %d findings matching stack=%q component=%q\n", len(findings), stack, component)
 			if len(findings) == 0 {
-				if outputFormat == security.FormatMarkdown {
-					ui.Writef("✅ No findings match the specified stack/component after mapping.\n")
-				}
+				ui.Writef("✅ No findings match the specified stack/component after mapping. No report written.\n")
 				return nil
 			}
 		}
