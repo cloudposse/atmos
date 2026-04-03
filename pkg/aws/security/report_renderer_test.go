@@ -150,10 +150,9 @@ func TestRenderSecurityReport_Markdown(t *testing.T) {
 	assert.Contains(t, output, "| **Path** | `components/terraform/s3-bucket` |")
 	assert.Contains(t, output, "| **Confidence** | exact |")
 
-	// Verify remediation section.
+	// Verify remediation section with structured fields.
 	assert.Contains(t, output, "#### Remediation")
 	assert.Contains(t, output, "**Root Cause:** Public access block not configured.")
-	assert.Contains(t, output, "Enable block public access on the S3 bucket.")
 	assert.Contains(t, output, "**Deploy:** `atmos terraform apply s3-bucket -s tenant1-ue1-prod`")
 
 	// Verify finding description section.
@@ -238,7 +237,8 @@ func TestRenderSecurityReport_CSV(t *testing.T) {
 	// Verify header row.
 	expectedHeaders := []string{
 		"id", "title", "severity", "source", "resource_arn", "resource_type",
-		"stack", "component", "mapped", "confidence", "remediation",
+		"stack", "component", "mapped", "confidence",
+		"root_cause", "deploy_command", "risk_level",
 	}
 	assert.Equal(t, expectedHeaders, records[0])
 
@@ -249,7 +249,6 @@ func TestRenderSecurityReport_CSV(t *testing.T) {
 	assert.Equal(t, "s3-bucket", records[1][7])
 	assert.Equal(t, "true", records[1][8])
 	assert.Equal(t, "exact", records[1][9])
-	assert.Equal(t, "Enable block public access on the S3 bucket.", records[1][10])
 
 	// Verify unmapped finding row (nil Mapping).
 	assert.Equal(t, "finding-3", records[3][0])
@@ -257,7 +256,9 @@ func TestRenderSecurityReport_CSV(t *testing.T) {
 	assert.Equal(t, "", records[3][7]) // component empty.
 	assert.Equal(t, "false", records[3][8])
 	assert.Equal(t, "", records[3][9])  // confidence empty.
-	assert.Equal(t, "", records[3][10]) // remediation empty.
+	assert.Equal(t, "", records[3][10]) // root_cause empty.
+	assert.Equal(t, "", records[3][11]) // deploy_command empty.
+	assert.Equal(t, "", records[3][12]) // risk_level empty.
 }
 
 func TestRenderComplianceReport_Markdown(t *testing.T) {
@@ -608,4 +609,141 @@ func TestCountMappedBySeverity(t *testing.T) {
 	mapped, unmapped = countMappedBySeverity(findings, SeverityCritical)
 	assert.Equal(t, 0, mapped)
 	assert.Equal(t, 0, unmapped)
+}
+
+func TestRenderRemediationMarkdown_AllFields(t *testing.T) {
+	report := &Report{
+		GeneratedAt:    time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+		Stack:          "prod-us-east-1",
+		TotalFindings:  1,
+		SeverityCounts: map[Severity]int{SeverityHigh: 1},
+		MappedCount:    1,
+		Findings: []Finding{
+			{
+				ID:          "full-001",
+				Title:       "EBS volume not encrypted",
+				Severity:    SeverityHigh,
+				Source:      SourceSecurityHub,
+				ResourceARN: "arn:aws:ec2:us-east-1:123:volume/vol-abc",
+				Mapping: &ComponentMapping{
+					Component: "ebs",
+					Stack:     "prod-us-east-1",
+					Mapped:    true,
+				},
+				Remediation: &Remediation{
+					RootCause:     "Encryption not enabled on the EBS volume.",
+					Steps:         []string{"Add encryption variable to stack config", "Apply the change"},
+					CodeChanges:   []CodeChange{{FilePath: "main.tf", Before: "encrypted = false", After: "encrypted = true"}},
+					StackChanges:  "vars:\n  encryption_enabled: true",
+					DeployCommand: "atmos terraform apply ebs -s prod-us-east-1",
+					RiskLevel:     "low",
+					References:    []string{"https://docs.aws.amazon.com/ebs", "CIS 2.2.1"},
+				},
+			},
+		},
+	}
+
+	var buf strings.Builder
+	renderer := NewReportRenderer(FormatMarkdown)
+	require.NoError(t, renderer.RenderSecurityReport(&buf, report))
+	output := buf.String()
+
+	// Root cause.
+	assert.Contains(t, output, "**Root Cause:** Encryption not enabled")
+
+	// Steps.
+	assert.Contains(t, output, "**Steps:**")
+	assert.Contains(t, output, "1. Add encryption variable to stack config")
+	assert.Contains(t, output, "2. Apply the change")
+
+	// Code changes.
+	assert.Contains(t, output, "**Code Changes:**")
+	assert.Contains(t, output, "File: `main.tf`")
+	assert.Contains(t, output, "- encrypted = false")
+	assert.Contains(t, output, "+ encrypted = true")
+
+	// Stack changes.
+	assert.Contains(t, output, "**Stack Changes:**")
+	assert.Contains(t, output, "encryption_enabled: true")
+
+	// Deploy.
+	assert.Contains(t, output, "**Deploy:** `atmos terraform apply ebs -s prod-us-east-1`")
+
+	// Risk.
+	assert.Contains(t, output, "**Risk:** low")
+
+	// References.
+	assert.Contains(t, output, "**References:**")
+	assert.Contains(t, output, "- https://docs.aws.amazon.com/ebs")
+	assert.Contains(t, output, "- CIS 2.2.1")
+}
+
+func TestRenderRemediationMarkdown_DescriptionFallback(t *testing.T) {
+	// When no structured fields are populated, falls back to Description.
+	report := &Report{
+		GeneratedAt:    time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+		TotalFindings:  1,
+		SeverityCounts: map[Severity]int{SeverityLow: 1},
+		Findings: []Finding{
+			{
+				ID:       "fallback-001",
+				Title:    "Minor issue",
+				Severity: SeverityLow,
+				Source:   SourceConfig,
+				Remediation: &Remediation{
+					Description: "This is a plain text description from the AI.",
+				},
+			},
+		},
+	}
+
+	var buf strings.Builder
+	renderer := NewReportRenderer(FormatMarkdown)
+	require.NoError(t, renderer.RenderSecurityReport(&buf, report))
+	output := buf.String()
+
+	assert.Contains(t, output, "This is a plain text description from the AI.")
+}
+
+func TestRenderCSV_WithRemediation(t *testing.T) {
+	report := &Report{
+		TotalFindings: 1,
+		Findings: []Finding{
+			{
+				ID:       "csv-001",
+				Title:    "Test",
+				Severity: SeverityHigh,
+				Source:   SourceSecurityHub,
+				Mapping: &ComponentMapping{
+					Stack:     "prod",
+					Component: "vpc",
+					Mapped:    true,
+				},
+				Remediation: &Remediation{
+					RootCause:     "Missing encryption",
+					DeployCommand: "atmos terraform apply vpc -s prod",
+					RiskLevel:     "medium",
+				},
+			},
+		},
+	}
+
+	var buf strings.Builder
+	renderer := NewReportRenderer(FormatCSV)
+	require.NoError(t, renderer.RenderSecurityReport(&buf, report))
+
+	r := csv.NewReader(strings.NewReader(buf.String()))
+	records, err := r.ReadAll()
+	require.NoError(t, err)
+	require.Len(t, records, 2) // header + 1 row.
+
+	// Verify new CSV columns.
+	assert.Equal(t, "root_cause", records[0][10])
+	assert.Equal(t, "deploy_command", records[0][11])
+	assert.Equal(t, "risk_level", records[0][12])
+
+	// Verify data.
+	assert.Equal(t, "Missing encryption", records[1][10])
+	assert.Equal(t, "atmos terraform apply vpc -s prod", records[1][11])
+	assert.Equal(t, "medium", records[1][12])
 }

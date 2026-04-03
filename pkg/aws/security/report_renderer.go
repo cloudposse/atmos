@@ -163,7 +163,8 @@ func (r *csvRenderer) RenderSecurityReport(w io.Writer, report *Report) error {
 	// Header row.
 	if err := cw.Write([]string{
 		"id", "title", "severity", "source", "resource_arn", "resource_type",
-		"stack", "component", "mapped", "confidence", "remediation",
+		"stack", "component", "mapped", "confidence",
+		"root_cause", "deploy_command", "risk_level",
 	}); err != nil {
 		return err
 	}
@@ -179,14 +180,17 @@ func (r *csvRenderer) RenderSecurityReport(w io.Writer, report *Report) error {
 			}
 			confidence = string(f.Mapping.Confidence)
 		}
-		remediation := ""
+		rootCause, deployCmd, riskLevel := "", "", ""
 		if f.Remediation != nil {
-			remediation = f.Remediation.Description
+			rootCause = f.Remediation.RootCause
+			deployCmd = f.Remediation.DeployCommand
+			riskLevel = f.Remediation.RiskLevel
 		}
 		if err := cw.Write([]string{
 			f.ID, f.Title, string(f.Severity), string(f.Source),
 			f.ResourceARN, f.ResourceType,
-			stack, component, mapped, confidence, remediation,
+			stack, component, mapped, confidence,
+			rootCause, deployCmd, riskLevel,
 		}); err != nil {
 			return err
 		}
@@ -295,15 +299,82 @@ func renderFindingMarkdown(sb *strings.Builder, f *Finding, num int) {
 	}
 
 	if f.Remediation != nil {
-		sb.WriteString("#### Remediation\n\n")
-		if f.Remediation.RootCause != "" {
-			fmt.Fprintf(sb, "**Root Cause:** %s\n\n", f.Remediation.RootCause)
-		}
-		fmt.Fprintf(sb, "%s\n\n", f.Remediation.Description)
-		if f.Remediation.DeployCommand != "" {
-			fmt.Fprintf(sb, "**Deploy:** `%s`\n\n", f.Remediation.DeployCommand)
-		}
+		renderRemediationMarkdown(sb, f.Remediation)
 	}
 
 	sb.WriteString("---\n\n")
+}
+
+// mdNewline is the newline string used in Markdown rendering.
+const mdNewline = "\n"
+
+// renderRemediationMarkdown renders the full Remediation struct as Markdown subsections.
+func renderRemediationMarkdown(sb *strings.Builder, r *Remediation) {
+	sb.WriteString("#### Remediation\n\n")
+
+	if r.RootCause != "" {
+		fmt.Fprintf(sb, "**Root Cause:** %s\n\n", r.RootCause)
+	}
+
+	renderSteps(sb, r.Steps)
+	renderCodeChanges(sb, r.CodeChanges)
+
+	if r.StackChanges != "" {
+		fmt.Fprintf(sb, "**Stack Changes:**\n\n%s\n\n", r.StackChanges)
+	}
+	if r.DeployCommand != "" {
+		fmt.Fprintf(sb, "**Deploy:** `%s`\n\n", r.DeployCommand)
+	}
+	if r.RiskLevel != "" {
+		fmt.Fprintf(sb, "**Risk:** %s\n\n", r.RiskLevel)
+	}
+
+	renderReferences(sb, r.References)
+
+	// Fall back to description if no structured fields are populated.
+	if r.RootCause == "" && len(r.Steps) == 0 && r.DeployCommand == "" {
+		fmt.Fprintf(sb, "%s\n\n", r.Description)
+	}
+}
+
+// renderSteps renders an ordered list of remediation steps.
+func renderSteps(sb *strings.Builder, steps []string) {
+	if len(steps) == 0 {
+		return
+	}
+	sb.WriteString("**Steps:**\n\n")
+	for i, step := range steps {
+		fmt.Fprintf(sb, "%d. %s%s", i+1, step, mdNewline)
+	}
+	sb.WriteString(mdNewline)
+}
+
+// renderCodeChanges renders code change diffs.
+func renderCodeChanges(sb *strings.Builder, changes []CodeChange) {
+	if len(changes) == 0 {
+		return
+	}
+	sb.WriteString("**Code Changes:**\n\n")
+	for _, change := range changes {
+		fmt.Fprintf(sb, "File: `%s`", change.FilePath)
+		if change.Line > 0 {
+			fmt.Fprintf(sb, " (line %d)", change.Line)
+		}
+		sb.WriteString(mdNewline)
+		if change.Before != "" {
+			fmt.Fprintf(sb, "```diff\n- %s\n+ %s\n```\n\n", change.Before, change.After)
+		}
+	}
+}
+
+// renderReferences renders a bulleted list of references.
+func renderReferences(sb *strings.Builder, refs []string) {
+	if len(refs) == 0 {
+		return
+	}
+	sb.WriteString("**References:**\n\n")
+	for _, ref := range refs {
+		fmt.Fprintf(sb, "- %s%s", ref, mdNewline)
+	}
+	sb.WriteString(mdNewline)
 }
