@@ -9,9 +9,9 @@ import (
 	"sort"
 	"text/template"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // profileTemplate is the Go template for rendering profile YAML files.
@@ -75,6 +75,11 @@ func (s *GenerateProfiles) Description() string {
 func (s *GenerateProfiles) Detect(ctx context.Context) (migrate.StepStatus, error) {
 	defer perf.Track(nil, "awssso.GenerateProfiles.Detect")()
 
+	// If there are no SSO group assignments, there's nothing to generate profiles from.
+	if s.migCtx.SSOConfig == nil || len(s.migCtx.SSOConfig.AccountAssignments) == 0 {
+		return migrate.StepNotApplicable, nil
+	}
+
 	// Check if profiles directory exists with subdirectories containing atmos.yaml files.
 	pattern := filepath.Join(s.migCtx.ProfilesPath, "*", "atmos.yaml")
 	matches, err := s.fs.Glob(pattern)
@@ -93,8 +98,8 @@ func (s *GenerateProfiles) Detect(ctx context.Context) (migrate.StepStatus, erro
 func (s *GenerateProfiles) Plan(ctx context.Context) ([]migrate.Change, error) {
 	defer perf.Track(nil, "awssso.GenerateProfiles.Plan")()
 
-	if s.migCtx.SSOConfig == nil {
-		return nil, fmt.Errorf("%w: SSO configuration required", errUtils.ErrSSOConfigNotFound)
+	if s.migCtx.SSOConfig == nil || len(s.migCtx.SSOConfig.AccountAssignments) == 0 {
+		return nil, nil
 	}
 
 	// Collect and sort group names for deterministic output.
@@ -126,8 +131,9 @@ func (s *GenerateProfiles) Plan(ctx context.Context) ([]migrate.Change, error) {
 func (s *GenerateProfiles) Apply(ctx context.Context) error {
 	defer perf.Track(nil, "awssso.GenerateProfiles.Apply")()
 
-	if s.migCtx.SSOConfig == nil {
-		return fmt.Errorf("%w: SSO configuration required", errUtils.ErrSSOConfigNotFound)
+	if s.migCtx.SSOConfig == nil || len(s.migCtx.SSOConfig.AccountAssignments) == 0 {
+		ui.Warning("No SSO group assignments found — skipping profile generation.")
+		return nil
 	}
 
 	// Collect and sort group names for deterministic output.

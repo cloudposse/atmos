@@ -20,6 +20,11 @@ func TestGenerateProfiles_Detect_NoProfiles(t *testing.T) {
 
 	migCtx := &migrate.MigrationContext{
 		ProfilesPath: "/tmp/profiles",
+		SSOConfig: &migrate.SSOConfig{
+			AccountAssignments: map[string]map[string][]string{
+				"devops": {"TerraformApplyAccess": {"dev"}},
+			},
+		},
 	}
 	step := NewGenerateProfiles(migCtx, mockFS)
 
@@ -38,6 +43,11 @@ func TestGenerateProfiles_Detect_ProfilesExist(t *testing.T) {
 
 	migCtx := &migrate.MigrationContext{
 		ProfilesPath: "/tmp/profiles",
+		SSOConfig: &migrate.SSOConfig{
+			AccountAssignments: map[string]map[string][]string{
+				"devops": {"TerraformApplyAccess": {"dev"}},
+			},
+		},
 	}
 	step := NewGenerateProfiles(migCtx, mockFS)
 
