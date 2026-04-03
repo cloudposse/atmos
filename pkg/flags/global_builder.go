@@ -38,7 +38,6 @@ func NewGlobalOptionsBuilder() *GlobalOptionsBuilder {
 	builder.registerLoggingFlags(&defaults)
 	builder.registerTerminalFlags(&defaults)
 	builder.registerAuthenticationFlags(&defaults)
-	builder.registerAIFlags(&defaults)
 	builder.registerProfilingFlags(&defaults)
 	builder.registerPerformanceFlags(&defaults)
 	builder.registerAIFlags(&defaults)
