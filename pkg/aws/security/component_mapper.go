@@ -163,7 +163,7 @@ func (m *dualPathMapper) mapByHeuristics(_ context.Context, finding *Finding) (*
 	}
 
 	// Strategy 3: ECR repository findings — extract repo/image name.
-	if mapping := mapByECRRepo(finding); mapping != nil {
+	if mapping := m.mapByECRRepo(finding); mapping != nil {
 		return mapping, nil
 	}
 
@@ -225,9 +225,9 @@ func (m *dualPathMapper) mapByAccountID(finding *Finding) *ComponentMapping {
 	}
 }
 
-// mapByECRRepo extracts ECR repository name as component.
+// mapByECRRepo extracts ECR repository name as component and resolves stack from account map.
 // ARN format: arn:aws:ecr:region:account:repository/org/image-name/sha256:hash.
-func mapByECRRepo(finding *Finding) *ComponentMapping {
+func (m *dualPathMapper) mapByECRRepo(finding *Finding) *ComponentMapping {
 	if !strings.Contains(finding.ResourceARN, ":repository/") {
 		return nil
 	}
@@ -251,7 +251,14 @@ func mapByECRRepo(finding *Finding) *ComponentMapping {
 		return nil
 	}
 
+	// Resolve stack from account map using the finding's account ID.
+	stack := ""
+	if m.accountMap != nil && finding.AccountID != "" {
+		stack = m.accountMap[finding.AccountID]
+	}
+
 	return &ComponentMapping{
+		Stack:      stack,
 		Component:  component,
 		Mapped:     true,
 		Confidence: ConfidenceLow,

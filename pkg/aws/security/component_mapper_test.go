@@ -911,31 +911,47 @@ func TestMapByAccountID(t *testing.T) {
 }
 
 func TestMapByECRRepo(t *testing.T) {
-	t.Run("ECR with sha256", func(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AWS: schema.AWSSettings{
+			Security: schema.AWSSecuritySettings{
+				AccountMap: map[string]string{
+					"982674173972": "core-artifacts",
+					"101071483060": "core-auto",
+				},
+			},
+		},
+	}
+	m := NewComponentMapper(atmosConfig, nil).(*dualPathMapper)
+
+	t.Run("ECR with sha256 and account map", func(t *testing.T) {
 		finding := &Finding{
 			ResourceARN: "arn:aws:ecr:us-east-2:982674173972:repository/inspatial/example-app-on-ecs/sha256:abc123",
+			AccountID:   "982674173972",
 		}
-		mapping := mapByECRRepo(finding)
+		mapping := m.mapByECRRepo(finding)
 		require.NotNil(t, mapping)
 		assert.True(t, mapping.Mapped)
 		assert.Equal(t, "example-app-on-ecs", mapping.Component)
+		assert.Equal(t, "core-artifacts", mapping.Stack)
 		assert.Equal(t, "ecr-repo", mapping.Method)
 	})
 
-	t.Run("ECR without sha256", func(t *testing.T) {
+	t.Run("ECR without account map", func(t *testing.T) {
 		finding := &Finding{
-			ResourceARN: "arn:aws:ecr:us-east-2:123:repository/myorg/myapp",
+			ResourceARN: "arn:aws:ecr:us-east-2:999:repository/myorg/myapp",
+			AccountID:   "999",
 		}
-		mapping := mapByECRRepo(finding)
+		mapping := m.mapByECRRepo(finding)
 		require.NotNil(t, mapping)
 		assert.Equal(t, "myapp", mapping.Component)
+		assert.Empty(t, mapping.Stack) // Unknown account.
 	})
 
 	t.Run("non-ECR resource returns nil", func(t *testing.T) {
 		finding := &Finding{
 			ResourceARN: "arn:aws:s3:::my-bucket",
 		}
-		mapping := mapByECRRepo(finding)
+		mapping := m.mapByECRRepo(finding)
 		assert.Nil(t, mapping)
 	})
 }
