@@ -1107,6 +1107,28 @@ for error handling and reference `aws.security.enabled` config.
     atmos aws security analyze --stack prod-us-east-1 --identity security-admin
     ```
 
+24. **Structured remediation schema** — ✅ Formalized the `Remediation` struct as the output
+    contract for AI-generated analysis. All fields are well-defined so every output — whether
+    from Claude, GPT, Gemini, Bedrock, or Ollama — follows the same structure. Without `--ai`,
+    remediation fields are empty but the schema is still valid JSON/YAML.
+
+    Fields: `RootCause`, `Steps` (ordered list), `CodeChanges` (Terraform/HCL),
+    `StackChanges` (stack YAML), `DeployCommand` (`atmos terraform apply ...`),
+    `RiskLevel` (low/medium/high), `References` (AWS docs, benchmarks).
+
+25. **AI remediation skill** — ✅ Created `agent-skills/skills/atmos-aws-security/SKILL.md`
+    that instructs AI providers to return remediation in the exact schema format. The skill
+    is sent as a system prompt with every `--ai` request, ensuring consistent and reproducible
+    output regardless of AI provider. The analyzer reads the skill at runtime and includes it
+    in the prompt.
+
+    The skill covers:
+    - How to analyze findings (read component source, understand stack config)
+    - What format to return (exact section headers matching schema fields)
+    - How to map findings to Atmos components and stacks
+    - How to generate specific `atmos terraform apply` commands
+    - How to reference Terraform resource names and variable changes
+
 ### Remaining Work (Future PRs)
 
 - **Terraform state search (Path B Strategy 1)** — Implement state file scanning for tagless

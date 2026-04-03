@@ -67,13 +67,17 @@ type ComponentMapping struct {
 }
 
 // Remediation contains AI-generated remediation details for a finding.
+// This is the output contract — every AI provider must populate these fields
+// following the same structure, ensuring consistent and reproducible output.
 type Remediation struct {
-	Description   string         `json:"description" yaml:"description"`
-	RootCause     string         `json:"root_cause,omitempty" yaml:"root_cause,omitempty"`
-	StackChanges  map[string]any `json:"stack_changes,omitempty" yaml:"stack_changes,omitempty"`
-	CodeChanges   []CodeChange   `json:"code_changes,omitempty" yaml:"code_changes,omitempty"`
-	DeployCommand string         `json:"deploy_command,omitempty" yaml:"deploy_command,omitempty"`
-	RiskLevel     string         `json:"risk_level,omitempty" yaml:"risk_level,omitempty"`
+	Description   string       `json:"description" yaml:"description"`                           // Brief summary of the remediation.
+	RootCause     string       `json:"root_cause,omitempty" yaml:"root_cause,omitempty"`         // Why this finding exists in the infrastructure.
+	Steps         []string     `json:"steps,omitempty" yaml:"steps,omitempty"`                   // Ordered remediation steps.
+	CodeChanges   []CodeChange `json:"code_changes,omitempty" yaml:"code_changes,omitempty"`     // Specific Terraform/HCL changes.
+	StackChanges  string       `json:"stack_changes,omitempty" yaml:"stack_changes,omitempty"`   // Specific stack YAML changes.
+	DeployCommand string       `json:"deploy_command,omitempty" yaml:"deploy_command,omitempty"` // atmos terraform apply <component> -s <stack>.
+	RiskLevel     string       `json:"risk_level,omitempty" yaml:"risk_level,omitempty"`         // low, medium, high.
+	References    []string     `json:"references,omitempty" yaml:"references,omitempty"`         // AWS docs, CIS benchmarks, etc.
 }
 
 // CodeChange represents a specific code change in a Terraform file.

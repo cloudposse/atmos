@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+//go:embed skill_prompt.md
+var skillPrompt string
 
 // FindingAnalyzer provides AI-powered analysis of security findings.
 type FindingAnalyzer interface {
@@ -55,9 +59,10 @@ func newFindingAnalyzerWithClient(client registry.Client, atmosConfig *schema.At
 func (a *aiAnalyzer) AnalyzeFinding(ctx context.Context, finding *Finding, componentSource string, stackConfig string) (*Remediation, error) {
 	defer perf.Track(nil, "security.aiAnalyzer.AnalyzeFinding")()
 
+	// Build prompt with the skill instructions as system context.
 	prompt := buildAnalysisPrompt(finding, componentSource, stackConfig)
 
-	response, err := a.client.SendMessage(ctx, prompt)
+	response, err := a.client.SendMessage(ctx, skillPrompt+"\n\n---\n\n"+prompt)
 	if err != nil {
 		return nil, fmt.Errorf("AI analysis failed for finding %s: %w", finding.ID, err)
 	}
@@ -93,11 +98,12 @@ func (a *aiAnalyzer) AnalyzeFindings(ctx context.Context, findings []Finding) ([
 	return findings, nil
 }
 
-// buildAnalysisPrompt constructs the AI prompt for analyzing a security finding.
+// buildAnalysisPrompt constructs the data portion of the AI prompt for analyzing a security finding.
+// The skill prompt (system instructions) is prepended separately.
 func buildAnalysisPrompt(finding *Finding, componentSource string, stackConfig string) string {
 	var sb strings.Builder
 
-	sb.WriteString("Analyze this AWS security finding and provide remediation guidance.\n\n")
+	sb.WriteString("Analyze this AWS security finding and provide structured remediation.\n\n")
 
 	// Finding details.
 	sb.WriteString("## Security Finding\n\n")
@@ -140,37 +146,28 @@ func buildAnalysisPrompt(finding *Finding, componentSource string, stackConfig s
 		sb.WriteString("\n```\n\n")
 	}
 
-	// Instructions for structured response.
-	sb.WriteString("## Response Format\n\n")
-	sb.WriteString("Please provide your analysis using the following sections:\n\n")
-	sb.WriteString("**Root Cause:** Explain the root cause tied to specific code or configuration.\n\n")
-	sb.WriteString("**Remediation:** Describe whether the fix should be in stack vars or component source, ")
-	sb.WriteString("and provide specific remediation steps.\n\n")
-	sb.WriteString("**Deploy:** Provide the atmos command to deploy the fix ")
-	sb.WriteString("(e.g., `atmos terraform apply <component> -s <stack>`).\n\n")
-	sb.WriteString("**Risk:** Assess the risk level of applying this fix (low, medium, high).\n")
-
 	return sb.String()
 }
 
 // parseRemediationResponse parses an AI response into a structured Remediation.
+// The AI is instructed (via the skill prompt) to use exact section headers.
 func parseRemediationResponse(response string, finding *Finding) *Remediation {
 	remediation := &Remediation{
-		Description: response,
+		Description:   response,
+		RootCause:     extractFirstMatch(response, "### Root Cause", "**Root Cause:**", "Root Cause:"),
+		StackChanges:  extractFirstMatch(response, "### Stack Changes"),
+		RiskLevel:     normalizeRiskLevel(extractFirstMatch(response, "### Risk", "**Risk:**", "Risk:")),
+		DeployCommand: extractAtmosCommand(extractFirstMatch(response, "### Deploy", "**Deploy:**", "Deploy:")),
 	}
 
-	// Extract Root Cause section (try bold markers first to avoid partial matches).
-	if rootCause := extractSection(response, "**Root Cause:**"); rootCause != "" {
-		remediation.RootCause = rootCause
-	} else if rootCause := extractSection(response, "Root Cause:"); rootCause != "" {
-		remediation.RootCause = rootCause
+	// Parse steps from structured or legacy format.
+	if steps := extractFirstMatch(response, "### Steps", "**Remediation:**"); steps != "" {
+		remediation.Steps = parseListItems(steps)
 	}
 
-	// Extract Deploy command (try bold markers first).
-	if deploy := extractSection(response, "**Deploy:**"); deploy != "" {
-		remediation.DeployCommand = extractAtmosCommand(deploy)
-	} else if deploy := extractSection(response, "Deploy:"); deploy != "" {
-		remediation.DeployCommand = extractAtmosCommand(deploy)
+	// Parse references.
+	if refs := extractFirstMatch(response, "### References"); refs != "" {
+		remediation.References = parseListItems(refs)
 	}
 
 	// Fall back to constructing the deploy command from the mapping.
@@ -179,17 +176,60 @@ func parseRemediationResponse(response string, finding *Finding) *Remediation {
 			finding.Mapping.Component, finding.Mapping.Stack)
 	}
 
-	// Extract Risk level (try bold markers first).
-	if risk := extractSection(response, "**Risk:**"); risk != "" {
-		remediation.RiskLevel = normalizeRiskLevel(risk)
-	} else if risk := extractSection(response, "Risk:"); risk != "" {
-		remediation.RiskLevel = normalizeRiskLevel(risk)
-	}
-
 	return remediation
 }
 
-// extractSection extracts the text following a header marker up to the next section header or end of text.
+// extractFirstMatch tries multiple section headers and returns the first non-empty match.
+func extractFirstMatch(text string, headers ...string) string {
+	for _, header := range headers {
+		if section := extractSection(text, header); section != "" {
+			return section
+		}
+	}
+	return ""
+}
+
+// maxNumberedPrefixLen is the max digits before ". " in a numbered list item (e.g., "99. ").
+const maxNumberedPrefixLen = 5
+
+// newlineSep is the newline separator used for splitting text.
+const newlineSep = "\n"
+
+// parseListItems extracts items from numbered lists (1. First) or bullet lists (- First, * First).
+// Non-list lines are skipped.
+func parseListItems(text string) []string {
+	var items []string
+	for _, line := range strings.Split(text, newlineSep) {
+		if item := extractListItem(strings.TrimSpace(line)); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+// extractListItem strips list prefixes (numbered, bullet, asterisk) from a line.
+// Returns empty string for non-list lines.
+func extractListItem(line string) string {
+	if line == "" {
+		return ""
+	}
+
+	// Numbered prefix: "1. ", "2. ", etc.
+	if len(line) > 2 && line[0] >= '0' && line[0] <= '9' {
+		if idx := strings.Index(line, ". "); idx != -1 && idx < maxNumberedPrefixLen {
+			return strings.TrimSpace(line[idx+2:])
+		}
+	}
+
+	// Bullet prefix: "- " or "* ".
+	if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
+		return strings.TrimSpace(line[2:])
+	}
+
+	return ""
+}
+
+// extractSection extracts the text following a header up to the next section header or end of text.
 func extractSection(text string, header string) string {
 	idx := strings.Index(text, header)
 	if idx == -1 {
@@ -199,8 +239,9 @@ func extractSection(text string, header string) string {
 	content := text[idx+len(header):]
 
 	// Find the end of this section (next header or end of text).
-	// Look for common section markers.
 	endMarkers := []string{
+		"### Root Cause", "### Steps", "### Code Changes", "### Stack Changes",
+		"### Deploy", "### Risk", "### References",
 		"**Root Cause:**", "**Remediation:**", "**Deploy:**", "**Risk:**",
 		"Root Cause:", "Remediation:", "Deploy:", "Risk:",
 	}
@@ -219,11 +260,9 @@ func extractSection(text string, header string) string {
 
 // extractAtmosCommand finds an atmos command in the text.
 func extractAtmosCommand(text string) string {
-	// Look for `atmos terraform apply ...` pattern.
-	lines := strings.Split(text, "\n")
+	lines := strings.Split(text, newlineSep)
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		// Strip backticks.
 		line = strings.Trim(line, "`")
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "atmos ") {
@@ -249,20 +288,17 @@ func normalizeRiskLevel(text string) string {
 }
 
 // readComponentSource reads the main.tf file from a component path.
-// Returns empty string if the path is empty or the file cannot be read.
 func readComponentSource(componentPath string) string {
 	if componentPath == "" {
 		return ""
 	}
 
-	// Read main.tf as the primary source file.
 	mainTF := filepath.Join(componentPath, "main.tf")
 	content, err := readFileContent(mainTF)
 	if err != nil {
 		return ""
 	}
 
-	// Truncate very large files to avoid exceeding token limits.
 	const maxSourceLength = 10000
 	if len(content) > maxSourceLength {
 		content = content[:maxSourceLength] + "\n... (truncated)"

@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"testing"
@@ -135,11 +136,9 @@ func TestBuildAnalysisPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "component: ebs-volume")
 	assert.Contains(t, prompt, "stack: ue1-prod")
 
-	// Verify response format instructions.
-	assert.Contains(t, prompt, "Root Cause:")
-	assert.Contains(t, prompt, "Remediation:")
-	assert.Contains(t, prompt, "Deploy:")
-	assert.Contains(t, prompt, "Risk:")
+	// Verify prompt contains structured analysis request.
+	assert.Contains(t, prompt, "Analyze this AWS security finding")
+	assert.Contains(t, prompt, "structured remediation")
 }
 
 func TestBuildAnalysisPrompt_NoMapping(t *testing.T) {
@@ -452,4 +451,177 @@ func TestExtractAtmosCommand(t *testing.T) {
 	assert.Equal(t, "atmos terraform apply vpc -s ue2-dev", extractAtmosCommand("`atmos terraform apply vpc -s ue2-dev`"))
 	assert.Equal(t, "atmos terraform apply s3 -s ue1-prod", extractAtmosCommand("Run:\natmos terraform apply s3 -s ue1-prod\nto deploy"))
 	assert.Equal(t, "just some text", extractAtmosCommand("just some text"))
+}
+
+func TestSkillPromptEmbedded(t *testing.T) {
+	// Verify the skill prompt is embedded and contains key instructions.
+	assert.NotEmpty(t, skillPrompt)
+	assert.Contains(t, skillPrompt, "### Root Cause")
+	assert.Contains(t, skillPrompt, "### Steps")
+	assert.Contains(t, skillPrompt, "### Code Changes")
+	assert.Contains(t, skillPrompt, "### Stack Changes")
+	assert.Contains(t, skillPrompt, "### Deploy")
+	assert.Contains(t, skillPrompt, "### Risk")
+	assert.Contains(t, skillPrompt, "### References")
+}
+
+func TestParseNumberedList(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name:     "numbered list",
+			input:    "1. First step\n2. Second step\n3. Third step",
+			expected: []string{"First step", "Second step", "Third step"},
+		},
+		{
+			name:     "bullet list",
+			input:    "- First item\n- Second item",
+			expected: []string{"First item", "Second item"},
+		},
+		{
+			name:     "asterisk list",
+			input:    "* Item A\n* Item B",
+			expected: []string{"Item A", "Item B"},
+		},
+		{
+			name:     "mixed with blank lines",
+			input:    "1. First\n\n2. Second\n\n3. Third",
+			expected: []string{"First", "Second", "Third"},
+		},
+		{
+			name:     "empty input",
+			input:    "",
+			expected: nil,
+		},
+		{
+			name:     "no list format",
+			input:    "Just plain text\nMore text",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseListItems(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseReferenceList(t *testing.T) {
+	input := "- https://docs.aws.amazon.com/s3\n- CIS AWS 1.4 Control 2.1\n- https://example.com"
+	refs := parseListItems(input)
+	require.Len(t, refs, 3)
+	assert.Equal(t, "https://docs.aws.amazon.com/s3", refs[0])
+	assert.Equal(t, "CIS AWS 1.4 Control 2.1", refs[1])
+}
+
+func TestParseRemediationResponse_StructuredFormat(t *testing.T) {
+	response := `### Root Cause
+
+The S3 bucket does not have versioning enabled because the component does not set the versioning variable.
+
+### Steps
+
+1. Add versioning_enabled variable to the stack configuration
+2. Apply the change with atmos
+
+### Code Changes
+
+No code changes needed — versioning is controlled by a stack variable.
+
+### Stack Changes
+
+` + "```yaml\ncomponents:\n  terraform:\n    s3-bucket:\n      vars:\n        versioning_enabled: true\n```" + `
+
+### Deploy
+
+` + "```\natmos terraform apply s3-bucket -s prod-us-east-1\n```" + `
+
+### Risk
+
+low
+
+### References
+
+- https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html
+- CIS AWS Foundations Benchmark v1.4 - Control 2.1.1`
+
+	finding := &Finding{
+		ID: "test-001",
+		Mapping: &ComponentMapping{
+			Component: "s3-bucket",
+			Stack:     "prod-us-east-1",
+			Mapped:    true,
+		},
+	}
+
+	remediation := parseRemediationResponse(response, finding)
+
+	assert.Contains(t, remediation.RootCause, "versioning enabled")
+	require.Len(t, remediation.Steps, 2)
+	assert.Equal(t, "Add versioning_enabled variable to the stack configuration", remediation.Steps[0])
+	assert.Contains(t, remediation.StackChanges, "versioning_enabled: true")
+	assert.Equal(t, "atmos terraform apply s3-bucket -s prod-us-east-1", remediation.DeployCommand)
+	assert.Equal(t, "low", remediation.RiskLevel)
+	require.Len(t, remediation.References, 2)
+	assert.Contains(t, remediation.References[0], "docs.aws.amazon.com")
+}
+
+func TestParseRemediationResponse_FallbackFormat(t *testing.T) {
+	// Old format with bold markers still works.
+	response := `**Root Cause:** Missing encryption config.
+
+**Remediation:** Add encryption.
+
+**Deploy:** ` + "`atmos terraform apply vpc -s prod`" + `
+
+**Risk:** Low`
+
+	finding := &Finding{
+		ID: "test-002",
+		Mapping: &ComponentMapping{
+			Component: "vpc",
+			Stack:     "prod",
+			Mapped:    true,
+		},
+	}
+
+	remediation := parseRemediationResponse(response, finding)
+
+	assert.Contains(t, remediation.RootCause, "Missing encryption")
+	assert.Equal(t, "atmos terraform apply vpc -s prod", remediation.DeployCommand)
+	assert.Equal(t, "low", remediation.RiskLevel)
+}
+
+func TestRemediationSchema_JSONRoundTrip(t *testing.T) {
+	// Verify the schema survives JSON round-trip with all fields.
+	remediation := Remediation{
+		Description:   "Fix S3 versioning",
+		RootCause:     "Versioning not enabled",
+		Steps:         []string{"Update stack vars", "Apply change"},
+		CodeChanges:   []CodeChange{{FilePath: "main.tf", Before: "old", After: "new"}},
+		StackChanges:  "vars:\n  versioning_enabled: true",
+		DeployCommand: "atmos terraform apply s3-bucket -s prod",
+		RiskLevel:     "low",
+		References:    []string{"https://docs.aws.amazon.com/s3"},
+	}
+
+	data, err := json.Marshal(remediation)
+	require.NoError(t, err)
+
+	var decoded Remediation
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, remediation.Description, decoded.Description)
+	assert.Equal(t, remediation.RootCause, decoded.RootCause)
+	assert.Equal(t, remediation.Steps, decoded.Steps)
+	assert.Equal(t, remediation.StackChanges, decoded.StackChanges)
+	assert.Equal(t, remediation.DeployCommand, decoded.DeployCommand)
+	assert.Equal(t, remediation.RiskLevel, decoded.RiskLevel)
+	assert.Equal(t, remediation.References, decoded.References)
+	require.Len(t, decoded.CodeChanges, 1)
 }
