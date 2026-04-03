@@ -103,8 +103,8 @@ type Report struct {
 	Findings       []Finding              `json:"findings" yaml:"findings"`
 	MappedCount    int                    `json:"mapped_count" yaml:"mapped_count"`
 	UnmappedCount  int                    `json:"unmapped_count" yaml:"unmapped_count"`
-	TagMapping     *AWSSecurityTagMapping `json:"tag_mapping,omitempty" yaml:"tag_mapping,omitempty"` // Configured tag keys for unmapped findings message.
-	GroupFindings  bool                   `json:"group_findings" yaml:"group_findings"`               // Group duplicate findings by title in Markdown output.
+	TagMapping     *AWSSecurityTagMapping `json:"-" yaml:"-"` // Display-only: configured tag keys for unmapped findings message.
+	GroupFindings  bool                   `json:"-" yaml:"-"` // Display-only: group duplicate findings in Markdown output.
 }
 
 // AWSSecurityTagMapping is re-exported from schema for use in reports.
