@@ -468,7 +468,7 @@ func TestSecurityAnalyzeAllFlagsRegistered(t *testing.T) {
 		{"framework flag", "framework", "", "string"},
 		{"format flag", "format", "markdown", "string"},
 		{"file flag", "file", "", "string"},
-		{"max-findings flag", "max-findings", "50", "int"},
+		{"max-findings flag", "max-findings", "500", "int"},
 		{"region flag", "region", "", "string"},
 		{"identity flag", "identity", "", "string"},
 		{"no-group flag", "no-group", "false", "bool"},
@@ -524,7 +524,7 @@ func TestSeverityMapCompleteness(t *testing.T) {
 
 func TestDefaultMaxFindings(t *testing.T) {
 	// Verify the default constant matches expectations.
-	assert.Equal(t, 50, defaultMaxFindings, "defaultMaxFindings should be 50")
+	assert.Equal(t, 500, defaultMaxFindings, "defaultMaxFindings should be 500")
 }
 
 func TestResolveAuthContext_EmptyIdentity(t *testing.T) {

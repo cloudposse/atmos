@@ -24,8 +24,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// defaultMaxFindings is the default maximum number of security findings to analyze.
-const defaultMaxFindings = 50
+// defaultMaxFindings is the default maximum number of security findings to fetch.
+// Set high enough to capture findings across all accounts in a multi-account org.
+// AI cost is controlled separately (only mapped findings are sent to AI).
+const defaultMaxFindings = 500
 
 //go:embed markdown/atmos_aws_security.md
 var securityLongMarkdown string
