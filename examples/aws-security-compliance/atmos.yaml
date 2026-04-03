@@ -1,0 +1,73 @@
+# Atmos AWS Security & Compliance Example
+#
+# Analyze security findings, map to components, get AI remediation.
+#
+# Prerequisites:
+#   - Update auth section below with your SSO settings
+#   - atmos auth login
+#   - For --ai: export ANTHROPIC_API_KEY="..."
+#
+# Quick start:
+#   atmos aws security analyze
+#   atmos aws compliance report --framework cis-aws
+
+base_path: "."
+
+# AWS Security & Compliance
+# Docs: https://atmos.tools/cli/commands/aws/security
+aws:
+  security:
+    enabled: true
+
+    # Atmos Auth identity targeting the Security Hub delegated admin account.
+    identity: "security-readonly"
+
+    # Security Hub aggregation region.
+    region: "us-east-2"
+
+    # Default severity filter.
+    default_severity:
+      - CRITICAL
+      - HIGH
+
+    max_findings: 50
+
+    # Tag keys for finding-to-code mapping.
+    # Update to match your organization's tagging standard.
+    tag_mapping:
+      stack_tag: "atmos:stack"
+      component_tag: "atmos:component"
+
+    frameworks:
+      - cis-aws
+
+# Atmos Auth — update with your AWS organization settings.
+# Docs: https://atmos.tools/cli/configuration/auth
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      start_url: "https://your-org.awsapps.com/start"   # ← Change this
+      region: "us-east-1"
+  identities:
+    security-readonly:
+      kind: aws/permission-set
+      provider: aws-sso
+      default: true
+      principal:
+        permission_set: "ReadOnlyAccess"                 # ← Change this
+        account:
+          id: "123456789012"                             # ← Change this (security account)
+
+# AI Configuration (optional, for --ai flag)
+# Docs: https://atmos.tools/cli/configuration/ai
+ai:
+  enabled: true
+  default_provider: "anthropic"
+  providers:
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
+  tools:
+    enabled: true
