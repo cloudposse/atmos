@@ -1,6 +1,10 @@
 package security
 
-import "time"
+import (
+	"time"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+)
 
 // Severity represents a security finding severity level.
 type Severity string
@@ -90,15 +94,19 @@ type CodeChange struct {
 
 // Report represents a complete security or compliance analysis report.
 type Report struct {
-	GeneratedAt    time.Time        `json:"generated_at" yaml:"generated_at"`
-	Stack          string           `json:"stack,omitempty" yaml:"stack,omitempty"`
-	Component      string           `json:"component,omitempty" yaml:"component,omitempty"`
-	TotalFindings  int              `json:"total_findings" yaml:"total_findings"`
-	SeverityCounts map[Severity]int `json:"severity_counts" yaml:"severity_counts"`
-	Findings       []Finding        `json:"findings" yaml:"findings"`
-	MappedCount    int              `json:"mapped_count" yaml:"mapped_count"`
-	UnmappedCount  int              `json:"unmapped_count" yaml:"unmapped_count"`
+	GeneratedAt    time.Time              `json:"generated_at" yaml:"generated_at"`
+	Stack          string                 `json:"stack,omitempty" yaml:"stack,omitempty"`
+	Component      string                 `json:"component,omitempty" yaml:"component,omitempty"`
+	TotalFindings  int                    `json:"total_findings" yaml:"total_findings"`
+	SeverityCounts map[Severity]int       `json:"severity_counts" yaml:"severity_counts"`
+	Findings       []Finding              `json:"findings" yaml:"findings"`
+	MappedCount    int                    `json:"mapped_count" yaml:"mapped_count"`
+	UnmappedCount  int                    `json:"unmapped_count" yaml:"unmapped_count"`
+	TagMapping     *AWSSecurityTagMapping `json:"tag_mapping,omitempty" yaml:"tag_mapping,omitempty"` // Configured tag keys for unmapped findings message.
 }
+
+// AWSSecurityTagMapping is re-exported from schema for use in reports.
+type AWSSecurityTagMapping = schema.AWSSecurityTagMapping
 
 // ComplianceReport represents a compliance posture report for a specific framework.
 type ComplianceReport struct {

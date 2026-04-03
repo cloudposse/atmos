@@ -83,9 +83,13 @@ func (r *markdownRenderer) RenderSecurityReport(w io.Writer, report *Report) err
 		report.TotalFindings, report.MappedCount, report.UnmappedCount)
 
 	if report.UnmappedCount > 0 {
+		tagHint := "the configured resource tags"
+		if report.TagMapping != nil {
+			tagHint = fmt.Sprintf("`%s` and `%s` tags", report.TagMapping.StackTag, report.TagMapping.ComponentTag)
+		}
 		fmt.Fprintf(&sb, "> %d findings could not be mapped to Atmos components. "+
-			"These resources may be managed outside of Atmos or may be missing `atmos:*` tags.\n\n",
-			report.UnmappedCount)
+			"These resources may be managed outside of Atmos or may be missing %s.\n\n",
+			report.UnmappedCount, tagHint)
 	}
 
 	_, err := io.WriteString(w, sb.String())

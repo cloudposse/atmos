@@ -219,7 +219,8 @@ var securityAnalyzeCmd = &cobra.Command{
 		}
 
 		// Build report.
-		report := buildSecurityReport(findings, stack, component)
+		tagMapping := &atmosConfig.AWS.Security.TagMapping
+		report := buildSecurityReport(findings, stack, component, tagMapping)
 
 		// Determine output destination.
 		output := os.Stdout
@@ -292,7 +293,7 @@ func init() {
 }
 
 // buildSecurityReport constructs a Report from mapped findings.
-func buildSecurityReport(findings []Finding, stack, component string) *security.Report {
+func buildSecurityReport(findings []Finding, stack, component string, tagMapping *schema.AWSSecurityTagMapping) *security.Report {
 	report := &security.Report{
 		GeneratedAt:    time.Now().UTC(),
 		Stack:          stack,
@@ -300,6 +301,7 @@ func buildSecurityReport(findings []Finding, stack, component string) *security.
 		TotalFindings:  len(findings),
 		SeverityCounts: make(map[security.Severity]int),
 		Findings:       findings,
+		TagMapping:     tagMapping,
 	}
 
 	for i := range findings {

@@ -253,7 +253,7 @@ func TestParseSeverities_InputOverridesDefaults(t *testing.T) {
 
 func TestBuildSecurityReport(t *testing.T) {
 	t.Run("empty findings", func(t *testing.T) {
-		report := buildSecurityReport(nil, "prod", "vpc")
+		report := buildSecurityReport(nil, "prod", "vpc", nil)
 
 		assert.Equal(t, "prod", report.Stack)
 		assert.Equal(t, "vpc", report.Component)
@@ -282,7 +282,7 @@ func TestBuildSecurityReport(t *testing.T) {
 			},
 		}
 
-		report := buildSecurityReport(findings, "staging", "")
+		report := buildSecurityReport(findings, "staging", "", nil)
 
 		assert.Equal(t, "staging", report.Stack)
 		assert.Equal(t, 3, report.TotalFindings)
@@ -306,7 +306,7 @@ func TestBuildSecurityReport(t *testing.T) {
 			},
 		}
 
-		report := buildSecurityReport(findings, "", "")
+		report := buildSecurityReport(findings, "", "", nil)
 
 		assert.Equal(t, 2, report.TotalFindings)
 		assert.Equal(t, 2, report.MappedCount)
@@ -314,7 +314,7 @@ func TestBuildSecurityReport(t *testing.T) {
 	})
 
 	t.Run("generated at is set", func(t *testing.T) {
-		report := buildSecurityReport(nil, "", "")
+		report := buildSecurityReport(nil, "", "", nil)
 		assert.False(t, report.GeneratedAt.IsZero())
 	})
 
@@ -327,7 +327,7 @@ func TestBuildSecurityReport(t *testing.T) {
 			{ID: "f5", Severity: security.SeverityInformational, Mapping: nil},
 		}
 
-		report := buildSecurityReport(findings, "dev", "rds")
+		report := buildSecurityReport(findings, "dev", "rds", nil)
 
 		assert.Equal(t, "dev", report.Stack)
 		assert.Equal(t, "rds", report.Component)
@@ -348,7 +348,7 @@ func TestBuildSecurityReport(t *testing.T) {
 			{ID: "f3", Severity: security.SeverityMedium, Mapping: nil},
 		}
 
-		report := buildSecurityReport(findings, "prod", "")
+		report := buildSecurityReport(findings, "prod", "", nil)
 
 		assert.Equal(t, 3, report.TotalFindings)
 		assert.Equal(t, 0, report.MappedCount)
@@ -368,7 +368,7 @@ func TestBuildSecurityReport(t *testing.T) {
 			},
 		}
 
-		report := buildSecurityReport(findings, "prod", "vpc")
+		report := buildSecurityReport(findings, "prod", "vpc", nil)
 
 		assert.Equal(t, 1, report.TotalFindings)
 		assert.Equal(t, 1, report.MappedCount)
@@ -383,7 +383,7 @@ func TestBuildSecurityReport(t *testing.T) {
 
 	t.Run("empty findings slice vs nil", func(t *testing.T) {
 		// Empty slice should behave the same as nil.
-		report := buildSecurityReport([]security.Finding{}, "prod", "vpc")
+		report := buildSecurityReport([]security.Finding{}, "prod", "vpc", nil)
 
 		assert.Equal(t, 0, report.TotalFindings)
 		assert.Equal(t, 0, report.MappedCount)
@@ -401,7 +401,7 @@ func TestBuildSecurityReport(t *testing.T) {
 			},
 		}
 
-		report := buildSecurityReport(findings, "", "")
+		report := buildSecurityReport(findings, "", "", nil)
 
 		assert.Equal(t, 1, report.TotalFindings)
 		assert.Equal(t, 0, report.MappedCount)
@@ -414,7 +414,7 @@ func TestBuildSecurityReport(t *testing.T) {
 			{ID: "f1", Severity: security.SeverityCritical, Mapping: nil},
 		}
 
-		report := buildSecurityReport(findings, "", "")
+		report := buildSecurityReport(findings, "", "", nil)
 
 		assert.Equal(t, 1, report.SeverityCounts[security.SeverityCritical])
 		assert.Equal(t, 0, report.SeverityCounts[security.SeverityHigh])
