@@ -72,7 +72,7 @@ components:
 
 Provide the exact `atmos terraform apply` command to deploy the fix:
 
-```
+```bash
 atmos terraform apply <component> -s <stack>
 ```
 
