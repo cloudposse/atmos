@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -42,10 +43,14 @@ func (s *UpdateStackDefaults) Detect(ctx context.Context) (migrate.StepStatus, e
 
 	files, err := s.findDefaultsFiles()
 	if err != nil {
+		log.Debug("Error finding _defaults.yaml files", "error", err)
 		return migrate.StepComplete, err
 	}
 
+	log.Debug("Found _defaults.yaml files", "count", len(files), "files", files)
+
 	if len(files) == 0 {
+		log.Debug("No _defaults.yaml files found — step already complete")
 		return migrate.StepComplete, nil
 	}
 
@@ -56,6 +61,7 @@ func (s *UpdateStackDefaults) Detect(ctx context.Context) (migrate.StepStatus, e
 		}
 
 		if !hasAuth {
+			log.Debug("File missing auth identity config", "file", f)
 			return migrate.StepNeeded, nil
 		}
 	}

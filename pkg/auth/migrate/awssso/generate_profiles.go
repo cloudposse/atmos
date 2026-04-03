@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -77,20 +78,27 @@ func (s *GenerateProfiles) Detect(ctx context.Context) (migrate.StepStatus, erro
 
 	// If there are no SSO group assignments, there's nothing to generate profiles from.
 	if s.migCtx.SSOConfig == nil || len(s.migCtx.SSOConfig.AccountAssignments) == 0 {
+		log.Debug("No SSO group assignments found — profile generation not applicable",
+			"sso_config_nil", s.migCtx.SSOConfig == nil)
 		return migrate.StepNotApplicable, nil
 	}
+
+	log.Debug("SSO group assignments found", "groups", len(s.migCtx.SSOConfig.AccountAssignments))
 
 	// Check if profiles directory exists with subdirectories containing atmos.yaml files.
 	pattern := filepath.Join(s.migCtx.ProfilesPath, "*", "atmos.yaml")
 	matches, err := s.fs.Glob(pattern)
 	if err != nil {
+		log.Debug("Error globbing for profiles", "pattern", pattern, "error", err)
 		return migrate.StepNeeded, nil
 	}
 
 	if len(matches) > 0 {
+		log.Debug("Profiles already exist", "matches", matches)
 		return migrate.StepComplete, nil
 	}
 
+	log.Debug("No profiles found — generation needed", "pattern", pattern)
 	return migrate.StepNeeded, nil
 }
 

@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -42,6 +43,7 @@ func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter 
 
 	// CliConfigPath is the directory containing atmos.yaml, not the file itself.
 	atmosConfigFile := filepath.Join(atmosConfig.CliConfigPath, "atmos.yaml")
+	log.Debug("Loaded atmos config", "config_path", atmosConfigFile, "stacks_base", atmosConfig.Stacks.BasePath)
 
 	migCtx := &migrate.MigrationContext{
 		AtmosConfig:     &atmosConfig,
@@ -56,12 +58,18 @@ func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter 
 	if err != nil {
 		return nil, err
 	}
+	log.Debug("Discovered account map", "accounts", len(migCtx.AccountMap))
 
 	// Discover SSO config, using existing auth config as a source of defaults.
 	migCtx.SSOConfig, err = discoverSSOConfig(migCtx.StacksBasePath, &atmosConfig.Auth, fs, prompter)
 	if err != nil {
 		return nil, err
 	}
+	log.Debug("Discovered SSO config",
+		"start_url", migCtx.SSOConfig.StartURL,
+		"region", migCtx.SSOConfig.Region,
+		"provider", migCtx.SSOConfig.ProviderName,
+		"groups", len(migCtx.SSOConfig.AccountAssignments))
 
 	return migCtx, nil
 }
@@ -89,14 +97,17 @@ func ssoConfigSearchPaths(base string) []string {
 func discoverAccountMap(base string, fs migrate.FileSystem, prompter migrate.Prompter) (map[string]string, error) {
 	defer perf.Track(nil, "awssso.discoverAccountMap")()
 
-	found := findExistingFiles(accountMapSearchPaths(base), fs)
+	searchPaths := accountMapSearchPaths(base)
+	log.Debug("Searching for account-map.yaml", "paths", searchPaths)
+
+	found := findExistingFiles(searchPaths, fs)
 	if len(found) == 0 {
-		// No account-map file found — return empty map.
-		// Steps that need account data will prompt the user.
+		log.Debug("No account-map file found in search paths")
 		return make(map[string]string), nil
 	}
 
 	filePath := found[0]
+	log.Debug("Found account-map file(s)", "paths", found)
 	if len(found) > 1 {
 		selected, err := prompter.Select("Multiple account-map files found. Select one", found)
 		if err != nil {
@@ -107,17 +118,18 @@ func discoverAccountMap(base string, fs migrate.FileSystem, prompter migrate.Pro
 
 	data, err := fs.ReadFile(filePath)
 	if err != nil {
-		// Cannot read file — return empty map gracefully.
+		log.Debug("Cannot read account-map file", "path", filePath, "error", err)
 		return make(map[string]string), nil
 	}
+	log.Debug("Read account-map file", "path", filePath, "bytes", len(data))
 
 	result, err := parseAccountMap(data)
 	if err != nil {
-		// File exists but format doesn't match — return empty map gracefully.
-		// The file may use a different structure (e.g., component config vs stack vars).
+		log.Debug("Failed to parse account-map file", "path", filePath, "error", err)
 		return make(map[string]string), nil
 	}
 
+	log.Debug("Parsed account map", "accounts", len(result))
 	return result, nil
 }
 
@@ -133,19 +145,27 @@ func discoverSSOConfig(base string, existingAuth *schema.AuthConfig, fs migrate.
 
 	// First, extract defaults from existing auth config in atmos.yaml.
 	if existingAuth != nil {
+		log.Debug("Checking existing auth config for SSO providers", "provider_count", len(existingAuth.Providers))
 		for name, provider := range existingAuth.Providers {
+			log.Debug("Found auth provider", "name", name, "kind", provider.Kind)
 			if provider.Kind == "aws/iam-identity-center" {
 				ssoCfg.ProviderName = name
 				ssoCfg.StartURL = provider.StartURL
 				ssoCfg.Region = provider.Region
+				log.Debug("Extracted SSO defaults from existing auth config",
+					"provider", name, "start_url", provider.StartURL, "region", provider.Region)
 				break
 			}
 		}
 	}
 
 	// Then try to parse aws-sso.yaml for account assignments.
-	found := findExistingFiles(ssoConfigSearchPaths(base), fs)
+	searchPaths := ssoConfigSearchPaths(base)
+	log.Debug("Searching for aws-sso.yaml", "paths", searchPaths)
+
+	found := findExistingFiles(searchPaths, fs)
 	if len(found) > 0 {
+		log.Debug("Found aws-sso.yaml file(s)", "paths", found)
 		filePath := found[0]
 		if len(found) > 1 {
 			selected, selectErr := prompter.Select("Multiple aws-sso.yaml files found. Select one", found)
@@ -155,9 +175,18 @@ func discoverSSOConfig(base string, existingAuth *schema.AuthConfig, fs migrate.
 		}
 
 		data, readErr := fs.ReadFile(filePath)
-		if readErr == nil {
+		if readErr != nil {
+			log.Debug("Cannot read aws-sso.yaml", "path", filePath, "error", readErr)
+		} else {
+			log.Debug("Read aws-sso.yaml", "path", filePath, "bytes", len(data))
 			parsed, parseErr := parseSSOConfig(data)
-			if parseErr == nil {
+			if parseErr != nil {
+				log.Debug("Failed to parse aws-sso.yaml", "path", filePath, "error", parseErr)
+			} else {
+				log.Debug("Parsed aws-sso.yaml",
+					"start_url", parsed.StartURL,
+					"region", parsed.Region,
+					"groups", len(parsed.AccountAssignments))
 				// Merge: keep existing auth values if parsed file doesn't have them.
 				if parsed.StartURL != "" {
 					ssoCfg.StartURL = parsed.StartURL
@@ -170,6 +199,8 @@ func discoverSSOConfig(base string, existingAuth *schema.AuthConfig, fs migrate.
 				}
 			}
 		}
+	} else {
+		log.Debug("No aws-sso.yaml found in search paths")
 	}
 
 	// Only prompt for values still missing after checking both sources.
@@ -360,9 +391,21 @@ func parseAccountAssignments(assignData interface{}) (map[string]map[string][]st
 func findVarsCandidates(raw map[string]interface{}, componentName string) []map[string]interface{} {
 	var candidates []map[string]interface{}
 
+	// Log top-level keys for debugging.
+	topKeys := make([]string, 0, len(raw))
+	for k := range raw {
+		topKeys = append(topKeys, k)
+	}
+	log.Debug("YAML top-level keys", "component", componentName, "keys", topKeys)
+
 	// Top-level vars.
 	if vars, ok := raw["vars"]; ok {
 		if varsMap, ok := vars.(map[string]interface{}); ok {
+			varKeys := make([]string, 0, len(varsMap))
+			for k := range varsMap {
+				varKeys = append(varKeys, k)
+			}
+			log.Debug("Found top-level vars", "keys", varKeys)
 			candidates = append(candidates, varsMap)
 		}
 	}
@@ -376,15 +419,32 @@ func findVarsCandidates(raw map[string]interface{}, componentName string) []map[
 						if compCfg, ok := comp.(map[string]interface{}); ok {
 							if vars, ok := compCfg["vars"]; ok {
 								if varsMap, ok := vars.(map[string]interface{}); ok {
+									varKeys := make([]string, 0, len(varsMap))
+									for k := range varsMap {
+										varKeys = append(varKeys, k)
+									}
+									log.Debug("Found component-level vars",
+										"component", componentName, "keys", varKeys)
 									candidates = append(candidates, varsMap)
 								}
+							} else {
+								log.Debug("Component found but no 'vars' key", "component", componentName)
 							}
 						}
+					} else {
+						// Log available terraform components for debugging.
+						tfCompNames := make([]string, 0, len(tfMap))
+						for k := range tfMap {
+							tfCompNames = append(tfCompNames, k)
+						}
+						log.Debug("Component not found in terraform section",
+							"component", componentName, "available", tfCompNames)
 					}
 				}
 			}
 		}
 	}
 
+	log.Debug("Vars candidates found", "component", componentName, "count", len(candidates))
 	return candidates
 }

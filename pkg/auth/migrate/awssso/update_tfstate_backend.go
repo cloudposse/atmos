@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -41,8 +42,11 @@ func (s *UpdateTfstateBackend) Detect(ctx context.Context) (migrate.StepStatus, 
 
 	filePath := s.findTfstateBackendFile()
 	if filePath == "" {
+		log.Debug("No tfstate-backend.yaml found — step not applicable")
 		return migrate.StepNotApplicable, nil
 	}
+
+	log.Debug("Found tfstate-backend.yaml", "path", filePath)
 
 	data, err := s.fs.ReadFile(filePath)
 	if err != nil {
@@ -50,9 +54,11 @@ func (s *UpdateTfstateBackend) Detect(ctx context.Context) (migrate.StepStatus, 
 	}
 
 	if bytes.Contains(data, allowedPermissionSetsMarker) {
+		log.Debug("allowed_permission_sets already configured")
 		return migrate.StepComplete, nil
 	}
 
+	log.Debug("allowed_permission_sets not found — update needed")
 	return migrate.StepNeeded, nil
 }
 

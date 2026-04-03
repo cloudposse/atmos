@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -37,6 +38,7 @@ func (d *DetectPrerequisites) Detect(ctx context.Context) (migrate.StepStatus, e
 	defer perf.Track(nil, "awssso.DetectPrerequisites.Detect")()
 
 	base := d.migCtx.StacksBasePath
+	log.Debug("Checking migration prerequisites", "stacks_base", base)
 
 	// Check for aws-teams / aws-team-roles in known catalog locations.
 	// filepath.Glob does not support recursive ** patterns, so we check
@@ -45,6 +47,7 @@ func (d *DetectPrerequisites) Detect(ctx context.Context) (migrate.StepStatus, e
 		// Check catalog root.
 		directPath := filepath.Join(base, "catalog", name)
 		if d.fs.Exists(directPath) {
+			log.Debug("Found teams-based config — SSO migration not applicable", "file", directPath)
 			return migrate.StepNotApplicable, nil
 		}
 
@@ -55,10 +58,12 @@ func (d *DetectPrerequisites) Detect(ctx context.Context) (migrate.StepStatus, e
 			return migrate.StepNotApplicable, fmt.Errorf("%w: %w", errUtils.ErrMigrationPrerequisitesNotMet, err)
 		}
 		if len(matches) > 0 {
+			log.Debug("Found teams-based config — SSO migration not applicable", "matches", matches)
 			return migrate.StepNotApplicable, nil
 		}
 	}
 
+	log.Debug("No aws-teams/aws-team-roles found — migration may proceed")
 	// No aws-teams found — migration may proceed.
 	return migrate.StepNeeded, nil
 }

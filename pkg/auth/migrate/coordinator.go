@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -58,12 +59,14 @@ func (c *Coordinator) Run(ctx context.Context, dryRun, force bool) error {
 
 // detect runs Detect on each step and returns the results.
 func (c *Coordinator) detect(ctx context.Context) ([]StepResult, error) {
+	log.Debug("Starting detection phase", "steps", len(c.steps))
 	results := make([]StepResult, 0, len(c.steps))
 	for _, step := range c.steps {
 		status, err := step.Detect(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("detecting step %q: %w", step.Name(), err)
 		}
+		log.Debug("Step detection result", "step", step.Name(), "status", status)
 		results = append(results, StepResult{
 			Step:   step,
 			Status: status,

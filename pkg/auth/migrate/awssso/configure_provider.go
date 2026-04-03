@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -34,16 +35,20 @@ func (s *ConfigureProvider) Detect(ctx context.Context) (migrate.StepStatus, err
 	defer perf.Track(nil, "awssso.ConfigureProvider.Detect")()
 
 	if s.migCtx.ExistingAuth == nil {
+		log.Debug("No existing auth config — provider configuration needed")
 		return migrate.StepNeeded, nil
 	}
 
 	// Check if any provider is already configured with SSO kind.
-	for _, provider := range s.migCtx.ExistingAuth.Providers {
+	for name, provider := range s.migCtx.ExistingAuth.Providers {
+		log.Debug("Checking existing provider", "name", name, "kind", provider.Kind)
 		if provider.Kind == "aws/iam-identity-center" {
+			log.Debug("SSO provider already configured", "name", name)
 			return migrate.StepComplete, nil
 		}
 	}
 
+	log.Debug("No SSO provider found — configuration needed")
 	return migrate.StepNeeded, nil
 }
 

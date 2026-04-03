@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -40,19 +41,25 @@ func (s *CleanupLegacyAuth) Description() string {
 func (s *CleanupLegacyAuth) Detect(ctx context.Context) (migrate.StepStatus, error) {
 	defer perf.Track(nil, "awssso.CleanupLegacyAuth.Detect")()
 
+	authDir := s.legacyAuthDirPath()
+	log.Debug("Checking for legacy auth directory", "path", authDir)
 	if s.hasLegacyAuthDir() {
+		log.Debug("Legacy auth directory found", "path", authDir)
 		return migrate.StepNeeded, nil
 	}
 
+	log.Debug("Checking for legacy assume-role identities", "config", s.migCtx.AtmosConfigPath)
 	hasAssumeRole, err := s.hasLegacyAssumeRole()
 	if err != nil {
 		return migrate.StepNeeded, fmt.Errorf("failed to read atmos.yaml: %w", err)
 	}
 
 	if hasAssumeRole {
+		log.Debug("Legacy aws/assume-role identities found in atmos.yaml")
 		return migrate.StepNeeded, nil
 	}
 
+	log.Debug("No legacy auth configuration found")
 	return migrate.StepComplete, nil
 }
 
