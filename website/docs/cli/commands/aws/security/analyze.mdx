@@ -65,7 +65,10 @@ atmos aws security analyze [flags]
   <dd>Enable AI-powered analysis and remediation suggestions. Requires `ai.enabled: true` in your `atmos.yaml`.</dd>
 
   <dt>`--region`</dt>
-  <dd>AWS region to query for findings (overrides stack region).</dd>
+  <dd>AWS region to query for findings (overrides `aws.security.region` config).</dd>
+
+  <dt>`--identity, -i`</dt>
+  <dd>Atmos Auth identity for AWS credentials (overrides `aws.security.identity` config).</dd>
 
   <dt>`--framework`</dt>
   <dd>Filter findings by compliance framework (e.g., `cis-aws`, `pci-dss`).</dd>
@@ -171,14 +174,16 @@ Configure the security command in your `atmos.yaml` under the `aws.security` sec
 aws:
   security:
     enabled: true
+    identity: "security-readonly"  # Atmos Auth identity
+    region: "us-east-2"            # Security Hub aggregation region
     default_severity:
-      - critical
-      - high
+      - CRITICAL
+      - HIGH
     sources:
       security_hub: true
       inspector: true
       guardduty: true
-    max_findings: 100
+    max_findings: 50
 ```
 
 To enable AI-powered analysis with the `--ai` flag, also configure your AI provider:

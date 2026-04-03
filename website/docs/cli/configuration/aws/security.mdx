@@ -26,11 +26,14 @@ and compliance frameworks.
 aws:
   security:
     enabled: true
+    identity: "security-readonly"  # Atmos Auth identity → Security Hub delegated admin
+    region: "us-east-2"            # Security Hub aggregation region
 ```
 </File>
 
-This enables security scanning with default settings: Security Hub, Config, Inspector, and GuardDuty
-as sources, filtering for `CRITICAL` and `HIGH` severity findings.
+This enables security scanning with Atmos Auth credentials targeting the Security Hub
+delegated admin account. Default sources: Security Hub, Config, Inspector, GuardDuty.
+Default severity: `CRITICAL` and `HIGH`.
 
 ## Full Configuration
 
@@ -39,6 +42,12 @@ as sources, filtering for `CRITICAL` and `HIGH` severity findings.
 aws:
   security:
     enabled: true
+
+    # Atmos Auth identity for AWS credentials (targets delegated admin account).
+    identity: "security-readonly"
+
+    # Default AWS region (Security Hub aggregation region).
+    region: "us-east-2"
 
     # AWS security services to query
     sources:
@@ -73,6 +82,12 @@ aws:
 <dl>
   <dt>`enabled`</dt>
   <dd>Enable AWS security and compliance features. Default: `false`.</dd>
+
+  <dt>`identity`</dt>
+  <dd>Atmos Auth identity for AWS credentials. Targets the account where Security Hub is the delegated administrator. Overridable with `--identity` / `-i` flag. See [Auth Configuration](/cli/configuration/auth) for identity setup.</dd>
+
+  <dt>`region`</dt>
+  <dd>Default AWS region for Security Hub queries (typically the finding aggregation region). Overridable with `--region` flag. Default: `us-east-1`.</dd>
 
   <dt>`sources`</dt>
   <dd>Configure which AWS security services to query for findings. See [Sources](#sources) below.</dd>

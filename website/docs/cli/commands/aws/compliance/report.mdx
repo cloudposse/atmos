@@ -52,6 +52,9 @@ atmos aws compliance report [flags]
 
   <dt>`--controls`</dt>
   <dd>Comma-separated list of specific control IDs to evaluate (e.g., `CIS.1.1,CIS.1.2`).</dd>
+
+  <dt>`--identity, -i`</dt>
+  <dd>Atmos Auth identity for AWS credentials (overrides `aws.security.identity` config).</dd>
 </dl>
 
 ## Examples
@@ -159,6 +162,8 @@ Configure the compliance command in your `atmos.yaml` under the `aws.security` s
 aws:
   security:
     enabled: true
+    identity: "security-readonly"  # Atmos Auth identity
+    region: "us-east-2"            # Security Hub aggregation region
     frameworks:
       - cis-aws
       - pci-dss
