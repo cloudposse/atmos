@@ -238,12 +238,21 @@ var securityAnalyzeCmd = &cobra.Command{
 
 		// Render output.
 		renderer := security.NewReportRenderer(outputFormat)
-		if err := renderer.RenderSecurityReport(output, report); err != nil {
-			return err
-		}
 
-		if fileOutput != "" {
-			ui.Writef("Report saved to %s\n", fileOutput)
+		// For Markdown to stdout, render with colors via ui.Markdown().
+		if outputFormat == security.FormatMarkdown && fileOutput == "" {
+			var buf strings.Builder
+			if err := renderer.RenderSecurityReport(&buf, report); err != nil {
+				return err
+			}
+			ui.Markdown(buf.String())
+		} else {
+			if err := renderer.RenderSecurityReport(output, report); err != nil {
+				return err
+			}
+			if fileOutput != "" {
+				ui.Writef("Report saved to %s\n", fileOutput)
+			}
 		}
 
 		return nil

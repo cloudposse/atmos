@@ -170,8 +170,17 @@ var complianceReportCmd = &cobra.Command{
 				report = filterComplianceReport(report, controlFilter)
 			}
 
-			if err := renderer.RenderComplianceReport(output, report); err != nil {
-				return err
+			// For Markdown to stdout, render with colors via ui.Markdown().
+			if outputFormat == security.FormatMarkdown && fileOutput == "" {
+				var buf strings.Builder
+				if err := renderer.RenderComplianceReport(&buf, report); err != nil {
+					return err
+				}
+				ui.Markdown(buf.String())
+			} else {
+				if err := renderer.RenderComplianceReport(output, report); err != nil {
+					return err
+				}
 			}
 		}
 
