@@ -532,3 +532,29 @@ func TestResolveAuthContext_EmptyIdentity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, authCtx)
 }
+
+func TestResolveAuthContext_NonEmptyIdentity_NoAuthConfig(t *testing.T) {
+	// When identity is provided but auth is not configured, should return error.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{},
+	}
+	_, err := resolveAuthContext(atmosConfig, "nonexistent-identity")
+	assert.Error(t, err)
+}
+
+func TestSecuritySettingsIdentityField(t *testing.T) {
+	// Verify the Identity field exists and is accessible.
+	settings := schema.AWSSecuritySettings{
+		Enabled:  true,
+		Identity: "security-readonly",
+	}
+	assert.Equal(t, "security-readonly", settings.Identity)
+	assert.True(t, settings.Enabled)
+}
+
+func TestSecuritySettingsIdentityField_Empty(t *testing.T) {
+	settings := schema.AWSSecuritySettings{
+		Enabled: true,
+	}
+	assert.Empty(t, settings.Identity)
+}
