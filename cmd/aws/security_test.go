@@ -575,3 +575,52 @@ func TestSecuritySettingsRegionField_Empty(t *testing.T) {
 	}
 	assert.Empty(t, settings.Region)
 }
+
+func TestFilterByStackAndComponent(t *testing.T) {
+	findings := []security.Finding{
+		{ID: "f1", Mapping: &security.ComponentMapping{Stack: "plat-use2-prod", Component: "vpc", Mapped: true}},
+		{ID: "f2", Mapping: &security.ComponentMapping{Stack: "plat-use2-prod", Component: "s3-bucket", Mapped: true}},
+		{ID: "f3", Mapping: &security.ComponentMapping{Stack: "plat-use2-dev", Component: "vpc", Mapped: true}},
+		{ID: "f4", Mapping: &security.ComponentMapping{Stack: "core-use2-security", Component: "account", Mapped: true}},
+		{ID: "f5", Mapping: nil}, // unmapped
+		{ID: "f6", Mapping: &security.ComponentMapping{Stack: "", Component: "", Mapped: false}}, // unmapped
+	}
+
+	t.Run("filter by stack only", func(t *testing.T) {
+		result := filterByStackAndComponent(findings, "plat-use2-prod", "")
+		require.Len(t, result, 2)
+		assert.Equal(t, "f1", result[0].ID)
+		assert.Equal(t, "f2", result[1].ID)
+	})
+
+	t.Run("filter by component only", func(t *testing.T) {
+		result := filterByStackAndComponent(findings, "", "vpc")
+		require.Len(t, result, 2)
+		assert.Equal(t, "f1", result[0].ID)
+		assert.Equal(t, "f3", result[1].ID)
+	})
+
+	t.Run("filter by both stack and component", func(t *testing.T) {
+		result := filterByStackAndComponent(findings, "plat-use2-prod", "vpc")
+		require.Len(t, result, 1)
+		assert.Equal(t, "f1", result[0].ID)
+	})
+
+	t.Run("no match returns empty", func(t *testing.T) {
+		result := filterByStackAndComponent(findings, "nonexistent", "")
+		assert.Empty(t, result)
+	})
+
+	t.Run("unmapped findings excluded", func(t *testing.T) {
+		result := filterByStackAndComponent(findings, "plat-use2-prod", "")
+		for _, f := range result {
+			assert.True(t, f.Mapping.Mapped)
+		}
+	})
+
+	t.Run("empty filters returns all mapped", func(t *testing.T) {
+		// When both filters empty, all mapped findings pass through.
+		result := filterByStackAndComponent(findings, "", "")
+		assert.Len(t, result, 4) // 4 mapped, 2 unmapped excluded.
+	})
+}

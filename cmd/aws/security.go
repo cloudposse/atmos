@@ -139,9 +139,10 @@ var securityAnalyzeCmd = &cobra.Command{
 			return err
 		}
 
+		// Note: stack and component are NOT passed to QueryOptions because
+		// Security Hub has no concept of Atmos stacks. Filtering by stack/component
+		// happens AFTER mapping (see filterByStackAndComponent below).
 		opts := security.QueryOptions{
-			Stack:       stack,
-			Component:   component,
 			Severity:    severities,
 			Source:      source,
 			MaxFindings: maxFindings,
@@ -192,6 +193,22 @@ var securityAnalyzeCmd = &cobra.Command{
 		findings, err = mapper.MapFindings(ctx, findings)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityMappingFailed, err)
+		}
+
+		// Filter by stack and component AFTER mapping.
+		// Security Hub doesn't know about Atmos stacks — we can only filter after
+		// findings are mapped to components/stacks via tags or heuristics.
+		if stack != "" || component != "" {
+			findings = filterByStackAndComponent(findings, stack, component)
+			if outputFormat == security.FormatMarkdown {
+				ui.Writef("🔎 Filtered to %d findings matching stack=%q component=%q\n", len(findings), stack, component)
+			}
+			if len(findings) == 0 {
+				if outputFormat == security.FormatMarkdown {
+					ui.Writef("✅ No findings match the specified stack/component after mapping.\n")
+				}
+				return nil
+			}
 		}
 
 		// AI analysis (only when --ai flag is set).
@@ -391,6 +408,38 @@ func parseSeverities(severityStr string, defaults []string) ([]security.Severity
 
 // Finding is a type alias for the security package Finding type (used in buildSecurityReport).
 type Finding = security.Finding
+
+// filterByStackAndComponent filters findings to those matching the specified stack and/or component.
+// Matching is done on the mapped stack/component names (after finding-to-code mapping).
+// If stack is empty, all stacks match. If component is empty, all components match.
+// Unmapped findings are excluded when filtering by stack or component.
+func filterByStackAndComponent(findings []Finding, stack, component string) []Finding {
+	var filtered []Finding
+	for i := range findings {
+		f := &findings[i]
+
+		// Unmapped findings can't match stack/component filters.
+		if f.Mapping == nil || !f.Mapping.Mapped {
+			continue
+		}
+
+		// Stack filter: exact match or prefix match (e.g., "plat-use2-prod" matches "plat-use2-prod-vpc").
+		if stack != "" && f.Mapping.Stack != stack && !strings.HasPrefix(f.Mapping.Stack, stack+nameSep) {
+			continue
+		}
+
+		// Component filter: exact match.
+		if component != "" && f.Mapping.Component != component {
+			continue
+		}
+
+		filtered = append(filtered, *f)
+	}
+	return filtered
+}
+
+// nameSep is the separator for stack name prefix matching.
+const nameSep = "-"
 
 // initReadOnlyTools creates a read-only tool registry and executor for AI security analysis.
 // Returns nil, nil if tool setup fails (analysis falls back to single-prompt mode).

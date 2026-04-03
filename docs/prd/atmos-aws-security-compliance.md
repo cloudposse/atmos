@@ -1267,6 +1267,26 @@ for error handling and reference `aws.security.enabled` config.
     Markdown report. Instead of listing 7 identical "AWS Config should be enabled" findings,
     they're collapsed into one entry with affected accounts/resources listed underneath.
 
+39. **Post-mapping stack/component filter** — ✅ The `--stack` and `--component` flags now
+    filter findings AFTER mapping, not at the AWS API level. Security Hub has no concept of
+    Atmos stacks — it can only filter by severity, source, and compliance standard. The flow:
+
+    1. Fetch all findings from Security Hub (no stack filter)
+    2. Map all findings to components/stacks (tags, context-tags, heuristics)
+    3. Filter by `--stack` and `--component` (exact match + prefix match for stack)
+    4. Unmapped findings are excluded when stack/component filter is active
+
+    Stack matching supports prefix: `--stack plat-use2-prod` matches both `plat-use2-prod`
+    and `plat-use2-prod-vpc`. Component matching is exact.
+
+    **Per-account deployment:** When querying a single account (no delegated admin), all
+    findings are already scoped to that account. The stack/component filter still applies
+    for further narrowing.
+
+    **Delegated admin:** All findings from all accounts are fetched, then filtered by
+    stack/component after mapping. This is the only reliable approach because the mapping
+    method (tags vs heuristics) determines which stack a finding belongs to.
+
 ### Known Limitations (from Production Testing 2026-04-03)
 
 Tested against the InSpatial AWS organization (11 accounts, Security Hub delegated admin).
