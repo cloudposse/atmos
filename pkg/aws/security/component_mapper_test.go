@@ -56,7 +56,7 @@ func TestMapByTags_ExactMatch(t *testing.T) {
 	assert.Equal(t, "tenant1-ue1-prod", mapping.Stack)
 	assert.Equal(t, "vpc", mapping.Component)
 	assert.Equal(t, ConfidenceExact, mapping.Confidence)
-	assert.Equal(t, "tag", mapping.Method)
+	assert.Equal(t, "tag-api", mapping.Method)
 }
 
 func TestMapByTags_ComponentOnlyNoStack(t *testing.T) {
@@ -121,7 +121,7 @@ func TestMapByTags_CustomTagKeys(t *testing.T) {
 	assert.Equal(t, "prod-us-east-1", mapping.Stack)
 	assert.Equal(t, "web-server", mapping.Component)
 	assert.Equal(t, ConfidenceExact, mapping.Confidence)
-	assert.Equal(t, "tag", mapping.Method)
+	assert.Equal(t, "tag-api", mapping.Method)
 }
 
 func TestMapByTags_NoTags(t *testing.T) {
@@ -283,7 +283,7 @@ func TestMapFinding_TagsThenHeuristicsFallback(t *testing.T) {
 				},
 			},
 			wantMapped:     true,
-			wantMethod:     "tag",
+			wantMethod:     "tag-api",
 			wantConfidence: ConfidenceExact,
 			wantComponent:  "vpc",
 		},
@@ -405,7 +405,7 @@ func TestMapFindings_Batch(t *testing.T) {
 	// First finding: mapped via tags.
 	require.NotNil(t, result[0].Mapping)
 	assert.True(t, result[0].Mapping.Mapped)
-	assert.Equal(t, "tag", result[0].Mapping.Method)
+	assert.Equal(t, "tag-api", result[0].Mapping.Method)
 
 	// Second finding: no tags, falls to resource type.
 	require.NotNil(t, result[1].Mapping)
@@ -687,4 +687,58 @@ func TestBatchFetchTags(t *testing.T) {
 	result, ok = mapper.tagCache["arn:aws:ec2:us-east-1:123:instance/i-def"]
 	assert.True(t, ok)
 	assert.False(t, result.exists)
+}
+
+func TestMapByTags_FindingEmbeddedTags(t *testing.T) {
+	// When the finding has ResourceTags, use them directly (no API call).
+	atmosConfig := &schema.AtmosConfiguration{
+		AWS: schema.AWSSettings{
+			Security: schema.AWSSecuritySettings{
+				TagMapping: schema.AWSSecurityTagMapping{
+					StackTag:     "atmos_stack",
+					ComponentTag: "atmos_component",
+				},
+			},
+		},
+	}
+
+	mapper := NewComponentMapper(atmosConfig, nil)
+
+	finding := &Finding{
+		ID:          "embedded-tag-001",
+		ResourceARN: "arn:aws:s3:::my-bucket",
+		ResourceTags: map[string]string{
+			"atmos_stack":     "plat-use2-prod",
+			"atmos_component": "s3-bucket",
+			"Environment":     "production",
+		},
+	}
+
+	mapping, err := mapper.MapFinding(context.Background(), finding)
+	require.NoError(t, err)
+	require.NotNil(t, mapping)
+	assert.True(t, mapping.Mapped)
+	assert.Equal(t, "plat-use2-prod", mapping.Stack)
+	assert.Equal(t, "s3-bucket", mapping.Component)
+	assert.Equal(t, ConfidenceExact, mapping.Confidence)
+	assert.Equal(t, "finding-tag", mapping.Method)
+}
+
+func TestMapByTags_FindingTagsFallbackToAPI(t *testing.T) {
+	// When finding has no ResourceTags, fall back to API.
+	finding := &Finding{
+		ID:           "no-tag-001",
+		ResourceARN:  "arn:aws:s3:::my-bucket",
+		ResourceTags: nil, // No embedded tags.
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	mapper := NewComponentMapper(atmosConfig, nil)
+
+	// Without mock API, this falls through to heuristics.
+	mapping, err := mapper.MapFinding(context.Background(), finding)
+	require.NoError(t, err)
+	require.NotNil(t, mapping)
+	// Should use naming convention or resource type, not tag.
+	assert.NotEqual(t, "finding-tag", mapping.Method)
 }

@@ -102,26 +102,38 @@ func (m *dualPathMapper) MapFindings(ctx context.Context, findings []Finding) ([
 	return findings, nil
 }
 
-// mapByTags implements Path A: tag-based mapping using cached resource tags.
+// mapByTags implements Path A: tag-based mapping.
+// First checks tags embedded in the Security Hub finding (no API call needed).
+// Falls back to the Resource Groups Tagging API if finding tags are empty.
 func (m *dualPathMapper) mapByTags(ctx context.Context, finding *Finding) (*ComponentMapping, error) {
 	if finding.ResourceARN == "" {
 		return nil, nil
 	}
 
+	// Try tags from the finding itself (embedded in Security Hub ASFF response).
+	if mapping := m.matchTags(finding.ResourceTags, "finding-tag"); mapping != nil {
+		return mapping, nil
+	}
+
+	// Fall back to Resource Groups Tagging API (only works in the same account).
 	tags, err := m.getResourceTags(ctx, finding.ResourceARN, finding.Region)
 	if err != nil {
 		return nil, err
 	}
-	if tags == nil {
-		return nil, nil
+	return m.matchTags(tags, "tag-api"), nil
+}
+
+// matchTags checks a tag map for Atmos stack/component tags.
+func (m *dualPathMapper) matchTags(tags map[string]string, method string) *ComponentMapping {
+	if len(tags) == 0 {
+		return nil
 	}
 
-	// Look for Atmos tags.
 	stack := tags[m.tagMapping.StackTag]
 	component := tags[m.tagMapping.ComponentTag]
 
 	if stack == "" && component == "" {
-		return nil, nil
+		return nil
 	}
 
 	return &ComponentMapping{
@@ -129,8 +141,8 @@ func (m *dualPathMapper) mapByTags(ctx context.Context, finding *Finding) (*Comp
 		Component:  component,
 		Mapped:     component != "",
 		Confidence: ConfidenceExact,
-		Method:     "tag",
-	}, nil
+		Method:     method,
+	}
 }
 
 // mapByHeuristics implements Path B: multi-strategy heuristic pipeline.

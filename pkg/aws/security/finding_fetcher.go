@@ -323,6 +323,10 @@ func normalizeSecurityHubFinding(f *shtypes.AwsSecurityFinding) Finding {
 		finding.ResourceARN = aws.ToString(res.Id)
 		finding.ResourceType = aws.ToString(res.Type)
 		finding.Region = aws.ToString(res.Region)
+		// Extract resource tags directly from the finding — no separate API call needed.
+		if len(res.Tags) > 0 {
+			finding.ResourceTags = res.Tags
+		}
 	}
 
 	// Compliance standard.

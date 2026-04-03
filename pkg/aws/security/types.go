@@ -51,6 +51,7 @@ type Finding struct {
 	ComplianceStandard string            `json:"compliance_standard,omitempty" yaml:"compliance_standard,omitempty"`
 	ResourceARN        string            `json:"resource_arn" yaml:"resource_arn"`
 	ResourceType       string            `json:"resource_type" yaml:"resource_type"`
+	ResourceTags       map[string]string `json:"resource_tags,omitempty" yaml:"resource_tags,omitempty"` // Tags from the Security Hub finding (no extra API call needed).
 	AccountID          string            `json:"account_id" yaml:"account_id"`
 	Region             string            `json:"region" yaml:"region"`
 	CreatedAt          time.Time         `json:"created_at" yaml:"created_at"`

@@ -1221,19 +1221,32 @@ for error handling and reference `aws.security.enabled` config.
 31. **Duplicate AI flag registration fix** — ✅ Fixed panic on startup caused by `registerAIFlags`
     being called twice in `NewGlobalOptionsBuilder` (copy-paste error).
 
+32. **Extract resource tags from Security Hub findings** — ✅ Security Hub ASFF findings include
+    `Resources[].Tags` — a `map[string]string` with all tags applied to the affected resource.
+    This eliminates the need for a separate Resource Groups Tagging API call (which only works
+    in the same account). The component mapper now checks `finding.ResourceTags` first
+    (`method: "finding-tag"`) and only falls back to the Tagging API if no embedded tags exist
+    (`method: "tag-api"`). This fixes the cross-account tag lookup limitation — tags from any
+    account are now available if Security Hub includes them in the finding.
+
+33. **Resource tags displayed in reports** — ✅ When a finding has embedded resource tags, they
+    are rendered in the Markdown report as a `Resource Tags` section with `key = value` list.
+    This helps users identify the resource and see Atmos component/stack tags even when the
+    naming convention mapper produces incorrect results.
+
+34. **Account ID in reports** — ✅ The AWS account ID is now shown in the finding table,
+    helping users identify which account the affected resource belongs to.
+
 ### Known Limitations (from Production Testing 2026-04-03)
 
 Tested against the InSpatial AWS organization (11 accounts, Security Hub delegated admin).
 
-1. **Cross-account tag lookup** — The Resource Groups Tagging API (`GetResources`) only
-   returns tags for resources in the same AWS account. When the security commands query
-   Security Hub in the `core-security` account (delegated admin), they see findings for
-   resources in other accounts (e.g., `plat-prod`), but the tag lookup is called in
-   `core-security` where those resources don't exist. Result: 0 exact (tag-based) mappings.
-
-   **Fix needed:** For each finding, extract the account ID from the resource ARN and use
-   cross-account credentials (or `atmos auth exec` with a per-account identity) to call
-   the Tagging API in the resource's own account.
+1. **Cross-account tag lookup (partially fixed)** — Security Hub ASFF findings include
+   embedded resource tags (`Resources[].Tags`), which are now extracted and used for
+   mapping (`method: "finding-tag"`). However, not all findings include tags — some
+   resource types or services may omit them. The Tagging API fallback still only works
+   in the same account. For findings without embedded tags, cross-account tag lookup
+   is not yet supported.
 
 2. **Naming convention heuristic is unreliable** — The last hyphen-separated segment often
    is NOT the Atmos component name. Examples from production:

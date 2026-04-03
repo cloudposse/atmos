@@ -285,6 +285,9 @@ func renderFindingMarkdown(sb *strings.Builder, f *Finding, num int) {
 	}
 	sb.WriteString(" |\n")
 	fmt.Fprintf(sb, "| **Resource** | `%s` |\n", f.ResourceARN)
+	if f.AccountID != "" {
+		fmt.Fprintf(sb, "| **Account** | %s |\n", f.AccountID)
+	}
 
 	if f.Mapping != nil && f.Mapping.Mapped {
 		fmt.Fprintf(sb, "| **Component** | %s |\n", f.Mapping.Component)
@@ -299,6 +302,12 @@ func renderFindingMarkdown(sb *strings.Builder, f *Finding, num int) {
 	} else {
 		sb.WriteString("| **Component** | *unmapped* |\n")
 	}
+
+	// Show resource tags if available (helps users identify the resource).
+	if len(f.ResourceTags) > 0 {
+		renderResourceTags(sb, f.ResourceTags)
+	}
+
 	sb.WriteString("\n")
 
 	if f.Description != "" {
@@ -314,6 +323,17 @@ func renderFindingMarkdown(sb *strings.Builder, f *Finding, num int) {
 
 // mdNewline is the newline string used in Markdown rendering.
 const mdNewline = "\n"
+
+// renderResourceTags renders resource tags as a compact key=value list.
+func renderResourceTags(sb *strings.Builder, tags map[string]string) {
+	if len(tags) == 0 {
+		return
+	}
+	sb.WriteString("\n**Resource Tags:**\n\n")
+	for k, v := range tags {
+		fmt.Fprintf(sb, "- `%s` = `%s`\n", k, v)
+	}
+}
 
 // renderRemediationMarkdown renders the full Remediation struct as Markdown subsections.
 func renderRemediationMarkdown(sb *strings.Builder, r *Remediation) {
