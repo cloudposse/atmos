@@ -190,11 +190,11 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - **See `docs/errors.md`** for complete developer guide
 
 ### External Command Invocation (MANDATORY)
-When spawning subprocesses (e.g., `exec.CommandContext`):
-- **Always use a timeout** via `context.WithTimeout`; allow override via an env var (e.g., `ATMOS_<PACKAGE>_CMD_TIMEOUT`) so operators can tune for slow NSS/LDAP backends.
+The rules below govern subprocesses used for **user/home-directory resolution** (e.g., `id`, `whoami`, `dscl`, `sh ~username` lookups). They apply to functions like `shellGetUsernameFunc`, `getDarwinHomeDir`, `getHomeFromShell`, and any future homedir-style lookup routines. They are not intended as general subprocess policy for unrelated commands (e.g., `terraform`, `helm`, build tools).
+- **Always use a timeout** via `context.WithTimeout`; allow override via an env var (e.g., `ATMOS_HOMEDIR_CMD_TIMEOUT`) so operators can tune for slow NSS/LDAP backends.
 - **Fall back gracefully on any failure** — not just `exec.ErrNotFound`. A binary can be present but exit non-zero due to transient NSS/LDAP errors; retry with a less privileged path (`$USER` env var, `whoami`) before returning an error.
 - **Validate all user-controlled inputs** with a strict whitelist (regex) before interpolating into shell commands. Never allow leading `-` or `+` in usernames (in bash/dash, `~-` expands to `$OLDPWD` and `~+` to `$PWD`, which can return wrong paths silently); reject all shell metacharacters.
-- **Require absolute paths** from all subprocess results; reject tilde-prefixed or relative outputs as `ErrBlankOutput`.
+- **Require absolute paths** from subprocess results that are expected to return filesystem paths (home directory paths, user directory lookups); reject relative or tilde-prefixed outputs as `ErrBlankOutput`.
 - **Never include PII** (e.g., raw usernames) in returned error messages; use sentinel errors with generic text (e.g., `ErrInvalidUsername`). Scrub subprocess stderr output before including it in errors (replace username occurrences with `<redacted>`).
 
 ### Testing Strategy (MANDATORY)

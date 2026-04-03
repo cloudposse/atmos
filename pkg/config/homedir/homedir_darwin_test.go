@@ -30,8 +30,9 @@ func TestGetDarwinHomeDir_RealDscl(t *testing.T) {
 		t.Skipf("cannot determine current username (%v); skipping.", err)
 	}
 
-	// Clear HOME to force dirUnix() past the env-var fast-path and down to the
-	// dscl branch.
+	// Clear HOME to ensure Dir() would not short-circuit via the env-var fast path
+	// if it were called. getDarwinHomeDir itself queries dscl directly and does not
+	// use $HOME, so this has no functional effect on the function under test.
 	t.Setenv("HOME", "")
 
 	home, err := getDarwinHomeDir(username)

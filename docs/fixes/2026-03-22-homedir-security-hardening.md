@@ -111,9 +111,9 @@ that include subprocess stderr in error messages: `shellGetUsernameFunc` (id/who
 
 - Added `compile-plan9` job to `.github/workflows/test.yml`:
   `GOOS=plan9 go build ./pkg/config/homedir/...` — compile-only guard against Plan 9 bit-rot
-- Added `test-homedir-macos` job to `.github/workflows/test.yml` (macOS runner):
-  runs `go build ./pkg/config/homedir/...` and `go test ./pkg/config/homedir/... -race`
-  to exercise real `dscl`/darwin paths; closes the "not addressed" gap noted in the audit table.
+- Added `test-homedir-macos` job to `.github/workflows/test.yml` (macOS runner, job name
+  `[test] homedir (macOS, race detector)`): runs `go test -race ./pkg/config/homedir/...`
+  to exercise real `dscl`/darwin code paths on an actual macOS environment.
 
 ### Windows CI Test Fix
 
