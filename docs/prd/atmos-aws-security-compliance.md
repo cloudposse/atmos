@@ -1287,34 +1287,56 @@ for error handling and reference `aws.security.enabled` config.
     stack/component after mapping. This is the only reliable approach because the mapping
     method (tags vs heuristics) determines which stack a finding belongs to.
 
-### Known Limitations (from Production Testing 2026-04-03)
+40. **Default max-findings increased to 500** — ✅ Was 50, too low for multi-account orgs.
+    With post-mapping filtering, all findings must be fetched before filtering by stack.
 
-Tested against the InSpatial AWS organization (11 accounts, Security Hub delegated admin).
+41. **ECR repo and resource-type mappers use account map for stack** — ✅ Previously these
+    mappers set empty stack. Now use `account_map` to resolve the finding's account ID
+    to an account name as the stack.
 
-1. **Cross-account tag lookup (partially fixed)** — Security Hub ASFF findings include
-   embedded resource tags (`Resources[].Tags`), which are now extracted and used for
-   mapping (`method: "finding-tag"`). However, not all findings include tags — some
-   resource types or services may omit them. The Tagging API fallback still only works
-   in the same account. For findings without embedded tags, cross-account tag lookup
-   is not yet supported.
+42. **UI messages use themed ui layer** — ✅ Replaced all hardcoded emoji icons with
+    `ui.Info()`, `ui.Success()`, `ui.Warning()` for automatic theming.
 
-2. **Naming convention heuristic is unreliable** — The last hyphen-separated segment often
-   is NOT the Atmos component name. Examples from production:
-   - `ins-plat-use2-prod-example-static-app-origin` → maps to `origin` (should be `s3-bucket` or `cdn`)
-   - `ins-plat-use2-prod-app:4` → maps to `app:4` (should be `ecs-service/app`)
-   - `ins-plat-use2-prod-echo-server:1` → maps to `server:1` (should be `ecs-service/echo-server`)
+### Production Testing Results (2026-04-03)
 
-   **Fix needed:** Cross-reference the extracted name against known Atmos components in the
-   project (via `atmos list components`) to validate before accepting the heuristic match.
+Tested against the InSpatial AWS organization (11 accounts, Security Hub delegated admin,
+500 findings fetched).
 
-3. **`--ai` flag not working** — AI analysis fails when invoked from the security command.
-   The AI provider itself works (`atmos ai ask` succeeds). Investigation needed — likely
-   an issue with how the client is created or the prompt is sent in the analyzer.
+**Mapping accuracy:**
+
+| Method | Count | Confidence | Description |
+|---|---|---|---|
+| `ecr-repo` | 395 | low | ECR image vulnerabilities → component from repo name, stack from account map |
+| `context-tags` | 41 | high | Cloud Posse context tags (Namespace/Tenant/Environment/Stage + Name) |
+| `finding-tag` | 28 | exact | Resources with `atmos_stack` + `atmos_component` tags |
+| `account-map` | 21 | low | Account-level findings → account name from config |
+| `resource-type` | 1 | low | AWS resource type → component name |
+| **Total mapped** | **486 (97.2%)** | | |
+| Unmapped | 14 (2.8%) | | Resources without tags or naming patterns |
+
+**Stack/component filtering verified:**
+- `--stack plat-use2-prod` → 13 findings (all HIGH, 100% mapped, 10 unique components)
+- `--stack plat-use2-dev` → 17 findings (all mapped, 11 unique components)
+- `--stack plat-use2-network` → 0 findings (correct — no findings mapped to that stack)
+- `--stack plat-use2-prod --component monitor-historical` → 1 finding (exact match)
+- No filter → 500 findings across 18 stacks
+
+**Output formats verified:** Markdown (grouped/ungrouped), JSON, YAML — all consistent.
+
+### Known Limitations
+
+1. **Cross-account tag lookup** — The Tagging API only works in the same account. Finding-embedded
+   tags (`Resources[].Tags`) are the primary tag source. Resources without embedded tags can
+   only be mapped via context-tags, naming convention, or resource-type heuristics.
+
+2. **`--ai` flag not working** — AI analysis fails from the security command context.
+   Investigation needed.
+
+3. **Naming convention is the weakest mapper** — Only used as last resort (confidence: low).
+   The context-tags strategy handles most cases that naming convention would attempt.
 
 ### Remaining Work (Future PRs)
 
-- **Cross-account tag lookup** — Call Tagging API in the resource's account, not the
-  Security Hub account. Extract account ID from ARN, use per-account auth.
 - **Component name validation** — Cross-reference heuristic names against `atmos list
   components` to filter false positives.
 - **Terraform state search (Path B Strategy 1)** — Implement state file scanning for tagless
