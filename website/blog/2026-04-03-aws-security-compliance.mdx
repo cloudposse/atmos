@@ -1,0 +1,135 @@
+---
+slug: aws-security-compliance
+title: "Analyze AWS Security Findings and Map Them to Your Infrastructure"
+authors: [aknysh]
+tags: [feature]
+---
+
+import File from '@site/src/components/File'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+Atmos can now pull security findings from AWS Security Hub, map them to the exact Atmos
+components and stacks that manage the affected resources, and generate structured remediation
+reports — all from a single command.
+
+<!--truncate-->
+
+## Why This Matters
+
+Reviewing AWS security findings today means navigating Security Hub, cross-referencing resources
+with Terraform code, and manually figuring out which stack configuration caused the issue. This is
+slow and requires deep AWS + Terraform expertise.
+
+With `atmos aws security analyze`, one command replaces that entire workflow:
+
+```bash
+atmos aws security analyze --stack prod-us-east-1
+```
+
+The command fetches findings, maps them to your Atmos components via resource tags, and shows
+which code manages each affected resource. Add `--ai` for AI-powered remediation with specific
+code changes and deploy commands.
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+aws:
+  security:
+    enabled: true
+    identity: "security-readonly"  # Atmos Auth identity → Security Hub account
+    region: "us-east-2"            # Security Hub aggregation region
+    tag_mapping:
+      stack_tag: "atmos:stack"
+      component_tag: "atmos:component"
+```
+</File>
+
+```bash
+# Authenticate and analyze
+atmos auth login
+atmos aws security analyze
+atmos aws security analyze --ai  # With AI remediation
+```
+
+## What You Get
+
+**Without `--ai`** — findings with component mapping:
+
+```text
+## CRITICAL Findings (2)
+
+### 1. S3 bucket without encryption
+
+| Field | Value |
+|-------|-------|
+| **Severity** | CRITICAL |
+| **Source** | security-hub (CIS-1.4) |
+| **Resource** | `arn:aws:s3:::my-bucket` |
+| **Component** | s3-bucket |
+| **Stack** | prod-us-east-1 |
+| **Confidence** | exact |
+```
+
+**With `--ai`** — adds structured remediation:
+
+```text
+#### Remediation
+
+**Root Cause:** The S3 bucket was provisioned without enabling versioning.
+
+**Steps:**
+1. Add versioning_enabled variable to the stack configuration
+2. Apply the change
+
+**Stack Changes:**
+  vars:
+    versioning_enabled: true
+
+**Deploy:** `atmos terraform apply s3-bucket -s prod-us-east-1`
+
+**Risk:** low
+```
+
+## Key Features
+
+- **Finding-to-code mapping** — traces AWS resources back to Atmos components via tags or naming heuristics
+- **Atmos Auth integration** — `identity` field targets the Security Hub delegated admin account
+- **Multi-turn AI analysis** — API providers can call `atmos_describe_component`, `read_component_file` to gather context before generating remediation
+- **CLI provider support** — Claude Code and Codex CLI fall back to enriched single-prompt mode
+- **Compliance reports** — `atmos aws compliance report --framework cis-aws` for framework-specific posture
+- **Four output formats** — Markdown (terminal), JSON (CI/CD), YAML (config), CSV (spreadsheets)
+- **Structured schema** — every output follows the same schema regardless of AI provider
+
+## Commands
+
+```bash
+# Security analysis
+atmos aws security analyze
+atmos aws security analyze --severity critical,high --source guardduty
+atmos aws security analyze --ai --format json --file findings.json
+
+# Compliance reports
+atmos aws compliance report --framework cis-aws
+atmos aws compliance report --framework pci-dss --format json
+
+# Override identity or region
+atmos aws security analyze --identity security-admin --region us-west-2
+```
+
+## Try It
+
+<ActionCard title="Example: AWS Security & Compliance">
+    Configuration example with auth, tag mapping, AI provider, and all available commands.
+    <div>
+      <PrimaryCTA to="/examples/aws-security-compliance">Browse Example</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Learn More
+
+- [Security Configuration](/cli/configuration/aws/security)
+- [Security Analyze Command](/cli/commands/aws/security/analyze)
+- [Compliance Report Command](/cli/commands/aws/compliance/report)
+- [Atmos Auth](/cli/configuration/auth)

@@ -582,7 +582,7 @@ export const roadmapConfig = {
       tagline: 'Security findings mapped to your infrastructure code',
       description:
         'Detect, review, and analyze security findings from AWS Security Hub, Config, Inspector, and GuardDuty — directly from the Atmos CLI. Findings are mapped back to Atmos components and stacks, with optional AI-powered remediation guidance via any supported AI provider.',
-      progress: 80,
+      progress: 84,
       status: 'in-progress',
       milestones: [
         { label: 'Schema additions for `aws.security` config', status: 'shipped', quarter: 'q1-2026', prd: 'atmos-aws-security-compliance', description: 'Added AWSSettings, AWSSecuritySettings, AWSSecuritySources, and AWSSecurityTagMapping types to pkg/schema/.', benefits: 'Configure security scanning behavior directly in atmos.yaml.' },
@@ -596,6 +596,11 @@ export const roadmapConfig = {
         { label: 'AI tools for security (4 tools)', status: 'shipped', quarter: 'q1-2026', prd: 'atmos-aws-security-compliance', description: 'atmos_list_findings, atmos_describe_finding, atmos_analyze_finding, and atmos_compliance_report tools for AI and MCP clients.', benefits: 'Security analysis available to AI chat sessions and MCP-connected IDEs.' },
         { label: '`--ai` global persistent flag', status: 'shipped', quarter: 'q1-2026', prd: 'atmos-aws-security-compliance', description: 'Global --ai flag inherited by all subcommands. Enables AI-powered analysis with ATMOS_AI env var support.', benefits: 'Consistent AI opt-in across all commands. No per-command flag registration needed.' },
         { label: 'Finding cache infrastructure', status: 'shipped', quarter: 'q1-2026', prd: 'atmos-aws-security-compliance', description: 'Cache layer in pkg/aws/security/cache.go for finding results with TTL and invalidation.', benefits: 'Faster repeated queries. Reduced AWS API calls and costs.' },
+        { label: 'AWS security finding analysis', status: 'shipped', quarter: 'q2-2026', changelog: 'aws-security-compliance' },
+        { label: 'Finding-to-code mapping', status: 'shipped', quarter: 'q2-2026', changelog: 'aws-security-compliance' },
+        { label: 'AI-powered remediation', status: 'shipped', quarter: 'q2-2026', changelog: 'aws-security-compliance' },
+        { label: 'Compliance framework reports', status: 'shipped', quarter: 'q2-2026', changelog: 'aws-security-compliance' },
+        { label: 'Atmos Auth integration for security', status: 'shipped', quarter: 'q2-2026', changelog: 'aws-security-compliance' },
         { label: 'Terraform state search for tagless mapping', status: 'planned', quarter: 'q2-2026', prd: 'atmos-aws-security-compliance', description: 'Scan Terraform state files to find resource ARNs, reusing the !terraform.state YAML function infrastructure.', benefits: 'Most reliable tagless mapping strategy. State file is the source of truth for managed resources.' },
         { label: 'AI-assisted inference for unmapped findings', status: 'planned', quarter: 'q2-2026', prd: 'atmos-aws-security-compliance', description: 'Send unmapped findings with candidate component list to AI for intelligent component inference.', benefits: 'AI resolves ambiguous matches using contextual clues when heuristic strategies fail.' },
         { label: 'Interactive AI Q&A with security context', status: 'planned', quarter: 'q2-2026', prd: 'atmos-aws-security-compliance', description: 'atmos ai chat with pre-loaded security context for follow-up questions about findings.', benefits: 'Ask follow-up questions about findings. Deep-dive into remediation strategies interactively.' },
