@@ -2076,3 +2076,93 @@ func TestUploadNoEventTypeAllowed(t *testing.T) {
 		assert.NotContains(t, err.Error(), "pull_request event")
 	}
 }
+
+// TestUploadSuppressesOutputButStillUploads verifies that when --upload is set without --verbose,
+// the JSON output is suppressed (printOrWriteToFile is not called) but the upload path is still reached.
+func TestUploadSuppressesOutputButStillUploads(t *testing.T) {
+	printCalled := false
+
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			printCalled = true
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	affected := []schema.Affected{
+		{Component: "vpc", Stack: "dev"},
+		{Component: "rds", Stack: "staging"},
+	}
+
+	// Upload=true, Verbose=false, no OutputFile — output should be suppressed.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Verbose:     false,
+			Format:      "json",
+			CIEventType: "pull_request",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		affected,
+	)
+
+	// printOrWriteToFile should NOT have been called — output is suppressed.
+	assert.False(t, printCalled, "printOrWriteToFile should not be called when --upload is used without --verbose")
+
+	// The function should proceed past event validation to the API client creation step.
+	// Since no API env vars are set, it logs a warning and returns nil (graceful degradation).
+	assert.NoError(t, err, "upload path should be reached and complete without error")
+}
+
+// TestUploadShowsOutputWhenVerbose verifies that when --upload and --verbose are both set,
+// the JSON output is displayed (printOrWriteToFile is called) and the upload path is still reached.
+func TestUploadShowsOutputWhenVerbose(t *testing.T) {
+	printCalled := false
+
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			printCalled = true
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	affected := []schema.Affected{
+		{Component: "vpc", Stack: "dev"},
+	}
+
+	// Upload=true, Verbose=true — output should be shown.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Verbose:     true,
+			Format:      "json",
+			CIEventType: "pull_request",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		affected,
+	)
+
+	// printOrWriteToFile SHOULD have been called — verbose mode shows output.
+	assert.True(t, printCalled, "printOrWriteToFile should be called when --upload and --verbose are both set")
+
+	// Upload path should still complete.
+	assert.NoError(t, err, "upload path should be reached and complete without error")
+}
