@@ -3,18 +3,16 @@ package awssso
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // DetectPrerequisites is a gate step that validates migration preconditions.
-// It checks whether the repository uses aws-teams or aws-team-roles components,
-// which indicate the SSO migration does not apply.
+// It checks whether enough context exists to proceed with SSO profile generation:
+// an SSO provider must be configured (or discoverable) and group assignments
+// must be available from aws-sso or aws-teams components.
 type DetectPrerequisites struct {
 	migCtx *migrate.MigrationContext
 	fs     migrate.FileSystem
@@ -31,41 +29,28 @@ func (d *DetectPrerequisites) Name() string { return "detect-prerequisites" }
 // Description returns a human-readable description of this step.
 func (d *DetectPrerequisites) Description() string { return "Check migration prerequisites" }
 
-// Detect checks if this step needs to run, is already complete, or does not apply.
-// It returns StepNotApplicable if aws-teams or aws-team-roles configs are found,
-// indicating the repository uses a teams-based auth model rather than SSO.
+// Detect validates that prerequisites for SSO migration are met.
+// Returns StepComplete if SSO config and group assignments are available.
+// Returns StepNotApplicable if no SSO provider is configured and no groups found.
 func (d *DetectPrerequisites) Detect(ctx context.Context) (migrate.StepStatus, error) {
 	defer perf.Track(nil, "awssso.DetectPrerequisites.Detect")()
 
-	base := d.migCtx.StacksBasePath
-	log.Debug("Checking migration prerequisites", "stacks_base", base)
+	hasSSO := d.migCtx.SSOConfig != nil && d.migCtx.SSOConfig.StartURL != ""
+	hasGroups := d.migCtx.SSOConfig != nil && len(d.migCtx.SSOConfig.AccountAssignments) > 0
+	hasProvider := d.migCtx.ExistingAuth != nil && len(d.migCtx.ExistingAuth.Providers) > 0
 
-	// Check for aws-teams / aws-team-roles in known catalog locations.
-	// filepath.Glob does not support recursive ** patterns, so we check
-	// both the catalog root and one level of subdirectory.
-	for _, name := range []string{"aws-teams.yaml", "aws-team-roles.yaml"} {
-		// Check catalog root.
-		directPath := filepath.Join(base, "catalog", name)
-		if d.fs.Exists(directPath) {
-			log.Debug("Found teams-based config — SSO migration not applicable", "file", directPath)
-			return migrate.StepNotApplicable, nil
-		}
+	log.Debug("Checking migration prerequisites",
+		"has_sso_config", hasSSO,
+		"has_groups", hasGroups,
+		"has_provider", hasProvider)
 
-		// Check one level of subdirectory under catalog.
-		pattern := filepath.Join(base, "catalog", "*", name)
-		matches, err := d.fs.Glob(pattern)
-		if err != nil {
-			return migrate.StepNotApplicable, fmt.Errorf("%w: %w", errUtils.ErrMigrationPrerequisitesNotMet, err)
-		}
-		if len(matches) > 0 {
-			log.Debug("Found teams-based config — SSO migration not applicable", "matches", matches)
-			return migrate.StepNotApplicable, nil
-		}
+	if !hasSSO && !hasProvider {
+		log.Debug("No SSO provider configured and no SSO config found — migration not applicable")
+		return migrate.StepNotApplicable, nil
 	}
 
-	log.Debug("No aws-teams/aws-team-roles found — migration may proceed")
-	// No aws-teams found — migration may proceed.
-	return migrate.StepNeeded, nil
+	// Prerequisites are met — migration can proceed.
+	return migrate.StepComplete, nil
 }
 
 // Plan is a no-op for the gate step.

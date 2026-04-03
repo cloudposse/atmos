@@ -125,24 +125,34 @@ func discoverSSOConfigViaStacks(atmosConfig *schema.AtmosConfiguration, existing
 		}
 	}
 
-	// Find aws-sso component via stacks.
-	componentName := "aws-sso"
-	stack, err := findStackWithComponent(atmosConfig, componentName)
-	if err != nil {
-		log.Debug("Error finding stack with aws-sso component", "error", err)
-	}
+	// Try multiple component names that may contain SSO group assignments.
+	// aws-sso is the standard SSO component; aws-teams also defines groups
+	// and permission sets that can be used to generate profiles.
+	for _, componentName := range []string{"aws-sso", "aws-teams"} {
+		if len(ssoCfg.AccountAssignments) > 0 {
+			break // Already found groups — no need to check more components.
+		}
 
-	if stack != "" {
-		log.Debug("Found aws-sso component", "stack", stack)
+		stack, findErr := findStackWithComponent(atmosConfig, componentName)
+		if findErr != nil {
+			log.Debug("Error finding stack with component", "component", componentName, "error", findErr)
+			continue
+		}
+
+		if stack == "" {
+			log.Debug("No stack found with component", "component", componentName)
+			continue
+		}
+
+		log.Debug("Found component", "component", componentName, "stack", stack)
 
 		componentSection, descErr := describeComponentRaw(atmosConfig, componentName, stack)
 		if descErr != nil {
-			log.Debug("Failed to describe aws-sso component", "stack", stack, "error", descErr)
-		} else {
-			extractSSOFromComponent(componentSection, ssoCfg)
+			log.Debug("Failed to describe component", "component", componentName, "stack", stack, "error", descErr)
+			continue
 		}
-	} else {
-		log.Debug("No stack found with aws-sso component")
+
+		extractSSOFromComponent(componentSection, ssoCfg)
 	}
 
 	// Only prompt for values still missing after checking both sources.
