@@ -72,6 +72,9 @@ atmos aws security analyze [flags]
 
   <dt>`--framework`</dt>
   <dd>Filter findings by compliance framework (e.g., `cis-aws`, `pci-dss`).</dd>
+
+  <dt>`--no-group`</dt>
+  <dd>Disable grouping of duplicate findings. By default, findings with the same title are collapsed into a summary table. Use `--no-group` to show each finding individually with full tags — useful for AI pipelines and detailed analysis.</dd>
 </dl>
 
 ## Examples
@@ -184,6 +187,12 @@ aws:
       inspector: true
       guardduty: true
     max_findings: 50
+    tag_mapping:
+      stack_tag: "atmos:stack"
+      component_tag: "atmos:component"
+    account_map:                   # For account-level findings
+      "123456789012": "prod"
+      "234567890123": "security"
 ```
 
 To enable AI-powered analysis with the `--ai` flag, also configure your AI provider:

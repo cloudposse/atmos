@@ -34,8 +34,11 @@ Learn more in the [AWS Security documentation](https://atmos.tools/cli/commands/
 ```shell
 cd examples/aws-security-compliance
 
-# Analyze security findings
+# Analyze security findings (grouped by default)
 atmos aws security analyze
+
+# Show each finding individually (no grouping)
+atmos aws security analyze --no-group
 
 # Filter by severity or source
 atmos aws security analyze --severity critical,high --source guardduty
@@ -43,7 +46,7 @@ atmos aws security analyze --severity critical,high --source guardduty
 # Compliance report
 atmos aws compliance report --framework cis-aws
 
-# AI-powered remediation
+# AI-powered remediation (only mapped findings sent to AI)
 atmos aws security analyze --ai
 
 # JSON output for automation

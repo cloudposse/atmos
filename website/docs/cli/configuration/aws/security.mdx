@@ -70,6 +70,11 @@ aws:
     tag_mapping:
       stack_tag: "atmos:stack"
       component_tag: "atmos:component"
+    # Account ID → name for account-level findings
+    account_map:
+      "123456789012": "prod"
+      "234567890123": "security"
+
     # Compliance frameworks to track
     frameworks:
       - cis-aws
@@ -100,6 +105,9 @@ aws:
 
   <dt>`tag_mapping`</dt>
   <dd>Tag keys used for mapping AWS resources back to Atmos components and stacks. See [Tag Mapping](#tag-mapping) below.</dd>
+
+  <dt>`account_map`</dt>
+  <dd>Map of AWS account IDs to account names. Used for account-level findings (`AWS::::Account:ID`) that target the account itself rather than a specific resource. Example: `"123456789012": "prod"`.</dd>
 
   <dt>`frameworks`</dt>
   <dd>Compliance frameworks to track with `atmos aws compliance report`. Supported: `cis-aws`, `pci-dss`, `soc2`, `hipaa`, `nist`.</dd>
