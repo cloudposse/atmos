@@ -20,7 +20,7 @@ import (
 type SecurityHubAPI interface {
 	GetFindings(ctx context.Context, params *securityhub.GetFindingsInput, optFns ...func(*securityhub.Options)) (*securityhub.GetFindingsOutput, error)
 	GetEnabledStandards(ctx context.Context, params *securityhub.GetEnabledStandardsInput, optFns ...func(*securityhub.Options)) (*securityhub.GetEnabledStandardsOutput, error)
-	DescribeStandardsControls(ctx context.Context, params *securityhub.DescribeStandardsControlsInput, optFns ...func(*securityhub.Options)) (*securityhub.DescribeStandardsControlsOutput, error)
+	ListSecurityControlDefinitions(ctx context.Context, params *securityhub.ListSecurityControlDefinitionsInput, optFns ...func(*securityhub.Options)) (*securityhub.ListSecurityControlDefinitionsOutput, error)
 }
 
 // TaggingAPI defines the subset of AWS Resource Groups Tagging API used by this package.

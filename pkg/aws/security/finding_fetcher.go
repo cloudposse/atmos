@@ -263,15 +263,19 @@ func (f *awsFindingFetcher) buildFindingFilters(opts *QueryOptions) *shtypes.Aws
 	}
 
 	// Framework filter — use compliance standard.
+	// Security Hub standard IDs include a type prefix like "ruleset/" or "standards/"
+	// (e.g., "ruleset/cis-aws-foundations-benchmark/v/1.2.0"). We use PREFIX matching
+	// with the full path including the type prefix.
 	if opts.Framework != "" {
-		standardID := frameworkToStandardID(opts.Framework)
-		if standardID != "" {
-			filters.ComplianceAssociatedStandardsId = []shtypes.StringFilter{
-				{
-					Value:      aws.String(standardID),
+		standardIDs := frameworkToStandardIDs(opts.Framework)
+		for _, id := range standardIDs {
+			filters.ComplianceAssociatedStandardsId = append(
+				filters.ComplianceAssociatedStandardsId,
+				shtypes.StringFilter{
+					Value:      aws.String(id),
 					Comparison: shtypes.StringFilterComparisonPrefix,
 				},
-			}
+			)
 		}
 	}
 
@@ -411,14 +415,38 @@ func sourceToProductFilters(source Source) []shtypes.StringFilter {
 	return nil
 }
 
+// Framework name constants used across mapping, filtering, and display functions.
+const (
+	frameworkCISAWS = "cis-aws"
+	frameworkPCIDSS = "pci-dss"
+	frameworkNIST   = "nist"
+	frameworkSOC2   = "soc2"
+	frameworkHIPAA  = "hipaa"
+)
+
 // frameworkToStandardID maps framework names to Security Hub standard ID prefixes.
+// Used by resolveFrameworkStandard for ARN matching (no type prefix needed).
 func frameworkToStandardID(framework string) string {
 	standards := map[string]string{
-		"cis-aws": "cis-aws-foundations-benchmark",
-		"pci-dss": "pci-dss",
-		"nist":    "nist-800-53",
-		"soc2":    "soc2",
-		"hipaa":   "hipaa",
+		frameworkCISAWS: "cis-aws-foundations-benchmark",
+		frameworkPCIDSS: frameworkPCIDSS,
+		frameworkNIST:   "nist-800-53",
+		frameworkSOC2:   frameworkSOC2,
+		frameworkHIPAA:  frameworkHIPAA,
+	}
+	return standards[strings.ToLower(framework)]
+}
+
+// frameworkToStandardIDs maps framework names to full Security Hub standard ID prefixes
+// including the type prefix (ruleset/ or standards/). Some frameworks appear under both
+// prefixes, so multiple entries are returned for OR matching.
+func frameworkToStandardIDs(framework string) []string {
+	standards := map[string][]string{
+		frameworkCISAWS: {"ruleset/cis-aws-foundations-benchmark", "standards/cis-aws-foundations-benchmark"},
+		frameworkPCIDSS: {"standards/pci-dss"},
+		frameworkNIST:   {"standards/nist-800-53"},
+		frameworkSOC2:   {"standards/soc2"},
+		frameworkHIPAA:  {"standards/hipaa"},
 	}
 	return standards[strings.ToLower(framework)]
 }
@@ -426,11 +454,11 @@ func frameworkToStandardID(framework string) string {
 // frameworkToTitle returns a human-readable title for a compliance framework.
 func frameworkToTitle(framework string) string {
 	titles := map[string]string{
-		"cis-aws": "CIS AWS Foundations Benchmark",
-		"pci-dss": "PCI DSS",
-		"nist":    "NIST 800-53",
-		"soc2":    "SOC 2",
-		"hipaa":   "HIPAA",
+		frameworkCISAWS: "CIS AWS Foundations Benchmark",
+		frameworkPCIDSS: "PCI DSS",
+		frameworkNIST:   "NIST 800-53",
+		frameworkSOC2:   "SOC 2",
+		frameworkHIPAA:  "HIPAA",
 	}
 	if title, ok := titles[strings.ToLower(framework)]; ok {
 		return title
@@ -438,27 +466,28 @@ func frameworkToTitle(framework string) string {
 	return framework
 }
 
-// controlsPageSize is the max results per DescribeStandardsControls API call.
+// controlsPageSize is the max results per ListSecurityControlDefinitions API call.
 const controlsPageSize = 100
 
-// countTotalControls paginates through DescribeStandardsControls to count all controls for a standard.
-func (f *awsFindingFetcher) countTotalControls(ctx context.Context, client SecurityHubAPI, subscriptionARN string) (int, error) {
+// countTotalControls paginates through ListSecurityControlDefinitions to count all controls
+// for a standard. Uses the standards ARN (not subscription ARN) which works in delegated admin mode.
+func (f *awsFindingFetcher) countTotalControls(ctx context.Context, client SecurityHubAPI, standardsARN string) (int, error) {
 	defer perf.Track(nil, "security.awsFindingFetcher.countTotalControls")()
 
 	var total int
 	var nextToken *string
 
 	for {
-		output, err := client.DescribeStandardsControls(ctx, &securityhub.DescribeStandardsControlsInput{
-			StandardsSubscriptionArn: &subscriptionARN,
-			MaxResults:               aws.Int32(controlsPageSize),
-			NextToken:                nextToken,
+		output, err := client.ListSecurityControlDefinitions(ctx, &securityhub.ListSecurityControlDefinitionsInput{
+			StandardsArn: &standardsARN,
+			MaxResults:   aws.Int32(controlsPageSize),
+			NextToken:    nextToken,
 		})
 		if err != nil {
-			return 0, fmt.Errorf("%w: DescribeStandardsControls: %w", errUtils.ErrAISecurityFetchFailed, err)
+			return 0, fmt.Errorf("%w: ListSecurityControlDefinitions: %w", errUtils.ErrAISecurityFetchFailed, err)
 		}
 
-		total += len(output.Controls)
+		total += len(output.SecurityControlDefinitions)
 
 		if output.NextToken == nil {
 			break

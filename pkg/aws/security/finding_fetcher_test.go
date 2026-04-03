@@ -16,10 +16,10 @@ import (
 
 // mockSecurityHubClient implements SecurityHubAPI for testing.
 type mockSecurityHubClient struct {
-	findings  []shtypes.AwsSecurityFinding
-	standards []shtypes.StandardsSubscription
-	controls  []shtypes.StandardsControl
-	err       error
+	findings           []shtypes.AwsSecurityFinding
+	standards          []shtypes.StandardsSubscription
+	controlDefinitions []shtypes.SecurityControlDefinition
+	err                error
 }
 
 func (m *mockSecurityHubClient) GetFindings(_ context.Context, _ *securityhub.GetFindingsInput, _ ...func(*securityhub.Options)) (*securityhub.GetFindingsOutput, error) {
@@ -40,12 +40,12 @@ func (m *mockSecurityHubClient) GetEnabledStandards(_ context.Context, _ *securi
 	}, nil
 }
 
-func (m *mockSecurityHubClient) DescribeStandardsControls(_ context.Context, _ *securityhub.DescribeStandardsControlsInput, _ ...func(*securityhub.Options)) (*securityhub.DescribeStandardsControlsOutput, error) {
+func (m *mockSecurityHubClient) ListSecurityControlDefinitions(_ context.Context, _ *securityhub.ListSecurityControlDefinitionsInput, _ ...func(*securityhub.Options)) (*securityhub.ListSecurityControlDefinitionsOutput, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return &securityhub.DescribeStandardsControlsOutput{
-		Controls: m.controls,
+	return &securityhub.ListSecurityControlDefinitionsOutput{
+		SecurityControlDefinitions: m.controlDefinitions,
 	}, nil
 }
 
@@ -257,11 +257,12 @@ func TestFrameworkToStandardID(t *testing.T) {
 }
 
 func TestFetchComplianceStatus_WithMock(t *testing.T) {
-	// Create 10 mock controls to simulate the total standard controls.
-	var controls []shtypes.StandardsControl
+	// Create 10 mock control definitions to simulate the total standard controls.
+	var controlDefs []shtypes.SecurityControlDefinition
 	for i := 0; i < 10; i++ {
-		controls = append(controls, shtypes.StandardsControl{
-			StandardsControlArn: aws.String(fmt.Sprintf("arn:aws:securityhub:us-east-1:123:control/cis-aws/%d", i+1)),
+		controlDefs = append(controlDefs, shtypes.SecurityControlDefinition{
+			SecurityControlId: aws.String(fmt.Sprintf("CIS.%d", i+1)),
+			Title:             aws.String(fmt.Sprintf("CIS Control %d", i+1)),
 		})
 	}
 
@@ -288,7 +289,7 @@ func TestFetchComplianceStatus_WithMock(t *testing.T) {
 				StandardsArn: aws.String("arn:aws:securityhub:::standards/cis-aws-foundations-benchmark/v/1.2.0"),
 			},
 		},
-		controls: controls,
+		controlDefinitions: controlDefs,
 	}
 
 	fetcher := &awsFindingFetcher{

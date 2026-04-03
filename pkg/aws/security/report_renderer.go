@@ -100,15 +100,11 @@ func (r *markdownRenderer) RenderComplianceReport(w io.Writer, report *Complianc
 
 	if len(report.FailingDetails) > 0 {
 		sb.WriteString("### Failing Controls\n\n")
-		sb.WriteString("| Control | Title | Severity | Component | Remediation |\n")
-		sb.WriteString("|---------|-------|----------|-----------|-------------|\n")
+		sb.WriteString("| Control | Title | Severity |\n")
+		sb.WriteString("|---------|-------|----------|\n")
 		for _, ctrl := range report.FailingDetails {
-			hasRemediation := "No"
-			if ctrl.Remediation != nil {
-				hasRemediation = "Yes"
-			}
-			fmt.Fprintf(&sb, "| %s | %s | %s | %s | %s |\n",
-				ctrl.ControlID, ctrl.Title, ctrl.Severity, ctrl.Component, hasRemediation)
+			fmt.Fprintf(&sb, "| %s | %s | %s |\n",
+				ctrl.ControlID, ctrl.Title, ctrl.Severity)
 		}
 		sb.WriteString("\n")
 	}

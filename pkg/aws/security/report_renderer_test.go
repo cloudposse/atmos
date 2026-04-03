@@ -282,9 +282,9 @@ func TestRenderComplianceReport_Markdown(t *testing.T) {
 
 	// Verify failing controls table.
 	assert.Contains(t, output, "### Failing Controls")
-	assert.Contains(t, output, "| Control | Title | Severity | Component | Remediation |")
-	assert.Contains(t, output, "| CIS.1.14 | Ensure MFA is enabled for root | CRITICAL | account-settings | Yes |")
-	assert.Contains(t, output, "| CIS.2.1 | Ensure CloudTrail is enabled | HIGH | cloudtrail | No |")
+	assert.Contains(t, output, "| Control | Title | Severity |")
+	assert.Contains(t, output, "| CIS.1.14 | Ensure MFA is enabled for root | CRITICAL |")
+	assert.Contains(t, output, "| CIS.2.1 | Ensure CloudTrail is enabled | HIGH |")
 }
 
 func TestRenderComplianceReport_JSON(t *testing.T) {
