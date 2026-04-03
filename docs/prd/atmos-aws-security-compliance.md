@@ -540,7 +540,8 @@ atmos aws security analyze --stack prod-us-east-1 --format json --file reports/f
 | `--file`         | string | (stdout)         | Write output to file instead of stdout (creates parent dirs if needed)     |
 | `--max-findings` | int    | `50`             | Maximum findings to analyze (AI cost control)                              |
 | `--ai`           | bool   | `false`          | Enable AI-powered analysis (requires `ai.enabled: true`)                   |
-| `--region`       | string | (from stack)     | AWS region override                                                        |
+| `--region`       | string | (from config)    | AWS region override (default: `aws.security.region` or `us-east-1`)        |
+| `--identity`     | string | (from config)    | Atmos Auth identity override (default: `aws.security.identity`)            |
 
 #### Output: Markdown Report
 
@@ -933,9 +934,14 @@ ai:
 
 # AWS-specific settings
 aws:
-  # Security & compliance settings
   security:
     enabled: true
+
+    # Atmos Auth identity for AWS credentials (targets the delegated admin account).
+    identity: "security-readonly"
+
+    # Default AWS region for Security Hub queries (typically the aggregation region).
+    region: "us-east-2"
 
     # AWS security services to query
     sources:
