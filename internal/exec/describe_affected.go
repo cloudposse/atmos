@@ -449,7 +449,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return uploadErr
 	}
 
-	ui.Success(fmt.Sprintf("Uploaded %d affected component(s) to Atmos Pro", len(affected)))
+	ui.Successf("Uploaded %d affected component(s) to Atmos Pro", len(affected))
 
 	return nil
 }
