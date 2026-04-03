@@ -1202,12 +1202,63 @@ for error handling and reference `aws.security.enabled` config.
     3. Check related components and dependencies
     4. Generate remediation based on actual data, not just `main.tf`
 
+27. **Colored Markdown output** — ✅ When format is Markdown and output is stdout, pipe
+    through `ui.Markdown()` for themed terminal rendering with colors. File output remains
+    raw Markdown (no ANSI codes).
+
+28. **"Mapped By" field in reports** — ✅ Added `Mapped By` row to the finding table showing
+    the mapping method used: `tag` (exact), `naming-convention` (low), or `resource-type` (low).
+
+29. **Configurable tag names in unmapped message** — ✅ The "X findings could not be mapped"
+    message now shows the configured tag keys from `aws.security.tag_mapping` instead of
+    hardcoded `atmos:*`.
+
+30. **Naming convention confidence lowered to `low`** — ✅ The heuristic of splitting resource
+    names by hyphens and using the last segment as the component name is unreliable for
+    multi-word component names (e.g., `example-static-app-origin` → incorrectly maps to
+    `origin` instead of `example-static-app`). Confidence lowered from `medium` to `low`.
+
+31. **Duplicate AI flag registration fix** — ✅ Fixed panic on startup caused by `registerAIFlags`
+    being called twice in `NewGlobalOptionsBuilder` (copy-paste error).
+
+### Known Limitations (from Production Testing 2026-04-03)
+
+Tested against the InSpatial AWS organization (11 accounts, Security Hub delegated admin).
+
+1. **Cross-account tag lookup** — The Resource Groups Tagging API (`GetResources`) only
+   returns tags for resources in the same AWS account. When the security commands query
+   Security Hub in the `core-security` account (delegated admin), they see findings for
+   resources in other accounts (e.g., `plat-prod`), but the tag lookup is called in
+   `core-security` where those resources don't exist. Result: 0 exact (tag-based) mappings.
+
+   **Fix needed:** For each finding, extract the account ID from the resource ARN and use
+   cross-account credentials (or `atmos auth exec` with a per-account identity) to call
+   the Tagging API in the resource's own account.
+
+2. **Naming convention heuristic is unreliable** — The last hyphen-separated segment often
+   is NOT the Atmos component name. Examples from production:
+   - `ins-plat-use2-prod-example-static-app-origin` → maps to `origin` (should be `s3-bucket` or `cdn`)
+   - `ins-plat-use2-prod-app:4` → maps to `app:4` (should be `ecs-service/app`)
+   - `ins-plat-use2-prod-echo-server:1` → maps to `server:1` (should be `ecs-service/echo-server`)
+
+   **Fix needed:** Cross-reference the extracted name against known Atmos components in the
+   project (via `atmos list components`) to validate before accepting the heuristic match.
+
+3. **`--ai` flag not working** — AI analysis fails when invoked from the security command.
+   The AI provider itself works (`atmos ai ask` succeeds). Investigation needed — likely
+   an issue with how the client is created or the prompt is sent in the analyzer.
+
 ### Remaining Work (Future PRs)
 
+- **Cross-account tag lookup** — Call Tagging API in the resource's account, not the
+  Security Hub account. Extract account ID from ARN, use per-account auth.
+- **Component name validation** — Cross-reference heuristic names against `atmos list
+  components` to filter false positives.
 - **Terraform state search (Path B Strategy 1)** — Implement state file scanning for tagless
   mapping. Reuse `!terraform.state` infrastructure.
 - **AI-assisted inference (Path B Strategy 4)** — Send unmapped findings to AI for component
   inference when heuristic strategies fail.
+- **Fix `--ai` flag** — Debug why AI analysis fails from security command context.
 - **Integration tests** — End-to-end tests with real AWS API calls (requires test account).
 
 ### Post-Implementation Analysis (2026-04-02)
