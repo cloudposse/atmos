@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -218,14 +219,13 @@ func TestIsProvenanceColorEnabled(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "default config without TTY returns false",
+			name: "default config follows stdout TTY detection",
 			config: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					Terminal: schema.Terminal{},
 				},
 			},
-			// Tests run without a TTY, so this should be false.
-			expected: false,
+			expected: termUtils.IsTTYSupportForStdout(),
 		},
 	}
 
@@ -247,9 +247,14 @@ func TestColorize(t *testing.T) {
 	})
 
 	t.Run("useColor true returns styled text", func(t *testing.T) {
+		// Force lipgloss to render colors regardless of TTY.
+		lipgloss.SetColorProfile(2) //nolint:mnd // TrueColor profile.
+		t.Cleanup(func() { lipgloss.SetColorProfile(0) })
+
 		result := colorize(text, color, true)
-		// Styled text should contain the original text but differ (has ANSI codes).
+		// Styled text should contain original text and differ from plain output.
 		assert.Contains(t, result, text)
+		assert.NotEqual(t, text, result)
 	})
 }
 
