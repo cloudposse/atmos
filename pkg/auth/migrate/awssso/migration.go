@@ -4,8 +4,11 @@ package awssso
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
+
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
@@ -14,6 +17,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // NewAWSSSOSteps returns the ordered list of migration steps for AWS SSO migration.
@@ -35,10 +39,20 @@ func NewAWSSSOSteps(migCtx *migrate.MigrationContext, fs migrate.FileSystem) []m
 func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter migrate.Prompter) (*migrate.MigrationContext, error) {
 	defer perf.Track(nil, "awssso.BuildMigrationContext")()
 
+	s := spinner.New("Analyzing stack configuration...")
+	s.Start()
+
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
+		s.Error("Failed to load atmos config")
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
+	}
+
+	// Validate stacks before proceeding — broken stack configs prevent component discovery.
+	if validateErr := exec.ValidateStacks(&atmosConfig); validateErr != nil {
+		s.Error("Stack validation failed")
+		return nil, fmt.Errorf("stack validation failed — fix stack configs before running migration:\n%w", validateErr)
 	}
 
 	// CliConfigPath is the directory containing atmos.yaml, not the file itself.
@@ -64,6 +78,7 @@ func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter 
 	// Discover SSO config via stacks, with existing auth config as defaults.
 	migCtx.SSOConfig, err = discoverSSOConfigViaStacks(&atmosConfig, &atmosConfig.Auth, prompter)
 	if err != nil {
+		s.Error("Failed to discover SSO configuration")
 		return nil, err
 	}
 	log.Debug("Discovered SSO config",
@@ -71,6 +86,8 @@ func BuildMigrationContext(ctx context.Context, fs migrate.FileSystem, prompter 
 		"region", migCtx.SSOConfig.Region,
 		"provider", migCtx.SSOConfig.ProviderName,
 		"groups", len(migCtx.SSOConfig.AccountAssignments))
+
+	s.Success("Stack configuration analyzed")
 
 	return migCtx, nil
 }
@@ -140,7 +157,15 @@ func discoverSSOConfigViaStacks(atmosConfig *schema.AtmosConfiguration, existing
 		}
 
 		if stack == "" {
-			log.Debug("No stack found with component", "component", componentName)
+			log.Debug("No stack found with component via describe stacks", "component", componentName)
+			// Fall back to searching catalog files directly.
+			// ExecuteDescribeStacks may return 0 stacks when catalog/mixin files
+			// can't satisfy the stack name pattern (e.g., {tenant}-{environment}-{stage}).
+			catalogSection := discoverComponentFromCatalog(atmosConfig.Stacks.BasePath, componentName)
+			if catalogSection != nil {
+				log.Debug("Found component in catalog file", "component", componentName)
+				extractSSOFromComponent(catalogSection, ssoCfg)
+			}
 			continue
 		}
 
@@ -195,7 +220,7 @@ func findStackWithComponent(atmosConfig *schema.AtmosConfiguration, component st
 		[]string{"terraform"}, // componentTypes.
 		[]string{"vars"},      // sections — we only need vars.
 		true,                  // ignoreMissingFiles.
-		false,                 // processTemplates.
+		true,                  // processTemplates — required for import/inheritance resolution.
 		false,                 // processYamlFunctions.
 		false,                 // includeEmptyStacks.
 		nil,                   // skip.
@@ -214,8 +239,82 @@ func findStackWithComponent(atmosConfig *schema.AtmosConfiguration, component st
 	return "", nil
 }
 
+// discoverComponentFromCatalog searches catalog YAML files for a component definition
+// and returns its section as a map. This is a fallback when ExecuteDescribeStacks
+// returns 0 stacks (e.g., when catalog files can't satisfy the stack name pattern).
+func discoverComponentFromCatalog(stacksBasePath, componentName string) map[string]any {
+	defer perf.Track(nil, "awssso.discoverComponentFromCatalog")()
+
+	// Search common catalog locations for the component.
+	patterns := []string{
+		filepath.Join(stacksBasePath, "catalog", componentName+".yaml"),
+		filepath.Join(stacksBasePath, "catalog", componentName, "*.yaml"),
+		filepath.Join(stacksBasePath, "catalog", componentName+".yml"),
+	}
+
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			log.Debug("Error globbing for catalog file", "pattern", pattern, "error", err)
+			continue
+		}
+
+		for _, match := range matches {
+			log.Debug("Checking catalog file for component", "file", match, "component", componentName)
+
+			section := parseComponentFromCatalogFile(match, componentName)
+			if section != nil {
+				return section
+			}
+		}
+	}
+
+	log.Debug("Component not found in catalog files", "component", componentName)
+	return nil
+}
+
+// parseComponentFromCatalogFile reads a YAML file and extracts a component's vars section.
+// Returns a map with a "vars" key matching the format expected by extractSSOFromComponent.
+func parseComponentFromCatalogFile(filePath, componentName string) map[string]any {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Debug("Failed to read catalog file", "file", filePath, "error", err)
+		return nil
+	}
+
+	var parsed map[string]any
+	if err := yaml.Unmarshal(data, &parsed); err != nil {
+		log.Debug("Failed to parse catalog YAML", "file", filePath, "error", err)
+		return nil
+	}
+
+	// Look for component definition at components.terraform.<componentName>.
+	components, ok := parsed["components"].(map[string]any)
+	if !ok {
+		// File might be a direct component definition (vars at top level).
+		if _, hasVars := parsed["vars"]; hasVars {
+			log.Debug("Found component vars at top level", "file", filePath)
+			return parsed
+		}
+		return nil
+	}
+
+	terraform, ok := components["terraform"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	compSection, ok := terraform[componentName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	log.Debug("Found component in catalog", "file", filePath, "component", componentName)
+	return compSection
+}
+
 // describeComponentRaw uses ExecuteDescribeComponent to get the fully resolved
-// component config without processing templates or YAML functions.
+// component config with template processing enabled for import/inheritance resolution.
 func describeComponentRaw(atmosConfig *schema.AtmosConfiguration, component, stack string) (map[string]any, error) {
 	defer perf.Track(nil, "awssso.describeComponentRaw")()
 
@@ -223,7 +322,7 @@ func describeComponentRaw(atmosConfig *schema.AtmosConfiguration, component, sta
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
-		ProcessTemplates:     false,
+		ProcessTemplates:     true,
 		ProcessYamlFunctions: false,
 		Skip:                 nil,
 		AuthManager:          nil,
@@ -318,14 +417,62 @@ func extractSSOFromComponent(componentSection map[string]any, ssoCfg *migrate.SS
 	}
 }
 
-// parseAccountAssignments parses the account_assignments structure:
-// group -> permission-set -> []accounts.
+// parseAccountAssignments detects the format of account_assignments and parses it
+// into the canonical group → permission-set → []accounts structure.
+//
+// Two formats are supported:
+//
+// Format A (group-centric, used by some aws-sso configs):
+//
+//	group → permission_set → [accounts]
+//
+// Format B (account-centric, used by aws-sso with aws-teams):
+//
+//	account → groups → group → permission_sets → [permission_sets]
 func parseAccountAssignments(assignData interface{}) (map[string]map[string][]string, error) {
 	assignMap, ok := assignData.(map[string]interface{})
 	if !ok {
 		return nil, fmt.Errorf("account_assignments is not a map")
 	}
 
+	// Detect format by examining the first entry's value structure.
+	format := detectAssignmentFormat(assignMap)
+	log.Debug("Detected account_assignments format", "format", format)
+
+	switch format {
+	case "account-centric":
+		return parseAccountCentricAssignments(assignMap)
+	case "group-centric":
+		return parseGroupCentricAssignments(assignMap)
+	default:
+		return nil, fmt.Errorf("unable to detect account_assignments format")
+	}
+}
+
+// detectAssignmentFormat examines the structure to determine the format.
+// Account-centric entries have a "groups" key; group-centric entries have list values.
+func detectAssignmentFormat(assignMap map[string]interface{}) string {
+	for _, v := range assignMap {
+		entryMap, ok := v.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		// Account-centric format has a "groups" key under each account.
+		if _, hasGroups := entryMap["groups"]; hasGroups {
+			return "account-centric"
+		}
+		// Group-centric format has list values (permission_set → [accounts]).
+		for _, vv := range entryMap {
+			if _, isList := vv.([]interface{}); isList {
+				return "group-centric"
+			}
+		}
+	}
+	return "unknown"
+}
+
+// parseGroupCentricAssignments parses: group → permission_set → [accounts].
+func parseGroupCentricAssignments(assignMap map[string]interface{}) (map[string]map[string][]string, error) {
 	result := make(map[string]map[string][]string, len(assignMap))
 
 	for group, permData := range assignMap {
@@ -350,5 +497,61 @@ func parseAccountAssignments(assignData interface{}) (map[string]map[string][]st
 		}
 	}
 
+	return result, nil
+}
+
+// parseAccountCentricAssignments parses and inverts:
+// account → groups → group → permission_sets → [permission_sets]
+// into: group → permission_set → [accounts].
+func parseAccountCentricAssignments(assignMap map[string]interface{}) (map[string]map[string][]string, error) {
+	result := make(map[string]map[string][]string)
+
+	for account, accountData := range assignMap {
+		accountMap, ok := accountData.(map[string]interface{})
+		if !ok {
+			log.Debug("Skipping non-map account entry", "account", account)
+			continue
+		}
+
+		groupsData, ok := accountMap["groups"]
+		if !ok {
+			log.Debug("Account has no groups key", "account", account)
+			continue
+		}
+
+		groupsMap, ok := groupsData.(map[string]interface{})
+		if !ok {
+			log.Debug("Account groups is not a map", "account", account)
+			continue
+		}
+
+		for group, groupData := range groupsMap {
+			groupMap, ok := groupData.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			permSetsData, ok := groupMap["permission_sets"]
+			if !ok {
+				continue
+			}
+
+			permSetsList, ok := permSetsData.([]interface{})
+			if !ok {
+				continue
+			}
+
+			if _, exists := result[group]; !exists {
+				result[group] = make(map[string][]string)
+			}
+
+			for _, ps := range permSetsList {
+				psName := fmt.Sprintf("%v", ps)
+				result[group][psName] = append(result[group][psName], account)
+			}
+		}
+	}
+
+	log.Debug("Parsed account-centric assignments", "groups", len(result))
 	return result, nil
 }

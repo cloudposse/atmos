@@ -230,6 +230,84 @@ func TestParseAccountAssignments(t *testing.T) {
 	assert.Equal(t, []string{"prod"}, result["Readers"]["TerraformPlanAccess"])
 }
 
+func TestParseAccountAssignments_AccountCentric(t *testing.T) {
+	t.Parallel()
+
+	// Account-centric format: account → groups → group → permission_sets → [perms].
+	assignData := map[string]interface{}{
+		"core-root": map[string]interface{}{
+			"groups": map[string]interface{}{
+				"PP_InfraManagers": map[string]interface{}{
+					"permission_sets": []interface{}{"AdministratorAccess", "PowerUserAccess"},
+				},
+			},
+		},
+		"core-identity": map[string]interface{}{
+			"groups": map[string]interface{}{
+				"PP_InfraManagers": map[string]interface{}{
+					"permission_sets": []interface{}{"AdministratorAccess"},
+				},
+				"PP_DevOps": map[string]interface{}{
+					"permission_sets": []interface{}{"AdministratorAccess", "ReadOnlyAccess"},
+				},
+			},
+		},
+	}
+
+	result, err := parseAccountAssignments(assignData)
+	require.NoError(t, err)
+
+	// Should be inverted to group → permission_set → [accounts].
+	require.Contains(t, result, "PP_InfraManagers")
+	require.Contains(t, result, "PP_DevOps")
+
+	// PP_InfraManagers has AdministratorAccess in both accounts.
+	assert.ElementsMatch(t, []string{"core-root", "core-identity"}, result["PP_InfraManagers"]["AdministratorAccess"])
+	// PP_InfraManagers has PowerUserAccess only in core-root.
+	assert.Equal(t, []string{"core-root"}, result["PP_InfraManagers"]["PowerUserAccess"])
+	// PP_DevOps has AdministratorAccess and ReadOnlyAccess in core-identity.
+	assert.Equal(t, []string{"core-identity"}, result["PP_DevOps"]["AdministratorAccess"])
+	assert.Equal(t, []string{"core-identity"}, result["PP_DevOps"]["ReadOnlyAccess"])
+}
+
+func TestDetectAssignmentFormat_GroupCentric(t *testing.T) {
+	t.Parallel()
+
+	assignMap := map[string]interface{}{
+		"DevOps": map[string]interface{}{
+			"TerraformApplyAccess": []interface{}{"core-root", "dev"},
+		},
+	}
+
+	assert.Equal(t, "group-centric", detectAssignmentFormat(assignMap))
+}
+
+func TestDetectAssignmentFormat_AccountCentric(t *testing.T) {
+	t.Parallel()
+
+	assignMap := map[string]interface{}{
+		"core-root": map[string]interface{}{
+			"groups": map[string]interface{}{
+				"PP_InfraManagers": map[string]interface{}{
+					"permission_sets": []interface{}{"AdministratorAccess"},
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, "account-centric", detectAssignmentFormat(assignMap))
+}
+
+func TestDetectAssignmentFormat_Unknown(t *testing.T) {
+	t.Parallel()
+
+	assignMap := map[string]interface{}{
+		"something": "scalar",
+	}
+
+	assert.Equal(t, "unknown", detectAssignmentFormat(assignMap))
+}
+
 func TestParseAccountAssignments_NotAMap(t *testing.T) {
 	t.Parallel()
 

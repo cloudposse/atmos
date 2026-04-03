@@ -88,16 +88,17 @@ func TestGenerateProfiles_Plan(t *testing.T) {
 	require.Len(t, changes, 2)
 
 	// Changes should be sorted alphabetically by group name.
+	// Profile names are normalized to lowercase snake case with prefixes removed.
 	assert.Equal(t, filepath.Join("profiles", "devops", "atmos.yaml"), changes[0].FilePath)
-	assert.Equal(t, `Create profile "devops"`, changes[0].Description)
-	assert.Contains(t, changes[0].Detail, "core-root/terraform")
-	assert.Contains(t, changes[0].Detail, "dev-sandbox/terraform")
-	assert.Contains(t, changes[0].Detail, "TerraformApplyAccess")
+	assert.Equal(t, `Create profile "devops" (from group "devops")`, changes[0].Description)
+	assert.Contains(t, changes[0].Detail, "core-root/terraform_apply_access:")
+	assert.Contains(t, changes[0].Detail, "dev-sandbox/terraform_apply_access:")
+	assert.Contains(t, changes[0].Detail, "name: TerraformApplyAccess")
 
 	assert.Equal(t, filepath.Join("profiles", "readonly", "atmos.yaml"), changes[1].FilePath)
-	assert.Equal(t, `Create profile "readonly"`, changes[1].Description)
-	assert.Contains(t, changes[1].Detail, "core-audit/terraform")
-	assert.Contains(t, changes[1].Detail, "ReadOnlyAccess")
+	assert.Equal(t, `Create profile "readonly" (from group "readonly")`, changes[1].Description)
+	assert.Contains(t, changes[1].Detail, "core-audit/read_only_access:")
+	assert.Contains(t, changes[1].Detail, "name: ReadOnlyAccess")
 }
 
 func TestGenerateProfiles_Apply(t *testing.T) {
@@ -130,9 +131,9 @@ func TestGenerateProfiles_Apply(t *testing.T) {
 			assert.Contains(t, content, "start_url: https://myorg.awsapps.com/start")
 			assert.Contains(t, content, "duration: 12h")
 			// Verify identities are sorted alphabetically by account name.
-			assert.Contains(t, content, "core-audit/terraform:")
-			assert.Contains(t, content, "core-root/terraform:")
-			assert.Contains(t, content, "dev-sandbox/terraform:")
+			assert.Contains(t, content, "core-audit/terraform_apply_access:")
+			assert.Contains(t, content, "core-root/terraform_apply_access:")
+			assert.Contains(t, content, "dev-sandbox/terraform_apply_access:")
 			assert.Contains(t, content, "name: TerraformApplyAccess")
 			return nil
 		},
@@ -158,6 +159,34 @@ func TestGenerateProfiles_Apply_EmptyAssignments(t *testing.T) {
 
 	// No groups means no files written and no errors.
 	require.NoError(t, err)
+}
+
+func TestNormalizeProfileName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"PP_InfraManagers", "infra_managers"},
+		{"PP_DevOps", "dev_ops"},
+		{"PP_Developers", "developers"},
+		{"PP_Auditors", "auditors"},
+		{"PP_DB_PLAT_PROD_RO", "db_plat_prod_ro"},
+		{"PP_DB_CARDS_NONPROD_RW", "db_cards_nonprod_rw"},
+		{"pp_InfraManagers", "infra_managers"},
+		{"devops", "devops"},
+		{"readonly", "readonly"},
+		{"DevOps", "dev_ops"},
+		{"InfraManagers", "infra_managers"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, normalizeProfileName(tt.input))
+		})
+	}
 }
 
 func TestGenerateProfiles_NameAndDescription(t *testing.T) {

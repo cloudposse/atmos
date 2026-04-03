@@ -2,19 +2,22 @@
 package awssso
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// authIdentityMarkers are byte sequences used to detect existing auth identity config.
+// authIdentityMarkers are byte sequences that must ALL be present to indicate
+// the file already has auth identity config.
 var authIdentityMarkers = [][]byte{
-	[]byte("terraform:"),
+	[]byte("auth:"),
 	[]byte("identities:"),
 }
 
@@ -91,19 +94,20 @@ func (s *UpdateStackDefaults) Plan(ctx context.Context) ([]migrate.Change, error
 		}
 
 		accountName := filepath.Base(filepath.Dir(f))
-		block := s.generateIdentityBlock(accountName)
 
 		changes = append(changes, migrate.Change{
 			FilePath:    f,
 			Description: fmt.Sprintf("Add terraform auth identity for %s", accountName),
-			Detail:      block,
+			Detail:      authIdentitySubBlock(accountName),
 		})
 	}
 
 	return changes, nil
 }
 
-// Apply appends the auth identity block to each _defaults.yaml file that needs it.
+// Apply adds the auth identity block to each _defaults.yaml file that needs it.
+// If the file already has a top-level `terraform:` key, the auth block is merged
+// into it to avoid duplicate keys.
 func (s *UpdateStackDefaults) Apply(ctx context.Context) error {
 	defer perf.Track(nil, "awssso.UpdateStackDefaults.Apply")()
 
@@ -122,15 +126,13 @@ func (s *UpdateStackDefaults) Apply(ctx context.Context) error {
 			continue
 		}
 
-		accountName := filepath.Base(filepath.Dir(f))
-		block := s.generateIdentityBlock(accountName)
-
 		existing, err := s.fs.ReadFile(f)
 		if err != nil {
 			return fmt.Errorf("failed to read %s: %w", f, err)
 		}
 
-		content := append(existing, []byte("\n"+block)...)
+		accountName := filepath.Base(filepath.Dir(f))
+		content := mergeAuthIdentityBlock(existing, accountName)
 
 		if err := s.fs.WriteFile(f, content, 0o644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", f, err)
@@ -180,12 +182,80 @@ func (s *UpdateStackDefaults) fileHasAuthIdentity(path string) (bool, error) {
 	return true, nil
 }
 
-// generateIdentityBlock returns the YAML block for a terraform auth identity.
-func (s *UpdateStackDefaults) generateIdentityBlock(accountName string) string {
-	return fmt.Sprintf(`terraform:
-  auth:
-    identities:
-      %s/terraform:
-        default: true
-`, accountName)
+// authIdentitySubBlock returns the auth identity lines to insert under an existing
+// `terraform:` key (indented at 2 spaces).
+func authIdentitySubBlock(accountName string) string {
+	return fmt.Sprintf("  auth:\n    identities:\n      %s/terraform:\n        default: true\n", accountName)
+}
+
+// mergeAuthIdentityBlock inserts the auth identity block into the file content.
+// If a top-level `terraform:` key already exists, the auth sub-block is inserted
+// at the end of that section. Otherwise, a new `terraform:` block is appended.
+func mergeAuthIdentityBlock(existing []byte, accountName string) []byte {
+	lines := splitLines(existing)
+	terraformIdx := -1
+
+	// Find the top-level `terraform:` line.
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, " \t")
+		if trimmed == "terraform:" {
+			terraformIdx = i
+			break
+		}
+	}
+
+	if terraformIdx == -1 {
+		// No existing terraform key — append a full block.
+		block := fmt.Sprintf("\nterraform:\n%s", authIdentitySubBlock(accountName))
+		return append(existing, []byte(block)...)
+	}
+
+	// Find the end of the terraform section: the next top-level key (non-blank,
+	// non-comment line at column 0) or end of file.
+	insertIdx := len(lines)
+	for i := terraformIdx + 1; i < len(lines); i++ {
+		line := lines[i]
+		if line == "" || strings.TrimSpace(line) == "" {
+			continue
+		}
+		// A non-blank line starting at column 0 (not indented) is the next top-level key.
+		if len(line) > 0 && line[0] != ' ' && line[0] != '\t' && line[0] != '#' {
+			insertIdx = i
+			break
+		}
+	}
+
+	// Build the result: lines before insert point, auth block, remaining lines.
+	var buf bytes.Buffer
+	for i := 0; i < insertIdx; i++ {
+		buf.WriteString(lines[i])
+		buf.WriteByte('\n')
+	}
+	buf.WriteString(authIdentitySubBlock(accountName))
+	for i := insertIdx; i < len(lines); i++ {
+		buf.WriteString(lines[i])
+		if i < len(lines)-1 {
+			buf.WriteByte('\n')
+		}
+	}
+
+	// Preserve trailing newline if the original had one.
+	if len(existing) > 0 && existing[len(existing)-1] == '\n' && buf.Len() > 0 {
+		result := buf.Bytes()
+		if result[len(result)-1] != '\n' {
+			buf.WriteByte('\n')
+		}
+	}
+
+	return buf.Bytes()
+}
+
+// splitLines splits content into lines without the trailing newline character.
+func splitLines(data []byte) []string {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	return lines
 }

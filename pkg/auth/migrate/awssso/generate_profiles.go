@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"text/template"
+	"unicode"
 
 	"github.com/cloudposse/atmos/pkg/auth/migrate"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -27,7 +29,7 @@ const profileTemplate = `auth:
 
   identities:
 {{- range .Identities }}
-    {{ .AccountName }}/terraform:
+    {{ .IdentityKey }}:
       kind: aws/permission-set
       via:
         provider: {{ .ProviderName }}
@@ -40,6 +42,7 @@ const profileTemplate = `auth:
 
 // profileIdentity holds the data for a single identity entry in the template.
 type profileIdentity struct {
+	IdentityKey       string
 	AccountName       string
 	PermissionSetName string
 	ProviderName      string
@@ -119,7 +122,8 @@ func (s *GenerateProfiles) Plan(ctx context.Context) ([]migrate.Change, error) {
 
 	changes := make([]migrate.Change, 0, len(groups))
 	for _, group := range groups {
-		profilePath := filepath.Join("profiles", group, "atmos.yaml")
+		profileName := normalizeProfileName(group)
+		profilePath := filepath.Join("profiles", profileName, "atmos.yaml")
 		content, err := s.renderProfile(group)
 		if err != nil {
 			return nil, fmt.Errorf("failed to render profile for group %q: %w", group, err)
@@ -127,7 +131,7 @@ func (s *GenerateProfiles) Plan(ctx context.Context) ([]migrate.Change, error) {
 
 		changes = append(changes, migrate.Change{
 			FilePath:    profilePath,
-			Description: fmt.Sprintf("Create profile %q", group),
+			Description: fmt.Sprintf("Create profile %q (from group %q)", profileName, group),
 			Detail:      content,
 		})
 	}
@@ -157,7 +161,7 @@ func (s *GenerateProfiles) Apply(ctx context.Context) error {
 			return fmt.Errorf("failed to render profile for group %q: %w", group, err)
 		}
 
-		profilePath := filepath.Join(s.migCtx.ProfilesPath, group, "atmos.yaml")
+		profilePath := filepath.Join(s.migCtx.ProfilesPath, normalizeProfileName(group), "atmos.yaml")
 		if err := s.fs.WriteFile(profilePath, []byte(content), 0o644); err != nil {
 			return fmt.Errorf("failed to write profile for group %q: %w", group, err)
 		}
@@ -189,6 +193,7 @@ func (s *GenerateProfiles) renderProfile(group string) (string, error) {
 
 		for _, acct := range sortedAccounts {
 			identities = append(identities, profileIdentity{
+				IdentityKey:       acct + "/" + camelToSnake(ps),
 				AccountName:       acct,
 				PermissionSetName: ps,
 				ProviderName:      s.migCtx.SSOConfig.ProviderName,
@@ -214,4 +219,44 @@ func (s *GenerateProfiles) renderProfile(group string) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+// normalizeProfileName converts a group name like "PP_InfraManagers" to
+// lowercase snake case with common prefixes removed: "infra_managers".
+func normalizeProfileName(group string) string {
+	// Strip known prefixes (case-insensitive).
+	name := group
+	for _, prefix := range []string{"PP_", "pp_"} {
+		if strings.HasPrefix(name, prefix) {
+			name = name[len(prefix):]
+			break
+		}
+	}
+
+	return camelToSnake(name)
+}
+
+// camelToSnake converts "InfraManagers" → "infra_managers",
+// "DevOps" → "dev_ops", "DB_PLAT_PROD_RO" → "db_plat_prod_ro".
+func camelToSnake(s string) string {
+	var buf strings.Builder
+	runes := []rune(s)
+
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			if unicode.IsLower(prev) {
+				buf.WriteByte('_')
+			} else if i+1 < len(runes) && unicode.IsLower(runes[i+1]) && prev != '_' {
+				buf.WriteByte('_')
+			}
+		}
+		if r != '_' {
+			buf.WriteRune(unicode.ToLower(r))
+		} else {
+			buf.WriteByte('_')
+		}
+	}
+
+	return buf.String()
 }
