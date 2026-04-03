@@ -14,6 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// minNamingParts is the minimum hyphen-separated segments for naming convention matching.
+const minNamingParts = 3
+
 // ComponentMapper maps AWS resources from security findings to Atmos components and stacks.
 type ComponentMapper interface {
 	// MapFinding attempts to map a finding's resource to an Atmos component/stack.
@@ -166,11 +169,13 @@ func (m *dualPathMapper) mapByNamingConvention(finding *Finding) *ComponentMappi
 	// Common Cloud Posse naming convention: {namespace}-{tenant}-{environment}-{stage}-{component}.
 	// Try to detect pattern with at least 3 hyphen-separated segments.
 	parts := strings.Split(name, "-")
-	if len(parts) < 3 {
+	if len(parts) < minNamingParts {
 		return nil
 	}
 
 	// Heuristic: the last segment is often the component type.
+	// But multi-word components (e.g., "example-static-app-origin") break this.
+	// Only use this heuristic at LOW confidence since it's unreliable.
 	component := parts[len(parts)-1]
 	// The middle segments form the stack identifier.
 	stack := strings.Join(parts[1:len(parts)-1], "-")
@@ -179,7 +184,7 @@ func (m *dualPathMapper) mapByNamingConvention(finding *Finding) *ComponentMappi
 		Stack:      stack,
 		Component:  component,
 		Mapped:     true,
-		Confidence: ConfidenceMedium,
+		Confidence: ConfidenceLow,
 		Method:     "naming-convention",
 	}
 }

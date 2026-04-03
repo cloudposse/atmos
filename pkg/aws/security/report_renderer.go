@@ -293,6 +293,9 @@ func renderFindingMarkdown(sb *strings.Builder, f *Finding, num int) {
 			fmt.Fprintf(sb, "| **Path** | `%s` |\n", f.Mapping.ComponentPath)
 		}
 		fmt.Fprintf(sb, "| **Confidence** | %s |\n", f.Mapping.Confidence)
+		if f.Mapping.Method != "" {
+			fmt.Fprintf(sb, "| **Mapped By** | %s |\n", f.Mapping.Method)
+		}
 	} else {
 		sb.WriteString("| **Component** | *unmapped* |\n")
 	}

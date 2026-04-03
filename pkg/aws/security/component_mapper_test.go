@@ -187,7 +187,7 @@ func TestMapByNamingConvention(t *testing.T) {
 			require.NotNil(t, mapping)
 			assert.Equal(t, tt.wantComponent, mapping.Component)
 			assert.Equal(t, tt.wantStack, mapping.Stack)
-			assert.Equal(t, ConfidenceMedium, mapping.Confidence)
+			assert.Equal(t, ConfidenceLow, mapping.Confidence)
 		})
 	}
 }
@@ -302,7 +302,7 @@ func TestMapFinding_TagsThenHeuristicsFallback(t *testing.T) {
 			},
 			wantMapped:     true,
 			wantMethod:     "naming-convention",
-			wantConfidence: ConfidenceMedium,
+			wantConfidence: ConfidenceLow,
 			wantComponent:  "alb",
 		},
 		{
@@ -440,7 +440,7 @@ func TestMapByHeuristics(t *testing.T) {
 			},
 			wantMapped:     true,
 			wantMethod:     "naming-convention",
-			wantConfidence: ConfidenceMedium,
+			wantConfidence: ConfidenceLow,
 		},
 		{
 			name: "resource type match when naming fails",
