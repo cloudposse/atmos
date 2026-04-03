@@ -9,7 +9,8 @@ type AWSSecuritySettings struct {
 	DefaultSeverity []string              `yaml:"default_severity,omitempty" json:"default_severity,omitempty" mapstructure:"default_severity"` // Default severity filter (e.g., ["CRITICAL", "HIGH"]).
 	MaxFindings     int                   `yaml:"max_findings,omitempty" json:"max_findings,omitempty" mapstructure:"max_findings"`             // Maximum findings per analysis run (controls AI costs).
 	TagMapping      AWSSecurityTagMapping `yaml:"tag_mapping,omitempty" json:"tag_mapping,omitempty" mapstructure:"tag_mapping"`
-	Frameworks      []string              `yaml:"frameworks,omitempty" json:"frameworks,omitempty" mapstructure:"frameworks"` // Compliance frameworks to track (e.g., ["cis-aws", "pci-dss"]).
+	AccountMap      map[string]string     `yaml:"account_map,omitempty" json:"account_map,omitempty" mapstructure:"account_map"` // Account ID → name for account-level findings.
+	Frameworks      []string              `yaml:"frameworks,omitempty" json:"frameworks,omitempty" mapstructure:"frameworks"`    // Compliance frameworks to track (e.g., ["cis-aws", "pci-dss"]).
 }
 
 // AWSSecuritySources controls which AWS security services to query.

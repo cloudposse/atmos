@@ -1255,6 +1255,18 @@ for error handling and reference `aws.security.enabled` config.
     4. `naming-convention` (low) — last hyphen segment heuristic
     5. `resource-type` (low) — AWS resource type to component name
 
+36. **Account-level finding mapping** — ✅ Account-level findings (`AWS::::Account:123456789012`)
+    now map to the account name using a configurable `account_map` in `aws.security`. This
+    handles CRITICAL findings like "AWS Config should be enabled" that target the account itself.
+
+37. **ECR image finding extraction** — ✅ ECR repository findings extract the repo/image name
+    as the component. Example: `repository/inspatial/example-app-on-ecs/sha256:...` →
+    component `example-app-on-ecs`.
+
+38. **Duplicate finding grouping** — ✅ Findings with the same title are grouped in the
+    Markdown report. Instead of listing 7 identical "AWS Config should be enabled" findings,
+    they're collapsed into one entry with affected accounts/resources listed underneath.
+
 ### Known Limitations (from Production Testing 2026-04-03)
 
 Tested against the InSpatial AWS organization (11 accounts, Security Hub delegated admin).

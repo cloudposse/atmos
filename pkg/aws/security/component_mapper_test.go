@@ -862,3 +862,117 @@ func TestMapByContextTags(t *testing.T) {
 		})
 	}
 }
+
+func TestMapByAccountID(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		AWS: schema.AWSSettings{
+			Security: schema.AWSSecuritySettings{
+				AccountMap: map[string]string{
+					"452379801773": "plat-prod",
+					"344349181611": "plat-dev",
+				},
+			},
+		},
+	}
+	m := NewComponentMapper(atmosConfig, nil).(*dualPathMapper)
+
+	t.Run("account-level finding with known account", func(t *testing.T) {
+		finding := &Finding{
+			ResourceARN: "AWS::::Account:452379801773",
+			AccountID:   "452379801773",
+		}
+		mapping := m.mapByAccountID(finding)
+		require.NotNil(t, mapping)
+		assert.True(t, mapping.Mapped)
+		assert.Equal(t, "plat-prod", mapping.Stack)
+		assert.Equal(t, "account", mapping.Component)
+		assert.Equal(t, "account-map", mapping.Method)
+	})
+
+	t.Run("account-level finding with unknown account", func(t *testing.T) {
+		finding := &Finding{
+			ResourceARN: "AWS::::Account:999999999999",
+			AccountID:   "999999999999",
+		}
+		mapping := m.mapByAccountID(finding)
+		require.NotNil(t, mapping)
+		assert.False(t, mapping.Mapped)
+		assert.Equal(t, "999999999999", mapping.Stack)
+		assert.Equal(t, "account-level", mapping.Method)
+	})
+
+	t.Run("non-account finding returns nil", func(t *testing.T) {
+		finding := &Finding{
+			ResourceARN: "arn:aws:s3:::my-bucket",
+		}
+		mapping := m.mapByAccountID(finding)
+		assert.Nil(t, mapping)
+	})
+}
+
+func TestMapByECRRepo(t *testing.T) {
+	t.Run("ECR with sha256", func(t *testing.T) {
+		finding := &Finding{
+			ResourceARN: "arn:aws:ecr:us-east-2:982674173972:repository/inspatial/example-app-on-ecs/sha256:abc123",
+		}
+		mapping := mapByECRRepo(finding)
+		require.NotNil(t, mapping)
+		assert.True(t, mapping.Mapped)
+		assert.Equal(t, "example-app-on-ecs", mapping.Component)
+		assert.Equal(t, "ecr-repo", mapping.Method)
+	})
+
+	t.Run("ECR without sha256", func(t *testing.T) {
+		finding := &Finding{
+			ResourceARN: "arn:aws:ecr:us-east-2:123:repository/myorg/myapp",
+		}
+		mapping := mapByECRRepo(finding)
+		require.NotNil(t, mapping)
+		assert.Equal(t, "myapp", mapping.Component)
+	})
+
+	t.Run("non-ECR resource returns nil", func(t *testing.T) {
+		finding := &Finding{
+			ResourceARN: "arn:aws:s3:::my-bucket",
+		}
+		mapping := mapByECRRepo(finding)
+		assert.Nil(t, mapping)
+	})
+}
+
+func TestGroupByTitle(t *testing.T) {
+	findings := []Finding{
+		{Title: "AWS Config should be enabled", AccountID: "111"},
+		{Title: "AWS Config should be enabled", AccountID: "222"},
+		{Title: "AWS Config should be enabled", AccountID: "333"},
+		{Title: "S3 bucket public", AccountID: "111"},
+		{Title: "S3 bucket public", AccountID: "222"},
+	}
+	groups := groupByTitle(findings)
+	require.Len(t, groups, 2)
+	assert.Len(t, groups[0], 3)
+	assert.Equal(t, "AWS Config should be enabled", groups[0][0].Title)
+	assert.Len(t, groups[1], 2)
+	assert.Equal(t, "S3 bucket public", groups[1][0].Title)
+}
+
+func TestGroupByTitle_NoDuplicates(t *testing.T) {
+	findings := []Finding{
+		{Title: "A"},
+		{Title: "B"},
+		{Title: "C"},
+	}
+	groups := groupByTitle(findings)
+	require.Len(t, groups, 3)
+	assert.Len(t, groups[0], 1)
+	assert.Len(t, groups[1], 1)
+	assert.Len(t, groups[2], 1)
+}
+
+func TestTruncateMiddle(t *testing.T) {
+	assert.Equal(t, "short", truncateMiddle("short", 80))
+	long := "arn:aws:ecr:us-east-2:982674173972:repository/inspatial/example-app-on-ecs/sha256:876f27531c79965bc6e3a5492e2ccdd3ca4532b0ebef80f2b5c2063e2db712c7"
+	truncated := truncateMiddle(long, 80)
+	assert.LessOrEqual(t, len(truncated), 80)
+	assert.Contains(t, truncated, "...")
+}

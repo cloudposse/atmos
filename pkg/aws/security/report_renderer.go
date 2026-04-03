@@ -55,17 +55,7 @@ func (r *markdownRenderer) RenderSecurityReport(w io.Writer, report *Report) err
 	}
 	sb.WriteString("\n\n---\n\n")
 
-	// Group findings by severity.
-	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInformational} {
-		findings := filterBySeverity(report.Findings, sev)
-		if len(findings) == 0 {
-			continue
-		}
-		fmt.Fprintf(&sb, "## %s Findings (%d)\n\n", sev, len(findings))
-		for i := range findings {
-			renderFindingMarkdown(&sb, &findings[i], i+1)
-		}
-	}
+	renderFindingsBySeverity(&sb, report.Findings)
 
 	// Summary table.
 	sb.WriteString("## Summary\n\n")
@@ -323,6 +313,79 @@ func renderFindingMarkdown(sb *strings.Builder, f *Finding, num int) {
 
 // mdNewline is the newline string used in Markdown rendering.
 const mdNewline = "\n"
+
+// renderFindingsBySeverity groups findings by severity, then collapses duplicates.
+func renderFindingsBySeverity(sb *strings.Builder, allFindings []Finding) {
+	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInformational} {
+		findings := filterBySeverity(allFindings, sev)
+		if len(findings) == 0 {
+			continue
+		}
+		fmt.Fprintf(sb, "## %s Findings (%d)\n\n", sev, len(findings))
+		groups := groupByTitle(findings)
+		for i, group := range groups {
+			if len(group) == 1 {
+				renderFindingMarkdown(sb, &group[0], i+1)
+			} else {
+				renderGroupedFindingMarkdown(sb, group, i+1)
+			}
+		}
+	}
+}
+
+// groupByTitle groups findings by title, preserving order of first occurrence.
+func groupByTitle(findings []Finding) [][]Finding {
+	seen := make(map[string]int) // title → index in result.
+	var groups [][]Finding
+	for i := range findings {
+		title := findings[i].Title
+		if idx, ok := seen[title]; ok {
+			groups[idx] = append(groups[idx], findings[i])
+		} else {
+			seen[title] = len(groups)
+			groups = append(groups, []Finding{findings[i]})
+		}
+	}
+	return groups
+}
+
+// renderGroupedFindingMarkdown renders a group of findings with the same title.
+func renderGroupedFindingMarkdown(sb *strings.Builder, findings []Finding, num int) {
+	f := &findings[0]
+	fmt.Fprintf(sb, "### %d. %s (%d occurrences)\n\n", num, f.Title, len(findings))
+
+	if f.Description != "" {
+		fmt.Fprintf(sb, "%s\n\n", f.Description)
+	}
+
+	// Show affected resources as a table.
+	sb.WriteString("| Resource | Account | Component | Stack | Confidence |\n")
+	sb.WriteString("|----------|---------|-----------|-------|------------|\n")
+	for i := range findings {
+		resource := truncateMiddle(findings[i].ResourceARN, maxARNDisplayLen)
+		account := findings[i].AccountID
+		component, stack, confidence := "*unmapped*", "", ""
+		if findings[i].Mapping != nil && findings[i].Mapping.Mapped {
+			component = findings[i].Mapping.Component
+			stack = findings[i].Mapping.Stack
+			confidence = string(findings[i].Mapping.Confidence)
+		}
+		fmt.Fprintf(sb, "| `%s` | %s | %s | %s | %s |\n", resource, account, component, stack, confidence)
+	}
+	sb.WriteString("\n---\n\n")
+}
+
+// maxARNDisplayLen is the max length for ARN display in grouped tables.
+const maxARNDisplayLen = 80
+
+// truncateMiddle truncates a string in the middle if it exceeds maxLen.
+func truncateMiddle(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	half := (maxLen - 3) / 2
+	return s[:half] + "..." + s[len(s)-half:]
+}
 
 // renderResourceTags renders resource tags as a compact key=value list.
 func renderResourceTags(sb *strings.Builder, tags map[string]string) {

@@ -43,6 +43,7 @@ func NewComponentMapper(atmosConfig *schema.AtmosConfiguration, authCtx *schema.
 	return &dualPathMapper{
 		atmosConfig: atmosConfig,
 		tagMapping:  resolveTagMapping(atmosConfig),
+		accountMap:  atmosConfig.AWS.Security.AccountMap,
 		clients:     clients,
 		tagCache:    make(map[string]*tagLookupResult),
 	}
@@ -52,6 +53,7 @@ func NewComponentMapper(atmosConfig *schema.AtmosConfiguration, authCtx *schema.
 type dualPathMapper struct {
 	atmosConfig *schema.AtmosConfiguration
 	tagMapping  schema.AWSSecurityTagMapping
+	accountMap  map[string]string // Account ID → name for account-level findings.
 	clients     *awsClientCache
 	tagCache    map[string]*tagLookupResult // Cache by resource ARN.
 }
@@ -150,18 +152,27 @@ func (m *dualPathMapper) matchTags(tags map[string]string, method string) *Compo
 
 // mapByHeuristics implements Path B: multi-strategy heuristic pipeline.
 func (m *dualPathMapper) mapByHeuristics(_ context.Context, finding *Finding) (*ComponentMapping, error) {
-	// Strategy 1: Context tags — use Namespace/Tenant/Environment/Stage tags to reconstruct
-	// the naming prefix and extract the component name from the Name tag.
+	// Strategy 1: Context tags — use Namespace/Tenant/Environment/Stage tags.
 	if mapping := m.mapByContextTags(finding); mapping != nil {
 		return mapping, nil
 	}
 
-	// Strategy 2: Resource naming convention analysis (last segment heuristic).
+	// Strategy 2: Account-level findings (AWS::::Account:123456789012).
+	if mapping := m.mapByAccountID(finding); mapping != nil {
+		return mapping, nil
+	}
+
+	// Strategy 3: ECR repository findings — extract repo/image name.
+	if mapping := mapByECRRepo(finding); mapping != nil {
+		return mapping, nil
+	}
+
+	// Strategy 4: Resource naming convention analysis (last segment heuristic).
 	if mapping := m.mapByNamingConvention(finding); mapping != nil {
 		return mapping, nil
 	}
 
-	// Strategy 3: Resource type to component mapping.
+	// Strategy 5: Resource type to component mapping.
 	if mapping := m.mapByResourceType(finding); mapping != nil {
 		return mapping, nil
 	}
@@ -172,6 +183,80 @@ func (m *dualPathMapper) mapByHeuristics(_ context.Context, finding *Finding) (*
 		Confidence: ConfidenceNone,
 		Method:     "unmatched",
 	}, nil
+}
+
+// mapByAccountID maps account-level findings (AWS::::Account:ID) to account names.
+func (m *dualPathMapper) mapByAccountID(finding *Finding) *ComponentMapping {
+	if !strings.HasPrefix(finding.ResourceARN, "AWS::::Account:") {
+		return nil
+	}
+
+	// Extract account ID from the ARN.
+	accountID := strings.TrimPrefix(finding.ResourceARN, "AWS::::Account:")
+	if accountID == "" {
+		return nil
+	}
+
+	// Look up account name from config.
+	accountName := ""
+	if m.accountMap != nil {
+		accountName = m.accountMap[accountID]
+	}
+	if accountName == "" && finding.AccountID != "" {
+		// Try finding.AccountID as well.
+		accountName = m.accountMap[finding.AccountID]
+	}
+
+	if accountName == "" {
+		return &ComponentMapping{
+			Stack:      accountID,
+			Mapped:     false,
+			Confidence: ConfidenceNone,
+			Method:     "account-level",
+		}
+	}
+
+	return &ComponentMapping{
+		Stack:      accountName,
+		Component:  "account",
+		Mapped:     true,
+		Confidence: ConfidenceLow,
+		Method:     "account-map",
+	}
+}
+
+// mapByECRRepo extracts ECR repository name as component.
+// ARN format: arn:aws:ecr:region:account:repository/org/image-name/sha256:hash.
+func mapByECRRepo(finding *Finding) *ComponentMapping {
+	if !strings.Contains(finding.ResourceARN, ":repository/") {
+		return nil
+	}
+
+	// Extract everything after "repository/".
+	idx := strings.Index(finding.ResourceARN, ":repository/")
+	if idx == -1 {
+		return nil
+	}
+	repoPath := finding.ResourceARN[idx+len(":repository/"):]
+
+	// Remove SHA256 suffix if present.
+	if shaIdx := strings.Index(repoPath, "/sha256:"); shaIdx != -1 {
+		repoPath = repoPath[:shaIdx]
+	}
+
+	// The last segment of the repo path is the image/component name.
+	parts := strings.Split(repoPath, "/")
+	component := parts[len(parts)-1]
+	if component == "" {
+		return nil
+	}
+
+	return &ComponentMapping{
+		Component:  component,
+		Mapped:     true,
+		Confidence: ConfidenceLow,
+		Method:     "ecr-repo",
+	}
 }
 
 // mapByContextTags uses Cloud Posse context tags (Namespace, Tenant, Environment, Stage)
