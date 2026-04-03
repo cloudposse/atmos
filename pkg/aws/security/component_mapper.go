@@ -17,6 +17,9 @@ import (
 // minNamingParts is the minimum hyphen-separated segments for naming convention matching.
 const minNamingParts = 3
 
+// nameSeparator is the hyphen used as a separator in Cloud Posse naming conventions.
+const nameSeparator = "-"
+
 // ComponentMapper maps AWS resources from security findings to Atmos components and stacks.
 type ComponentMapper interface {
 	// MapFinding attempts to map a finding's resource to an Atmos component/stack.
@@ -147,12 +150,18 @@ func (m *dualPathMapper) matchTags(tags map[string]string, method string) *Compo
 
 // mapByHeuristics implements Path B: multi-strategy heuristic pipeline.
 func (m *dualPathMapper) mapByHeuristics(_ context.Context, finding *Finding) (*ComponentMapping, error) {
-	// Strategy 1: Resource naming convention analysis.
+	// Strategy 1: Context tags — use Namespace/Tenant/Environment/Stage tags to reconstruct
+	// the naming prefix and extract the component name from the Name tag.
+	if mapping := m.mapByContextTags(finding); mapping != nil {
+		return mapping, nil
+	}
+
+	// Strategy 2: Resource naming convention analysis (last segment heuristic).
 	if mapping := m.mapByNamingConvention(finding); mapping != nil {
 		return mapping, nil
 	}
 
-	// Strategy 2: Resource type to component mapping.
+	// Strategy 3: Resource type to component mapping.
 	if mapping := m.mapByResourceType(finding); mapping != nil {
 		return mapping, nil
 	}
@@ -163,6 +172,70 @@ func (m *dualPathMapper) mapByHeuristics(_ context.Context, finding *Finding) (*
 		Confidence: ConfidenceNone,
 		Method:     "unmatched",
 	}, nil
+}
+
+// mapByContextTags uses Cloud Posse context tags (Namespace, Tenant, Environment, Stage)
+// from the finding's resource tags to reconstruct the naming prefix and extract the component.
+// This is more reliable than the basic naming convention because it uses explicit tag values.
+func (m *dualPathMapper) mapByContextTags(finding *Finding) *ComponentMapping {
+	tags := finding.ResourceTags
+	if len(tags) == 0 {
+		return nil
+	}
+
+	name := tags["Name"]
+	if name == "" {
+		return nil
+	}
+
+	// Build the context prefix from tags: {namespace}-{tenant}-{environment}-{stage}-.
+	namespace := tags["Namespace"]
+	tenant := tags["Tenant"]
+	environment := tags["Environment"]
+	stage := tags["Stage"]
+
+	// Need at least tenant + stage to construct a meaningful prefix.
+	if tenant == "" || stage == "" {
+		return nil
+	}
+
+	// Build prefix: namespace-tenant-environment-stage-.
+	var prefixParts []string
+	if namespace != "" {
+		prefixParts = append(prefixParts, namespace)
+	}
+	prefixParts = append(prefixParts, tenant)
+	if environment != "" {
+		prefixParts = append(prefixParts, environment)
+	}
+	prefixParts = append(prefixParts, stage)
+	prefix := strings.Join(prefixParts, nameSeparator) + nameSeparator
+
+	// Strip the prefix from the Name to get the component name.
+	if !strings.HasPrefix(name, prefix) {
+		return nil
+	}
+	component := name[len(prefix):]
+	if component == "" {
+		return nil
+	}
+
+	// Build stack name from context: tenant-environment-stage.
+	var stackParts []string
+	stackParts = append(stackParts, tenant)
+	if environment != "" {
+		stackParts = append(stackParts, environment)
+	}
+	stackParts = append(stackParts, stage)
+	stack := strings.Join(stackParts, nameSeparator)
+
+	return &ComponentMapping{
+		Stack:      stack,
+		Component:  component,
+		Mapped:     true,
+		Confidence: ConfidenceHigh,
+		Method:     "context-tags",
+	}
 }
 
 // mapByNamingConvention attempts to extract component/stack info from resource naming patterns.
@@ -180,7 +253,7 @@ func (m *dualPathMapper) mapByNamingConvention(finding *Finding) *ComponentMappi
 
 	// Common Cloud Posse naming convention: {namespace}-{tenant}-{environment}-{stage}-{component}.
 	// Try to detect pattern with at least 3 hyphen-separated segments.
-	parts := strings.Split(name, "-")
+	parts := strings.Split(name, nameSeparator)
 	if len(parts) < minNamingParts {
 		return nil
 	}
@@ -190,7 +263,7 @@ func (m *dualPathMapper) mapByNamingConvention(finding *Finding) *ComponentMappi
 	// Only use this heuristic at LOW confidence since it's unreliable.
 	component := parts[len(parts)-1]
 	// The middle segments form the stack identifier.
-	stack := strings.Join(parts[1:len(parts)-1], "-")
+	stack := strings.Join(parts[1:len(parts)-1], nameSeparator)
 
 	return &ComponentMapping{
 		Stack:      stack,

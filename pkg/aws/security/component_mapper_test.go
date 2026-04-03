@@ -742,3 +742,123 @@ func TestMapByTags_FindingTagsFallbackToAPI(t *testing.T) {
 	// Should use naming convention or resource type, not tag.
 	assert.NotEqual(t, "finding-tag", mapping.Method)
 }
+
+func TestMapByContextTags(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	m := NewComponentMapper(atmosConfig, nil).(*dualPathMapper)
+
+	tests := []struct {
+		name          string
+		finding       *Finding
+		wantComponent string
+		wantStack     string
+		wantMapped    bool
+	}{
+		{
+			name: "full context tags",
+			finding: &Finding{
+				ResourceTags: map[string]string{
+					"Name":        "ins-plat-use2-dev-example-static-app-origin",
+					"Namespace":   "ins",
+					"Tenant":      "plat",
+					"Environment": "use2",
+					"Stage":       "dev",
+				},
+			},
+			wantComponent: "example-static-app-origin",
+			wantStack:     "plat-use2-dev",
+			wantMapped:    true,
+		},
+		{
+			name: "no namespace",
+			finding: &Finding{
+				ResourceTags: map[string]string{
+					"Name":        "plat-use2-prod-vpc",
+					"Tenant":      "plat",
+					"Environment": "use2",
+					"Stage":       "prod",
+				},
+			},
+			wantComponent: "vpc",
+			wantStack:     "plat-use2-prod",
+			wantMapped:    true,
+		},
+		{
+			name: "no environment",
+			finding: &Finding{
+				ResourceTags: map[string]string{
+					"Name":      "ins-core-security-guardduty",
+					"Namespace": "ins",
+					"Tenant":    "core",
+					"Stage":     "security",
+				},
+			},
+			wantComponent: "guardduty",
+			wantStack:     "core-security",
+			wantMapped:    true,
+		},
+		{
+			name: "ecs task definition with version",
+			finding: &Finding{
+				ResourceTags: map[string]string{
+					"Name":        "ins-plat-use2-prod-app",
+					"Namespace":   "ins",
+					"Tenant":      "plat",
+					"Environment": "use2",
+					"Stage":       "prod",
+				},
+			},
+			wantComponent: "app",
+			wantStack:     "plat-use2-prod",
+			wantMapped:    true,
+		},
+		{
+			name: "no tags",
+			finding: &Finding{
+				ResourceTags: nil,
+			},
+			wantMapped: false,
+		},
+		{
+			name: "missing tenant",
+			finding: &Finding{
+				ResourceTags: map[string]string{
+					"Name":  "something",
+					"Stage": "dev",
+				},
+			},
+			wantMapped: false,
+		},
+		{
+			name: "name doesn't match prefix",
+			finding: &Finding{
+				ResourceTags: map[string]string{
+					"Name":        "unrelated-resource-name",
+					"Namespace":   "ins",
+					"Tenant":      "plat",
+					"Environment": "use2",
+					"Stage":       "dev",
+				},
+			},
+			wantMapped: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mapping := m.mapByContextTags(tt.finding)
+			if !tt.wantMapped {
+				if mapping != nil {
+					assert.False(t, mapping.Mapped)
+				}
+				return
+			}
+			require.NotNil(t, mapping)
+			assert.True(t, mapping.Mapped)
+			assert.Equal(t, tt.wantComponent, mapping.Component)
+			assert.Equal(t, tt.wantStack, mapping.Stack)
+			assert.Equal(t, ConfidenceHigh, mapping.Confidence)
+			assert.Equal(t, "context-tags", mapping.Method)
+		})
+	}
+}

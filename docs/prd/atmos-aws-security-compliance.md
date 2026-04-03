@@ -1237,6 +1237,24 @@ for error handling and reference `aws.security.enabled` config.
 34. **Account ID in reports** — ✅ The AWS account ID is now shown in the finding table,
     helping users identify which account the affected resource belongs to.
 
+35. **Context tags mapping strategy** — ✅ New heuristic strategy (`method: "context-tags"`,
+    `confidence: high`) that uses Cloud Posse context tags (`Namespace`, `Tenant`,
+    `Environment`, `Stage`, `Name`) to reconstruct the naming prefix and extract the
+    component name. This is much more reliable than the basic naming convention because
+    it uses explicit tag values instead of guessing segment boundaries.
+
+    Example: `Name=ins-plat-use2-dev-example-static-app-origin` with
+    `Namespace=ins, Tenant=plat, Environment=use2, Stage=dev` →
+    prefix `ins-plat-use2-dev-` → component `example-static-app-origin`,
+    stack `plat-use2-dev` (namespace excluded from stack name).
+
+    Mapping priority is now:
+    1. `finding-tag` (exact) — atmos_stack + atmos_component tags in the finding
+    2. `tag-api` (exact) — same tags from the Resource Groups Tagging API
+    3. `context-tags` (high) — Cloud Posse context tags + Name tag
+    4. `naming-convention` (low) — last hyphen segment heuristic
+    5. `resource-type` (low) — AWS resource type to component name
+
 ### Known Limitations (from Production Testing 2026-04-03)
 
 Tested against the InSpatial AWS organization (11 accounts, Security Hub delegated admin).
