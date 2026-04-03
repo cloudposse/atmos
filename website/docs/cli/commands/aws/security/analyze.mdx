@@ -47,10 +47,10 @@ atmos aws security analyze [flags]
   <dd>Filter findings to a specific Atmos component (e.g., `vpc`, `eks`).</dd>
 
   <dt>`--severity`</dt>
-  <dd>Comma-separated list of severity levels to include: `critical`, `high`, `medium`, `low`, `informational`.</dd>
+  <dd>Comma-separated list of severity levels (case-insensitive): `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFORMATIONAL`. Default: `critical,high`.</dd>
 
   <dt>`--source`</dt>
-  <dd>Filter findings by source service: `security-hub`, `config`, `inspector`, `guardduty`.</dd>
+  <dd>Filter findings by source service: `security-hub`, `config`, `inspector`, `guardduty`, `macie`, `access-analyzer`, `all` (default: `all`).</dd>
 
   <dt>`--format, -f`</dt>
   <dd>Output format: `markdown`, `json`, `yaml`, `csv` (default: `markdown`).</dd>
@@ -59,7 +59,7 @@ atmos aws security analyze [flags]
   <dd>Write output to a file instead of stdout. Creates parent directories if they don't exist.</dd>
 
   <dt>`--max-findings`</dt>
-  <dd>Maximum number of findings to retrieve and analyze.</dd>
+  <dd>Maximum number of findings to retrieve and analyze (default: `500`).</dd>
 
   <dt>`--ai`</dt>
   <dd>Enable AI-powered analysis and remediation suggestions. Requires `ai.enabled: true` in your `atmos.yaml`.</dd>

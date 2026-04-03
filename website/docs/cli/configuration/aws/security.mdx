@@ -64,7 +64,7 @@ aws:
       - HIGH
 
     # Maximum findings per analysis run
-    max_findings: 50
+    max_findings: 500
 
     # Tag keys for mapping AWS resources to Atmos components
     tag_mapping:
@@ -101,7 +101,7 @@ aws:
   <dd>Default severity filter when `--severity` flag is not specified. Valid values: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFORMATIONAL`. Default: `["CRITICAL", "HIGH"]`.</dd>
 
   <dt>`max_findings`</dt>
-  <dd>Maximum findings per analysis run. Controls the number of findings fetched from AWS. Default: `50`.</dd>
+  <dd>Maximum findings per analysis run. Controls the number of findings fetched from AWS. Default: `500`.</dd>
 
   <dt>`tag_mapping`</dt>
   <dd>Tag keys used for mapping AWS resources back to Atmos components and stacks. See [Tag Mapping](#tag-mapping) below.</dd>
