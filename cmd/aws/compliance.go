@@ -131,7 +131,7 @@ var complianceReportCmd = &cobra.Command{
 
 		// Fetch compliance status for each framework.
 		if outputFormat == security.FormatMarkdown {
-			ui.Writef("📊 Generating compliance report...\n")
+			ui.Info("Generating compliance report...")
 		}
 
 		// Determine output destination.
@@ -160,7 +160,7 @@ var complianceReportCmd = &cobra.Command{
 
 			if report == nil {
 				if outputFormat == security.FormatMarkdown {
-					ui.Writef("No compliance data available for framework: %s\n", fw)
+					ui.Warningf("No compliance data available for framework: %s", fw)
 				}
 				continue
 			}
@@ -185,7 +185,7 @@ var complianceReportCmd = &cobra.Command{
 		}
 
 		if fileOutput != "" {
-			ui.Writef("Report saved to %s\n", fileOutput)
+			ui.Successf("Report saved to %s", fileOutput)
 		}
 
 		return nil

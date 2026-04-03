@@ -172,7 +172,7 @@ var securityAnalyzeCmd = &cobra.Command{
 
 		// Fetch findings.
 		if outputFormat == security.FormatMarkdown {
-			ui.Writef("🔍 Fetching security findings...\n")
+			ui.Info("Fetching security findings...")
 		}
 		fetcher := security.NewFindingFetcher(&atmosConfig, authCtx)
 		findings, err := fetcher.FetchFindings(ctx, &opts)
@@ -181,13 +181,13 @@ var securityAnalyzeCmd = &cobra.Command{
 		}
 
 		if len(findings) == 0 {
-			ui.Writef("✅ No security findings match the specified filters. No report written.\n")
+			ui.Success("No security findings match the specified filters. No report written.")
 			return nil
 		}
 
 		// Map findings to Atmos components.
 		if outputFormat == security.FormatMarkdown {
-			ui.Writef("🗺️  Mapping %d findings to Atmos components...\n", len(findings))
+			ui.Infof("Mapping %d findings to Atmos components...", len(findings))
 		}
 		mapper := security.NewComponentMapper(&atmosConfig, authCtx)
 		findings, err = mapper.MapFindings(ctx, findings)
@@ -200,9 +200,9 @@ var securityAnalyzeCmd = &cobra.Command{
 		// findings are mapped to components/stacks via tags or heuristics.
 		if stack != "" || component != "" {
 			findings = filterByStackAndComponent(findings, stack, component)
-			ui.Writef("🔎 Filtered to %d findings matching stack=%q component=%q\n", len(findings), stack, component)
+			ui.Infof("Filtered to %d findings matching stack=%q component=%q", len(findings), stack, component)
 			if len(findings) == 0 {
-				ui.Writef("✅ No findings match the specified stack/component after mapping. No report written.\n")
+				ui.Success("No findings match the specified stack/component after mapping. No report written.")
 				return nil
 			}
 		}
@@ -210,7 +210,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		// AI analysis (only when --ai flag is set).
 		if useAI {
 			if outputFormat == security.FormatMarkdown {
-				ui.Writef("🤖 Analyzing findings with AI...\n")
+				ui.Info("Analyzing findings with AI...")
 			}
 
 			// Initialize read-only tools for multi-turn analysis (API providers).
@@ -267,7 +267,7 @@ var securityAnalyzeCmd = &cobra.Command{
 				return err
 			}
 			if fileOutput != "" {
-				ui.Writef("Report saved to %s\n", fileOutput)
+				ui.Successf("Report saved to %s", fileOutput)
 			}
 		}
 
