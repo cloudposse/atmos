@@ -359,31 +359,67 @@ func renderGroupedFindingMarkdown(sb *strings.Builder, findings []Finding, num i
 	}
 
 	// Show affected resources as a table.
-	sb.WriteString("| Resource | Account | Component | Stack | Confidence |\n")
-	sb.WriteString("|----------|---------|-----------|-------|------------|\n")
+	sb.WriteString("| Resource | Account | Component | Stack | Mapped By | Confidence |\n")
+	sb.WriteString("|----------|---------|-----------|-------|-----------|------------|\n")
 	for i := range findings {
-		resource := truncateMiddle(findings[i].ResourceARN, maxARNDisplayLen)
+		resource := truncateMiddle(findings[i].ResourceARN)
 		account := findings[i].AccountID
-		component, stack, confidence := "*unmapped*", "", ""
+		component, stack, method, confidence := "*unmapped*", "", "", ""
 		if findings[i].Mapping != nil && findings[i].Mapping.Mapped {
 			component = findings[i].Mapping.Component
 			stack = findings[i].Mapping.Stack
+			method = findings[i].Mapping.Method
 			confidence = string(findings[i].Mapping.Confidence)
 		}
-		fmt.Fprintf(sb, "| `%s` | %s | %s | %s | %s |\n", resource, account, component, stack, confidence)
+		fmt.Fprintf(sb, "| `%s` | %s | %s | %s | %s | %s |\n", resource, account, component, stack, method, confidence)
 	}
-	sb.WriteString("\n---\n\n")
+	sb.WriteString(mdNewline)
+
+	// Show resource tags for each finding that has them.
+	renderGroupedTags(sb, findings)
+
+	sb.WriteString("---\n\n")
+}
+
+// renderGroupedTags shows resource tags for findings in a group that have them.
+func renderGroupedTags(sb *strings.Builder, findings []Finding) {
+	var tagged int
+	for i := range findings {
+		if len(findings[i].ResourceTags) > 0 {
+			tagged++
+		}
+	}
+	if tagged == 0 {
+		return
+	}
+
+	sb.WriteString("\n<details>\n<summary>Resource Tags (" + fmt.Sprintf("%d", tagged) + " resources with tags)</summary>\n\n")
+	for i := range findings {
+		if len(findings[i].ResourceTags) == 0 {
+			continue
+		}
+		name := findings[i].ResourceARN
+		if n, ok := findings[i].ResourceTags["Name"]; ok {
+			name = n
+		}
+		fmt.Fprintf(sb, "**%s:**\n", truncateMiddle(name))
+		for k, v := range findings[i].ResourceTags {
+			fmt.Fprintf(sb, "- `%s` = `%s`\n", k, v)
+		}
+		sb.WriteString(mdNewline)
+	}
+	sb.WriteString("</details>\n\n")
 }
 
 // maxARNDisplayLen is the max length for ARN display in grouped tables.
 const maxARNDisplayLen = 80
 
-// truncateMiddle truncates a string in the middle if it exceeds maxLen.
-func truncateMiddle(s string, maxLen int) string {
-	if len(s) <= maxLen {
+// truncateMiddle truncates a string in the middle if it exceeds maxARNDisplayLen.
+func truncateMiddle(s string) string {
+	if len(s) <= maxARNDisplayLen {
 		return s
 	}
-	half := (maxLen - 3) / 2
+	half := (maxARNDisplayLen - 3) / 2
 	return s[:half] + "..." + s[len(s)-half:]
 }
 

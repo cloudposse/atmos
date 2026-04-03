@@ -970,9 +970,9 @@ func TestGroupByTitle_NoDuplicates(t *testing.T) {
 }
 
 func TestTruncateMiddle(t *testing.T) {
-	assert.Equal(t, "short", truncateMiddle("short", 80))
+	assert.Equal(t, "short", truncateMiddle("short"))
 	long := "arn:aws:ecr:us-east-2:982674173972:repository/inspatial/example-app-on-ecs/sha256:876f27531c79965bc6e3a5492e2ccdd3ca4532b0ebef80f2b5c2063e2db712c7"
-	truncated := truncateMiddle(long, 80)
-	assert.LessOrEqual(t, len(truncated), 80)
+	truncated := truncateMiddle(long)
+	assert.LessOrEqual(t, len(truncated), maxARNDisplayLen)
 	assert.Contains(t, truncated, "...")
 }
