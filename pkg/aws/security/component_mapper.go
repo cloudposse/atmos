@@ -395,7 +395,13 @@ func (m *dualPathMapper) mapByResourceType(finding *Finding) *ComponentMapping {
 	}
 
 	if component, ok := resourceTypeMap[finding.ResourceType]; ok {
+		// Resolve stack from account map.
+		stack := ""
+		if m.accountMap != nil && finding.AccountID != "" {
+			stack = m.accountMap[finding.AccountID]
+		}
 		return &ComponentMapping{
+			Stack:      stack,
 			Component:  component,
 			Mapped:     true,
 			Confidence: ConfidenceLow,
