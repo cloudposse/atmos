@@ -111,6 +111,63 @@ notifications, or compliance reporting tools.
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+### Data Pipeline and Schema
+
+All data flows through a common schema that ensures consistent, structured output
+regardless of AI provider or output format.
+
+```text
+┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│  AWS APIs    │────▶│  Finding struct   │────▶│  Report struct   │
+│              │     │                  │     │                  │
+│ SecurityHub  │     │ ID, title        │     │ GeneratedAt      │
+│ GuardDuty    │     │ severity, source │     │ TotalFindings    │
+│ Inspector    │     │ resource ARN     │     │ SeverityCounts   │
+│ Config       │     │ description      │     │ MappedCount      │
+│              │     │ region, account  │     │ UnmappedCount    │
+└──────────────┘     └───────┬──────────┘     │ Findings[]       │
+                             │                └────────┬─────────┘
+                             ▼                         │
+                     ┌──────────────────┐              │
+                     │ ComponentMapping │              │
+                     │                  │              │
+                     │ stack, component │              │
+                     │ component_path   │              ▼
+                     │ confidence       │     ┌──────────────────┐
+                     │ method (tag/     │     │ ReportRenderer   │
+                     │  naming/heuristic│     │                  │
+                     └───────┬──────────┘     │ Markdown (human) │
+                             │                │ JSON (automation)│
+                             ▼                │ YAML (config)    │
+                     ┌──────────────────┐     │ CSV (spreadsheet)│
+                     │ Remediation      │     └──────────────────┘
+                     │ (AI-populated)   │
+                     │                  │
+                     │ root_cause       │
+                     │ steps[]          │
+                     │ code_changes[]   │
+                     │ stack_changes    │
+                     │ deploy_command   │
+                     │ risk_level       │
+                     │ references[]     │
+                     └──────────────────┘
+```
+
+**Without `--ai`:** Finding + ComponentMapping are populated, Remediation is nil. The report
+renders findings with component mapping but no remediation guidance.
+
+**With `--ai`:** All three structs are populated. The embedded skill prompt ensures every AI
+provider (Claude, GPT, Gemini, Bedrock, Ollama) fills the same Remediation fields in the same
+format. The parser handles both the structured `### Section` format and legacy `**Bold:**` format.
+
+**Output formats:** The `ReportRenderer` takes the `Report` struct and produces:
+- **Markdown** — Rich terminal output with severity grouping, remediation details, deploy commands
+- **JSON** — Structured output for CI/CD pipelines, dashboards, ticketing systems
+- **YAML** — Configuration-friendly format for further processing
+- **CSV** — Flat rows for spreadsheet analysis and compliance reporting
+
+All four formats use the same schema — the data is identical, only the presentation differs.
+
 ### Data Flow
 
 1. **Authenticate** — Atmos Auth obtains AWS credentials (SSO, assume-role, etc.)
