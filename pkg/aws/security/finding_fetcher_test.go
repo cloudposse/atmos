@@ -606,6 +606,211 @@ func TestResolveRegion(t *testing.T) {
 	})
 }
 
+func TestResolveRegion_AuthContextFallback(t *testing.T) {
+	// When no override and no config region, should fall back to auth context region.
+	clients := newAWSClientCache()
+	clients.authContext = &schema.AWSAuthContext{Region: "ap-southeast-1"}
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{},
+		clients:     clients,
+	}
+	assert.Equal(t, "ap-southeast-1", fetcher.resolveRegion(""))
+}
+
+func TestResolveRegion_ConfigWinsOverAuthContext(t *testing.T) {
+	// Config region should take precedence over auth context region.
+	clients := newAWSClientCache()
+	clients.authContext = &schema.AWSAuthContext{Region: "ap-southeast-1"}
+	fetcher := &awsFindingFetcher{
+		atmosConfig: &schema.AtmosConfiguration{
+			AWS: schema.AWSSettings{
+				Security: schema.AWSSecuritySettings{Region: "eu-central-1"},
+			},
+		},
+		clients: clients,
+	}
+	assert.Equal(t, "eu-central-1", fetcher.resolveRegion(""))
+}
+
+func TestBuildComplianceReport_NoFindings(t *testing.T) {
+	// Empty findings with a known total should result in 100% compliance.
+	report := buildComplianceReport(nil, "cis-aws", "CIS AWS", "prod", 50)
+	assert.Equal(t, 0, report.FailingControls)
+	assert.Equal(t, 50, report.TotalControls)
+	assert.Equal(t, 50, report.PassingControls)
+	assert.InDelta(t, 100.0, report.ScorePercent, 0.01)
+	assert.Empty(t, report.FailingDetails)
+}
+
+func TestBuildComplianceReport_ZeroTotalControls(t *testing.T) {
+	// When totalControls is 0 (API unavailable), TotalControls should equal FailingControls.
+	findings := []Finding{
+		{ID: "f1", Title: "Issue 1", Severity: SeverityHigh, SecurityControlID: "EC2.18"},
+		{ID: "f2", Title: "Issue 2", Severity: SeverityCritical, SecurityControlID: "IAM.4"},
+	}
+	report := buildComplianceReport(findings, "pci-dss", "PCI DSS", "dev", 0)
+	assert.Equal(t, 2, report.FailingControls)
+	assert.Equal(t, 2, report.TotalControls, "should fall back to failing count when total is less")
+	assert.Equal(t, 0, report.PassingControls)
+	assert.InDelta(t, 0.0, report.ScorePercent, 0.01)
+}
+
+func TestBuildComplianceReport_DeduplicatesBySecurityControlID(t *testing.T) {
+	// Multiple findings with same SecurityControlID should be deduplicated.
+	findings := []Finding{
+		{ID: "f1", Title: "EC2 issue A", Severity: SeverityHigh, SecurityControlID: "EC2.18"},
+		{ID: "f2", Title: "EC2 issue B", Severity: SeverityHigh, SecurityControlID: "EC2.18"},
+		{ID: "f3", Title: "IAM issue", Severity: SeverityCritical, SecurityControlID: "IAM.4"},
+	}
+	report := buildComplianceReport(findings, "cis-aws", "CIS", "prod", 10)
+	assert.Equal(t, 2, report.FailingControls, "should deduplicate by SecurityControlID")
+	assert.Len(t, report.FailingDetails, 2)
+}
+
+func TestBuildComplianceReport_FallbackToIDWhenNoControlID(t *testing.T) {
+	// When SecurityControlID and ComplianceStandard are both empty, should use finding ID.
+	findings := []Finding{
+		{ID: "unique-finding-1", Title: "Issue 1", Severity: SeverityLow},
+		{ID: "unique-finding-2", Title: "Issue 2", Severity: SeverityLow},
+	}
+	report := buildComplianceReport(findings, "nist", "NIST 800-53", "", 20)
+	assert.Equal(t, 2, report.FailingControls)
+	// Verify the control IDs match the finding IDs.
+	controlIDs := make(map[string]bool)
+	for _, ctrl := range report.FailingDetails {
+		controlIDs[ctrl.ControlID] = true
+	}
+	assert.True(t, controlIDs["unique-finding-1"])
+	assert.True(t, controlIDs["unique-finding-2"])
+}
+
+func TestBuildComplianceReport_TimestampSet(t *testing.T) {
+	// Verify GeneratedAt is set to a non-zero value.
+	report := buildComplianceReport(nil, "soc2", "SOC 2", "", 10)
+	assert.False(t, report.GeneratedAt.IsZero())
+}
+
+func TestResolvePageSize(t *testing.T) {
+	tests := []struct {
+		name        string
+		maxFindings int
+		want        int32
+	}{
+		{"no limit uses default", 0, int32(securityHubPageSize)},
+		{"small limit", 10, 10},
+		{"exact page size", securityHubPageSize, int32(securityHubPageSize)},
+		{"over page size", 500, int32(securityHubPageSize)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, resolvePageSize(tt.maxFindings))
+		})
+	}
+}
+
+func TestTrimToLimit(t *testing.T) {
+	findings := make([]Finding, 10)
+	for i := range findings {
+		findings[i].ID = fmt.Sprintf("f%d", i)
+	}
+
+	t.Run("no limit returns all", func(t *testing.T) {
+		result := trimToLimit(findings, 0)
+		assert.Len(t, result, 10)
+	})
+
+	t.Run("limit trims", func(t *testing.T) {
+		result := trimToLimit(findings, 5)
+		assert.Len(t, result, 5)
+		assert.Equal(t, "f0", result[0].ID)
+		assert.Equal(t, "f4", result[4].ID)
+	})
+
+	t.Run("limit higher than count returns all", func(t *testing.T) {
+		result := trimToLimit(findings, 20)
+		assert.Len(t, result, 10)
+	})
+}
+
+func TestFrameworkToStandardIDs(t *testing.T) {
+	tests := []struct {
+		framework string
+		wantLen   int
+	}{
+		{"cis-aws", 2}, // Both ruleset and standards prefixes.
+		{"pci-dss", 1},
+		{"nist", 1},
+		{"unknown", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.framework, func(t *testing.T) {
+			result := frameworkToStandardIDs(tt.framework)
+			assert.Len(t, result, tt.wantLen)
+		})
+	}
+}
+
+func TestNormalizeSecurityHubFinding_WithComplianceAndTags(t *testing.T) {
+	// Verify compliance fields and resource tags are extracted correctly.
+	finding := &shtypes.AwsSecurityFinding{
+		Id:          aws.String("compliance-finding-1"),
+		Title:       aws.String("Control failed"),
+		ProductName: aws.String("Security Hub"),
+		Severity:    &shtypes.Severity{Label: shtypes.SeverityLabelMedium},
+		Resources: []shtypes.Resource{
+			{
+				Id:     aws.String("arn:aws:ec2:us-west-2:123:instance/i-abc"),
+				Type:   aws.String("AwsEc2Instance"),
+				Region: aws.String("us-west-2"),
+				Tags: map[string]string{
+					"atmos:stack":     "prod",
+					"atmos:component": "web",
+				},
+			},
+		},
+		Compliance: &shtypes.Compliance{
+			AssociatedStandards: []shtypes.AssociatedStandard{
+				{StandardsId: aws.String("cis-aws-foundations-benchmark/v/1.4.0")},
+			},
+			SecurityControlId: aws.String("EC2.18"),
+		},
+	}
+
+	result := normalizeSecurityHubFinding(finding)
+	assert.Equal(t, "cis-aws-foundations-benchmark/v/1.4.0", result.ComplianceStandard)
+	assert.Equal(t, "EC2.18", result.SecurityControlID)
+	assert.Equal(t, "us-west-2", result.Region)
+	require.NotNil(t, result.ResourceTags)
+	assert.Equal(t, "prod", result.ResourceTags["atmos:stack"])
+	assert.Equal(t, "web", result.ResourceTags["atmos:component"])
+}
+
+func TestNormalizeSecurityHubFinding_NoSeverity(t *testing.T) {
+	// When severity is nil, should default to empty severity.
+	finding := &shtypes.AwsSecurityFinding{
+		Id:          aws.String("no-sev"),
+		Title:       aws.String("No severity"),
+		ProductName: aws.String("Security Hub"),
+	}
+	result := normalizeSecurityHubFinding(finding)
+	assert.Equal(t, Severity(""), result.Severity)
+}
+
+func TestNormalizeSecurityHubFinding_NoResources(t *testing.T) {
+	// When no resources are present, resource fields should be empty.
+	finding := &shtypes.AwsSecurityFinding{
+		Id:          aws.String("no-res"),
+		Title:       aws.String("No resources"),
+		ProductName: aws.String("Config"),
+		Severity:    &shtypes.Severity{Label: shtypes.SeverityLabelLow},
+	}
+	result := normalizeSecurityHubFinding(finding)
+	assert.Empty(t, result.ResourceARN)
+	assert.Empty(t, result.ResourceType)
+	assert.Empty(t, result.Region)
+	assert.Nil(t, result.ResourceTags)
+}
+
 func TestBuildComplianceReport(t *testing.T) {
 	findings := []Finding{
 		{

@@ -60,9 +60,13 @@ var complianceReportCmd = &cobra.Command{
 		controlFilter := parseControlFilter(controlsStr)
 
 		// Initialize configuration with global flags (--base-path, --config, etc.).
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		globalFlags := flags.ParseGlobalFlags(cmd, v)
-		configAndStacksInfo.BasePath = globalFlags.BasePath
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			BasePath:                globalFlags.BasePath,
+			AtmosConfigFilesFromArg: globalFlags.Config,
+			AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+			ProfilesFromArg:         globalFlags.Profile,
+		}
 		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
 			return err

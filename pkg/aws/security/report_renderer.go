@@ -219,6 +219,9 @@ func reportTarget(stack, component string) string {
 	if stack != "" && component != "" {
 		return fmt.Sprintf("%s / %s", stack, component)
 	}
+	if component != "" {
+		return fmt.Sprintf("All Stacks / %s", component)
+	}
 	if stack != "" {
 		return stack
 	}
@@ -382,6 +385,14 @@ func renderGroupedFindingMarkdown(sb *strings.Builder, findings []Finding, num i
 
 	// Show resource tags for each finding that has them.
 	renderGroupedTags(sb, findings)
+
+	// Render remediation from the first finding that has one (shared across the group).
+	for i := range findings {
+		if findings[i].Remediation != nil {
+			renderRemediationMarkdown(sb, findings[i].Remediation)
+			break
+		}
+	}
 
 	sb.WriteString("---\n\n")
 }

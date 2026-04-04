@@ -576,6 +576,53 @@ func TestSecuritySettingsRegionField_Empty(t *testing.T) {
 	assert.Empty(t, settings.Region)
 }
 
+func TestResolveAuthContext_NilConfig(t *testing.T) {
+	// When atmosConfig is nil and identityName is provided, should return an error.
+	_, err := resolveAuthContext(nil, "some-identity")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrAWSCredentialsNotValid),
+		"expected ErrAWSCredentialsNotValid, got: %v", err)
+}
+
+func TestResolveAuthContext_EmptyIdentityWithNilConfig(t *testing.T) {
+	// When identityName is empty, should return nil regardless of config.
+	authCtx, err := resolveAuthContext(nil, "")
+	require.NoError(t, err)
+	assert.Nil(t, authCtx)
+}
+
+func TestResolveAuthContext_EmptyProfileError(t *testing.T) {
+	// When auth resolves but AWS_PROFILE is empty, should error.
+	// Since resolveIdentityEnvVars creates a real auth manager, we test the scenario
+	// where a non-existent identity is requested from an empty auth config.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{},
+	}
+	_, err := resolveAuthContext(atmosConfig, "nonexistent-identity")
+	require.Error(t, err)
+	// Should wrap ErrAWSCredentialsNotValid.
+	assert.True(t, errors.Is(err, errUtils.ErrAWSCredentialsNotValid),
+		"expected ErrAWSCredentialsNotValid, got: %v", err)
+}
+
+func TestBuildSecurityReport_TagMappingPreserved(t *testing.T) {
+	// Verify that the tag mapping is included in the report when provided.
+	tagMapping := &security.AWSSecurityTagMapping{
+		StackTag:     "custom:stack",
+		ComponentTag: "custom:component",
+	}
+	report := buildSecurityReport(nil, "prod", "vpc", tagMapping)
+	require.NotNil(t, report.TagMapping)
+	assert.Equal(t, "custom:stack", report.TagMapping.StackTag)
+	assert.Equal(t, "custom:component", report.TagMapping.ComponentTag)
+}
+
+func TestBuildSecurityReport_TagMappingNilWhenNotProvided(t *testing.T) {
+	// Verify that tag mapping is nil when not provided.
+	report := buildSecurityReport(nil, "prod", "vpc", nil)
+	assert.Nil(t, report.TagMapping)
+}
+
 func TestFilterByStackAndComponent(t *testing.T) {
 	findings := []security.Finding{
 		{ID: "f1", Mapping: &security.ComponentMapping{Stack: "plat-use2-prod", Component: "vpc", Mapped: true}},

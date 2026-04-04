@@ -16,16 +16,16 @@ import (
 // resolveAuthContext resolves an Atmos Auth identity to an AWSAuthContext.
 // If identityName is empty, returns nil (use default AWS credential chain).
 func resolveAuthContext(atmosConfig *schema.AtmosConfiguration, identityName string) (*schema.AWSAuthContext, error) {
+	if identityName == "" {
+		return nil, nil
+	}
+
 	if atmosConfig == nil {
 		return nil, errUtils.Build(errUtils.ErrAWSCredentialsNotValid).
 			WithExplanation("Atmos configuration is not loaded").
 			WithHint("Ensure atmos.yaml is present and valid").
 			WithExitCode(1).
 			Err()
-	}
-
-	if identityName == "" {
-		return nil, nil
 	}
 
 	log.Debug("Resolving Atmos Auth identity for AWS security", "identity", identityName)

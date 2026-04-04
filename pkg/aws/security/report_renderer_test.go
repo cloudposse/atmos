@@ -747,3 +747,354 @@ func TestRenderCSV_WithRemediation(t *testing.T) {
 	assert.Equal(t, "atmos terraform apply vpc -s prod", records[1][11])
 	assert.Equal(t, "medium", records[1][12])
 }
+
+func TestReportTarget_ComponentOnly(t *testing.T) {
+	// When only component is set (no stack), should show "All Stacks / component".
+	result := reportTarget("", "vpc")
+	assert.Equal(t, "All Stacks / vpc", result)
+}
+
+func TestRenderGroupedFindingMarkdown_WithRemediation(t *testing.T) {
+	// Verify grouped finding rendering includes remediation from the first finding that has one.
+	findings := []Finding{
+		{
+			ID:          "g1",
+			Title:       "S3 bucket public access",
+			Description: "Multiple S3 buckets have public access.",
+			Severity:    SeverityCritical,
+			Source:      SourceSecurityHub,
+			ResourceARN: "arn:aws:s3:::bucket-one",
+			AccountID:   "111111111111",
+			Mapping: &ComponentMapping{
+				Stack:      "prod-ue1",
+				Component:  "s3-bucket",
+				Mapped:     true,
+				Confidence: ConfidenceExact,
+				Method:     "tag",
+			},
+			Remediation: nil, // First finding has no remediation.
+		},
+		{
+			ID:          "g2",
+			Title:       "S3 bucket public access",
+			Severity:    SeverityCritical,
+			Source:      SourceSecurityHub,
+			ResourceARN: "arn:aws:s3:::bucket-two",
+			AccountID:   "222222222222",
+			Mapping:     nil, // Unmapped.
+			Remediation: &Remediation{
+				RootCause:     "Block public access not configured.",
+				DeployCommand: "atmos terraform apply s3-bucket -s prod-ue1",
+				RiskLevel:     "low",
+			},
+		},
+	}
+
+	report := &Report{
+		GeneratedAt:   fixedTime,
+		TotalFindings: 2,
+		SeverityCounts: map[Severity]int{
+			SeverityCritical: 2,
+		},
+		MappedCount:   1,
+		UnmappedCount: 1,
+		Findings:      findings,
+		GroupFindings: true,
+	}
+
+	renderer := NewReportRenderer(FormatMarkdown)
+	var buf bytes.Buffer
+	err := renderer.RenderSecurityReport(&buf, report)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Verify grouped header with occurrence count.
+	assert.Contains(t, output, "(2 occurrences)")
+
+	// Verify the resource table is present.
+	assert.Contains(t, output, "| Resource | Account | Component | Stack | Mapped By | Confidence |")
+	assert.Contains(t, output, "111111111111")
+	assert.Contains(t, output, "222222222222")
+
+	// Verify the unmapped row shows *unmapped*.
+	assert.Contains(t, output, "*unmapped*")
+
+	// Verify remediation from the second finding is rendered.
+	assert.Contains(t, output, "**Root Cause:** Block public access not configured.")
+	assert.Contains(t, output, "**Deploy:** `atmos terraform apply s3-bucket -s prod-ue1`")
+	assert.Contains(t, output, "**Risk:** low")
+}
+
+func TestRenderGroupedFindingMarkdown_WithResourceTags(t *testing.T) {
+	// Verify grouped findings render resource tags in a collapsible section.
+	findings := []Finding{
+		{
+			ID:          "t1",
+			Title:       "Security group issue",
+			Severity:    SeverityHigh,
+			Source:      SourceConfig,
+			ResourceARN: "arn:aws:ec2:us-east-1:123:security-group/sg-aaa",
+			AccountID:   "123",
+			ResourceTags: map[string]string{
+				"Name":        "prod-vpc-sg",
+				"Environment": "production",
+			},
+		},
+		{
+			ID:          "t2",
+			Title:       "Security group issue",
+			Severity:    SeverityHigh,
+			Source:      SourceConfig,
+			ResourceARN: "arn:aws:ec2:us-east-1:456:security-group/sg-bbb",
+			AccountID:   "456",
+			// No tags on this one.
+		},
+	}
+
+	report := &Report{
+		GeneratedAt:    fixedTime,
+		TotalFindings:  2,
+		SeverityCounts: map[Severity]int{SeverityHigh: 2},
+		Findings:       findings,
+		GroupFindings:  true,
+	}
+
+	renderer := NewReportRenderer(FormatMarkdown)
+	var buf bytes.Buffer
+	err := renderer.RenderSecurityReport(&buf, report)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Should show the tags section with 1 resource having tags.
+	assert.Contains(t, output, "Resource Tags (1 resources with tags)")
+	assert.Contains(t, output, "`Environment` = `production`")
+	// The Name tag should be used as the label.
+	assert.Contains(t, output, "**prod-vpc-sg:**")
+}
+
+func TestRenderSecurityReport_InformationalSeverityInSummary(t *testing.T) {
+	// Verify INFORMATIONAL severity appears in the summary table and counts string.
+	report := &Report{
+		GeneratedAt:   fixedTime,
+		TotalFindings: 2,
+		SeverityCounts: map[Severity]int{
+			SeverityHigh:          1,
+			SeverityInformational: 1,
+		},
+		MappedCount:   2,
+		UnmappedCount: 0,
+		Findings: []Finding{
+			{
+				ID:       "i1",
+				Title:    "High severity finding",
+				Severity: SeverityHigh,
+				Source:   SourceSecurityHub,
+				Mapping:  &ComponentMapping{Mapped: true, Stack: "prod", Component: "vpc"},
+			},
+			{
+				ID:       "i2",
+				Title:    "Info finding",
+				Severity: SeverityInformational,
+				Source:   SourceConfig,
+				Mapping:  &ComponentMapping{Mapped: true, Stack: "prod", Component: "s3"},
+			},
+		},
+	}
+
+	renderer := NewReportRenderer(FormatMarkdown)
+	var buf bytes.Buffer
+	err := renderer.RenderSecurityReport(&buf, report)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Verify INFORMATIONAL appears in findings header.
+	assert.Contains(t, output, "## INFORMATIONAL Findings (1)")
+	// Verify INFORMATIONAL row in summary table.
+	assert.Contains(t, output, "| INFORMATIONAL | 1 | 1 | 0 |")
+	// Verify severity counts string includes INFORMATIONAL.
+	assert.Contains(t, output, "1 INFORMATIONAL")
+}
+
+func TestRenderSecurityReport_TagMappingHintInUnmappedNote(t *testing.T) {
+	// When TagMapping is set, the unmapped note should reference the specific tag keys.
+	report := &Report{
+		GeneratedAt:   fixedTime,
+		TotalFindings: 1,
+		SeverityCounts: map[Severity]int{
+			SeverityMedium: 1,
+		},
+		MappedCount:   0,
+		UnmappedCount: 1,
+		Findings: []Finding{
+			{
+				ID:       "u1",
+				Title:    "Unmapped finding",
+				Severity: SeverityMedium,
+				Source:   SourceGuardDuty,
+				Mapping:  nil,
+			},
+		},
+		TagMapping: &AWSSecurityTagMapping{
+			StackTag:     "mycompany:stack",
+			ComponentTag: "mycompany:component",
+		},
+	}
+
+	renderer := NewReportRenderer(FormatMarkdown)
+	var buf bytes.Buffer
+	err := renderer.RenderSecurityReport(&buf, report)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Verify the tag mapping hint uses the configured tag names.
+	assert.Contains(t, output, "`mycompany:stack` and `mycompany:component` tags")
+}
+
+func TestRenderComplianceReport_CSV_EmptyFailingDetails(t *testing.T) {
+	// CSV compliance renderer with no failing controls should produce header only.
+	report := &ComplianceReport{
+		GeneratedAt:     fixedTime,
+		Framework:       "cis-1.4",
+		FrameworkTitle:  "CIS",
+		TotalControls:   10,
+		PassingControls: 10,
+		FailingControls: 0,
+		FailingDetails:  []ComplianceControl{},
+	}
+
+	renderer := NewReportRenderer(FormatCSV)
+	var buf bytes.Buffer
+	err := renderer.RenderComplianceReport(&buf, report)
+	require.NoError(t, err)
+
+	reader := csv.NewReader(strings.NewReader(buf.String()))
+	records, err := reader.ReadAll()
+	require.NoError(t, err)
+
+	// Should have header row only.
+	require.Len(t, records, 1)
+	assert.Equal(t, "control_id", records[0][0])
+}
+
+func TestRenderComplianceReport_MarkdownNoStack(t *testing.T) {
+	// When stack is empty, the **Stack:** line should not appear.
+	report := &ComplianceReport{
+		GeneratedAt:     fixedTime,
+		Framework:       "pci-dss",
+		FrameworkTitle:  "PCI DSS",
+		TotalControls:   20,
+		PassingControls: 20,
+		FailingControls: 0,
+		ScorePercent:    100.0,
+		FailingDetails:  []ComplianceControl{},
+	}
+
+	renderer := NewReportRenderer(FormatMarkdown)
+	var buf bytes.Buffer
+	err := renderer.RenderComplianceReport(&buf, report)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	assert.NotContains(t, output, "**Stack:**")
+	assert.Contains(t, output, "**Framework:** PCI DSS")
+}
+
+func TestSeverityCountsString_Empty(t *testing.T) {
+	// Empty counts should produce an empty string.
+	result := severityCountsString(map[Severity]int{})
+	assert.Equal(t, "", result)
+}
+
+func TestSeverityCountsString_AllSeverities(t *testing.T) {
+	// Verify ordering: CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL.
+	counts := map[Severity]int{
+		SeverityInformational: 5,
+		SeverityCritical:      1,
+		SeverityHigh:          2,
+		SeverityMedium:        3,
+		SeverityLow:           4,
+	}
+	result := severityCountsString(counts)
+	// Verify all are present.
+	assert.Contains(t, result, "1 CRITICAL")
+	assert.Contains(t, result, "2 HIGH")
+	assert.Contains(t, result, "3 MEDIUM")
+	assert.Contains(t, result, "4 LOW")
+	assert.Contains(t, result, "5 INFORMATIONAL")
+
+	// Verify ordering by checking index positions.
+	critIdx := strings.Index(result, "CRITICAL")
+	highIdx := strings.Index(result, "HIGH")
+	medIdx := strings.Index(result, "MEDIUM")
+	lowIdx := strings.Index(result, "LOW")
+	infoIdx := strings.Index(result, "INFORMATIONAL")
+	assert.Less(t, critIdx, highIdx, "CRITICAL should come before HIGH")
+	assert.Less(t, highIdx, medIdx, "HIGH should come before MEDIUM")
+	assert.Less(t, medIdx, lowIdx, "MEDIUM should come before LOW")
+	assert.Less(t, lowIdx, infoIdx, "LOW should come before INFORMATIONAL")
+}
+
+func TestRenderFindingMarkdown_WithResourceTags(t *testing.T) {
+	// Verify that resource tags are rendered when present on a single finding.
+	report := &Report{
+		GeneratedAt:    fixedTime,
+		TotalFindings:  1,
+		SeverityCounts: map[Severity]int{SeverityLow: 1},
+		Findings: []Finding{
+			{
+				ID:          "tag-001",
+				Title:       "Tagged finding",
+				Severity:    SeverityLow,
+				Source:      SourceConfig,
+				ResourceARN: "arn:aws:ec2:us-east-1:123:instance/i-tagged",
+				ResourceTags: map[string]string{
+					"Team":    "platform",
+					"Service": "api",
+				},
+			},
+		},
+	}
+
+	renderer := NewReportRenderer(FormatMarkdown)
+	var buf bytes.Buffer
+	err := renderer.RenderSecurityReport(&buf, report)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	assert.Contains(t, output, "**Resource Tags:**")
+	assert.Contains(t, output, "`Team` = `platform`")
+	assert.Contains(t, output, "`Service` = `api`")
+}
+
+func TestRenderFindingMarkdown_WithAccountID(t *testing.T) {
+	// Verify that AccountID is rendered in the finding details.
+	report := &Report{
+		GeneratedAt:    fixedTime,
+		TotalFindings:  1,
+		SeverityCounts: map[Severity]int{SeverityMedium: 1},
+		Findings: []Finding{
+			{
+				ID:          "acct-001",
+				Title:       "Finding with account",
+				Severity:    SeverityMedium,
+				Source:      SourceSecurityHub,
+				ResourceARN: "arn:aws:s3:::test",
+				AccountID:   "123456789012",
+			},
+		},
+	}
+
+	renderer := NewReportRenderer(FormatMarkdown)
+	var buf bytes.Buffer
+	err := renderer.RenderSecurityReport(&buf, report)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "| **Account** | 123456789012 |")
+}

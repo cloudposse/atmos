@@ -724,23 +724,29 @@ func TestMapByTags_FindingEmbeddedTags(t *testing.T) {
 	assert.Equal(t, "finding-tag", mapping.Method)
 }
 
-func TestMapByTags_FindingTagsFallbackToAPI(t *testing.T) {
-	// When finding has no ResourceTags, fall back to API.
+func TestMapByTags_FindingTagsFallbackToHeuristics(t *testing.T) {
+	// When finding has no ResourceTags and no Tagging API, falls through to heuristics.
 	finding := &Finding{
 		ID:           "no-tag-001",
 		ResourceARN:  "arn:aws:s3:::my-bucket",
+		ResourceType: "AwsS3Bucket",
 		ResourceTags: nil, // No embedded tags.
 	}
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	mapper := NewComponentMapper(atmosConfig, nil)
 
-	// Without mock API, this falls through to heuristics.
 	mapping, err := mapper.MapFinding(context.Background(), finding)
 	require.NoError(t, err)
 	require.NotNil(t, mapping)
-	// Should use naming convention or resource type, not tag.
+	// Without tags, should fall through to a heuristic method.
 	assert.NotEqual(t, "finding-tag", mapping.Method)
+	assert.NotEqual(t, "tag-api", mapping.Method)
+	// The resource-type mapper should produce a component name from AwsS3Bucket.
+	if mapping.Mapped {
+		assert.NotEmpty(t, mapping.Component)
+		assert.Equal(t, ConfidenceLow, mapping.Confidence)
+	}
 }
 
 func TestMapByContextTags(t *testing.T) {
@@ -987,6 +993,206 @@ func TestGroupByTitle_NoDuplicates(t *testing.T) {
 		gotTitles = append(gotTitles, group[0].Title)
 	}
 	assert.ElementsMatch(t, []string{"A", "B", "C"}, gotTitles)
+}
+
+func TestMapByAccountID_EmptyAccountID(t *testing.T) {
+	// When the resource ARN has "AWS::::Account:" but the extracted ID is empty.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+		accountMap:  map[string]string{"123": "prod"},
+	}
+	finding := &Finding{
+		ResourceARN: "AWS::::Account:",
+	}
+	mapping := m.mapByAccountID(finding)
+	assert.Nil(t, mapping, "empty account ID should return nil")
+}
+
+func TestMapByAccountID_FallbackToFindingAccountID(t *testing.T) {
+	// When the ARN account ID doesn't match but finding.AccountID does.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+		accountMap:  map[string]string{"999": "special-account"},
+	}
+	finding := &Finding{
+		ResourceARN: "AWS::::Account:888", // 888 not in map.
+		AccountID:   "999",                // 999 is in map.
+	}
+	mapping := m.mapByAccountID(finding)
+	require.NotNil(t, mapping)
+	assert.True(t, mapping.Mapped)
+	assert.Equal(t, "special-account", mapping.Stack)
+	assert.Equal(t, "account", mapping.Component)
+	assert.Equal(t, "account-map", mapping.Method)
+}
+
+func TestMapByAccountID_NilAccountMap(t *testing.T) {
+	// When accountMap is nil, should return unmapped for account-level findings.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+		accountMap:  nil,
+	}
+	finding := &Finding{
+		ResourceARN: "AWS::::Account:123456",
+		AccountID:   "123456",
+	}
+	mapping := m.mapByAccountID(finding)
+	require.NotNil(t, mapping)
+	assert.False(t, mapping.Mapped)
+	assert.Equal(t, "123456", mapping.Stack)
+	assert.Equal(t, "account-level", mapping.Method)
+}
+
+func TestMapByECRRepo_EmptyComponent(t *testing.T) {
+	// When the repo path ends with /, the component would be empty.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+	}
+	finding := &Finding{
+		ResourceARN: "arn:aws:ecr:us-east-1:123:repository/",
+	}
+	mapping := m.mapByECRRepo(finding)
+	assert.Nil(t, mapping, "empty component from ECR path should return nil")
+}
+
+func TestMapByNamingConvention_EmptyARN(t *testing.T) {
+	// Empty ARN should return nil.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+	}
+	finding := &Finding{ResourceARN: ""}
+	mapping := m.mapByNamingConvention(finding)
+	assert.Nil(t, mapping)
+}
+
+func TestMapByResourceType_WithAccountMap(t *testing.T) {
+	// Resource type mapping should resolve stack from account map.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+		accountMap:  map[string]string{"111222333444": "plat-prod"},
+	}
+	finding := &Finding{
+		ResourceType: "AwsEc2Vpc",
+		AccountID:    "111222333444",
+	}
+	mapping := m.mapByResourceType(finding)
+	require.NotNil(t, mapping)
+	assert.True(t, mapping.Mapped)
+	assert.Equal(t, "vpc", mapping.Component)
+	assert.Equal(t, "plat-prod", mapping.Stack)
+	assert.Equal(t, "resource-type", mapping.Method)
+}
+
+func TestMapByResourceType_NoAccountMap(t *testing.T) {
+	// When accountMap is nil, stack should be empty.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+		accountMap:  nil,
+	}
+	finding := &Finding{
+		ResourceType: "AwsS3Bucket",
+		AccountID:    "123",
+	}
+	mapping := m.mapByResourceType(finding)
+	require.NotNil(t, mapping)
+	assert.True(t, mapping.Mapped)
+	assert.Equal(t, "s3-bucket", mapping.Component)
+	assert.Empty(t, mapping.Stack)
+}
+
+func TestMapByContextTags_EmptyComponentAfterPrefix(t *testing.T) {
+	// When the name exactly equals the prefix (no remaining component), should return nil.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+	}
+	finding := &Finding{
+		ResourceTags: map[string]string{
+			"Name":        "plat-use2-prod-",
+			"Tenant":      "plat",
+			"Environment": "use2",
+			"Stage":       "prod",
+		},
+	}
+	// The prefix would be "plat-use2-prod-", and stripping it leaves empty string.
+	mapping := m.mapByContextTags(finding)
+	assert.Nil(t, mapping, "empty component after prefix strip should return nil")
+}
+
+func TestMapByContextTags_MissingStage(t *testing.T) {
+	// Without Stage, should return nil.
+	m := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+	}
+	finding := &Finding{
+		ResourceTags: map[string]string{
+			"Name":   "something",
+			"Tenant": "plat",
+		},
+	}
+	mapping := m.mapByContextTags(finding)
+	assert.Nil(t, mapping)
+}
+
+func TestMapByTags_EmptyARN(t *testing.T) {
+	// Empty ARN should return nil without error.
+	mapper := &dualPathMapper{
+		atmosConfig: &schema.AtmosConfiguration{},
+		tagMapping:  schema.DefaultAWSSecurityTagMapping(),
+		clients:     newAWSClientCache(),
+		tagCache:    map[string]*tagLookupResult{},
+	}
+	finding := &Finding{ResourceARN: ""}
+	mapping, err := mapper.mapByTags(context.Background(), finding)
+	require.NoError(t, err)
+	assert.Nil(t, mapping)
+}
+
+func TestMatchTags_BothEmpty(t *testing.T) {
+	// When tags are present but neither stack nor component tag exists.
+	mapper := &dualPathMapper{
+		tagMapping: schema.AWSSecurityTagMapping{
+			StackTag:     "atmos:stack",
+			ComponentTag: "atmos:component",
+		},
+	}
+	result := mapper.matchTags(map[string]string{"Name": "test", "Env": "prod"}, "test-method")
+	assert.Nil(t, result, "should return nil when neither stack nor component tag found")
+}
+
+func TestMatchTags_StackOnlyNoComponent(t *testing.T) {
+	// When only stack tag is present, Mapped should be false (component is empty).
+	mapper := &dualPathMapper{
+		tagMapping: schema.AWSSecurityTagMapping{
+			StackTag:     "atmos:stack",
+			ComponentTag: "atmos:component",
+		},
+	}
+	result := mapper.matchTags(map[string]string{"atmos:stack": "prod-ue1"}, "test-method")
+	require.NotNil(t, result)
+	assert.False(t, result.Mapped, "mapped should be false when component is empty")
+	assert.Equal(t, "prod-ue1", result.Stack)
+	assert.Empty(t, result.Component)
+}
+
+func TestExtractResourceName_ColonSeparated(t *testing.T) {
+	// Resource name extracted from colon-separated ARN (no slash).
+	name := extractResourceName("arn:aws:iam::123456789012:user:my-user")
+	assert.Equal(t, "my-user", name)
+}
+
+func TestExtractResourceName_ShortARN(t *testing.T) {
+	// ARN with too few segments should return empty.
+	name := extractResourceName("arn:aws:s3")
+	assert.Equal(t, "", name)
 }
 
 func TestTruncateMiddle(t *testing.T) {

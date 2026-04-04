@@ -71,9 +71,13 @@ var securityAnalyzeCmd = &cobra.Command{
 		frameworkStr := v.GetString("framework")
 
 		// Initialize configuration with global flags (--base-path, --config, etc.).
-		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		globalFlags := flags.ParseGlobalFlags(cmd, v)
-		configAndStacksInfo.BasePath = globalFlags.BasePath
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			BasePath:                globalFlags.BasePath,
+			AtmosConfigFilesFromArg: globalFlags.Config,
+			AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+			ProfilesFromArg:         globalFlags.Profile,
+		}
 		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
 			return err
@@ -232,7 +236,7 @@ var securityAnalyzeCmd = &cobra.Command{
 
 			analyzer, analyzerErr := security.NewFindingAnalyzer(ctx, &atmosConfig, toolReg, toolExec)
 			if analyzerErr != nil {
-				log.Debug("AI analyzer creation failed, skipping AI analysis", "error", analyzerErr)
+				ui.Warningf("AI analysis unavailable: %s (continuing without AI)", analyzerErr)
 			} else {
 				findings, err = analyzer.AnalyzeFindings(ctx, findings)
 				if err != nil {
