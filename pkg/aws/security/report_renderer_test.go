@@ -549,6 +549,7 @@ func TestReportTarget(t *testing.T) {
 	}{
 		{name: "both_set", stack: "prod", component: "vpc", expected: "prod / vpc"},
 		{name: "stack_only", stack: "prod", component: "", expected: "prod"},
+		{name: "component_only", stack: "", component: "vpc", expected: "All Stacks / vpc"},
 		{name: "neither_set", stack: "", component: "", expected: "All Stacks"},
 	}
 
