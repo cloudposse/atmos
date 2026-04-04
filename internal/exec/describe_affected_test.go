@@ -1700,7 +1700,7 @@ func TestResolveBaseFromCI(t *testing.T) {
 		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 		t.Setenv("GITHUB_BASE_REF", "main")
 
-		eventPayload := `{"action": "synchronize"}`
+		eventPayload := `{"action":"synchronize","pull_request":{"base":{"ref":"main","sha":"abc123def456789012345678901234567890abcd"}}}`
 		eventPath := filepath.Join(t.TempDir(), "event.json")
 		err := os.WriteFile(eventPath, []byte(eventPayload), 0o644)
 		require.NoError(t, err)
@@ -1710,8 +1710,8 @@ func TestResolveBaseFromCI(t *testing.T) {
 			CLIConfig: &schema.AtmosConfiguration{},
 		}
 		resolveBaseFromCI(describe)
-		assert.Equal(t, "refs/remotes/origin/main", describe.Ref)
-		assert.Empty(t, describe.SHA)
+		assert.Empty(t, describe.Ref)
+		assert.Equal(t, "abc123def456789012345678901234567890abcd", describe.SHA)
 	})
 
 	t.Run("GitHub Actions push event with before SHA", func(t *testing.T) {

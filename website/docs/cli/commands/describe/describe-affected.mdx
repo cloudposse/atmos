@@ -32,7 +32,7 @@ The deprecated `--ref` and `--sha` flags are still supported for backward compat
 
 :::tip Zero-Config CI
 When `ci.enabled` is `true` in `atmos.yaml`, the base commit is automatically resolved from the CI environment:
-- **Pull requests**: Compares against the PR target branch (`GITHUB_BASE_REF`)
+- **Pull requests**: Prefers the PR base commit SHA from the GitHub event payload, then falls back to local Git refs only if needed
 - **Push events**: Compares against the previous commit
 - **Merge groups**: Compares against the merge queue base
 
@@ -97,8 +97,8 @@ resolution logic.
 
 | Event | Base Resolution |
 |-------|----------------|
-| `pull_request` (opened/synchronize) | Target branch (`GITHUB_BASE_REF`) |
-| `pull_request` (closed/merged) | PR base commit SHA from event payload |
+| `pull_request` / `pull_request_target` | PR base commit SHA from event payload (`pull_request.base.sha`), then `merge-base(HEAD, origin/<base>)`, then fallback refs |
+| `pull_request` (closed/merged, no payload SHA) | Parent of current commit (`HEAD~1`), then fallback refs |
 | `push` | Previous HEAD from event payload (`before`) |
 | `push` (force-push) | Parent of current commit (`HEAD~1`) |
 | `merge_group` | Target branch (`GITHUB_BASE_REF`) |
@@ -116,6 +116,14 @@ resolution logic.
 2. `--ref` / `--sha` flags (deprecated, backward compatible)
 3. CI auto-detection (when `ci.enabled` is `true`)
 4. `refs/remotes/origin/HEAD` (default)
+
+For GitHub Actions pull request events, CI auto-detection uses this order:
+
+1. `pull_request.base.sha` from `GITHUB_EVENT_PATH`
+2. `git merge-base HEAD origin/<base branch>` when a usable local remote-tracking ref exists
+3. `HEAD~1` for closed/merged PRs when the payload does not provide a usable base SHA
+4. `refs/remotes/origin/<base branch>` from `GITHUB_BASE_REF`
+5. `refs/remotes/origin/HEAD`
 
 ## Usage
 

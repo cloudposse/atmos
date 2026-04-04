@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var gitMergeBaseOriginal = mergeBaseResolver
+
 func TestResolveBase_PullRequest_OpenSync(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 	t.Setenv("GITHUB_BASE_REF", "main")
@@ -22,6 +24,7 @@ func TestResolveBase_PullRequest_OpenSync(t *testing.T) {
 			},
 			"base": map[string]any{
 				"ref": "main",
+				"sha": "abc123def456789012345678901234567890abcd",
 			},
 		},
 	}
@@ -33,14 +36,11 @@ func TestResolveBase_PullRequest_OpenSync(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	// merge-base may or may not succeed depending on git state in test env.
-	// Either way, we get a valid resolution.
 	assert.Equal(t, "pull_request", res.EventType)
 	assert.Equal(t, "headsha123456789012345678901234567890ab", res.HeadSHA)
-	// If merge-base failed, falls back to GITHUB_BASE_REF.
-	if res.SHA == "" {
-		assert.Equal(t, "refs/remotes/origin/main", res.Ref)
-	}
+	assert.Equal(t, "abc123def456789012345678901234567890abcd", res.SHA)
+	assert.Empty(t, res.Ref)
+	assert.Contains(t, res.Source, "event.pull_request.base.sha")
 }
 
 func TestResolveBase_PullRequest_Opened(t *testing.T) {
@@ -58,10 +58,8 @@ func TestResolveBase_PullRequest_Opened(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	// merge-base may fail (no origin/develop in test), falls back to ref.
-	if res.SHA == "" {
-		assert.Equal(t, "refs/remotes/origin/develop", res.Ref)
-	}
+	assert.Equal(t, "refs/remotes/origin/develop", res.Ref)
+	assert.Empty(t, res.SHA)
 }
 
 func TestResolveBase_PullRequest_Closed(t *testing.T) {
@@ -91,13 +89,9 @@ func TestResolveBase_PullRequest_Closed(t *testing.T) {
 	require.NotNil(t, res)
 	assert.Equal(t, "pull_request", res.EventType)
 	assert.Equal(t, "headsha123456789012345678901234567890ab", res.HeadSHA)
-	// In test env, merge-base and HEAD~1 may or may not work.
-	// Either way we get a valid resolution through the fallback chain.
-	if res.SHA != "" {
-		assert.Contains(t, res.Source, "merge-base", "HEAD~1")
-	} else {
-		assert.Equal(t, "refs/remotes/origin/main", res.Ref)
-	}
+	assert.Equal(t, "abc123def456789012345678901234567890abcd", res.SHA)
+	assert.Empty(t, res.Ref)
+	assert.Contains(t, res.Source, "event.pull_request.base.sha")
 }
 
 func TestResolveBase_PullRequestTarget(t *testing.T) {
@@ -115,10 +109,8 @@ func TestResolveBase_PullRequestTarget(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	// Falls back to GITHUB_BASE_REF in test env.
-	if res.SHA == "" {
-		assert.Equal(t, "refs/remotes/origin/main", res.Ref)
-	}
+	assert.Equal(t, "refs/remotes/origin/main", res.Ref)
+	assert.Empty(t, res.SHA)
 }
 
 func TestResolveBase_Push_Normal(t *testing.T) {
@@ -295,10 +287,7 @@ func TestResolveBase_PullRequest_Closed_FallbackToBaseRef(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	// merge-base fails (no target in payload, falls back to GITHUB_BASE_REF for target,
-	// but origin/develop doesn't exist in test env). HEAD~1 may or may not work.
 	if res.SHA != "" {
-		// HEAD~1 succeeded or merge-base succeeded.
 		assert.NotEmpty(t, res.Source)
 	} else {
 		assert.Equal(t, "refs/remotes/origin/develop", res.Ref)
@@ -470,6 +459,102 @@ func TestResolveBase_PullRequest_OpenSync_NoHeadInPayload(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.Empty(t, res.HeadSHA, "should be empty when pull_request.head.sha is missing from payload")
+}
+
+func TestResolveBase_PullRequest_UsesPayloadBaseSHAWhenMergeBaseUnavailable(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+	})
+
+	mergeBaseResolver = func(string) (string, error) {
+		return "", assert.AnError
+	}
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"head": map[string]any{"sha": "headsha123456789012345678901234567890ab"},
+			"base": map[string]any{
+				"ref": "main",
+				"sha": "abc123def456789012345678901234567890abcd",
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "abc123def456789012345678901234567890abcd", res.SHA)
+	assert.Contains(t, res.Source, "event.pull_request.base.sha")
+	assert.Contains(t, res.Source, "merge-base unavailable")
+}
+
+func TestResolveBase_PullRequest_UsesMergeBaseWhenPayloadSHAMissing(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+	})
+
+	mergeBaseResolver = func(string) (string, error) {
+		return "feedfacefeedfacefeedfacefeedfacefeedface", nil
+	}
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"base": map[string]any{"ref": "main"},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "feedfacefeedfacefeedfacefeedfacefeedface", res.SHA)
+	assert.Equal(t, "merge-base(HEAD, origin/main)", res.Source)
+}
+
+func TestResolveBase_PullRequest_Closed_UsesParentWhenPayloadAndMergeBaseMissing(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+		parentCommitResolver = resolveParentCommit
+	})
+
+	mergeBaseResolver = func(string) (string, error) {
+		return "", assert.AnError
+	}
+	parentCommitResolver = func() (string, error) {
+		return "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", nil
+	}
+
+	eventPayload := map[string]any{
+		"action": "closed",
+		"pull_request": map[string]any{
+			"base": map[string]any{"ref": "main"},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", res.SHA)
+	assert.Equal(t, "HEAD~1 (merged PR, merge-base unavailable)", res.Source)
 }
 
 // writeEventPayload writes a JSON event payload to a temp file and returns the path.

@@ -23,6 +23,8 @@ const (
 	sourceDefault = "default"
 	// SourceGitHubBaseRef is the source label when resolving from GITHUB_BASE_REF.
 	sourceGitHubBaseRef = "GITHUB_BASE_REF"
+	// SourcePRBaseSHA is the source label when resolving from the PR event payload.
+	sourcePRBaseSHA = "event.pull_request.base.sha"
 )
 
 // ErrEventPathNotSet is returned when $GITHUB_EVENT_PATH is not set.
@@ -30,6 +32,11 @@ var ErrEventPathNotSet = fmt.Errorf("GITHUB_EVENT_PATH is not set")
 
 // ErrNoParentCommit is returned when HEAD has no parents (initial commit).
 var ErrNoParentCommit = fmt.Errorf("HEAD has no parents (initial commit)")
+
+var (
+	mergeBaseResolver    = git.MergeBase
+	parentCommitResolver = resolveParentCommit
+)
 
 // ResolveBase returns the base commit for affected detection in GitHub Actions.
 // It reads GitHub Actions environment variables and event payloads to determine
@@ -56,7 +63,7 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 }
 
 // resolvePRBase resolves the base commit for pull request events.
-// Uses a fallback chain: merge-base → HEAD~1 (closed PRs) → GITHUB_BASE_REF.
+// Uses a fallback chain: PR payload base SHA → merge-base → HEAD~1 (closed PRs) → GITHUB_BASE_REF.
 // Also extracts the PR head SHA for Atmos Pro upload correlation.
 func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	payload, err := readEventPayload()
@@ -65,13 +72,21 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	}
 
 	headSHA := extractPRHeadSHA(payload)
+	baseSHA := extractPRBaseSHA(payload)
 	targetBranch := extractTargetBranch(payload)
 	action, _ := payload["action"].(string)
 
-	// Try merge-base first — the gold standard. Works regardless of what's
-	// checked out, merge strategy, or number of commits on the PR.
+	var mergeBaseErr error
 	if targetBranch != "" {
-		if sha, mbErr := git.MergeBase(targetBranch); mbErr == nil {
+		if sha, mbErr := mergeBaseResolver(targetBranch); mbErr == nil {
+			if baseSHA != "" {
+				return &provider.BaseResolution{
+					SHA:       baseSHA,
+					HeadSHA:   headSHA,
+					Source:    sourcePRBaseSHA + " (merge-base also available)",
+					EventType: eventName,
+				}, nil
+			}
 			return &provider.BaseResolution{
 				SHA:       sha,
 				HeadSHA:   headSHA,
@@ -79,14 +94,28 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 				EventType: eventName,
 			}, nil
 		} else {
+			mergeBaseErr = mbErr
 			log.Debug("merge-base failed, trying fallbacks", "target", targetBranch, "error", mbErr)
 		}
+	}
+
+	if baseSHA != "" {
+		source := sourcePRBaseSHA
+		if mergeBaseErr != nil {
+			source += " (merge-base unavailable: " + mergeBaseErr.Error() + ")"
+		}
+		return &provider.BaseResolution{
+			SHA:       baseSHA,
+			HeadSHA:   headSHA,
+			Source:    source,
+			EventType: eventName,
+		}, nil
 	}
 
 	// Fallback for closed/merged PRs: HEAD~1.
 	// Correct when the merge commit is checked out (merge/squash strategies).
 	if action == "closed" {
-		if sha, parentErr := resolveParentCommit(); parentErr == nil {
+		if sha, parentErr := parentCommitResolver(); parentErr == nil {
 			return &provider.BaseResolution{
 				SHA:       sha,
 				HeadSHA:   headSHA,
@@ -139,6 +168,22 @@ func extractPRHeadSHA(payload map[string]any) string {
 	}
 
 	sha, _ := head["sha"].(string)
+	return sha
+}
+
+// extractPRBaseSHA extracts the base commit SHA from a pull request event payload.
+func extractPRBaseSHA(payload map[string]any) string {
+	pr, _ := payload["pull_request"].(map[string]any)
+	if pr == nil {
+		return ""
+	}
+
+	base, _ := pr["base"].(map[string]any)
+	if base == nil {
+		return ""
+	}
+
+	sha, _ := base["sha"].(string)
 	return sha
 }
 
