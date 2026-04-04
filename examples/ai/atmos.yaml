@@ -149,7 +149,7 @@ ai:
     # Tools that are completely blocked
     # Docs: https://atmos.tools/cli/configuration/ai/tools#blocked-tools
     blocked_tools:
-      - execute_bash_command
+      - execute_direct_command
 
     # Skip all confirmations (DANGEROUS - only for trusted environments)
     # Docs: https://atmos.tools/cli/configuration/ai/tools#yolo-mode--dangerous

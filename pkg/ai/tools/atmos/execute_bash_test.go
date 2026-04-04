@@ -21,7 +21,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestExecuteBashCommandTool_Interface(t *testing.T) {
-	config := &schema.AtmosConfiguration{BasePath: "/tmp/atmos"}
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	tool := NewExecuteBashCommandTool(config)
 
 	assert.Equal(t, "execute_direct_command", tool.Name())
@@ -48,7 +48,7 @@ func TestExecuteBashCommandTool_Description_NoShell(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestExecuteBashCommandTool_Execute_MissingParameter(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp/atmos"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{})
 	assert.NoError(t, err)
 	assert.False(t, result.Success)
@@ -57,7 +57,7 @@ func TestExecuteBashCommandTool_Execute_MissingParameter(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_EmptyCommand(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp/atmos"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{"command": ""})
 	assert.NoError(t, err)
 	assert.False(t, result.Success)
@@ -67,7 +67,7 @@ func TestExecuteBashCommandTool_Execute_EmptyCommand(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_EmptyCommand_WhitespaceOnly ensures that a
 // whitespace-only string (which tokenizes to zero fields) is rejected.
 func TestExecuteBashCommandTool_Execute_EmptyCommand_WhitespaceOnly(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp/atmos"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{"command": "   "})
 	assert.NoError(t, err)
 	assert.False(t, result.Success)
@@ -267,7 +267,7 @@ func TestExecuteBashCommandTool_Execute_ResultData(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_InjectionViaSemicolon is the primary
 // regression test for the reported CWE-78 vulnerability.
 func TestExecuteBashCommandTool_Execute_InjectionViaSemicolon(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 
 	cases := []string{
 		"echo test; rm -rf /",
@@ -288,7 +288,7 @@ func TestExecuteBashCommandTool_Execute_InjectionViaSemicolon(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_InjectionViaLogicalAnd(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	for _, cmd := range []string{
 		"echo ok && rm -rf /",
 		"ls && cat /etc/passwd",
@@ -304,7 +304,7 @@ func TestExecuteBashCommandTool_Execute_InjectionViaLogicalAnd(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_InjectionViaLogicalOr(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	for _, cmd := range []string{
 		"false || id",
 		"echo a || cat /etc/shadow",
@@ -319,7 +319,7 @@ func TestExecuteBashCommandTool_Execute_InjectionViaLogicalOr(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_InjectionViaCommandSubstitution(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	for _, cmd := range []string{
 		"echo $(id)",
 		"echo $(cat /etc/passwd)",
@@ -340,7 +340,7 @@ func TestExecuteBashCommandTool_Execute_InjectionViaCommandSubstitution(t *testi
 // metacharacter list and would silently pass validation (then execute
 // incorrectly as direct exec can't run a pipeline).
 func TestExecuteBashCommandTool_Execute_UnquotedPipeBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
 		"command": "cat /etc/passwd | grep root",
 	})
@@ -354,7 +354,7 @@ func TestExecuteBashCommandTool_Execute_UnquotedPipeBlocked(t *testing.T) {
 // unquoted output/input redirections are rejected.  These were missing from the
 // previous metacharacter list.
 func TestExecuteBashCommandTool_Execute_UnquotedRedirectBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	for _, cmd := range []string{
 		"echo hello > /tmp/out.txt",
 		"cat < /etc/passwd",
@@ -373,7 +373,7 @@ func TestExecuteBashCommandTool_Execute_UnquotedRedirectBlocked(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_UnquotedBackgroundBlocked verifies that
 // background execution (&) is blocked.
 func TestExecuteBashCommandTool_Execute_UnquotedBackgroundBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
 		"command": "sleep 10 &",
 	})
@@ -386,7 +386,7 @@ func TestExecuteBashCommandTool_Execute_UnquotedBackgroundBlocked(t *testing.T) 
 // TestExecuteBashCommandTool_Execute_UnterminatedQuoteBlocked verifies that
 // commands with unterminated quotes are rejected (not silently mishandled).
 func TestExecuteBashCommandTool_Execute_UnterminatedQuoteBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	for _, cmd := range []string{
 		"echo 'unterminated",
 		`echo "unterminated`,
@@ -409,7 +409,7 @@ func TestExecuteBashCommandTool_Execute_UnterminatedQuoteBlocked(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_NotAllowedCommand verifies that a binary
 // not in allowedCommands is rejected with ErrAICommandNotAllowed.
 func TestExecuteBashCommandTool_Execute_NotAllowedCommand(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	for _, cmd := range []string{
 		"openssl genrsa 2048",
 		"ssh user@host",
@@ -437,7 +437,7 @@ func TestExecuteBashCommandTool_Execute_NotAllowedCommand(t *testing.T) {
 // blocked because they are not in allowedCommands (ErrAICommandNotAllowed fires
 // before the blacklist check).
 func TestExecuteBashCommandTool_Execute_BlockedCommand(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 
 	blockedCmds := []string{
 		"dd if=/dev/zero of=/dev/sda",
@@ -468,7 +468,7 @@ func TestExecuteBashCommandTool_Execute_BlockedCommand(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_RmRecursiveBlocked verifies that various
 // forms of recursive rm are rejected.
 func TestExecuteBashCommandTool_Execute_RmRecursiveBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 
 	cases := []string{
 		"rm -rf /",
@@ -767,7 +767,7 @@ func TestExecuteBashCommandTool_Execute_WorkingDirOutsideBasePathFallsBack(t *te
 // interpreter and exfiltration binaries removed from allowedCommands are
 // rejected with ErrAICommandNotAllowed.
 func TestExecuteBashCommandTool_Execute_InterpreterCommandsBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	cases := []string{
 		"python3 -c 'import os; os.system(\"id\")'",
 		"awk 'BEGIN{system(\"id\")}'",
@@ -854,7 +854,7 @@ func TestExecuteBashCommandTool_Execute_SourcePathsAllowed(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_BypassFlagsBlocked verifies that interpreter
 // bypass flags (-c, --eval, -e, --exec) are rejected for build/package tools.
 func TestExecuteBashCommandTool_Execute_BypassFlagsBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	cases := []string{
 		"npm --exec id",
 		"npm -c ls",
@@ -877,7 +877,7 @@ func TestExecuteBashCommandTool_Execute_BypassFlagsBlocked(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_GoRunStdinBlocked verifies that "go run -"
 // (stdin execution) is rejected.
 func TestExecuteBashCommandTool_Execute_GoRunStdinBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	result, err := tool.Execute(context.Background(), map[string]interface{}{
 		"command": "go run -",
 	})
@@ -923,7 +923,7 @@ func TestExecuteBashCommandTool_Execute_Timeout(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_UnquotedDollarBlocked verifies that commands
 // containing unquoted environment variable references are rejected.
 func TestExecuteBashCommandTool_Execute_UnquotedDollarBlocked(t *testing.T) {
-	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: "/tmp"})
+	tool := NewExecuteBashCommandTool(&schema.AtmosConfiguration{BasePath: t.TempDir()})
 	cases := []string{
 		"echo $HOME",
 		"grep $PATTERN file.txt",
