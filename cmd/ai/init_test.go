@@ -527,6 +527,27 @@ func TestSortedServerNames(t *testing.T) {
 	})
 }
 
+func TestIsCLIProvider(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		expected bool
+	}{
+		{"claude-code is CLI", "claude-code", true},
+		{"codex-cli is CLI", "codex-cli", true},
+		{"gemini-cli is CLI", "gemini-cli", true},
+		{"anthropic is not CLI", "anthropic", false},
+		{"openai is not CLI", "openai", false},
+		{"ollama is not CLI", "ollama", false},
+		{"empty is not CLI", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isCLIProvider(tt.provider))
+		})
+	}
+}
+
 func TestSelectManualServers(t *testing.T) {
 	servers := map[string]schema.MCPServerConfig{
 		"aws":   {Command: "aws-mcp"},

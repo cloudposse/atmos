@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -87,7 +88,10 @@ func executeMCPExport(cmd *cobra.Command, _ []string) error {
 
 // buildMCPJSONEntry creates a .mcp.json entry for a server.
 // Servers with identity are wrapped with 'atmos auth exec' for credential injection.
+// Env keys are uppercased because Viper lowercases all YAML map keys.
 func buildMCPJSONEntry(_ string, serverCfg *schema.MCPServerConfig) mcpJSONServer {
+	env := uppercaseEnvKeys(serverCfg.Env)
+
 	if serverCfg.Identity != "" {
 		// Wrap with atmos auth exec for credential injection.
 		args := []string{"auth", "exec", "-i", serverCfg.Identity, "--", serverCfg.Command}
@@ -95,7 +99,7 @@ func buildMCPJSONEntry(_ string, serverCfg *schema.MCPServerConfig) mcpJSONServe
 		return mcpJSONServer{
 			Command: "atmos",
 			Args:    args,
-			Env:     serverCfg.Env,
+			Env:     env,
 		}
 	}
 
@@ -103,6 +107,19 @@ func buildMCPJSONEntry(_ string, serverCfg *schema.MCPServerConfig) mcpJSONServe
 	return mcpJSONServer{
 		Command: serverCfg.Command,
 		Args:    serverCfg.Args,
-		Env:     serverCfg.Env,
+		Env:     env,
 	}
+}
+
+// uppercaseEnvKeys returns a copy of the env map with all keys uppercased.
+// Viper lowercases all YAML map keys, but env vars are conventionally UPPERCASE.
+func uppercaseEnvKeys(env map[string]string) map[string]string {
+	if env == nil {
+		return nil
+	}
+	result := make(map[string]string, len(env))
+	for k, v := range env {
+		result[strings.ToUpper(k)] = v
+	}
+	return result
 }

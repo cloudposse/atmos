@@ -1,167 +1,70 @@
-# Atmos AI Assistant Example Configuration
-# This demonstrates multi-provider AI configuration with sessions, tools, and custom skills.
+# Atmos AI Assistant Example
 #
-# Documentation: https://atmos.tools/ai
+# Multi-provider AI configuration with sessions and tool execution.
+# No cloud credentials required — uses mock Terraform components.
+#
+# Quick start:
+#   export ANTHROPIC_API_KEY="your-api-key"
+#   atmos ai ask "What stacks and components do we have?"
+#   atmos ai chat
 
-# Base paths
 base_path: "."
 
-# Components configuration
-# Docs: https://atmos.tools/core-concepts/components
 components:
   terraform:
     base_path: "components/terraform"
 
-# Stacks configuration
-# Docs: https://atmos.tools/core-concepts/stacks
 stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
-  # Stack naming template
-  # Docs: https://atmos.tools/core-concepts/stacks/templates
   name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
 
-# Templates configuration
-# Docs: https://atmos.tools/core-concepts/stacks/templates
 templates:
   settings:
     enabled: true
-    # Sprig functions: https://atmos.tools/core-concepts/stacks/templates/functions/sprig-functions
     sprig:
       enabled: true
-    # Gomplate functions: https://atmos.tools/core-concepts/stacks/templates/functions/gomplate-functions
     gomplate:
       enabled: true
 
-# MCP Server Configuration (disabled by default)
-# Docs: https://atmos.tools/cli/configuration/mcp
-# Enable to allow external AI clients (Claude Desktop, VS Code, Cursor) to connect.
-# mcp:
-#   enabled: true
-
-# AI Assistant Configuration
+# AI Configuration
 # Docs: https://atmos.tools/cli/configuration/ai
 ai:
-  # Enable AI features (required)
-  # Docs: https://atmos.tools/cli/configuration/ai#quick-start
   enabled: true
-
-  # Default provider for CLI commands
-  # Docs: https://atmos.tools/cli/configuration/ai/providers
   default_provider: "anthropic"
 
-  # Default skill to use
-  # Docs: https://atmos.tools/cli/configuration/ai/skills
-  # The --skill flag supports multiple skills:
-  #   atmos terraform plan vpc -s prod --ai --skill atmos-terraform,atmos-stacks
-  #   atmos terraform plan vpc -s prod --ai --skill atmos-terraform --skill atmos-stacks
-  #   ATMOS_SKILL=atmos-terraform,atmos-stacks atmos terraform plan vpc -s prod --ai
-  default_skill: "general"
-
-  # Context settings - control what information is sent to the AI
-  # Docs: https://atmos.tools/cli/configuration/ai#context-aware-ai-queries
-  send_context: false      # Don't auto-send stack configs
-  prompt_on_send: true     # Prompt before sending context
-
-  # History management - limit conversation history size
-  # Docs: https://atmos.tools/cli/configuration/ai#conversation-history-management
-  max_history_messages: 50  # Keep last 50 messages
-  max_history_tokens: 8000  # Or limit by tokens
-
-  # Timeouts for AI API calls
-  # Docs: https://atmos.tools/cli/configuration/ai#tool-execution-timeouts
-  timeout_seconds: 60
-
-  # Configure multiple AI providers
-  # Docs: https://atmos.tools/cli/configuration/ai/providers
   providers:
-    # Anthropic Claude - Best for complex reasoning
-    # Docs: https://atmos.tools/cli/configuration/ai/providers#anthropic
+    # Anthropic Claude — requires ANTHROPIC_API_KEY
     anthropic:
       model: "claude-sonnet-4-6"
       api_key: !env "ANTHROPIC_API_KEY"
       max_tokens: 4096
-      # Token caching for cost savings (Anthropic-specific)
-      # Docs: https://atmos.tools/cli/configuration/ai/providers#prompt-caching
-      cache:
-        enabled: true
-        cache_system_prompt: true
-        cache_project_instructions: true
 
-    # OpenAI GPT - Strong general capabilities
-    # Docs: https://atmos.tools/cli/configuration/ai/providers#openai
+    # OpenAI GPT — requires OPENAI_API_KEY
     openai:
       model: "gpt-5.4"
       api_key: !env "OPENAI_API_KEY"
       max_tokens: 4096
 
-    # Google Gemini - Fast with large context
-    # Docs: https://atmos.tools/cli/configuration/ai/providers#gemini
-    gemini:
-      model: "gemini-2.5-flash"
-      api_key: !env "GEMINI_API_KEY"
-      max_tokens: 8192
-
-    # Ollama - Local, private, no API costs
-    # Docs: https://atmos.tools/cli/configuration/ai/providers#ollama
+    # Ollama — local, no API key needed
     ollama:
       model: "llama4"
       base_url: "http://localhost:11434/v1"
 
-  # Session management - persist conversations across sessions
-  # Docs: https://atmos.tools/cli/configuration/ai/sessions
   sessions:
     enabled: true
     path: ".atmos/sessions"
-    max_sessions: 10
 
-    # Auto-compact for long conversations
-    # Docs: https://atmos.tools/cli/configuration/ai/sessions#auto-compact-extended-conversations
-    auto_compact:
-      enabled: true
-      trigger_threshold: 0.75    # Compact at 75% of max_history_messages
-      compact_ratio: 0.4         # Compact 40% of old messages
-      preserve_recent: 10        # Always keep last 10 messages
-      use_ai_summary: true       # Use AI for intelligent summaries
-      show_summary_markers: false
-
-  # Tool execution settings - control what the AI can do
-  # Docs: https://atmos.tools/cli/configuration/ai/tools
   tools:
     enabled: true
-    require_confirmation: true   # Prompt before tool execution
-
-    # Tools that execute without confirmation
-    # Docs: https://atmos.tools/cli/configuration/ai/tools#allowed-tools
+    require_confirmation: true
     allowed_tools:
       - atmos_describe_component
       - atmos_list_stacks
       - atmos_validate_stacks
       - read_stack_file
 
-    # Tools that always require confirmation
-    # Docs: https://atmos.tools/cli/configuration/ai/tools#restricted-tools
-    restricted_tools:
-      - edit_file
-      - execute_atmos_command
-
-    # Tools that are completely blocked
-    # Docs: https://atmos.tools/cli/configuration/ai/tools#blocked-tools
-    blocked_tools:
-      - execute_direct_command
-
-    # Skip all confirmations (DANGEROUS - only for trusted environments)
-    # Docs: https://atmos.tools/cli/configuration/ai/tools#yolo-mode--dangerous
-    yolo_mode: false
-
-  # Project instructions - persistent context across sessions via ATMOS.md
-  # Docs: https://atmos.tools/cli/configuration/ai/instructions
   instructions:
     enabled: true
     file: "ATMOS.md"
-
-# Workflows
-# Docs: https://atmos.tools/core-concepts/workflows
-workflows:
-  base_path: "workflows"
