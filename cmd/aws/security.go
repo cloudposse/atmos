@@ -68,9 +68,12 @@ var securityAnalyzeCmd = &cobra.Command{
 		region := v.GetString("region")
 		identityFlag := v.GetString("identity")
 		noGroup := v.GetBool("no-group")
+		frameworkStr := v.GetString("framework")
 
-		// Initialize configuration.
+		// Initialize configuration with global flags (--base-path, --config, etc.).
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		globalFlags := flags.ParseGlobalFlags(cmd, v)
+		configAndStacksInfo.BasePath = globalFlags.BasePath
 		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
 			return err
@@ -147,6 +150,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		opts := security.QueryOptions{
 			Severity:    severities,
 			Source:      source,
+			Framework:   frameworkStr,
 			MaxFindings: maxFindings,
 			Region:      region,
 			NoAI:        !useAI,

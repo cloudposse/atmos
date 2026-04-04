@@ -79,11 +79,11 @@ fill the same fields in the same format.
 
 ## Finding-to-Code Mapping
 
-The system uses 5 mapping strategies in priority order, stopping at the first confident match:
+The system uses 7 mapping strategies in priority order, stopping at the first confident match:
 
 | Priority | Method | Confidence | How It Works |
 |----------|--------|------------|--------------|
-| 1 | `finding-tag` | exact | `atmos_stack` + `atmos_component` tags embedded in the Security Hub finding |
+| 1 | `finding-tag` | exact | Stack + component tags (configurable, default `atmos:stack` + `atmos:component`) embedded in the Security Hub finding |
 | 2 | `tag-api` | exact | Same tags from the Resource Groups Tagging API (same-account only) |
 | 3 | `context-tags` | high | Cloud Posse context tags (`Namespace`, `Tenant`, `Environment`, `Stage`, `Name`) reconstruct naming prefix → extract component name |
 | 4 | `account-map` | low | Account-level findings → account name from `aws.security.account_map` config |
@@ -193,8 +193,8 @@ aws:
     default_severity: [CRITICAL, HIGH]
     max_findings: 500
     tag_mapping:
-      stack_tag: "atmos_stack"
-      component_tag: "atmos_component"
+      stack_tag: "atmos:stack"       # default; customize to match your tagging standard
+      component_tag: "atmos:component"
     account_map:                     # Account ID → name for account-level findings
       "123456789012": "core-security"
       "234567890123": "plat-use2-dev"

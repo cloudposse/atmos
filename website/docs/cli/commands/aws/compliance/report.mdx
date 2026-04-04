@@ -55,6 +55,9 @@ atmos aws compliance report [flags]
 
   <dt>`--identity, -i`</dt>
   <dd>Atmos Auth identity for AWS credentials (overrides `aws.security.identity` config).</dd>
+
+  <dt>`--ai`</dt>
+  <dd>Enable AI-powered analysis of the compliance report. The global `--ai` flag captures the report output and sends it to the configured AI provider for a summary with remediation guidance for each failing control.</dd>
 </dl>
 
 ## Examples
@@ -83,6 +86,18 @@ atmos aws compliance report --framework cis-aws --format json
 
 # Markdown report for documentation
 atmos aws compliance report --framework soc2 --stack prod-us-east-1 --format markdown
+```
+</Terminal>
+
+### AI-Powered Analysis
+
+<Terminal title="AI compliance analysis">
+```bash
+# Get AI remediation guidance for failing controls
+atmos aws compliance report --ai
+
+# AI analysis for a specific framework
+atmos aws compliance report --framework cis-aws --ai
 ```
 </Terminal>
 

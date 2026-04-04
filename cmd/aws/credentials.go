@@ -16,15 +16,52 @@ import (
 // resolveAuthContext resolves an Atmos Auth identity to an AWSAuthContext.
 // If identityName is empty, returns nil (use default AWS credential chain).
 func resolveAuthContext(atmosConfig *schema.AtmosConfiguration, identityName string) (*schema.AWSAuthContext, error) {
+	if atmosConfig == nil {
+		return nil, errUtils.Build(errUtils.ErrAWSCredentialsNotValid).
+			WithExplanation("Atmos configuration is not loaded").
+			WithHint("Ensure atmos.yaml is present and valid").
+			WithExitCode(1).
+			Err()
+	}
+
 	if identityName == "" {
 		return nil, nil
 	}
 
 	log.Debug("Resolving Atmos Auth identity for AWS security", "identity", identityName)
 
-	authStackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
+	envVars, err := resolveIdentityEnvVars(atmosConfig, identityName)
+	if err != nil {
+		return nil, err
 	}
+
+	authCtx := &schema.AWSAuthContext{
+		CredentialsFile: envVars["AWS_SHARED_CREDENTIALS_FILE"],
+		ConfigFile:      envVars["AWS_CONFIG_FILE"],
+		Profile:         envVars["AWS_PROFILE"],
+		Region:          envVars["AWS_REGION"],
+	}
+
+	if authCtx.Profile == "" {
+		return nil, errUtils.Build(errUtils.ErrAWSCredentialsNotValid).
+			WithExplanation(fmt.Sprintf("Identity %q resolved but AWS_PROFILE is empty", identityName)).
+			WithHint(fmt.Sprintf("Run `atmos auth login --identity %s` to authenticate", identityName)).
+			WithExitCode(1).
+			Err()
+	}
+
+	log.Debug("Resolved Atmos Auth identity",
+		"identity", identityName,
+		"profile", authCtx.Profile,
+		"region", authCtx.Region,
+	)
+
+	return authCtx, nil
+}
+
+// resolveIdentityEnvVars creates an auth manager and resolves environment variables for the given identity.
+func resolveIdentityEnvVars(atmosConfig *schema.AtmosConfiguration, identityName string) (map[string]string, error) {
+	authStackInfo := &schema.ConfigAndStacksInfo{AuthContext: &schema.AuthContext{}}
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
 	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
@@ -47,20 +84,7 @@ func resolveAuthContext(atmosConfig *schema.AtmosConfiguration, identityName str
 			Err()
 	}
 
-	authCtx := &schema.AWSAuthContext{
-		CredentialsFile: envVars["AWS_SHARED_CREDENTIALS_FILE"],
-		ConfigFile:      envVars["AWS_CONFIG_FILE"],
-		Profile:         envVars["AWS_PROFILE"],
-		Region:          envVars["AWS_REGION"],
-	}
-
-	log.Debug("Resolved Atmos Auth identity",
-		"identity", identityName,
-		"profile", authCtx.Profile,
-		"region", authCtx.Region,
-	)
-
-	return authCtx, nil
+	return envVars, nil
 }
 
 // validateAWSCredentials performs an early check that AWS credentials are available and valid.

@@ -980,9 +980,13 @@ func TestGroupByTitle_NoDuplicates(t *testing.T) {
 	}
 	groups := groupByTitle(findings)
 	require.Len(t, groups, 3)
-	assert.Len(t, groups[0], 1)
-	assert.Len(t, groups[1], 1)
-	assert.Len(t, groups[2], 1)
+
+	gotTitles := make([]string, 0, len(groups))
+	for _, group := range groups {
+		require.Len(t, group, 1)
+		gotTitles = append(gotTitles, group[0].Title)
+	}
+	assert.ElementsMatch(t, []string{"A", "B", "C"}, gotTitles)
 }
 
 func TestTruncateMiddle(t *testing.T) {

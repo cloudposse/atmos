@@ -113,7 +113,8 @@ func TestFindingsCache_GetSetFindings(t *testing.T) {
 			assert.Equal(t, tt.wantHit, hit)
 			if tt.wantHit {
 				require.NotNil(t, got)
-				assert.Len(t, got, tt.wantCount)
+				require.Len(t, got, tt.wantCount)
+				assert.Equal(t, tt.findings[0].ID, got[0].ID)
 			}
 		})
 	}
@@ -321,19 +322,33 @@ func TestBuildFindingsKey(t *testing.T) {
 				Source:      SourceSecurityHub,
 				MaxFindings: 50,
 			},
-			wantKey: "findings:us-east-1:CRITICAL,HIGH:security-hub:50",
+			wantKey: "findings:us-east-1:CRITICAL,HIGH:security-hub::::50",
 		},
 		{
 			name:    "empty options",
 			opts:    &QueryOptions{},
-			wantKey: "findings::::0",
+			wantKey: "findings:::::::0",
 		},
 		{
 			name: "severity ordering is normalized",
 			opts: &QueryOptions{
 				Severity: []Severity{SeverityLow, SeverityCritical, SeverityHigh},
 			},
-			wantKey: "findings::CRITICAL,HIGH,LOW::0",
+			wantKey: "findings::CRITICAL,HIGH,LOW:::::0",
+		},
+		{
+			name: "framework and stack in key",
+			opts: &QueryOptions{
+				Framework: "cis-aws",
+				Stack:     "prod-us-east-1",
+				Severity:  []Severity{SeverityCritical},
+			},
+			wantKey: "findings::CRITICAL::cis-aws:prod-us-east-1::0",
+		},
+		{
+			name:    "nil options",
+			opts:    nil,
+			wantKey: "findings:<nil>",
 		},
 	}
 

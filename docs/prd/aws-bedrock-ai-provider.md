@@ -22,8 +22,8 @@ For general AI provider configuration, see the [Atmos AWS Security & Compliance 
 
 | Requirement           | Bedrock Advantage                                               |
 |-----------------------|-----------------------------------------------------------------|
-| **Data residency**    | Data never leaves your AWS account or chosen region             |
-| **Compliance**        | Bedrock is SOC 2, HIPAA, PCI DSS, FedRAMP compliant            |
+| **Data residency**    | Data stays in your chosen AWS Region by default (cross-Region inference routes elsewhere if enabled) |
+| **Compliance**        | Bedrock is in scope for SOC 2, ISO 27001, HIPAA eligible, PCI DSS, FedRAMP High (GovCloud). Shared responsibility applies. |
 | **No API keys**       | Uses IAM roles via Atmos Auth — no secrets to manage            |
 | **Audit trail**       | All invocations logged in CloudTrail + optional CloudWatch Logs |
 | **Network isolation** | VPC endpoints available — no internet access required           |

@@ -20,21 +20,29 @@ func TestNewAWSClientCache(t *testing.T) {
 }
 
 func TestWithAuthContext(t *testing.T) {
-	cache := newAWSClientCache()
-	authCtx := &schema.AWSAuthContext{
-		CredentialsFile: "/tmp/creds",
-		ConfigFile:      "/tmp/config",
-		Profile:         "test-profile",
-		Region:          "us-east-2",
+	tests := []struct {
+		name    string
+		authCtx *schema.AWSAuthContext
+	}{
+		{
+			name: "non-nil auth context",
+			authCtx: &schema.AWSAuthContext{
+				CredentialsFile: "/tmp/creds",
+				ConfigFile:      "/tmp/config",
+				Profile:         "test-profile",
+				Region:          "us-east-2",
+			},
+		},
+		{name: "nil auth context", authCtx: nil},
 	}
-	cache.WithAuthContext(authCtx)
-	assert.Equal(t, authCtx, cache.authContext)
-}
 
-func TestWithAuthContext_Nil(t *testing.T) {
-	cache := newAWSClientCache()
-	cache.WithAuthContext(nil)
-	assert.Nil(t, cache.authContext)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cache := newAWSClientCache()
+			cache.WithAuthContext(tt.authCtx)
+			assert.Equal(t, tt.authCtx, cache.authContext)
+		})
+	}
 }
 
 func TestNewAWSClientCache_ClientMaps_Empty(t *testing.T) {

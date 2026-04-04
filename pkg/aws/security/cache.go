@@ -72,7 +72,10 @@ func (c *findingsCache) GetFindings(opts *QueryOptions) ([]Finding, bool) {
 	if !ok || entry.isExpired() {
 		return nil, false
 	}
-	return entry.value, true
+	// Return a copy to prevent callers from mutating cached state.
+	result := make([]Finding, len(entry.value))
+	copy(result, entry.value)
+	return result, true
 }
 
 // SetFindings stores findings in the cache for the given query options.
@@ -81,11 +84,15 @@ func (c *findingsCache) SetFindings(opts *QueryOptions, findings []Finding) {
 
 	key := buildFindingsKey(opts)
 
+	// Store a copy to prevent callers from mutating cached state.
+	stored := make([]Finding, len(findings))
+	copy(stored, findings)
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.findings[key] = &cacheEntry[[]Finding]{
-		value:     findings,
+		value:     stored,
 		expiresAt: time.Now().Add(c.ttl),
 	}
 }
@@ -133,9 +140,12 @@ func (c *findingsCache) Invalidate() {
 	c.compliance = make(map[string]*cacheEntry[*ComplianceReport])
 }
 
-// buildFindingsKey constructs a composite cache key from query options.
-// The key is derived from region, severity filter, source filter, and max_findings.
+// buildFindingsKey constructs a composite cache key from all query dimensions.
 func buildFindingsKey(opts *QueryOptions) string {
+	if opts == nil {
+		return "findings:<nil>"
+	}
+
 	// Sort severities for consistent key generation.
 	sevs := make([]string, len(opts.Severity))
 	for i, s := range opts.Severity {
@@ -143,10 +153,13 @@ func buildFindingsKey(opts *QueryOptions) string {
 	}
 	sort.Strings(sevs)
 
-	return fmt.Sprintf("findings:%s:%s:%s:%d",
+	return fmt.Sprintf("findings:%s:%s:%s:%s:%s:%s:%d",
 		opts.Region,
 		strings.Join(sevs, ","),
 		string(opts.Source),
+		opts.Framework,
+		opts.Stack,
+		opts.Component,
 		opts.MaxFindings,
 	)
 }

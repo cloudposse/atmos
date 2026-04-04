@@ -221,6 +221,9 @@ func (f *awsFindingFetcher) resolveRegion(override string) string {
 	if f.atmosConfig.AWS.Security.Region != "" {
 		return f.atmosConfig.AWS.Security.Region
 	}
+	if f.clients != nil && f.clients.authContext != nil && f.clients.authContext.Region != "" {
+		return f.clients.authContext.Region
+	}
 	return "us-east-1"
 }
 
@@ -333,9 +336,12 @@ func normalizeSecurityHubFinding(f *shtypes.AwsSecurityFinding) Finding {
 		}
 	}
 
-	// Compliance standard.
-	if f.Compliance != nil && len(f.Compliance.AssociatedStandards) > 0 {
-		finding.ComplianceStandard = aws.ToString(f.Compliance.AssociatedStandards[0].StandardsId)
+	// Compliance standard and control ID.
+	if f.Compliance != nil {
+		if len(f.Compliance.AssociatedStandards) > 0 {
+			finding.ComplianceStandard = aws.ToString(f.Compliance.AssociatedStandards[0].StandardsId)
+		}
+		finding.SecurityControlID = aws.ToString(f.Compliance.SecurityControlId)
 	}
 
 	// Timestamps (Security Hub returns ISO 8601 strings).
@@ -507,11 +513,16 @@ func buildComplianceReport(findings []Finding, framework, title, stack string, t
 		FrameworkTitle: title,
 	}
 
-	// Deduplicate by compliance control ID.
+	// Deduplicate by security control ID (e.g., "EC2.18", "IAM.4").
+	// SecurityControlID is per-control; ComplianceStandard is per-framework and
+	// would collapse multiple failing controls under the same framework.
 	controlMap := make(map[string]*ComplianceControl)
 	for i := range findings {
 		f := &findings[i]
-		controlID := f.ComplianceStandard
+		controlID := f.SecurityControlID
+		if controlID == "" {
+			controlID = f.ComplianceStandard
+		}
 		if controlID == "" {
 			controlID = f.ID
 		}

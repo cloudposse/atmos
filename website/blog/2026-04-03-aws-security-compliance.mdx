@@ -292,71 +292,60 @@ one call covers all related findings.
 ```text
 $ atmos aws compliance report
 
-ℹ Generating compliance report...
-
 # Compliance Report: CIS AWS Foundations Benchmark
 
-Date: 2026-04-03  Framework: CIS AWS Foundations Benchmark
-
-## Score: 40/42 Controls Passing (95%)
+## Score: 35/42 Controls Passing (83%)
 
 ### Failing Controls
 
-| Control                                         | Title                                                                              | Severity |
-|-------------------------------------------------|------------------------------------------------------------------------------------|----------|
-| ruleset/cis-aws-foundations-benchmark/v/1.2.0   | AWS Config should be enabled and use the service-linked role for resource recording | CRITICAL |
-| standards/aws-foundational-security-best-practices/v/1.0.0 | S3 general purpose buckets should have block public access settings enabled | MEDIUM   |
+| Control      | Title                                                                    | Severity |
+|--------------|--------------------------------------------------------------------------|----------|
+| Config.1     | AWS Config should be enabled with service-linked role                    | CRITICAL |
+| EC2.14       | Security groups should not allow ingress from 0.0.0.0/0 to port 3389     | HIGH     |
+| EC2.13       | Security groups should not allow ingress from 0.0.0.0/0 to port 22       | HIGH     |
+| S3.1         | S3 buckets should have block public access settings enabled              | MEDIUM   |
+| EC2.6        | VPC flow logging should be enabled in all VPCs                           | MEDIUM   |
+| IAM.17       | Ensure IAM password policy expires passwords within 90 days              | LOW      |
+| CloudTrail.7 | Ensure S3 bucket access logging is enabled on CloudTrail S3 bucket       | LOW      |
 ```
 
-**Compliance with `--ai`** — adds remediation guidance for each failing control:
+**Compliance with `--ai`** — adds prioritized remediation guidance:
 
 ```text
 $ atmos aws compliance report --ai
 
-✓ AI analysis complete
+✓ AI analysis complete — CIS Foundations Benchmark
 
-## ✅ AWS Compliance Report Summary
+## Overall Status: 🟡 83% Compliant (35/42 controls passing)
 
-Your infrastructure is passing 40 out of 42 controls (95%).
+## 🚨 Priority Issues (Fix First)
 
-## ⚠️ 2 Failing Controls to Address
+### CRITICAL
+| Control  | Issue                                   | Action                               |
+|----------|-----------------------------------------|--------------------------------------|
+| Config.1 | AWS Config not enabled or missing role  | Enable in all regions, attach role   |
 
-### 1. 🔴 CRITICAL — AWS Config Not Properly Configured
+### HIGH
+| Control | Issue                             | Action                                  |
+|---------|-----------------------------------|-----------------------------------------|
+| EC2.14  | RDP (port 3389) open to 0.0.0.0/0 | Restrict to known IP ranges or VPN      |
+| EC2.13  | SSH (port 22) open to 0.0.0.0/0   | Use SSM Session Manager instead of SSH  |
 
-Control: cis-aws-foundations-benchmark/v/1.2.0
+⚠️ Open SSH/RDP to the world is a common attack vector.
 
-How to fix:
-• Ensure AWS Config is enabled in all active regions
-• Attach the AWSServiceRoleForConfig service-linked role
-• Verify your aws_config_configuration_recorder resource:
-    recording_group {
-      all_supported                 = true
-      include_global_resource_types = true
-    }
+## 🟠 Medium Priority
+• S3.1 — Enable S3 Block Public Access at the account level
+• EC2.6 — Enable VPC Flow Logs for all VPCs
 
-### 2. 🟡 MEDIUM — S3 Bucket(s) Missing Public Access Block
+## 🟢 Low Priority
+• IAM.17 — Set IAM password policy MaxPasswordAge to ≤ 90 days
+• CloudTrail.7 — Enable S3 access logging on CloudTrail bucket
 
-Control: aws-foundational-security-best-practices/v/1.0.0
-
-How to fix:
-• Apply to all S3 buckets in your Terraform components:
-    resource "aws_s3_bucket_public_access_block" "this" {
-      block_public_acls       = true
-      block_public_policy     = true
-      ignore_public_acls      = true
-      restrict_public_buckets = true
-    }
-• Consider enforcing via an SCP at the org level
-
-## 📋 Recommended Next Steps
-
-| Priority      | Action                                                     |
-|---------------|------------------------------------------------------------|
-| 🔴 Immediate  | Enable AWS Config with service-linked role in all regions  |
-| 🟡 Soon       | Audit and remediate S3 public access block settings        |
-| 🔵 Ongoing    | Re-run `atmos aws compliance report` to confirm 42/42      |
-
-💡 You're at 95% — fixing these two controls achieves a perfect score.
+## Recommended Next Steps
+1. Lock down security groups for ports 22/3389
+2. Enable AWS Config — also helps detect future drift
+3. Run `atmos terraform apply` on security-groups, vpc, config components
+4. Re-run this report after remediation to verify score improves
 ```
 
 ## Try It

@@ -61,7 +61,7 @@ func (r *markdownRenderer) RenderSecurityReport(w io.Writer, report *Report) err
 	sb.WriteString("## Summary\n\n")
 	sb.WriteString("| Severity | Count | Mapped | Unmapped |\n")
 	sb.WriteString("|----------|-------|--------|----------|\n")
-	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow} {
+	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInformational} {
 		count := report.SeverityCounts[sev]
 		if count == 0 {
 			continue
@@ -148,7 +148,6 @@ type csvRenderer struct{}
 
 func (r *csvRenderer) RenderSecurityReport(w io.Writer, report *Report) error {
 	cw := csv.NewWriter(w)
-	defer cw.Flush()
 
 	// Header row.
 	if err := cw.Write([]string{
@@ -185,12 +184,12 @@ func (r *csvRenderer) RenderSecurityReport(w io.Writer, report *Report) error {
 			return err
 		}
 	}
-	return nil
+	cw.Flush()
+	return cw.Error()
 }
 
 func (r *csvRenderer) RenderComplianceReport(w io.Writer, report *ComplianceReport) error {
 	cw := csv.NewWriter(w)
-	defer cw.Flush()
 
 	if err := cw.Write([]string{
 		"control_id", "title", "severity", "component", "stack", "has_remediation",
@@ -210,7 +209,8 @@ func (r *csvRenderer) RenderComplianceReport(w io.Writer, report *ComplianceRepo
 			return err
 		}
 	}
-	return nil
+	cw.Flush()
+	return cw.Error()
 }
 
 // Helper functions.
@@ -227,7 +227,7 @@ func reportTarget(stack, component string) string {
 
 func severityCountsString(counts map[Severity]int) string {
 	var parts []string
-	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow} {
+	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInformational} {
 		if c, ok := counts[sev]; ok && c > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", c, sev))
 		}
