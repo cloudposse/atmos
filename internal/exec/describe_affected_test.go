@@ -2189,6 +2189,7 @@ func TestUploadShowsOutputWhenVerbose(t *testing.T) {
 // and the upload succeeds, covering the OutputFile branch in uploadableQuery.
 func TestUploadShowsOutputWhenOutputFileRequested(t *testing.T) {
 	printCalled := false
+	var gotFormat, gotFile string
 	var uploadReq dtos.UploadAffectedStacksRequest
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
@@ -2217,6 +2218,9 @@ func TestUploadShowsOutputWhenOutputFileRequested(t *testing.T) {
 		atmosConfig: atmosConfig,
 		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
 			printCalled = true
+			gotFormat = format
+			gotFile = file
+			assert.NotNil(t, data)
 			return nil
 		},
 		IsTTYSupportForStdout: func() bool { return false },
@@ -2229,13 +2233,14 @@ func TestUploadShowsOutputWhenOutputFileRequested(t *testing.T) {
 	affected := []schema.Affected{
 		{Component: "vpc", Stack: "dev"},
 	}
+	outputFile := filepath.Join(t.TempDir(), "affected.json")
 
 	err := d.uploadableQuery(
 		&DescribeAffectedCmdArgs{
 			Upload:          true,
 			Verbose:         false,
 			Format:          "json",
-			OutputFile:      filepath.Join(t.TempDir(), "affected.json"),
+			OutputFile:      outputFile,
 			CIEventType:     "pull_request",
 			HeadSHAOverride: "cccccccccccccccccccccccccccccccccccccccc",
 			CLIConfig:       atmosConfig,
@@ -2248,6 +2253,8 @@ func TestUploadShowsOutputWhenOutputFileRequested(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, printCalled, "printOrWriteToFile should be called when OutputFile is set")
+	assert.Equal(t, "json", gotFormat)
+	assert.Equal(t, outputFile, gotFile)
 	assert.Equal(t, "cccccccccccccccccccccccccccccccccccccccc", uploadReq.HeadSHA)
 	assert.Equal(t, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", uploadReq.BaseSHA)
 	assert.Equal(t, "repo", uploadReq.RepoName)
