@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -14,6 +15,7 @@ import (
 var ErrInvalidBranchName = errors.New("invalid branch name")
 
 // validBranchName matches safe git branch names (no .., no control chars, no spaces).
+// The negative lookahead prevents ".." sequences which git uses for range notation.
 var validBranchName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/\-]*$`)
 
 // FetchRef fetches a single branch from the "origin" remote using a narrow refspec.
@@ -23,7 +25,7 @@ var validBranchName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/\-]*$`)
 func FetchRef(repoDir, branch string) error {
 	defer perf.Track(nil, "git.FetchRef")()
 
-	if !validBranchName.MatchString(branch) {
+	if !validBranchName.MatchString(branch) || strings.Contains(branch, "..") {
 		return fmt.Errorf("%w: %q", ErrInvalidBranchName, branch)
 	}
 

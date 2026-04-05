@@ -97,6 +97,17 @@ func TestResolveBase_PullRequest_Closed(t *testing.T) {
 func TestResolveBase_PullRequestTarget(t *testing.T) {
 	t.Setenv("GITHUB_EVENT_NAME", "pull_request_target")
 	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Setenv("GITHUB_WORKSPACE", "")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+		ensureSafeDirectoryFunc = gitEnsureSafeDirectoryOriginal
+	})
+
+	// Mock merge-base to fail so we exercise the fallback chain.
+	mergeBaseResolver = func(string) (string, error) {
+		return "", assert.AnError
+	}
+	ensureSafeDirectoryFunc = func() error { return nil }
 
 	eventPayload := map[string]any{
 		"action": "opened",
@@ -555,6 +566,214 @@ func TestResolveBase_PullRequest_Closed_UsesParentWhenPayloadAndMergeBaseMissing
 	require.NotNil(t, res)
 	assert.Equal(t, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", res.SHA)
 	assert.Equal(t, "HEAD~1 (merged PR, merge-base unavailable)", res.Source)
+}
+
+var (
+	gitFetchRefOriginal            = fetchRefFunc
+	gitEnsureSafeDirectoryOriginal = ensureSafeDirectoryFunc
+)
+
+func TestResolveBase_PullRequest_FetchRetryMakesmergeBaseSucceed(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Setenv("GITHUB_WORKSPACE", "")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+		fetchRefFunc = gitFetchRefOriginal
+		ensureSafeDirectoryFunc = gitEnsureSafeDirectoryOriginal
+	})
+
+	mergeBaseCallCount := 0
+	mergeBaseResolver = func(branch string) (string, error) {
+		mergeBaseCallCount++
+		if mergeBaseCallCount == 1 {
+			return "", assert.AnError // First call fails.
+		}
+		return "feedfacefeedfacefeedfacefeedfacefeedface", nil // Second call succeeds after fetch.
+	}
+	fetchCalled := false
+	fetchRefFunc = func(_, branch string) error {
+		fetchCalled = true
+		assert.Equal(t, "main", branch)
+		return nil
+	}
+	ensureSafeDirectoryFunc = func() error { return nil }
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"head": map[string]any{"sha": "headsha123456789012345678901234567890ab"},
+			"base": map[string]any{
+				"ref": "main",
+				"sha": "abc123def456789012345678901234567890abcd",
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.True(t, fetchCalled, "FetchRef should have been called")
+	assert.Equal(t, 2, mergeBaseCallCount, "merge-base should be called twice (before and after fetch)")
+	// When both baseSHA and merge-base are available after fetch, prefer baseSHA.
+	assert.Equal(t, "abc123def456789012345678901234567890abcd", res.SHA)
+	assert.Contains(t, res.Source, "merge-base also available after fetch")
+	assert.Equal(t, "main", res.TargetBranch)
+}
+
+func TestResolveBase_PullRequest_FetchRetryMergeBaseOnlyNoPayloadSHA(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Setenv("GITHUB_WORKSPACE", "")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+		fetchRefFunc = gitFetchRefOriginal
+		ensureSafeDirectoryFunc = gitEnsureSafeDirectoryOriginal
+	})
+
+	mergeBaseCallCount := 0
+	mergeBaseResolver = func(string) (string, error) {
+		mergeBaseCallCount++
+		if mergeBaseCallCount == 1 {
+			return "", assert.AnError
+		}
+		return "feedfacefeedfacefeedfacefeedfacefeedface", nil
+	}
+	fetchRefFunc = func(_, _ string) error { return nil }
+	ensureSafeDirectoryFunc = func() error { return nil }
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"base": map[string]any{"ref": "main"},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "feedfacefeedfacefeedfacefeedfacefeedface", res.SHA)
+	assert.Contains(t, res.Source, "merge-base")
+	assert.Contains(t, res.Source, "after fetch")
+}
+
+func TestResolveBase_PullRequest_FetchFailsFallsBackToPayloadSHA(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Setenv("GITHUB_WORKSPACE", "")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+		fetchRefFunc = gitFetchRefOriginal
+		ensureSafeDirectoryFunc = gitEnsureSafeDirectoryOriginal
+	})
+
+	mergeBaseResolver = func(string) (string, error) {
+		return "", assert.AnError
+	}
+	fetchRefFunc = func(_, _ string) error {
+		return assert.AnError // Fetch also fails.
+	}
+	ensureSafeDirectoryFunc = func() error { return nil }
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"base": map[string]any{
+				"ref": "main",
+				"sha": "abc123def456789012345678901234567890abcd",
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "abc123def456789012345678901234567890abcd", res.SHA)
+	assert.Contains(t, res.Source, "event.pull_request.base.sha")
+	assert.Contains(t, res.Source, "merge-base unavailable")
+}
+
+func TestResolveBase_PullRequest_TargetBranchPopulated(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Setenv("GITHUB_WORKSPACE", "")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+		ensureSafeDirectoryFunc = gitEnsureSafeDirectoryOriginal
+	})
+
+	mergeBaseResolver = func(string) (string, error) {
+		return "", assert.AnError
+	}
+	ensureSafeDirectoryFunc = func() error { return nil }
+
+	eventPayload := map[string]any{
+		"action": "synchronize",
+		"pull_request": map[string]any{
+			"base": map[string]any{
+				"ref": "develop",
+				"sha": "abc123def456789012345678901234567890abcd",
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	res, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "develop", res.TargetBranch, "TargetBranch should be populated from PR payload")
+}
+
+func TestResolveBase_PullRequest_EnsureSafeDirectoryCalled(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+	t.Setenv("GITHUB_BASE_REF", "main")
+	t.Setenv("GITHUB_WORKSPACE", "")
+	t.Cleanup(func() {
+		mergeBaseResolver = gitMergeBaseOriginal
+		ensureSafeDirectoryFunc = gitEnsureSafeDirectoryOriginal
+	})
+
+	safeDirCalled := false
+	ensureSafeDirectoryFunc = func() error {
+		safeDirCalled = true
+		return nil
+	}
+	mergeBaseResolver = func(string) (string, error) {
+		return "", assert.AnError
+	}
+
+	eventPayload := map[string]any{
+		"action": "opened",
+		"pull_request": map[string]any{
+			"base": map[string]any{
+				"ref": "main",
+				"sha": "abc123def456789012345678901234567890abcd",
+			},
+		},
+	}
+	eventPath := writeEventPayload(t, eventPayload)
+	t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+	p := NewProvider()
+	_, err := p.ResolveBase()
+
+	require.NoError(t, err)
+	assert.True(t, safeDirCalled, "EnsureSafeDirectory should be called before git operations")
 }
 
 // writeEventPayload writes a JSON event payload to a temp file and returns the path.
