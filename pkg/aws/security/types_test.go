@@ -1,7 +1,6 @@
 package security
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,9 +49,7 @@ func TestParseOutputFormat_ErrorType(t *testing.T) {
 	for _, format := range invalidFormats {
 		t.Run(format, func(t *testing.T) {
 			_, err := ParseOutputFormat(format)
-			require.Error(t, err)
-			assert.True(t, errors.Is(err, errUtils.ErrAISecurityInvalidFormat),
-				"expected ErrAISecurityInvalidFormat, got: %v", err)
+			require.ErrorIs(t, err, errUtils.ErrAISecurityInvalidFormat)
 		})
 	}
 }

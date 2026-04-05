@@ -69,6 +69,8 @@ type tagLookupResult struct {
 
 // MapFinding maps a single finding to an Atmos component/stack.
 func (m *dualPathMapper) MapFinding(ctx context.Context, finding *Finding) (*ComponentMapping, error) {
+	defer perf.Track(nil, "security.dualPathMapper.MapFinding")()
+
 	// Path A: Try tag-based mapping first.
 	mapping, err := m.mapByTags(ctx, finding)
 	if err == nil && mapping != nil && mapping.Mapped {
@@ -154,19 +156,19 @@ func (m *dualPathMapper) matchTags(tags map[string]string, method string) *Compo
 }
 
 // mapByHeuristics implements Path B: multi-strategy heuristic pipeline.
-func (m *dualPathMapper) mapByHeuristics(_ context.Context, finding *Finding) (*ComponentMapping, error) {
+func (m *dualPathMapper) mapByHeuristics(ctx context.Context, finding *Finding) (*ComponentMapping, error) { //nolint:unparam // error return reserved for future heuristic strategies
 	// Strategy 1: Context tags — use Namespace/Tenant/Environment/Stage tags.
 	if mapping := m.mapByContextTags(finding); mapping != nil {
 		return mapping, nil
 	}
 
 	// Strategy 2: Account-level findings (AWS::::Account:123456789012).
-	if mapping := m.mapByAccountID(finding); mapping != nil {
+	if mapping := m.mapByAccountID(ctx, finding); mapping != nil {
 		return mapping, nil
 	}
 
 	// Strategy 3: ECR repository findings — extract repo/image name.
-	if mapping := m.mapByECRRepo(finding); mapping != nil {
+	if mapping := m.mapByECRRepo(ctx, finding); mapping != nil {
 		return mapping, nil
 	}
 
@@ -176,7 +178,7 @@ func (m *dualPathMapper) mapByHeuristics(_ context.Context, finding *Finding) (*
 	}
 
 	// Strategy 5: Resource type to component mapping.
-	if mapping := m.mapByResourceType(finding); mapping != nil {
+	if mapping := m.mapByResourceType(ctx, finding); mapping != nil {
 		return mapping, nil
 	}
 
@@ -189,7 +191,7 @@ func (m *dualPathMapper) mapByHeuristics(_ context.Context, finding *Finding) (*
 }
 
 // mapByAccountID maps account-level findings (AWS::::Account:ID) to account names.
-func (m *dualPathMapper) mapByAccountID(finding *Finding) *ComponentMapping {
+func (m *dualPathMapper) mapByAccountID(ctx context.Context, finding *Finding) *ComponentMapping {
 	if !strings.HasPrefix(finding.ResourceARN, "AWS::::Account:") {
 		return nil
 	}
@@ -201,9 +203,9 @@ func (m *dualPathMapper) mapByAccountID(finding *Finding) *ComponentMapping {
 	}
 
 	// Resolve account name: config override → Organizations API → raw account ID.
-	accountName := m.resolveAccountName(accountID)
+	accountName := m.resolveAccountName(ctx, accountID)
 	if accountName == "" && finding.AccountID != "" {
-		accountName = m.resolveAccountName(finding.AccountID)
+		accountName = m.resolveAccountName(ctx, finding.AccountID)
 	}
 
 	if accountName == "" {
@@ -226,7 +228,7 @@ func (m *dualPathMapper) mapByAccountID(finding *Finding) *ComponentMapping {
 
 // mapByECRRepo extracts ECR repository name as component and resolves stack from account map.
 // ARN format: arn:aws:ecr:region:account:repository/org/image-name/sha256:hash.
-func (m *dualPathMapper) mapByECRRepo(finding *Finding) *ComponentMapping {
+func (m *dualPathMapper) mapByECRRepo(ctx context.Context, finding *Finding) *ComponentMapping {
 	if !strings.Contains(finding.ResourceARN, ":repository/") {
 		return nil
 	}
@@ -251,7 +253,7 @@ func (m *dualPathMapper) mapByECRRepo(finding *Finding) *ComponentMapping {
 	}
 
 	// Resolve stack from account name using the finding's account ID.
-	stack := m.resolveAccountName(finding.AccountID)
+	stack := m.resolveAccountName(ctx, finding.AccountID)
 
 	return &ComponentMapping{
 		Stack:      stack,
@@ -363,7 +365,7 @@ func (m *dualPathMapper) mapByNamingConvention(finding *Finding) *ComponentMappi
 }
 
 // mapByResourceType maps well-known AWS resource types to common Atmos component names.
-func (m *dualPathMapper) mapByResourceType(finding *Finding) *ComponentMapping {
+func (m *dualPathMapper) mapByResourceType(ctx context.Context, finding *Finding) *ComponentMapping {
 	resourceTypeMap := map[string]string{
 		"AwsEc2Instance":            "ec2-instance",
 		"AwsEc2SecurityGroup":       "security-group",
@@ -392,7 +394,7 @@ func (m *dualPathMapper) mapByResourceType(finding *Finding) *ComponentMapping {
 
 	if component, ok := resourceTypeMap[finding.ResourceType]; ok {
 		// Resolve stack from account map.
-		stack := m.resolveAccountName(finding.AccountID)
+		stack := m.resolveAccountName(ctx, finding.AccountID)
 		return &ComponentMapping{
 			Stack:      stack,
 			Component:  component,
@@ -554,7 +556,7 @@ func (m *dualPathMapper) resolveRegion() string {
 
 // resolveAccountName resolves an AWS account ID to a human-readable name.
 // Priority: config account_map override → cached API result → Organizations API → empty string.
-func (m *dualPathMapper) resolveAccountName(accountID string) string {
+func (m *dualPathMapper) resolveAccountName(ctx context.Context, accountID string) string {
 	if accountID == "" {
 		return ""
 	}
@@ -574,7 +576,7 @@ func (m *dualPathMapper) resolveAccountName(accountID string) string {
 	}
 
 	// Try AWS Organizations API.
-	name := m.lookupAccountName(accountID)
+	name := m.lookupAccountName(ctx, accountID)
 	if m.accountNameCache != nil {
 		m.accountNameCache[accountID] = name
 	}
@@ -583,18 +585,18 @@ func (m *dualPathMapper) resolveAccountName(accountID string) string {
 
 // lookupAccountName calls the AWS Organizations DescribeAccount API to get the account name.
 // Returns empty string on any error (non-org accounts, permission issues, etc.).
-func (m *dualPathMapper) lookupAccountName(accountID string) string {
+func (m *dualPathMapper) lookupAccountName(ctx context.Context, accountID string) string {
 	if m.clients == nil {
 		return ""
 	}
 
-	client, err := m.clients.getOrganizationsClient(context.Background(), m.resolveRegion())
+	client, err := m.clients.getOrganizationsClient(ctx, m.resolveRegion())
 	if err != nil {
 		log.Debug("Failed to create Organizations client for account lookup", "error", err)
 		return ""
 	}
 
-	output, err := client.DescribeAccount(context.Background(), &organizations.DescribeAccountInput{
+	output, err := client.DescribeAccount(ctx, &organizations.DescribeAccountInput{
 		AccountId: aws.String(accountID),
 	})
 	if err != nil {

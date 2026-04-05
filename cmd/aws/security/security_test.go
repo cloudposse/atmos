@@ -441,9 +441,11 @@ func TestSecurityAnalyzeFlagShorthand(t *testing.T) {
 }
 
 func TestSecurityCmdUsesNoArgs(t *testing.T) {
-	// Both security and security analyze commands should accept no positional args.
-	assert.NotNil(t, SecurityCmd.Args, "SecurityCmd should have Args set")
-	assert.NotNil(t, securityAnalyzeCmd.Args, "securityAnalyzeCmd should have Args set")
+	// Verify commands reject positional arguments.
+	err := SecurityCmd.Args(SecurityCmd, []string{"unexpected-arg"})
+	assert.Error(t, err, "SecurityCmd should reject positional args")
+	err = securityAnalyzeCmd.Args(securityAnalyzeCmd, []string{"unexpected-arg"})
+	assert.Error(t, err, "securityAnalyzeCmd should reject positional args")
 }
 
 func TestSeverityMapCompleteness(t *testing.T) {

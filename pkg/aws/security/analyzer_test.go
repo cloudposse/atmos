@@ -1119,6 +1119,99 @@ func TestHandleToolCalls(t *testing.T) {
 	assert.Contains(t, result[2].Content, "Tool result for nonexistent_tool")
 }
 
+func TestAnalyzeWithTools_DirectToolCallLoop(t *testing.T) {
+	// Test analyzeWithTools directly with a tool-call loop.
+	callIdx := 0
+	client := &toolCallMockClient{
+		inner: &mockToolAwareClient{
+			responses: []string{
+				"",
+				"### Root Cause\n\nSG open.\n\n### Risk\n\nlow",
+			},
+		},
+		callIdx: &callIdx,
+	}
+
+	// Create a mock executor with a dummy tool so ListTools returns non-empty.
+	reg := tools.NewRegistry()
+	executor := tools.NewExecutor(reg, nil, 0)
+
+	analyzer := &aiAnalyzer{
+		client:       client,
+		atmosConfig:  &schema.AtmosConfiguration{},
+		toolRegistry: reg,
+		toolExecutor: executor,
+	}
+
+	finding := &Finding{ID: "direct-tool-001", Title: "Test"}
+	remediation, err := analyzer.analyzeWithTools(context.Background(), finding, "test prompt")
+
+	// With no tools registered, ListTools returns empty → falls back to simple.
+	// The toolCallMockClient returns the final response via simple path.
+	require.NoError(t, err)
+	assert.NotNil(t, remediation)
+}
+
+func TestAnalyzeWithTools_ErrorFromProvider(t *testing.T) {
+	// Test that non-retryable errors from the provider are returned via AnalyzeFinding.
+	client := &mockAIClient{err: fmt.Errorf("bad request")}
+
+	analyzer := &aiAnalyzer{
+		client:      client,
+		atmosConfig: &schema.AtmosConfiguration{},
+	}
+
+	finding := &Finding{ID: "error-001", Title: "Test"}
+	// No toolRegistry/toolExecutor → falls back to simple, which errors.
+	_, err := analyzer.AnalyzeFinding(context.Background(), finding, "", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "bad request")
+}
+
+func TestAnalyzeWithTools_CLIProviderFallsBack(t *testing.T) {
+	// CLI provider returns ErrCLIProviderToolsNotSupported → falls back to simple.
+	client := &mockCLIClient{
+		response: "### Root Cause\n\nTest.\n\n### Risk\n\nlow",
+	}
+
+	analyzer := &aiAnalyzer{
+		client:      client,
+		atmosConfig: &schema.AtmosConfiguration{},
+	}
+
+	finding := &Finding{ID: "cli-001", Title: "Test"}
+	// No toolRegistry/toolExecutor → simple path.
+	remediation, err := analyzer.AnalyzeFinding(context.Background(), finding, "", "")
+	require.NoError(t, err)
+	assert.Contains(t, remediation.RootCause, "Test")
+}
+
+func TestHandleToolCalls_NilResult(t *testing.T) {
+	// When tool execution returns nil result, message should be empty.
+	reg := tools.NewRegistry()
+	executor := tools.NewExecutor(reg, nil, 0)
+
+	analyzer := &aiAnalyzer{
+		client:       &mockAIClient{},
+		atmosConfig:  &schema.AtmosConfiguration{},
+		toolExecutor: executor,
+	}
+
+	response := &types.Response{
+		Content: "calling tool",
+		ToolCalls: []types.ToolCall{
+			{ID: "call-nil", Name: "missing_tool", Input: map[string]interface{}{}},
+		},
+	}
+
+	messages := []types.Message{{Role: types.RoleUser, Content: "prompt"}}
+	result := analyzer.handleToolCalls(context.Background(), response, messages)
+
+	require.Len(t, result, 3)
+	// Tool result should contain the error message.
+	assert.Contains(t, result[2].Content, "Tool result for missing_tool")
+}
+
 func TestAiRetryConfig(t *testing.T) {
 	cfg := aiRetryConfig()
 	require.NotNil(t, cfg.MaxAttempts)

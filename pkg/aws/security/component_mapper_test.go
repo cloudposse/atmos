@@ -213,7 +213,7 @@ func TestMapByResourceType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			finding := &Finding{ResourceType: tt.resourceType}
-			mapping := mapper.mapByResourceType(finding)
+			mapping := mapper.mapByResourceType(context.Background(), finding)
 			if !tt.wantMapped {
 				assert.Nil(t, mapping)
 				return
@@ -887,7 +887,7 @@ func TestMapByAccountID(t *testing.T) {
 			ResourceARN: "AWS::::Account:452379801773",
 			AccountID:   "452379801773",
 		}
-		mapping := m.mapByAccountID(finding)
+		mapping := m.mapByAccountID(context.Background(), finding)
 		require.NotNil(t, mapping)
 		assert.True(t, mapping.Mapped)
 		assert.Equal(t, "plat-prod", mapping.Stack)
@@ -900,7 +900,7 @@ func TestMapByAccountID(t *testing.T) {
 			ResourceARN: "AWS::::Account:999999999999",
 			AccountID:   "999999999999",
 		}
-		mapping := m.mapByAccountID(finding)
+		mapping := m.mapByAccountID(context.Background(), finding)
 		require.NotNil(t, mapping)
 		assert.False(t, mapping.Mapped)
 		assert.Equal(t, "999999999999", mapping.Stack)
@@ -911,7 +911,7 @@ func TestMapByAccountID(t *testing.T) {
 		finding := &Finding{
 			ResourceARN: "arn:aws:s3:::my-bucket",
 		}
-		mapping := m.mapByAccountID(finding)
+		mapping := m.mapByAccountID(context.Background(), finding)
 		assert.Nil(t, mapping)
 	})
 }
@@ -934,7 +934,7 @@ func TestMapByECRRepo(t *testing.T) {
 			ResourceARN: "arn:aws:ecr:us-east-2:982674173972:repository/inspatial/example-app-on-ecs/sha256:abc123",
 			AccountID:   "982674173972",
 		}
-		mapping := m.mapByECRRepo(finding)
+		mapping := m.mapByECRRepo(context.Background(), finding)
 		require.NotNil(t, mapping)
 		assert.True(t, mapping.Mapped)
 		assert.Equal(t, "example-app-on-ecs", mapping.Component)
@@ -947,7 +947,7 @@ func TestMapByECRRepo(t *testing.T) {
 			ResourceARN: "arn:aws:ecr:us-east-2:999:repository/myorg/myapp",
 			AccountID:   "999",
 		}
-		mapping := m.mapByECRRepo(finding)
+		mapping := m.mapByECRRepo(context.Background(), finding)
 		require.NotNil(t, mapping)
 		assert.Equal(t, "myapp", mapping.Component)
 		assert.Empty(t, mapping.Stack) // Unknown account.
@@ -957,7 +957,7 @@ func TestMapByECRRepo(t *testing.T) {
 		finding := &Finding{
 			ResourceARN: "arn:aws:s3:::my-bucket",
 		}
-		mapping := m.mapByECRRepo(finding)
+		mapping := m.mapByECRRepo(context.Background(), finding)
 		assert.Nil(t, mapping)
 	})
 }
@@ -1005,7 +1005,7 @@ func TestMapByAccountID_EmptyAccountID(t *testing.T) {
 	finding := &Finding{
 		ResourceARN: "AWS::::Account:",
 	}
-	mapping := m.mapByAccountID(finding)
+	mapping := m.mapByAccountID(context.Background(), finding)
 	assert.Nil(t, mapping, "empty account ID should return nil")
 }
 
@@ -1020,7 +1020,7 @@ func TestMapByAccountID_FallbackToFindingAccountID(t *testing.T) {
 		ResourceARN: "AWS::::Account:888", // 888 not in map.
 		AccountID:   "999",                // 999 is in map.
 	}
-	mapping := m.mapByAccountID(finding)
+	mapping := m.mapByAccountID(context.Background(), finding)
 	require.NotNil(t, mapping)
 	assert.True(t, mapping.Mapped)
 	assert.Equal(t, "special-account", mapping.Stack)
@@ -1039,7 +1039,7 @@ func TestMapByAccountID_NilAccountMap(t *testing.T) {
 		ResourceARN: "AWS::::Account:123456",
 		AccountID:   "123456",
 	}
-	mapping := m.mapByAccountID(finding)
+	mapping := m.mapByAccountID(context.Background(), finding)
 	require.NotNil(t, mapping)
 	assert.False(t, mapping.Mapped)
 	assert.Equal(t, "123456", mapping.Stack)
@@ -1055,7 +1055,7 @@ func TestMapByECRRepo_EmptyComponent(t *testing.T) {
 	finding := &Finding{
 		ResourceARN: "arn:aws:ecr:us-east-1:123:repository/",
 	}
-	mapping := m.mapByECRRepo(finding)
+	mapping := m.mapByECRRepo(context.Background(), finding)
 	assert.Nil(t, mapping, "empty component from ECR path should return nil")
 }
 
@@ -1081,7 +1081,7 @@ func TestMapByResourceType_WithAccountMap(t *testing.T) {
 		ResourceType: "AwsEc2Vpc",
 		AccountID:    "111222333444",
 	}
-	mapping := m.mapByResourceType(finding)
+	mapping := m.mapByResourceType(context.Background(), finding)
 	require.NotNil(t, mapping)
 	assert.True(t, mapping.Mapped)
 	assert.Equal(t, "vpc", mapping.Component)
@@ -1100,7 +1100,7 @@ func TestMapByResourceType_NoAccountMap(t *testing.T) {
 		ResourceType: "AwsS3Bucket",
 		AccountID:    "123",
 	}
-	mapping := m.mapByResourceType(finding)
+	mapping := m.mapByResourceType(context.Background(), finding)
 	require.NotNil(t, mapping)
 	assert.True(t, mapping.Mapped)
 	assert.Equal(t, "s3-bucket", mapping.Component)
