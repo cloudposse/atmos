@@ -1,4 +1,4 @@
-package aws
+package compliance
 
 import (
 	"errors"
@@ -105,26 +105,16 @@ func TestComplianceReportFileFlag(t *testing.T) {
 }
 
 func TestComplianceSubcommandRegistered(t *testing.T) {
-	cmd := awsCmd
-	var foundCompliance bool
+	cmd := ComplianceCmd
+	// Verify the report subcommand exists under compliance.
+	var foundReport bool
 	for _, sub := range cmd.Commands() {
-		if sub.Use != "compliance" {
-			continue
+		if sub.Use == "report" {
+			foundReport = true
+			break
 		}
-
-		foundCompliance = true
-		// Verify the report subcommand exists under compliance.
-		var foundReport bool
-		for _, subSub := range sub.Commands() {
-			if subSub.Use == "report" {
-				foundReport = true
-				break
-			}
-		}
-		assert.True(t, foundReport, "compliance command should have report subcommand")
-		break
 	}
-	assert.True(t, foundCompliance, "aws command should have compliance subcommand")
+	assert.True(t, foundReport, "compliance command should have report subcommand")
 }
 
 func TestComplianceReportAllFlagsRegistered(t *testing.T) {
@@ -176,15 +166,15 @@ func TestComplianceReportFlagShorthand(t *testing.T) {
 
 func TestComplianceCmdUsesNoArgs(t *testing.T) {
 	// Both compliance and compliance report commands should accept no positional args.
-	assert.NotNil(t, complianceCmd.Args, "complianceCmd should have Args set")
+	assert.NotNil(t, ComplianceCmd.Args, "ComplianceCmd should have Args set")
 	assert.NotNil(t, complianceReportCmd.Args, "complianceReportCmd should have Args set")
 }
 
 func TestComplianceCmdAttributes(t *testing.T) {
 	// Verify compliance command metadata.
-	assert.Equal(t, "compliance", complianceCmd.Use)
-	assert.Contains(t, complianceCmd.Short, "compliance")
-	assert.Contains(t, complianceCmd.Long, "compliance")
+	assert.Equal(t, "compliance", ComplianceCmd.Use)
+	assert.Contains(t, ComplianceCmd.Short, "compliance")
+	assert.Contains(t, ComplianceCmd.Long, "compliance")
 }
 
 func TestComplianceReportCmdAttributes(t *testing.T) {
@@ -192,33 +182,6 @@ func TestComplianceReportCmdAttributes(t *testing.T) {
 	assert.Equal(t, "report", complianceReportCmd.Use)
 	assert.Contains(t, complianceReportCmd.Short, "compliance")
 	assert.NotNil(t, complianceReportCmd.RunE, "complianceReportCmd should have RunE set")
-}
-
-func TestParseOutputFormat_UsedByCompliance(t *testing.T) {
-	// The compliance command also uses parseOutputFormat. Verify the formats
-	// relevant to compliance reporting work correctly.
-	tests := []struct {
-		name   string
-		format string
-		valid  bool
-	}{
-		{"markdown for compliance", "markdown", true},
-		{"json for compliance", "json", true},
-		{"yaml for compliance", "yaml", true},
-		{"csv for compliance", "csv", true},
-		{"invalid for compliance", "pdf", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := parseOutputFormat(tt.format)
-			if tt.valid {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-			}
-		})
-	}
 }
 
 func TestValidateFramework_MultipleInSequence(t *testing.T) {
@@ -404,4 +367,11 @@ func TestFilterComplianceReport(t *testing.T) {
 		assert.Equal(t, 0, result.TotalControls)
 		assert.Equal(t, 0.0, result.ScorePercent)
 	})
+}
+
+func TestAuthenticateAndResolveAWS_EmptyIdentity(t *testing.T) {
+	// Empty identity should return nil without error.
+	authCtx, err := authenticateAndResolveAWS(nil, "")
+	require.NoError(t, err)
+	assert.Nil(t, authCtx)
 }

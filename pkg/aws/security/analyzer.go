@@ -21,7 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-//go:embed skill_prompt.md
+//go:embed markdown/skill_prompt.md
 var skillPrompt string
 
 // FindingAnalyzer provides AI-powered analysis of security findings.

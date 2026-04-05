@@ -1,4 +1,4 @@
-package aws
+package compliance
 
 import (
 	"context"
@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/aws/identity"
 	"github.com/cloudposse/atmos/pkg/aws/security"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -27,8 +29,8 @@ var complianceLongMarkdown string
 // complianceParser handles flag parsing with Viper precedence for the compliance command.
 var complianceParser *flags.StandardParser
 
-// complianceCmd is the parent command for compliance subcommands.
-var complianceCmd = &cobra.Command{
+// ComplianceCmd is the parent command for compliance subcommands.
+var ComplianceCmd = &cobra.Command{
 	Use:   "compliance",
 	Short: "AWS compliance commands",
 	Long:  "Commands for generating compliance posture reports against industry frameworks.",
@@ -82,7 +84,7 @@ var complianceReportCmd = &cobra.Command{
 		}
 
 		// Validate output format.
-		outputFormat, err := parseOutputFormat(formatStr)
+		outputFormat, err := security.ParseOutputFormat(formatStr)
 		if err != nil {
 			return err
 		}
@@ -99,7 +101,7 @@ var complianceReportCmd = &cobra.Command{
 		if identityName == "" {
 			identityName = atmosConfig.AWS.Security.Identity
 		}
-		authCtx, err := resolveAuthContext(&atmosConfig, identityName)
+		authCtx, err := authenticateAndResolveAWS(&atmosConfig, identityName)
 		if err != nil {
 			return err
 		}
@@ -107,7 +109,7 @@ var complianceReportCmd = &cobra.Command{
 		// Validate AWS credentials early before attempting any API calls.
 		credCtx, credCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer credCancel()
-		if err := validateAWSCredentials(credCtx, "", authCtx); err != nil {
+		if err := identity.ValidateAWSCredentials(credCtx, "", authCtx); err != nil {
 			return err
 		}
 
@@ -221,8 +223,7 @@ func init() {
 		panic(err)
 	}
 
-	complianceCmd.AddCommand(complianceReportCmd)
-	awsCmd.AddCommand(complianceCmd)
+	ComplianceCmd.AddCommand(complianceReportCmd)
 }
 
 // parseControlFilter parses a comma-separated list of control IDs into a set.
@@ -264,6 +265,48 @@ func filterComplianceReport(report *security.ComplianceReport, controlFilter map
 		filteredReport.ScorePercent = 0
 	}
 	return &filteredReport
+}
+
+// logKeyIdentity is the log key for identity name.
+const logKeyIdentity = "identity"
+
+// authenticateAndResolveAWS authenticates an Atmos Auth identity and returns the AWSAuthContext.
+// Uses the standard auth flow (same as Terraform, S3 backend): authenticate → read AuthContext.AWS.
+// Returns nil if identityName is empty (use default AWS credential chain).
+func authenticateAndResolveAWS(atmosConfig *schema.AtmosConfiguration, identityName string) (*schema.AWSAuthContext, error) {
+	if identityName == "" {
+		return nil, nil
+	}
+
+	log.Debug("Authenticating Atmos Auth identity", logKeyIdentity, identityName)
+
+	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+		identityName,
+		&atmosConfig.Auth,
+		cfg.IdentityFlagSelectValue,
+		atmosConfig,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to authenticate identity %q: %w", identityName, err)
+	}
+
+	if authManager == nil {
+		return nil, nil
+	}
+
+	stackInfo := authManager.GetStackInfo()
+	if stackInfo == nil || stackInfo.AuthContext == nil || stackInfo.AuthContext.AWS == nil {
+		return nil, fmt.Errorf("%w: identity %q authenticated but no AWS credentials were produced",
+			errUtils.ErrAWSCredentialsNotValid, identityName)
+	}
+
+	authCtx := stackInfo.AuthContext.AWS
+	log.Debug("Resolved AWS auth context",
+		logKeyIdentity, identityName,
+		"profile", authCtx.Profile,
+		"region", authCtx.Region,
+	)
+	return authCtx, nil
 }
 
 // validateFramework checks that the framework name is valid.

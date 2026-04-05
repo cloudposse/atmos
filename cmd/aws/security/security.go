@@ -1,4 +1,4 @@
-package aws
+package security
 
 import (
 	"context"
@@ -16,7 +16,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
-	"github.com/cloudposse/atmos/pkg/aws/security"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/aws/identity"
+	pkgsecurity "github.com/cloudposse/atmos/pkg/aws/security"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -35,8 +37,8 @@ var securityLongMarkdown string
 // securityParser handles flag parsing with Viper precedence for the security command.
 var securityParser *flags.StandardParser
 
-// securityCmd is the parent command for security subcommands.
-var securityCmd = &cobra.Command{
+// SecurityCmd is the parent command for security subcommands.
+var SecurityCmd = &cobra.Command{
 	Use:   "security",
 	Short: "AWS security commands",
 	Long:  "Commands for analyzing AWS security findings and mapping them to Atmos components.",
@@ -104,7 +106,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		}
 
 		// Validate and parse flags.
-		outputFormat, err := parseOutputFormat(formatStr)
+		outputFormat, err := pkgsecurity.ParseOutputFormat(formatStr)
 		if err != nil {
 			return err
 		}
@@ -136,7 +138,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		if identityName == "" {
 			identityName = atmosConfig.AWS.Security.Identity
 		}
-		authCtx, err := resolveAuthContext(&atmosConfig, identityName)
+		authCtx, err := authenticateAndResolveAWS(&atmosConfig, identityName)
 		if err != nil {
 			return err
 		}
@@ -144,14 +146,14 @@ var securityAnalyzeCmd = &cobra.Command{
 		// Validate AWS credentials early before attempting any API calls.
 		credCtx, credCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer credCancel()
-		if err := validateAWSCredentials(credCtx, region, authCtx); err != nil {
+		if err := identity.ValidateAWSCredentials(credCtx, region, authCtx); err != nil {
 			return err
 		}
 
 		// Note: stack and component are NOT passed to QueryOptions because
 		// Security Hub has no concept of Atmos stacks. Filtering by stack/component
 		// happens AFTER mapping (see filterByStackAndComponent below).
-		opts := security.QueryOptions{
+		opts := pkgsecurity.QueryOptions{
 			Severity:    severities,
 			Source:      source,
 			Framework:   frameworkStr,
@@ -184,10 +186,10 @@ var securityAnalyzeCmd = &cobra.Command{
 		defer cancel()
 
 		// Fetch findings.
-		if outputFormat == security.FormatMarkdown {
+		if outputFormat == pkgsecurity.FormatMarkdown {
 			ui.Info("Fetching security findings...")
 		}
-		fetcher := security.NewFindingFetcher(&atmosConfig, authCtx)
+		fetcher := pkgsecurity.NewFindingFetcher(&atmosConfig, authCtx)
 		findings, err := fetcher.FetchFindings(ctx, &opts)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
@@ -199,10 +201,10 @@ var securityAnalyzeCmd = &cobra.Command{
 		}
 
 		// Map findings to Atmos components.
-		if outputFormat == security.FormatMarkdown {
+		if outputFormat == pkgsecurity.FormatMarkdown {
 			ui.Infof("Mapping %d findings to Atmos components...", len(findings))
 		}
-		mapper := security.NewComponentMapper(&atmosConfig, authCtx)
+		mapper := pkgsecurity.NewComponentMapper(&atmosConfig, authCtx)
 		findings, err = mapper.MapFindings(ctx, findings)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityMappingFailed, err)
@@ -222,7 +224,7 @@ var securityAnalyzeCmd = &cobra.Command{
 
 		// AI analysis (only when --ai flag is set).
 		if useAI {
-			if outputFormat == security.FormatMarkdown {
+			if outputFormat == pkgsecurity.FormatMarkdown {
 				ui.Info("Analyzing findings with AI...")
 			}
 
@@ -234,7 +236,7 @@ var securityAnalyzeCmd = &cobra.Command{
 				toolReg, toolExec = initReadOnlyTools(&atmosConfig)
 			}
 
-			analyzer, analyzerErr := security.NewFindingAnalyzer(ctx, &atmosConfig, toolReg, toolExec)
+			analyzer, analyzerErr := pkgsecurity.NewFindingAnalyzer(ctx, &atmosConfig, toolReg, toolExec)
 			if analyzerErr != nil {
 				ui.Warningf("AI analysis unavailable: %s (continuing without AI)", analyzerErr)
 			} else {
@@ -266,10 +268,10 @@ var securityAnalyzeCmd = &cobra.Command{
 		}
 
 		// Render output.
-		renderer := security.NewReportRenderer(outputFormat)
+		renderer := pkgsecurity.NewReportRenderer(outputFormat)
 
 		// For Markdown to stdout, render with colors via ui.Markdown().
-		if outputFormat == security.FormatMarkdown && fileOutput == "" {
+		if outputFormat == pkgsecurity.FormatMarkdown && fileOutput == "" {
 			var buf strings.Builder
 			if err := renderer.RenderSecurityReport(&buf, report); err != nil {
 				return err
@@ -317,18 +319,20 @@ func init() {
 		panic(err)
 	}
 
-	securityCmd.AddCommand(securityAnalyzeCmd)
-	awsCmd.AddCommand(securityCmd)
+	SecurityCmd.AddCommand(securityAnalyzeCmd)
 }
 
+// Finding is a type alias for the security package Finding type (used in buildSecurityReport).
+type Finding = pkgsecurity.Finding
+
 // buildSecurityReport constructs a Report from mapped findings.
-func buildSecurityReport(findings []Finding, stack, component string, tagMapping *schema.AWSSecurityTagMapping) *security.Report {
-	report := &security.Report{
+func buildSecurityReport(findings []Finding, stack, component string, tagMapping *schema.AWSSecurityTagMapping) *pkgsecurity.Report {
+	report := &pkgsecurity.Report{
 		GeneratedAt:    time.Now().UTC(),
 		Stack:          stack,
 		Component:      component,
 		TotalFindings:  len(findings),
-		SeverityCounts: make(map[security.Severity]int),
+		SeverityCounts: make(map[pkgsecurity.Severity]int),
 		Findings:       findings,
 		TagMapping:     tagMapping,
 	}
@@ -345,57 +349,41 @@ func buildSecurityReport(findings []Finding, stack, component string, tagMapping
 	return report
 }
 
-// parseOutputFormat validates and returns the output format.
-func parseOutputFormat(format string) (security.OutputFormat, error) {
-	switch strings.ToLower(format) {
-	case "markdown", "md", "":
-		return security.FormatMarkdown, nil
-	case "json":
-		return security.FormatJSON, nil
-	case "yaml", "yml":
-		return security.FormatYAML, nil
-	case "csv":
-		return security.FormatCSV, nil
-	default:
-		return "", errUtils.ErrAISecurityInvalidFormat
-	}
-}
-
 // parseSource validates and returns the finding source.
-func parseSource(source string) (security.Source, error) {
+func parseSource(source string) (pkgsecurity.Source, error) {
 	switch strings.ToLower(source) {
 	case "all", "":
-		return security.SourceAll, nil
+		return pkgsecurity.SourceAll, nil
 	case "security-hub", "securityhub":
-		return security.SourceSecurityHub, nil
+		return pkgsecurity.SourceSecurityHub, nil
 	case "config":
-		return security.SourceConfig, nil
+		return pkgsecurity.SourceConfig, nil
 	case "inspector":
-		return security.SourceInspector, nil
+		return pkgsecurity.SourceInspector, nil
 	case "guardduty":
-		return security.SourceGuardDuty, nil
+		return pkgsecurity.SourceGuardDuty, nil
 	case "macie":
-		return security.SourceMacie, nil
+		return pkgsecurity.SourceMacie, nil
 	case "access-analyzer", "accessanalyzer":
-		return security.SourceAccessAnalyzer, nil
+		return pkgsecurity.SourceAccessAnalyzer, nil
 	default:
 		return "", errUtils.ErrAISecurityInvalidSource
 	}
 }
 
 // severityMap maps severity name strings to their typed constants.
-var severityMap = map[string]security.Severity{
-	"CRITICAL":      security.SeverityCritical,
-	"HIGH":          security.SeverityHigh,
-	"MEDIUM":        security.SeverityMedium,
-	"LOW":           security.SeverityLow,
-	"INFORMATIONAL": security.SeverityInformational,
+var severityMap = map[string]pkgsecurity.Severity{
+	"CRITICAL":      pkgsecurity.SeverityCritical,
+	"HIGH":          pkgsecurity.SeverityHigh,
+	"MEDIUM":        pkgsecurity.SeverityMedium,
+	"LOW":           pkgsecurity.SeverityLow,
+	"INFORMATIONAL": pkgsecurity.SeverityInformational,
 }
 
 // parseSeverities parses and validates the severity filter string.
-func parseSeverities(severityStr string, defaults []string) ([]security.Severity, error) {
+func parseSeverities(severityStr string, defaults []string) ([]pkgsecurity.Severity, error) {
 	if severityStr == "" && len(defaults) == 0 {
-		return []security.Severity{security.SeverityCritical, security.SeverityHigh}, nil
+		return []pkgsecurity.Severity{pkgsecurity.SeverityCritical, pkgsecurity.SeverityHigh}, nil
 	}
 
 	parts := strings.Split(severityStr, ",")
@@ -403,7 +391,7 @@ func parseSeverities(severityStr string, defaults []string) ([]security.Severity
 		parts = defaults
 	}
 
-	var severities []security.Severity
+	var severities []pkgsecurity.Severity
 	for _, p := range parts {
 		sev, ok := severityMap[strings.ToUpper(strings.TrimSpace(p))]
 		if !ok {
@@ -414,9 +402,6 @@ func parseSeverities(severityStr string, defaults []string) ([]security.Severity
 
 	return severities, nil
 }
-
-// Finding is a type alias for the security package Finding type (used in buildSecurityReport).
-type Finding = security.Finding
 
 // filterByStackAndComponent filters findings to those matching the specified stack and/or component.
 // Matching is done on the mapped stack/component names (after finding-to-code mapping).
@@ -466,4 +451,56 @@ func initReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.Registry,
 
 	log.Debug("Initialized tools for security analysis", "count", registry.Count())
 	return registry, executor
+}
+
+// authenticateAndResolveAWS authenticates an Atmos Auth identity and returns the AWSAuthContext.
+// Uses the standard auth flow (same as Terraform, S3 backend): authenticate → read AuthContext.AWS.
+// Returns nil if identityName is empty (use default AWS credential chain).
+func authenticateAndResolveAWS(atmosConfig *schema.AtmosConfiguration, identityName string) (*schema.AWSAuthContext, error) {
+	if identityName == "" {
+		return nil, nil
+	}
+
+	log.Debug("Authenticating Atmos Auth identity", logKeyIdentity, identityName)
+
+	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+		identityName,
+		&atmosConfig.Auth,
+		cfg.IdentityFlagSelectValue,
+		atmosConfig,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to authenticate identity %q: %w", identityName, err)
+	}
+
+	if authManager == nil {
+		return nil, nil
+	}
+
+	return extractAWSAuthContext(authManager, identityName)
+}
+
+// logKeyIdentity is the log key for identity name.
+const logKeyIdentity = "identity"
+
+// stackInfoProvider is a narrow interface for reading auth context from an auth manager.
+type stackInfoProvider interface {
+	GetStackInfo() *schema.ConfigAndStacksInfo
+}
+
+// extractAWSAuthContext reads the AWSAuthContext populated by PostAuthenticate → SetAuthContext.
+func extractAWSAuthContext(authManager stackInfoProvider, identityName string) (*schema.AWSAuthContext, error) {
+	stackInfo := authManager.GetStackInfo()
+	if stackInfo == nil || stackInfo.AuthContext == nil || stackInfo.AuthContext.AWS == nil {
+		return nil, fmt.Errorf("%w: identity %q authenticated but no AWS credentials were produced",
+			errUtils.ErrAWSCredentialsNotValid, identityName)
+	}
+
+	authCtx := stackInfo.AuthContext.AWS
+	log.Debug("Resolved AWS auth context",
+		logKeyIdentity, identityName,
+		"profile", authCtx.Profile,
+		"region", authCtx.Region,
+	)
+	return authCtx, nil
 }

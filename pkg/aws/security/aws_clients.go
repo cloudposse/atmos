@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
 
@@ -28,13 +29,20 @@ type TaggingAPI interface {
 	GetResources(ctx context.Context, params *resourcegroupstaggingapi.GetResourcesInput, optFns ...func(*resourcegroupstaggingapi.Options)) (*resourcegroupstaggingapi.GetResourcesOutput, error)
 }
 
+// OrganizationsAPI defines the subset of AWS Organizations API used for account name lookup.
+type OrganizationsAPI interface {
+	DescribeAccount(ctx context.Context, params *organizations.DescribeAccountInput, optFns ...func(*organizations.Options)) (*organizations.DescribeAccountOutput, error)
+}
+
 // awsClientCache holds cached AWS service clients keyed by region.
 type awsClientCache struct {
 	mu            sync.Mutex
 	securityHub   map[string]SecurityHubAPI
 	tagging       map[string]TaggingAPI
+	orgs          OrganizationsAPI // Organizations client (region-independent).
 	securityHubFn func(cfg aws.Config) SecurityHubAPI
 	taggingFn     func(cfg aws.Config) TaggingAPI
+	orgsFn        func(cfg aws.Config) OrganizationsAPI
 	authContext   *schema.AWSAuthContext // Atmos Auth context for credential injection.
 }
 
@@ -48,6 +56,9 @@ func newAWSClientCache() *awsClientCache {
 		},
 		taggingFn: func(cfg aws.Config) TaggingAPI {
 			return resourcegroupstaggingapi.NewFromConfig(cfg)
+		},
+		orgsFn: func(cfg aws.Config) OrganizationsAPI {
+			return organizations.NewFromConfig(cfg)
 		},
 	}
 }
@@ -101,4 +112,27 @@ func (c *awsClientCache) getTaggingClient(ctx context.Context, region string) (T
 	client := c.taggingFn(cfg)
 	c.tagging[region] = client
 	return client, nil
+}
+
+// getOrganizationsClient returns a cached or new Organizations client.
+// Organizations is a global service, so the region is only used for initial config loading.
+func (c *awsClientCache) getOrganizationsClient(ctx context.Context, region string) (OrganizationsAPI, error) {
+	defer perf.Track(nil, "security.awsClientCache.getOrganizationsClient")()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.orgs != nil {
+		return c.orgs, nil
+	}
+
+	cfg, err := identity.LoadConfigWithAuth(ctx, region, "", 0, c.authContext)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Created Organizations client")
+
+	c.orgs = c.orgsFn(cfg)
+	return c.orgs, nil
 }

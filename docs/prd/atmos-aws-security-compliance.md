@@ -2,7 +2,7 @@
 
 **Status:** Shipped (experimental)
 **Version:** 1.0
-**Last Updated:** 2026-04-03
+**Last Updated:** 2026-04-05
 
 ---
 
@@ -46,10 +46,10 @@ and `atmos gcp security`.
 ┌─────────────────────────────────────────────────────────────────────┐
 │                 atmos aws security analyze <stack>                  │
 ├─────────────────────────────────────────────────────────────────────┤
-│  Atmos Auth → AWS Security Hub → Component Mapper → AI → Report   │
+│  Atmos Auth → AWS Security Hub → Component Mapper → AI → Report     │
 │                                                                     │
-│  Finding → Resource ARN → Resource Tags → Atmos Stack →            │
-│  Atmos Component → Terraform Source → Root Cause → Remediation     │
+│  Finding → Resource ARN → Resource Tags → Atmos Stack →             │
+│  Atmos Component → Terraform Source → Root Cause → Remediation      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -81,15 +81,15 @@ fill the same fields in the same format.
 
 The system uses 7 mapping strategies in priority order, stopping at the first confident match:
 
-| Priority | Method | Confidence | How It Works |
-|----------|--------|------------|--------------|
-| 1 | `finding-tag` | exact | Stack + component tags (configurable, default `atmos:stack` + `atmos:component`) embedded in the Security Hub finding |
-| 2 | `tag-api` | exact | Same tags from the Resource Groups Tagging API (same-account only) |
-| 3 | `context-tags` | high | Cloud Posse context tags (`Namespace`, `Tenant`, `Environment`, `Stage`, `Name`) reconstruct naming prefix → extract component name |
-| 4 | `account-map` | low | Account-level findings → account name from `aws.security.account_map` config |
-| 5 | `ecr-repo` | low | ECR findings → component from repository name, stack from account map |
-| 6 | `naming-convention` | low | Last hyphen segment of resource name (unreliable for multi-word components) |
-| 7 | `resource-type` | low | AWS resource type → component name heuristic |
+| Priority | Method              | Confidence | How It Works                                                                                                                                       |
+|----------|---------------------|------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1        | `finding-tag`       | exact      | Stack + component tags (configurable, default `atmos:stack` + `atmos:component`) embedded in the Security Hub finding                              |
+| 2        | `tag-api`           | exact      | Same tags from the Resource Groups Tagging API (same-account only)                                                                                 |
+| 3        | `context-tags`      | high       | Cloud Posse context tags (`Namespace`, `Tenant`, `Environment`, `Stage`, `Name`) reconstruct naming prefix → extract component name                |
+| 4        | `account-map`       | low        | Account-level findings → account name from config `account_map` (if configured, no API call) or AWS Organizations `DescribeAccount` API (fallback) |
+| 5        | `ecr-repo`          | low        | ECR findings → component from repository name, stack from account name                                                                             |
+| 6        | `naming-convention` | low        | Last hyphen segment of resource name (unreliable for multi-word components)                                                                        |
+| 7        | `resource-type`     | low        | AWS resource type → component name heuristic                                                                                                       |
 
 **Tag configuration** — the tag keys are configurable in `atmos.yaml`:
 
@@ -147,19 +147,19 @@ atmos aws security analyze --format json --file findings.json       # Save as JS
 atmos aws security analyze --identity security-admin --region us-west-2  # Override auth
 ```
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--stack` | string | (all) | Target stack |
-| `--component` | string | (all) | Target component |
-| `--severity` | string | `critical,high` | Severity filter |
-| `--source` | string | `all` | Source: security-hub, config, inspector, guardduty, all |
-| `--format` | string | `markdown` | Output: markdown, json, yaml, csv |
-| `--file` | string | (stdout) | Write to file |
-| `--max-findings` | int | `500` | Maximum findings |
-| `--ai` | bool | `false` | Enable AI analysis |
-| `--no-group` | bool | `false` | Disable duplicate grouping |
-| `--region` | string | (config) | AWS region override |
-| `--identity` | string | (config) | Atmos Auth identity override |
+| Flag             | Type   | Default         | Description                                             |
+|------------------|--------|-----------------|---------------------------------------------------------|
+| `--stack`        | string | (all)           | Target stack                                            |
+| `--component`    | string | (all)           | Target component                                        |
+| `--severity`     | string | `critical,high` | Severity filter                                         |
+| `--source`       | string | `all`           | Source: security-hub, config, inspector, guardduty, all |
+| `--format`       | string | `markdown`      | Output: markdown, json, yaml, csv                       |
+| `--file`         | string | (stdout)        | Write to file                                           |
+| `--max-findings` | int    | `500`           | Maximum findings                                        |
+| `--ai`           | bool   | `false`         | Enable AI analysis                                      |
+| `--no-group`     | bool   | `false`         | Disable duplicate grouping                              |
+| `--region`       | string | (config)        | AWS region override                                     |
+| `--identity`     | string | (config)        | Atmos Auth identity override                            |
 
 ### `atmos aws compliance report`
 
@@ -170,14 +170,14 @@ atmos aws compliance report --framework pci-dss --format json       # PCI DSS as
 atmos aws compliance report --controls CIS.1.14,CIS.2.1             # Specific controls
 ```
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--stack` | string | (all) | Target stack |
-| `--framework` | string | (all) | Framework: cis-aws, pci-dss, soc2, hipaa, nist |
-| `--format` | string | `markdown` | Output: markdown, json, yaml, csv |
-| `--file` | string | (stdout) | Write to file |
-| `--controls` | string | (all) | Specific control IDs to check |
-| `--identity` | string | (config) | Atmos Auth identity override |
+| Flag          | Type   | Default    | Description                                    |
+|---------------|--------|------------|------------------------------------------------|
+| `--stack`     | string | (all)      | Target stack                                   |
+| `--framework` | string | (all)      | Framework: cis-aws, pci-dss, soc2, hipaa, nist |
+| `--format`    | string | `markdown` | Output: markdown, json, yaml, csv              |
+| `--file`      | string | (stdout)   | Write to file                                  |
+| `--controls`  | string | (all)      | Specific control IDs to check                  |
+| `--identity`  | string | (config)   | Atmos Auth identity override                   |
 
 ---
 
@@ -195,9 +195,10 @@ aws:
     tag_mapping:
       stack_tag: "atmos:stack"       # default; customize to match your tagging standard
       component_tag: "atmos:component"
-    account_map:                     # Account ID → name for account-level findings
-      "123456789012": "core-security"
-      "234567890123": "plat-use2-dev"
+    # Account names resolved automatically via AWS Organizations DescribeAccount API.
+    # Optional override if Organizations access is unavailable:
+    # account_map:
+    #   "123456789012": "core-security"
     frameworks: [cis-aws, pci-dss]
 
 # AI (optional, for --ai flag)
@@ -214,9 +215,33 @@ ai:
 
 ### Authentication
 
-All AWS API calls use Atmos Auth. The `identity` field targets the delegated admin account
-where Security Hub aggregates findings from all member accounts. The `region` field targets
-the Security Hub aggregation region.
+Each command directly calls `auth.CreateAndAuthenticateManagerWithAtmosConfig()` — the standard
+Atmos Auth entry point — then reads `authManager.GetStackInfo().AuthContext.AWS` to get the
+`AWSAuthContext` populated by `PostAuthenticate` → `SetAuthContext`. Credential validation uses
+`identity.ValidateAWSCredentials()` (STS GetCallerIdentity) before the pipeline starts.
+
+The `identity` config field targets the delegated admin account where Security Hub aggregates
+findings from all member accounts. The `region` field targets the aggregation region.
+
+Account names for account-level findings are resolved dynamically via the AWS Organizations
+`DescribeAccount` API. The optional `account_map` config provides a static override — when
+configured, matched account IDs are resolved from the map without an API call.
+
+#### Atmos Auth Patterns Across Commands
+
+Each command type has different credential delivery needs:
+
+| Command                       | Auth Pattern                                                                                                                                       | How Credentials Reach AWS SDK             |
+|-------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------|
+| **Terraform/Helmfile/Packer** | `createAndAuthenticateAuthManager()` merges component-specific auth → `PostAuthenticate` populates `AuthContext.AWS` → `PrepareShellEnvironment()` | Subprocess inherits `AWS_*` env vars      |
+| **S3 backend**                | Already has `AuthContext.AWS` from the Terraform flow                                                                                              | `LoadConfigWithAuth(authContext.AWS)`     |
+| **EKS token**                 | Custom `authenticateForToken()` → `Authenticate()` → `ICredentials` → `exportAWSCredsToEnv()`                                                      | `os.Setenv(AWS_ACCESS_KEY_ID, ...)`       |
+| **ECR login**                 | `ExecuteIntegration()` or `ExecuteIdentityIntegrations()`                                                                                          | Integrations handle Docker login directly |
+| **Security/Compliance**       | `CreateAndAuthenticateManagerWithAtmosConfig()` → `GetStackInfo().AuthContext.AWS`                                                                 | `LoadConfigWithAuth(authCtx)`             |
+
+The security commands follow the S3 backend pattern (in-process AWS SDK via `LoadConfigWithAuth`
+with `AWSAuthContext`), using the standard `CreateAndAuthenticateManagerWithAtmosConfig()` entry
+point.
 
 ### Required AWS Permissions
 
@@ -239,6 +264,12 @@ the Security Hub aggregation region.
       "Effect": "Allow",
       "Action": ["tag:GetResources"],
       "Resource": "*"
+    },
+    {
+      "Sid": "AccountNameLookup",
+      "Effect": "Allow",
+      "Action": ["organizations:DescribeAccount"],
+      "Resource": "*"
     }
   ]
 }
@@ -250,48 +281,48 @@ the Security Hub aggregation region.
 
 ### File Structure
 
-| File | Purpose |
-|------|---------|
-| `cmd/aws/security.go` | Security analyze command, flags, filtering, AI integration |
-| `cmd/aws/compliance.go` | Compliance report command, control filtering |
-| `cmd/aws/credentials.go` | Shared AWS credential validation, Atmos Auth resolution |
-| `pkg/aws/security/types.go` | Finding, ComponentMapping, Remediation, Report structs |
-| `pkg/aws/security/finding_fetcher.go` | Security Hub API queries, pagination, compliance scoring |
-| `pkg/aws/security/component_mapper.go` | 7-strategy mapping pipeline (tag → context → heuristic) |
-| `pkg/aws/security/analyzer.go` | AI analysis: dedup, retry, multi-turn tools, skill prompt |
-| `pkg/aws/security/report_renderer.go` | Markdown, JSON, YAML, CSV rendering |
-| `pkg/aws/security/aws_clients.go` | AWS SDK interfaces (SecurityHubAPI, TaggingAPI) |
-| `pkg/aws/security/cache.go` | Findings and compliance cache |
-| `pkg/aws/security/skill_prompt.md` | Embedded AI system prompt for structured remediation |
-| `pkg/schema/aws_security.go` | Schema: AWSSecuritySettings, TagMapping, AccountMap |
-| `agent-skills/skills/atmos-aws-security/SKILL.md` | Agent skill for MCP/AI tools |
+| File                                              | Purpose                                                                     |
+|---------------------------------------------------|-----------------------------------------------------------------------------|
+| `cmd/aws/security/security.go`                    | Security analyze command, flags, filtering, auth, AI integration            |
+| `cmd/aws/compliance/compliance.go`                | Compliance report command, control filtering, auth                          |
+| `pkg/aws/identity/identity.go`                    | AWS SDK config loading, `GetCallerIdentity`, `ValidateAWSCredentials`       |
+| `pkg/aws/security/types.go`                       | Finding, ComponentMapping, Remediation, Report, `ParseOutputFormat`         |
+| `pkg/aws/security/finding_fetcher.go`             | Security Hub API queries, pagination, compliance scoring                    |
+| `pkg/aws/security/component_mapper.go`            | 7-strategy mapping pipeline (tag → context → Organizations API → heuristic) |
+| `pkg/aws/security/analyzer.go`                    | AI analysis: dedup, retry, multi-turn tools, skill prompt                   |
+| `pkg/aws/security/report_renderer.go`             | Markdown, JSON, YAML, CSV rendering                                         |
+| `pkg/aws/security/aws_clients.go`                 | AWS SDK interfaces (SecurityHubAPI, TaggingAPI, OrganizationsAPI)           |
+| `pkg/aws/security/cache.go`                       | Findings and compliance cache                                               |
+| `pkg/aws/security/skill_prompt.md`                | Embedded AI system prompt for structured remediation                        |
+| `pkg/schema/aws_security.go`                      | Schema: AWSSecuritySettings, TagMapping, AccountMap                         |
+| `agent-skills/skills/atmos-aws-security/SKILL.md` | Agent skill for MCP/AI tools                                                |
 
 ### AI Tools
 
 Registered in `pkg/ai/tools/atmos/` for both CLI commands and MCP clients:
 
-| Tool | Purpose |
-|------|---------|
-| `atmos_list_findings` | List security findings with filters |
-| `atmos_describe_finding` | Full finding details with mapping |
-| `atmos_analyze_finding` | AI analysis for a specific finding |
-| `atmos_compliance_report` | Compliance posture report |
+| Tool                      | Purpose                             |
+|---------------------------|-------------------------------------|
+| `atmos_list_findings`     | List security findings with filters |
+| `atmos_describe_finding`  | Full finding details with mapping   |
+| `atmos_analyze_finding`   | AI analysis for a specific finding  |
+| `atmos_compliance_report` | Compliance posture report           |
 
 ### Error Handling
 
 Static sentinel errors in `errors/errors.go`:
 
-| Error | When |
-|-------|------|
-| `ErrAISecurityNotEnabled` | `aws.security.enabled` is false |
-| `ErrAISecurityFetchFailed` | AWS API errors |
-| `ErrAISecurityMappingFailed` | Component mapping fails |
-| `ErrAISecurityAnalysisFailed` | AI provider errors |
-| `ErrAWSCredentialsNotValid` | STS GetCallerIdentity fails |
-| `ErrAISecurityInvalidSeverity` | Unknown severity value |
-| `ErrAISecurityInvalidSource` | Unknown source value |
-| `ErrAISecurityInvalidFramework` | Unknown framework value |
-| `ErrAISecurityInvalidFormat` | Unknown output format |
+| Error                           | When                            |
+|---------------------------------|---------------------------------|
+| `ErrAISecurityNotEnabled`       | `aws.security.enabled` is false |
+| `ErrAISecurityFetchFailed`      | AWS API errors                  |
+| `ErrAISecurityMappingFailed`    | Component mapping fails         |
+| `ErrAISecurityAnalysisFailed`   | AI provider errors              |
+| `ErrAWSCredentialsNotValid`     | STS GetCallerIdentity fails     |
+| `ErrAISecurityInvalidSeverity`  | Unknown severity value          |
+| `ErrAISecurityInvalidSource`    | Unknown source value            |
+| `ErrAISecurityInvalidFramework` | Unknown framework value         |
+| `ErrAISecurityInvalidFormat`    | Unknown output format           |
 
 ---
 
@@ -299,19 +330,20 @@ Static sentinel errors in `errors/errors.go`:
 
 ### Coverage
 
-| Test File | Tests | Coverage |
-|-----------|-------|----------|
-| `pkg/aws/security/finding_fetcher_test.go` | 17+ | ~92% |
-| `pkg/aws/security/component_mapper_test.go` | 11 | ~90% |
-| `pkg/aws/security/report_renderer_test.go` | 18 | ~95% |
-| `pkg/aws/security/analyzer_test.go` | 25+ | ~90% |
-| `pkg/aws/security/cache_test.go` | 9 | ~90% |
-| `cmd/aws/security_test.go` | 50+ | 100%* |
-| `cmd/aws/compliance_test.go` | 25+ | 100%* |
+| Test File                                   | Tests | Coverage |
+|---------------------------------------------|-------|----------|
+| `pkg/aws/security/finding_fetcher_test.go`  | 30+   | ~92%     |
+| `pkg/aws/security/component_mapper_test.go` | 27+   | ~90%     |
+| `pkg/aws/security/report_renderer_test.go`  | 30+   | ~95%     |
+| `pkg/aws/security/analyzer_test.go`         | 25+   | ~90%     |
+| `pkg/aws/security/cache_test.go`            | 15+   | ~90%     |
+| `pkg/aws/security/types_test.go`            | 12    | 100%     |
+| `cmd/aws/security/security_test.go`         | 50+   | 100%*    |
+| `cmd/aws/compliance/compliance_test.go`     | 25+   | 100%*    |
 
-\* All testable functions. RunE handlers and `validateAWSCredentials` require real AWS.
+\* All testable functions. RunE handlers require real AWS.
 
-**Overall:** `pkg/aws/security/` at 84.5%, `cmd/aws/` at 32.5%.
+**Overall:** `pkg/aws/security/` at 91.8%.
 
 ### Approach
 
@@ -328,15 +360,15 @@ Tested against a multi-account AWS organization (11 accounts, Security Hub deleg
 
 ### Mapping Accuracy (500 findings)
 
-| Method | Count | Confidence |
-|--------|-------|------------|
-| `ecr-repo` | 395 | low |
-| `context-tags` | 41 | high |
-| `finding-tag` | 28 | exact |
-| `account-map` | 21 | low |
-| `resource-type` | 1 | low |
-| **Total mapped** | **486 (97.2%)** | |
-| Unmapped | 14 (2.8%) | |
+| Method           | Count           | Confidence |
+|------------------|-----------------|------------|
+| `ecr-repo`       | 395             | low        |
+| `context-tags`   | 41              | high       |
+| `finding-tag`    | 28              | exact      |
+| `account-map`    | 21              | low        |
+| `resource-type`  | 1               | low        |
+| **Total mapped** | **486 (97.2%)** |            |
+| Unmapped         | 14 (2.8%)       |            |
 
 ### Stack/Component Filtering
 
@@ -347,8 +379,9 @@ Tested against a multi-account AWS organization (11 accounts, Security Hub deleg
 
 ### Compliance Report
 
-- `atmos aws compliance report --framework cis-aws` → 40/42 controls passing (95%)
-- 2 failing: AWS Config not enabled (CRITICAL), S3 public access block (MEDIUM)
+- `atmos aws compliance report --framework cis-aws` → 35/42 controls passing (83%)
+- 7 failing controls: Config.1 (CRITICAL), EC2.14, EC2.13 (HIGH), S3.1, EC2.6 (MEDIUM), IAM.17, CloudTrail.7 (LOW)
+- Controls deduplicated by `SecurityControlID` (e.g., `EC2.18`)
 - Total controls counted via `ListSecurityControlDefinitions` API
 
 ### AI Analysis (`--ai`)
@@ -421,33 +454,33 @@ method (tags vs naming convention) determines which stack a finding belongs to.
 Security Hub aggregates findings from: AWS Config, GuardDuty, Inspector, Macie, IAM Access Analyzer.
 All follow a multi-account delegated admin pattern with the security account as admin.
 
-| Service | Component | Finding Types |
-|---------|-----------|---------------|
-| Security Hub | `aws-security-hub` | Aggregated ASFF findings, compliance controls |
-| AWS Config | `aws-config` | Resource compliance evaluations |
-| GuardDuty | `aws-guardduty` | Threat detection (ML-based) |
-| Inspector v2 | `aws-inspector2` | CVE vulnerabilities, network reachability |
-| Access Analyzer | `aws-access-analyzer` | External/unused access |
-| Macie | `aws-macie` | S3 sensitive data, policy findings |
+| Service         | Component             | Finding Types                                 |
+|-----------------|-----------------------|-----------------------------------------------|
+| Security Hub    | `aws-security-hub`    | Aggregated ASFF findings, compliance controls |
+| AWS Config      | `aws-config`          | Resource compliance evaluations               |
+| GuardDuty       | `aws-guardduty`       | Threat detection (ML-based)                   |
+| Inspector v2    | `aws-inspector2`      | CVE vulnerabilities, network reachability     |
+| Access Analyzer | `aws-access-analyzer` | External/unused access                        |
+| Macie           | `aws-macie`           | S3 sensitive data, policy findings            |
 
 ### Prerequisite Components
 
-| Component | Required |
-|-----------|----------|
-| `cloudtrail` + `cloudtrail-bucket` | Yes |
-| `aws-config` + `aws-config-bucket` | Yes |
-| `aws-security-hub` | Yes |
-| `aws-guardduty` | Yes |
-| `aws-inspector2` | Recommended |
-| `aws-access-analyzer` | Recommended |
-| `aws-macie` | Optional |
+| Component                          | Required    |
+|------------------------------------|-------------|
+| `cloudtrail` + `cloudtrail-bucket` | Yes         |
+| `aws-config` + `aws-config-bucket` | Yes         |
+| `aws-security-hub`                 | Yes         |
+| `aws-guardduty`                    | Yes         |
+| `aws-inspector2`                   | Recommended |
+| `aws-access-analyzer`              | Recommended |
+| `aws-macie`                        | Optional    |
 
 ---
 
 ## Documentation
 
-- `website/docs/cli/commands/aws/security/analyze.mdx`
-- `website/docs/cli/commands/aws/compliance/report.mdx`
-- `website/docs/cli/configuration/aws/security.mdx`
-- `examples/aws-security-compliance/`
-- `website/blog/2026-04-03-aws-security-compliance.mdx`
+- CLI: `website/docs/cli/commands/aws/security/analyze.mdx`, `website/docs/cli/commands/aws/compliance/report.mdx`
+- Config: `website/docs/cli/configuration/aws/security.mdx`
+- Example: `examples/aws-security-compliance/`
+- Blog: `website/blog/2026-04-03-aws-security-compliance.mdx`
+- PRD: `docs/prd/atmos-aws-security-compliance.md` (this file)

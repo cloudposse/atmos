@@ -38,12 +38,12 @@ aws:
       stack_tag: "atmos:stack"
       component_tag: "atmos:component"
 
-    # Account ID → name mapping for account-level findings.
-    # Update with your AWS account IDs and names.
-    account_map:
-      "123456789012": "security"
-      "234567890123": "prod"
-      "345678901234": "staging"
+    # Account names are resolved automatically via AWS Organizations DescribeAccount API.
+    # If account_map is configured, it takes priority (no API call for matched IDs).
+    # Use account_map only if Organizations access is unavailable.
+    # account_map:
+    #   "123456789012": "security"
+    #   "234567890123": "prod"
 
     frameworks:
       - cis-aws

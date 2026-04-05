@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	tagtypes "github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi/types"
 
@@ -41,21 +42,23 @@ func NewComponentMapper(atmosConfig *schema.AtmosConfiguration, authCtx *schema.
 	}
 
 	return &dualPathMapper{
-		atmosConfig: atmosConfig,
-		tagMapping:  resolveTagMapping(atmosConfig),
-		accountMap:  atmosConfig.AWS.Security.AccountMap,
-		clients:     clients,
-		tagCache:    make(map[string]*tagLookupResult),
+		atmosConfig:      atmosConfig,
+		tagMapping:       resolveTagMapping(atmosConfig),
+		accountMap:       atmosConfig.AWS.Security.AccountMap,
+		accountNameCache: make(map[string]string),
+		clients:          clients,
+		tagCache:         make(map[string]*tagLookupResult),
 	}
 }
 
 // dualPathMapper implements the dual-path mapping algorithm from the PRD.
 type dualPathMapper struct {
-	atmosConfig *schema.AtmosConfiguration
-	tagMapping  schema.AWSSecurityTagMapping
-	accountMap  map[string]string // Account ID → name for account-level findings.
-	clients     *awsClientCache
-	tagCache    map[string]*tagLookupResult // Cache by resource ARN.
+	atmosConfig      *schema.AtmosConfiguration
+	tagMapping       schema.AWSSecurityTagMapping
+	accountMap       map[string]string // Account ID → name override from config.
+	accountNameCache map[string]string // Account ID → name from AWS Organizations API.
+	clients          *awsClientCache
+	tagCache         map[string]*tagLookupResult // Cache by resource ARN.
 }
 
 // tagLookupResult caches the result of a tag lookup for a resource.
@@ -197,14 +200,10 @@ func (m *dualPathMapper) mapByAccountID(finding *Finding) *ComponentMapping {
 		return nil
 	}
 
-	// Look up account name from config.
-	accountName := ""
-	if m.accountMap != nil {
-		accountName = m.accountMap[accountID]
-	}
+	// Resolve account name: config override → Organizations API → raw account ID.
+	accountName := m.resolveAccountName(accountID)
 	if accountName == "" && finding.AccountID != "" {
-		// Try finding.AccountID as well.
-		accountName = m.accountMap[finding.AccountID]
+		accountName = m.resolveAccountName(finding.AccountID)
 	}
 
 	if accountName == "" {
@@ -251,11 +250,8 @@ func (m *dualPathMapper) mapByECRRepo(finding *Finding) *ComponentMapping {
 		return nil
 	}
 
-	// Resolve stack from account map using the finding's account ID.
-	stack := ""
-	if m.accountMap != nil && finding.AccountID != "" {
-		stack = m.accountMap[finding.AccountID]
-	}
+	// Resolve stack from account name using the finding's account ID.
+	stack := m.resolveAccountName(finding.AccountID)
 
 	return &ComponentMapping{
 		Stack:      stack,
@@ -396,10 +392,7 @@ func (m *dualPathMapper) mapByResourceType(finding *Finding) *ComponentMapping {
 
 	if component, ok := resourceTypeMap[finding.ResourceType]; ok {
 		// Resolve stack from account map.
-		stack := ""
-		if m.accountMap != nil && finding.AccountID != "" {
-			stack = m.accountMap[finding.AccountID]
-		}
+		stack := m.resolveAccountName(finding.AccountID)
 		return &ComponentMapping{
 			Stack:      stack,
 			Component:  component,
@@ -546,6 +539,75 @@ func extractRegionFromARN(arn string) string {
 		return parts[3]
 	}
 	return "us-east-1"
+}
+
+// resolveRegion returns the configured region for AWS API calls.
+func (m *dualPathMapper) resolveRegion() string {
+	if m.atmosConfig != nil && m.atmosConfig.AWS.Security.Region != "" {
+		return m.atmosConfig.AWS.Security.Region
+	}
+	if m.clients != nil && m.clients.authContext != nil && m.clients.authContext.Region != "" {
+		return m.clients.authContext.Region
+	}
+	return "us-east-1"
+}
+
+// resolveAccountName resolves an AWS account ID to a human-readable name.
+// Priority: config account_map override → cached API result → Organizations API → empty string.
+func (m *dualPathMapper) resolveAccountName(accountID string) string {
+	if accountID == "" {
+		return ""
+	}
+
+	// Check config override first.
+	if m.accountMap != nil {
+		if name, ok := m.accountMap[accountID]; ok {
+			return name
+		}
+	}
+
+	// Check cache.
+	if m.accountNameCache != nil {
+		if name, ok := m.accountNameCache[accountID]; ok {
+			return name
+		}
+	}
+
+	// Try AWS Organizations API.
+	name := m.lookupAccountName(accountID)
+	if m.accountNameCache != nil {
+		m.accountNameCache[accountID] = name
+	}
+	return name
+}
+
+// lookupAccountName calls the AWS Organizations DescribeAccount API to get the account name.
+// Returns empty string on any error (non-org accounts, permission issues, etc.).
+func (m *dualPathMapper) lookupAccountName(accountID string) string {
+	if m.clients == nil {
+		return ""
+	}
+
+	client, err := m.clients.getOrganizationsClient(context.Background(), m.resolveRegion())
+	if err != nil {
+		log.Debug("Failed to create Organizations client for account lookup", "error", err)
+		return ""
+	}
+
+	output, err := client.DescribeAccount(context.Background(), &organizations.DescribeAccountInput{
+		AccountId: aws.String(accountID),
+	})
+	if err != nil {
+		log.Debug("Failed to look up account name", "account_id", accountID, "error", err)
+		return ""
+	}
+
+	if output.Account != nil && output.Account.Name != nil {
+		log.Debug("Resolved account name from AWS Organizations", "account_id", accountID, "name", *output.Account.Name)
+		return *output.Account.Name
+	}
+
+	return ""
 }
 
 // resolveTagMapping returns the tag mapping config with defaults applied.

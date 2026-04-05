@@ -1,8 +1,10 @@
 package security
 
 import (
+	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -158,3 +160,19 @@ const (
 	FormatYAML     OutputFormat = "yaml"
 	FormatCSV      OutputFormat = "csv"
 )
+
+// ParseOutputFormat validates a format string and returns the corresponding OutputFormat.
+func ParseOutputFormat(format string) (OutputFormat, error) {
+	switch strings.ToLower(format) {
+	case "markdown", "md", "":
+		return FormatMarkdown, nil
+	case "json":
+		return FormatJSON, nil
+	case "yaml", "yml":
+		return FormatYAML, nil
+	case "csv":
+		return FormatCSV, nil
+	default:
+		return "", errUtils.ErrAISecurityInvalidFormat
+	}
+}
