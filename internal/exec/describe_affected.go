@@ -462,7 +462,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 				Err()
 		}
 
-		return uploadErr
+		return errUtils.Build(errUtils.ErrFailedToUploadStacks).WithCause(uploadErr).Err()
 	}
 
 	ui.Successf("Uploaded %d affected component(s) to Atmos Pro", len(affected))

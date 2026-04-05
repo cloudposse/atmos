@@ -239,6 +239,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 			worktreePath, err = g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
 		} else {
 			log.Debug("Auto-fetch failed in worktree creation", "branch", targetBranch, "error", fetchErr)
+			err = errors.Join(err, fetchErr)
 		}
 	}
 	if err != nil {

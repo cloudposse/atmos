@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,7 +34,7 @@ func TestFetchRef_InvalidBranchName(t *testing.T) {
 
 func TestFetchRef_ValidBranchNames(t *testing.T) {
 	// These should pass validation but may fail on the actual fetch (no remote).
-	// We just verify the regex accepts them.
+	// We just verify git accepts them as valid branch names.
 	validNames := []string{
 		"main",
 		"develop",
@@ -41,10 +42,12 @@ func TestFetchRef_ValidBranchNames(t *testing.T) {
 		"release/v1.2.3",
 		"fix-123",
 		"user.name/branch",
+		"_release",
+		"feature+1",
 	}
 
 	for _, name := range validNames {
-		assert.True(t, validBranchName.MatchString(name), "expected %q to be valid", name)
+		assert.True(t, isValidBranchName(name), "expected %q to be valid", name)
 	}
 }
 
@@ -57,25 +60,32 @@ func TestFetchRef_FetchFromLocalBareRepo(t *testing.T) {
 	runGit(t, originDir, "add", "initial.txt")
 	runGit(t, originDir, "commit", "-m", "initial commit")
 
+	// Detect the default branch name (may be "main" or "master" depending on git config).
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = originDir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	defaultBranch := strings.TrimSpace(string(out))
+
 	// Create a second branch with a commit.
 	runGit(t, originDir, "checkout", "-b", "test-branch")
 	branchFile := filepath.Join(originDir, "branch.txt")
 	require.NoError(t, os.WriteFile(branchFile, []byte("branch"), 0o644))
 	runGit(t, originDir, "add", "branch.txt")
 	runGit(t, originDir, "commit", "-m", "branch commit")
-	runGit(t, originDir, "checkout", "master")
+	runGit(t, originDir, "checkout", defaultBranch)
 
 	// Clone only the default branch (single-branch).
 	cloneDir := t.TempDir()
 	runGit(t, cloneDir, "clone", "--single-branch", originDir, ".")
 
 	// Verify origin/test-branch doesn't exist yet.
-	cmd := exec.Command("git", "rev-parse", "--verify", "origin/test-branch")
+	cmd = exec.Command("git", "rev-parse", "--verify", "origin/test-branch")
 	cmd.Dir = cloneDir
 	assert.Error(t, cmd.Run(), "origin/test-branch should not exist before fetch")
 
 	// Fetch the branch.
-	err := FetchRef(cloneDir, "test-branch")
+	err = FetchRef(cloneDir, "test-branch")
 	require.NoError(t, err)
 
 	// Verify origin/test-branch now exists.

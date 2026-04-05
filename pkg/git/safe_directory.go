@@ -1,11 +1,13 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	atmosErrors "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -33,7 +35,7 @@ func EnsureSafeDirectory() error {
 	cmd := exec.Command("git", "config", "--global", "--add", "safe.directory", workspace) //nolint:gosec // workspace is from the trusted GITHUB_WORKSPACE env var set by the GitHub Actions runner.
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("setting safe.directory for %s: %w\n%s", workspace, err, string(output))
+		return errors.Join(atmosErrors.ErrGitCommandFailed, fmt.Errorf("setting safe.directory for %s: %w\n%s", workspace, err, string(output)))
 	}
 
 	log.Debug("Configured git safe.directory", "path", workspace)
