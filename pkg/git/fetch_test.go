@@ -47,7 +47,7 @@ func TestFetchRef_ValidBranchNames(t *testing.T) {
 	}
 
 	for _, name := range validNames {
-		assert.True(t, isValidBranchName(name), "expected %q to be valid", name)
+		assert.NoError(t, validateBranchName(name), "expected %q to be valid", name)
 	}
 }
 

@@ -12,13 +12,22 @@ import (
 // ErrInvalidBranchName indicates a branch name contains invalid characters.
 var ErrInvalidBranchName = errors.New("invalid branch name")
 
-// isValidBranchName validates a branch name using git's own rules.
-func isValidBranchName(branch string) bool {
+// validateBranchName validates a branch name using git's own rules.
+// It distinguishes between invalid branch names (ExitError) and git execution
+// failures (missing binary, permissions, etc.), returning the appropriate error.
+func validateBranchName(branch string) error {
 	if branch == "" {
-		return false
+		return fmt.Errorf("%w: %q", ErrInvalidBranchName, branch)
 	}
 	cmd := exec.Command("git", "check-ref-format", "--branch", branch)
-	return cmd.Run() == nil
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return fmt.Errorf("%w: %q", ErrInvalidBranchName, branch)
+		}
+		return fmt.Errorf("validating branch %q with git check-ref-format: %w", branch, err)
+	}
+	return nil
 }
 
 // FetchRef fetches a single branch from the "origin" remote using a narrow refspec.
@@ -28,8 +37,8 @@ func isValidBranchName(branch string) bool {
 func FetchRef(repoDir, branch string) error {
 	defer perf.Track(nil, "git.FetchRef")()
 
-	if !isValidBranchName(branch) {
-		return fmt.Errorf("%w: %q", ErrInvalidBranchName, branch)
+	if err := validateBranchName(branch); err != nil {
+		return err
 	}
 
 	refspec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
