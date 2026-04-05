@@ -2,6 +2,8 @@ package exec
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/tests"
@@ -1700,7 +1703,18 @@ func TestResolveBaseFromCI(t *testing.T) {
 		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
 		t.Setenv("GITHUB_BASE_REF", "main")
 
-		eventPayload := `{"action":"synchronize","pull_request":{"base":{"ref":"main","sha":"abc123def456789012345678901234567890abcd"}}}`
+		eventPayload := `{
+			"action": "synchronize",
+			"pull_request": {
+				"head": {
+					"sha": "headsha123456789012345678901234567890ab"
+				},
+				"base": {
+					"ref": "main",
+					"sha": "abc123def456789012345678901234567890abcd"
+				}
+			}
+		}`
 		eventPath := filepath.Join(t.TempDir(), "event.json")
 		err := os.WriteFile(eventPath, []byte(eventPayload), 0o644)
 		require.NoError(t, err)
@@ -1710,8 +1724,10 @@ func TestResolveBaseFromCI(t *testing.T) {
 			CLIConfig: &schema.AtmosConfiguration{},
 		}
 		resolveBaseFromCI(describe)
-		assert.Empty(t, describe.Ref)
+		assert.Equal(t, "pull_request", describe.CIEventType)
+		assert.Equal(t, "headsha123456789012345678901234567890ab", describe.HeadSHAOverride)
 		assert.Equal(t, "abc123def456789012345678901234567890abcd", describe.SHA)
+		assert.Equal(t, "main", describe.TargetBranch)
 	})
 
 	t.Run("GitHub Actions push event with before SHA", func(t *testing.T) {
@@ -2075,4 +2091,172 @@ func TestUploadNoEventTypeAllowed(t *testing.T) {
 	if err != nil {
 		assert.NotContains(t, err.Error(), "pull_request event")
 	}
+}
+
+// TestUploadSuppressesOutputButStillUploads verifies that when --upload is set without --verbose,
+// the JSON output is suppressed (printOrWriteToFile is not called) but the upload path is still reached.
+func TestUploadSuppressesOutputButStillUploads(t *testing.T) {
+	printCalled := false
+
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			printCalled = true
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	affected := []schema.Affected{
+		{Component: "vpc", Stack: "dev"},
+		{Component: "rds", Stack: "staging"},
+	}
+
+	// Upload=true, Verbose=false, no OutputFile — output should be suppressed.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Verbose:     false,
+			Format:      "json",
+			CIEventType: "pull_request",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		affected,
+	)
+
+	// printOrWriteToFile should NOT have been called — output is suppressed.
+	assert.False(t, printCalled, "printOrWriteToFile should not be called when --upload is used without --verbose")
+
+	// The function should proceed past event validation to the API client creation step.
+	// Since no API env vars are set, it logs a warning and returns nil (graceful degradation).
+	assert.NoError(t, err, "upload path should be reached and complete without error")
+}
+
+// TestUploadShowsOutputWhenVerbose verifies that when --upload and --verbose are both set,
+// the JSON output is displayed (printOrWriteToFile is called) and the upload path is still reached.
+func TestUploadShowsOutputWhenVerbose(t *testing.T) {
+	printCalled := false
+
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			printCalled = true
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	affected := []schema.Affected{
+		{Component: "vpc", Stack: "dev"},
+	}
+
+	// Upload=true, Verbose=true — output should be shown.
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Verbose:     true,
+			Format:      "json",
+			CIEventType: "pull_request",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		affected,
+	)
+
+	// printOrWriteToFile SHOULD have been called — verbose mode shows output.
+	assert.True(t, printCalled, "printOrWriteToFile should be called when --upload and --verbose are both set")
+
+	// Upload path should still complete.
+	assert.NoError(t, err, "upload path should be reached and complete without error")
+}
+
+// TestUploadShowsOutputWhenOutputFileRequested verifies that file output still renders JSON
+// and the upload succeeds, covering the OutputFile branch in uploadableQuery.
+func TestUploadShowsOutputWhenOutputFileRequested(t *testing.T) {
+	printCalled := false
+	var gotFormat, gotFile string
+	var uploadReq dtos.UploadAffectedStacksRequest
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Pro: schema.ProSettings{
+				BaseURL:  "http://placeholder.invalid",
+				Endpoint: "api/v1",
+				Token:    "test-token",
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/api/v1/affected-stacks", r.URL.Path)
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&uploadReq))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(`{"success":true}`))
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+	atmosConfig.Settings.Pro.BaseURL = server.URL
+
+	d := describeAffectedExec{
+		atmosConfig: atmosConfig,
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			printCalled = true
+			gotFormat = format
+			gotFile = file
+			assert.NotNil(t, data)
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	affected := []schema.Affected{
+		{Component: "vpc", Stack: "dev"},
+	}
+	outputFile := filepath.Join(t.TempDir(), "affected.json")
+
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:          true,
+			Verbose:         false,
+			Format:          "json",
+			OutputFile:      outputFile,
+			CIEventType:     "pull_request",
+			HeadSHAOverride: "cccccccccccccccccccccccccccccccccccccccc",
+			CLIConfig:       atmosConfig,
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		affected,
+	)
+
+	require.NoError(t, err)
+	assert.True(t, printCalled, "printOrWriteToFile should be called when OutputFile is set")
+	assert.Equal(t, "json", gotFormat)
+	assert.Equal(t, outputFile, gotFile)
+	assert.Equal(t, "cccccccccccccccccccccccccccccccccccccccc", uploadReq.HeadSHA)
+	assert.Equal(t, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", uploadReq.BaseSHA)
+	assert.Equal(t, "repo", uploadReq.RepoName)
+	assert.Equal(t, "example", uploadReq.RepoOwner)
+	require.Len(t, uploadReq.Stacks, 1)
+	assert.Equal(t, "vpc", uploadReq.Stacks[0].Component)
 }
