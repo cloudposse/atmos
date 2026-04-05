@@ -186,6 +186,7 @@ func ExecuteAtlantisGenerateRepoConfigAffectedOnly(
 			atmosConfig,
 			ref,
 			sha,
+			"",
 			false,
 			false,
 			stack,

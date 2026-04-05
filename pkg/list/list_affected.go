@@ -248,6 +248,7 @@ func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *Affected
 			atmosConfig,
 			opts.Ref,
 			opts.SHA,
+			"",    // targetBranch
 			false, // includeSpaceliftAdminStacks
 			includeSettings,
 			opts.Stack,

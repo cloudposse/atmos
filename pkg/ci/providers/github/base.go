@@ -25,6 +25,12 @@ const (
 	sourceGitHubBaseRef = "GITHUB_BASE_REF"
 	// SourcePRBaseSHA is the source label when resolving from the PR event payload.
 	sourcePRBaseSHA = "event.pull_request.base.sha"
+	// EventPullRequest is the GitHub Actions pull_request event name.
+	eventPullRequest = "pull_request"
+	// EventPullRequestTarget is the GitHub Actions pull_request_target event name.
+	eventPullRequestTarget = "pull_request_target"
+	// PayloadKeyPullRequest is the JSON key for pull request data in the event payload.
+	payloadKeyPullRequest = "pull_request"
 )
 
 // ErrEventPathNotSet is returned when $GITHUB_EVENT_PATH is not set.
@@ -34,8 +40,10 @@ var ErrEventPathNotSet = fmt.Errorf("GITHUB_EVENT_PATH is not set")
 var ErrNoParentCommit = fmt.Errorf("HEAD has no parents (initial commit)")
 
 var (
-	mergeBaseResolver    = git.MergeBase
-	parentCommitResolver = resolveParentCommit
+	mergeBaseResolver       = git.MergeBase
+	parentCommitResolver    = resolveParentCommit
+	fetchRefFunc            = git.FetchRef
+	ensureSafeDirectoryFunc = git.EnsureSafeDirectory
 )
 
 // ResolveBase returns the base commit for affected detection in GitHub Actions.
@@ -47,7 +55,7 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 	eventName := os.Getenv("GITHUB_EVENT_NAME")
 
 	switch eventName {
-	case "pull_request", "pull_request_target":
+	case eventPullRequest, eventPullRequestTarget:
 		return resolvePRBase(eventName)
 	case eventPush:
 		return resolvePushBase()
@@ -66,6 +74,12 @@ func (p *Provider) ResolveBase() (*provider.BaseResolution, error) {
 // Uses a fallback chain: PR payload base SHA → merge-base → HEAD~1 (closed PRs) → GITHUB_BASE_REF.
 // Also extracts the PR head SHA for Atmos Pro upload correlation.
 func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
+	// Ensure git trusts the workspace directory in CI containers where the
+	// repo owner may differ from the running user.
+	if err := ensureSafeDirectoryFunc(); err != nil {
+		log.Warn("Failed to configure git safe.directory", "error", err)
+	}
+
 	payload, err := readEventPayload()
 	if err != nil {
 		return nil, fmt.Errorf("reading GitHub event payload: %w", err)
@@ -81,21 +95,47 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 		if sha, mbErr := mergeBaseResolver(targetBranch); mbErr == nil {
 			if baseSHA != "" {
 				return &provider.BaseResolution{
-					SHA:       baseSHA,
-					HeadSHA:   headSHA,
-					Source:    sourcePRBaseSHA + " (merge-base also available)",
-					EventType: eventName,
+					SHA:          baseSHA,
+					HeadSHA:      headSHA,
+					Source:       sourcePRBaseSHA + " (merge-base also available)",
+					EventType:    eventName,
+					TargetBranch: targetBranch,
 				}, nil
 			}
 			return &provider.BaseResolution{
-				SHA:       sha,
-				HeadSHA:   headSHA,
-				Source:    "merge-base(HEAD, origin/" + targetBranch + ")",
-				EventType: eventName,
+				SHA:          sha,
+				HeadSHA:      headSHA,
+				Source:       "merge-base(HEAD, origin/" + targetBranch + ")",
+				EventType:    eventName,
+				TargetBranch: targetBranch,
 			}, nil
 		} else {
 			mergeBaseErr = mbErr
-			log.Debug("merge-base failed, trying fallbacks", "target", targetBranch, "error", mbErr)
+			log.Debug("merge-base failed, attempting auto-fetch", "target", targetBranch, "error", mbErr)
+
+			// Auto-fetch the target branch and retry merge-base.
+			if fetchErr := fetchRefFunc(".", targetBranch); fetchErr == nil {
+				if sha, mbErr2 := mergeBaseResolver(targetBranch); mbErr2 == nil {
+					if baseSHA != "" {
+						return &provider.BaseResolution{
+							SHA:          baseSHA,
+							HeadSHA:      headSHA,
+							Source:       sourcePRBaseSHA + " (merge-base also available after fetch)",
+							EventType:    eventName,
+							TargetBranch: targetBranch,
+						}, nil
+					}
+					return &provider.BaseResolution{
+						SHA:          sha,
+						HeadSHA:      headSHA,
+						Source:       "merge-base(HEAD, origin/" + targetBranch + ") after fetch",
+						EventType:    eventName,
+						TargetBranch: targetBranch,
+					}, nil
+				}
+			} else {
+				log.Debug("Auto-fetch failed", "branch", targetBranch, "error", fetchErr)
+			}
 		}
 	}
 
@@ -105,10 +145,11 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 			source += " (merge-base unavailable: " + mergeBaseErr.Error() + ")"
 		}
 		return &provider.BaseResolution{
-			SHA:       baseSHA,
-			HeadSHA:   headSHA,
-			Source:    source,
-			EventType: eventName,
+			SHA:          baseSHA,
+			HeadSHA:      headSHA,
+			Source:       source,
+			EventType:    eventName,
+			TargetBranch: targetBranch,
 		}, nil
 	}
 
@@ -117,10 +158,11 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	if action == "closed" {
 		if sha, parentErr := parentCommitResolver(); parentErr == nil {
 			return &provider.BaseResolution{
-				SHA:       sha,
-				HeadSHA:   headSHA,
-				Source:    "HEAD~1 (merged PR, merge-base unavailable)",
-				EventType: eventName,
+				SHA:          sha,
+				HeadSHA:      headSHA,
+				Source:       "HEAD~1 (merged PR, merge-base unavailable)",
+				EventType:    eventName,
+				TargetBranch: targetBranch,
 			}, nil
 		} else {
 			log.Debug("HEAD~1 failed for merged PR", "error", parentErr)
@@ -130,13 +172,14 @@ func resolvePRBase(eventName string) (*provider.BaseResolution, error) {
 	// Final fallback: GITHUB_BASE_REF ref.
 	res := resolveFromBaseRef(eventName)
 	res.HeadSHA = headSHA
+	res.TargetBranch = targetBranch
 	return res, nil
 }
 
 // extractTargetBranch extracts the target branch name from the PR event payload.
 // Falls back to GITHUB_BASE_REF environment variable if not found in the payload.
 func extractTargetBranch(payload map[string]any) string {
-	pr, _ := payload["pull_request"].(map[string]any)
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
 	if pr == nil {
 		return os.Getenv(envGitHubBaseRef)
 	}
@@ -157,7 +200,7 @@ func extractTargetBranch(payload map[string]any) string {
 // extractPRHeadSHA extracts the head commit SHA from a pull request event payload.
 // This SHA is used for upload correlation with Atmos Pro, which indexes by head.sha.
 func extractPRHeadSHA(payload map[string]any) string {
-	pr, _ := payload["pull_request"].(map[string]any)
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
 	if pr == nil {
 		return ""
 	}
@@ -173,7 +216,7 @@ func extractPRHeadSHA(payload map[string]any) string {
 
 // extractPRBaseSHA extracts the base commit SHA from a pull request event payload.
 func extractPRBaseSHA(payload map[string]any) string {
-	pr, _ := payload["pull_request"].(map[string]any)
+	pr, _ := payload[payloadKeyPullRequest].(map[string]any)
 	if pr == nil {
 		return ""
 	}

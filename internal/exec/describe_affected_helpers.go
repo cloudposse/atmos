@@ -187,10 +187,13 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 // processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
 // This approach uses `git worktree add` to create an isolated worktree that shares the repository's
 // object database but has its own HEAD, allowing checkout operations without affecting the main worktree.
+// The targetBranch parameter enables auto-fetching from origin when the target commit is not available
+// locally (common in CI shallow clones).
 func ExecuteDescribeAffectedWithTargetRefCheckout(
 	atmosConfig *schema.AtmosConfiguration,
 	ref string,
 	sha string,
+	targetBranch string,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stack string,
@@ -228,6 +231,16 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 
 	// Create an isolated worktree for the target ref.
 	worktreePath, err := g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
+	if err != nil && targetBranch != "" {
+		// Auto-fetch the target branch and retry when the commit is not available
+		// locally (common in CI shallow clones).
+		log.Info("Target commit not available locally, fetching base branch", "branch", targetBranch)
+		if fetchErr := g.FetchRef(localRepoInfo.LocalWorktreePath, targetBranch); fetchErr == nil {
+			worktreePath, err = g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
+		} else {
+			log.Debug("Auto-fetch failed in worktree creation", "branch", targetBranch, "error", fetchErr)
+		}
+	}
 	if err != nil {
 		return nil, nil, nil, "", err
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/go-git/go-git/v5/plumbing"
@@ -57,6 +58,7 @@ type DescribeAffectedCmdArgs struct {
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
 	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
+	TargetBranch                string           // Base branch name from CI (e.g., "main"), used to auto-fetch when refs are missing.
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -97,6 +99,7 @@ type describeAffectedExec struct {
 		atmosConfig *schema.AtmosConfiguration,
 		ref string,
 		sha string,
+		targetBranch string,
 		includeSpaceliftAdminStacks bool,
 		includeSettings bool,
 		stack string,
@@ -272,6 +275,7 @@ func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
 	describe.SHA = resolution.SHA
 	describe.HeadSHAOverride = resolution.HeadSHA
 	describe.CIEventType = resolution.EventType
+	describe.TargetBranch = resolution.TargetBranch
 
 	base := resolution.SHA
 	if base == "" {
@@ -328,6 +332,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.CLIConfig,
 			a.Ref,
 			a.SHA,
+			a.TargetBranch,
 			a.IncludeSpaceliftAdminStacks,
 			a.IncludeSettings,
 			a.Stack,
@@ -443,6 +448,17 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 
 	if uploadErr := apiClient.UploadAffectedStacks(&req); uploadErr != nil {
 		ui.Error("Failed to upload affected stacks to Atmos Pro")
+
+		var apiErr *pro.APIError
+		if errors.As(uploadErr, &apiErr) && apiErr.StatusCode == http.StatusForbidden {
+			return errUtils.Build(errUtils.ErrFailedToUploadStacks).
+				WithCause(uploadErr).
+				WithHint("Ensure the GitHub Actions workflow has `id-token: write` permission so that Atmos can authenticate via OIDC: https://atmos-pro.com/docs/configure/github-workflows").
+				WithHint("Verify that this repository has the required permissions configured in Atmos Pro: https://atmos-pro.com/docs/learn/permissions").
+				WithHint("For a working example of a properly configured setup, see the quickstart: https://atmos-pro.com/docs/install").
+				Err()
+		}
+
 		return uploadErr
 	}
 

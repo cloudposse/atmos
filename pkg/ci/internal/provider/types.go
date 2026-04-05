@@ -21,6 +21,11 @@ type BaseResolution struct {
 
 	// EventType describes the CI event (e.g., "pull_request", "push").
 	EventType string
+
+	// TargetBranch is the base branch name (e.g., "main") for PR events.
+	// Used to auto-fetch the branch when the commit is not available locally.
+	// Empty for non-PR events.
+	TargetBranch string
 }
 
 // Provider represents a CI/CD provider (GitHub Actions, GitLab CI, etc.).

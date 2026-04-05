@@ -130,7 +130,7 @@ func TestDescribeAffected(t *testing.T) {
 		return []schema.Affected{}, nil, nil, "", nil
 	}
 
-	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
+	d.executeDescribeAffectedWithTargetRefCheckout = func(atmosConfig *schema.AtmosConfiguration, ref, sha, targetBranch string, includeSpaceliftAdminStacks, includeSettings bool, stack string, processTemplates, processYamlFunctions bool, skip []string, excludeLocked bool, authManager auth.AuthManager) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error) {
 		return []schema.Affected{
 			{
 				Stack: "test-stack",
@@ -1871,7 +1871,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 	}
 	d.executeDescribeAffectedWithTargetRefCheckout = func(
 		atmosConfig *schema.AtmosConfiguration,
-		ref, sha string,
+		ref, sha, targetBranch string,
 		includeSpaceliftAdminStacks, includeSettings bool,
 		stack string, processTemplates, processYamlFunctions bool,
 		skip []string, excludeLocked bool,
