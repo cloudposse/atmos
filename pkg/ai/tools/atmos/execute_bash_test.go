@@ -194,6 +194,11 @@ func TestExecuteBashCommandTool_Execute_QuotedOperatorsAreAllowed(t *testing.T) 
 // respected when it is within the base path.
 func TestExecuteBashCommandTool_Execute_WorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
+	// Resolve symlinks so the expected path matches what resolveWorkingDir
+	// returns (e.g., macOS /var → /private/var).
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
 	exe := testHelperBin(t)
 	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "pwd")
 
@@ -241,6 +246,11 @@ func TestExecuteBashCommandTool_Execute_GitCommand(t *testing.T) {
 // TestExecuteBashCommandTool_Execute_ResultData checks the Data map fields.
 func TestExecuteBashCommandTool_Execute_ResultData(t *testing.T) {
 	dir := t.TempDir()
+	// Resolve symlinks so the expected path matches what resolveWorkingDir
+	// returns (e.g., macOS /var → /private/var).
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
 	exe := testHelperBin(t)
 	t.Setenv("ATMOS_BASH_TOOL_TEST_MODE", "echoargs")
 
