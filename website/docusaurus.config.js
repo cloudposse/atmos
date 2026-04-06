@@ -233,11 +233,11 @@ const config = {
                     },
                     {
                         from: '/core-concepts/vendor/vendor-package',
-                        to: '/vendor/component-manifest/'
+                        to: '/vendor/component-manifest'
                     },
                     {
                         from: '/vendoring/component-manifest',
-                        to: '/vendor/component-manifest/'
+                        to: '/vendor/component-manifest'
                     },
                     {
                         from: '/core-concepts/vendor/vendor-lock',
@@ -319,6 +319,38 @@ const config = {
                     {from: '/cli/commands/terraform/generate-backends', to: '/cli/commands/terraform/generate/backends'},
                     {from: '/cli/commands/terraform/generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
+                    // Broken URLs referenced by LLMs — screenshot-confirmed 404s
+                    {from: '/core-concepts/components/vendoring', to: '/vendor/'},
+                    {from: '/core-concepts/vendor/component-management', to: '/vendor/vendor-config'},
+                    {from: '/core-concepts/stacks/provisioning', to: '/components/terraform/backend-provisioning'},
+                    {from: '/reference/schemas', to: '/cli/configuration/schemas'},
+                    // Projects section moved to /projects/ and /cli/configuration/
+                    {from: '/core-concepts/projects', to: '/projects/layout'},
+                    {from: '/core-concepts/projects/configuration', to: '/cli/configuration-overview'},
+                    {from: '/core-concepts/projects/configuration/terraform', to: '/cli/configuration/components/terraform'},
+                    {from: '/core-concepts/projects/configuration/helmfile', to: '/cli/configuration/components/helmfile'},
+                    {from: '/core-concepts/projects/configuration/packer', to: '/cli/configuration/components/packer'},
+                    {from: '/core-concepts/projects/configuration/stores', to: '/cli/configuration/stores'},
+                    {from: '/core-concepts/projects/setup-editor', to: '/projects/setup-editor'},
+                    // Additional core-concepts/stacks sub-pages
+                    {from: '/core-concepts/stacks/define-components', to: '/stacks/components'},
+                    {from: '/core-concepts/stacks/settings', to: '/stacks/settings'},
+                    {from: '/core-concepts/stacks/components', to: '/stacks/components'},
+                    {from: '/core-concepts/stacks/backend', to: '/stacks/backend'},
+                    {from: '/core-concepts/stacks/vars', to: '/stacks/vars'},
+                    {from: '/core-concepts/stacks/env', to: '/stacks/env'},
+                    {from: '/core-concepts/stacks/providers', to: '/stacks/providers'},
+                    // Share data / remote state
+                    {from: '/core-concepts/share-data', to: '/stacks/share-data'},
+                    {from: '/core-concepts/share-data/remote-state', to: '/stacks/remote-state'},
+                    // Additional vendor sub-pages
+                    {from: '/core-concepts/vendor/component-manifest', to: '/vendor/component-manifest'},
+                    {from: '/core-concepts/vendor/vendor-manifest', to: '/vendor/vendor-config'},
+                    // Describe pages
+                    {from: '/core-concepts/describe/component', to: '/cli/commands/describe/usage'},
+                    // Additional component sub-pages
+                    {from: '/core-concepts/components/packer', to: '/components/packer'},
+                    {from: '/core-concepts/components/ansible', to: '/components/ansible'},
                 ],
             },
         ],
