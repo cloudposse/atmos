@@ -183,7 +183,7 @@ func (a *aiAnalyzer) analyzeWithTools(ctx context.Context, finding *Finding, pro
 	}
 
 	if finalResponse == "" {
-		return nil, fmt.Errorf("%w: empty response for finding %s", errUtils.ErrAISecurityAnalysisFailed, finding.ID)
+		return nil, fmt.Errorf("%w: empty response for finding %s", errUtils.ErrAWSSecurityAnalysisFailed, finding.ID)
 	}
 
 	return parseRemediationResponse(finalResponse, finding), nil

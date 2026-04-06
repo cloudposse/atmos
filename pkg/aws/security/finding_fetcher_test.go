@@ -820,31 +820,31 @@ func TestWrapAWSServiceError(t *testing.T) {
 	t.Run("security hub not enabled", func(t *testing.T) {
 		err := wrapAWSServiceError("GetFindings", fmt.Errorf("InvalidAccessException: Security Hub is not enabled"))
 		require.Error(t, err)
-		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+		require.ErrorIs(t, err, errUtils.ErrAWSSecurityFetchFailed)
 	})
 
 	t.Run("not subscribed", func(t *testing.T) {
 		err := wrapAWSServiceError("GetFindings", fmt.Errorf("not subscribed to service"))
 		require.Error(t, err)
-		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+		require.ErrorIs(t, err, errUtils.ErrAWSSecurityFetchFailed)
 	})
 
 	t.Run("access denied", func(t *testing.T) {
 		err := wrapAWSServiceError("GetFindings", fmt.Errorf("AccessDeniedException: User is not authorized"))
 		require.Error(t, err)
-		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+		require.ErrorIs(t, err, errUtils.ErrAWSSecurityFetchFailed)
 	})
 
 	t.Run("connection error", func(t *testing.T) {
 		err := wrapAWSServiceError("GetFindings", fmt.Errorf("UnrecognizedClientException: bad endpoint"))
 		require.Error(t, err)
-		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+		require.ErrorIs(t, err, errUtils.ErrAWSSecurityFetchFailed)
 	})
 
 	t.Run("generic error preserves message", func(t *testing.T) {
 		err := wrapAWSServiceError("GetFindings", fmt.Errorf("something unexpected"))
 		require.Error(t, err)
-		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+		require.ErrorIs(t, err, errUtils.ErrAWSSecurityFetchFailed)
 		assert.Contains(t, err.Error(), "something unexpected")
 	})
 }

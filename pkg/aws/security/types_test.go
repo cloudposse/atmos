@@ -49,7 +49,7 @@ func TestParseOutputFormat_ErrorType(t *testing.T) {
 	for _, format := range invalidFormats {
 		t.Run(format, func(t *testing.T) {
 			_, err := ParseOutputFormat(format)
-			require.ErrorIs(t, err, errUtils.ErrAISecurityInvalidFormat)
+			require.ErrorIs(t, err, errUtils.ErrAWSSecurityInvalidFormat)
 		})
 	}
 }

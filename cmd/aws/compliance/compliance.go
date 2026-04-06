@@ -76,7 +76,7 @@ var complianceReportCmd = &cobra.Command{
 
 		// Check if AWS security features are enabled.
 		if !atmosConfig.AWS.Security.Enabled {
-			return errUtils.Build(errUtils.ErrAISecurityNotEnabled).
+			return errUtils.Build(errUtils.ErrAWSSecurityNotEnabled).
 				WithHint("Add `aws.security.enabled: true` to your `atmos.yaml`").
 				WithHint("See https://atmos.tools/cli/configuration/aws for configuration reference").
 				WithExitCode(2).
@@ -163,7 +163,7 @@ var complianceReportCmd = &cobra.Command{
 		for _, fw := range frameworks {
 			report, err := fetcher.FetchComplianceStatus(ctx, fw, stack)
 			if err != nil {
-				return fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
+				return fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityFetchFailed, err)
 			}
 
 			if report == nil {
@@ -319,7 +319,7 @@ func validateFramework(framework string) error {
 		"nist":    true,
 	}
 	if !validFrameworks[framework] {
-		return errUtils.ErrAISecurityInvalidFramework
+		return errUtils.ErrAWSSecurityInvalidFramework
 	}
 	return nil
 }

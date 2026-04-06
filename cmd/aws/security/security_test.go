@@ -62,8 +62,8 @@ func TestParseSource_ErrorType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parseSource(tt.input)
 			require.Error(t, err)
-			assert.True(t, errors.Is(err, errUtils.ErrAISecurityInvalidSource),
-				"expected ErrAISecurityInvalidSource, got: %v", err)
+			assert.True(t, errors.Is(err, errUtils.ErrAWSSecurityInvalidSource),
+				"expected ErrAWSSecurityInvalidSource, got: %v", err)
 		})
 	}
 }
@@ -173,8 +173,8 @@ func TestParseSeverities_ErrorType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parseSeverities(tt.input, tt.defaults)
 			require.Error(t, err)
-			assert.True(t, errors.Is(err, errUtils.ErrAISecurityInvalidSeverity),
-				"expected ErrAISecurityInvalidSeverity, got: %v", err)
+			assert.True(t, errors.Is(err, errUtils.ErrAWSSecurityInvalidSeverity),
+				"expected ErrAWSSecurityInvalidSeverity, got: %v", err)
 		})
 	}
 }

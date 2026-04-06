@@ -58,8 +58,8 @@ func TestValidateFramework_ErrorType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validateFramework(tt.framework)
 			require.Error(t, err)
-			assert.True(t, errors.Is(err, errUtils.ErrAISecurityInvalidFramework),
-				"expected ErrAISecurityInvalidFramework, got: %v", err)
+			assert.True(t, errors.Is(err, errUtils.ErrAWSSecurityInvalidFramework),
+				"expected ErrAWSSecurityInvalidFramework, got: %v", err)
 		})
 	}
 }
@@ -201,7 +201,7 @@ func TestValidateFramework_InvalidInSequence(t *testing.T) {
 		err := validateFramework(fw)
 		if fw == "invalid-framework" {
 			require.Error(t, err, "framework %q should fail validation", fw)
-			assert.True(t, errors.Is(err, errUtils.ErrAISecurityInvalidFramework))
+			assert.True(t, errors.Is(err, errUtils.ErrAWSSecurityInvalidFramework))
 		} else {
 			require.NoError(t, err, "framework %q should pass validation", fw)
 		}

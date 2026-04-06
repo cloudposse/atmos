@@ -72,7 +72,7 @@ func (f *awsFindingFetcher) FetchFindings(ctx context.Context, opts *QueryOption
 
 	client, err := f.clients.getSecurityHubClient(ctx, region)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityFetchFailed, err)
 	}
 
 	filters := f.buildFindingFilters(opts)
@@ -116,7 +116,7 @@ func (f *awsFindingFetcher) paginateFindings(
 			NextToken:  nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityFetchFailed, err)
 		}
 
 		for i := range output.Findings {
@@ -169,7 +169,7 @@ func (f *awsFindingFetcher) FetchComplianceStatus(ctx context.Context, framework
 
 	client, err := f.clients.getSecurityHubClient(ctx, region)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityFetchFailed, err)
 	}
 
 	// Find the enabled standard ARN matching the framework.
@@ -490,7 +490,7 @@ func (f *awsFindingFetcher) countTotalControls(ctx context.Context, client Secur
 			NextToken:    nextToken,
 		})
 		if err != nil {
-			return 0, fmt.Errorf("%w: ListSecurityControlDefinitions: %w", errUtils.ErrAISecurityFetchFailed, err)
+			return 0, fmt.Errorf("%w: ListSecurityControlDefinitions: %w", errUtils.ErrAWSSecurityFetchFailed, err)
 		}
 
 		total += len(output.SecurityControlDefinitions)
@@ -570,7 +570,7 @@ func wrapAWSServiceError(operation string, err error) error {
 	// Security Hub not enabled.
 	if strings.Contains(msg, "InvalidAccessException") || strings.Contains(msg, "not subscribed") ||
 		strings.Contains(msg, "Security Hub is not enabled") {
-		return errUtils.Build(errUtils.ErrAISecurityFetchFailed).
+		return errUtils.Build(errUtils.ErrAWSSecurityFetchFailed).
 			WithCause(err).
 			WithExplanation("AWS Security Hub is not enabled in this account/region").
 			WithHint("Enable Security Hub: `aws securityhub enable-security-hub --region <region>`").
@@ -582,7 +582,7 @@ func wrapAWSServiceError(operation string, err error) error {
 	// Access denied / insufficient permissions.
 	if strings.Contains(msg, "AccessDeniedException") || strings.Contains(msg, "is not authorized") ||
 		strings.Contains(msg, "Access Denied") {
-		return errUtils.Build(errUtils.ErrAISecurityFetchFailed).
+		return errUtils.Build(errUtils.ErrAWSSecurityFetchFailed).
 			WithCause(err).
 			WithExplanationf("Insufficient permissions for %s", operation).
 			WithHint("Ensure the IAM role has `securityhub:GetFindings`, `securityhub:GetEnabledStandards`, and `securityhub:ListSecurityControlDefinitions` permissions").
@@ -592,7 +592,7 @@ func wrapAWSServiceError(operation string, err error) error {
 
 	// Invalid region or endpoint.
 	if strings.Contains(msg, "UnrecognizedClientException") || strings.Contains(msg, "Could not connect") {
-		return errUtils.Build(errUtils.ErrAISecurityFetchFailed).
+		return errUtils.Build(errUtils.ErrAWSSecurityFetchFailed).
 			WithCause(err).
 			WithExplanation("Cannot connect to AWS Security Hub in the configured region").
 			WithHint("Check `aws.security.region` in atmos.yaml — it should be the Security Hub aggregation region").
@@ -601,5 +601,5 @@ func wrapAWSServiceError(operation string, err error) error {
 	}
 
 	// Generic fallback.
-	return fmt.Errorf("%w: %s: %w", errUtils.ErrAISecurityFetchFailed, operation, err)
+	return fmt.Errorf("%w: %s: %w", errUtils.ErrAWSSecurityFetchFailed, operation, err)
 }

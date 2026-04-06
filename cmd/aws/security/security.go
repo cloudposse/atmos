@@ -87,7 +87,7 @@ var securityAnalyzeCmd = &cobra.Command{
 
 		// Check if AWS security features are enabled.
 		if !atmosConfig.AWS.Security.Enabled {
-			return errUtils.Build(errUtils.ErrAISecurityNotEnabled).
+			return errUtils.Build(errUtils.ErrAWSSecurityNotEnabled).
 				WithHint("Add `aws.security.enabled: true` to your `atmos.yaml`").
 				WithHint("See https://atmos.tools/cli/configuration/aws for configuration reference").
 				WithExitCode(2).
@@ -192,7 +192,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		fetcher := pkgsecurity.NewFindingFetcher(&atmosConfig, authCtx)
 		findings, err := fetcher.FetchFindings(ctx, &opts)
 		if err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityFetchFailed, err)
+			return fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityFetchFailed, err)
 		}
 
 		if len(findings) == 0 {
@@ -207,7 +207,7 @@ var securityAnalyzeCmd = &cobra.Command{
 		mapper := pkgsecurity.NewComponentMapper(&atmosConfig, authCtx)
 		findings, err = mapper.MapFindings(ctx, findings)
 		if err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrAISecurityMappingFailed, err)
+			return fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityMappingFailed, err)
 		}
 
 		// Filter by stack and component AFTER mapping.
@@ -242,7 +242,7 @@ var securityAnalyzeCmd = &cobra.Command{
 			} else {
 				findings, err = analyzer.AnalyzeFindings(ctx, findings)
 				if err != nil {
-					return fmt.Errorf("%w: %w", errUtils.ErrAISecurityAnalysisFailed, err)
+					return fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityAnalysisFailed, err)
 				}
 			}
 		}
@@ -367,7 +367,7 @@ func parseSource(source string) (pkgsecurity.Source, error) {
 	case "access-analyzer", "accessanalyzer":
 		return pkgsecurity.SourceAccessAnalyzer, nil
 	default:
-		return "", errUtils.ErrAISecurityInvalidSource
+		return "", errUtils.ErrAWSSecurityInvalidSource
 	}
 }
 
@@ -395,7 +395,7 @@ func parseSeverities(severityStr string, defaults []string) ([]pkgsecurity.Sever
 	for _, p := range parts {
 		sev, ok := severityMap[strings.ToUpper(strings.TrimSpace(p))]
 		if !ok {
-			return nil, errUtils.ErrAISecurityInvalidSeverity
+			return nil, errUtils.ErrAWSSecurityInvalidSeverity
 		}
 		severities = append(severities, sev)
 	}

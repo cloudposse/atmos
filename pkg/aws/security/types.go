@@ -173,6 +173,6 @@ func ParseOutputFormat(format string) (OutputFormat, error) {
 	case "csv":
 		return FormatCSV, nil
 	default:
-		return "", errUtils.ErrAISecurityInvalidFormat
+		return "", errUtils.ErrAWSSecurityInvalidFormat
 	}
 }

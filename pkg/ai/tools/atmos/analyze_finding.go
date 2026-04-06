@@ -77,7 +77,7 @@ func (t *AnalyzeFindingTool) Execute(ctx context.Context, params map[string]inte
 	if !atmosConfig.AWS.Security.Enabled {
 		return &tools.Result{
 			Success: false,
-			Error: errUtils.Build(errUtils.ErrAISecurityNotEnabled).
+			Error: errUtils.Build(errUtils.ErrAWSSecurityNotEnabled).
 				WithHint("Add `aws.security.enabled: true` to your `atmos.yaml`").
 				WithExitCode(2).
 				Err(),
