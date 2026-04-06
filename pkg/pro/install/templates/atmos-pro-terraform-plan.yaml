@@ -1,0 +1,42 @@
+# Atmos Pro - Terraform Plan workflow.
+# Triggered by Atmos Pro via workflow_dispatch when a pull request is opened or updated.
+#
+# Prerequisites:
+#   - Configure the `profiles/github/atmos.yaml` auth profile
+#   - Set the `ATMOS_VERSION` repository variable in GitHub Settings
+#
+# See: https://atmos-pro.com/docs/howto/aws
+name: Atmos Pro - Terraform Plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Atmos component"
+        required: true
+        type: string
+      stack:
+        description: "Atmos stack"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Terraform Plan
+        env:
+          ATMOS_PROFILE: github
+        run: |
+          atmos terraform plan ${{ inputs.component }} -s ${{ inputs.stack }}
