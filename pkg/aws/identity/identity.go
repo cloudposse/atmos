@@ -328,12 +328,16 @@ func LoadConfig(ctx context.Context, region string, roleArn string, assumeRoleDu
 // ValidateAWSCredentials performs an early check that AWS credentials are available and valid.
 // Uses STS GetCallerIdentity which is lightweight and always works if credentials are valid.
 // If authCtx is provided, credentials from the Atmos Auth identity are used.
+
+// getCallerIdentityFn is the function used by ValidateAWSCredentials. Overridable in tests.
+var getCallerIdentityFn = GetCallerIdentity
+
 func ValidateAWSCredentials(ctx context.Context, region string, authCtx *schema.AWSAuthContext) error {
 	defer perf.Track(nil, "identity.ValidateAWSCredentials")()
 
 	log.Debug("Validating AWS credentials via STS GetCallerIdentity")
 
-	callerIdentity, err := GetCallerIdentity(ctx, region, "", 0, authCtx)
+	callerIdentity, err := getCallerIdentityFn(ctx, region, "", 0, authCtx)
 	if err != nil {
 		hint := "Ensure AWS credentials are configured (e.g., via environment variables, ~/.aws/credentials, or SSO)"
 		if authCtx != nil {

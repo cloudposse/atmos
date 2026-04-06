@@ -86,7 +86,7 @@ func (f *awsFindingFetcher) FetchFindings(ctx context.Context, opts *QueryOption
 
 	allFindings, err := f.paginateFindings(ctx, client, filters, opts.MaxFindings)
 	if err != nil {
-		return nil, err
+		return nil, wrapAWSServiceError("GetFindings", err)
 	}
 
 	log.Debug("Fetched Security Hub findings", "count", len(allFindings))
@@ -291,7 +291,7 @@ func (f *awsFindingFetcher) resolveFrameworkStandard(ctx context.Context, client
 
 	output, err := client.GetEnabledStandards(ctx, &securityhub.GetEnabledStandardsInput{})
 	if err != nil {
-		return "", "", fmt.Errorf("%w: GetEnabledStandards: %w", errUtils.ErrAISecurityFetchFailed, err)
+		return "", "", wrapAWSServiceError("GetEnabledStandards", err)
 	}
 
 	targetID := frameworkToStandardID(framework)
@@ -556,4 +556,50 @@ func buildComplianceReport(findings []Finding, framework, title, stack string, t
 	}
 
 	return report
+}
+
+// wrapAWSServiceError detects common AWS service errors and returns user-friendly messages
+// with actionable hints. Falls back to generic error wrapping for unknown errors.
+func wrapAWSServiceError(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	msg := err.Error()
+
+	// Security Hub not enabled.
+	if strings.Contains(msg, "InvalidAccessException") || strings.Contains(msg, "not subscribed") ||
+		strings.Contains(msg, "Security Hub is not enabled") {
+		return errUtils.Build(errUtils.ErrAISecurityFetchFailed).
+			WithCause(err).
+			WithExplanation("AWS Security Hub is not enabled in this account/region").
+			WithHint("Enable Security Hub: `aws securityhub enable-security-hub --region <region>`").
+			WithHint("Or deploy the `aws-security-hub` component via Atmos").
+			WithHint("See https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-enable.html").
+			Err()
+	}
+
+	// Access denied / insufficient permissions.
+	if strings.Contains(msg, "AccessDeniedException") || strings.Contains(msg, "is not authorized") ||
+		strings.Contains(msg, "Access Denied") {
+		return errUtils.Build(errUtils.ErrAISecurityFetchFailed).
+			WithCause(err).
+			WithExplanationf("Insufficient permissions for %s", operation).
+			WithHint("Ensure the IAM role has `securityhub:GetFindings`, `securityhub:GetEnabledStandards`, and `securityhub:ListSecurityControlDefinitions` permissions").
+			WithHint("If using delegated admin, verify the `identity` in `aws.security` targets the correct account").
+			Err()
+	}
+
+	// Invalid region or endpoint.
+	if strings.Contains(msg, "UnrecognizedClientException") || strings.Contains(msg, "Could not connect") {
+		return errUtils.Build(errUtils.ErrAISecurityFetchFailed).
+			WithCause(err).
+			WithExplanation("Cannot connect to AWS Security Hub in the configured region").
+			WithHint("Check `aws.security.region` in atmos.yaml — it should be the Security Hub aggregation region").
+			WithHint("Verify the region with: `aws securityhub describe-hub --region <region>`").
+			Err()
+	}
+
+	// Generic fallback.
+	return fmt.Errorf("%w: %s: %w", errUtils.ErrAISecurityFetchFailed, operation, err)
 }

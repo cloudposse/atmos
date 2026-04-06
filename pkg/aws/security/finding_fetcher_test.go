@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -809,6 +810,43 @@ func TestNormalizeSecurityHubFinding_NoResources(t *testing.T) {
 	assert.Empty(t, result.ResourceType)
 	assert.Empty(t, result.Region)
 	assert.Nil(t, result.ResourceTags)
+}
+
+func TestWrapAWSServiceError(t *testing.T) {
+	t.Run("nil error returns nil", func(t *testing.T) {
+		assert.Nil(t, wrapAWSServiceError("TestOp", nil))
+	})
+
+	t.Run("security hub not enabled", func(t *testing.T) {
+		err := wrapAWSServiceError("GetFindings", fmt.Errorf("InvalidAccessException: Security Hub is not enabled"))
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+	})
+
+	t.Run("not subscribed", func(t *testing.T) {
+		err := wrapAWSServiceError("GetFindings", fmt.Errorf("not subscribed to service"))
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+	})
+
+	t.Run("access denied", func(t *testing.T) {
+		err := wrapAWSServiceError("GetFindings", fmt.Errorf("AccessDeniedException: User is not authorized"))
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+	})
+
+	t.Run("connection error", func(t *testing.T) {
+		err := wrapAWSServiceError("GetFindings", fmt.Errorf("UnrecognizedClientException: bad endpoint"))
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+	})
+
+	t.Run("generic error preserves message", func(t *testing.T) {
+		err := wrapAWSServiceError("GetFindings", fmt.Errorf("something unexpected"))
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrAISecurityFetchFailed)
+		assert.Contains(t, err.Error(), "something unexpected")
+	})
 }
 
 func TestBuildComplianceReport(t *testing.T) {
