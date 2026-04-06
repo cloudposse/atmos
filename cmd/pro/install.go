@@ -73,11 +73,16 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	installer := install.NewInstaller(&install.OSFileWriter{},
+	opts := []install.Option{
 		install.WithBasePath(basePath),
 		install.WithStacksBasePath(stacksBasePath),
 		install.WithForce(force),
-	)
+	}
+	if !force {
+		opts = append(opts, install.WithOnConflict(promptOverwrite))
+	}
+
+	installer := install.NewInstaller(&install.OSFileWriter{}, opts...)
 
 	if dryRun {
 		reportDryRun(installer.DryRun())
@@ -93,6 +98,16 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	ui.MarkdownMessage(nextStepsMarkdown)
 
 	return nil
+}
+
+// promptOverwrite prompts the user to overwrite an existing file.
+// In interactive TTY mode, shows a confirmation prompt.
+// In non-TTY mode, returns an error.
+func promptOverwrite(relPath string) (bool, error) {
+	return flags.PromptForConfirmation(
+		fmt.Sprintf("Overwrite %s?", relPath),
+		false,
+	)
 }
 
 // reportResult displays the installation results.

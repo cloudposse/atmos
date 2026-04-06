@@ -199,8 +199,14 @@ func (i *Installer) writeFile(fullPath, content string, result *InstallResult) e
 	relPath, _ := filepath.Rel(i.opts.BasePath, fullPath)
 
 	if i.writer.FileExists(fullPath) && !i.opts.Force {
-		result.SkippedFiles = append(result.SkippedFiles, relPath)
-		return nil
+		overwrite, err := i.resolveConflict(relPath)
+		if err != nil {
+			return err
+		}
+		if !overwrite {
+			result.SkippedFiles = append(result.SkippedFiles, relPath)
+			return nil
+		}
 	}
 
 	dir := filepath.Dir(fullPath)
@@ -214,6 +220,15 @@ func (i *Installer) writeFile(fullPath, content string, result *InstallResult) e
 
 	result.CreatedFiles = append(result.CreatedFiles, relPath)
 	return nil
+}
+
+// resolveConflict decides whether to overwrite an existing file.
+// If OnConflict is set, it delegates to the callback; otherwise it skips.
+func (i *Installer) resolveConflict(relPath string) (bool, error) {
+	if i.opts.OnConflict == nil {
+		return false, nil
+	}
+	return i.opts.OnConflict(relPath)
 }
 
 // defaultsRelPath returns the relative path to _defaults.yaml.

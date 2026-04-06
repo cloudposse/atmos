@@ -1,6 +1,7 @@
 package install
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -160,6 +161,77 @@ func TestInstaller_Install_ExistingFiles_WithForce(t *testing.T) {
 
 	// Content should be overwritten.
 	assert.NotEqual(t, "existing content", string(writer.files[planPath]))
+}
+
+func TestInstaller_Install_OnConflict_Overwrite(t *testing.T) {
+	base := t.TempDir()
+	writer := newMockFileWriter()
+
+	// Pre-populate a workflow file.
+	planPath := filepath.Join(base, githubDir, "workflows", "atmos-pro-terraform-plan.yaml")
+	writer.files[planPath] = []byte("existing content")
+
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+		WithOnConflict(func(_ string) (bool, error) {
+			return true, nil // Always overwrite.
+		}),
+	)
+
+	result, err := installer.Install()
+	require.NoError(t, err)
+
+	// The plan workflow should be overwritten.
+	assert.Contains(t, result.CreatedFiles,
+		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"))
+	assert.NotEqual(t, "existing content", string(writer.files[planPath]))
+}
+
+func TestInstaller_Install_OnConflict_Skip(t *testing.T) {
+	base := t.TempDir()
+	writer := newMockFileWriter()
+
+	// Pre-populate a workflow file.
+	planPath := filepath.Join(base, githubDir, "workflows", "atmos-pro-terraform-plan.yaml")
+	writer.files[planPath] = []byte("existing content")
+
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+		WithOnConflict(func(_ string) (bool, error) {
+			return false, nil // Always skip.
+		}),
+	)
+
+	result, err := installer.Install()
+	require.NoError(t, err)
+
+	// The plan workflow should be skipped.
+	assert.Contains(t, result.SkippedFiles,
+		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"))
+	assert.Equal(t, "existing content", string(writer.files[planPath]))
+}
+
+func TestInstaller_Install_OnConflict_Error(t *testing.T) {
+	base := t.TempDir()
+	writer := newMockFileWriter()
+
+	// Pre-populate a workflow file.
+	planPath := filepath.Join(base, githubDir, "workflows", "atmos-pro-terraform-plan.yaml")
+	writer.files[planPath] = []byte("existing content")
+
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+		WithOnConflict(func(_ string) (bool, error) {
+			return false, fmt.Errorf("non-interactive mode")
+		}),
+	)
+
+	_, err := installer.Install()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-interactive mode")
 }
 
 func TestInstaller_Install_DefaultsAlreadyHasImport(t *testing.T) {
