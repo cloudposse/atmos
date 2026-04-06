@@ -330,3 +330,9 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveToolchainPATH_NoDeps(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	result := ResolveToolchainPATH(atmosConfig)
+	assert.Empty(t, result)
+}

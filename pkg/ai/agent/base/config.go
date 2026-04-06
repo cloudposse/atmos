@@ -2,8 +2,10 @@
 package base
 
 import (
+	"strings"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -62,6 +64,25 @@ func ExtractConfig(atmosConfig *schema.AtmosConfiguration, providerName string, 
 	applyProviderOverrides(config, GetProviderConfig(atmosConfig, providerName))
 
 	return config
+}
+
+// ResolveToolchainPATH extracts the toolchain bin PATH for MCP server subprocesses.
+// Returns the PATH string from the toolchain environment, or empty if no toolchain is configured.
+func ResolveToolchainPATH(atmosConfig *schema.AtmosConfiguration) string {
+	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
+	if err != nil || len(deps) == 0 {
+		return ""
+	}
+	tenv, err := dependencies.NewEnvironmentFromDeps(atmosConfig, deps)
+	if err != nil || tenv == nil {
+		return ""
+	}
+	for _, envVar := range tenv.EnvVars() {
+		if strings.HasPrefix(envVar, "PATH=") {
+			return envVar[len("PATH="):]
+		}
+	}
+	return ""
 }
 
 // applyProviderOverrides applies provider-specific configuration overrides to the config.

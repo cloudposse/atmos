@@ -209,6 +209,24 @@ toolchain:
 atmos toolchain install astral-sh/uv@0.7.12
 ```
 
+### CLI Provider MCP Pass-Through
+
+When using a CLI provider (`claude-code`, `codex-cli`, `gemini-cli`), MCP servers are passed directly to the CLI tool instead of being managed by Atmos. Smart routing is skipped — all configured servers are passed and the AI model decides which to use.
+
+| CLI Provider | Config Delivery | Notes |
+|---|---|---|
+| Claude Code | `--mcp-config` temp file | Full support |
+| Codex CLI | `~/.codex/config.toml` (backup/restore) | `ATMOS_*` env vars injected |
+| Gemini CLI | `.gemini/settings.json` in cwd (backup/restore) | MCP blocked for personal Google accounts |
+
+:::tip
+For CLI providers, `ATMOS_PROFILE` must be exported in your shell for auth-requiring MCP servers to work:
+```bash
+export ATMOS_PROFILE=managers
+atmos ai ask "What did we spend on EC2?"
+```
+:::
+
 ### Smart Routing
 
 When multiple MCP servers are configured, Atmos automatically selects only the servers
