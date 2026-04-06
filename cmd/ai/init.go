@@ -48,9 +48,14 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 	}
 
 	// Register external MCP server tools (filtered by routing).
-	mcpMgr := registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
+	// Skip for CLI providers — they handle MCP via provider-specific pass-through.
+	var mcpMgr *mcpclient.Manager
+	if !isCLIProvider(atmosConfig.AI.DefaultProvider) {
+		mcpMgr = registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
+	}
 
 	ui.Info(fmt.Sprintf("AI tools initialized: %d total", registry.Count()))
+	ui.Info(fmt.Sprintf("AI provider: %s", atmosConfig.AI.DefaultProvider))
 
 	// Initialize permission cache for persistent decisions.
 	permCache, err := permission.NewPermissionCache(atmosConfig.BasePath)
@@ -290,6 +295,19 @@ func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthE
 		return nil
 	}
 	return mgr
+}
+
+// cliProviders lists providers that invoke a local CLI binary as a subprocess.
+// These providers handle MCP via provider-specific pass-through, not via the Atmos tool registry.
+var cliProviders = map[string]bool{
+	"claude-code": true,
+	"codex-cli":   true,
+	"gemini-cli":  true,
+}
+
+// isCLIProvider returns true if the provider invokes a local CLI binary.
+func isCLIProvider(providerName string) bool {
+	return cliProviders[providerName]
 }
 
 // serversNeedAuth returns true if any configured MCP server has identity set.

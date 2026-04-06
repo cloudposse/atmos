@@ -39,8 +39,8 @@ export const roadmapConfig = {
     { id: 'q2-2025', label: 'Q2 2025', status: 'completed' },
     { id: 'q3-2025', label: 'Q3 2025', status: 'completed' },
     { id: 'q4-2025', label: 'Q4 2025', status: 'completed' },
-    { id: 'q1-2026', label: 'Q1 2026', status: 'current' },
-    { id: 'q2-2026', label: 'Q2 2026', status: 'planned' },
+    { id: 'q1-2026', label: 'Q1 2026', status: 'completed' },
+    { id: 'q2-2026', label: 'Q2 2026', status: 'current' },
   ],
 
   featured: [
@@ -392,7 +392,7 @@ export const roadmapConfig = {
       tagline: 'Native CI/CD support — local = CI',
       description:
         'CI pipelines shouldn\'t require complicated workflows, custom actions, and shell commands just to run what should be a one liner. They should just work. What works locally should work identically in CI with minimal configuration.',
-      progress: 80,
+      progress: 85,
       status: 'in-progress',
       milestones: [
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
@@ -400,6 +400,7 @@ export const roadmapConfig = {
         { label: 'Easily share Terraform outputs between GitHub Actions steps', status: 'shipped', quarter: 'q1-2026', pr: 1985, docs: '/cli/commands/terraform/output', changelog: 'github-output-format', description: 'Native --format=github option writes Terraform outputs directly to $GITHUB_OUTPUT, with automatic heredoc handling for multiline values—no jq parsing or manual heredoc construction required.', category: 'featured', priority: 'high', benefits: 'Pass outputs between workflow steps naturally. Complex values like JSON configs just work.' },
         { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'CLI auto-detects CI environments and generates rich job summaries with resource badges, collapsible diffs, and status checks. Replaces separate actions like github-action-atmos-terraform-plan.', category: 'featured', priority: 'high', benefits: 'No wrapper scripts needed. Same command works locally and in CI. Ships with GitHub Actions support; provider architecture enables future GitLab and Azure DevOps support.' },
         { label: 'Detect deleted components in affected stacks', status: 'shipped', quarter: 'q1-2026', pr: 2063, docs: '/cli/commands/describe/affected', changelog: 'describe-affected-deleted-detection', description: 'Automatically detect components and stacks that have been deleted in the current branch compared to the target branch. Enables CI/CD pipelines to trigger terraform destroy workflows for removed infrastructure.', category: 'featured', priority: 'high', benefits: 'CI/CD pipelines can now separate apply and destroy workflows automatically. No more orphaned cloud resources from removed components.' },
+        { label: 'Zero-config CI base detection for describe affected', status: 'shipped', quarter: 'q1-2026', pr: 2241, docs: '/cli/commands/describe/affected', changelog: 'describe-affected-auto-detection', description: 'Automatic base commit resolution from CI environment variables. The --base flag replaces --ref/--sha, and CI providers auto-detect the comparison point for pull requests, pushes, and merge groups.', category: 'featured', priority: 'high', benefits: 'No more shell expression gymnastics in CI workflows. Just run atmos describe affected and it does the right thing.' },
       ],
       issues: [],
       prs: [
@@ -500,8 +501,8 @@ export const roadmapConfig = {
       tagline: 'AI-powered infrastructure management',
       description:
         'An intelligent assistant built directly into Atmos CLI that understands your infrastructure-as-code. Unlike general-purpose AI assistants, Atmos AI has deep understanding of Atmos stacks, components, inheritance patterns, and infrastructure workflows.',
-      progress: 100,
-      status: 'shipped',
+      progress: 96,
+      status: 'in-progress',
       milestones: [
         { label: 'Multi-provider AI support (7 providers)', status: 'shipped', quarter: 'q1-2026', docs: '/ai/providers', changelog: 'introducing-atmos-ai', description: 'Support for Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok, Ollama (local), AWS Bedrock, and Azure OpenAI.', benefits: 'Choose the right AI for your needs—cloud, local, or enterprise. Switch providers mid-conversation.' },
         { label: 'Interactive AI chat (`atmos ai chat`)', status: 'shipped', quarter: 'q1-2026', docs: '/cli/commands/ai/chat', changelog: 'introducing-atmos-ai', description: 'Interactive terminal chat with persistent sessions, markdown rendering, and conversation history.', benefits: 'Have natural conversations about your infrastructure. Context is preserved across sessions.' },
@@ -521,6 +522,10 @@ export const roadmapConfig = {
         { label: 'AI example with documentation', status: 'shipped', quarter: 'q1-2026', changelog: 'introducing-atmos-ai', description: 'Complete example in examples/ai/ demonstrating all AI features with inline documentation links.', benefits: 'Learn AI features from working examples. Quick start for new users.' },
         { label: 'Global `--ai` flag for AI-powered command analysis', status: 'shipped', quarter: 'q1-2026', docs: '/cli/global-flags', changelog: 'ai-powered-analysis-with-global-ai-flag', description: 'Add --ai to any Atmos command to get instant AI-powered analysis of output. Errors get explained with fixes, successful plans get summarized.', benefits: 'Zero-friction AI integration—just add --ai to any command. No workflow changes required.', category: 'featured', priority: 'high' },
         { label: 'External MCP server connections', status: 'shipped', quarter: 'q1-2026', docs: '/cli/configuration/mcp', changelog: 'mcp-server-integrations', description: 'Connect Atmos to external MCP servers (AWS, GCP, Azure, custom). Configure servers in atmos.yaml, and their tools become available in atmos ai chat, ask, and exec. Includes Atmos Auth credential injection and Atmos Toolchain prerequisite management.', benefits: 'Use 100+ ecosystem MCP servers without custom code. AWS pricing, security, docs, and API tools available in AI conversations.', category: 'featured', priority: 'high' },
+        { label: 'Claude Code CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', pr: 2280, description: 'Native Claude Code CLI provider (`claude-code`) that spawns the claude binary with full MCP pass-through support.', benefits: 'Use Claude Code from atmos ai chat with your existing Claude Code setup. MCP servers configured in atmos.yaml are available automatically.' },
+        { label: 'OpenAI Codex CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', pr: 2280, description: 'Native OpenAI Codex CLI provider (`codex-cli`) with MCP pass-through and ATMOS_* env var injection for MCP servers.', benefits: 'Use Codex CLI from atmos ai chat. MCP server environment receives Atmos context automatically via ATMOS_* variables.' },
+        { label: 'Gemini CLI provider', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', pr: 2280, description: 'Native Gemini CLI provider (`gemini-cli`) that spawns the gemini binary for terminal-based AI interaction.', benefits: 'Use Google Gemini CLI from atmos ai chat without extra configuration.' },
+        { label: 'MCP pass-through for CLI providers', status: 'shipped', quarter: 'q2-2026', changelog: 'ai-cli-providers', pr: 2280, description: 'MCP server configurations defined in atmos.yaml are passed through to Claude Code and Codex CLI providers automatically.', benefits: 'One MCP configuration works across all CLI providers. No duplicate server definitions per tool.' },
         { label: 'Agent marketplace', status: 'planned', quarter: 'q2-2026', docs: '/ai/agent-marketplace', description: 'Install community-created specialized agents from GitHub repositories.', benefits: 'Extend AI capabilities with community agents. Share agents across teams.' },
       ],
       issues: [],

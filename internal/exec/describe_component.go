@@ -12,6 +12,7 @@ import (
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -260,9 +261,8 @@ func (d *DescribeComponentExec) renderProvenance(
 		return writeOutputToFile(file, output)
 	}
 
-	// Print to stdout (pipeable)
-	fmt.Print(output)
-	return nil
+	// Print to stdout (pipeable).
+	return data.Write(output)
 }
 
 // extractImportsList converts imports from any type to []string.
