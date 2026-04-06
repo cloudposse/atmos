@@ -1,36 +1,49 @@
 ## Next Steps
 
-Your Atmos Pro workflows, auth profile, and stack configuration have been created.
+Your Atmos Pro workflows, auth profiles, and stack configuration have been created.
 
-### 1. Configure the Auth Profile
+### 1. Configure Auth Profiles
 
-Edit `profiles/github/atmos.yaml` and replace the placeholder values:
-- `<region>` with your AWS region (e.g., `us-east-2`)
-- `<role-arn>` with the IAM role ARN for Terraform operations
+Edit the auth profiles and add one identity block per AWS account:
 
-See: https://atmos-pro.com/docs/howto/aws
+- `profiles/github-plan/atmos.yaml` — planner (read-only) roles for `terraform plan`
+- `profiles/github-apply/atmos.yaml` — terraform (admin) roles for `terraform apply`
+
+Replace the placeholder values (`<region>`, `<account-id>`, `<role-name>`) with your
+AWS account details. See `profiles/README.md` for examples.
 
 ### 2. Set Up OIDC Authentication
 
 Deploy a GitHub OIDC provider in your AWS account to enable keyless
-authentication from GitHub Actions.
+authentication from GitHub Actions. Create IAM roles with trust policies
+scoped to your GitHub repository.
 
-### 3. Create IAM Roles
+See: https://atmos.tools/cli/auth/
 
-Create IAM roles with trust policies that allow your GitHub repository
-to assume them via OIDC. Scope roles to specific branches or GitHub
-Environments for production safety.
+### 3. Set GitHub Repository Variables
+
+Add these in GitHub Settings → Secrets and variables → Actions → Variables:
+
+- `ATMOS_PRO_WORKSPACE_ID` — your Atmos Pro workspace ID (not a secret)
+- `ATMOS_VERSION` — Atmos container image tag (e.g., `latest` or a specific version)
 
 ### 4. Create Your Workspace
 
 Visit https://app.atmos.tools and create a workspace for your organization.
+Connect this repository and configure repository permissions.
 
-### 5. Add Your Repository
+### 5. Create GitHub Environments
 
-Connect this repository to your Atmos Pro workspace to enable
-automated plan/apply orchestration.
+Create GitHub Environments matching your `tenant-stage` naming convention
+(e.g., `core-prod`, `plat-staging`). The apply workflow uses these for
+deployment protection rules (required reviewers, wait timers).
 
-### 6. Set ATMOS_VERSION Repository Variable
+### 6. Open a Test PR
 
-Add a repository variable `ATMOS_VERSION` in GitHub Settings → Variables
-with the desired Atmos version (e.g., `latest` or a specific version).
+Once the workflows are on your default branch, open a PR to trigger the
+full Atmos Pro flow:
+
+1. `atmos-pro-affected-stacks.yaml` determines affected stacks
+2. Atmos Pro dispatches `atmos-pro-terraform-plan.yaml` for each affected stack
+3. Plan results appear as PR status checks
+4. On merge, Atmos Pro dispatches `atmos-pro-terraform-apply.yaml`

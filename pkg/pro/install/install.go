@@ -166,17 +166,25 @@ func (i *Installer) buildFileSpecs() []fileSpec {
 			Content: applyWorkflowTemplate,
 		},
 		{
-			RelPath: filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-drift-detection.yaml"),
-			Content: driftDetectionWorkflowTemplate,
+			RelPath: filepath.Join(githubDir, workflowsDir, "atmos-pro-affected-stacks.yaml"),
+			Content: affectedStacksWorkflowTemplate,
 		},
 		{
-			RelPath: filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-drift-remediation.yaml"),
-			Content: driftRemediationWorkflowTemplate,
+			RelPath: filepath.Join(githubDir, workflowsDir, "atmos-pro-list-instances.yaml"),
+			Content: listInstancesWorkflowTemplate,
 		},
-		// Auth profile.
+		// Auth profiles.
 		{
-			RelPath: filepath.Join("profiles", "github", "atmos.yaml"),
-			Content: githubProfileTemplate,
+			RelPath: filepath.Join("profiles", "github-plan", "atmos.yaml"),
+			Content: githubPlanProfileTemplate,
+		},
+		{
+			RelPath: filepath.Join("profiles", "github-apply", "atmos.yaml"),
+			Content: githubApplyProfileTemplate,
+		},
+		{
+			RelPath: filepath.Join("profiles", "README.md"),
+			Content: profilesReadmeTemplate,
 		},
 		// Stack mixin.
 		{

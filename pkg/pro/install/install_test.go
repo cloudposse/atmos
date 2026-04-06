@@ -62,15 +62,15 @@ func TestInstaller_Install_FreshProject(t *testing.T) {
 	assert.Empty(t, result.SkippedFiles)
 	assert.Empty(t, result.UpdatedFiles)
 
-	// 4 workflows + 1 profile + 1 mixin + 1 defaults = 7 files.
-	assert.Len(t, result.CreatedFiles, 7)
+	// 4 workflows + 2 profiles + 1 profiles README + 1 mixin + 1 defaults = 9 files.
+	assert.Len(t, result.CreatedFiles, 9)
 
 	// Verify workflow files exist.
 	expectedWorkflows := []string{
 		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"),
 		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-apply.yaml"),
-		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-drift-detection.yaml"),
-		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-drift-remediation.yaml"),
+		filepath.Join(githubDir, workflowsDir, "atmos-pro-affected-stacks.yaml"),
+		filepath.Join(githubDir, workflowsDir, "atmos-pro-list-instances.yaml"),
 	}
 	for _, wf := range expectedWorkflows {
 		assert.Contains(t, result.CreatedFiles, wf)
@@ -78,20 +78,30 @@ func TestInstaller_Install_FreshProject(t *testing.T) {
 		assert.True(t, writer.FileExists(fullPath), "expected file to exist: %s", fullPath)
 	}
 
-	// Verify auth profile.
-	profilePath := filepath.Join(base, "profiles", "github", "atmos.yaml")
-	assert.True(t, writer.FileExists(profilePath))
-	content := string(writer.files[profilePath])
-	assert.Contains(t, content, "github-oidc")
-	assert.Contains(t, content, "<region>")
-	assert.Contains(t, content, "<role-arn>")
+	// Verify auth profiles.
+	planProfilePath := filepath.Join(base, "profiles", "github-plan", "atmos.yaml")
+	assert.True(t, writer.FileExists(planProfilePath))
+	planContent := string(writer.files[planProfilePath])
+	assert.Contains(t, planContent, "github-oidc")
+	assert.Contains(t, planContent, "<region>")
+	assert.Contains(t, planContent, "planner")
+
+	applyProfilePath := filepath.Join(base, "profiles", "github-apply", "atmos.yaml")
+	assert.True(t, writer.FileExists(applyProfilePath))
+	applyContent := string(writer.files[applyProfilePath])
+	assert.Contains(t, applyContent, "github-oidc")
+	assert.Contains(t, applyContent, "terraform")
+
+	// Verify profiles README.
+	readmePath := filepath.Join(base, "profiles", "README.md")
+	assert.True(t, writer.FileExists(readmePath))
 
 	// Verify mixin.
 	mixinPath := filepath.Join(base, "stacks", "mixins", "atmos-pro.yaml")
 	assert.True(t, writer.FileExists(mixinPath))
 	mixinContent := string(writer.files[mixinPath])
-	assert.Contains(t, mixinContent, "settings:")
-	assert.Contains(t, mixinContent, "pro:")
+	assert.Contains(t, mixinContent, "drift_detection:")
+	assert.Contains(t, mixinContent, "github_environment:")
 
 	// Verify defaults.
 	defaultsPath := filepath.Join(base, "stacks", "deploy", "_defaults.yaml")

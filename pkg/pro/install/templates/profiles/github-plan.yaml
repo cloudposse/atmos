@@ -1,0 +1,37 @@
+# Atmos Pro auth profile for terraform plan.
+# Uses read-only (planner) IAM roles for safe plan operations.
+#
+# Identity names must match the pattern <tenant>-<stage>/terraform.
+# Atmos resolves identities by matching the stack's tenant-stage to an identity name.
+# Add one identity block per AWS account.
+#
+# Replace placeholder values:
+#   <region>      — Your AWS region (e.g., us-east-1)
+#   <account-id>  — AWS account ID
+#   <planner-role> — IAM role name with ReadOnly access (e.g., myorg-core-gbl-prod-planner)
+#
+# See: https://atmos.tools/cli/auth/
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: <region>
+      spec:
+        audience: sts.amazonaws.com
+
+  identities:
+    # Add one identity per AWS account. Example:
+    #
+    #   core-prod/terraform:
+    #     kind: aws/assume-role
+    #     via:
+    #       provider: github-oidc
+    #     principal:
+    #       assume_role: arn:aws:iam::111111111111:role/myorg-core-gbl-prod-planner
+    #
+    <tenant>-<stage>/terraform:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::<account-id>:role/<planner-role>
