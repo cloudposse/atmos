@@ -36,7 +36,7 @@ func init() {
 	installParser = flags.NewStandardParser(
 		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompts"),
 		flags.WithEnvVars("yes", "ATMOS_YES"),
-		flags.WithBoolFlag("force", "f", false, "Force operation without confirmation"),
+		flags.WithBoolFlag("force", "", false, "Force operation without confirmation"),
 		flags.WithEnvVars("force", "ATMOS_FORCE"),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate operation without making changes"),
 		flags.WithEnvVars("dry-run", "ATMOS_DRY_RUN"),
@@ -49,9 +49,22 @@ func init() {
 	}
 }
 
+// resolveFromGlobalFlags parses global flags and resolves install paths.
+func resolveFromGlobalFlags(cmd *cobra.Command, v *viper.Viper) (basePath, stacksBasePath string) {
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	info := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+
+	return resolveInstallPaths(&info)
+}
+
 // resolveInstallPaths loads atmos config and resolves base/stacks paths.
-func resolveInstallPaths() (basePath, stacksBasePath string) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+func resolveInstallPaths(info *schema.ConfigAndStacksInfo) (basePath, stacksBasePath string) {
+	atmosConfig, err := cfg.InitCliConfig(*info, false)
 	if err != nil {
 		ui.Warning("Could not load atmos config, using default paths")
 		return ".", "stacks"
@@ -77,7 +90,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	force := v.GetBool("force")
 	dryRun := v.GetBool("dry-run")
 
-	basePath, stacksBasePath := resolveInstallPaths()
+	basePath, stacksBasePath := resolveFromGlobalFlags(cmd, v)
 
 	// Prompt for confirmation unless --yes or --dry-run.
 	if !dryRun && !yes {
@@ -119,7 +132,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	ui.Writeln("")
 	ui.MarkdownMessage(nextStepsMarkdown)
 
-	promptOpenWorkspace()
+	if !yes {
+		promptOpenWorkspace()
+	}
 
 	return nil
 }

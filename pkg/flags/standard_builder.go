@@ -166,7 +166,7 @@ func (b *StandardOptionsBuilder) WithDryRun() *StandardOptionsBuilder {
 func (b *StandardOptionsBuilder) WithForce() *StandardOptionsBuilder {
 	defer perf.Track(nil, "flags.StandardOptionsBuilder.WithForce")()
 
-	b.options = append(b.options, WithBoolFlag("force", "f", false, "Force operation without confirmation"))
+	b.options = append(b.options, WithBoolFlag("force", "", false, "Force operation without confirmation"))
 	b.options = append(b.options, WithEnvVars("force", "ATMOS_FORCE"))
 	return b
 }

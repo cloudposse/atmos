@@ -71,6 +71,8 @@ type fileSpec struct {
 	RelPath string
 	// Content is the file content.
 	Content string
+	// CreateOnly indicates the file should only be created if missing (never overwritten).
+	CreateOnly bool
 }
 
 // Installer scaffolds Atmos Pro configuration files.
@@ -105,7 +107,7 @@ func (i *Installer) Install() (*InstallResult, error) {
 	// Write each file.
 	for _, f := range files {
 		fullPath := filepath.Join(i.opts.BasePath, f.RelPath)
-		if err := i.writeFile(fullPath, f.Content, result); err != nil {
+		if err := i.writeFile(fullPath, f, result); err != nil {
 			return result, fmt.Errorf("failed to create %s: %w", f.RelPath, err)
 		}
 	}
@@ -122,9 +124,16 @@ func (i *Installer) DryRun() *InstallResult {
 
 	for _, f := range files {
 		fullPath := filepath.Join(i.opts.BasePath, f.RelPath)
-		if i.writer.FileExists(fullPath) && !i.opts.Force {
+		exists := i.writer.FileExists(fullPath)
+
+		switch {
+		case exists && f.CreateOnly:
 			result.SkippedFiles = append(result.SkippedFiles, f.RelPath)
-		} else {
+		case exists && !i.opts.Force:
+			result.SkippedFiles = append(result.SkippedFiles, f.RelPath)
+		case exists:
+			result.UpdatedFiles = append(result.UpdatedFiles, f.RelPath)
+		default:
 			result.CreatedFiles = append(result.CreatedFiles, f.RelPath)
 		}
 	}
@@ -139,8 +148,9 @@ func (i *Installer) buildFileSpecs() []fileSpec {
 	return []fileSpec{
 		// Root configuration (created only if missing).
 		{
-			RelPath: "atmos.yaml",
-			Content: atmosConfigTemplate,
+			RelPath:    "atmos.yaml",
+			Content:    atmosConfigTemplate,
+			CreateOnly: true,
 		},
 		// GitHub Actions workflows.
 		{
@@ -190,10 +200,17 @@ func (i *Installer) buildFileSpecs() []fileSpec {
 }
 
 // writeFile creates a file, handling directory creation and force/skip logic.
-func (i *Installer) writeFile(fullPath, content string, result *InstallResult) error {
+func (i *Installer) writeFile(fullPath string, f fileSpec, result *InstallResult) error {
 	relPath, _ := filepath.Rel(i.opts.BasePath, fullPath)
+	exists := i.writer.FileExists(fullPath)
 
-	if i.writer.FileExists(fullPath) && !i.opts.Force {
+	// Create-only files are always skipped when they already exist.
+	if exists && f.CreateOnly {
+		result.SkippedFiles = append(result.SkippedFiles, relPath)
+		return nil
+	}
+
+	if exists && !i.opts.Force {
 		overwrite, err := i.resolveConflict(relPath)
 		if err != nil {
 			return err
@@ -209,11 +226,16 @@ func (i *Installer) writeFile(fullPath, content string, result *InstallResult) e
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	if err := i.writer.WriteFile(fullPath, []byte(content), fileMode); err != nil {
+	if err := i.writer.WriteFile(fullPath, []byte(f.Content), fileMode); err != nil {
 		return err
 	}
 
-	result.CreatedFiles = append(result.CreatedFiles, relPath)
+	if exists {
+		result.UpdatedFiles = append(result.UpdatedFiles, relPath)
+	} else {
+		result.CreatedFiles = append(result.CreatedFiles, relPath)
+	}
+
 	return nil
 }
 

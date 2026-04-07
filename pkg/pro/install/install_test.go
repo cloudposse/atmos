@@ -165,10 +165,12 @@ func TestInstaller_Install_ExistingFiles_WithForce(t *testing.T) {
 	result, err := installer.Install()
 	require.NoError(t, err)
 
-	// The plan workflow should be created (overwritten), not skipped.
-	assert.Contains(t, result.CreatedFiles,
+	// The plan workflow should be updated (overwritten), not skipped or created.
+	assert.Contains(t, result.UpdatedFiles,
 		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"))
 	assert.NotContains(t, result.SkippedFiles,
+		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"))
+	assert.NotContains(t, result.CreatedFiles,
 		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"))
 
 	// Content should be overwritten.
@@ -194,8 +196,10 @@ func TestInstaller_Install_OnConflict_Overwrite(t *testing.T) {
 	result, err := installer.Install()
 	require.NoError(t, err)
 
-	// The plan workflow should be overwritten.
-	assert.Contains(t, result.CreatedFiles,
+	// The plan workflow should be updated (overwritten via OnConflict).
+	assert.Contains(t, result.UpdatedFiles,
+		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"))
+	assert.NotContains(t, result.CreatedFiles,
 		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"))
 	assert.NotEqual(t, "existing content", string(writer.files[planPath]))
 }
@@ -296,9 +300,11 @@ func TestInstaller_DryRun_WithForce(t *testing.T) {
 	base := t.TempDir()
 	writer := newMockFileWriter()
 
-	// Pre-populate atmos.yaml.
+	// Pre-populate atmos.yaml and a workflow file.
 	atmosPath := filepath.Join(base, "atmos.yaml")
 	writer.files[atmosPath] = []byte("existing")
+	planPath := filepath.Join(base, githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml")
+	writer.files[planPath] = []byte("existing workflow")
 
 	installer := NewInstaller(writer,
 		WithBasePath(base),
@@ -308,9 +314,14 @@ func TestInstaller_DryRun_WithForce(t *testing.T) {
 
 	result := installer.DryRun()
 
-	// With force, atmos.yaml should be in created (not skipped).
-	assert.Contains(t, result.CreatedFiles, "atmos.yaml")
-	assert.NotContains(t, result.SkippedFiles, "atmos.yaml")
+	// atmos.yaml is create-only, so it should be skipped even with force.
+	assert.Contains(t, result.SkippedFiles, "atmos.yaml")
+	assert.NotContains(t, result.CreatedFiles, "atmos.yaml")
+	assert.NotContains(t, result.UpdatedFiles, "atmos.yaml")
+
+	// Non-create-only files should be in UpdatedFiles when they exist with force.
+	assert.Contains(t, result.UpdatedFiles,
+		filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"))
 }
 
 func TestInstaller_Install_CustomStacksPath(t *testing.T) {
@@ -419,6 +430,55 @@ type failingWriteWriter struct {
 
 func (f *failingWriteWriter) WriteFile(_ string, _ []byte, _ os.FileMode) error {
 	return fmt.Errorf("permission denied")
+}
+
+func TestInstaller_Install_AtmosYaml_CreateOnly(t *testing.T) {
+	base := t.TempDir()
+	writer := newMockFileWriter()
+
+	// Pre-populate atmos.yaml.
+	atmosPath := filepath.Join(base, "atmos.yaml")
+	writer.files[atmosPath] = []byte("existing config")
+
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+		WithForce(true),
+	)
+
+	result, err := installer.Install()
+	require.NoError(t, err)
+
+	// atmos.yaml is create-only and should be skipped even with --force.
+	assert.Contains(t, result.SkippedFiles, "atmos.yaml")
+	assert.NotContains(t, result.CreatedFiles, "atmos.yaml")
+	assert.NotContains(t, result.UpdatedFiles, "atmos.yaml")
+
+	// Original content should be preserved.
+	assert.Equal(t, "existing config", string(writer.files[atmosPath]))
+}
+
+func TestInstaller_Install_ExistingFiles_WithForce_UpdatedFiles(t *testing.T) {
+	base := t.TempDir()
+	writer := newMockFileWriter()
+
+	// Pre-populate a non-create-only file.
+	planPath := filepath.Join(base, githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml")
+	writer.files[planPath] = []byte("existing content")
+
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+		WithForce(true),
+	)
+
+	result, err := installer.Install()
+	require.NoError(t, err)
+
+	// The overwritten file should be in UpdatedFiles, not CreatedFiles.
+	wfRelPath := filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml")
+	assert.Contains(t, result.UpdatedFiles, wfRelPath)
+	assert.NotContains(t, result.CreatedFiles, wfRelPath)
 }
 
 func TestNewInstaller_Defaults(t *testing.T) {
