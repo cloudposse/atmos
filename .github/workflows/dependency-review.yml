@@ -13,7 +13,7 @@ jobs:
     name: Review Dependency Licenses
     runs-on:
       - runs-on=${{github.run_id}}
-      - runner=large
+      - runner=terraform
       - tag=atmos
       - extras=s3-cache
       - private=false
