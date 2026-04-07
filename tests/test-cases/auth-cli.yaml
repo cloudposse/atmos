@@ -293,7 +293,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "invalid argument"
+        - "unsupported format"
       exit_code: 1
 
   - name: atmos auth whoami --identity nonexistent

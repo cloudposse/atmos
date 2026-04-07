@@ -970,7 +970,11 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		opts = append(opts, glamour.WithPreservedNewLines())
 	}
 
-	// Use theme-aware glamour styles
+	// Use atmos-configured color profile (not glamour's auto-detection) to ensure
+	// consistent color rendering across all output paths.
+	opts = append(opts, glamour.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
+
+	// Use theme-aware glamour styles.
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
 		if themeName == "" {
@@ -980,7 +984,7 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		if err == nil {
 			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
 		}
-		// Fallback to notty style if theme conversion fails
+		// Fallback to notty style if theme conversion fails.
 	} else {
 		opts = append(opts, glamour.WithStylePath("notty"))
 	}
