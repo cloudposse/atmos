@@ -121,7 +121,7 @@ func TestInstaller_Install_FreshProject(t *testing.T) {
 	proContent := string(writer.files[proPath])
 	assert.Contains(t, proContent, "settings:")
 	assert.Contains(t, proContent, "pro:")
-	assert.Contains(t, proContent, "base_url:")
+	assert.Contains(t, proContent, "workspace_id")
 }
 
 func TestInstaller_Install_ExistingFiles_NoForce(t *testing.T) {
@@ -267,6 +267,158 @@ func TestInstaller_DryRun(t *testing.T) {
 	assert.Contains(t, result.CreatedFiles, "atmos.yaml")
 	assert.Contains(t, result.CreatedFiles, filepath.Join(".atmos.d", "ci.yaml"))
 	assert.Contains(t, result.CreatedFiles, filepath.Join(".atmos.d", "atmos-pro.yaml"))
+}
+
+func TestInstaller_DryRun_ExistingFiles(t *testing.T) {
+	base := t.TempDir()
+	writer := newMockFileWriter()
+
+	// Pre-populate atmos.yaml.
+	atmosPath := filepath.Join(base, "atmos.yaml")
+	writer.files[atmosPath] = []byte("existing")
+
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+	)
+
+	result := installer.DryRun()
+
+	// atmos.yaml should be skipped.
+	assert.Contains(t, result.SkippedFiles, "atmos.yaml")
+	// Other files should be created.
+	assert.Contains(t, result.CreatedFiles, filepath.Join(".atmos.d", "ci.yaml"))
+	// Nothing written.
+	assert.Empty(t, writer.written)
+}
+
+func TestInstaller_DryRun_WithForce(t *testing.T) {
+	base := t.TempDir()
+	writer := newMockFileWriter()
+
+	// Pre-populate atmos.yaml.
+	atmosPath := filepath.Join(base, "atmos.yaml")
+	writer.files[atmosPath] = []byte("existing")
+
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+		WithForce(true),
+	)
+
+	result := installer.DryRun()
+
+	// With force, atmos.yaml should be in created (not skipped).
+	assert.Contains(t, result.CreatedFiles, "atmos.yaml")
+	assert.NotContains(t, result.SkippedFiles, "atmos.yaml")
+}
+
+func TestInstaller_Install_CustomStacksPath(t *testing.T) {
+	base := t.TempDir()
+	writer := newMockFileWriter()
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("custom/stacks"),
+	)
+
+	result, err := installer.Install()
+	require.NoError(t, err)
+
+	// Mixin should be under custom stacks path.
+	assert.Contains(t, result.CreatedFiles, filepath.Join("custom", "stacks", "mixins", "atmos-pro.yaml"))
+
+	mixinPath := filepath.Join(base, "custom", "stacks", "mixins", "atmos-pro.yaml")
+	assert.True(t, writer.FileExists(mixinPath))
+}
+
+func TestInstaller_Install_MkdirAllError(t *testing.T) {
+	base := t.TempDir()
+	writer := &failingMkdirWriter{mockFileWriter: newMockFileWriter()}
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+	)
+
+	_, err := installer.Install()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create directory")
+}
+
+func TestInstaller_Install_WriteFileError(t *testing.T) {
+	base := t.TempDir()
+	writer := &failingWriteWriter{mockFileWriter: newMockFileWriter()}
+	installer := NewInstaller(writer,
+		WithBasePath(base),
+		WithStacksBasePath("stacks"),
+	)
+
+	_, err := installer.Install()
+	require.Error(t, err)
+}
+
+func TestOSFileWriter(t *testing.T) {
+	w := &OSFileWriter{}
+	dir := t.TempDir()
+
+	t.Run("WriteFile and ReadFile", func(t *testing.T) {
+		path := filepath.Join(dir, "test.txt")
+		err := w.WriteFile(path, []byte("hello"), fileMode)
+		require.NoError(t, err)
+
+		content, err := w.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, "hello", string(content))
+	})
+
+	t.Run("FileExists", func(t *testing.T) {
+		path := filepath.Join(dir, "test.txt")
+		assert.True(t, w.FileExists(path))
+		assert.False(t, w.FileExists(filepath.Join(dir, "nonexistent")))
+	})
+
+	t.Run("MkdirAll", func(t *testing.T) {
+		path := filepath.Join(dir, "a", "b", "c")
+		err := w.MkdirAll(path, dirMode)
+		require.NoError(t, err)
+		assert.True(t, w.FileExists(path))
+	})
+
+	t.Run("ReadFile nonexistent", func(t *testing.T) {
+		_, err := w.ReadFile(filepath.Join(dir, "nonexistent"))
+		require.Error(t, err)
+	})
+}
+
+func TestWithOnConflict(t *testing.T) {
+	called := false
+	fn := func(_ string) (bool, error) {
+		called = true
+		return true, nil
+	}
+	opts := Options{}
+	WithOnConflict(fn)(&opts)
+	require.NotNil(t, opts.OnConflict)
+
+	_, _ = opts.OnConflict("test")
+	assert.True(t, called)
+}
+
+// failingMkdirWriter fails on MkdirAll.
+type failingMkdirWriter struct {
+	*mockFileWriter
+}
+
+func (f *failingMkdirWriter) MkdirAll(_ string, _ os.FileMode) error {
+	return fmt.Errorf("disk full")
+}
+
+// failingWriteWriter fails on WriteFile.
+type failingWriteWriter struct {
+	*mockFileWriter
+}
+
+func (f *failingWriteWriter) WriteFile(_ string, _ []byte, _ os.FileMode) error {
+	return fmt.Errorf("permission denied")
 }
 
 func TestNewInstaller_Defaults(t *testing.T) {
