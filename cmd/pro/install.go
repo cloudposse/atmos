@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/browser"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/pro/install"
@@ -118,6 +119,8 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	ui.Writeln("")
 	ui.MarkdownMessage(nextStepsMarkdown)
 
+	promptOpenWorkspace()
+
 	return nil
 }
 
@@ -129,6 +132,24 @@ func promptOverwrite(relPath string) (bool, error) {
 		fmt.Sprintf("Overwrite %s?", relPath),
 		false,
 	)
+}
+
+const workspaceURL = "https://atmos-pro.com/onboarding/create-workspace"
+
+// promptOpenWorkspace asks the user if they want to open the workspace creation page.
+func promptOpenWorkspace() {
+	confirmed, err := flags.PromptForConfirmation(
+		"Open Atmos Pro workspace setup in your browser?",
+		false,
+	)
+	if err != nil || !confirmed {
+		return
+	}
+
+	if err := browser.New().Open(workspaceURL); err != nil {
+		ui.Warningf("Could not open browser: %s", err)
+		ui.Infof("Visit: %s", workspaceURL)
+	}
 }
 
 // reportResult displays the installation results.
