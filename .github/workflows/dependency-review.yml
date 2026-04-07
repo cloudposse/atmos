@@ -29,6 +29,8 @@ jobs:
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
+          # Retry when snapshot is not yet available for the head SHA.
+          retry-on-snapshot-warnings: true
           # Disable OpenSSF scorecard to reduce summary size (prevents 1024k limit errors)
           show-openssf-scorecard: false
           # Allow only permissive licenses
