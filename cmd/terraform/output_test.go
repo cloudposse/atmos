@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
@@ -426,7 +427,6 @@ func TestExecuteGitHubOutput(t *testing.T) {
 		tmpDir := t.TempDir()
 		err := executeGitHubOutput(outputs, filepath.Join(tmpDir, "nonexistent", "file.txt"), "", opts)
 		require.Error(t, err)
-		// Error is wrapped: contains "failed to open file".
-		assert.Contains(t, err.Error(), "failed to open file")
+		assert.ErrorIs(t, err, errUtils.ErrOpenFile)
 	})
 }
