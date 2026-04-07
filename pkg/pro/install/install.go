@@ -256,25 +256,33 @@ func (i *Installer) defaultsPath() string {
 	return filepath.Join(i.opts.BasePath, i.defaultsRelPath())
 }
 
+// createDefaults creates a new _defaults.yaml from the template.
+func (i *Installer) createDefaults(fullPath, relPath string, result *InstallResult) error {
+	dir := filepath.Dir(fullPath)
+	if err := i.writer.MkdirAll(dir, dirMode); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
+	}
+	if err := i.writer.WriteFile(fullPath, []byte(defaultsSnippetTemplate), fileMode); err != nil {
+		return fmt.Errorf("failed to create %s: %w", relPath, err)
+	}
+	result.CreatedFiles = append(result.CreatedFiles, relPath)
+	return nil
+}
+
 // ensureDefaults creates or updates _defaults.yaml with the atmos-pro import.
 func (i *Installer) ensureDefaults(result *InstallResult) error {
 	fullPath := i.defaultsPath()
 	relPath := i.defaultsRelPath()
 
 	if !i.writer.FileExists(fullPath) {
-		// Create new _defaults.yaml from template.
-		dir := filepath.Dir(fullPath)
-		if err := i.writer.MkdirAll(dir, dirMode); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-		if err := i.writer.WriteFile(fullPath, []byte(defaultsSnippetTemplate), fileMode); err != nil {
-			return fmt.Errorf("failed to create %s: %w", relPath, err)
-		}
-		result.CreatedFiles = append(result.CreatedFiles, relPath)
-		return nil
+		return i.createDefaults(fullPath, relPath, result)
 	}
 
-	// File exists - check if import is already present.
+	return i.updateDefaults(fullPath, relPath, result)
+}
+
+// updateDefaults adds the atmos-pro import to an existing _defaults.yaml.
+func (i *Installer) updateDefaults(fullPath, relPath string, result *InstallResult) error {
 	content, err := i.writer.ReadFile(fullPath)
 	if err != nil {
 		return fmt.Errorf("failed to read %s: %w", relPath, err)
@@ -285,7 +293,18 @@ func (i *Installer) ensureDefaults(result *InstallResult) error {
 		return nil
 	}
 
-	// Add the import to the existing file.
+	// Respect conflict policy before mutating existing file.
+	if !i.opts.Force && i.opts.OnConflict != nil {
+		overwrite, err := i.resolveConflict(relPath)
+		if err != nil {
+			return err
+		}
+		if !overwrite {
+			result.SkippedFiles = append(result.SkippedFiles, relPath)
+			return nil
+		}
+	}
+
 	updated := addImport(string(content), "mixins/atmos-pro")
 	if err := i.writer.WriteFile(fullPath, []byte(updated), fileMode); err != nil {
 		return fmt.Errorf("failed to update %s: %w", relPath, err)

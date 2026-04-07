@@ -50,7 +50,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.sha }}
+          ref: ${{ inputs.sha || github.sha }}
 
       - name: Apply Atmos Component
         env:

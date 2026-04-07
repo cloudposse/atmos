@@ -31,24 +31,26 @@ Add an identity entry to both profiles:
 
 ```yaml
 # profiles/github-plan/atmos.yaml
-identities:
-  <tenant>-<stage>/terraform:
-    kind: aws/assume-role
-    via:
-      provider: github-oidc
-    principal:
-      assume_role: arn:aws:iam::<account-id>:role/<namespace>-<tenant>-gbl-<stage>-planner
+auth:
+  identities:
+    <tenant>-<stage>/terraform:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::<account-id>:role/<namespace>-<tenant>-gbl-<stage>-planner
 ```
 
 ```yaml
 # profiles/github-apply/atmos.yaml
-identities:
-  <tenant>-<stage>/terraform:
-    kind: aws/assume-role
-    via:
-      provider: github-oidc
-    principal:
-      assume_role: arn:aws:iam::<account-id>:role/<namespace>-<tenant>-gbl-<stage>-terraform
+auth:
+  identities:
+    <tenant>-<stage>/terraform:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::<account-id>:role/<namespace>-<tenant>-gbl-<stage>-terraform
 ```
 
 ## References

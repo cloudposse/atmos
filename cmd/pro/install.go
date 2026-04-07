@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -28,16 +29,30 @@ var installCmd = &cobra.Command{
 	RunE:  runInstall,
 }
 
+var installParser *flags.StandardParser
+
 func init() {
-	installCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts")
-	installCmd.Flags().BoolP("force", "f", false, "Overwrite existing files")
-	installCmd.Flags().Bool("dry-run", false, "Show what would be created without writing files")
+	installParser = flags.NewStandardParser(
+		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompts"),
+		flags.WithEnvVars("yes", "ATMOS_YES"),
+		flags.WithBoolFlag("force", "f", false, "Force operation without confirmation"),
+		flags.WithEnvVars("force", "ATMOS_FORCE"),
+		flags.WithBoolFlag("dry-run", "", false, "Simulate operation without making changes"),
+		flags.WithEnvVars("dry-run", "ATMOS_DRY_RUN"),
+	)
+
+	installParser.RegisterFlags(installCmd)
+
+	if err := installParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }
 
 // resolveInstallPaths loads atmos config and resolves base/stacks paths.
 func resolveInstallPaths() (basePath, stacksBasePath string) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
+		ui.Warning("Could not load atmos config, using default paths")
 		return ".", "stacks"
 	}
 	basePath = atmosConfig.BasePath
@@ -52,9 +67,14 @@ func resolveInstallPaths() (basePath, stacksBasePath string) {
 }
 
 func runInstall(cmd *cobra.Command, _ []string) error {
-	yes, _ := cmd.Flags().GetBool("yes")
-	force, _ := cmd.Flags().GetBool("force")
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	v := viper.GetViper()
+	if err := installParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	yes := v.GetBool("yes")
+	force := v.GetBool("force")
+	dryRun := v.GetBool("dry-run")
 
 	basePath, stacksBasePath := resolveInstallPaths()
 
