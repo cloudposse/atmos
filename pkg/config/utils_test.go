@@ -417,8 +417,8 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 	}
 
 	t.Run("env var not set leaves yaml value unchanged", func(t *testing.T) {
-		// Ensure the env var is not set.
-		os.Unsetenv("ATMOS_CI_COMMENTS_ENABLED")
+		// Empty string is treated as unset — env var is not processed.
+		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "")
 
 		config := &schema.AtmosConfiguration{
 			Schemas: make(map[string]interface{}),
@@ -432,7 +432,7 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 		assert.True(t, config.CI.Comments.Enabled)
 	})
 
-	t.Run("invalid env var value logs warning and leaves value unchanged", func(t *testing.T) {
+	t.Run("invalid env var value logs warning and leaves value unchanged (true)", func(t *testing.T) {
 		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "not-a-bool")
 
 		config := &schema.AtmosConfiguration{
@@ -445,6 +445,21 @@ func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
 		err := processEnvVars(config)
 		assert.NoError(t, err)
 		assert.True(t, config.CI.Comments.Enabled)
+	})
+
+	t.Run("invalid env var value logs warning and leaves value unchanged (false)", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "not-a-bool")
+
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+			CI: schema.CIConfig{
+				Comments: schema.CICommentsConfig{Enabled: false},
+			},
+		}
+
+		err := processEnvVars(config)
+		assert.NoError(t, err)
+		assert.False(t, config.CI.Comments.Enabled)
 	})
 }
 
