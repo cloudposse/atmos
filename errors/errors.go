@@ -1004,6 +1004,18 @@ var (
 	ErrAIComponentPathNotFound        = errors.New("component path not found")
 	ErrAIComponentPathNotDirectory    = errors.New("component path is not a directory")
 
+	// AWS security and compliance errors.
+	ErrAWSSecurityNotEnabled       = errors.New("security features are not enabled: add 'aws.security.enabled: true' to atmos.yaml")
+	ErrAWSSecurityNoFindings       = errors.New("no security findings found matching the specified filters")
+	ErrAWSSecurityFetchFailed      = errors.New("failed to fetch security findings from AWS")
+	ErrAWSSecurityMappingFailed    = errors.New("failed to map security finding to Atmos component")
+	ErrAWSSecurityInvalidSeverity  = errors.New("invalid severity filter: valid values are CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL")
+	ErrAWSSecurityInvalidSource    = errors.New("invalid finding source: valid values are security-hub, config, inspector, guardduty, macie, access-analyzer, all")
+	ErrAWSSecurityInvalidFramework = errors.New("invalid compliance framework: valid values are cis-aws, pci-dss, soc2, hipaa, nist")
+	ErrAWSSecurityInvalidFormat    = errors.New("invalid output format: valid values are markdown, json, yaml, csv")
+	ErrAWSSecurityAnalysisFailed   = errors.New("AI analysis of security findings failed")
+	ErrAWSCredentialsNotValid      = errors.New("AWS credentials are not configured or have expired")
+
 	// CLI provider errors.
 	ErrCLIProviderBinaryNotFound    = errors.New("CLI provider binary not found on PATH")
 	ErrCLIProviderExecFailed        = errors.New("CLI provider execution failed")
