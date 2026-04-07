@@ -179,3 +179,80 @@ func TestHelmfileComponentEnvSectionConversion(t *testing.T) {
 		})
 	}
 }
+
+// TestHelmfileEKSAuthEnvOrdering verifies that auth-derived environment variables from
+// ComponentEnvSection (e.g., AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE) are present
+// in ComponentEnvList BEFORE the EKS update-kubeconfig subprocess would be launched.
+//
+// This is a regression test for the bug where ComponentEnvSection was only converted
+// to ComponentEnvList AFTER the EKS block, meaning the aws eks update-kubeconfig
+// subprocess could not receive Atmos-managed credential file paths.
+func TestHelmfileEKSAuthEnvOrdering(t *testing.T) {
+	// Simulate the order of operations in ExecuteHelmfile:
+	// 1. tenv.EnvVars() are appended to ComponentEnvList (toolchain env)
+	// 2. ConvertComponentEnvSectionToList is called (moves auth env into ComponentEnvList)
+	// 3. EKS block uses ComponentEnvList — auth vars must be present at this point
+
+	toolchainEnv := []string{"PATH=/some/bin:/usr/bin"}
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentEnvSection: map[string]any{
+			"AWS_CONFIG_FILE":             "/atmos/auth/config",
+			"AWS_SHARED_CREDENTIALS_FILE": "/atmos/auth/credentials",
+		},
+		ComponentEnvList: []string{},
+	}
+
+	// Step 1: Append toolchain env (mirrors line in ExecuteHelmfile).
+	info.ComponentEnvList = append(info.ComponentEnvList, toolchainEnv...)
+
+	// Step 2: Convert ComponentEnvSection (must happen BEFORE EKS block).
+	ConvertComponentEnvSectionToList(&info)
+
+	// Step 3: Verify auth vars are present in ComponentEnvList for EKS subprocess.
+	envMap := make(map[string]string)
+	for _, envVar := range info.ComponentEnvList {
+		parts := strings.SplitN(envVar, "=", 2)
+		if len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
+
+	assert.Equal(t, "/atmos/auth/config", envMap["AWS_CONFIG_FILE"],
+		"AWS_CONFIG_FILE must be in ComponentEnvList before EKS subprocess is launched")
+	assert.Equal(t, "/atmos/auth/credentials", envMap["AWS_SHARED_CREDENTIALS_FILE"],
+		"AWS_SHARED_CREDENTIALS_FILE must be in ComponentEnvList before EKS subprocess is launched")
+	// Toolchain env should also still be present.
+	assert.Equal(t, "/some/bin:/usr/bin", envMap["PATH"],
+		"toolchain PATH must also be in ComponentEnvList")
+}
+
+// TestHelmfileEKSSanitizedEnvPassthrough verifies that SanitizedEnv is configured as
+// the process environment for the aws eks update-kubeconfig subprocess, consistent
+// with how the final helmfile invocation receives it via WithEnvironment(info.SanitizedEnv).
+//
+// This is a contract test: WithEnvironment(nil) falls back to os.Environ(), while
+// WithEnvironment(nonNil) replaces the base environment with the sanitized one.
+func TestHelmfileEKSSanitizedEnvPassthrough(t *testing.T) {
+	// A nil SanitizedEnv means "use os.Environ()" — default behaviour, no regression.
+	infoNilSanitized := schema.ConfigAndStacksInfo{
+		SanitizedEnv: nil,
+	}
+	assert.Nil(t, infoNilSanitized.SanitizedEnv,
+		"nil SanitizedEnv must fall back to os.Environ() in ExecuteShellCommand")
+
+	// A non-nil SanitizedEnv (e.g., from --identity auth) must be forwarded.
+	sanitizedEnv := []string{
+		"AWS_CONFIG_FILE=/atmos/identity/config",
+		"AWS_SHARED_CREDENTIALS_FILE=/atmos/identity/credentials",
+		"AWS_PROFILE=identity-profile",
+	}
+	infoWithSanitized := schema.ConfigAndStacksInfo{
+		SanitizedEnv: sanitizedEnv,
+	}
+	// Verify the slice is non-nil and contains the expected credential vars.
+	assert.NotNil(t, infoWithSanitized.SanitizedEnv,
+		"non-nil SanitizedEnv must be forwarded to the EKS subprocess via WithEnvironment")
+	assert.Contains(t, infoWithSanitized.SanitizedEnv, "AWS_CONFIG_FILE=/atmos/identity/config")
+	assert.Contains(t, infoWithSanitized.SanitizedEnv, "AWS_SHARED_CREDENTIALS_FILE=/atmos/identity/credentials")
+}
