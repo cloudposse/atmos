@@ -72,6 +72,10 @@ func (m *mockProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCh
 	return &provider.CheckRun{ID: m.nextID, Name: opts.Name, Status: opts.Status}, nil
 }
 
+func (m *mockProvider) ResolveBase() (*provider.BaseResolution, error) {
+	return nil, nil
+}
+
 func TestIsSummaryEnabled(t *testing.T) {
 	tests := []struct {
 		name     string

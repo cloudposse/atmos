@@ -1,8 +1,8 @@
 # Atmos Global `--ai` Flag - Product Requirements Document
 
-**Status:** In Progress (v3.0 — `--skill` flag)
-**Version:** 3.0
-**Last Updated:** 2026-03-11
+**Status:** Shipped
+**Version:** 3.1
+**Last Updated:** 2026-03-30
 
 ---
 

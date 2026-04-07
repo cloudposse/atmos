@@ -308,12 +308,25 @@ func uploadInstancesWithDeps(
 		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
+	// Convert schema.Instance to dtos.UploadInstance at the upload boundary.
+	// UploadInstance is an allowlist — only fields Atmos Pro needs are included.
+	// Sensitive data (vars, env, backend) never leaves this boundary.
+	uploadInstances := make([]dtos.UploadInstance, len(instances))
+	for i, inst := range instances {
+		uploadInstances[i] = dtos.UploadInstance{
+			Component:     inst.Component,
+			Stack:         inst.Stack,
+			ComponentType: inst.ComponentType,
+			Settings:      extractProSettings(inst.Settings),
+		}
+	}
+
 	req := dtos.InstancesUploadRequest{
 		RepoURL:   repoInfo.RepoUrl,
 		RepoName:  repoInfo.RepoName,
 		RepoOwner: repoInfo.RepoOwner,
 		RepoHost:  repoInfo.RepoHost,
-		Instances: instances,
+		Instances: uploadInstances,
 	}
 
 	err = apiClient.UploadInstances(&req)
@@ -481,10 +494,59 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
 			return nil
 		}
-		return uploadInstances(proInstances)
+		// Upload failures are logged but never cause the list command to fail.
+		if uploadErr := uploadInstances(proInstances); uploadErr != nil {
+			log.Warn("Failed to upload instances to Atmos Pro. The list result is unaffected.", "error", uploadErr)
+		}
 	}
 
 	return nil
+}
+
+// extractProSettings extracts only the "pro" key from a settings map for upload.
+// Returns nil if settings is nil or has no "pro" key.
+// Sanitizes nested maps to ensure JSON compatibility (converting
+// map[interface{}]interface{} from YAML to map[string]interface{}).
+func extractProSettings(settings map[string]any) map[string]any {
+	if settings == nil {
+		return nil
+	}
+
+	pro, hasPro := settings["pro"]
+	if !hasPro {
+		return nil
+	}
+
+	return map[string]any{
+		"pro": sanitizeForJSON(pro),
+	}
+}
+
+// sanitizeForJSON recursively converts map[interface{}]interface{} to
+// map[string]interface{} for JSON compatibility.
+func sanitizeForJSON(v any) any {
+	switch val := v.(type) {
+	case map[interface{}]interface{}:
+		m := make(map[string]interface{}, len(val))
+		for k, v := range val {
+			m[fmt.Sprintf("%v", k)] = sanitizeForJSON(v)
+		}
+		return m
+	case map[string]interface{}:
+		m := make(map[string]interface{}, len(val))
+		for k, v := range val {
+			m[k] = sanitizeForJSON(v)
+		}
+		return m
+	case []interface{}:
+		s := make([]interface{}, len(val))
+		for i, v := range val {
+			s[i] = sanitizeForJSON(v)
+		}
+		return s
+	default:
+		return v
+	}
 }
 
 // buildInstanceFilters creates filters from filter specification.

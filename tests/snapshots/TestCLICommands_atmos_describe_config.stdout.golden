@@ -22,7 +22,8 @@
       "planfiles": {
         "default": ""
       },
-      "plugin_cache": true
+      "plugin_cache": true,
+      "ci": {}
     },
     "helmfile": {
       "base_path": "",
@@ -284,6 +285,14 @@
     "web_search": {},
     "context": {}
   },
-  "mcp": {},
+  "aws": {
+    "security": {
+      "sources": {},
+      "tag_mapping": {}
+    }
+  },
+  "mcp": {
+    "routing": {}
+  },
   "lsp": {}
 }

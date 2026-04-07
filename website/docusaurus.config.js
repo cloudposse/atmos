@@ -397,6 +397,20 @@ const config = {
                 githubPath: 'examples',
             },
         ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'gists',
+                sourceDir: '../gists',
+                routeBasePath: '/gists',
+                title: 'Gists',
+                description: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'gists',
+                disclaimer: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
+            },
+        ],
     ],
 
     presets: [
@@ -500,6 +514,11 @@ const config = {
                         label: 'Examples'
                     },
                     {
+                        to: '/gists',
+                        position: 'left',
+                        label: 'Gists'
+                    },
+                    {
                         label: 'Community',
                         position: 'left',
                         to: '/community'
@@ -567,14 +586,6 @@ const config = {
                         dark: 'rgb(50, 50, 50)'
                     }
                 }
-            },
-            announcementBar: {
-                id: 'refarch-announcement',
-                content:
-                  'Try Cloud Posse\'s <a href="https://docs.cloudposse.com">Reference Architecture for AWS, Datadog & GitHub Actions</a> using Atmos',
-                backgroundColor: 'var(--announcement-bar-background)',
-                textColor: 'var(--announcement-bar-text-color)',
-                isCloseable: true,
             },
             colorMode: {
                 // "light" | "dark"

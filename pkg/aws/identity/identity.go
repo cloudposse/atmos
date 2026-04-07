@@ -324,3 +324,37 @@ func LoadConfig(ctx context.Context, region string, roleArn string, assumeRoleDu
 
 	return LoadConfigWithAuth(ctx, region, roleArn, assumeRoleDuration, nil)
 }
+
+// ValidateAWSCredentials performs an early check that AWS credentials are available and valid.
+// Uses STS GetCallerIdentity which is lightweight and always works if credentials are valid.
+// If authCtx is provided, credentials from the Atmos Auth identity are used.
+
+// getCallerIdentityFn is the function used by ValidateAWSCredentials. Overridable in tests.
+var getCallerIdentityFn = GetCallerIdentity
+
+func ValidateAWSCredentials(ctx context.Context, region string, authCtx *schema.AWSAuthContext) error {
+	defer perf.Track(nil, "identity.ValidateAWSCredentials")()
+
+	log.Debug("Validating AWS credentials via STS GetCallerIdentity")
+
+	callerIdentity, err := getCallerIdentityFn(ctx, region, "", 0, authCtx)
+	if err != nil {
+		hint := "Ensure AWS credentials are configured (e.g., via environment variables, ~/.aws/credentials, or SSO)"
+		if authCtx != nil {
+			hint = "Run `atmos auth login` to refresh credentials for the configured identity"
+		}
+		return errUtils.Build(errUtils.ErrAWSCredentialsNotValid).
+			WithExplanation(fmt.Sprintf("Unable to verify AWS credentials: %s", err)).
+			WithHint(hint).
+			WithHint("Run `aws sts get-caller-identity` to verify your credentials").
+			WithExitCode(1).
+			Err()
+	}
+
+	log.Debug("AWS credentials validated successfully",
+		"account", callerIdentity.Account,
+		"arn", callerIdentity.Arn,
+	)
+
+	return nil
+}
