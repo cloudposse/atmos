@@ -151,6 +151,47 @@ func TestSetupTerraformAuth_MergedConfigError_WrapsWithInvalidAuthConfig(t *test
 	assert.False(t, errors.Is(err, errUtils.ErrInvalidComponent))
 }
 
+// TestSetupTerraformAuth_ExportedWrapper verifies that the exported SetupTerraformAuth
+// delegates to setupTerraformAuth and returns the same result. This ensures the cmd/terraform
+// code path (used by --format) exercises the same auth logic as ExecuteTerraform.
+func TestSetupTerraformAuth_ExportedWrapper(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockMgr := mockTypes.NewMockAuthManager(ctrl)
+	mockMgr.EXPECT().GetChain().Return([]string{"test-identity"})
+
+	orig := defaultAuthManagerCreator
+	t.Cleanup(func() { defaultAuthManagerCreator = orig })
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return mockMgr, nil
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{}
+
+	mgr, err := SetupTerraformAuth(&atmosConfig, &info)
+	require.NoError(t, err)
+	assert.Equal(t, mockMgr, mgr)
+	assert.Equal(t, mockMgr, info.AuthManager)
+	assert.Equal(t, "test-identity", info.Identity)
+}
+
+// TestSetupTerraformAuth_ExportedWrapper_Error verifies that the exported SetupTerraformAuth
+// propagates errors from setupTerraformAuth.
+func TestSetupTerraformAuth_ExportedWrapper_Error(t *testing.T) {
+	orig := defaultMergedAuthConfigGetter
+	t.Cleanup(func() { defaultMergedAuthConfigGetter = orig })
+	defaultMergedAuthConfigGetter = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+		return nil, errors.New("config error")
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "comp"}
+
+	_, err := SetupTerraformAuth(&atmosConfig, &info)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+}
+
 // TestStoreAutoDetectedIdentity_ExistingIdentity_NotOverwritten verifies that when
 // info.Identity is already set, storeAutoDetectedIdentity returns early without
 // calling GetChain() — preventing user-supplied identities from being overwritten.
