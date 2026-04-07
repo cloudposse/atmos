@@ -136,19 +136,34 @@ func (i *Installer) DryRun() *InstallResult {
 	}
 
 	// Check _defaults.yaml.
-	defaultsPath := i.defaultsPath()
-	if i.writer.FileExists(defaultsPath) {
-		content, err := i.writer.ReadFile(defaultsPath)
-		if err == nil && !hasImport(string(content), "mixins/atmos-pro") {
-			result.UpdatedFiles = append(result.UpdatedFiles, i.defaultsRelPath())
-		} else {
-			result.SkippedFiles = append(result.SkippedFiles, i.defaultsRelPath())
-		}
-	} else {
-		result.CreatedFiles = append(result.CreatedFiles, i.defaultsRelPath())
-	}
+	i.classifyDefaults(result)
 
 	return result
+}
+
+// classifyDefaults checks the state of _defaults.yaml and classifies it
+// as created, updated, or skipped for dry-run reporting.
+func (i *Installer) classifyDefaults(result *InstallResult) {
+	defaultsPath := i.defaultsPath()
+	relPath := i.defaultsRelPath()
+
+	if !i.writer.FileExists(defaultsPath) {
+		result.CreatedFiles = append(result.CreatedFiles, relPath)
+		return
+	}
+
+	content, err := i.writer.ReadFile(defaultsPath)
+	if err != nil {
+		result.SkippedFiles = append(result.SkippedFiles, relPath)
+		return
+	}
+
+	if hasImport(string(content), "mixins/atmos-pro") {
+		result.SkippedFiles = append(result.SkippedFiles, relPath)
+		return
+	}
+
+	result.UpdatedFiles = append(result.UpdatedFiles, relPath)
 }
 
 // buildFileSpecs returns the list of files to install.

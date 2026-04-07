@@ -16,6 +16,6 @@ var unlockCmd = &cobra.Command{
 }
 
 func init() {
-	unlockCmd.PersistentFlags().StringP("component", "c", "", "Specify the Atmos component to lock")
-	unlockCmd.PersistentFlags().StringP("stack", "s", "", "Specify the Atmos stack to lock")
+	unlockCmd.PersistentFlags().StringP("component", "c", "", "Specify the Atmos component to unlock")
+	unlockCmd.PersistentFlags().StringP("stack", "s", "", "Specify the Atmos stack to unlock")
 }
