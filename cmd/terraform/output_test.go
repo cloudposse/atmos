@@ -23,34 +23,10 @@ func initTestIO(t *testing.T) {
 	data.InitWriter(ioCtx)
 }
 
-// mockComponentDescriber implements tfoutput.ComponentDescriber for testing.
-type mockComponentDescriber struct {
-	capturedAuthManager any
-}
-
-func (m *mockComponentDescriber) DescribeComponent(params *tfoutput.DescribeComponentParams) (map[string]any, error) {
-	m.capturedAuthManager = params.AuthManager
-	// Return a disabled component so no real terraform execution happens.
-	return map[string]any{
-		"vars": map[string]any{
-			"enabled": false,
-		},
-	}, nil
-}
-
-// TestExecuteOutputWithFormat_PassesAuthManager verifies that executeOutputWithFormat
-// passes the authManager through to GetComponentOutputs, which in turn passes it to
-// DescribeComponent. This ensures the --format path uses auth credentials.
-func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
+// TestFormatAndWriteOutput_JSON verifies that formatAndWriteOutput correctly
+// formats outputs as JSON and writes to stdout.
+func TestFormatAndWriteOutput_JSON(t *testing.T) {
 	initTestIO(t)
-
-	// Save and restore the default executor.
-	origExecutor := tfoutput.GetDefaultExecutor()
-	t.Cleanup(func() { tfoutput.SetDefaultExecutor(origExecutor) })
-
-	describer := &mockComponentDescriber{}
-	executor := tfoutput.NewExecutor(describer)
-	tfoutput.SetDefaultExecutor(executor)
 
 	atmosConfig := &schema.AtmosConfiguration{
 		Logs: schema.Logs{Level: "debug"},
@@ -59,43 +35,12 @@ func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
 		ComponentFromArg: "test-component",
 		Stack:            "test-stack",
 	}
-
-	// Pass a sentinel authManager value.
-	fakeAuthManager := "fake-auth-manager-sentinel"
-	err := executeOutputWithFormat(atmosConfig, info, "json", fakeAuthManager)
-	require.NoError(t, err)
-
-	// Verify the authManager was passed through to DescribeComponent.
-	assert.Equal(t, fakeAuthManager, describer.capturedAuthManager,
-		"authManager should be passed through to DescribeComponent via GetComponentOutputs")
-}
-
-// TestExecuteOutputWithFormat_NilAuthManager verifies that when authManager is nil
-// (pre-fix behavior), it reaches DescribeComponent as nil.
-func TestExecuteOutputWithFormat_NilAuthManager(t *testing.T) {
-	initTestIO(t)
-
-	// Save and restore the default executor.
-	origExecutor := tfoutput.GetDefaultExecutor()
-	t.Cleanup(func() { tfoutput.SetDefaultExecutor(origExecutor) })
-
-	describer := &mockComponentDescriber{}
-	executor := tfoutput.NewExecutor(describer)
-	tfoutput.SetDefaultExecutor(executor)
-
-	atmosConfig := &schema.AtmosConfiguration{
-		Logs: schema.Logs{Level: "debug"},
-	}
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg: "test-component",
-		Stack:            "test-stack",
+	outputs := map[string]any{
+		"vpc_id": "vpc-12345",
 	}
 
-	err := executeOutputWithFormat(atmosConfig, info, "json", nil)
+	err := formatAndWriteOutput(atmosConfig, info, "json", outputs)
 	require.NoError(t, err)
-
-	assert.Nil(t, describer.capturedAuthManager,
-		"nil authManager should reach DescribeComponent as nil")
 }
 
 // TestOutputCommandSetup verifies that the output command is properly configured.

@@ -18,7 +18,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
@@ -84,15 +83,6 @@ func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schem
 // level (used for ErrInvalidAuthConfig). Do not override both simultaneously — the deeper
 // var is shadowed and its effect would be masked.
 var defaultMergedAuthConfigGetter = getMergedAuthConfig
-
-// SetupTerraformAuth is the exported entry point for setupTerraformAuth.
-// It is used by cmd/terraform when the --format flag requires auth setup
-// outside the standard ExecuteTerraform pipeline.
-func SetupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
-	defer perf.Track(atmosConfig, "exec.SetupTerraformAuth")()
-
-	return setupTerraformAuth(atmosConfig, info)
-}
 
 func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	// Log the identity-selection decision point for easy debugging.

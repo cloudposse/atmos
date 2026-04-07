@@ -65,16 +65,18 @@ func outputRunWithFormat(cmd *cobra.Command, args []string, format string) error
 		return err
 	}
 
-	// Set up authentication so that ATMOS_PROFILE and identity-based credentials
-	// are resolved and available for terraform init/output. Without this, the
-	// --format path bypasses the auth setup that the passthrough path gets via
-	// ExecuteTerraform → setupTerraformAuth.
-	authManager, err := exec.SetupTerraformAuth(atmosConfig, info)
+	v := viper.GetViper()
+	skipInit := v.GetBool("skip-init")
+
+	outputs, err := exec.ExecuteTerraformOutput(atmosConfig, info, exec.OutputOptions{SkipInit: skipInit})
 	if err != nil {
-		return err
+		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanationf("Failed to get terraform outputs for component %q in stack %q.", info.ComponentFromArg, info.Stack).
+			Err()
 	}
 
-	return executeOutputWithFormat(atmosConfig, info, format, authManager)
+	return formatAndWriteOutput(atmosConfig, info, format, outputs)
 }
 
 // validateOutputFormat checks if the format is supported.
@@ -119,21 +121,12 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	return &info, &atmosConfig, nil
 }
 
-// executeOutputWithFormat retrieves and formats terraform outputs.
-func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, format string, authManager any) error {
+// formatAndWriteOutput formats terraform outputs and writes them to the appropriate destination.
+func formatAndWriteOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, format string, outputs map[string]any) error {
 	v := viper.GetViper()
-	skipInit := v.GetBool("skip-init")
 	outputFile := v.GetString("output-file")
 	uppercase := v.GetBool("uppercase")
 	flatten := v.GetBool("flatten")
-
-	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, authManager)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
-			WithCause(err).
-			WithExplanationf("Failed to get terraform outputs for component %q in stack %q.", info.ComponentFromArg, info.Stack).
-			Err()
-	}
 
 	// Build format options.
 	opts := tfoutput.FormatOptions{
@@ -149,7 +142,10 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 	if format == "github" {
 		return executeGitHubOutput(outputs, outputFile, outputName, opts)
 	}
-	var formatted string
+	var (
+		formatted string
+		err       error
+	)
 	if outputName != "" {
 		formatted, err = formatSingleOutput(outputs, outputName, format, opts)
 	} else {
