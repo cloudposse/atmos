@@ -27,6 +27,7 @@ jobs:
     name: "Bump Homebrew formula"
     runs-on: ubuntu-latest
     needs: release
+    environment: release
     steps:
       - uses: mislav/bump-homebrew-formula-action@56a283fa15557e9abaa4bdb63b8212abc68e655c # v3.6
         with:
