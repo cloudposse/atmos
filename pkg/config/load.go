@@ -397,7 +397,10 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.pro.github_run_id", "GITHUB_RUN_ID")
 	bindEnv(v, "settings.pro.atmos_pro_run_id", AtmosProRunIDEnvVarName)
 
-	// GitHub OIDC for Atmos Pro
+	// GitHub Actions CI context for Atmos Pro.
+	bindEnv(v, "settings.pro.github_head_ref", "GITHUB_HEAD_REF")
+
+	// GitHub OIDC for Atmos Pro.
 	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
 	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 

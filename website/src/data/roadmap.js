@@ -165,6 +165,17 @@ export const roadmapConfig = {
       pr: 2251,
       changelog: 'chunked-stack-uploads',
     },
+    {
+      id: 'pro-commit',
+      icon: 'RiGitCommitLine',
+      title: 'Server-Side Commits via GitHub App',
+      tagline: 'Commits that trigger CI, without write tokens',
+      description: 'New `atmos pro commit` command sends changes to Atmos Pro, which creates the commit server-side using its GitHub App. Commits trigger CI workflows unlike GITHUB_TOKEN commits.',
+      benefits: 'Replaces autofix.ci for autocommit workflows. The workflow never receives a write token — Atmos Pro controls exactly what gets committed.',
+      status: 'shipped',
+      quarter: 'q2-2026',
+      changelog: 'pro-commit',
+    },
   ],
 
   initiatives: [
