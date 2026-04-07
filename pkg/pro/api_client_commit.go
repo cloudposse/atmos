@@ -53,7 +53,13 @@ func (c *AtmosProAPIClient) sendCommitRequest(targetURL string, data []byte, com
 		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, reqErr)
 	}
 
-	resp, doErr := c.HTTPClient.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+	// Guard against nil HTTPClient by ensuring a default client with a sane timeout.
+	client := c.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: DefaultHTTPClientTimeout}
+	}
+
+	resp, doErr := client.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
 	if doErr != nil {
 		return errors.Join(errUtils.ErrFailedToMakeRequest, doErr)
 	}
