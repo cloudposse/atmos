@@ -210,13 +210,7 @@ func TestHelmfileEKSAuthEnvOrdering(t *testing.T) {
 	ConvertComponentEnvSectionToList(&info)
 
 	// Step 3: Verify auth vars are present in ComponentEnvList for EKS subprocess.
-	envMap := make(map[string]string)
-	for _, envVar := range info.ComponentEnvList {
-		parts := strings.SplitN(envVar, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
+	envMap := envListToMap(info.ComponentEnvList)
 
 	assert.Equal(t, "/atmos/auth/config", envMap["AWS_CONFIG_FILE"],
 		"AWS_CONFIG_FILE must be in ComponentEnvList before EKS subprocess is launched")
