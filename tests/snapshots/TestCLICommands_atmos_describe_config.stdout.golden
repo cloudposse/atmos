@@ -285,6 +285,12 @@
     "web_search": {},
     "context": {}
   },
+  "aws": {
+    "security": {
+      "sources": {},
+      "tag_mapping": {}
+    }
+  },
   "mcp": {
     "routing": {}
   },

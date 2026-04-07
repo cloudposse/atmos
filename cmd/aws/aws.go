@@ -3,8 +3,10 @@ package aws
 import (
 	"github.com/spf13/cobra"
 
+	awscompliance "github.com/cloudposse/atmos/cmd/aws/compliance"
 	"github.com/cloudposse/atmos/cmd/aws/ecr"
 	"github.com/cloudposse/atmos/cmd/aws/eks"
+	awssecurity "github.com/cloudposse/atmos/cmd/aws/security"
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -30,6 +32,12 @@ func init() {
 
 	// Add EKS subcommand from the eks subpackage.
 	awsCmd.AddCommand(eks.EksCmd)
+
+	// Add Security subcommand from the security subpackage.
+	awsCmd.AddCommand(awssecurity.SecurityCmd)
+
+	// Add Compliance subcommand from the compliance subpackage.
+	awsCmd.AddCommand(awscompliance.ComplianceCmd)
 
 	// Register this command with the registry.
 	internal.Register(&AWSCommandProvider{})

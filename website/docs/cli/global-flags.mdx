@@ -590,6 +590,19 @@ All global flags can be set using environment variables. The precedence order is
     </dd>
 </dl>
 
+### AI Integration Environment Variables
+
+<dl>
+    <dt>`ATMOS_AI`</dt>
+    <dd>
+        Enable AI-powered analysis of command output.
+        - Equivalent to the `--ai` flag
+        - Set to `true` to enable AI analysis
+        - CLI flag takes precedence over this environment variable
+        - Example: `ATMOS_AI=true atmos aws security analyze -s prod`
+    </dd>
+</dl>
+
 ### AI Assistant Environment Variables
 
 <dl>
@@ -760,6 +773,19 @@ export ATMOS_LOGS_LEVEL=Debug
 
 # Commands will use these settings
 atmos describe config
+```
+
+### AI-Powered Analysis Examples
+
+```bash
+# Enable AI analysis for security findings
+atmos aws security analyze --ai -s prod
+
+# Enable AI analysis via environment variable
+ATMOS_AI=true atmos aws security analyze --severity=critical -s prod
+
+# AI analysis with compliance reports
+atmos aws compliance report --ai --framework=cis-aws -s prod
 ```
 
 ### CI/CD Configuration
