@@ -20,6 +20,7 @@ type AISettings struct {
 	Instructions       AIInstructionsSettings       `yaml:"instructions,omitempty" json:"instructions,omitempty" mapstructure:"instructions"`
 	WebSearch          AIWebSearchSettings          `yaml:"web_search,omitempty" json:"web_search,omitempty" mapstructure:"web_search"`
 	Context            AIContextSettings            `yaml:"context,omitempty" json:"context,omitempty" mapstructure:"context"`
+	// Security settings have been moved to AWS.Security (see aws.go).
 }
 
 // AIProviderConfig contains configuration for a specific AI provider.
