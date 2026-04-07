@@ -84,13 +84,23 @@ func TestDescribeAffectedGreenfieldBase(t *testing.T) {
 
 		// Every component that exists in HEAD must be in the affected list
 		// because there is no corresponding state in the empty BASE.
-		assert.Greater(t, len(affected), 0,
-			"at least one component should be reported as affected on a greenfield base")
+		// The fixture has two stacks (prod, nonprod) each with component-1 and component-2.
+		require.GreaterOrEqual(t, len(affected), 4,
+			"all 4 components (component-1 and component-2 in prod and nonprod stacks) should be affected on a greenfield base")
 
-		// Confirm that no error was silently swallowed for a wrong reason.
+		// Build a set of component+stack pairs from the result.
+		type componentStack struct{ component, stack string }
+		got := make(map[componentStack]bool, len(affected))
 		for _, a := range affected {
-			assert.NotEmpty(t, a.Component, "affected entry should have a component name")
-			assert.NotEmpty(t, a.Stack, "affected entry should have a stack name")
+			got[componentStack{a.Component, a.Stack}] = true
+		}
+
+		// Assert that the known fixture components are present in both stacks.
+		for _, stack := range []string{"prod", "nonprod"} {
+			for _, comp := range []string{"component-1", "component-2"} {
+				assert.True(t, got[componentStack{comp, stack}],
+					"expected %s/%s to be in the affected list", stack, comp)
+			}
 		}
 	})
 }
