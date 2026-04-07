@@ -247,7 +247,11 @@ func WithAuthManager(authMgr AuthEnvProvider) StartOption {
 		if perServer, ok := authMgr.(PerServerAuthProvider); ok {
 			scoped, err := perServer.ForServer(ctx, config)
 			if err != nil {
-				return nil, fmt.Errorf("auth manager creation failed for %q: %w", config.Name, err)
+				// ForServer returns errors already wrapped (pkg/auth wraps with
+				// ErrAuthManager). prepareEnv adds "auth setup failed for X" and
+				// Session.Start adds ErrMCPServerStartFailed + the server name,
+				// so further wrapping here would only duplicate context.
+				return nil, err
 			}
 			if scoped == nil {
 				return nil, fmt.Errorf("%w: server `%s`, identity `%s`", errUtils.ErrMCPServerAuthUnavailable, config.Name, config.Identity)

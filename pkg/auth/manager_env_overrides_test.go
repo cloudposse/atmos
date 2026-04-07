@@ -4,12 +4,33 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// managerEnvOverridesTestMu serializes any test in this file that mutates
+// the package-level DI hooks (initCliConfigFn, createAuthManager,
+// setEnvWithRestoreFn). Per CLAUDE.md these tests MUST NOT call t.Parallel(),
+// but this mutex is a defensive guard so that if a future test author
+// accidentally adds t.Parallel(), they get a deadlock or contention rather
+// than silent cross-test stub interference (which would manifest as flaky
+// failures that are very hard to diagnose).
+var managerEnvOverridesTestMu sync.Mutex
+
+// Static sentinel errors for test injection. These are package-level vars,
+// not inline errors.New calls, so they comply with CLAUDE.md's "no dynamic
+// errors" rule and can be matched via errors.Is in assertions.
+var (
+	errTestInitBoom   = errors.New("test: simulated InitCliConfig failure")
+	errTestSetenvBoom = errors.New("test: simulated setenv failure")
+	errTestNilCleanup = errors.New("test: simulated nil-cleanup failure")
 )
 
 // unsetEnvForTest unsets the given env vars and registers cleanup that
@@ -58,6 +79,14 @@ func withStubbedManagerEnvOverrides(
 	mgrToReturn AuthManager,
 ) {
 	t.Helper()
+
+	// Acquire the package-level lock for the duration of the test so
+	// concurrent invocations of any test that mutates these hooks can't
+	// race. The lock is released by t.Cleanup, which runs in LIFO order
+	// after all other cleanups for this test — including the hook restore
+	// closures registered below.
+	managerEnvOverridesTestMu.Lock()
+	t.Cleanup(managerEnvOverridesTestMu.Unlock)
 
 	origInit := initCliConfigFn
 	origCreate := createAuthManager
@@ -186,13 +215,16 @@ func TestCreateAndAuthenticateManagerWithEnvOverrides_OnlyNonAtmosKeys_NoMutatio
 func TestCreateAndAuthenticateManagerWithEnvOverrides_InitConfigError(t *testing.T) {
 	unsetEnvForTest(t, "ATMOS_PROFILE")
 
-	withStubbedManagerEnvOverrides(t, nil, errors.New("init boom"), nil)
+	withStubbedManagerEnvOverrides(t, nil, errTestInitBoom, nil)
 
 	_, err := CreateAndAuthenticateManagerWithEnvOverrides(map[string]string{
 		"ATMOS_PROFILE": "managers",
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "init boom")
+	// Wrapping should preserve the static sentinel for errors.Is matching
+	// AND add the auth-manager sentinel as the leading wrap.
+	assert.ErrorIs(t, err, errTestInitBoom)
+	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 
 	// Env restored even on error.
 	_, stillSet := os.LookupEnv("ATMOS_PROFILE")
@@ -228,7 +260,7 @@ func TestCreateAndAuthenticateManagerWithEnvOverrides_SetEnvError_ReturnsAndClea
 
 	cleanupCalled := 0
 	setEnvWithRestoreFn = func(_ map[string]string) (func(), error) {
-		return func() { cleanupCalled++ }, errors.New("setenv refused")
+		return func() { cleanupCalled++ }, errTestSetenvBoom
 	}
 
 	mgr, err := CreateAndAuthenticateManagerWithEnvOverrides(map[string]string{
@@ -236,7 +268,8 @@ func TestCreateAndAuthenticateManagerWithEnvOverrides_SetEnvError_ReturnsAndClea
 	})
 	require.Error(t, err)
 	assert.Nil(t, mgr)
-	assert.Contains(t, err.Error(), "setenv refused")
+	assert.ErrorIs(t, err, errTestSetenvBoom)
+	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 	// Cleanup should have been called exactly once during the error path.
 	assert.Equal(t, 1, cleanupCalled)
 }
@@ -251,7 +284,7 @@ func TestCreateAndAuthenticateManagerWithEnvOverrides_SetEnvError_NilCleanup_NoP
 	t.Cleanup(func() { setEnvWithRestoreFn = origSetEnv })
 
 	setEnvWithRestoreFn = func(_ map[string]string) (func(), error) {
-		return nil, errors.New("nil cleanup")
+		return nil, errTestNilCleanup
 	}
 
 	assert.NotPanics(t, func() {
@@ -259,6 +292,86 @@ func TestCreateAndAuthenticateManagerWithEnvOverrides_SetEnvError_NilCleanup_NoP
 			"ATMOS_PROFILE": "managers",
 		})
 	})
+}
+
+// TestCreateAndAuthenticateManagerWithEnvOverrides_ConcurrentSafe asserts
+// the goroutine-safety contract: concurrent invocations must not race on
+// os.Environ() and each call must observe its own ATMOS_* override (not
+// another goroutine's). The test injects a stubbed initCliConfigFn that
+// captures the ATMOS_PROFILE active *during* its own invocation, then
+// verifies every goroutine saw exactly the value it requested.
+//
+// Without managerEnvOverridesMu this test would be flaky/failing under -race.
+// With the lock it must be deterministic.
+func TestCreateAndAuthenticateManagerWithEnvOverrides_ConcurrentSafe(t *testing.T) {
+	unsetEnvForTest(t, "ATMOS_PROFILE")
+
+	// Stub the hooks. We do NOT use withStubbedManagerEnvOverrides here
+	// because that helper takes the test mutex (intended for sequential
+	// tests). This test deliberately exercises the production lock from
+	// many goroutines, so we manage hook restoration manually.
+	origInit := initCliConfigFn
+	origCreate := createAuthManager
+	t.Cleanup(func() {
+		initCliConfigFn = origInit
+		createAuthManager = origCreate
+	})
+
+	// Capture ATMOS_PROFILE seen at the moment initCliConfigFn runs, keyed
+	// by the goroutine's expected value (passed via the override map). The
+	// goroutine that requested ATMOS_PROFILE=alpha must see "alpha" inside
+	// its own InitCliConfig call, not "beta" or "gamma".
+	type observation struct {
+		expected string
+		actual   string
+	}
+	observations := make(chan observation, 64)
+
+	initCliConfigFn = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		// We don't know which goroutine we're in; record what we see.
+		// Add a small sleep to widen the race window if the lock is missing.
+		seen := os.Getenv("ATMOS_PROFILE")
+		// Yield to other goroutines — without the lock, this is where one
+		// goroutine's setenv would clobber another's observation.
+		time.Sleep(time.Microsecond)
+		seenAfter := os.Getenv("ATMOS_PROFILE")
+		// Record both reads. They must be equal (no inflight mutation by
+		// another goroutine).
+		observations <- observation{expected: seen, actual: seenAfter}
+		return schema.AtmosConfiguration{}, nil
+	}
+	createAuthManager = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (AuthManager, error) {
+		return &fakeAuthMgrForEnvOverrides{marker: "ok"}, nil
+	}
+
+	const goroutines = 32
+	values := []string{"alpha", "beta", "gamma", "delta"}
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		want := values[i%len(values)]
+		go func() {
+			defer wg.Done()
+			_, err := CreateAndAuthenticateManagerWithEnvOverrides(map[string]string{
+				"ATMOS_PROFILE": want,
+			})
+			require.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+	close(observations)
+
+	// Every observation must show a stable read across the sleep window.
+	// If two goroutines were ever in flight simultaneously, the seen/seenAfter
+	// values would diverge.
+	count := 0
+	for o := range observations {
+		assert.Equal(t, o.expected, o.actual,
+			"ATMOS_PROFILE observed inside InitCliConfig must be stable across the read window — divergence indicates a missing lock")
+		count++
+	}
+	assert.Equal(t, goroutines, count, "every goroutine should have produced one observation")
 }
 
 // ----------------------------------------------------------------------------

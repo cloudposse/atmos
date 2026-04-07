@@ -10,6 +10,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time sentinel: if schema.MCPServerConfig.Command or .Identity is
+// renamed or removed, this declaration fails the build before any test runs.
+// Per CLAUDE.md: "Add compile-time sentinels for schema field references in tests".
+var _ = schema.MCPServerConfig{
+	Command:  "echo",
+	Identity: "ci",
+}
+
 func TestResolveAuthProvider_NoIdentity_ReturnsNil(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
 	cfg.MCP.Servers = map[string]schema.MCPServerConfig{

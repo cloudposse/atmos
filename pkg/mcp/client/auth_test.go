@@ -161,6 +161,10 @@ func TestWithAuthManager_PerServerProvider_ForServerError(t *testing.T) {
 
 	_, err := opt(context.Background(), config, []string{"PATH=/usr/bin"})
 	require.Error(t, err)
+	// Contract: WithAuthManager passes ForServer errors through unchanged.
+	// Higher layers (Session.Start) add ErrMCPServerStartFailed and the
+	// server name; the dispatcher must not duplicate that context.
+	assert.ErrorIs(t, err, assert.AnError)
 	// Scoped provider should never have been built or called.
 	assert.Equal(t, 0, root.callCount)
 }

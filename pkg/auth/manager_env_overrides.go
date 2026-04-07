@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -19,6 +22,20 @@ var (
 	createAuthManager   = CreateAndAuthenticateManagerWithAtmosConfig
 	setEnvWithRestoreFn = env.SetWithRestore
 )
+
+// managerEnvOverridesMu serializes calls to
+// CreateAndAuthenticateManagerWithEnvOverrides. It is required for
+// correctness, not just hardening: the function mutates os.Environ() and
+// then reads it back via cfg.InitCliConfig (Viper). Without this lock,
+// concurrent invocations would race — goroutine A's InitCliConfig could
+// observe goroutine B's ATMOS_* overrides and load the wrong profile and
+// identities for A.
+//
+// The lock lives at this composition layer (rather than inside
+// env.SetWithRestore) because the unsafe pattern is the *read-after-write*
+// across multiple steps. The env.SetWithRestore primitive on its own is
+// fine for callers that don't subsequently read os.Environ().
+var managerEnvOverridesMu sync.Mutex
 
 // CreateAndAuthenticateManagerWithEnvOverrides builds and authenticates an
 // AuthManager "as if" the given ATMOS_* environment variables were set on
@@ -50,11 +67,17 @@ var (
 // identity specified, or no default identity configured. Callers that require
 // a non-nil manager must check explicitly.
 //
-// NOT goroutine-safe: env.SetWithRestore mutates process-global state.
-// Current Atmos callers (sequential MCP server startup, single-auth-manager
-// commands) serialize access, so this is fine.
+// Goroutine-safe: a package-level mutex (managerEnvOverridesMu) serializes
+// concurrent calls to prevent races between the os.Environ() write and the
+// subsequent cfg.InitCliConfig read. Concurrent callers will block rather
+// than observe each other's overrides.
 func CreateAndAuthenticateManagerWithEnvOverrides(envOverrides map[string]string) (AuthManager, error) {
 	defer perf.Track(nil, "auth.CreateAndAuthenticateManagerWithEnvOverrides")()
+
+	// Serialize: see managerEnvOverridesMu doc for why this is correctness,
+	// not just hardening.
+	managerEnvOverridesMu.Lock()
+	defer managerEnvOverridesMu.Unlock()
 
 	atmosOnly := filterAtmosOverrides(envOverrides)
 
@@ -63,13 +86,13 @@ func CreateAndAuthenticateManagerWithEnvOverrides(envOverrides map[string]string
 		if restore != nil {
 			restore()
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to apply ATMOS_* env overrides: %w", errUtils.ErrAuthManager, err)
 	}
 	defer restore()
 
 	loadedConfig, err := initCliConfigFn(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to initialize CLI config for scoped auth manager: %w", errUtils.ErrAuthManager, err)
 	}
 
 	return createAuthManager(

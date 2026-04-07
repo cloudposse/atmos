@@ -66,16 +66,29 @@ func (p *ScopedAuthProvider) PrepareShellEnvironment(ctx context.Context, identi
 
 // ForServer implements PerServerAuthProvider. It asks pkg/auth to construct
 // an auth manager with the server's `env:` block applied to ATMOS_* variables.
+//
+// Errors from the underlying primitive are returned as-is: pkg/auth already
+// wraps with errUtils.ErrAuthManager, and Session.Start (the eventual caller)
+// wraps with errUtils.ErrMCPServerStartFailed and the server name. Adding
+// another wrap here would only duplicate context. The (nil, nil) "auth
+// unavailable" branch is the one case the adapter must surface explicitly,
+// because pkg/auth treats it as a normal "no manager needed" return.
+//
+// PerServerAuthProvider is an exported interface, so a nil config is treated
+// as a public-API boundary violation and surfaces a typed error instead of a
+// panic. Internal Atmos callers always pass a non-nil config; this guard
+// exists only for safety against future external implementations.
 func (p *ScopedAuthProvider) ForServer(_ context.Context, config *ParsedConfig) (AuthEnvProvider, error) {
 	defer perf.Track(nil, "mcp.client.ScopedAuthProvider.ForServer")()
 
+	if config == nil {
+		return nil, fmt.Errorf("%w: nil server config", errUtils.ErrMCPServerAuthUnavailable)
+	}
+
 	mgr, err := p.buildManagerFn(config.Env)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build auth manager for MCP server %q: %w", config.Name, err)
+		return nil, err
 	}
-	// (nil, nil) means auth disabled or no identity resolved — a server with
-	// an explicit identity cannot proceed. Surface the sentinel error with
-	// server+identity context for errors.Is-matching and display.
 	if mgr == nil {
 		return nil, fmt.Errorf("%w: server %q, identity %q", errUtils.ErrMCPServerAuthUnavailable, config.Name, config.Identity)
 	}
