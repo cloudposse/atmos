@@ -186,22 +186,14 @@ func TestScopedAuthProvider_PrepareShellEnvironment_BuilderError(t *testing.T) {
 	assert.ErrorIs(t, err, errTestScopedBuilderInit)
 }
 
-func TestScopedAuthProvider_ImplementsBothInterfaces(t *testing.T) {
-	var p AuthEnvProvider = NewScopedAuthProvider(&schema.AtmosConfiguration{})
-	_, ok := p.(PerServerAuthProvider)
-	assert.True(t, ok, "ScopedAuthProvider must implement PerServerAuthProvider")
-}
-
-func TestNewScopedAuthProvider_DefaultBuilderWiredToAuthPackage(t *testing.T) {
-	// Smoke test that the default constructor wires buildManagerFn to the
-	// pkg/auth primitive. We don't invoke it (that would need real atmos
-	// config) — just verify it's not nil and is the expected function.
-	p := NewScopedAuthProvider(&schema.AtmosConfiguration{})
-	require.NotNil(t, p.buildManagerFn)
-
-	// The zero value behavior check: after construction the builder exists,
-	// meaning a caller that bypasses the test hooks would get real behavior.
-	// (We cannot compare function values for equality in Go.) This assertion
-	// is therefore just a presence check.
-	_ = auth.CreateAndAuthenticateManagerWithEnvOverrides
-}
+// Interface satisfaction for ScopedAuthProvider is enforced at compile time
+// via the `var _ AuthEnvProvider = (*ScopedAuthProvider)(nil)` and
+// `var _ PerServerAuthProvider = (*ScopedAuthProvider)(nil)` declarations
+// in scoped_auth.go. A runtime test for the same fact would be a tautology
+// (per CLAUDE.md "avoid tautological tests").
+//
+// Default-builder wiring is similarly not testable at runtime: Go function
+// values cannot be compared for equality, so any "default builder is the
+// pkg/auth primitive" assertion would degrade to a non-nil check that passes
+// for any constructor. The wiring is verified by reading NewScopedAuthProvider
+// (one line) and by all the behavioral tests above.

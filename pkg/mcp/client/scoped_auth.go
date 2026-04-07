@@ -36,6 +36,16 @@ type ScopedAuthProvider struct {
 	buildManagerFn func(map[string]string) (auth.AuthManager, error)
 }
 
+// Compile-time interface assertions: ScopedAuthProvider must satisfy both
+// AuthEnvProvider (so it can be passed to WithAuthManager) and
+// PerServerAuthProvider (so WithAuthManager will dispatch through ForServer).
+// If a future change breaks either contract, the build fails immediately
+// instead of waiting for a test run.
+var (
+	_ AuthEnvProvider       = (*ScopedAuthProvider)(nil)
+	_ PerServerAuthProvider = (*ScopedAuthProvider)(nil)
+)
+
 // NewScopedAuthProvider creates a ScopedAuthProvider using the given base
 // config as future fallback context.
 func NewScopedAuthProvider(baseConfig *schema.AtmosConfiguration) *ScopedAuthProvider {

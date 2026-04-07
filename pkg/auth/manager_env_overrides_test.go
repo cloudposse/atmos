@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -295,14 +296,25 @@ func TestCreateAndAuthenticateManagerWithEnvOverrides_SetEnvError_NilCleanup_NoP
 }
 
 // TestCreateAndAuthenticateManagerWithEnvOverrides_ConcurrentSafe asserts
-// the goroutine-safety contract: concurrent invocations must not race on
-// os.Environ() and each call must observe its own ATMOS_* override (not
-// another goroutine's). The test injects a stubbed initCliConfigFn that
-// captures the ATMOS_PROFILE active *during* its own invocation, then
-// verifies every goroutine saw exactly the value it requested.
+// the goroutine-safety contract on two independent vectors:
 //
-// Without managerEnvOverridesMu this test would be flaky/failing under -race.
-// With the lock it must be deterministic.
+//  1. Per-goroutine isolation: each goroutine that requests
+//     ATMOS_PROFILE=X MUST observe X inside its own InitCliConfig call —
+//     not some other goroutine's value. The test gives every goroutine a
+//     UNIQUE want value, so any cross-goroutine hijack manifests as a
+//     missing want and an unexpected extra observation.
+//  2. Read stability inside the stub: a stub that performs two reads of
+//     ATMOS_PROFILE separated by a tiny sleep MUST see the same value for
+//     both, otherwise another goroutine mutated os.Environ during the
+//     window.
+//
+// All worker errors are routed back to the test goroutine via channels.
+// Per testify docs, require.* / t.Fatal* must NOT be invoked from worker
+// goroutines because runtime.Goexit only exits the current goroutine and
+// leaves t in an inconsistent state.
+//
+// Without managerEnvOverridesMu both vectors fail under -race. With the
+// lock the test must be deterministic.
 func TestCreateAndAuthenticateManagerWithEnvOverrides_ConcurrentSafe(t *testing.T) {
 	unsetEnvForTest(t, "ATMOS_PROFILE")
 
@@ -317,61 +329,100 @@ func TestCreateAndAuthenticateManagerWithEnvOverrides_ConcurrentSafe(t *testing.
 		createAuthManager = origCreate
 	})
 
-	// Capture ATMOS_PROFILE seen at the moment initCliConfigFn runs, keyed
-	// by the goroutine's expected value (passed via the override map). The
-	// goroutine that requested ATMOS_PROFILE=alpha must see "alpha" inside
-	// its own InitCliConfig call, not "beta" or "gamma".
-	type observation struct {
-		expected string
-		actual   string
+	const goroutines = 32
+
+	// Each goroutine gets a UNIQUE want value. Under correct serialization
+	// the stub MUST observe exactly this value during the goroutine's own
+	// InitCliConfig call. Without the lock, a goroutine could observe any
+	// other goroutine's value — which the multiset comparison below detects.
+	wants := make([]string, goroutines)
+	for i := 0; i < goroutines; i++ {
+		wants[i] = fmt.Sprintf("profile-%02d", i)
 	}
-	observations := make(chan observation, 64)
+
+	observed := make(chan string, goroutines)
+	workerErrs := make(chan error, goroutines*2)
 
 	initCliConfigFn = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
-		// We don't know which goroutine we're in; record what we see.
-		// Add a small sleep to widen the race window if the lock is missing.
-		seen := os.Getenv("ATMOS_PROFILE")
-		// Yield to other goroutines — without the lock, this is where one
-		// goroutine's setenv would clobber another's observation.
+		// Vector 2: read the env twice with a sleep between to widen the
+		// race window. Under serialization the two reads must agree.
+		before := os.Getenv("ATMOS_PROFILE")
 		time.Sleep(time.Microsecond)
-		seenAfter := os.Getenv("ATMOS_PROFILE")
-		// Record both reads. They must be equal (no inflight mutation by
-		// another goroutine).
-		observations <- observation{expected: seen, actual: seenAfter}
+		after := os.Getenv("ATMOS_PROFILE")
+		if before != after {
+			// Forward the divergence as a worker error so the main goroutine
+			// can fail the test. We do NOT call t.Errorf from here because
+			// the stub may run on a worker goroutine.
+			workerErrs <- fmt.Errorf("ATMOS_PROFILE diverged inside InitCliConfig: before=%q after=%q", before, after)
+		}
+		// Record what this stub call observed for the multiset check.
+		observed <- after
 		return schema.AtmosConfiguration{}, nil
 	}
 	createAuthManager = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (AuthManager, error) {
 		return &fakeAuthMgrForEnvOverrides{marker: "ok"}, nil
 	}
 
-	const goroutines = 32
-	values := []string{"alpha", "beta", "gamma", "delta"}
-
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
-		want := values[i%len(values)]
+	for _, want := range wants {
+		want := want // capture per-iteration
 		go func() {
 			defer wg.Done()
 			_, err := CreateAndAuthenticateManagerWithEnvOverrides(map[string]string{
 				"ATMOS_PROFILE": want,
 			})
-			require.NoError(t, err)
+			if err != nil {
+				// Route the error back to the main goroutine — never call
+				// require.* / t.Fatal* from a worker goroutine.
+				workerErrs <- fmt.Errorf("worker want=%s: %w", want, err)
+			}
 		}()
 	}
 	wg.Wait()
-	close(observations)
+	close(observed)
+	close(workerErrs)
 
-	// Every observation must show a stable read across the sleep window.
-	// If two goroutines were ever in flight simultaneously, the seen/seenAfter
-	// values would diverge.
-	count := 0
-	for o := range observations {
-		assert.Equal(t, o.expected, o.actual,
-			"ATMOS_PROFILE observed inside InitCliConfig must be stable across the read window — divergence indicates a missing lock")
-		count++
+	// Surface any worker / divergence errors first. Drained on the test
+	// goroutine, so t.Errorf is safe here.
+	for err := range workerErrs {
+		t.Errorf("%v", err)
 	}
-	assert.Equal(t, goroutines, count, "every goroutine should have produced one observation")
+
+	// Vector 1: multiset comparison. Build a set of expected wants, then
+	// walk the observed channel marking each off. Anything missing means
+	// some goroutine's read was hijacked; anything extra (or duplicated)
+	// means a goroutine observed a value it didn't request.
+	expectedSet := make(map[string]bool, goroutines)
+	for _, w := range wants {
+		expectedSet[w] = false
+	}
+
+	var extras []string
+	for o := range observed {
+		seen, known := expectedSet[o]
+		if !known {
+			extras = append(extras, fmt.Sprintf("%q (unknown)", o))
+			continue
+		}
+		if seen {
+			extras = append(extras, fmt.Sprintf("%q (duplicate)", o))
+			continue
+		}
+		expectedSet[o] = true
+	}
+
+	var missing []string
+	for w, seen := range expectedSet {
+		if !seen {
+			missing = append(missing, w)
+		}
+	}
+
+	assert.Empty(t, missing,
+		"every goroutine must have observed its own ATMOS_PROFILE under serialization; missing wants indicate the lock is broken")
+	assert.Empty(t, extras,
+		"no goroutine should observe a value it did not request; extras indicate cross-goroutine env leakage")
 }
 
 // ----------------------------------------------------------------------------
