@@ -1496,3 +1496,119 @@ func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) 
 	assert.Equal(t, fakeBinary, capturedExecutable,
 		"expected executable to be resolved to the toolchain binary path")
 }
+
+// TestExecutor_Execute_NilAuthContext_OmitsAWSCredentials verifies that when authContext is nil
+// (as happens in the --format json path), no AWS credential environment variables are injected
+// into the terraform subprocess. This reproduces the bug where `atmos terraform output --format json`
+// fails to authenticate when ATMOS_PROFILE is set because executeOutputWithFormat passes nil
+// authContext through to execute(), so SetupEnvironment never calls awsCloud.PrepareEnvironment().
+func TestExecutor_Execute_NilAuthContext_OmitsAWSCredentials(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Capture the environment map passed to the terraform runner.
+	var capturedEnv map[string]string
+	mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
+		capturedEnv = env
+		return nil
+	}).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-no-auth"`)},
+	}, nil)
+
+	// Call with nil authContext — simulates the --format json code path.
+	outputs, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-no-auth", outputs["vpc_id"])
+
+	// Verify AWS credential keys are NOT present in the environment.
+	// When authContext is nil, SetupEnvironment skips awsCloud.PrepareEnvironment(),
+	// so these keys should be absent (unless set in the parent process environment).
+	require.NotNil(t, capturedEnv, "environment should have been set on runner")
+	_, hasProfile := capturedEnv["AWS_PROFILE"]
+	_, hasCredsFile := capturedEnv["AWS_SHARED_CREDENTIALS_FILE"]
+	_, hasConfigFile := capturedEnv["AWS_CONFIG_FILE"]
+	_, hasSDKLoad := capturedEnv["AWS_SDK_LOAD_CONFIG"]
+
+	// None of the auth-injected keys should be present from PrepareEnvironment.
+	// Note: AWS_PROFILE might exist if inherited from os.Environ(), but
+	// AWS_SDK_LOAD_CONFIG is only set by PrepareEnvironment, so its absence
+	// conclusively proves that auth injection did not run.
+	assert.False(t, hasSDKLoad,
+		"AWS_SDK_LOAD_CONFIG should not be set when authContext is nil — auth injection was skipped")
+
+	t.Logf("Captured env has AWS_PROFILE=%v, AWS_SHARED_CREDENTIALS_FILE=%v, AWS_CONFIG_FILE=%v, AWS_SDK_LOAD_CONFIG=%v",
+		hasProfile, hasCredsFile, hasConfigFile, hasSDKLoad)
+}
+
+// TestExecutor_Execute_WithAuthContext_InjectsAWSCredentials verifies that when authContext
+// contains AWS credentials, those credentials are injected into the terraform subprocess
+// environment via awsCloud.PrepareEnvironment(). This demonstrates the correct behavior that
+// the --format json path should exhibit once the bug is fixed.
+func TestExecutor_Execute_WithAuthContext_InjectsAWSCredentials(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Capture the environment map passed to the terraform runner.
+	var capturedEnv map[string]string
+	mockRunner.EXPECT().SetEnv(gomock.Any()).DoAndReturn(func(env map[string]string) error {
+		capturedEnv = env
+		return nil
+	}).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {Value: []byte(`"vpc-with-auth"`)},
+	}, nil)
+
+	// Call with a real authContext — simulates the passthrough (non-format) code path.
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile:         "test-devops-profile",
+			CredentialsFile: "/tmp/test-atmos-credentials",
+			ConfigFile:      "/tmp/test-atmos-config",
+			Region:          "us-east-2",
+		},
+	}
+
+	outputs, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, authContext)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-with-auth", outputs["vpc_id"])
+
+	// Verify AWS credential keys ARE present with the correct values.
+	require.NotNil(t, capturedEnv, "environment should have been set on runner")
+	assert.Equal(t, "test-devops-profile", capturedEnv["AWS_PROFILE"],
+		"AWS_PROFILE should be set from authContext")
+	assert.Equal(t, "/tmp/test-atmos-credentials", capturedEnv["AWS_SHARED_CREDENTIALS_FILE"],
+		"AWS_SHARED_CREDENTIALS_FILE should be set from authContext")
+	assert.Equal(t, "/tmp/test-atmos-config", capturedEnv["AWS_CONFIG_FILE"],
+		"AWS_CONFIG_FILE should be set from authContext")
+	assert.Equal(t, "1", capturedEnv["AWS_SDK_LOAD_CONFIG"],
+		"AWS_SDK_LOAD_CONFIG should be set by PrepareEnvironment")
+	assert.Equal(t, "us-east-2", capturedEnv["AWS_DEFAULT_REGION"],
+		"AWS_DEFAULT_REGION should be set from authContext")
+}

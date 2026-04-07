@@ -64,7 +64,17 @@ func outputRunWithFormat(cmd *cobra.Command, args []string, format string) error
 	if err != nil {
 		return err
 	}
-	return executeOutputWithFormat(atmosConfig, info, format)
+
+	// Set up authentication so that ATMOS_PROFILE and identity-based credentials
+	// are resolved and available for terraform init/output. Without this, the
+	// --format path bypasses the auth setup that the passthrough path gets via
+	// ExecuteTerraform → setupTerraformAuth.
+	authManager, err := exec.SetupTerraformAuth(atmosConfig, info)
+	if err != nil {
+		return err
+	}
+
+	return executeOutputWithFormat(atmosConfig, info, format, authManager)
 }
 
 // validateOutputFormat checks if the format is supported.
@@ -110,14 +120,14 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 }
 
 // executeOutputWithFormat retrieves and formats terraform outputs.
-func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, format string) error {
+func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, format string, authManager any) error {
 	v := viper.GetViper()
 	skipInit := v.GetBool("skip-init")
 	outputFile := v.GetString("output-file")
 	uppercase := v.GetBool("uppercase")
 	flatten := v.GetBool("flatten")
 
-	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, nil)
+	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, authManager)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
