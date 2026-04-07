@@ -394,6 +394,49 @@ func TestStandardOptionsBuilder_WithDryRun(t *testing.T) {
 	}
 }
 
+func TestStandardOptionsBuilder_WithForce(t *testing.T) {
+	tests := []struct {
+		name       string
+		viperValue bool
+		want       bool
+	}{
+		{
+			name:       "no force flag",
+			viperValue: false,
+			want:       false,
+		},
+		{
+			name:       "force enabled",
+			viperValue: true,
+			want:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := NewStandardOptionsBuilder().WithForce()
+			parser := builder.Build()
+
+			cmd := &cobra.Command{Use: "test"}
+			parser.RegisterFlags(cmd)
+
+			// Verify flag exists with no shorthand (avoids collision with --format).
+			flag := cmd.Flags().Lookup("force")
+			require.NotNil(t, flag, "force flag should be registered")
+			assert.Equal(t, "", flag.Shorthand, "force should have no shorthand to avoid collision with --format")
+
+			// Parse and verify.
+			v := viper.New()
+			v.Set("force", tt.viperValue)
+			_ = parser.BindToViper(v)
+
+			interpreter, err := parser.Parse(context.Background(), []string{})
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, interpreter.Force)
+		})
+	}
+}
+
 func TestStandardOptionsBuilder_WithQuery(t *testing.T) {
 	builder := NewStandardOptionsBuilder().WithQuery()
 	parser := builder.Build()

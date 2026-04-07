@@ -1,12 +1,17 @@
 package pro
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/pro/install"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestProCommandProvider(t *testing.T) {
@@ -123,7 +128,7 @@ func TestInstallCmd(t *testing.T) {
 
 		forceFlag := installCmd.Flags().Lookup("force")
 		assert.NotNil(t, forceFlag)
-		assert.Equal(t, "f", forceFlag.Shorthand)
+		assert.Equal(t, "", forceFlag.Shorthand)
 
 		dryRunFlag := installCmd.Flags().Lookup("dry-run")
 		assert.NotNil(t, dryRunFlag)
@@ -189,6 +194,155 @@ func TestReportDryRun(t *testing.T) {
 			reportDryRun(result)
 		})
 	})
+}
+
+func TestResolveInstallPaths_DefaultPaths(t *testing.T) {
+	// When config cannot be loaded (no atmos.yaml), defaults should be returned.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+	})
+
+	info := &schema.ConfigAndStacksInfo{}
+	basePath, stacksBasePath := resolveInstallPaths(info)
+
+	assert.Equal(t, ".", basePath)
+	assert.Equal(t, "stacks", stacksBasePath)
+}
+
+func TestResolveInstallPaths_WithConfig(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+	})
+
+	// Write a minimal atmos.yaml with custom stacks path.
+	configContent := []byte("base_path: .\nstacks:\n  base_path: custom-stacks\n")
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), configContent, 0o644))
+
+	info := &schema.ConfigAndStacksInfo{}
+	basePath, stacksBasePath := resolveInstallPaths(info)
+
+	// BasePath defaults to "." when empty, stacks path comes from config.
+	assert.NotEmpty(t, basePath)
+	assert.Equal(t, "custom-stacks", stacksBasePath)
+}
+
+func TestResolveFromGlobalFlags(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+	})
+
+	cmd := &cobra.Command{Use: "test"}
+	v := viper.New()
+
+	basePath, stacksBasePath := resolveFromGlobalFlags(cmd, v)
+
+	// Without atmos.yaml, should return defaults.
+	assert.Equal(t, ".", basePath)
+	assert.Equal(t, "stacks", stacksBasePath)
+}
+
+func TestRunInstall_DryRun(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		viper.Reset()
+	})
+
+	// Use a fresh viper to avoid state leaking.
+	v := viper.GetViper()
+	v.Set("dry-run", true)
+	v.Set("yes", false)
+	v.Set("force", false)
+
+	cmd := &cobra.Command{Use: "install"}
+	installParser.RegisterFlags(cmd)
+
+	err = runInstall(cmd, nil)
+	assert.NoError(t, err)
+}
+
+func TestRunInstall_YesFlag(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		viper.Reset()
+	})
+
+	v := viper.GetViper()
+	v.Set("dry-run", false)
+	v.Set("yes", true)
+	v.Set("force", false)
+
+	cmd := &cobra.Command{Use: "install"}
+	installParser.RegisterFlags(cmd)
+
+	err = runInstall(cmd, nil)
+	assert.NoError(t, err)
+
+	// Verify files were created.
+	assert.FileExists(t, filepath.Join(tmpDir, "atmos.yaml"))
+	assert.FileExists(t, filepath.Join(tmpDir, ".github", "workflows", "atmos-pro-terraform-plan.yaml"))
+}
+
+func TestRunInstall_NoConfirmation_NonTTY(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		viper.Reset()
+	})
+
+	v := viper.GetViper()
+	v.Set("dry-run", false)
+	v.Set("yes", false)
+	v.Set("force", false)
+
+	cmd := &cobra.Command{Use: "install"}
+	installParser.RegisterFlags(cmd)
+
+	// In non-TTY mode (tests), confirmation prompt returns an error.
+	err = runInstall(cmd, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "confirmation failed")
+}
+
+func TestPromptOpenWorkspace_NonTTY(t *testing.T) {
+	// In non-TTY mode (tests), promptOpenWorkspace should return without error.
+	require.NotPanics(t, func() {
+		promptOpenWorkspace()
+	})
+}
+
+func TestPromptOverwrite(t *testing.T) {
+	// In non-TTY mode (test environment), promptOverwrite returns an error.
+	_, err := promptOverwrite("test-file.yaml")
+	assert.Error(t, err)
 }
 
 func TestWorkspaceURL(t *testing.T) {
