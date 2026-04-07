@@ -304,7 +304,7 @@ func TestWriteToFile(t *testing.T) {
 	t.Run("error on invalid path", func(t *testing.T) {
 		err := WriteToFile("/nonexistent/dir/file.txt", "content")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to open file")
+		assert.ErrorIs(t, err, errUtils.ErrOpenFile)
 	})
 }
 
