@@ -11,8 +11,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
-	"github.com/cloudposse/atmos/pkg/auth"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
@@ -283,67 +281,14 @@ func resolveToolchain(atmosConfig *schema.AtmosConfiguration) mcpclient.Toolchai
 }
 
 // resolveAuthProvider creates an auth provider if any MCP server needs
-// credentials. The returned provider builds a per-server auth manager so each
-// server's `env:` block (specifically ATMOS_* variables) influences atmos
-// config loading and identity resolution.
+// credentials. It delegates to mcpclient.NewScopedAuthProvider, which rebuilds
+// the auth manager per-server so each server's `env:` block (specifically
+// ATMOS_* variables) influences atmos config loading and identity resolution.
 func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthEnvProvider {
 	if !serversNeedAuth(atmosConfig.MCP.Servers) {
 		return nil
 	}
-	return newPerServerAuthProvider(atmosConfig)
-}
-
-// perServerAuthProvider rebuilds the auth manager per-server with the server's
-// ATMOS_* env block applied so that ATMOS_PROFILE, ATMOS_CLI_CONFIG_PATH, etc.
-// influence identity resolution. Implements both mcpclient.AuthEnvProvider and
-// mcpclient.PerServerAuthProvider.
-type perServerAuthProvider struct {
-	baseConfig *schema.AtmosConfiguration
-	// initConfig and createAuthManager are overridable for tests.
-	initConfig        func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error)
-	createAuthManager func(string, *schema.AuthConfig, string, *schema.AtmosConfiguration) (auth.AuthManager, error)
-}
-
-func newPerServerAuthProvider(atmosConfig *schema.AtmosConfiguration) *perServerAuthProvider {
-	return &perServerAuthProvider{
-		baseConfig:        atmosConfig,
-		initConfig:        cfg.InitCliConfig,
-		createAuthManager: auth.CreateAndAuthenticateManagerWithAtmosConfig,
-	}
-}
-
-// PrepareShellEnvironment satisfies AuthEnvProvider as a fallback. The
-// per-server path (ForServer) is preferred when WithAuthManager detects it.
-func (p *perServerAuthProvider) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
-	mgr, err := p.buildManager(nil)
-	if err != nil {
-		return nil, err
-	}
-	return mgr.PrepareShellEnvironment(ctx, identityName, currentEnv)
-}
-
-// ForServer returns an AuthEnvProvider built with the server's `env:` block
-// applied to ATMOS_* variables for the duration of manager construction.
-func (p *perServerAuthProvider) ForServer(_ context.Context, config *mcpclient.ParsedConfig) (mcpclient.AuthEnvProvider, error) {
-	mgr, err := p.buildManager(config.Env)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build auth manager for MCP server %q: %w", config.Name, err)
-	}
-	return mgr, nil
-}
-
-func (p *perServerAuthProvider) buildManager(serverEnv map[string]string) (auth.AuthManager, error) {
-	restore := mcpclient.ApplyAtmosEnvOverrides(serverEnv)
-	defer restore()
-
-	loadedConfig, err := p.initConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return p.createAuthManager(
-		"", &loadedConfig.Auth, cfg.IdentityFlagSelectValue, &loadedConfig,
-	)
+	return mcpclient.NewScopedAuthProvider(atmosConfig)
 }
 
 // cliProviders lists providers that invoke a local CLI binary as a subprocess.

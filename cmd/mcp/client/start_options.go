@@ -46,17 +46,15 @@ func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.St
 }
 
 // buildAuthOption creates an auth StartOption if any configured server needs
-// credentials. The returned option uses a per-server auth manager that
-// applies each server's `env:` block (specifically ATMOS_* variables) before
-// loading atmos config and resolving identities — see
-// PerServerAuthManager.ForServer.
+// credentials. The returned option delegates to mcpclient.NewScopedAuthProvider
+// which rebuilds the auth manager per-server, applying each server's `env:`
+// block (specifically ATMOS_* variables) before loading atmos config and
+// resolving identities.
 func buildAuthOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.StartOption {
 	if !mcpServersNeedAuth(atmosConfig.MCP.Servers) {
 		return nil
 	}
-
-	provider := NewPerServerAuthManager(atmosConfig)
-	return []mcpclient.StartOption{mcpclient.WithAuthManager(provider)}
+	return []mcpclient.StartOption{mcpclient.WithAuthManager(mcpclient.NewScopedAuthProvider(atmosConfig))}
 }
 
 // mcpServersNeedAuth returns true if any configured MCP server has identity set.
