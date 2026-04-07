@@ -302,6 +302,37 @@ func Test_processEnvVars(t *testing.T) {
 			expectError:  true,
 			errorMessage: "strconv.ParseBool: parsing \"not-a-boolean\": invalid syntax",
 		},
+		{
+			name: "ATMOS_CI_COMMENTS_ENABLED=true enables CI comments",
+			envVars: map[string]string{
+				"ATMOS_CI_COMMENTS_ENABLED": "true",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Comments: schema.CICommentsConfig{Enabled: true},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "ATMOS_CI_COMMENTS_ENABLED=false disables CI comments",
+			envVars: map[string]string{
+				"ATMOS_CI_COMMENTS_ENABLED": "false",
+			},
+			expectedConfig: schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Comments: schema.CICommentsConfig{Enabled: false},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "ATMOS_CI_COMMENTS_ENABLED invalid value logs warning without error",
+			envVars: map[string]string{
+				"ATMOS_CI_COMMENTS_ENABLED": "not-a-bool",
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -333,6 +364,88 @@ func Test_processEnvVars(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProcessEnvVars_CICommentsEnabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVal  string
+		initial bool
+		want    bool
+	}{
+		{
+			name:    "env var true overrides false yaml default",
+			envVal:  "true",
+			initial: false,
+			want:    true,
+		},
+		{
+			name:    "env var false overrides true yaml setting",
+			envVal:  "false",
+			initial: true,
+			want:    false,
+		},
+		{
+			name:    "env var 1 enables CI comments",
+			envVal:  "1",
+			initial: false,
+			want:    true,
+		},
+		{
+			name:    "env var 0 disables CI comments",
+			envVal:  "0",
+			initial: true,
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_CI_COMMENTS_ENABLED", tt.envVal)
+
+			config := &schema.AtmosConfiguration{
+				Schemas: make(map[string]interface{}),
+				CI: schema.CIConfig{
+					Comments: schema.CICommentsConfig{Enabled: tt.initial},
+				},
+			}
+
+			err := processEnvVars(config)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, config.CI.Comments.Enabled)
+		})
+	}
+
+	t.Run("env var not set leaves yaml value unchanged", func(t *testing.T) {
+		// Ensure the env var is not set.
+		os.Unsetenv("ATMOS_CI_COMMENTS_ENABLED")
+
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+			CI: schema.CIConfig{
+				Comments: schema.CICommentsConfig{Enabled: true},
+			},
+		}
+
+		err := processEnvVars(config)
+		assert.NoError(t, err)
+		assert.True(t, config.CI.Comments.Enabled)
+	})
+
+	t.Run("invalid env var value logs warning and leaves value unchanged", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_COMMENTS_ENABLED", "not-a-bool")
+
+		config := &schema.AtmosConfiguration{
+			Schemas: make(map[string]interface{}),
+			CI: schema.CIConfig{
+				Comments: schema.CICommentsConfig{Enabled: true},
+			},
+		}
+
+		err := processEnvVars(config)
+		assert.NoError(t, err)
+		assert.True(t, config.CI.Comments.Enabled)
+	})
 }
 
 func TestFindAllStackConfigsInPathsForStack(t *testing.T) {
