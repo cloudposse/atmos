@@ -1,15 +1,10 @@
 package client
 
 import (
-	"fmt"
-
-	"github.com/cloudposse/atmos/pkg/auth"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // buildStartOptions creates StartOption slice with toolchain and auth resolution
@@ -50,30 +45,26 @@ func buildToolchainOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.St
 	return nil
 }
 
-// buildAuthOption creates an auth StartOption if any configured server needs credentials.
+// buildAuthOption creates an auth StartOption if any configured server needs
+// credentials. The returned option uses a per-server auth manager that
+// applies each server's `env:` block (specifically ATMOS_* variables) before
+// loading atmos config and resolving identities — see
+// PerServerAuthManager.ForServer.
 func buildAuthOption(atmosConfig *schema.AtmosConfiguration) []mcpclient.StartOption {
-	// Check if any server needs auth.
-	needsAuth := false
-	for _, s := range atmosConfig.MCP.Servers {
+	if !mcpServersNeedAuth(atmosConfig.MCP.Servers) {
+		return nil
+	}
+
+	provider := NewPerServerAuthManager(atmosConfig)
+	return []mcpclient.StartOption{mcpclient.WithAuthManager(provider)}
+}
+
+// mcpServersNeedAuth returns true if any configured MCP server has identity set.
+func mcpServersNeedAuth(servers map[string]schema.MCPServerConfig) bool {
+	for _, s := range servers {
 		if s.Identity != "" {
-			needsAuth = true
-			break
+			return true
 		}
 	}
-	if !needsAuth {
-		return nil
-	}
-
-	mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-		"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
-	)
-	if err != nil {
-		ui.Error(fmt.Sprintf("Failed to create auth manager for MCP servers: %v", err))
-		return nil
-	}
-	if mgr == nil {
-		return nil
-	}
-
-	return []mcpclient.StartOption{mcpclient.WithAuthManager(mgr)}
+	return false
 }
