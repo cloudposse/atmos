@@ -21,6 +21,7 @@ const (
 	testEnvRunLogGroupPipeline     = "_ATMOS_TEST_RUN_LOG_GROUP_PIPELINE"
 	testEnvPipelineBackendType     = "_ATMOS_TEST_PIPELINE_BACKEND_TYPE"
 	testEnvPipelineSkipInit        = "_ATMOS_TEST_PIPELINE_SKIP_INIT"
+	testEnvEnvDumpFile             = "_ATMOS_TEST_ENV_DUMP_FILE"
 )
 
 // TestMain is the entry point for the internal/exec test binary.
@@ -38,6 +39,10 @@ const (
 //	_ATMOS_TEST_STDERR=<text>         — if set, write text to stderr.
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 immediately after the optional
 //	                                   counter-file write (for workspace recovery tests).
+//	_ATMOS_TEST_ENV_DUMP_FILE=<path> — if set, write the subprocess's full environment
+//	                                   (newline-joined "KEY=VALUE" pairs) to <path> and
+//	                                   exit successfully (for asserting which env vars a
+//	                                   faked external binary, e.g. "aws", actually received).
 func TestMain(m *testing.M) {
 	// Initialize the I/O writer and ui formatter so data.Write*/ui.Write* calls
 	// (used throughout internal/exec and its pkg/ci dependency, e.g. CI log
@@ -69,6 +74,11 @@ func TestMain(m *testing.M) {
 
 	if argsFile := os.Getenv("_ATMOS_TEST_ARGS_FILE"); argsFile != "" {
 		_ = os.WriteFile(argsFile, []byte(strings.Join(os.Args[1:], "\n")), 0o600)
+		os.Exit(0)
+	}
+
+	if envDumpFile := os.Getenv(testEnvEnvDumpFile); envDumpFile != "" {
+		_ = os.WriteFile(envDumpFile, []byte(strings.Join(os.Environ(), "\n")), 0o600)
 		os.Exit(0)
 	}
 
