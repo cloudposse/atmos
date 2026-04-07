@@ -115,6 +115,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 
 	reportResult(result)
+	ui.Writeln("")
 	ui.MarkdownMessage(nextStepsMarkdown)
 
 	return nil
@@ -133,13 +134,13 @@ func promptOverwrite(relPath string) (bool, error) {
 // reportResult displays the installation results.
 func reportResult(result *install.InstallResult) {
 	for _, f := range result.CreatedFiles {
-		ui.Successf("Created %s", f)
+		ui.Successf("Created `%s`", f)
 	}
 	for _, f := range result.UpdatedFiles {
-		ui.Successf("Updated %s", f)
+		ui.Successf("Updated `%s`", f)
 	}
 	for _, f := range result.SkippedFiles {
-		ui.Warningf("Skipped %s (already exists, use --force to overwrite)", f)
+		ui.Warningf("Skipped `%s` (already exists, use --force to overwrite)", f)
 	}
 }
 
@@ -147,12 +148,12 @@ func reportResult(result *install.InstallResult) {
 func reportDryRun(result *install.InstallResult) {
 	ui.Infof("Dry run - no files will be written\n")
 	for _, f := range result.CreatedFiles {
-		ui.Infof("Would create %s", f)
+		ui.Infof("Would create `%s`", f)
 	}
 	for _, f := range result.UpdatedFiles {
-		ui.Infof("Would update %s", f)
+		ui.Infof("Would update `%s`", f)
 	}
 	for _, f := range result.SkippedFiles {
-		ui.Warningf("Would skip %s (already exists)", f)
+		ui.Warningf("Would skip `%s` (already exists)", f)
 	}
 }

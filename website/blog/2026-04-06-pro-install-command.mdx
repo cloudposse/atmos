@@ -33,35 +33,6 @@ atmos pro install --yes
 atmos pro install --force
 ```
 
-## What Gets Created
-
-```
-.github/workflows/
-  atmos-pro-terraform-plan.yaml
-  atmos-pro-terraform-apply.yaml
-  atmos-pro-affected-stacks.yaml
-  atmos-pro-list-instances.yaml
-
-profiles/
-  github-plan/atmos.yaml
-  github-apply/atmos.yaml
-  README.md
-
-stacks/
-  mixins/atmos-pro.yaml
-  deploy/_defaults.yaml  (updated with mixin import)
-```
-
-The generated workflows use `workflow_dispatch` triggers, concurrency groups, and environment-scoped secrets — matching production Atmos Pro deployments. Auth profiles handle GitHub OIDC token exchange with per-account identity mapping.
-
-## Smart Conflict Handling
-
-The command detects existing files and handles conflicts gracefully:
-
-- **Interactive mode** prompts per-file before overwriting
-- **`--force`** overwrites all existing files
-- **Import merging** adds the atmos-pro mixin to `_defaults.yaml` without duplicating existing imports
-
 ## Why This Matters
 
 Teams adopting Atmos Pro no longer need to copy workflow templates, configure auth profiles by hand, or wire up stack mixins manually. One command produces a working CI/CD integration that follows best practices — then you customize the generated files for your environment.

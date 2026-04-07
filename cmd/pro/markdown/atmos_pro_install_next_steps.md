@@ -18,7 +18,7 @@ Deploy a GitHub OIDC provider in your AWS account to enable keyless
 authentication from GitHub Actions. Create IAM roles with trust policies
 scoped to your GitHub repository.
 
-See: https://atmos.tools/cli/auth/
+See: https://atmos-pro.com/docs/configure/cloud-authentication
 
 ### 3. Set GitHub Repository Variables
 
@@ -29,8 +29,10 @@ Add these in GitHub Settings → Secrets and variables → Actions → Variables
 
 ### 4. Create Your Workspace
 
-Visit https://app.atmos.tools and create a workspace for your organization.
-Connect this repository and configure repository permissions.
+Create a workspace for your organization. Connect this repository and
+configure repository permissions.
+
+See: https://atmos-pro.com/onboarding/create-workspace
 
 ### 5. Create GitHub Environments
 

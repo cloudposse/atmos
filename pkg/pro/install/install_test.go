@@ -63,8 +63,13 @@ func TestInstaller_Install_FreshProject(t *testing.T) {
 	assert.Empty(t, result.SkippedFiles)
 	assert.Empty(t, result.UpdatedFiles)
 
-	// 4 workflows + 2 profiles + 1 profiles README + 1 mixin + 1 defaults = 9 files.
-	assert.Len(t, result.CreatedFiles, 9)
+	// 1 atmos.yaml + 4 workflows + 2 profiles + 1 profiles README + 1 mixin + 2 .atmos.d configs = 11 files.
+	assert.Len(t, result.CreatedFiles, 11)
+
+	// Verify atmos.yaml.
+	atmosPath := filepath.Join(base, "atmos.yaml")
+	assert.True(t, writer.FileExists(atmosPath))
+	assert.Contains(t, string(writer.files[atmosPath]), "atmos.d")
 
 	// Verify workflow files exist.
 	expectedWorkflows := []string{
@@ -104,12 +109,19 @@ func TestInstaller_Install_FreshProject(t *testing.T) {
 	assert.Contains(t, mixinContent, "drift_detection:")
 	assert.Contains(t, mixinContent, "github_environment:")
 
-	// Verify defaults.
-	defaultsPath := filepath.Join(base, "stacks", "deploy", "_defaults.yaml")
-	assert.True(t, writer.FileExists(defaultsPath))
-	defaultsContent := string(writer.files[defaultsPath])
-	assert.Contains(t, defaultsContent, "mixins/atmos-pro")
-	assert.Contains(t, defaultsContent, "drift_detection")
+	// Verify .atmos.d/ drop-in configs.
+	ciPath := filepath.Join(base, ".atmos.d", "ci.yaml")
+	assert.True(t, writer.FileExists(ciPath))
+	ciContent := string(writer.files[ciPath])
+	assert.Contains(t, ciContent, "ci:")
+	assert.Contains(t, ciContent, "enabled: true")
+
+	proPath := filepath.Join(base, ".atmos.d", "atmos-pro.yaml")
+	assert.True(t, writer.FileExists(proPath))
+	proContent := string(writer.files[proPath])
+	assert.Contains(t, proContent, "settings:")
+	assert.Contains(t, proContent, "pro:")
+	assert.Contains(t, proContent, "base_url:")
 }
 
 func TestInstaller_Install_ExistingFiles_NoForce(t *testing.T) {
@@ -234,54 +246,6 @@ func TestInstaller_Install_OnConflict_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "non-interactive mode")
 }
 
-func TestInstaller_Install_DefaultsAlreadyHasImport(t *testing.T) {
-	base := t.TempDir()
-	writer := newMockFileWriter()
-
-	// Pre-populate _defaults.yaml with the import already present.
-	defaultsPath := filepath.Join(base, "stacks", "deploy", "_defaults.yaml")
-	writer.files[defaultsPath] = []byte("import:\n  - mixins/atmos-pro\n\nsettings:\n  pro:\n    enabled: true\n")
-
-	installer := NewInstaller(writer,
-		WithBasePath(base),
-		WithStacksBasePath("stacks"),
-	)
-
-	result, err := installer.Install()
-	require.NoError(t, err)
-
-	// Defaults should be skipped since import already exists.
-	assert.Contains(t, result.SkippedFiles,
-		filepath.Join("stacks", "deploy", "_defaults.yaml"))
-	assert.NotContains(t, result.UpdatedFiles,
-		filepath.Join("stacks", "deploy", "_defaults.yaml"))
-}
-
-func TestInstaller_Install_DefaultsNeedsImport(t *testing.T) {
-	base := t.TempDir()
-	writer := newMockFileWriter()
-
-	// Pre-populate _defaults.yaml without the atmos-pro import.
-	defaultsPath := filepath.Join(base, "stacks", "deploy", "_defaults.yaml")
-	writer.files[defaultsPath] = []byte("import:\n  - mixins/other\n\nsettings:\n  something: true\n")
-
-	installer := NewInstaller(writer,
-		WithBasePath(base),
-		WithStacksBasePath("stacks"),
-	)
-
-	result, err := installer.Install()
-	require.NoError(t, err)
-
-	// Defaults should be updated with the import.
-	assert.Contains(t, result.UpdatedFiles,
-		filepath.Join("stacks", "deploy", "_defaults.yaml"))
-
-	updatedContent := string(writer.files[defaultsPath])
-	assert.Contains(t, updatedContent, "mixins/atmos-pro")
-	assert.Contains(t, updatedContent, "mixins/other")
-}
-
 func TestInstaller_DryRun(t *testing.T) {
 	base := t.TempDir()
 	writer := newMockFileWriter()
@@ -298,69 +262,11 @@ func TestInstaller_DryRun(t *testing.T) {
 	// Should report what would be created.
 	assert.NotEmpty(t, result.CreatedFiles)
 	assert.Empty(t, result.SkippedFiles)
-}
 
-func TestHasImport(t *testing.T) {
-	tests := []struct {
-		name       string
-		content    string
-		importPath string
-		expected   bool
-	}{
-		{
-			name:       "bare import",
-			content:    "import:\n  - mixins/atmos-pro\n",
-			importPath: "mixins/atmos-pro",
-			expected:   true,
-		},
-		{
-			name:       "double-quoted import",
-			content:    "import:\n  - \"mixins/atmos-pro\"\n",
-			importPath: "mixins/atmos-pro",
-			expected:   true,
-		},
-		{
-			name:       "single-quoted import",
-			content:    "import:\n  - 'mixins/atmos-pro'\n",
-			importPath: "mixins/atmos-pro",
-			expected:   true,
-		},
-		{
-			name:       "not present",
-			content:    "import:\n  - mixins/other\n",
-			importPath: "mixins/atmos-pro",
-			expected:   false,
-		},
-		{
-			name:       "empty content",
-			content:    "",
-			importPath: "mixins/atmos-pro",
-			expected:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := hasImport(tt.content, tt.importPath)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
-}
-
-func TestAddImport(t *testing.T) {
-	t.Run("appends to existing import section", func(t *testing.T) {
-		content := "import:\n  - mixins/other\n\nsettings:\n  foo: bar\n"
-		result := addImport(content, "mixins/atmos-pro")
-		assert.Contains(t, result, "mixins/atmos-pro")
-		assert.Contains(t, result, "mixins/other")
-	})
-
-	t.Run("prepends import section when none exists", func(t *testing.T) {
-		content := "settings:\n  foo: bar\n"
-		result := addImport(content, "mixins/atmos-pro")
-		assert.Contains(t, result, "import:\n  - mixins/atmos-pro")
-		assert.Contains(t, result, "settings:\n  foo: bar")
-	})
+	// Verify atmos.yaml and .atmos.d/ files are included.
+	assert.Contains(t, result.CreatedFiles, "atmos.yaml")
+	assert.Contains(t, result.CreatedFiles, filepath.Join(".atmos.d", "ci.yaml"))
+	assert.Contains(t, result.CreatedFiles, filepath.Join(".atmos.d", "atmos-pro.yaml"))
 }
 
 func TestNewInstaller_Defaults(t *testing.T) {

@@ -32,5 +32,15 @@ var profilesReadmeTemplate string
 //go:embed templates/mixins/atmos-pro.yaml
 var proMixinTemplate string
 
-//go:embed templates/stacks/defaults-snippet.yaml
-var defaultsSnippetTemplate string
+// Root configuration template.
+
+//go:embed templates/atmos.yaml
+var atmosConfigTemplate string
+
+// Drop-in configuration templates (.atmos.d/).
+
+//go:embed templates/atmos.d/ci.yaml
+var ciConfigTemplate string
+
+//go:embed templates/atmos.d/atmos-pro.yaml
+var proConfigTemplate string

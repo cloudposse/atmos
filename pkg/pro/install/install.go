@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -62,7 +61,7 @@ type InstallResult struct {
 	CreatedFiles []string
 	// SkippedFiles lists files that were skipped because they already exist.
 	SkippedFiles []string
-	// UpdatedFiles lists files that were updated (e.g., _defaults.yaml import added).
+	// UpdatedFiles lists files that were updated in place.
 	UpdatedFiles []string
 }
 
@@ -111,11 +110,6 @@ func (i *Installer) Install() (*InstallResult, error) {
 		}
 	}
 
-	// Handle _defaults.yaml separately (merge logic).
-	if err := i.ensureDefaults(result); err != nil {
-		return result, err
-	}
-
 	return result, nil
 }
 
@@ -135,35 +129,7 @@ func (i *Installer) DryRun() *InstallResult {
 		}
 	}
 
-	// Check _defaults.yaml.
-	i.classifyDefaults(result)
-
 	return result
-}
-
-// classifyDefaults checks the state of _defaults.yaml and classifies it
-// as created, updated, or skipped for dry-run reporting.
-func (i *Installer) classifyDefaults(result *InstallResult) {
-	defaultsPath := i.defaultsPath()
-	relPath := i.defaultsRelPath()
-
-	if !i.writer.FileExists(defaultsPath) {
-		result.CreatedFiles = append(result.CreatedFiles, relPath)
-		return
-	}
-
-	content, err := i.writer.ReadFile(defaultsPath)
-	if err != nil {
-		result.SkippedFiles = append(result.SkippedFiles, relPath)
-		return
-	}
-
-	if hasImport(string(content), "mixins/atmos-pro") {
-		result.SkippedFiles = append(result.SkippedFiles, relPath)
-		return
-	}
-
-	result.UpdatedFiles = append(result.UpdatedFiles, relPath)
 }
 
 // buildFileSpecs returns the list of files to install.
@@ -171,6 +137,11 @@ func (i *Installer) buildFileSpecs() []fileSpec {
 	stacksBase := i.opts.StacksBasePath
 
 	return []fileSpec{
+		// Root configuration (created only if missing).
+		{
+			RelPath: "atmos.yaml",
+			Content: atmosConfigTemplate,
+		},
 		// GitHub Actions workflows.
 		{
 			RelPath: filepath.Join(githubDir, workflowsDir, "atmos-pro-terraform-plan.yaml"),
@@ -205,6 +176,15 @@ func (i *Installer) buildFileSpecs() []fileSpec {
 		{
 			RelPath: filepath.Join(stacksBase, "mixins", "atmos-pro.yaml"),
 			Content: proMixinTemplate,
+		},
+		// Drop-in configuration (.atmos.d/).
+		{
+			RelPath: filepath.Join(".atmos.d", "ci.yaml"),
+			Content: ciConfigTemplate,
+		},
+		{
+			RelPath: filepath.Join(".atmos.d", "atmos-pro.yaml"),
+			Content: proConfigTemplate,
 		},
 	}
 }
@@ -244,113 +224,4 @@ func (i *Installer) resolveConflict(relPath string) (bool, error) {
 		return false, nil
 	}
 	return i.opts.OnConflict(relPath)
-}
-
-// defaultsRelPath returns the relative path to _defaults.yaml.
-func (i *Installer) defaultsRelPath() string {
-	return filepath.Join(i.opts.StacksBasePath, "deploy", "_defaults.yaml")
-}
-
-// defaultsPath returns the absolute path to _defaults.yaml.
-func (i *Installer) defaultsPath() string {
-	return filepath.Join(i.opts.BasePath, i.defaultsRelPath())
-}
-
-// createDefaults creates a new _defaults.yaml from the template.
-func (i *Installer) createDefaults(fullPath, relPath string, result *InstallResult) error {
-	dir := filepath.Dir(fullPath)
-	if err := i.writer.MkdirAll(dir, dirMode); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", dir, err)
-	}
-	if err := i.writer.WriteFile(fullPath, []byte(defaultsSnippetTemplate), fileMode); err != nil {
-		return fmt.Errorf("failed to create %s: %w", relPath, err)
-	}
-	result.CreatedFiles = append(result.CreatedFiles, relPath)
-	return nil
-}
-
-// ensureDefaults creates or updates _defaults.yaml with the atmos-pro import.
-func (i *Installer) ensureDefaults(result *InstallResult) error {
-	fullPath := i.defaultsPath()
-	relPath := i.defaultsRelPath()
-
-	if !i.writer.FileExists(fullPath) {
-		return i.createDefaults(fullPath, relPath, result)
-	}
-
-	return i.updateDefaults(fullPath, relPath, result)
-}
-
-// updateDefaults adds the atmos-pro import to an existing _defaults.yaml.
-func (i *Installer) updateDefaults(fullPath, relPath string, result *InstallResult) error {
-	content, err := i.writer.ReadFile(fullPath)
-	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", relPath, err)
-	}
-
-	if hasImport(string(content), "mixins/atmos-pro") {
-		result.SkippedFiles = append(result.SkippedFiles, relPath)
-		return nil
-	}
-
-	// Respect conflict policy before mutating existing file.
-	if !i.opts.Force && i.opts.OnConflict != nil {
-		overwrite, err := i.resolveConflict(relPath)
-		if err != nil {
-			return err
-		}
-		if !overwrite {
-			result.SkippedFiles = append(result.SkippedFiles, relPath)
-			return nil
-		}
-	}
-
-	updated := addImport(string(content), "mixins/atmos-pro")
-	if err := i.writer.WriteFile(fullPath, []byte(updated), fileMode); err != nil {
-		return fmt.Errorf("failed to update %s: %w", relPath, err)
-	}
-	result.UpdatedFiles = append(result.UpdatedFiles, relPath)
-	return nil
-}
-
-// hasImport checks if a YAML file already imports the given path.
-func hasImport(content, importPath string) bool {
-	// Check for the import in common formats:
-	// - mixins/atmos-pro
-	// - "mixins/atmos-pro"
-	// - 'mixins/atmos-pro'
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "- "+importPath ||
-			trimmed == "- \""+importPath+"\"" ||
-			trimmed == "- '"+importPath+"'" {
-			return true
-		}
-	}
-	return false
-}
-
-// addImport adds an import entry to an existing YAML file.
-// If the file has an import section, it appends to it.
-// If not, it prepends the import section.
-func addImport(content, importPath string) string {
-	lines := strings.Split(content, "\n")
-	importLine := "  - " + importPath
-
-	// Look for an existing import: section.
-	for idx, line := range lines {
-		if strings.TrimSpace(line) != "import:" {
-			continue
-		}
-		// Insert after the import: line.
-		result := make([]string, 0, len(lines)+1)
-		result = append(result, lines[:idx+1]...)
-		result = append(result, importLine)
-		result = append(result, lines[idx+1:]...)
-		return strings.Join(result, "\n")
-	}
-
-	// No import section found - prepend one.
-	importSection := "import:\n" + importLine + "\n\n"
-	return importSection + content
 }
