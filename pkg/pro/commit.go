@@ -306,7 +306,7 @@ func filterPaths(paths []string) []string {
 // validatePath checks that a file path is safe for the commit API.
 func validatePath(p string) error {
 	// Reject absolute paths.
-	if filepath.IsAbs(p) {
+	if filepath.IsAbs(p) || strings.HasPrefix(p, "/") {
 		return fmt.Errorf("%w: absolute path not allowed: %s", errUtils.ErrCommitInvalidFilePath, p)
 	}
 
