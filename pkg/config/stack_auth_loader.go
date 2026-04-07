@@ -175,7 +175,7 @@ func getAllStackFiles(includePaths, excludePaths []string) []string {
 func collectFilesIncludingImports(topLevelFiles []string, stacksBasePath string) []string {
 	// Use a map to track all visited files and avoid duplicates / cycles.
 	visited := make(map[string]bool, len(topLevelFiles))
-	result := make([]string, 0, len(topLevelFiles))
+	result := make([]string, 0)
 
 	queue := make([]string, 0, len(topLevelFiles))
 	for _, f := range topLevelFiles {
@@ -283,6 +283,7 @@ func containsTemplateSyntax(s string) bool {
 //   - All other paths are resolved relative to stacksBasePath.
 //
 // A ".yaml" extension is added when the path has no file extension.
+// Only ".yaml" is tried; ".yml" files must be specified with the extension explicitly.
 // Returns an empty string if the resolved path is still relative (should not happen in practice).
 func resolveImportToAbsPath(rawPath, parentFilePath, stacksBasePath string) string {
 	if rawPath == "" {
@@ -298,7 +299,7 @@ func resolveImportToAbsPath(rawPath, parentFilePath, stacksBasePath string) stri
 
 	// Add .yaml extension when the path has no extension.
 	if filepath.Ext(resolved) == "" {
-		// Try .yaml first; the caller checks os.Stat so missing files are silently skipped.
+		// Add .yaml; the caller checks os.Stat so missing files are silently skipped.
 		resolved += ".yaml"
 	}
 

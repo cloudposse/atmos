@@ -756,25 +756,28 @@ assert.False(t, containsTemplateSyntax(""))
 }
 
 func TestResolveImportToAbsPath_RelativeDotDot(t *testing.T) {
-parentFile := filepath.Join("/", "stacks", "orgs", "dev", "us-east-1", "foundation.yaml")
-stacksBase := filepath.Join("/", "stacks")
+	base := t.TempDir()
+	parentFile := filepath.Join(base, "stacks", "orgs", "dev", "us-east-1", "foundation.yaml")
+	stacksBase := filepath.Join(base, "stacks")
 
-resolved := resolveImportToAbsPath("../_defaults", parentFile, stacksBase)
+	resolved := resolveImportToAbsPath("../_defaults", parentFile, stacksBase)
 
-expected := filepath.Join("/", "stacks", "orgs", "dev", "_defaults.yaml")
-assert.Equal(t, expected, resolved)
+	expected := filepath.Join(base, "stacks", "orgs", "dev", "_defaults.yaml")
+	assert.Equal(t, expected, resolved)
 }
 
 func TestResolveImportToAbsPath_BasePathRelative(t *testing.T) {
-parentFile := filepath.Join("/", "stacks", "orgs", "dev", "foundation.yaml")
-stacksBase := filepath.Join("/", "stacks")
+	base := t.TempDir()
+	parentFile := filepath.Join(base, "stacks", "orgs", "dev", "foundation.yaml")
+	stacksBase := filepath.Join(base, "stacks")
 
-resolved := resolveImportToAbsPath("mixins/region/us-east-1", parentFile, stacksBase)
+	resolved := resolveImportToAbsPath("mixins/region/us-east-1", parentFile, stacksBase)
 
-expected := filepath.Join("/", "stacks", "mixins", "region", "us-east-1.yaml")
-assert.Equal(t, expected, resolved)
+	expected := filepath.Join(base, "stacks", "mixins", "region", "us-east-1.yaml")
+	assert.Equal(t, expected, resolved)
 }
 
 func TestResolveImportToAbsPath_EmptyPath(t *testing.T) {
-assert.Empty(t, resolveImportToAbsPath("", "/any/parent.yaml", "/stacks"))
+	base := t.TempDir()
+	assert.Empty(t, resolveImportToAbsPath("", filepath.Join(base, "parent.yaml"), base))
 }
