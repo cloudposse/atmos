@@ -107,15 +107,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	opts := []install.Option{
-		install.WithBasePath(basePath),
-		install.WithStacksBasePath(stacksBasePath),
-		install.WithForce(force),
-	}
-	if !force {
-		opts = append(opts, install.WithOnConflict(promptOverwrite))
-	}
-
+	opts := buildInstallOpts(basePath, stacksBasePath, force, yes)
 	installer := install.NewInstaller(&install.OSFileWriter{}, opts...)
 
 	if dryRun {
@@ -137,6 +129,26 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
+}
+
+// buildInstallOpts constructs the installer options based on flags.
+func buildInstallOpts(basePath, stacksBasePath string, force, yes bool) []install.Option {
+	opts := []install.Option{
+		install.WithBasePath(basePath),
+		install.WithStacksBasePath(stacksBasePath),
+		install.WithForce(force),
+	}
+	if !force {
+		if yes {
+			// --yes skips all prompts; silently skip existing files.
+			opts = append(opts, install.WithOnConflict(func(string) (bool, error) {
+				return false, nil
+			}))
+		} else {
+			opts = append(opts, install.WithOnConflict(promptOverwrite))
+		}
+	}
+	return opts
 }
 
 // promptOverwrite prompts the user to overwrite an existing file.

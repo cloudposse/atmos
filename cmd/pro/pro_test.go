@@ -307,6 +307,41 @@ func TestRunInstall_YesFlag(t *testing.T) {
 	assert.FileExists(t, filepath.Join(tmpDir, ".github", "workflows", "atmos-pro-terraform-plan.yaml"))
 }
 
+func TestRunInstall_YesFlag_ExistingFiles_NoPrompt(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		viper.Reset()
+	})
+
+	// Pre-create a workflow file to trigger the conflict path.
+	wfDir := filepath.Join(tmpDir, ".github", "workflows")
+	require.NoError(t, os.MkdirAll(wfDir, 0o755))
+	planFile := filepath.Join(wfDir, "atmos-pro-terraform-plan.yaml")
+	require.NoError(t, os.WriteFile(planFile, []byte("original"), 0o644))
+
+	v := viper.GetViper()
+	v.Set("dry-run", false)
+	v.Set("yes", true)
+	v.Set("force", false)
+
+	cmd := &cobra.Command{Use: "install"}
+	installParser.RegisterFlags(cmd)
+
+	// --yes should succeed without prompts, even with existing files (non-TTY).
+	err = runInstall(cmd, nil)
+	assert.NoError(t, err)
+
+	// Existing file should be preserved (skipped, not overwritten).
+	content, readErr := os.ReadFile(planFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, "original", string(content))
+}
+
 func TestRunInstall_NoConfirmation_NonTTY(t *testing.T) {
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
