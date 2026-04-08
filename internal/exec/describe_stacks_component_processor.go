@@ -92,6 +92,10 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	// not "imports", but keeping reads before mutations avoids implicit ordering assumptions.
 	stackManifestName := getStackManifestName(stackMap)
 
+	// Extract stack-level description from the top-level "description" key.
+	// ProcessStackConfig already promotes metadata.description to the top level of the result map.
+	stackDescription, _ := stackMap[cfg.DescriptionSectionName].(string)
+
 	// Delete the stack-wide imports section (not needed in output).
 	delete(stackMap, "imports")
 
@@ -119,6 +123,9 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 			entry[cfg.ComponentsSectionName] = make(map[string]any)
 			p.finalStacksMap[initialName] = entry
 		}
+		// Stamp the description onto the pre-created entry immediately.  For import-only
+		// stacks (no components section) this is the only opportunity to attach it.
+		setStackDescription(p.finalStacksMap, initialName, stackDescription, p.sections)
 	}
 
 	componentsSection, ok := stackMap[cfg.ComponentsSectionName].(map[string]any)
@@ -149,7 +156,7 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		if !ok {
 			continue
 		}
-		if err := p.processComponentTypeSection(stackFileName, stackManifestName, te.name, typeSection, te.opts); err != nil {
+		if err := p.processComponentTypeSection(stackFileName, stackManifestName, te.name, typeSection, te.opts, stackDescription); err != nil {
 			return err
 		}
 	}
@@ -163,6 +170,7 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 	stackFileName, stackManifestName, typeName string,
 	typeSection map[string]any,
 	opts processComponentTypeOpts,
+	stackDescription string,
 ) error {
 	defer perf.Track(p.atmosConfig, "exec.describeStacksProcessor.processComponentTypeSection")()
 
@@ -187,7 +195,7 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 
 		if err := p.processComponentEntry(
 			stackFileName, stackManifestName, typeName,
-			componentName, componentSection, typeSection, opts,
+			componentName, componentSection, typeSection, opts, stackDescription,
 		); err != nil {
 			return err
 		}
@@ -197,11 +205,13 @@ func (p *describeStacksProcessor) processComponentTypeSection(
 
 // processComponentEntry processes a single component: resolves the stack name,
 // filters, builds the ConfigAndStacksInfo, processes templates, and writes to the result map.
+// stackDescription is the stack-manifest-level description (may be empty).
 func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,revive,cyclop,funlen // Orchestrator function with unavoidable branching.
 	stackFileName, stackManifestName, typeName,
 	componentName string,
 	componentSection, allTypeComponents map[string]any,
 	opts processComponentTypeOpts,
+	stackDescription string,
 ) error {
 	defer perf.Track(p.atmosConfig, "exec.describeStacksProcessor.processComponentEntry")()
 
@@ -283,6 +293,12 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	setAtmosComponentMetadata(info.ComponentSection, componentName, stackName, stackFileName)
 
 	ensureComponentEntryInMap(p.finalStacksMap, stackName, typeName, componentName)
+
+	// Propagate the stack-level description to the stack entry.  Using setStackDescription
+	// here (per component, per file) rather than in a post-processing loop means the
+	// description is applied regardless of whether this stack name was already in
+	// finalStacksMap from a prior file's processing (idempotent: first non-empty wins).
+	setStackDescription(p.finalStacksMap, stackName, stackDescription, p.sections)
 
 	// Terraform-only: build and attach the Terraform workspace.
 	if opts.buildWorkspace {
@@ -799,4 +815,23 @@ func stackHasNonEmptyComponents(componentsSection map[string]any) bool {
 		}
 	}
 	return false
+}
+
+// setStackDescription sets the description field on the stack entry in finalStacksMap
+// if description is non-empty and the sections filter allows it.
+// The first non-empty description found wins (idempotent: existing values are not overwritten).
+func setStackDescription(finalStacksMap map[string]any, stackName string, description string, sections []string) {
+	if len(sections) > 0 && !u.SliceContainsString(sections, cfg.DescriptionSectionName) {
+		return
+	}
+	if description == "" {
+		return
+	}
+	stackEntry, ok := finalStacksMap[stackName].(map[string]any)
+	if !ok {
+		return
+	}
+	if _, exists := stackEntry[cfg.DescriptionSectionName]; !exists {
+		stackEntry[cfg.DescriptionSectionName] = description
+	}
 }

@@ -2,6 +2,9 @@
 import:
   - catalog/base
 
+metadata:
+  description: "Development UW2 stack without explicit name."
+
 vars:
   environment: dev
   stage: uw2

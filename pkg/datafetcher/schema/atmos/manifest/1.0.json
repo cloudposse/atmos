@@ -43,6 +43,9 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "metadata": {
+      "$ref": "#/definitions/metadata"
     }
   },
   "additionalProperties": true,
@@ -584,6 +587,10 @@
             "locked": {
               "type": "boolean",
               "description": "Flag to lock the component and prevent modifications while allowing read operations"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of this component or stack."
             }
           },
           "required": []

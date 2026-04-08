@@ -24,5 +24,7 @@ components:
             # from the `dev` stage (in any `environment` and any `tenant`)
             component: "test/test-component"
             stage: "dev"
+      metadata:
+        description: "Top-level component for testing Atmos stack configuration."
       vars:
         enabled: true

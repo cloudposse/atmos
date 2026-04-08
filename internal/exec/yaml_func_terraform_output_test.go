@@ -4,7 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
@@ -13,6 +15,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// windowsTerraformWait inserts a brief pause on Windows after a Terraform apply to
+// allow the OS to fully release file handles on the state file before the next
+// operation accesses it.  All tests in this package share the same mock-component
+// directory so concurrent or back-to-back locking can cause transient failures.
+func windowsTerraformWait() {
+	if runtime.GOOS == "windows" {
+		time.Sleep(500 * time.Millisecond)
+	}
+}
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
 	if _, err := exec.LookPath("tofu"); err != nil {
@@ -63,6 +75,9 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
+	// On Windows, Terraform may briefly retain a file-lock on the state after exit.
+	// Wait to avoid "file locked by another process" errors on the next read.
+	windowsTerraformWait()
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
@@ -110,6 +125,8 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
+	// On Windows, Terraform may briefly retain a file-lock on the state after exit.
+	windowsTerraformWait()
 
 	d, err = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 foo", stack, nil)
 	assert.NoError(t, err)

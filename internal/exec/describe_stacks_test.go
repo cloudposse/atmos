@@ -743,3 +743,116 @@ func TestProcessStackFile_NoGhostEntry_FilterByStack(t *testing.T) {
 	_, exists := p.finalStacksMap["stacks/prod.yaml"]
 	assert.False(t, exists, "non-matching stack should not create an entry when filterByStack is active")
 }
+
+// ---------------------------------------------------------------------------
+// setStackDescription
+// ---------------------------------------------------------------------------
+
+// TestSetStackDescription covers all branches of the setStackDescription helper.
+func TestSetStackDescription(t *testing.T) {
+	t.Run("sections filter excludes description – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		// sections is non-empty but does not include "description", so the early return should fire.
+		setStackDescription(finalMap, "my-stack", "some description", []string{"vars"})
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		_, exists := stackEntry[cfg.DescriptionSectionName]
+		assert.False(t, exists, "description should not be set when it is absent from the sections filter")
+	})
+
+	t.Run("empty description – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		setStackDescription(finalMap, "my-stack", "", nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		_, exists := stackEntry[cfg.DescriptionSectionName]
+		assert.False(t, exists, "description should not be set when value is empty string")
+	})
+
+	t.Run("finalStacksMap entry not a map – no-op", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": "not-a-map",
+		}
+		// Should not panic; the non-map stack entry triggers the guard and returns.
+		setStackDescription(finalMap, "my-stack", "some description", nil)
+		// Entry remains unchanged.
+		assert.Equal(t, "not-a-map", finalMap["my-stack"])
+	})
+
+	t.Run("description set on first call", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		setStackDescription(finalMap, "my-stack", "hello world", nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "hello world", stackEntry[cfg.DescriptionSectionName])
+	})
+
+	t.Run("idempotent – second call does not overwrite", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{
+				cfg.DescriptionSectionName: "original",
+			},
+		}
+		setStackDescription(finalMap, "my-stack", "overwrite-attempt", nil)
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "original", stackEntry[cfg.DescriptionSectionName], "existing description should not be overwritten")
+	})
+
+	t.Run("sections filter includes description – description is set", func(t *testing.T) {
+		finalMap := map[string]any{
+			"my-stack": map[string]any{},
+		}
+		setStackDescription(finalMap, "my-stack", "filtered in", []string{cfg.DescriptionSectionName})
+		stackEntry := finalMap["my-stack"].(map[string]any)
+		assert.Equal(t, "filtered in", stackEntry[cfg.DescriptionSectionName])
+	})
+}
+
+// TestProcessStackFile_DescriptionOnPreCreatedEntry is a regression test for the
+// includeEmptyStacks description-drop bug: the existingStacks snapshot must be taken
+// BEFORE the pre-creation block so that pre-created entries are recognised as "new"
+// and receive the stack-level description.
+func TestProcessStackFile_DescriptionOnPreCreatedEntry(t *testing.T) {
+	// Use a config with no NameTemplate and no NamePattern so the stack name is
+	// resolved from the raw file name — canResolveNameEarly is true.
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	p := newDescribeStacksProcessor(
+		atmosConfig,
+		"", nil, nil, nil,
+		false, false,
+		true, // includeEmptyStacks — triggers the pre-creation path.
+		nil, nil,
+	)
+
+	// A stack map that has a description AND a components section.
+	// When includeEmptyStacks=true, processStackFile should:
+	//   1. Snapshot existingStacks (empty at this point).
+	//   2. Pre-create p.finalStacksMap["stacks/dev.yaml"] = { components: {} }.
+	//   3. Process the terraform component (reuses the pre-created entry).
+	//   4. Stamp the description onto every entry not in the snapshot.
+	stackMap := map[string]any{
+		cfg.DescriptionSectionName: "Dev stack with description.",
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformSectionName: map[string]any{
+				"vpc": map[string]any{},
+			},
+		},
+	}
+
+	err := p.processStackFile("stacks/dev.yaml", stackMap)
+	require.NoError(t, err)
+
+	entry, exists := p.finalStacksMap["stacks/dev.yaml"]
+	require.True(t, exists, "stack entry must exist after processing")
+
+	stackEntry, ok := entry.(map[string]any)
+	require.True(t, ok)
+
+	desc, hasDesc := stackEntry[cfg.DescriptionSectionName]
+	assert.True(t, hasDesc, "stack entry must carry the stack-level description")
+	assert.Equal(t, "Dev stack with description.", desc)
+}

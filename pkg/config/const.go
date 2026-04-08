@@ -82,6 +82,7 @@ const (
 
 	ImportSectionName                 = "import"
 	NameSectionName                   = "name"
+	DescriptionSectionName            = "description"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
 	HooksSectionName                  = "hooks"

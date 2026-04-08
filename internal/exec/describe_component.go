@@ -562,6 +562,7 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 		"providers":    true,
 		"imports":      true,
 		"dependencies": true,
+		"description":  true,
 	}
 
 	filtered := make(map[string]any)

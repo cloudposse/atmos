@@ -1,0 +1,83 @@
+---
+slug: description-field-on-components-and-stacks
+title: "First-Class Description Field on Components and Stacks"
+authors: [atmos]
+tags: [feature, dx]
+---
+
+Stacks and components now support a native `description` field under `metadata` for inline documentation that surfaces in `atmos describe` output and enables AI tooling to understand your infrastructure.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos now supports a first-class `description` field on both stack manifests and individual component definitions, written as `metadata.description`. Descriptions are surfaced in `atmos describe component`, `atmos describe stacks`, and available as a filterable section.
+
+**Component-level description:**
+
+```yaml
+# stacks/catalog/terraform/vpc.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        description: "Primary VPC for us-east-2. Owns the CIDR 10.10.0.0/16."
+      vars:
+        cidr_block: "10.10.0.0/16"
+```
+
+**Stack-level description:**
+
+```yaml
+# stacks/orgs/acme/prod/us-east-2.yaml
+metadata:
+  description: "Production US East 2 stack. Runs all customer-facing workloads."
+
+import:
+  - catalog/terraform/vpc
+  - catalog/terraform/eks
+```
+
+## Why This Matters
+
+Large organizations managing 50+ components and dozens of stacks face a discoverability problem: the only documentation layer was YAML comments, which get lost during merges and never surface in CLI output or tooling.
+
+With `metadata.description`:
+
+- **Human discoverability**: `atmos describe stacks --sections description` shows what every component does at a glance.
+- **AI integration**: Atmos AI and the Atmos MCP server can now answer "what does this component do?" with meaningful context from your own stack definitions.
+- **Lintable**: Unlike comments, `description` is part of the schema and can be validated with JSON Schema.
+- **Inheritable**: Component descriptions follow the same metadata inheritance rules — a base component description is the fallback, overridden by the instance's own description.
+
+## How to Use It
+
+Add `metadata.description` to any component or stack manifest:
+
+```yaml
+# stacks/catalog/terraform/eks.yaml
+components:
+  terraform:
+    eks:
+      metadata:
+        description: "Managed EKS cluster. Uses Karpenter for node provisioning."
+      vars:
+        cluster_name: "main"
+```
+
+Filter describe output to only descriptions:
+
+```bash
+atmos describe stacks --sections description
+atmos describe stacks --stack prod-ue2 --sections description
+atmos describe component eks --stack prod-ue2
+```
+
+## JSON Schema Support
+
+The `description` field is fully documented in the [Atmos JSON Schema](https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json), providing IDE auto-completion in VS Code and other editors that support `yaml-language-server`.
+
+## Get Involved
+
+- [Atmos documentation](/stacks)
+- [Open an issue](https://github.com/cloudposse/atmos/issues)
+- [Join Slack](https://slack.cloudposse.com)
