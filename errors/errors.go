@@ -701,6 +701,25 @@ var (
 	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
 	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
 
+	// AWS browser webflow errors.
+	ErrWebflowAuthFailed     = errors.New("browser authentication failed")
+	ErrWebflowDisabled       = errors.New("browser authentication is disabled")
+	ErrWebflowTokenExchange  = errors.New("failed to exchange authorization code for credentials")
+	ErrWebflowCallbackServer = errors.New("failed to start local callback server")
+	ErrWebflowTimeout        = errors.New("browser authentication timed out")
+	ErrWebflowRefreshFailed  = errors.New("failed to refresh browser credentials")
+	// ErrWebflowRefreshTokenRevoked indicates the refresh token has been definitively
+	// rejected by the AWS signin service (e.g. HTTP 400 invalid_grant/invalid_token).
+	// This is the only condition under which the cached refresh token should be deleted;
+	// transient failures (HTTP 5xx, 429, network errors) must preserve the cache.
+	ErrWebflowRefreshTokenRevoked = errors.New("browser refresh token has been revoked")
+	ErrWebflowCodeRequired        = errors.New("authorization code is required")
+	ErrWebflowReadAuthCodeFailed  = errors.New("failed to read authorization code")
+	ErrWebflowAuthorizationError  = errors.New("authorization error")
+	ErrWebflowMissingCallbackCode = errors.New("missing authorization code in callback")
+	ErrWebflowStateMismatch       = errors.New("state mismatch: possible CSRF attack")
+	ErrWebflowEmptyCachedToken    = errors.New("cached refresh token is empty")
+
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
 	ErrInvalidDuration    = errors.New("invalid duration format")
