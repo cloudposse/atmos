@@ -1715,12 +1715,26 @@ func TestWaitForCallbackWithSpinner_SpinnerFallback(t *testing.T) {
 	// Fake spinner: wait for the exchange goroutine to finish its work,
 	// THEN return an error so handleSpinnerFallback drains a known-good
 	// tokenCh (no race between resultCh and context cancellation).
+	//
+	// IMPORTANT: the wait on exchangeDone is bounded to prevent the test
+	// from hanging for the full parent context deadline if the exchange
+	// never runs (e.g. a Windows-specific httptest/scheduling quirk). If
+	// the timeout fires, the stub still returns, handleSpinnerFallback
+	// drains tokenCh (which may be empty), and the test fails fast with a
+	// clear error rather than hanging the whole CI job.
 	origRun := runSpinnerProgramFunc
 	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
-		<-exchangeDone
-		// Give the goroutine a tick to actually write to tokenCh after the
-		// HTTP response is sent (tokenCh send happens after Do() returns).
-		time.Sleep(20 * time.Millisecond)
+		select {
+		case <-exchangeDone:
+			// Give the goroutine a tick to actually write to tokenCh after
+			// the HTTP response is sent (tokenCh send happens after Do()
+			// returns).
+			time.Sleep(20 * time.Millisecond)
+		case <-time.After(2 * time.Second):
+			// Exchange goroutine never signaled completion. Proceed anyway
+			// so the test can fail cleanly with a diagnostic rather than
+			// hang.
+		}
 		return model, fmt.Errorf("simulated tea run failure")
 	}
 	defer func() { runSpinnerProgramFunc = origRun }()
