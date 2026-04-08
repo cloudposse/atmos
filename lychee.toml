@@ -77,4 +77,6 @@ exclude = [
   "file://.*/ai/skill-marketplace",
   # Example/placeholder URLs in usage documentation
   "github\\.com/user/repo",
+  # Atlantis documentation (external site with intermittent availability)
+  "runatlantis\\.io",
 ]

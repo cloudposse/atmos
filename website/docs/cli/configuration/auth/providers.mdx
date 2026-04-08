@@ -389,10 +389,11 @@ auth:
   providers:
     gcp-adc:
       kind: gcp/adc
-      project_id: my-gcp-project      # Optional: override default project
-      region: us-central1             # Optional: default region
-      scopes:                         # Optional: custom OAuth scopes
-        - https://www.googleapis.com/auth/cloud-platform
+      spec:
+        project_id: my-gcp-project      # Optional: override default project
+        region: us-central1             # Optional: default region
+        scopes:                         # Optional: custom OAuth scopes
+          - https://www.googleapis.com/auth/cloud-platform
 ```
 </File>
 
@@ -400,13 +401,13 @@ auth:
   <dt>`kind`</dt>
   <dd>**Required.** Must be `gcp/adc`.</dd>
 
-  <dt>`project_id`</dt>
+  <dt>`spec.project_id`</dt>
   <dd>Optional. GCP project ID. If not set, uses the project from `gcloud config`.</dd>
 
-  <dt>`region`</dt>
+  <dt>`spec.region`</dt>
   <dd>Optional. Default GCP region for resources.</dd>
 
-  <dt>`scopes`</dt>
+  <dt>`spec.scopes`</dt>
   <dd>Optional. OAuth scopes for the access token. Defaults to `https://www.googleapis.com/auth/cloud-platform`.</dd>
 </dl>
 
@@ -426,11 +427,12 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_id: my-gcp-project
-      project_number: "123456789012"
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
-      service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+      spec:
+        project_id: my-gcp-project
+        project_number: "123456789012"
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
+        service_account_email: ci-sa@my-project.iam.gserviceaccount.com
 ```
 </File>
 
@@ -449,15 +451,16 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_number: "123456789012"
-      workload_identity_pool_id: my-pool
-      workload_identity_provider_id: my-provider
-      token_source:
-        type: url
-        url: https://my-oidc-provider.example.com/token
-        audience: //iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/my-pool/providers/my-provider
-        allowed_hosts:
-          - my-oidc-provider.example.com
+      spec:
+        project_number: "123456789012"
+        workload_identity_pool_id: my-pool
+        workload_identity_provider_id: my-provider
+        token_source:
+          type: url
+          url: https://my-oidc-provider.example.com/token
+          audience: //iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/my-pool/providers/my-provider
+          allowed_hosts:
+            - my-oidc-provider.example.com
 ```
 </File>
 
@@ -465,46 +468,46 @@ auth:
   <dt>`kind`</dt>
   <dd>**Required.** Must be `gcp/workload-identity-federation`.</dd>
 
-  <dt>`project_id`</dt>
+  <dt>`spec.project_id`</dt>
   <dd>Optional. GCP project ID for the resulting credentials.</dd>
 
-  <dt>`project_number`</dt>
+  <dt>`spec.project_number`</dt>
   <dd>**Required.** GCP project number (numeric) where WIF is configured.</dd>
 
-  <dt>`workload_identity_pool_id`</dt>
+  <dt>`spec.workload_identity_pool_id`</dt>
   <dd>**Required.** Workload Identity Pool ID.</dd>
 
-  <dt>`workload_identity_provider_id`</dt>
+  <dt>`spec.workload_identity_provider_id`</dt>
   <dd>**Required.** Workload Identity Provider ID within the pool.</dd>
 
-  <dt>`service_account_email`</dt>
+  <dt>`spec.service_account_email`</dt>
   <dd>Optional. Service account to impersonate after federation. If not set, uses the federated token directly.</dd>
 
-  <dt>`token_source`</dt>
+  <dt>`spec.token_source`</dt>
   <dd>Optional in GitHub Actions (auto-detected). Required for other OIDC providers.</dd>
 
-  <dt>`token_source.type`</dt>
+  <dt>`spec.token_source.type`</dt>
   <dd>Token source type: `url`, `file`, or `environment`. Auto-detected as `url` in GitHub Actions.</dd>
 
-  <dt>`token_source.environment_variable`</dt>
+  <dt>`spec.token_source.environment_variable`</dt>
   <dd>For `type: environment`. Environment variable containing the OIDC token.</dd>
 
-  <dt>`token_source.file_path`</dt>
+  <dt>`spec.token_source.file_path`</dt>
   <dd>For `type: file`. Path to file containing the OIDC token.</dd>
 
-  <dt>`token_source.url`</dt>
+  <dt>`spec.token_source.url`</dt>
   <dd>For `type: url`. URL to fetch OIDC token. In GitHub Actions, defaults to `ACTIONS_ID_TOKEN_REQUEST_URL`.</dd>
 
-  <dt>`token_source.request_token`</dt>
+  <dt>`spec.token_source.request_token`</dt>
   <dd>For `type: url`. Bearer token for authenticating to the OIDC token endpoint. In GitHub Actions, defaults to `ACTIONS_ID_TOKEN_REQUEST_TOKEN`.</dd>
 
-  <dt>`token_source.audience`</dt>
+  <dt>`spec.token_source.audience`</dt>
   <dd>Optional. Audience for the OIDC token request. In GitHub Actions, auto-constructed from `project_number`, `workload_identity_pool_id`, and `workload_identity_provider_id`.</dd>
 
-  <dt>`token_source.allowed_hosts`</dt>
+  <dt>`spec.token_source.allowed_hosts`</dt>
   <dd>For `type: url`. Allowed hostnames for the token endpoint. Not needed in GitHub Actions (validated against known GitHub hosts automatically).</dd>
 
-  <dt>`scopes`</dt>
+  <dt>`spec.scopes`</dt>
   <dd>Optional. OAuth scopes for the access token.</dd>
 </dl>
 
@@ -566,13 +569,15 @@ auth:
     # GCP local development
     gcp-adc:
       kind: gcp/adc
+      spec: {}
 
     # GCP GitHub Actions (token_source auto-detected)
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_number: "123456789012"
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
+      spec:
+        project_number: "123456789012"
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
 ```
 </File>
 
