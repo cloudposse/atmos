@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -22,6 +23,12 @@ type stackAuthSection struct {
 			Default bool `yaml:"default"`
 		} `yaml:"identities"`
 	} `yaml:"auth"`
+}
+
+// stackImportSection represents the import section in a stack file for lightweight parsing.
+type stackImportSection struct {
+	Import  interface{} `yaml:"import"`
+	Imports interface{} `yaml:"imports"`
 }
 
 // LoadStackAuthDefaults loads stack configuration files for auth identity defaults.
@@ -55,8 +62,12 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 		return defaults, nil
 	}
 
-	// Get all stack config files.
-	stackFiles := getAllStackFiles(atmosConfig.IncludeStackAbsolutePaths, atmosConfig.ExcludeStackAbsolutePaths)
+	// Get the top-level stack config files (may exclude _defaults.yaml files via ExcludeStackAbsolutePaths).
+	topLevelFiles := getAllStackFiles(atmosConfig.IncludeStackAbsolutePaths, atmosConfig.ExcludeStackAbsolutePaths)
+
+	// Follow import chains from top-level files to discover all files, including imported
+	// _defaults.yaml files that may be excluded from IncludeStackAbsolutePaths.
+	stackFiles := collectFilesIncludingImports(topLevelFiles, atmosConfig.StacksBaseAbsolutePath)
 
 	log.Debug("Loading stack files for auth defaults", "count", len(stackFiles))
 
@@ -155,6 +166,144 @@ func getAllStackFiles(includePaths, excludePaths []string) []string {
 	}
 
 	return filtered
+}
+
+// collectFilesIncludingImports performs a BFS traversal starting from topLevelFiles,
+// following import directives to discover all imported files (e.g., _defaults.yaml files
+// that may be excluded from IncludeStackAbsolutePaths but contain auth defaults).
+// Returns the deduplicated union of topLevelFiles and all transitively imported files.
+func collectFilesIncludingImports(topLevelFiles []string, stacksBasePath string) []string {
+	// Use a map to track all visited files and avoid duplicates / cycles.
+	visited := make(map[string]bool, len(topLevelFiles))
+	result := make([]string, 0)
+
+	queue := make([]string, 0, len(topLevelFiles))
+	for _, f := range topLevelFiles {
+		if !visited[f] {
+			visited[f] = true
+			result = append(result, f)
+			queue = append(queue, f)
+		}
+	}
+
+	for len(queue) > 0 {
+		file := queue[0]
+		queue = queue[1:]
+
+		imports := extractImportPathsFromFile(file)
+		for _, rawPath := range imports {
+			absPath := resolveImportToAbsPath(rawPath, file, stacksBasePath)
+			if absPath == "" || visited[absPath] {
+				continue
+			}
+			// Only include files that actually exist on disk.
+			if _, err := os.Stat(absPath); err != nil {
+				continue
+			}
+			visited[absPath] = true
+			result = append(result, absPath)
+			queue = append(queue, absPath)
+		}
+	}
+
+	return result
+}
+
+// extractImportPathsFromFile reads a YAML file and returns the raw (unresolved) import
+// path strings from its `import:` or `imports:` section.
+// Both plain-string imports and {path: "..."} object imports are supported.
+// If the file cannot be read or parsed, an empty slice is returned (non-fatal).
+func extractImportPathsFromFile(filePath string) []string {
+	ext := filepath.Ext(filePath)
+	if ext != ".yaml" && ext != ".yml" {
+		return nil
+	}
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil
+	}
+
+	var section stackImportSection
+	if err := yaml.Unmarshal(content, &section); err != nil {
+		// File may contain Go template syntax that prevents YAML parsing.
+		// Non-fatal: return empty.
+		return nil //nolint:nilerr // Intentional: YAML parse errors are non-fatal.
+	}
+
+	var paths []string
+	for _, val := range []interface{}{section.Import, section.Imports} {
+		paths = append(paths, extractImportPathStrings(val)...)
+	}
+	return paths
+}
+
+// extractImportPathStrings extracts import path strings from an interface{} value.
+// Handles: a single string, a slice of strings, and a slice of {path: "..."} objects.
+// Entries containing Go template syntax are skipped since they cannot be resolved statically.
+func extractImportPathStrings(val interface{}) []string {
+	if val == nil {
+		return nil
+	}
+
+	var results []string
+
+	switch v := val.(type) {
+	case string:
+		if !containsTemplateSyntax(v) {
+			results = append(results, v)
+		}
+	case []interface{}:
+		for _, item := range v {
+			switch i := item.(type) {
+			case string:
+				if !containsTemplateSyntax(i) {
+					results = append(results, i)
+				}
+			case map[string]interface{}:
+				// {path: "...", context: {}} import object form.
+				if path, ok := i["path"].(string); ok && path != "" && !containsTemplateSyntax(path) {
+					results = append(results, path)
+				}
+			}
+		}
+	}
+
+	return results
+}
+
+// containsTemplateSyntax reports whether s contains Go template delimiters
+// ({{ or }}) that would prevent static path resolution.
+func containsTemplateSyntax(s string) bool {
+	return strings.Contains(s, "{{") || strings.Contains(s, "}}")
+}
+
+// resolveImportToAbsPath converts a raw import path string to an absolute file path.
+//   - Paths starting with "." or ".." are resolved relative to the parent file's directory.
+//   - All other paths are resolved relative to stacksBasePath.
+//
+// A ".yaml" extension is added when the path has no file extension.
+// Only ".yaml" is tried; ".yml" files must be specified with the extension explicitly.
+// Returns an empty string if the resolved path is still relative (should not happen in practice).
+func resolveImportToAbsPath(rawPath, parentFilePath, stacksBasePath string) string {
+	if rawPath == "" {
+		return ""
+	}
+
+	resolved := u.ResolveRelativePath(rawPath, parentFilePath)
+
+	// ResolveRelativePath returns a non-absolute path for base-path-relative imports.
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(stacksBasePath, resolved)
+	}
+
+	// Add .yaml extension when the path has no extension.
+	if filepath.Ext(resolved) == "" {
+		// Add .yaml; the caller checks os.Stat so missing files are silently skipped.
+		resolved += ".yaml"
+	}
+
+	return resolved
 }
 
 // loadFileForAuthDefaults reads a single YAML file and extracts auth identity defaults.

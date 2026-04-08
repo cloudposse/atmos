@@ -504,3 +504,280 @@ auth:
 	// Should have found the default from the valid file.
 	assert.True(t, defaults["valid-identity"])
 }
+
+// ─── Import chain tests ───────────────────────────────────────────────────────
+
+// TestLoadStackAuthDefaults_DefaultInImportedFile verifies that auth defaults
+// defined in an imported file (e.g. _defaults.yaml excluded from IncludeStackAbsolutePaths)
+// are discovered via the import-chain traversal.
+func TestLoadStackAuthDefaults_DefaultInImportedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Top-level stack file — no auth section, just imports _defaults.yaml.
+	topLevel := `
+import:
+  - _defaults
+vars:
+  region: us-east-1
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "foundation.yaml"), []byte(topLevel), 0o644))
+
+	// Imported _defaults file — contains the auth default.
+	defaults := `
+vars:
+  stage: dev
+auth:
+  identities:
+    acme-dev:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "_defaults.yaml"), []byte(defaults), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		// Only include foundation.yaml (simulate excluded_paths: ["**/_defaults.yaml"]).
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "foundation.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+		StacksBaseAbsolutePath:    tmpDir,
+	}
+
+	result, err := LoadStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	assert.True(t, result["acme-dev"], "auth default from imported file should be discovered")
+}
+
+// TestLoadStackAuthDefaults_DefaultInTransitiveImport verifies that auth defaults
+// are found even when they are in a file imported by an imported file (two hops).
+func TestLoadStackAuthDefaults_DefaultInTransitiveImport(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// foundation.yaml → dev/_defaults.yaml → acme/_defaults.yaml (has auth)
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "dev"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "acme"), 0o755))
+
+	topLevel := `
+import:
+  - dev/_defaults
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "foundation.yaml"), []byte(topLevel), 0o644))
+
+	devDefaults := `
+import:
+  - acme/_defaults
+vars:
+  stage: dev
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "dev", "_defaults.yaml"), []byte(devDefaults), 0o644))
+
+	acmeDefaults := `
+auth:
+  identities:
+    acme-root:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "acme", "_defaults.yaml"), []byte(acmeDefaults), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "foundation.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+		StacksBaseAbsolutePath:    tmpDir,
+	}
+
+	result, err := LoadStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	assert.True(t, result["acme-root"], "auth default from transitive import should be discovered")
+}
+
+// TestLoadStackAuthDefaults_RelativeImportPath verifies that relative import
+// paths starting with ".." are correctly resolved from the importing file's directory.
+func TestLoadStackAuthDefaults_RelativeImportPath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// stacks/orgs/dev/us-east-1/foundation.yaml → imports ../../_defaults (relative)
+	regionDir := filepath.Join(tmpDir, "orgs", "dev", "us-east-1")
+	require.NoError(t, os.MkdirAll(regionDir, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "orgs"), 0o755))
+
+	topLevel := `
+import:
+  - ../../_defaults
+`
+	require.NoError(t, os.WriteFile(filepath.Join(regionDir, "foundation.yaml"), []byte(topLevel), 0o644))
+
+	orgsDefaults := `
+auth:
+  identities:
+    org-default:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "orgs", "_defaults.yaml"), []byte(orgsDefaults), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(regionDir, "foundation.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+		StacksBaseAbsolutePath:    tmpDir,
+	}
+
+	result, err := LoadStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	assert.True(t, result["org-default"], "auth default from relative-path import should be discovered")
+}
+
+// TestLoadStackAuthDefaults_ImportObjectForm verifies that imports specified as
+// {path: "..."} objects (not plain strings) are also followed.
+func TestLoadStackAuthDefaults_ImportObjectForm(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	topLevel := `
+import:
+  - path: _defaults
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "foundation.yaml"), []byte(topLevel), 0o644))
+
+	defaults := `
+auth:
+  identities:
+    obj-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "_defaults.yaml"), []byte(defaults), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "foundation.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+		StacksBaseAbsolutePath:    tmpDir,
+	}
+
+	result, err := LoadStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	assert.True(t, result["obj-identity"], "auth default from {path:} import object should be discovered")
+}
+
+// TestLoadStackAuthDefaults_CircularImports verifies that circular imports do not
+// cause an infinite loop.
+func TestLoadStackAuthDefaults_CircularImports(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// a.yaml imports b.yaml; b.yaml imports a.yaml (cycle).
+	aContent := `
+import:
+  - b
+auth:
+  identities:
+    identity-a:
+      default: true
+`
+	bContent := `
+import:
+  - a
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a.yaml"), []byte(aContent), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "b.yaml"), []byte(bContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "a.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+		StacksBaseAbsolutePath:    tmpDir,
+	}
+
+	// Should not hang; circular imports are silently skipped.
+	result, err := LoadStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	assert.True(t, result["identity-a"])
+}
+
+// TestLoadStackAuthDefaults_TemplateImportPathSkipped verifies that import paths
+// containing Go template syntax are skipped (they cannot be resolved statically).
+func TestLoadStackAuthDefaults_TemplateImportPathSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// The import path contains a template expression — cannot be resolved.
+	topLevel := `
+import:
+  - "{{ .DynamicPath }}"
+auth:
+  identities:
+    direct-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "foundation.yaml"), []byte(topLevel), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "foundation.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+		StacksBaseAbsolutePath:    tmpDir,
+	}
+
+	result, err := LoadStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	// The direct auth default should still be found (the template import path is just skipped).
+	assert.True(t, result["direct-identity"])
+}
+
+// TestExtractImportPathStrings tests the helper that extracts path strings from
+// various import section shapes.
+func TestExtractImportPathStrings_Nil(t *testing.T) {
+	assert.Empty(t, extractImportPathStrings(nil))
+}
+
+func TestExtractImportPathStrings_PlainString(t *testing.T) {
+	result := extractImportPathStrings("_defaults")
+	assert.Equal(t, []string{"_defaults"}, result)
+}
+
+func TestExtractImportPathStrings_SliceOfStrings(t *testing.T) {
+	result := extractImportPathStrings([]interface{}{"a", "b", "c"})
+	assert.Equal(t, []string{"a", "b", "c"}, result)
+}
+
+func TestExtractImportPathStrings_SliceOfObjects(t *testing.T) {
+	result := extractImportPathStrings([]interface{}{
+		map[string]interface{}{"path": "foo"},
+		map[string]interface{}{"path": "bar", "context": map[string]interface{}{}},
+	})
+	assert.Equal(t, []string{"foo", "bar"}, result)
+}
+
+func TestExtractImportPathStrings_SkipsTemplatePaths(t *testing.T) {
+	result := extractImportPathStrings([]interface{}{"good-path", "{{ .Bad }}"})
+	assert.Equal(t, []string{"good-path"}, result)
+}
+
+func TestContainsTemplateSyntax(t *testing.T) {
+	assert.True(t, containsTemplateSyntax("{{ .Foo }}"))
+	assert.True(t, containsTemplateSyntax("prefix-{{ .Foo }}-suffix"))
+	assert.False(t, containsTemplateSyntax("plain/path"))
+	assert.False(t, containsTemplateSyntax(""))
+}
+
+func TestResolveImportToAbsPath_RelativeDotDot(t *testing.T) {
+	base := t.TempDir()
+	parentFile := filepath.Join(base, "stacks", "orgs", "dev", "us-east-1", "foundation.yaml")
+	stacksBase := filepath.Join(base, "stacks")
+
+	resolved := resolveImportToAbsPath("../_defaults", parentFile, stacksBase)
+
+	expected := filepath.Join(base, "stacks", "orgs", "dev", "_defaults.yaml")
+	assert.Equal(t, expected, resolved)
+}
+
+func TestResolveImportToAbsPath_BasePathRelative(t *testing.T) {
+	base := t.TempDir()
+	parentFile := filepath.Join(base, "stacks", "orgs", "dev", "foundation.yaml")
+	stacksBase := filepath.Join(base, "stacks")
+
+	resolved := resolveImportToAbsPath("mixins/region/us-east-1", parentFile, stacksBase)
+
+	expected := filepath.Join(base, "stacks", "mixins", "region", "us-east-1.yaml")
+	assert.Equal(t, expected, resolved)
+}
+
+func TestResolveImportToAbsPath_EmptyPath(t *testing.T) {
+	base := t.TempDir()
+	assert.Empty(t, resolveImportToAbsPath("", filepath.Join(base, "parent.yaml"), base))
+}
