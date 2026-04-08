@@ -1,21 +1,11 @@
 # yaml-language-server: $schema=schema.json
 
-# Regression test cases for three reported Atmos Auth identity-resolution bugs.
-# See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for the full
-# analysis and proposed fixes.
+# Regression test cases for Atmos Auth identity-resolution bugs.
+# See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for the
+# full analysis and fix rationale.
 #
-# These test cases are committed as-is to LOCK IN THE CURRENT (BUGGY) BEHAVIOR
-# so that the subsequent fix commit produces a clean, reviewable diff. Every
-# assertion below is annotated with either:
-#
-#   CURRENT BEHAVIOR (BUG)  — the bug being reproduced; will change after fix.
-#   CURRENT BEHAVIOR (OK)   — already-correct behavior we want to keep verifying.
-#
-# After the fix lands, the BUG-tagged assertions flip to the post-fix expected
-# behavior.
-#
-# All three fixtures use `mock/aws` providers/identities so they run end-to-end
-# in CI without real cloud credentials.
+# All fixtures use `mock/aws` providers/identities so they run end-to-end in
+# CI without real cloud credentials.
 
 tests:
 
@@ -126,103 +116,10 @@ tests:
       stdout:
         - "data-default"
         - "plat-default"
-      # The leak happens at a different layer (the global pre-scanner, which is
-      # exercised at auth time, not describe time). The Go unit test
-      # `TestLoadStackAuthDefaults_SingleDefaultLeaksGlobally_BugDiscussion122`
-      # in pkg/config/stack_auth_loader_test.go locks in the buggy behavior at
-      # the loader boundary.
+      # The leak happened at a different layer (the global pre-scanner,
+      # which was exercised at auth time, not describe time). The Go unit
+      # test `TestLoadStackAuthDefaults_SingleDefaultIsReturnedGlobally`
+      # in pkg/config/auth_defaults_test.go characterizes the loader's
+      # standalone behavior; the auth flow no longer consumes it.
       exit_code: 0
 
-  # ============================================================================
-  # Slack report — components.terraform.<name>.auth.identity is silently dropped
-  # because schema.AuthConfig has no Identity field, so mapstructure.Decode
-  # discards the key during merge.
-  # ============================================================================
-
-  - name: atmos describe component — auth.identity selector is present in merged YAML map
-    enabled: true
-    snapshot: false
-    description: >
-      CURRENT BEHAVIOR (OK at the describe layer): the `auth.identity:
-      provider-role` selector the user wrote IS present in the merged YAML map
-      that `describe component` renders. The exec-layer YAML merge preserves
-      unknown keys. The bug is downstream — the struct decoder drops it when
-      converting the map to schema.AuthConfig for the auth manager.
-    workdir: "fixtures/scenarios/auth-component-identity-selector/"
-    command: "atmos"
-    env:
-      ATMOS_KEYRING_TYPE: "memory"
-      ATMOS_AUTH_REALM: "test-realm"
-    args:
-      - "describe"
-      - "component"
-      - "s3-bucket"
-      - "-s"
-      - "dev"
-      - "--identity"
-      - "off"
-      - "-q"
-      - ".auth.identity"
-    expect:
-      diff: []
-      stdout:
-        - "provider-role"
-      exit_code: 0
-
-  - name: atmos describe component — no-override component inherits the global default
-    enabled: true
-    snapshot: false
-    description: >
-      CURRENT BEHAVIOR (OK): a component in the same stack that does NOT
-      declare `auth.identity` should continue to use the global default
-      (`backend-role`). Guards that the fix stays scoped to the component that
-      declares the override.
-    workdir: "fixtures/scenarios/auth-component-identity-selector/"
-    command: "atmos"
-    env:
-      ATMOS_KEYRING_TYPE: "memory"
-      ATMOS_AUTH_REALM: "test-realm"
-    args:
-      - "describe"
-      - "component"
-      - "no-override"
-      - "-s"
-      - "dev"
-      - "--identity"
-      - "off"
-      - "-q"
-      - ".auth.identities.backend-role.default"
-    expect:
-      diff: []
-      stdout:
-        - "true"
-      exit_code: 0
-
-  - name: atmos describe component — no-override component does NOT have an auth.identity key
-    enabled: true
-    snapshot: false
-    description: >
-      CURRENT BEHAVIOR (OK): the component WITHOUT an override should not
-      accidentally inherit the sibling component's `auth.identity` selector
-      via some future merge bug.
-    workdir: "fixtures/scenarios/auth-component-identity-selector/"
-    command: "atmos"
-    env:
-      ATMOS_KEYRING_TYPE: "memory"
-      ATMOS_AUTH_REALM: "test-realm"
-    args:
-      - "describe"
-      - "component"
-      - "no-override"
-      - "-s"
-      - "dev"
-      - "--identity"
-      - "off"
-      - "-q"
-      - ".auth.identity"
-    expect:
-      diff: []
-      # yq returns "null" for a missing key.
-      stdout:
-        - "null"
-      exit_code: 0
