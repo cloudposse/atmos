@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1147,4 +1148,150 @@ func TestCreateAndAuthenticateManagerWithAtmosConfig_DoesNotLeakCrossStackDefaul
 	assert.Equal(t, "", resolved,
 		"when the merged config has no default, resolveIdentityName must return "+
 			"the empty string — no more global pre-scan leak across stacks.")
+}
+
+// TestCreateAndAuthenticateManagerWithAtmosConfig_IgnoresStackFilesWithLeakingDefault
+// is the end-to-end regression guard for discussion #122: even when the
+// caller passes an atmosConfig whose Include paths point at stack files
+// containing a `default: true` that would have leaked before the fix,
+// CreateAndAuthenticateManagerWithAtmosConfig must NOT load or apply that
+// default if the merged authConfig carries none. The pre-scanner call has
+// been removed, so the stack files are never read.
+//
+// Before the fix, the authConfig here would have been mutated to set
+// `data-default.Default = true` via the pre-scanner + MergeStackAuthDefaults
+// sequence, and the function would have returned a manager authenticated
+// against `data-default`. After the fix, it returns (nil, nil) — the
+// correct behavior for a target stack with no auth block.
+func TestCreateAndAuthenticateManagerWithAtmosConfig_IgnoresStackFilesWithLeakingDefault(t *testing.T) {
+	// Create a real stack file on disk that declares a default identity.
+	// Before the fix, the pre-scanner would glob this file, read its
+	// `auth.identities.data-default.default: true`, and clobber the
+	// merged auth config with it. After the fix, the file is never read.
+	tmpDir := t.TempDir()
+	stackFilePath := filepath.Join(tmpDir, "leaking-stack.yaml")
+	stackContent := `
+auth:
+  identities:
+    data-default:
+      default: true
+`
+	require.NoError(t, os.WriteFile(stackFilePath, []byte(stackContent), 0o644))
+
+	// Merged authConfig: two identities defined in atmos.yaml, NEITHER is
+	// the default. This is what the exec-layer merge produces for a target
+	// stack like `plat-staging` that has no auth block of its own.
+	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"data-default": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "test-provider"},
+				Principal: map[string]interface{}{
+					"name":    "Access",
+					"account": map[string]interface{}{"name": "data"},
+				},
+			},
+			"plat-default": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "test-provider"},
+				Principal: map[string]interface{}{
+					"name":    "Access",
+					"account": map[string]interface{}{"name": "plat"},
+				},
+			},
+		},
+	}
+
+	// atmosConfig whose include path WOULD have been scanned by the
+	// pre-scanner and would have found the leaking default.
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "*.yaml")},
+	}
+
+	manager, err := CreateAndAuthenticateManagerWithAtmosConfig("", authConfig, "__SELECT__", atmosConfig)
+	require.NoError(t, err, "no default in merged config + pre-scanner removed should return nil cleanly")
+	assert.Nil(t, manager,
+		"manager must be nil when the merged config has no default and the "+
+			"pre-scanner no longer leaks from unrelated stack files")
+
+	// The stack file's default MUST NOT have been applied to authConfig.
+	assert.False(t, authConfig.Identities["data-default"].Default,
+		"data-default must remain un-defaulted — the pre-scanner no longer "+
+			"scans stack files and cannot clobber the merged config")
+	assert.False(t, authConfig.Identities["plat-default"].Default,
+		"plat-default must remain un-defaulted")
+}
+
+// TestCreateAndAuthenticateManagerWithAtmosConfig_ExplicitIdentityNotOverriddenByStackFiles
+// verifies that when an explicit `--identity` flag is passed, stack files
+// in atmosConfig.IncludeStackAbsolutePaths are still not read. The explicit
+// identity takes effect unchanged — no pre-scanner interference.
+func TestCreateAndAuthenticateManagerWithAtmosConfig_ExplicitIdentityNotOverriddenByStackFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	stackFilePath := filepath.Join(tmpDir, "stack.yaml")
+	// This stack file declares a different identity as default; it would
+	// have clobbered the user's --identity flag if the pre-scanner were
+	// still in place.
+	stackContent := `
+auth:
+  identities:
+    leaked-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(stackFilePath, []byte(stackContent), 0o644))
+
+	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"user-selected": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "test-provider"},
+				Principal: map[string]interface{}{
+					"name":    "Access",
+					"account": map[string]interface{}{"name": "selected"},
+				},
+			},
+			"leaked-identity": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "test-provider"},
+				Principal: map[string]interface{}{
+					"name":    "Access",
+					"account": map[string]interface{}{"name": "leaked"},
+				},
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "*.yaml")},
+	}
+
+	// Explicit --identity flag: the user wants `user-selected`.
+	_, err := CreateAndAuthenticateManagerWithAtmosConfig("user-selected", authConfig, "__SELECT__", atmosConfig)
+	// Authentication will fail because we don't have real SSO credentials,
+	// but the important thing is the config was not mutated by a pre-scanner.
+	_ = err
+
+	// The stack file's default MUST NOT have been applied to authConfig.
+	assert.False(t, authConfig.Identities["leaked-identity"].Default,
+		"explicit --identity flag + pre-scanner removal: no stack file "+
+			"can leak a default into the merged config")
+	assert.False(t, authConfig.Identities["user-selected"].Default,
+		"user-selected was not originally a default and must not have "+
+			"been modified")
 }

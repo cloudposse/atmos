@@ -1,7 +1,7 @@
 # Fix: Atmos Auth stack-level default identity resolution
 
 **Date:** 2026-04-08
-**Branch:** `aknysh/atmos-auth-fixes-2`
+
 **Issues:**
 - [#2293](https://github.com/cloudposse/atmos/issues/2293) — `auth.identities.<name>.default: true` in imported stack files not recognized during identity resolution
 - [Discussion #122](https://github.com/orgs/cloudposse/discussions/122) — Auth inheritance not scoping to stack (a default identity declared in one stack manifest leaks to every other stack across all OUs)
@@ -359,7 +359,7 @@ CI without real cloud credentials.
 
 Mirrors the real-world Cloud Posse reference architecture layout:
 
-```
+```text
 atmos.yaml                                        # name_template,
                                                   # excluded_paths: ['**/_defaults.yaml']
 stacks/orgs/acme/dev/
@@ -377,7 +377,7 @@ sees it. The stack name resolves to `acme-dev` via
 Two unrelated stacks under `stacks/orgs/acme/`, using tenant names `data`
 and `plat` (acme is a placeholder; real customer namespace is redacted):
 
-```
+```text
 atmos.yaml                                        # NO global default
 stacks/orgs/acme/
 ├── data/staging/us-east-1/monitoring.yaml        # auth.identities.data-default.default: true
@@ -430,7 +430,7 @@ stack scoping — the exact behavior that the pre-scanner removal relies on.
 
 ### Regression run
 
-```
+```text
 go test ./pkg/auth/ ./pkg/config/ ./internal/exec/ -count=1        → all PASS
 go test ./tests -run 'TestCLICommands/atmos_describe_component_—'  → all PASS
 go test ./pkg/auth/ ./pkg/config/ -count=1 -race                   → PASS
@@ -439,18 +439,6 @@ go test ./pkg/auth/ ./pkg/config/ -count=1 -race                   → PASS
 The `internal/exec` race run exceeds the 300s budget on a local laptop due
 to pre-existing heavy tests; it is not related to this fix. CI will
 exercise it fully.
-
----
-
-## Remaining follow-ups
-
-1. Regenerate scenario snapshots if the fix commit changes any CLI output
-   (the current test cases use substring matching, so this may be skippable).
-2. Consider deleting `pkg/config/stack_auth_loader.go` and the characterization
-   tests in `pkg/config/auth_defaults_test.go` in a separate PR — they are
-   now unreachable from the auth flow and kept only for characterization
-   coverage.
-3. Changelog + blog post once merged.
 
 ---
 
