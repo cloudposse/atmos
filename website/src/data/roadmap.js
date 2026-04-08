@@ -224,7 +224,7 @@ export const roadmapConfig = {
       tagline: 'Sane defaults, full configurability',
       description:
         'Too many parameters, too much configuration. Everything should just work out of the box while remaining fully customizable.',
-      progress: 91,
+      progress: 92,
       status: 'in-progress',
       milestones: [
         { label: 'Global `ignore_missing_template_values` for stack imports', status: 'shipped', quarter: 'q1-2026', changelog: 'global-ignore-missing-template-values', docs: '/cli/configuration/templates', description: 'Set `templates.settings.ignore_missing_template_values: true` in `atmos.yaml` once to apply globally, instead of annotating every catalog import individually.', benefits: 'Teams with hundreds of catalog imports no longer need to annotate each one. One-line change in atmos.yaml applies the setting project-wide.' },
@@ -258,6 +258,7 @@ export const roadmapConfig = {
         { label: 'Command aliases for vendor and workflow list', status: 'shipped', quarter: 'q1-2026', changelog: 'vendor-workflow-list-aliases', description: 'Added `atmos vendor list` and `atmos workflow list` as aliases for their `atmos list` counterparts for intuitive command discovery.', benefits: 'Users can use either command form. Natural command structure regardless of preference.' },
         { label: 'Packer directory-based templates', status: 'shipped', quarter: 'q1-2026', pr: 1982, changelog: 'packer-directory-based-templates', description: 'Packer commands now default to directory mode, loading all *.pkr.hcl files from the component directory. Aligns with HashiCorp best practices for multi-file configurations.', benefits: 'Organize Packer configurations across multiple files without explicit template configuration. Just run atmos packer build and it works.' },
         { label: 'AI Agent Skills (19 domain skills)', status: 'shipped', quarter: 'q1-2026', changelog: 'ai-agent-skills', docs: '/ai/agent-skills', description: 'Atmos ships 19 domain-specific agent skills covering stacks, components, vendoring, terraform, helmfile, packer, ansible, workflows, custom-commands, auth, stores, schemas, gitops, validation, templates, design-patterns, toolchain, introspection, and devcontainers. Compatible with Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and more.', benefits: 'AI coding assistants get deep knowledge of Atmos conventions and patterns. Contributors and users get AI assistance that understands Atmos stack configuration, orchestration, and best practices.' },
+        { label: 'Conditional imports with `import_if`', status: 'shipped', quarter: 'q1-2026', changelog: 'conditional-imports', docs: '/stacks/imports', description: 'Native `import_if` field on structured import entries evaluates a lightweight Go template expression against the stack\'s vars before performing any file I/O. Supports `.stage`, `.vars.pci_scope`, and any Sprig/Gomplate function.', benefits: 'Include catalog files only when needed without resorting to .yaml.tmpl escape hatches. Cleaner stacks, less "complexity rash" from nested conditional templates.' },
       ],
       issues: [],
       prs: [
