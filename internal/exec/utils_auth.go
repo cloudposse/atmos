@@ -13,6 +13,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -63,6 +64,31 @@ func createAndAuthenticateAuthManagerWithDeps(
 			return nil, err
 		}
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
+
+	// Honor the component-level `auth.identity` selector from the stack config
+	// if present and the user did not pass `--identity` on the command line.
+	//
+	// The selector is a direct pointer to a globally-defined identity by name
+	// (e.g. `components.terraform.<name>.auth.identity: provider-role`). It
+	// must be extracted from the raw componentConfig map BEFORE the merged
+	// result is decoded into `*schema.AuthConfig` because `AuthConfig` has no
+	// `Identity string` field — mapstructure would drop the key silently.
+	//
+	// Precedence (from highest to lowest):
+	//   1. `--identity` flag (info.Identity already set)
+	//   2. component-level `auth.identity` stack-config selector (this block)
+	//   3. default identity from merged auth config (resolved downstream)
+	if info.Identity == "" {
+		selector, selErr := extractComponentIdentitySelector(info, configFetcher, mergedAuthConfig)
+		if selErr != nil {
+			return nil, selErr
+		}
+		if selector != "" {
+			info.Identity = selector
+			log.Debug("Using component-level auth.identity selector",
+				"component", info.ComponentFromArg, "stack", info.Stack, "identity", selector)
+		}
 	}
 
 	// Create and authenticate AuthManager from --identity flag if specified.
@@ -126,6 +152,130 @@ func getMergedAuthConfigWithFetcher(
 
 	// Merge component-specific auth with global auth.
 	return auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, atmosConfig, cfg.AuthSectionName)
+}
+
+// extractComponentIdentitySelector reads the component-level `auth.identity`
+// selector from the stack config and validates that it refers to an identity
+// that exists in the merged auth config. Returns the empty string when no
+// selector is present; returns an error only when the selector points to an
+// unknown identity (silent fallback is the wrong behavior here — users who
+// wrote `auth.identity: foo` expect a clear error if `foo` does not exist).
+//
+// This primitive exists because `schema.AuthConfig` has no `Identity` field,
+// so the value is silently dropped by mapstructure during the merge decode.
+// Reading the raw componentConfig map BEFORE that decode preserves it.
+func extractComponentIdentitySelector(
+	info *schema.ConfigAndStacksInfo,
+	configFetcher componentConfigFetcher,
+	mergedAuthConfig *schema.AuthConfig,
+) (string, error) {
+	// Only meaningful when we have both stack and component context.
+	if info.Stack == "" || info.ComponentFromArg == "" {
+		return "", nil
+	}
+
+	componentConfig, err := fetchComponentConfigForSelector(info, configFetcher)
+	if err != nil {
+		return "", err
+	}
+	if componentConfig == nil {
+		return "", nil
+	}
+
+	selector := readAuthIdentityStringFromConfig(componentConfig)
+	if selector == "" {
+		return "", nil
+	}
+
+	if canonical, ok := resolveIdentityInMergedAuthConfig(mergedAuthConfig, selector); ok {
+		return canonical, nil
+	}
+
+	return "", fmt.Errorf(
+		"%w: component-level auth.identity %q for component %q in stack %q is not defined in auth.identities",
+		errUtils.ErrInvalidAuthConfig,
+		selector,
+		info.ComponentFromArg,
+		info.Stack,
+	)
+}
+
+// fetchComponentConfigForSelector calls the component config fetcher with
+// template/function processing disabled (no AuthManager yet) and normalizes
+// the error-handling contract for extractComponentIdentitySelector.
+//
+// Returns:
+//   - (componentConfig, nil) on success.
+//   - (nil, ErrInvalidComponent) when the component does not exist — caller
+//     propagates untouched so the command exits fast.
+//   - (nil, nil) for any other error — non-fatal: the auth flow continues
+//     with the global config.
+func fetchComponentConfigForSelector(
+	info *schema.ConfigAndStacksInfo,
+	configFetcher componentConfigFetcher,
+) (map[string]any, error) {
+	componentConfig, err := configFetcher(&ExecuteDescribeComponentParams{
+		Component:            info.ComponentFromArg,
+		Stack:                info.Stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
+	if err == nil {
+		return componentConfig, nil
+	}
+	if errors.Is(err, errUtils.ErrInvalidComponent) {
+		return nil, err
+	}
+	return nil, nil
+}
+
+// readAuthIdentityStringFromConfig pulls `auth.identity` as a non-empty
+// string out of the raw componentConfig map. Returns the empty string for
+// any missing / nil / wrong-type / empty case — the caller treats that as
+// "no selector is present".
+func readAuthIdentityStringFromConfig(componentConfig map[string]any) string {
+	authSection, ok := componentConfig[cfg.AuthSectionName].(map[string]any)
+	if !ok || authSection == nil {
+		return ""
+	}
+	selectorAny, ok := authSection["identity"]
+	if !ok || selectorAny == nil {
+		return ""
+	}
+	selector, ok := selectorAny.(string)
+	if !ok {
+		return ""
+	}
+	return selector
+}
+
+// resolveIdentityInMergedAuthConfig returns the canonical identity name for
+// the given selector by looking it up in the merged auth config, falling
+// back to the case-insensitive IdentityCaseMap (mirrors the rest of the
+// auth layer's handling of Viper's case folding).
+func resolveIdentityInMergedAuthConfig(
+	mergedAuthConfig *schema.AuthConfig,
+	selector string,
+) (string, bool) {
+	if mergedAuthConfig == nil || mergedAuthConfig.Identities == nil {
+		return "", false
+	}
+	if _, exists := mergedAuthConfig.Identities[selector]; exists {
+		return selector, true
+	}
+	if mergedAuthConfig.IdentityCaseMap == nil {
+		return "", false
+	}
+	canonical, exists := mergedAuthConfig.IdentityCaseMap[strings.ToLower(selector)]
+	if !exists {
+		return "", false
+	}
+	if _, ok := mergedAuthConfig.Identities[canonical]; !ok {
+		return "", false
+	}
+	return canonical, true
 }
 
 // storeAutoDetectedIdentity stores the authenticated identity from AuthManager back into

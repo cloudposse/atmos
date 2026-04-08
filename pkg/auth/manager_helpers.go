@@ -233,11 +233,28 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 		return nil, nil
 	}
 
-	// If no identity specified and auth is configured, load stack configs for defaults.
-	// This solves the chicken-and-egg problem where stack-level defaults are not yet loaded.
-	if identityName == "" && isAuthConfigured(authConfig) && atmosConfig != nil {
-		loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
-	}
+	// Stack-level default identities are resolved earlier in the exec layer
+	// by `internal/exec/utils_auth.go:getMergedAuthConfigWithFetcher`, which
+	// correctly follows `import:` chains for the *specific* target stack. A
+	// previous implementation called `loadAndMergeStackAuthDefaults` here to
+	// do a global raw-YAML pre-scan of every stack file, but that approach
+	// caused two bugs:
+	//
+	//   - Issue #2293: defaults declared in excluded `_defaults.yaml` files
+	//     were invisible because the pre-scanner did not follow imports.
+	//   - Discussion #122: a default declared in a single stack file leaked
+	//     to every other stack in the repo because the pre-scanner ran
+	//     before the target stack was known and returned a global map.
+	//
+	// The pre-scan has been removed. `authConfig` passed in here is expected
+	// to already carry any stack/component-scoped defaults, having been
+	// merged by the exec-layer stack processor for commands that target a
+	// specific stack. Commands with no stack context fall back to the
+	// atmos.yaml-level default, which is what `resolveIdentityName` reads
+	// from `authConfig.Identities[name].Default` below.
+	//
+	// See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for
+	// the full rationale.
 
 	// Get cliConfigPath from atmosConfig if available, otherwise use empty string.
 	cliConfigPath := ""
@@ -274,29 +291,4 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 	}
 
 	return authManager, nil
-}
-
-// loadAndMergeStackAuthDefaults loads stack configs for auth defaults and merges them into authConfig.
-// This is a helper function that handles the stack auth loading logic.
-// Stack defaults take precedence over atmos.yaml defaults (following Atmos inheritance model).
-func loadAndMergeStackAuthDefaults(authConfig *schema.AuthConfig, atmosConfig *schema.AtmosConfiguration) {
-	defer perf.Track(atmosConfig, "auth.loadAndMergeStackAuthDefaults")()
-
-	// Always load stack configs - stack defaults take precedence over atmos.yaml.
-	// This follows the Atmos inheritance model where more specific config overrides global.
-	log.Debug("Loading stack configs for auth identity defaults")
-	stackDefaults, err := cfg.LoadStackAuthDefaults(atmosConfig)
-	if err != nil {
-		log.Debug("Failed to load stack auth defaults", "error", err)
-		return
-	}
-
-	if len(stackDefaults) == 0 {
-		log.Debug("No default identities found in stack configs")
-		return
-	}
-
-	// Merge stack defaults into auth config (stack takes precedence over atmos.yaml).
-	cfg.MergeStackAuthDefaults(authConfig, stackDefaults)
-	log.Debug("Merged stack auth defaults", "count", len(stackDefaults))
 }

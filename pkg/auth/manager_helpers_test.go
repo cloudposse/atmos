@@ -973,95 +973,11 @@ func TestCreateAndAuthenticateManagerWithAtmosConfig_SkipsWhenAtmosConfigDefault
 	}
 }
 
-func TestLoadAndMergeStackAuthDefaults_ExistingDefault_NoStackFiles(t *testing.T) {
-	// When authConfig has a default and no stack files exist, default should be preserved.
-	authConfig := &schema.AuthConfig{
-		Identities: map[string]schema.Identity{
-			"test-identity": {Kind: "aws/assume-role", Default: true},
-		},
-	}
-
-	atmosConfig := &schema.AtmosConfiguration{
-		IncludeStackAbsolutePaths: []string{"/nonexistent/path/*.yaml"},
-	}
-
-	// Should scan but find no files, so atmos.yaml default is preserved
-	loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
-
-	// Identity should still have default: true (no stack files to override)
-	assert.True(t, authConfig.Identities["test-identity"].Default)
-}
-
-func TestLoadAndMergeStackAuthDefaults_NoExistingDefault(t *testing.T) {
-	// When authConfig has no default, loadAndMergeStackAuthDefaults should scan.
-	authConfig := &schema.AuthConfig{
-		Identities: map[string]schema.Identity{
-			"test-identity": {Kind: "aws/assume-role", Default: false},
-		},
-	}
-
-	// Empty paths - no files to scan
-	atmosConfig := &schema.AtmosConfiguration{
-		IncludeStackAbsolutePaths: []string{},
-	}
-
-	// Should not error, just find no defaults
-	loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
-
-	// Identity should still not have default set (no stack defaults found)
-	assert.False(t, authConfig.Identities["test-identity"].Default)
-}
-
-func TestLoadAndMergeStackAuthDefaults_WithStackFiles(t *testing.T) {
-	// Create a temporary directory with stack files.
-	tmpDir := t.TempDir()
-
-	// Create a stack file with default identity.
-	stackContent := `auth:
-  identities:
-    stack-identity:
-      default: true
-`
-	err := os.WriteFile(tmpDir+"/stack.yaml", []byte(stackContent), 0o644)
-	require.NoError(t, err)
-
-	authConfig := &schema.AuthConfig{
-		Identities: map[string]schema.Identity{
-			"stack-identity": {Kind: "aws/assume-role", Default: false},
-		},
-	}
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath:                  tmpDir,
-		IncludeStackAbsolutePaths: []string{tmpDir + "/*.yaml"},
-	}
-
-	// Should scan and find the default
-	loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
-
-	// Identity should now have default set from stack config
-	assert.True(t, authConfig.Identities["stack-identity"].Default)
-}
-
-func TestLoadAndMergeStackAuthDefaults_LoadError(t *testing.T) {
-	// When loading fails, should gracefully handle the error.
-	authConfig := &schema.AuthConfig{
-		Identities: map[string]schema.Identity{
-			"test-identity": {Kind: "aws/assume-role", Default: true},
-		},
-	}
-
-	// Invalid glob pattern - should fail gracefully
-	atmosConfig := &schema.AtmosConfiguration{
-		IncludeStackAbsolutePaths: []string{"/nonexistent/path/[invalid/glob"},
-	}
-
-	// Should not panic, should gracefully return after logging error
-	loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
-
-	// Default should be preserved (scan failed, so no change)
-	assert.True(t, authConfig.Identities["test-identity"].Default)
-}
+// Tests for the removed `loadAndMergeStackAuthDefaults` helper have been
+// deleted along with the function itself. The pre-scanner was the source of
+// Issues #2293 and discussion #122 and has been replaced by the exec-layer
+// stack-scoped merge. See
+// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for details.
 
 func TestAuthenticateWithIdentity_SelectValue(t *testing.T) {
 	// Test the forceSelect branch in authenticateWithIdentity.
@@ -1138,4 +1054,97 @@ func TestResolveIdentityName_EmptyWithAuth(t *testing.T) {
 	resolved, err := resolveIdentityName("", authConfig, "")
 	require.NoError(t, err)
 	assert.Equal(t, "default-identity", resolved)
+}
+
+// --- Regression tests for Issues #2293 and discussion #122 ---
+//
+// These verify that `CreateAndAuthenticateManagerWithAtmosConfig` no longer
+// performs a global pre-scan of stack files, and therefore:
+//
+//   - A merged auth config that DOES carry a default (Issue #2293 happy path)
+//     gets its default honored without the pre-scanner clobbering it.
+//   - A merged auth config that does NOT carry a default (Issue #2293 / #122
+//     scenario where the target stack has no auth block and the merged
+//     config is empty) does NOT inherit a default from an unrelated stack
+//     via the pre-scanner.
+//
+// See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+
+// TestCreateAndAuthenticateManagerWithAtmosConfig_HonorsMergedConfigDefault
+// verifies that when the merged authConfig passed in already has a default
+// identity set (as produced by the exec-layer stack processor for a target
+// stack that imports `_defaults.yaml`), that default is resolved correctly
+// and the pre-scanner no longer runs to clobber it.
+//
+// This guards against regressing Issue #2293.
+func TestCreateAndAuthenticateManagerWithAtmosConfig_HonorsMergedConfigDefault(t *testing.T) {
+	// Simulate the result of the exec-layer merge: global atmos.yaml had no
+	// default, but the imported _defaults.yaml flipped dev-identity to
+	// default.
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"mock-provider": {Kind: "mock/aws"},
+		},
+		Identities: map[string]schema.Identity{
+			"dev-identity": {
+				Kind:    "mock/aws",
+				Default: true,
+				Via:     &schema.IdentityVia{Provider: "mock-provider"},
+				Principal: map[string]interface{}{
+					"account": map[string]interface{}{"id": "111111111111"},
+				},
+			},
+			"prod-identity": {
+				Kind: "mock/aws",
+				Via:  &schema.IdentityVia{Provider: "mock-provider"},
+				Principal: map[string]interface{}{
+					"account": map[string]interface{}{"id": "222222222222"},
+				},
+			},
+		},
+	}
+
+	// Any non-nil atmosConfig — the pre-scanner would have been triggered
+	// by a non-nil atmosConfig before the fix.
+	atmosConfig := &schema.AtmosConfiguration{
+		CliConfigPath: "irrelevant/for/this/test",
+		// No Include/Exclude paths — before the fix, the pre-scanner would
+		// have tried to glob them. After the fix it is never called, so the
+		// zero value is fine.
+	}
+
+	resolved, err := resolveIdentityName("", authConfig, atmosConfig.CliConfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, "dev-identity", resolved,
+		"merged authConfig's default must be honored after the pre-scanner removal")
+}
+
+// TestCreateAndAuthenticateManagerWithAtmosConfig_DoesNotLeakCrossStackDefault
+// verifies that when the merged authConfig passed in has NO default
+// (simulating a target stack like `plat-staging` with no auth block), the
+// auth flow no longer inherits a default from an unrelated stack file
+// elsewhere in the repo via the pre-scanner. `resolveIdentityName` should
+// return the empty string, which the auth flow interprets as "no
+// authentication".
+//
+// This guards against regressing discussion #122.
+func TestCreateAndAuthenticateManagerWithAtmosConfig_DoesNotLeakCrossStackDefault(t *testing.T) {
+	// Merged authConfig: two identities are defined in atmos.yaml but NONE
+	// of them have `default: true`. This is what the exec-layer merge
+	// produces for a target stack that has no auth block of its own.
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"mock-provider": {Kind: "mock/aws"},
+		},
+		Identities: map[string]schema.Identity{
+			"data-default": {Kind: "mock/aws"},
+			"plat-default": {Kind: "mock/aws"},
+		},
+	}
+
+	resolved, err := resolveIdentityName("", authConfig, "")
+	require.NoError(t, err)
+	assert.Equal(t, "", resolved,
+		"when the merged config has no default, resolveIdentityName must return "+
+			"the empty string — no more global pre-scan leak across stacks.")
 }

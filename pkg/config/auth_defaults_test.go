@@ -95,6 +95,144 @@ vars:
 	assert.True(t, defaults["my-identity"])
 }
 
+// --- Archive: characterization tests for the (now-detached) LoadStackAuthDefaults ---
+//
+// These tests originally documented bugs in the global auth-defaults
+// pre-scanner (Issues #2293 and discussion #122). As of the fix landed on
+// branch `aknysh/atmos-auth-fixes-2`, `LoadStackAuthDefaults` is NO LONGER
+// called from the auth flow — the exec-layer stack processor
+// (`internal/exec/utils_auth.go:getMergedAuthConfigWithFetcher`) is the
+// single source of truth for stack-scoped auth defaults, and it correctly
+// follows `import:` chains against the specific target stack.
+//
+// The function itself remains in place for potential reuse by tooling that
+// wants a lightweight pre-scan (e.g. `atmos list` or docs generators that
+// don't have a target-stack context). These tests are kept as
+// characterization tests that document the function's standalone behavior,
+// not the auth flow's behavior.
+//
+// See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for the
+// full fix rationale.
+
+// TestLoadStackAuthDefaults_ExcludedDefaultsFile documents that when
+// `_defaults.yaml` is listed in `stacks.excluded_paths` (the common Cloud
+// Posse reference-architecture layout), its `auth:` block is invisible to
+// LoadStackAuthDefaults because the loader does not follow `import:` chains.
+// This is the function-level root cause that was Issue #2293 when the auth
+// flow depended on this loader. Post-fix the auth flow no longer depends
+// on it — the exec-layer merged config handles imports correctly.
+func TestLoadStackAuthDefaults_ExcludedDefaultsFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Layout:
+	//   stacks/orgs/acme/dev/_defaults.yaml       — holds auth block
+	//   stacks/orgs/acme/dev/us-east-1/foundation.yaml — imports ../_defaults
+	devDir := filepath.Join(tmpDir, "stacks", "orgs", "acme", "dev")
+	regionDir := filepath.Join(devDir, "us-east-1")
+	require.NoError(t, os.MkdirAll(regionDir, 0o755))
+
+	defaultsContent := `
+vars:
+  tenant: acme
+  stage: dev
+auth:
+  identities:
+    dev-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(devDir, "_defaults.yaml"), []byte(defaultsContent), 0o644))
+
+	foundationContent := `
+import:
+  - orgs/acme/dev/_defaults
+vars:
+  region: us-east-1
+`
+	require.NoError(t, os.WriteFile(filepath.Join(regionDir, "foundation.yaml"), []byte(foundationContent), 0o644))
+
+	// Include pattern matches only the region directory; _defaults.yaml is
+	// explicitly excluded to mirror the Cloud Posse reference architecture.
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "stacks", "orgs", "**", "us-east-1", "*")},
+		ExcludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "stacks", "**", "_defaults.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+
+	// LoadStackAuthDefaults does not follow `import:` chains and cannot
+	// reach content that lives inside files filtered out by exclude paths.
+	// This characterization test documents that standalone behavior.
+	// The auth flow no longer depends on this result — it reads defaults
+	// from the merged stack config produced by the exec-layer processor,
+	// which correctly follows imports.
+	assert.Empty(t, defaults,
+		"LoadStackAuthDefaults does not see auth blocks inside excluded "+
+			"_defaults.yaml files; the auth flow now reads from the merged "+
+			"stack config instead.")
+}
+
+// TestLoadStackAuthDefaults_SingleDefaultIsReturnedGlobally documents that
+// LoadStackAuthDefaults returns a `default: true` flag from a single stack
+// file as-if it were a global default. This "global flattening" behavior was
+// the root cause of discussion #122 when the auth flow consumed this loader:
+// a single stack's default would leak to every other stack in the repo.
+//
+// Post-fix the auth flow no longer consumes LoadStackAuthDefaults, so this
+// behavior no longer leaks. This test is kept as a characterization test
+// for the function itself — any caller that chooses to use it gets the
+// documented global-flattening semantics.
+func TestLoadStackAuthDefaults_SingleDefaultIsReturnedGlobally(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Two unrelated stack files in different OUs. Only ONE has an auth block.
+	dataDir := filepath.Join(tmpDir, "stacks", "orgs", "acme", "data", "staging", "us-east-1")
+	platDir := filepath.Join(tmpDir, "stacks", "orgs", "acme", "plat", "staging", "us-east-1")
+	require.NoError(t, os.MkdirAll(dataDir, 0o755))
+	require.NoError(t, os.MkdirAll(platDir, 0o755))
+
+	// data-staging stack DECLARES the default.
+	dataStackContent := `
+vars:
+  tenant: data
+  stage: staging
+auth:
+  identities:
+    data-default:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "monitoring.yaml"), []byte(dataStackContent), 0o644))
+
+	// plat-staging stack has NO auth block at all.
+	platStackContent := `
+vars:
+  tenant: plat
+  stage: staging
+`
+	require.NoError(t, os.WriteFile(filepath.Join(platDir, "eks.yaml"), []byte(platStackContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "stacks", "orgs", "**", "us-east-1", "*")},
+		ExcludeStackAbsolutePaths: []string{},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+
+	// The loader collects the ONE default from monitoring.yaml and returns
+	// it globally. This is the characterization test — the function has no
+	// target-stack context, so it has no way to know whether the default
+	// belongs to the stack the user actually targeted. The auth flow no
+	// longer consumes this result; see
+	// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for
+	// the fix rationale.
+	assert.Len(t, defaults, 1,
+		"LoadStackAuthDefaults returns the single stack-level default as "+
+			"a global map; the function has no target-stack awareness.")
+	assert.True(t, defaults["data-default"],
+		"data-default is the single flag declared in monitoring.yaml.")
+}
+
 // --- MergeStackAuthDefaults tests ---
 
 // TestMergeStackAuthDefaults_ClearsMultipleExistingDefaults verifies that when

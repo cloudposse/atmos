@@ -2,9 +2,11 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -995,4 +997,389 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_PreservesExistingIdentity(t *t
 	assert.Equal(t, mockManager, result)
 	// Identity should remain unchanged.
 	assert.Equal(t, "pre-existing-identity", info.Identity)
+}
+
+// --- Regression tests for the Slack-reported component-level auth.identity selector ---
+//
+// These tests verify the fix for the Slack-reported bug where a component's
+// `auth.identity: <name>` selector in the stack config was silently dropped
+// because schema.AuthConfig has no `Identity string` field. See
+// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md §"Issue 3".
+
+// TestCreateAndAuthenticateAuthManagerWithDeps_ComponentIdentitySelector verifies
+// that when the stack config declares
+//
+//	components.terraform.<name>.auth.identity: provider-role
+//
+// and the user does NOT pass `--identity` on the command line, the exec layer
+// extracts the selector from the raw componentConfig map BEFORE the merged
+// result is decoded to *schema.AuthConfig (which would drop it), and sets
+// info.Identity accordingly.
+func TestCreateAndAuthenticateAuthManagerWithDeps_ComponentIdentitySelector(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"mock-provider": {Kind: "mock/aws"},
+			},
+			Identities: map[string]schema.Identity{
+				"backend-role": {
+					Kind:    "mock/aws",
+					Default: true,
+					Via:     &schema.IdentityVia{Provider: "mock-provider"},
+				},
+				"provider-role": {
+					Kind: "mock/aws",
+					Via:  &schema.IdentityVia{Provider: "mock-provider"},
+				},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "s3-bucket",
+		// Identity is empty — no --identity flag.
+	}
+
+	// Mock fetcher returns a component config with the selector form from the
+	// Slack report: `components.terraform.s3-bucket.auth.identity: provider-role`.
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identity": "provider-role",
+			},
+		}, nil
+	}
+
+	// Mock creator captures the identity name it was called with so we can
+	// assert the selector propagated correctly.
+	var capturedIdentity string
+	mockManager := mockTypes.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetChain().Return([]string{"provider-role"}).AnyTimes()
+	mockCreator := func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		capturedIdentity = identity
+		return mockManager, nil
+	}
+
+	result, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
+	assert.NoError(t, err)
+	assert.Equal(t, mockManager, result)
+	// POST-FIX: the selector was extracted from componentConfig["auth"]["identity"]
+	// and propagated to info.Identity, and thence passed to the auth manager.
+	assert.Equal(t, "provider-role", capturedIdentity,
+		"component-level auth.identity selector must be passed to the auth manager")
+	assert.Equal(t, "provider-role", info.Identity,
+		"info.Identity must be updated with the component-level selector")
+}
+
+// TestCreateAndAuthenticateAuthManagerWithDeps_CliIdentityFlagOverridesComponentSelector
+// verifies that an explicit `--identity` flag on the command line takes
+// precedence over the component-level `auth.identity` selector in the stack
+// config (i.e. CLI > stack config).
+func TestCreateAndAuthenticateAuthManagerWithDeps_CliIdentityFlagOverridesComponentSelector(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"mock-provider": {Kind: "mock/aws"},
+			},
+			Identities: map[string]schema.Identity{
+				"provider-role": {Kind: "mock/aws"},
+				"other-role":    {Kind: "mock/aws"},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "s3-bucket",
+		Identity:         "other-role", // Set by the --identity flag.
+	}
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identity": "provider-role", // Stack-config selector.
+			},
+		}, nil
+	}
+
+	var capturedIdentity string
+	mockManager := mockTypes.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetChain().Return([]string{"other-role"}).AnyTimes()
+	mockCreator := func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		capturedIdentity = identity
+		return mockManager, nil
+	}
+
+	result, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
+	assert.NoError(t, err)
+	assert.Equal(t, mockManager, result)
+	// Precedence: --identity flag wins over the component selector.
+	assert.Equal(t, "other-role", capturedIdentity,
+		"--identity flag must take precedence over component auth.identity selector")
+	assert.Equal(t, "other-role", info.Identity)
+}
+
+// TestCreateAndAuthenticateAuthManagerWithDeps_ComponentIdentitySelectorUnknownIdentity
+// verifies that referencing a non-existent identity via
+// `components.terraform.<name>.auth.identity: <unknown>` returns a clear
+// error rather than silently falling back to the default.
+func TestCreateAndAuthenticateAuthManagerWithDeps_ComponentIdentitySelectorUnknownIdentity(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"mock-provider": {Kind: "mock/aws"},
+			},
+			Identities: map[string]schema.Identity{
+				"backend-role": {Kind: "mock/aws", Default: true},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "s3-bucket",
+	}
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identity": "nonexistent-role", // Does not exist anywhere.
+			},
+		}, nil
+	}
+
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		t.Fatal("authCreator should not be called when the selector is invalid")
+		return nil, nil
+	}
+
+	result, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
+	assert.Nil(t, result)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	assert.Contains(t, err.Error(), "nonexistent-role",
+		"error message should name the unknown identity")
+	assert.Contains(t, err.Error(), "s3-bucket",
+		"error message should name the component")
+}
+
+// TestExtractComponentIdentitySelector_NoStackOrComponent ensures the
+// selector extractor is a safe no-op when there is no stack or component
+// context (as happens for CLI commands that work across all stacks).
+func TestExtractComponentIdentitySelector_NoStackOrComponent(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "", ComponentFromArg: ""}
+	fetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		t.Fatal("configFetcher must not be called when stack/component is missing")
+		return nil, nil
+	}
+	selector, err := extractComponentIdentitySelector(info, fetcher, &schema.AuthConfig{})
+	assert.NoError(t, err)
+	assert.Empty(t, selector)
+}
+
+// TestExtractComponentIdentitySelector_InvalidComponentErrorPropagates
+// verifies that an ErrInvalidComponent error from the describe path is
+// returned untouched so the caller can exit fast without prompting.
+func TestExtractComponentIdentitySelector_InvalidComponentErrorPropagates(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "nonexistent"}
+	fetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, errUtils.ErrInvalidComponent
+	}
+	selector, err := extractComponentIdentitySelector(info, fetcher, &schema.AuthConfig{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponent)
+	assert.Empty(t, selector)
+}
+
+// TestExtractComponentIdentitySelector_OtherFetcherErrorSuppressed verifies
+// that a non-fatal describe error (e.g. a permission issue) is suppressed so
+// the auth flow can continue with the global config instead of failing hard.
+func TestExtractComponentIdentitySelector_OtherFetcherErrorSuppressed(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "s3-bucket"}
+	fetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, fmt.Errorf("transient describe failure")
+	}
+	selector, err := extractComponentIdentitySelector(info, fetcher, &schema.AuthConfig{})
+	assert.NoError(t, err)
+	assert.Empty(t, selector)
+}
+
+// TestExtractComponentIdentitySelector_NoAuthSection covers the case where
+// the component config has no `auth:` section at all.
+func TestExtractComponentIdentitySelector_NoAuthSection(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "s3-bucket"}
+	fetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{"vars": map[string]any{"stage": "dev"}}, nil
+	}
+	selector, err := extractComponentIdentitySelector(info, fetcher, &schema.AuthConfig{})
+	assert.NoError(t, err)
+	assert.Empty(t, selector)
+}
+
+// TestExtractComponentIdentitySelector_AuthSectionWithoutIdentityKey covers
+// the case where the component has an `auth:` block but no `identity` key
+// (e.g. only `auth.identities.<name>.*` overrides).
+func TestExtractComponentIdentitySelector_AuthSectionWithoutIdentityKey(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "s3-bucket"}
+	fetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identities": map[string]any{
+					"foo": map[string]any{"kind": "mock/aws"},
+				},
+			},
+		}, nil
+	}
+	selector, err := extractComponentIdentitySelector(info, fetcher, &schema.AuthConfig{})
+	assert.NoError(t, err)
+	assert.Empty(t, selector)
+}
+
+// TestExtractComponentIdentitySelector_IdentityKeyWrongType verifies that a
+// non-string `identity` value (e.g. accidentally a map or integer) is
+// treated as "no selector" rather than as an error.
+func TestExtractComponentIdentitySelector_IdentityKeyWrongType(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "s3-bucket"}
+	fetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identity": 123, // invalid: should be a string
+			},
+		}, nil
+	}
+	selector, err := extractComponentIdentitySelector(info, fetcher, &schema.AuthConfig{})
+	assert.NoError(t, err)
+	assert.Empty(t, selector)
+}
+
+// TestExtractComponentIdentitySelector_EmptyStringIdentity verifies that an
+// explicitly-empty selector is treated as unset rather than as an error.
+func TestExtractComponentIdentitySelector_EmptyStringIdentity(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "s3-bucket"}
+	fetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identity": "",
+			},
+		}, nil
+	}
+	selector, err := extractComponentIdentitySelector(info, fetcher, &schema.AuthConfig{})
+	assert.NoError(t, err)
+	assert.Empty(t, selector)
+}
+
+// TestExtractComponentIdentitySelector_CaseInsensitiveLookup verifies that a
+// selector with mixed case resolves via the IdentityCaseMap fallback (mirrors
+// the rest of the auth layer's case handling for Viper's case folding).
+func TestExtractComponentIdentitySelector_CaseInsensitiveLookup(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "s3-bucket"}
+	fetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"identity": "Provider-Role", // wrong case
+			},
+		}, nil
+	}
+	merged := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"provider-role": {Kind: "mock/aws"},
+		},
+		IdentityCaseMap: map[string]string{
+			"provider-role": "provider-role",
+		},
+	}
+	selector, err := extractComponentIdentitySelector(info, fetcher, merged)
+	assert.NoError(t, err)
+	assert.Equal(t, "provider-role", selector,
+		"case-insensitive lookup must return the canonical name")
+}
+
+// TestResolveIdentityInMergedAuthConfig_NilConfig covers the defensive
+// branch where resolveIdentityInMergedAuthConfig is called with a nil auth
+// config or nil Identities map.
+func TestResolveIdentityInMergedAuthConfig_NilConfig(t *testing.T) {
+	name, ok := resolveIdentityInMergedAuthConfig(nil, "anything")
+	assert.False(t, ok)
+	assert.Empty(t, name)
+
+	name, ok = resolveIdentityInMergedAuthConfig(&schema.AuthConfig{}, "anything")
+	assert.False(t, ok)
+	assert.Empty(t, name)
+}
+
+// TestResolveIdentityInMergedAuthConfig_NilCaseMap covers the branch where
+// the direct lookup misses and IdentityCaseMap is nil (no case-insensitive
+// fallback possible).
+func TestResolveIdentityInMergedAuthConfig_NilCaseMap(t *testing.T) {
+	merged := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"foo": {Kind: "mock/aws"},
+		},
+		IdentityCaseMap: nil,
+	}
+	name, ok := resolveIdentityInMergedAuthConfig(merged, "Foo")
+	assert.False(t, ok)
+	assert.Empty(t, name)
+}
+
+// TestResolveIdentityInMergedAuthConfig_StaleCaseMap covers the defensive
+// branch where IdentityCaseMap points to a canonical name that no longer
+// exists in Identities (stale mapping).
+func TestResolveIdentityInMergedAuthConfig_StaleCaseMap(t *testing.T) {
+	merged := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"foo": {Kind: "mock/aws"},
+		},
+		IdentityCaseMap: map[string]string{
+			"bar": "stale-name", // points to an identity that does not exist
+		},
+	}
+	name, ok := resolveIdentityInMergedAuthConfig(merged, "Bar")
+	assert.False(t, ok)
+	assert.Empty(t, name)
+}
+
+// TestCreateAndAuthenticateAuthManagerWithDeps_ComponentWithoutSelectorUnchanged
+// verifies that a component WITHOUT an `auth.identity` selector has its
+// identity resolution unchanged (the fix must be scoped to components that
+// actually declare the selector).
+func TestCreateAndAuthenticateAuthManagerWithDeps_ComponentWithoutSelectorUnchanged(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"mock-provider": {Kind: "mock/aws"},
+			},
+			Identities: map[string]schema.Identity{
+				"backend-role": {Kind: "mock/aws", Default: true},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "no-override",
+	}
+
+	// No auth section at all in the component config.
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{}, nil
+	}
+
+	var capturedIdentity string
+	mockManager := mockTypes.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetChain().Return([]string{"backend-role"}).AnyTimes()
+	mockCreator := func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		capturedIdentity = identity
+		return mockManager, nil
+	}
+
+	result, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
+	assert.NoError(t, err)
+	assert.Equal(t, mockManager, result)
+	// Empty identity is passed to the auth manager, which will auto-detect
+	// the default. No component override was applied.
+	assert.Equal(t, "", capturedIdentity)
 }
