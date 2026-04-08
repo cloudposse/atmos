@@ -84,6 +84,9 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	// When yq returns a scalar with UnwrapScalar=true, special characters like trailing
 	// colons can cause the YAML parser to misinterpret the value as a map.
 	// E.g., "arn:aws:secretsmanager:...::password::" would become {"password:": null}.
+	// This also covers IPv6 addresses ending in "::" (e.g., "2041:0000:140F::875B::"),
+	// which were similarly misinterpreted as {"2041:0000:140F::875B:": null}.
+	// Fix introduced in v1.206.0 (PR #2059); regression guard added in #2155.
 	if isScalarString(trimmedResult) {
 		return trimmedResult, nil
 	}
@@ -116,7 +119,14 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 
 // isScalarString checks if the yq result appears to be a simple scalar string value
 // that should not be parsed as YAML. This handles edge cases where the YAML parser
-// would misinterpret the string (e.g., strings ending with colons).
+// would misinterpret the string as a map because it ends with one or more colons.
+//
+// Known patterns covered:
+//   - AWS ARNs: "arn:aws:secretsmanager:...:password::" → would become {"password:": null}
+//   - IPv6 addresses ending in "::": "2041:0000:140F::875B::" → would become {"2041:0000:140F::875B:": null}
+//   - Any single-line string ending with ":" or "::" that contains no ": " (YAML map) pattern.
+//
+// This fix was introduced in v1.206.0 (PR #2059) for AWS ARNs and also covers IPv6 (#2155).
 func isScalarString(s string) bool {
 	// Handle strings starting with # (comments would be stripped by YAML parser).
 	if strings.HasPrefix(s, "#") && !strings.Contains(s, "\n") {
@@ -152,7 +162,7 @@ func isYAMLNullValue(node *yaml.Node) bool {
 
 // keyMatchesOriginalWithColon checks if the key plus trailing colon(s) matches the original string.
 // Only single (:) and double (::) colon suffixes are handled, as real-world values like AWS ARNs
-// use at most :: as a separator. Triple or more colons are not matched intentionally.
+// and IPv6 addresses use at most :: as a separator. Triple or more colons are not matched intentionally.
 func keyMatchesOriginalWithColon(key, original string) bool {
 	return key+":" == original || key+"::" == original
 }
@@ -160,6 +170,8 @@ func keyMatchesOriginalWithColon(key, original string) bool {
 // isMisinterpretedScalar checks if the YAML parser has misinterpreted a scalar string as a map.
 // This happens when a string ends with colons (e.g., "value:" or "value::") which YAML
 // interprets as a map key with a null value.
+// Affected patterns include AWS ARNs (e.g., "arn:aws:...:password::") and IPv6 addresses
+// ending with "::" (e.g., "2041:0000:140F::875B::"). Fix introduced in v1.206.0 (PR #2059).
 func isMisinterpretedScalar(node *yaml.Node, originalResult string) bool {
 	// Navigate to document content if this is a document node.
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {

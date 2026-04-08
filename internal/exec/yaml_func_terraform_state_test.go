@@ -8,6 +8,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -182,5 +183,50 @@ func TestYamlFuncTerraformState(t *testing.T) {
 		assert.Contains(t, y, "client_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-secret-xyz789")
 		assert.Contains(t, y, "client_id_arn_bare: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 		assert.Contains(t, y, "client_id_arn_with_stack: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
+	})
+
+	// Test that IPv6 addresses ending in :: are correctly preserved as strings
+	// when read via !terraform.state.
+	// Regression guard for issue #2155 (reported against v1.204.0); fix in v1.206.0 (PR #2059).
+	t.Run("IPv6 address string preservation", func(t *testing.T) {
+		// First, apply the source component with an IPv6 address.
+		ipv6Info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            stack,
+			StackFile:        "",
+			ComponentType:    "terraform",
+			ComponentFromArg: "component-ipv6-source",
+			SubCommand:       "deploy",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+
+		err = ExecuteTerraform(ipv6Info)
+		if err != nil {
+			t.Fatalf("Failed to execute 'ExecuteTerraform' for component-ipv6-source: %v", err)
+		}
+
+		// Verify that reading the IPv6 state returns a string, not a map.
+		ipv6Val, err := processTagTerraformState(&atmosConfig, "!terraform.state component-ipv6-source ipv6", stack, nil)
+		require.NoError(t, err)
+		ipv6Str, ok := ipv6Val.(string)
+		require.True(t, ok, "IPv6 value should be a string, got %T: %v", ipv6Val, ipv6Val)
+		assert.Equal(t, "2041:0000:140F::875B::", ipv6Str)
+
+		// Verify that the consumer component correctly resolves the IPv6 value.
+		res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            "component-ipv6-consumer",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+			Skip:                 nil,
+			AuthManager:          nil,
+		})
+		assert.NoError(t, err)
+
+		y, err = u.ConvertToYAML(res)
+		assert.Nil(t, err)
+		// The IPv6 address must appear quoted in YAML (not as a map).
+		assert.Contains(t, y, "ipv6: '2041:0000:140F::875B::'")
 	})
 }
