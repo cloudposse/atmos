@@ -1,38 +1,29 @@
 package aws
 
+// Browser-based OAuth2 PKCE authentication flow for aws/user identities.
+// This file holds the top-level Authenticate entry points, package-level
+// types and override variables. Implementation details are split across:
+//
+//   webflow_browser.go  — interactive/non-interactive dispatch and wait loops
+//   webflow_oauth.go    — PKCE/state helpers and local callback HTTP server
+//   webflow_token.go    — token endpoint HTTP + response parsing
+//   webflow_cache.go    — refresh-token XDG cache file I/O
+//   webflow_ui.go       — TTY detection, display dialogs, bubbletea spinner model
+
 import (
-	"bufio"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
-
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-isatty"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
@@ -51,9 +42,22 @@ const (
 	webflowCacheDirPerms       = 0o700
 	webflowCacheFilePerms      = 0o600
 	webflowSessionDuration     = 12 * time.Hour
-	// webflowTokenRefreshBuffer is the buffer before expiration to trigger refresh.
+	// Buffer before expiration at which webflowTokenRefreshBuffer triggers a refresh.
 	webflowTokenRefreshBuffer = 1 * time.Minute
+	// Byte length for generated state strings (CSRF protection).
+	webflowStateBytes = 16
+	// Read-header timeout for the local callback HTTP server.
+	webflowCallbackReadHeaderTimeout = 10 * time.Second
+	// Shutdown timeout for the local callback HTTP server.
+	webflowCallbackShutdownTimeout = 5 * time.Second
 )
+
+// wrapWebflowErr wraps a cause error with a sentinel so both remain in the
+// error chain. Centralizes the common `fmt.Errorf("%w: %w", sentinel, cause)`
+// pattern used throughout webflow error handling.
+func wrapWebflowErr(sentinel, cause error) error {
+	return fmt.Errorf("%w: %w", sentinel, cause)
+}
 
 // HTTPClient abstracts HTTP requests for token exchange (testability).
 type HTTPClient interface {
@@ -71,7 +75,7 @@ type webflowResult struct {
 type webflowTokenResponse struct {
 	AccessToken  webflowAccessToken `json:"accessToken"`
 	ExpiresIn    int                `json:"expiresIn"`
-	RefreshToken string             `json:"refreshToken"`
+	RefreshToken string             `json:"refreshToken"` //nolint:gosec // G117: OAuth2 refresh token field name, not a hardcoded secret.
 	TokenType    string             `json:"tokenType"`
 	IDToken      string             `json:"idToken"`
 }
@@ -80,12 +84,12 @@ type webflowTokenResponse struct {
 type webflowAccessToken struct {
 	AccessKeyID     string `json:"accessKeyId"`
 	SecretAccessKey string `json:"secretAccessKey"`
-	SessionToken    string `json:"sessionToken"`
+	SessionToken    string `json:"sessionToken"` //nolint:gosec // G117: AWS STS session token field name, not a hardcoded secret.
 }
 
 // webflowRefreshCache stores the refresh token for later use.
 type webflowRefreshCache struct {
-	RefreshToken string    `json:"refreshToken"`
+	RefreshToken string    `json:"refreshToken"` //nolint:gosec // G117: OAuth2 refresh token field name, not a hardcoded secret.
 	Region       string    `json:"region"`
 	ExpiresAt    time.Time `json:"expiresAt"` // Session end time (~12h from initial auth).
 }
@@ -110,8 +114,17 @@ var webflowIsTTYFunc = webflowIsTTY
 // displayWebflowDialogFunc shows the authentication URL. Overridable for testing.
 var displayWebflowDialogFunc = displayWebflowDialog
 
+// displayWebflowPlainTextFunc shows the authentication URL in plain-text mode. Overridable for testing.
+var displayWebflowPlainTextFunc = displayWebflowDialogPlainText
+
+// webflowStdinReader is the io.Reader used by browserWebflowNonInteractive to
+// read the manual authorization code. Defaults to os.Stdin but is overridable
+// for testing so unit tests can supply a controlled reader without mutating
+// the global os.Stdin (which causes data races with the reader goroutine).
+var webflowStdinReader io.Reader = os.Stdin
+
 // resolveCredentialsViaWebflow attempts to obtain AWS credentials via the OAuth2 browser flow.
-// It first tries to refresh using a cached refresh token, then falls back to a full browser flow.
+// It first tries to use a cached refresh token, then falls back to the full browser flow.
 func (i *userIdentity) resolveCredentialsViaWebflow(ctx context.Context) (*types.AWSCredentials, error) {
 	defer perf.Track(nil, "aws.userIdentity.resolveCredentialsViaWebflow")()
 
@@ -138,7 +151,7 @@ func (i *userIdentity) refreshWebflowCredentials(ctx context.Context, region str
 
 	cache, err := i.loadRefreshCache()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowRefreshFailed, err)
+		return nil, wrapWebflowErr(errUtils.ErrWebflowRefreshFailed, err)
 	}
 
 	// Check if session has expired.
@@ -149,12 +162,14 @@ func (i *userIdentity) refreshWebflowCredentials(ctx context.Context, region str
 	// Exchange refresh token for new credentials.
 	tokenResp, err := exchangeRefreshToken(ctx, defaultHTTPClient, region, cache.RefreshToken)
 	if err != nil {
-		// Only clear cache for definitive server rejections (invalid_grant, etc.),
-		// not transient errors (network issues, timeouts) that don't invalidate the token.
-		if !isTransientTokenError(err) {
+		// Only delete the cached refresh token when the server definitively rejects it
+		// (HTTP 400 invalid_grant/invalid_token per RFC 6749 §5.2). Transient failures —
+		// HTTP 5xx, 429, network errors, context cancellation, malformed responses —
+		// must preserve the cache so unattended runs can retry without a browser prompt.
+		if errors.Is(err, errUtils.ErrWebflowRefreshTokenRevoked) {
 			i.deleteRefreshCache()
 		}
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowRefreshFailed, err)
+		return nil, wrapWebflowErr(errUtils.ErrWebflowRefreshFailed, err)
 	}
 
 	creds := tokenResponseToCredentials(tokenResp, region)
@@ -172,247 +187,6 @@ func (i *userIdentity) refreshWebflowCredentials(ctx context.Context, region str
 	return creds, nil
 }
 
-// browserWebflow performs the full OAuth2 PKCE browser authentication flow.
-func (i *userIdentity) browserWebflow(ctx context.Context, region string) (*types.AWSCredentials, error) {
-	defer perf.Track(nil, "aws.userIdentity.browserWebflow")()
-
-	allowPrompts := types.AllowPrompts(ctx)
-
-	if allowPrompts && webflowIsTTYFunc() {
-		return i.browserWebflowInteractive(ctx, region)
-	}
-
-	// Non-interactive mode: display URL for manual auth.
-	if allowPrompts {
-		return i.browserWebflowNonInteractive(ctx, region)
-	}
-
-	return nil, errUtils.Build(errUtils.ErrWebflowAuthFailed).
-		WithExplanation("Browser authentication requires an interactive terminal or prompts").
-		WithHint("Use 'atmos auth login' in an interactive terminal").
-		WithHint("Or configure static credentials in atmos.yaml or keychain").
-		WithContext("identity", i.name).
-		WithExitCode(2).
-		Err()
-}
-
-// browserWebflowInteractive performs the browser flow with automatic browser opening and callback server.
-func (i *userIdentity) browserWebflowInteractive(ctx context.Context, region string) (*types.AWSCredentials, error) {
-	// Generate PKCE pair.
-	verifier, challenge, err := generatePKCEPair()
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to generate PKCE pair: %w", errUtils.ErrWebflowAuthFailed, err)
-	}
-
-	// Generate state for CSRF protection.
-	state, err := generateRandomString(16)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to generate state: %w", errUtils.ErrWebflowAuthFailed, err)
-	}
-
-	// Start callback server.
-	listener, resultCh, err := startCallbackServer(ctx, state)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowCallbackServer, err)
-	}
-	defer listener.Close()
-
-	// Build authorization URL.
-	port := listener.Addr().(*net.TCPAddr).Port
-	authURL := buildAuthorizationURL(region, port, challenge, state)
-	redirectURI := fmt.Sprintf("http://127.0.0.1:%d%s", port, webflowCallbackPath)
-
-	// Display UI and open browser.
-	displayWebflowDialogFunc(authURL)
-
-	if !telemetry.IsCI() {
-		if err := openURLFunc(authURL); err != nil {
-			log.Debug("Failed to open browser automatically", "error", err)
-		}
-	}
-
-	// Wait for callback with spinner.
-	tokenResp, err := i.waitForCallbackWithSpinner(ctx, resultCh, region, verifier, redirectURI)
-	if err != nil {
-		return nil, err
-	}
-
-	return i.processTokenResponse(tokenResp, region)
-}
-
-// browserWebflowNonInteractive performs the browser flow with manual code entry.
-func (i *userIdentity) browserWebflowNonInteractive(ctx context.Context, region string) (*types.AWSCredentials, error) {
-	// Generate PKCE pair.
-	verifier, challenge, err := generatePKCEPair()
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to generate PKCE pair: %w", errUtils.ErrWebflowAuthFailed, err)
-	}
-
-	// Generate state for CSRF protection.
-	state, err := generateRandomString(16)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to generate state: %w", errUtils.ErrWebflowAuthFailed, err)
-	}
-
-	// Start callback server (user might be on the same machine and browser redirects).
-	listener, resultCh, err := startCallbackServer(ctx, state)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowCallbackServer, err)
-	}
-	defer listener.Close()
-
-	port := listener.Addr().(*net.TCPAddr).Port
-	authURL := buildAuthorizationURL(region, port, challenge, state)
-	redirectURI := fmt.Sprintf("http://127.0.0.1:%d%s", port, webflowCallbackPath)
-
-	// Display URL for manual use.
-	displayWebflowDialogPlainText(authURL)
-
-	// Read authorization code from stdin (non-interactive: no TUI, just line input).
-	codeCh := make(chan string, 1)
-	errCh := make(chan error, 1)
-
-	go func() {
-		fmt.Fprintf(os.Stderr, "Authorization code: ")
-		scanner := bufio.NewScanner(os.Stdin)
-		if scanner.Scan() {
-			code := strings.TrimSpace(scanner.Text())
-			if code == "" {
-				errCh <- fmt.Errorf("authorization code is required")
-				return
-			}
-			codeCh <- code
-		} else if err := scanner.Err(); err != nil {
-			errCh <- fmt.Errorf("failed to read authorization code: %w", err)
-		} else {
-			errCh <- fmt.Errorf("no input received (stdin closed)")
-		}
-	}()
-
-	// Race between manual code entry and callback.
-	select {
-	case result := <-resultCh:
-		if result.err != nil {
-			return nil, fmt.Errorf("%w: callback error: %w", errUtils.ErrWebflowAuthFailed, result.err)
-		}
-		tokenResp, tokenErr := exchangeCodeForCredentials(ctx, defaultHTTPClient, region, result.code, verifier, redirectURI)
-		if tokenErr != nil {
-			return nil, tokenErr
-		}
-		return i.processTokenResponse(tokenResp, region)
-	case code := <-codeCh:
-		tokenResp, tokenErr := exchangeCodeForCredentials(ctx, defaultHTTPClient, region, code, verifier, redirectURI)
-		if tokenErr != nil {
-			return nil, tokenErr
-		}
-		return i.processTokenResponse(tokenResp, region)
-	case readErr := <-errCh:
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowAuthFailed, readErr)
-	case <-ctx.Done():
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowTimeout, ctx.Err())
-	}
-}
-
-// waitForCallbackWithSpinner waits for the OAuth2 callback with a spinner UI.
-func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh <-chan webflowResult, region, verifier, redirectURI string) (*webflowTokenResponse, error) {
-	if !webflowIsTTYFunc() || telemetry.IsCI() {
-		return i.waitForCallbackSimple(ctx, resultCh, region, verifier, redirectURI)
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, webflowCallbackTimeout)
-	defer cancel()
-
-	tokenCh := make(chan webflowSpinnerTokenResult, 1)
-
-	go func() {
-		defer close(tokenCh)
-		select {
-		case result := <-resultCh:
-			if result.err != nil {
-				tokenCh <- webflowSpinnerTokenResult{err: fmt.Errorf("%w: %w", errUtils.ErrWebflowAuthFailed, result.err)}
-				return
-			}
-			resp, err := exchangeCodeForCredentials(ctx, defaultHTTPClient, region, result.code, verifier, redirectURI)
-			tokenCh <- webflowSpinnerTokenResult{resp: resp, err: err}
-		case <-ctx.Done():
-			tokenCh <- webflowSpinnerTokenResult{err: fmt.Errorf("%w: %w", errUtils.ErrWebflowTimeout, ctx.Err())}
-		}
-	}()
-
-	// Run spinner.
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
-
-	model := webflowSpinnerModel{
-		spinner: s,
-		message: "Waiting for browser authentication",
-		tokenCh: tokenCh,
-		cancel:  cancel,
-	}
-
-	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr))
-	finalModel, err := prog.Run()
-	if err != nil {
-		log.Debug("Bubbletea spinner failed, falling back to simple wait", "error", err)
-		cancel()
-		// Drain the goroutine result. If the callback arrived just before cancel,
-		// the goroutine may have captured the real result instead of a timeout.
-		res := <-tokenCh
-		if !errors.Is(res.err, errUtils.ErrWebflowTimeout) {
-			return res.resp, res.err
-		}
-		// Goroutine got the cancellation — callback hasn't arrived yet.
-		// Fall back to a blocking wait with a fresh timeout.
-		ctx2, cancel2 := context.WithTimeout(context.Background(), webflowCallbackTimeout)
-		defer cancel2()
-		return i.waitForCallbackSimple(ctx2, resultCh, region, verifier, redirectURI)
-	}
-
-	final := finalModel.(webflowSpinnerModel)
-	if final.result == nil {
-		return nil, errUtils.Build(errUtils.ErrWebflowAuthFailed).
-			WithExplanation("Browser authentication did not complete").
-			WithHint("Try running the authentication again").
-			WithContext("identity", i.name).
-			WithExitCode(1).
-			Err()
-	}
-	return final.result.resp, final.result.err
-}
-
-// waitForCallbackSimple waits for callback without spinner (non-TTY environments).
-func (i *userIdentity) waitForCallbackSimple(ctx context.Context, resultCh <-chan webflowResult, region, verifier, redirectURI string) (*webflowTokenResponse, error) {
-	ctx, cancel := context.WithTimeout(ctx, webflowCallbackTimeout)
-	defer cancel()
-
-	select {
-	case result := <-resultCh:
-		if result.err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowAuthFailed, result.err)
-		}
-		return exchangeCodeForCredentials(ctx, defaultHTTPClient, region, result.code, verifier, redirectURI)
-	case <-ctx.Done():
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrWebflowTimeout, ctx.Err())
-	}
-}
-
-// processTokenResponse converts a token response to AWS credentials and caches the refresh token.
-func (i *userIdentity) processTokenResponse(tokenResp *webflowTokenResponse, region string) (*types.AWSCredentials, error) {
-	creds := tokenResponseToCredentials(tokenResp, region)
-
-	// Cache refresh token for future use.
-	if tokenResp.RefreshToken != "" {
-		i.saveRefreshCache(&webflowRefreshCache{
-			RefreshToken: tokenResp.RefreshToken,
-			Region:       region,
-			ExpiresAt:    time.Now().Add(webflowSessionDuration),
-		})
-	}
-
-	return creds, nil
-}
-
 // isWebflowEnabled checks if browser authentication is enabled for this identity.
 // Returns true by default unless explicitly disabled via credentials.webflow_enabled: false.
 func (i *userIdentity) isWebflowEnabled() bool {
@@ -424,452 +198,4 @@ func (i *userIdentity) isWebflowEnabled() bool {
 		return true // Default: enabled.
 	}
 	return enabled
-}
-
-// generatePKCEPair generates a PKCE code verifier and code challenge.
-// The verifier is 32 random bytes, base64url-encoded without padding.
-// The challenge is the SHA-256 hash of the verifier, base64url-encoded without padding.
-func generatePKCEPair() (verifier string, challenge string, err error) {
-	defer perf.Track(nil, "aws.generatePKCEPair")()
-
-	buf := make([]byte, webflowCodeVerifierBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", "", fmt.Errorf("failed to generate random bytes: %w", err)
-	}
-
-	verifier = base64.RawURLEncoding.EncodeToString(buf)
-
-	hash := sha256.Sum256([]byte(verifier))
-	challenge = base64.RawURLEncoding.EncodeToString(hash[:])
-
-	return verifier, challenge, nil
-}
-
-// generateRandomString generates a random string of the specified byte length, base64url-encoded.
-func generateRandomString(n int) (string, error) {
-	buf := make([]byte, n)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("failed to generate random bytes: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
-}
-
-// getSigninEndpoint returns the AWS signin endpoint for the given region.
-// us-east-1 uses the global endpoint (no region prefix).
-func getSigninEndpoint(region string) string {
-	if region == "us-east-1" {
-		return "https://signin.aws.amazon.com"
-	}
-	return fmt.Sprintf("https://%s.signin.aws.amazon.com", region)
-}
-
-// buildAuthorizationURL constructs the OAuth2 authorization URL.
-func buildAuthorizationURL(region string, port int, codeChallenge, state string) string {
-	baseURL := getSigninEndpoint(region)
-	params := url.Values{}
-	params.Set("client_id", webflowOAuthClientID)
-	params.Set("redirect_uri", fmt.Sprintf("http://127.0.0.1:%d%s", port, webflowCallbackPath))
-	params.Set("response_type", webflowResponseType)
-	params.Set("code_challenge", codeChallenge)
-	params.Set("code_challenge_method", webflowCodeChallengeMethod)
-	params.Set("scope", webflowScope)
-	params.Set("state", state)
-	return fmt.Sprintf("%s/v1/authorize?%s", baseURL, params.Encode())
-}
-
-// startCallbackServer starts an HTTP server on an ephemeral port to receive the OAuth2 callback.
-// It returns the listener, a channel for the result, and any error.
-func startCallbackServer(ctx context.Context, expectedState string) (net.Listener, <-chan webflowResult, error) {
-	defer perf.Track(nil, "aws.startCallbackServer")()
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to bind to loopback address: %w", err)
-	}
-
-	resultCh := make(chan webflowResult, 1)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc(webflowCallbackPath, func(w http.ResponseWriter, r *http.Request) {
-		code := r.URL.Query().Get("code")
-		state := r.URL.Query().Get("state")
-		errParam := r.URL.Query().Get("error")
-
-		if errParam != "" {
-			errDesc := r.URL.Query().Get("error_description")
-			resultCh <- webflowResult{err: fmt.Errorf("authorization error: %s: %s", errParam, errDesc)}
-			http.Error(w, "Authorization failed. You can close this tab.", http.StatusBadRequest)
-			return
-		}
-
-		if code == "" {
-			resultCh <- webflowResult{err: fmt.Errorf("missing authorization code in callback")}
-			http.Error(w, "Missing authorization code. You can close this tab.", http.StatusBadRequest)
-			return
-		}
-
-		if state != expectedState {
-			resultCh <- webflowResult{err: fmt.Errorf("state mismatch: possible CSRF attack")}
-			http.Error(w, "State mismatch. You can close this tab.", http.StatusBadRequest)
-			return
-		}
-
-		resultCh <- webflowResult{code: code, state: state}
-
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<!DOCTYPE html><html><body><h2>Authentication successful!</h2><p>You can close this tab and return to your terminal.</p><script>window.close()</script></body></html>`)
-	})
-
-	server := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-
-	go func() {
-		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			log.Debug("Callback server error", "error", err)
-		}
-	}()
-
-	// Shut down server when context is cancelled.
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		server.Shutdown(shutdownCtx) //nolint:errcheck // Best-effort shutdown.
-	}()
-
-	return listener, resultCh, nil
-}
-
-// exchangeCodeForCredentials exchanges an authorization code for AWS credentials.
-func exchangeCodeForCredentials(ctx context.Context, client HTTPClient, region, code, codeVerifier, redirectURI string) (*webflowTokenResponse, error) {
-	defer perf.Track(nil, "aws.exchangeCodeForCredentials")()
-
-	body := url.Values{}
-	body.Set("client_id", webflowOAuthClientID)
-	body.Set("grant_type", webflowGrantTypeAuthCode)
-	body.Set("code", code)
-	body.Set("code_verifier", codeVerifier)
-	body.Set("redirect_uri", redirectURI)
-
-	return callTokenEndpoint(ctx, client, region, body)
-}
-
-// exchangeRefreshToken exchanges a refresh token for new AWS credentials.
-func exchangeRefreshToken(ctx context.Context, client HTTPClient, region, refreshToken string) (*webflowTokenResponse, error) {
-	defer perf.Track(nil, "aws.exchangeRefreshToken")()
-
-	body := url.Values{}
-	body.Set("client_id", webflowOAuthClientID)
-	body.Set("grant_type", webflowGrantTypeRefresh)
-	body.Set("refresh_token", refreshToken)
-
-	return callTokenEndpoint(ctx, client, region, body)
-}
-
-// callTokenEndpoint makes a POST request to the AWS signin token endpoint.
-func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, body url.Values) (*webflowTokenResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/token", getSigninEndpoint(region))
-
-	encodedBody := body.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(encodedBody))
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create request: %w", errUtils.ErrWebflowTokenExchange, err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	log.Debug("Token exchange request",
-		"endpoint", endpoint,
-		"body", encodedBody,
-	)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrWebflowTokenExchange).
-			WithCause(err).
-			WithExplanation("Failed to contact the AWS signin service").
-			WithHint("Check your network connectivity").
-			WithHintf("Ensure the region '%s' is correct", region).
-			WithContext("endpoint", endpoint).
-			Err()
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, webflowTokenMaxBodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read response: %w", errUtils.ErrWebflowTokenExchange, err)
-	}
-
-	log.Debug("Token exchange response",
-		"status", resp.StatusCode,
-		"body", string(respBody),
-	)
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp webflowTokenErrorResponse
-		if jsonErr := json.Unmarshal(respBody, &errResp); jsonErr == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("%w: %s: %s (HTTP %d, endpoint: %s)",
-				errUtils.ErrWebflowTokenExchange, errResp.Error, errResp.ErrorDescription,
-				resp.StatusCode, endpoint)
-		}
-		return nil, fmt.Errorf("%w: HTTP %d (endpoint: %s, body: %s)",
-			errUtils.ErrWebflowTokenExchange, resp.StatusCode, endpoint, string(respBody))
-	}
-
-	var tokenResp webflowTokenResponse
-	if err := json.Unmarshal(respBody, &tokenResp); err != nil {
-		return nil, fmt.Errorf("%w: failed to parse token response: %w", errUtils.ErrWebflowTokenExchange, err)
-	}
-
-	if tokenResp.AccessToken.AccessKeyID == "" || tokenResp.AccessToken.SecretAccessKey == "" {
-		return nil, fmt.Errorf("%w: token response missing credentials", errUtils.ErrWebflowTokenExchange)
-	}
-
-	return &tokenResp, nil
-}
-
-// tokenResponseToCredentials converts a token response to AWSCredentials.
-func tokenResponseToCredentials(resp *webflowTokenResponse, region string) *types.AWSCredentials {
-	expiration := ""
-	if resp.ExpiresIn > 0 {
-		expiration = time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second).Format(time.RFC3339)
-	}
-
-	return &types.AWSCredentials{
-		AccessKeyID:     resp.AccessToken.AccessKeyID,
-		SecretAccessKey: resp.AccessToken.SecretAccessKey,
-		SessionToken:    resp.AccessToken.SessionToken,
-		Region:          region,
-		Expiration:      expiration,
-	}
-}
-
-// Refresh token cache (XDG file-based, following SSO cache pattern).
-
-// getRefreshCachePath returns the XDG-compliant cache path for the refresh token.
-func (i *userIdentity) getRefreshCachePath() (string, error) {
-	cacheDir, err := xdg.GetXDGCacheDir(webflowCacheSubdir, webflowCacheDirPerms)
-	if err != nil {
-		return "", fmt.Errorf("failed to get XDG cache directory: %w", err)
-	}
-
-	identityDir := fmt.Sprintf("%s-%s", i.name, i.realm)
-	fullDir := filepath.Join(cacheDir, identityDir)
-	if err := os.MkdirAll(fullDir, webflowCacheDirPerms); err != nil {
-		return "", fmt.Errorf("failed to create cache directory: %w", err)
-	}
-
-	return filepath.Join(fullDir, webflowCacheFilename), nil
-}
-
-// loadRefreshCache loads the cached refresh token.
-func (i *userIdentity) loadRefreshCache() (*webflowRefreshCache, error) {
-	path, err := i.getRefreshCachePath()
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("no cached refresh token: %w", err)
-	}
-
-	var cache webflowRefreshCache
-	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil, fmt.Errorf("failed to parse refresh cache: %w", err)
-	}
-
-	if cache.RefreshToken == "" {
-		return nil, fmt.Errorf("cached refresh token is empty")
-	}
-
-	return &cache, nil
-}
-
-// saveRefreshCache saves the refresh token to cache.
-func (i *userIdentity) saveRefreshCache(cache *webflowRefreshCache) {
-	path, err := i.getRefreshCachePath()
-	if err != nil {
-		log.Debug("Failed to get refresh cache path", logKeyIdentity, i.name, "error", err)
-		return
-	}
-
-	data, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		log.Debug("Failed to marshal refresh cache", logKeyIdentity, i.name, "error", err)
-		return
-	}
-
-	if err := os.WriteFile(path, data, webflowCacheFilePerms); err != nil {
-		log.Debug("Failed to write refresh cache", logKeyIdentity, i.name, "error", err)
-		return
-	}
-
-	log.Debug("Saved webflow refresh token to cache", logKeyIdentity, i.name, "expiresAt", cache.ExpiresAt)
-}
-
-// deleteRefreshCache removes the cached refresh token.
-func (i *userIdentity) deleteRefreshCache() {
-	path, err := i.getRefreshCachePath()
-	if err != nil {
-		return
-	}
-
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		log.Debug("Failed to delete refresh cache", logKeyIdentity, i.name, "error", err)
-	}
-}
-
-// isTransientTokenError checks if a token exchange error is transient (network/timeout)
-// vs a definitive server rejection (invalid_grant). Transient errors should not
-// invalidate cached refresh tokens since the token may still be valid.
-func isTransientTokenError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Context cancellation/timeout is transient.
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	// Network errors (connectivity, DNS, etc.) are transient.
-	var netErr net.Error
-	if errors.As(err, &netErr) {
-		return true
-	}
-	return false
-}
-
-// TTY detection helpers (mirrors providers/aws/sso.go pattern).
-
-// webflowIsTTY checks if stderr is a terminal.
-func webflowIsTTY() bool {
-	return isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
-}
-
-// webflowIsInteractive checks if we're running in an interactive terminal.
-// Respects --force-tty / ATMOS_FORCE_TTY for environments where TTY detection fails.
-func webflowIsInteractive() bool {
-	if viper.GetBool("force-tty") {
-		return true
-	}
-	return webflowIsTTY()
-}
-
-// UI display functions.
-
-// displayWebflowDialog shows a styled dialog with the authentication URL (TTY mode).
-func displayWebflowDialog(authURL string) {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan)).
-		PaddingLeft(1).
-		PaddingRight(1)
-
-	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBorder)).
-		Italic(true)
-
-	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorDarkGray))
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
-		Padding(1, 2).
-		MarginTop(1).
-		MarginBottom(1)
-
-	var content strings.Builder
-	content.WriteString(titleStyle.Render("🔐 AWS Browser Authentication"))
-	content.WriteString("\n\n")
-	content.WriteString(instructionStyle.Render("Opening browser for authentication..."))
-	content.WriteString("\n")
-	content.WriteString(instructionStyle.Render("If the browser doesn't open, visit:"))
-	content.WriteString("\n\n")
-	content.WriteString(urlStyle.Render(authURL))
-
-	fmt.Fprintf(os.Stderr, "%s\n", boxStyle.Render(content.String()))
-}
-
-// displayWebflowDialogPlainText shows the authentication URL in plain text (non-TTY).
-func displayWebflowDialogPlainText(authURL string) {
-	utils.PrintfMessageToTUI("🔐 **AWS Browser Authentication (Non-Interactive)**\n")
-	utils.PrintfMessageToTUI("Visit this URL on a device with a browser:\n")
-	utils.PrintfMessageToTUI("%s\n", authURL)
-	utils.PrintfMessageToTUI("After signing in, paste the authorization code below.\n")
-}
-
-// Spinner model for interactive waiting (follows SSO pattern from sso.go).
-
-// webflowSpinnerTokenResult wraps the token exchange result.
-type webflowSpinnerTokenResult struct {
-	resp *webflowTokenResponse
-	err  error
-}
-
-// webflowSpinnerModel is a bubbletea model for the authentication spinner.
-type webflowSpinnerModel struct {
-	spinner spinner.Model
-	message string
-	done    bool
-	tokenCh <-chan webflowSpinnerTokenResult
-	cancel  context.CancelFunc
-	result  *webflowSpinnerTokenResult
-}
-
-//nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
-func (m webflowSpinnerModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, m.checkResult())
-}
-
-//nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
-func (m webflowSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			m.done = true
-			m.result = &webflowSpinnerTokenResult{err: errUtils.ErrUserAborted}
-			if m.cancel != nil {
-				m.cancel()
-			}
-			return m, tea.Quit
-		}
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	case webflowSpinnerTokenResult:
-		m.done = true
-		m.result = &msg
-		if m.cancel != nil {
-			m.cancel()
-		}
-		return m, tea.Quit
-	}
-	return m, nil
-}
-
-//nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
-func (m webflowSpinnerModel) View() string {
-	if m.done {
-		if m.result != nil && m.result.err != nil {
-			return fmt.Sprintf("%s Authentication failed\n", theme.Styles.XMark)
-		}
-		return ""
-	}
-	return fmt.Sprintf("%s %s...", m.spinner.View(), m.message)
-}
-
-//nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
-func (m webflowSpinnerModel) checkResult() tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case res := <-m.tokenCh:
-			return webflowSpinnerTokenResult{resp: res.resp, err: res.err}
-		case <-time.After(100 * time.Millisecond):
-			return m.checkResult()()
-		}
-	}
 }

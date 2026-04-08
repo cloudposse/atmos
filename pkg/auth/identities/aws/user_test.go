@@ -2,7 +2,11 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	urlpkg "net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -2327,4 +2331,159 @@ func TestUserIdentity_CredentialsFromConfig(t *testing.T) {
 		assert.Equal(t, "secrettest", creds.SecretAccessKey)
 		assert.Equal(t, "arn:aws:iam::123:mfa/test", creds.MfaArn)
 	})
+}
+
+// TestUserIdentity_Authenticate_WebflowFallbackSuccess verifies the webflow
+// fallback branches added in Authenticate (user.go:99-117). With no YAML
+// credentials and no keyring entry, and webflow enabled, Authenticate must:
+//  1. Fall through to browser webflow
+//  2. Return webflow credentials
+//  3. Write them to the AWS config files
+func TestUserIdentity_Authenticate_WebflowFallbackSuccess(t *testing.T) {
+	blockStdin(t)
+
+	// Isolate XDG dirs so writeAWSFiles + refresh cache land in temp.
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	// Mock the AWS signin token endpoint to return valid credentials.
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_WF_AUTH",
+				"secretAccessKey": "SECRET_WF_AUTH",
+				"sessionToken":    "TOKEN_WF_AUTH",
+			},
+			"expiresIn": 900,
+		})
+	}))
+	defer tokenServer.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = urlpkg.Parse(tokenServer.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	// Force non-TTY so browserWebflow routes to the non-interactive branch.
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return false }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	// Intercept the plain-text display to fire the OAuth callback asynchronously.
+	origDisplay := displayWebflowPlainTextFunc
+	displayWebflowPlainTextFunc = func(authURL string) {
+		go func() {
+			time.Sleep(30 * time.Millisecond)
+			parsed, _ := urlpkg.Parse(authURL)
+			redirectURI := parsed.Query().Get("redirect_uri")
+			state := parsed.Query().Get("state")
+			cbURL := redirectURI + "?code=wf-auth-code&state=" + state
+			resp, err := http.Get(cbURL)
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
+	}
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	// Unique identity name + empty keyring → keystoreErr triggers fallback.
+	identity, err := NewUserIdentity("test-wf-auth-"+t.Name(), &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"region": "us-east-2",
+		},
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ctx = types.WithAllowPrompts(ctx, true)
+
+	result, err := identity.Authenticate(ctx, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	awsCreds, ok := result.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "AKID_WF_AUTH", awsCreds.AccessKeyID)
+	assert.Equal(t, "SECRET_WF_AUTH", awsCreds.SecretAccessKey)
+	assert.Equal(t, "TOKEN_WF_AUTH", awsCreds.SessionToken)
+	assert.Equal(t, "us-east-2", awsCreds.Region)
+}
+
+// TestUserIdentity_Authenticate_PartialYAMLCredsSurfacesConfigError verifies
+// the guard that prevents silent principal hijack: partial YAML credentials
+// (only access_key_id, no secret_access_key) must surface ErrInvalidAuthConfig
+// immediately without triggering webflow fallback.
+func TestUserIdentity_Authenticate_PartialYAMLCredsSurfacesConfigError(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	// Set a displayWebflowPlainTextFunc that fails loudly if reached.
+	origDisplay := displayWebflowPlainTextFunc
+	webflowReached := false
+	displayWebflowPlainTextFunc = func(_ string) { webflowReached = true }
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	identity, err := NewUserIdentity("test-partial-yaml-"+t.Name(), &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"access_key_id": "AKIA_ONLY",
+			// secret_access_key intentionally omitted.
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := types.WithAllowPrompts(context.Background(), true)
+	result, err := identity.Authenticate(ctx, nil)
+
+	assert.Nil(t, result)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig,
+		"partial YAML credentials must surface ErrInvalidAuthConfig, not trigger webflow")
+	assert.False(t, webflowReached,
+		"webflow must NOT be reached when YAML credentials are partial")
+}
+
+// TestUserIdentity_Authenticate_WebflowDisabledBypassed verifies that when
+// webflow_enabled is false and no credentials are available, the original
+// "not configured" error is returned (webflow fallback is skipped).
+func TestUserIdentity_Authenticate_WebflowDisabledBypassed(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	// Fail loudly if webflow display is reached.
+	origDisplay := displayWebflowPlainTextFunc
+	webflowReached := false
+	displayWebflowPlainTextFunc = func(_ string) { webflowReached = true }
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	identity, err := NewUserIdentity("test-wf-disabled-"+t.Name(), &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"webflow_enabled": false,
+		},
+	})
+	require.NoError(t, err)
+
+	// Disable PromptCredentialsFunc so the test doesn't hang.
+	origPrompt := PromptCredentialsFunc
+	PromptCredentialsFunc = nil
+	defer func() { PromptCredentialsFunc = origPrompt }()
+
+	ctx := types.WithAllowPrompts(context.Background(), true)
+	result, err := identity.Authenticate(ctx, nil)
+
+	assert.Nil(t, result)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsUserNotConfigured)
+	assert.False(t, webflowReached, "webflow must not run when webflow_enabled is false")
 }
