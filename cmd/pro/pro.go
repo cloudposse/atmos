@@ -66,7 +66,7 @@ func (p *ProCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
-// IsExperimental returns false because pro commands are stable.
+// IsExperimental returns true because pro commands are experimental.
 func (p *ProCommandProvider) IsExperimental() bool {
-	return false
+	return true
 }

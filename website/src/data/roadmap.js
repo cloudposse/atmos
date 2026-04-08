@@ -175,6 +175,7 @@ export const roadmapConfig = {
       status: 'shipped',
       quarter: 'q2-2026',
       changelog: 'pro-install-command',
+      experimental: true,
     },
   ],
 

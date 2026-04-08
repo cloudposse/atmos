@@ -29,8 +29,8 @@ func TestProCommandProvider(t *testing.T) {
 		assert.Equal(t, "Pro Features", provider.GetGroup())
 	})
 
-	t.Run("not experimental", func(t *testing.T) {
-		assert.False(t, provider.IsExperimental())
+	t.Run("experimental", func(t *testing.T) {
+		assert.True(t, provider.IsExperimental())
 	})
 
 	t.Run("has install subcommand", func(t *testing.T) {
