@@ -11,8 +11,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
-	"github.com/cloudposse/atmos/pkg/auth"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
@@ -48,9 +46,14 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration, mcpSer
 	}
 
 	// Register external MCP server tools (filtered by routing).
-	mcpMgr := registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
+	// Skip for CLI providers — they handle MCP via provider-specific pass-through.
+	var mcpMgr *mcpclient.Manager
+	if !isCLIProvider(atmosConfig.AI.DefaultProvider) {
+		mcpMgr = registerMCPServerTools(registry, atmosConfig, mcpServerNames, question)
+	}
 
 	ui.Info(fmt.Sprintf("AI tools initialized: %d total", registry.Count()))
+	ui.Info(fmt.Sprintf("AI provider: %s", atmosConfig.AI.DefaultProvider))
 
 	// Initialize permission cache for persistent decisions.
 	permCache, err := permission.NewPermissionCache(atmosConfig.BasePath)
@@ -277,19 +280,28 @@ func resolveToolchain(atmosConfig *schema.AtmosConfiguration) mcpclient.Toolchai
 	return nil
 }
 
-// resolveAuthProvider creates an auth provider if any MCP server needs credentials.
+// resolveAuthProvider creates an auth provider if any MCP server needs
+// credentials. It delegates to mcpclient.NewScopedAuthProvider, which rebuilds
+// the auth manager per-server so each server's `env:` block (specifically
+// ATMOS_* variables) influences atmos config loading and identity resolution.
 func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthEnvProvider {
 	if !serversNeedAuth(atmosConfig.MCP.Servers) {
 		return nil
 	}
-	mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-		"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
-	)
-	if err != nil {
-		ui.Error(fmt.Sprintf("Failed to create auth manager for MCP servers: %v", err))
-		return nil
-	}
-	return mgr
+	return mcpclient.NewScopedAuthProvider(atmosConfig)
+}
+
+// cliProviders lists providers that invoke a local CLI binary as a subprocess.
+// These providers handle MCP via provider-specific pass-through, not via the Atmos tool registry.
+var cliProviders = map[string]bool{
+	"claude-code": true,
+	"codex-cli":   true,
+	"gemini-cli":  true,
+}
+
+// isCLIProvider returns true if the provider invokes a local CLI binary.
+func isCLIProvider(providerName string) bool {
+	return cliProviders[providerName]
 }
 
 // serversNeedAuth returns true if any configured MCP server has identity set.

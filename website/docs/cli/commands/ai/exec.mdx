@@ -70,7 +70,7 @@ The prompt can be provided as:
   <dd>Include stack context in the prompt</dd>
 
   <dt>`--provider, -p`</dt>
-  <dd>Override AI provider (anthropic, openai, gemini, grok, ollama, bedrock, azureopenai)</dd>
+  <dd>Override AI provider. API: `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, `azureopenai`. CLI: `claude-code`, `codex-cli`, `gemini-cli`.</dd>
 
   <dt>`--session, -s`</dt>
   <dd>Session ID for conversation context (enables multi-turn execution)</dd>
@@ -89,7 +89,7 @@ The prompt can be provided as:
 </dl>
 
 :::tip Smart MCP Routing
-When multiple MCP servers are configured, Atmos automatically selects only the servers relevant to your prompt using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly.
+When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your prompt using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`, `gemini-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
 :::
 
 ## Exit Codes

@@ -68,6 +68,8 @@ exclude = [
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
   "lfaidata\\.foundation",
+  # Taskfile.dev (connection resets in CI)
+  "taskfile\\.dev",
   # Test data placeholder URLs (intentional)
   "github\\.com/test/",
   # Planned documentation paths (not yet published)

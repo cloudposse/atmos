@@ -83,10 +83,12 @@ func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, for
 		return code, nil
 	}
 
-	// Check if either stdout or stderr is a terminal (provenance goes to stderr).
+	// Check if stdout is a terminal. Only stdout matters because highlighted
+	// output goes to the data channel (stdout). Stderr may still be a TTY when
+	// stdout is piped, so checking it would defeat pipe detection.
 	// Note: This must be checked dynamically, not at package init time.
 	// Some environments (like VHS) set up the TTY after the binary is loaded.
-	isTerm := termUtils.IsTTYSupportForStdout() || termUtils.IsTTYSupportForStderr()
+	isTerm := termUtils.IsTTYSupportForStdout()
 
 	// Check if color is forced via ForceColor (ATMOS_FORCE_COLOR).
 	// ForceColor acts like isTTY=true for color support checking.
