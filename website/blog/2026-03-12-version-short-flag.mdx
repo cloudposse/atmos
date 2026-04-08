@@ -1,0 +1,90 @@
+---
+slug: version-short-flag
+title: "`atmos version --short`: Get Just the Version Number"
+authors: [nitrocode]
+tags: [dx]
+---
+
+Scripting just got simpler. `atmos version --short` now prints only the version number—no banner, no update check, no noise.
+
+<!--truncate-->
+
+## What Changed
+
+The `atmos version` command has two new options for retrieving just the version number:
+
+- **`--short` / `-s`**: Print the version number without the ASCII art banner, alien icon, or update notifications.
+- **`--format plain`**: The underlying format that `--short` maps to.
+
+The `--format` flag also now explicitly supports `plain` as a valid value alongside the existing `json` and `yaml` formats.
+
+## Why This Matters
+
+Extracting the version string in a shell script previously required parsing the full styled output:
+
+```bash
+# Before: awkward and fragile
+ATMOS_VER=$(atmos version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+```
+
+Now it's clean and direct:
+
+```bash
+# After: simple and reliable
+ATMOS_VER=$(atmos version --short)
+```
+
+## How to Use It
+
+```bash
+# Print just the version number
+atmos version --short
+
+# Short alias
+atmos version -s
+
+# Equivalent using --format
+atmos version --format plain
+```
+
+**Example output:**
+
+```
+1.96.0
+```
+
+## Scripting Examples
+
+```bash
+# Store version in a variable
+ATMOS_VER=$(atmos version --short)
+echo "Running Atmos $ATMOS_VER"
+
+# Enforce minimum version in CI
+MIN_VERSION="1.90.0"
+ATMOS_VER=$(atmos version --short)
+if [[ "$(printf '%s\n' "$MIN_VERSION" "$ATMOS_VER" | sort -V | head -n1)" != "$MIN_VERSION" ]]; then
+  echo "Error: Atmos $MIN_VERSION or higher is required (found $ATMOS_VER)"
+  exit 1
+fi
+
+# Use in version badge generation
+echo "atmos-v$(atmos version --short)"
+```
+
+## Environment Variable
+
+You can also trigger the short output via environment variable:
+
+```bash
+ATMOS_VERSION_SHORT=true atmos version
+```
+
+## All Version Output Formats
+
+| Command | Output |
+|---------|--------|
+| `atmos version` | Styled banner with alien icon and optional update check |
+| `atmos version --short` | `1.96.0` (version number only) |
+| `atmos version --format json` | JSON object with `version`, `os`, `arch`, and optional `update_version` |
+| `atmos version --format yaml` | YAML with same fields |

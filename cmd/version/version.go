@@ -25,6 +25,7 @@ type VersionOptions struct {
 	global.Flags
 	Check  bool
 	Format string
+	Short  bool
 }
 
 // SetAtmosConfig sets the Atmos configuration for the version command.
@@ -70,20 +71,28 @@ var versionCmd = &cobra.Command{
 //
 //nolint:unparam // args parameter kept for consistency with other parse functions
 func parseVersionOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*VersionOptions, error) {
-	return &VersionOptions{
+	opts := &VersionOptions{
 		Flags:  flags.ParseGlobalFlags(cmd, v),
 		Check:  v.GetBool("check"),
 		Format: v.GetString("format"),
-	}, nil
+		Short:  v.GetBool("short"),
+	}
+	// --short sets --format plain when no explicit format is specified.
+	if opts.Short && opts.Format == "" {
+		opts.Format = "plain"
+	}
+	return opts, nil
 }
 
 func init() {
 	// Create parser with version-specific flags using functional options.
 	versionParser = flags.NewStandardParser(
 		flags.WithBoolFlag("check", "c", false, "Run additional checks after displaying version info"),
-		flags.WithStringFlag("format", "", "", "Specify the output format"),
+		flags.WithStringFlag("format", "", "", "Specify the output format (plain, json, yaml)"),
+		flags.WithBoolFlag("short", "s", false, "Print just the version number"),
 		flags.WithEnvVars("check", "ATMOS_VERSION_CHECK"),
 		flags.WithEnvVars("format", "ATMOS_VERSION_FORMAT"),
+		flags.WithEnvVars("short", "ATMOS_VERSION_SHORT"),
 	)
 
 	// Register flags using the standard RegisterFlags method.
