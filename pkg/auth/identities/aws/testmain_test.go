@@ -2,40 +2,59 @@ package aws
 
 // Package-level test setup for pkg/auth/identities/aws.
 //
-// This TestMain exists primarily as a Windows CI guardrail for the webflow
-// tests: several tests reach browserWebflow / browserWebflowInteractive and
-// rely on either telemetry.IsCI() returning true OR on individual tests
-// mocking openURLFunc to avoid the real browser launch. On Windows, the
-// default openURLFunc ultimately calls
-// `rundll32 url.dll,FileProtocolHandler <url>` via exec.Command — which can
-// hang GitHub Actions runners when no default browser is configured.
+// This TestMain installs safe, deterministic defaults for every webflow
+// package-level override variable so no test can accidentally perform a
+// real browser launch, read real stdin, or construct a real bubbletea
+// program. Individual tests that need specific behavior save and restore
+// these variables as usual; their "original" is this safe default.
 //
-// Setting GO_TEST=1 here makes pkg/browser's defaultOpener.Open
-// short-circuit and return nil before ever touching exec.Command, so no
-// individual test can accidentally spawn a real browser process regardless
-// of whether it remembered to mock openURLFunc.
+// Why it exists:
+//   Windows GitHub Actions runners were hanging in this package for 30+
+//   minutes. The root cause was that several tests could reach code paths
+//   that call exec.Command("rundll32", ...) (via the default openURLFunc)
+//   or bufio.Scanner.Scan(os.Stdin) (via the default stdin reader) — both
+//   of which can block indefinitely on Windows and cannot be safely
+//   cancelled. By neutralizing every such code path at the package level,
+//   we make the test suite completely hermetic regardless of host OS.
 //
 // This follows CLAUDE.md's "cross-platform subprocess helpers in tests"
-// pattern: wrap dangerous subprocess behavior behind a test-mode guard.
+// pattern: wrap dangerous subprocess/stdin behavior behind a test-mode
+// guard.
 
 import (
+	"fmt"
 	"os"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestMain(m *testing.M) {
-	// Force pkg/browser into its test short-circuit regardless of whether
-	// the CI environment provides CI=true / GITHUB_ACTIONS=true. This is a
-	// safety net for tests that reach browserWebflowInteractive without
-	// explicitly mocking openURLFunc; on Windows CI a real browser launch
-	// attempt can hang the test runner.
-	//
-	// os.Setenv is used here (not t.Setenv) because TestMain does not
-	// receive a *testing.T, so t.Setenv is not an option. The variable is
-	// set process-wide for the lifetime of the test binary, which is the
-	// desired scope.
+	// Force pkg/browser into its GO_TEST short-circuit as a belt-and-
+	// suspenders safety net in case any code somehow bypasses openURLFunc.
 	//nolint:lintroller // TestMain has no *testing.T; os.Setenv is the only option.
 	_ = os.Setenv("GO_TEST", "1")
+
+	// Install safe, deterministic defaults for every webflow override var.
+	// Tests that need specific behavior override these and restore them
+	// (the "original" they restore is THIS default, which is still safe).
+	//
+	// - openURLFunc: no-op so no test can spawn a real browser process.
+	// - webflowIsTTYFunc: return false so no test can enter the bubbletea
+	//   spinner branch by default. Tests that want the spinner override
+	//   this explicitly.
+	// - webflowStdinIsReadableFunc: return false so no test can start the
+	//   blocking stdin scanner goroutine on real os.Stdin. Tests that
+	//   exercise the stdin branch call overrideStdinReadable(t).
+	// - runSpinnerProgramFunc: fail-loud so any test that accidentally
+	//   reaches the real spinner path fails fast with a clear diagnostic
+	//   rather than hanging or producing unpredictable output.
+	openURLFunc = func(_ string) error { return nil }
+	webflowIsTTYFunc = func() bool { return false }
+	webflowStdinIsReadableFunc = func() bool { return false }
+	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
+		return model, fmt.Errorf("runSpinnerProgramFunc default reached in test: a test entered the TTY branch without overriding runSpinnerProgramFunc")
+	}
 
 	os.Exit(m.Run())
 }
