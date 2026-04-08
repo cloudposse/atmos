@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1374,48 +1376,149 @@ func TestBrowserWebflowNonInteractive_EmptyStdinCode(t *testing.T) {
 	assert.Contains(t, err.Error(), "authorization code is required")
 }
 
-// TestWaitForCallbackWithSpinner_BubbleteaFallback exercises the TTY branch of
-// waitForCallbackWithSpinner. In the test environment, stderr is usually not a
-// real TTY, so tea.NewProgram.Run() returns an error and the function takes
-// the explicit fallback path (webflow.go:358-372), draining the goroutine and
-// then calling waitForCallbackSimple. This test forces webflowIsTTYFunc=true
-// and unsets CI env vars so the spinner code is actually reached.
-func TestWaitForCallbackWithSpinner_BubbleteaFallback(t *testing.T) {
-	// telemetry.IsCI() uses os.LookupEnv, which returns ok=true even for
-	// empty-string values — so t.Setenv("CI", "") does NOT defeat CI detection.
-	// We must actually unset each variable and restore it on cleanup.
-	for _, envVar := range []string{
-		"CI", "GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "TRAVIS", "JENKINS_URL",
-		"BUILDKITE", "APPVEYOR", "DRONE", "TEAMCITY_VERSION", "BITBUCKET_BUILD_NUMBER",
-		"BITRISE_BUILD_URL", "CODEBUILD_BUILD_ID", "TF_BUILD", "SEMAPHORE",
-	} {
-		orig, had := os.LookupEnv(envVar)
-		_ = os.Unsetenv(envVar)
-		if had {
-			t.Cleanup(func() { _ = os.Setenv(envVar, orig) })
-		}
-	}
+// TestBrowserWebflow_ForceTTYDispatchesToInteractive verifies that when
+// viper's force-tty flag is set, browserWebflow routes to the interactive
+// path even if the underlying TTY check would say otherwise. This honors
+// --force-tty / ATMOS_FORCE_TTY=true for screenshot generation and similar
+// workflows where auto-detection fails.
+func TestBrowserWebflow_ForceTTYDispatchesToInteractive(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	// Force TTY via viper; webflowIsTTYFunc still returns false so only the
+	// force-tty branch can lead to the interactive path.
+	viper.Set("force-tty", true)
+	defer viper.Set("force-tty", false)
 
 	origTTY := webflowIsTTYFunc
-	webflowIsTTYFunc = func() bool { return true }
+	webflowIsTTYFunc = func() bool { return false }
 	defer func() { webflowIsTTYFunc = origTTY }()
 
+	// Trace which internal function was called by mocking the spinner runner
+	// to observe whether browserWebflow reached the interactive branch
+	// (interactive path calls runSpinnerProgramFunc inside
+	// waitForCallbackWithSpinner).
+	interactiveReached := false
+	origRun := runSpinnerProgramFunc
+	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
+		interactiveReached = true
+		model.done = true
+		model.result = &webflowSpinnerTokenResult{
+			resp: &webflowTokenResponse{
+				AccessToken: webflowAccessToken{AccessKeyID: "AKID_FORCE_TTY", SecretAccessKey: "S"},
+				ExpiresIn:   900,
+			},
+		}
+		return model, nil
+	}
+	defer func() { runSpinnerProgramFunc = origRun }()
+
+	// Unset CI env vars so waitForCallbackWithSpinner does NOT divert to the
+	// simple path for CI reasons. This test isolates the force-tty effect.
+	unsetCIEnvVars(t)
+
+	// Mock display dialog to avoid writing to stderr during tests.
+	origDisplay := displayWebflowDialogFunc
+	displayWebflowDialogFunc = func(_ string) {}
+	defer func() { displayWebflowDialogFunc = origDisplay }()
+
+	// Mock openURLFunc to avoid attempting to launch a real browser.
+	origOpen := openURLFunc
+	openURLFunc = func(_ string) error { return nil }
+	defer func() { openURLFunc = origOpen }()
+
 	identity := &userIdentity{
-		name:  "test-spinner-fallback",
-		realm: "realm",
-		config: &schema.Identity{
-			Kind: "aws/user",
-		},
+		name:   "test-force-tty",
+		realm:  "realm",
+		config: &schema.Identity{Kind: "aws/user"},
 	}
 
-	// Mock token endpoint.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = types.WithAllowPrompts(ctx, true)
+
+	creds, err := identity.browserWebflow(ctx, "us-east-2")
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+	assert.Equal(t, "AKID_FORCE_TTY", creds.AccessKeyID)
+	assert.True(t, interactiveReached, "force-tty should have routed browserWebflow to the interactive path + spinner")
+}
+
+// TestWaitForCallbackWithSpinner_ForceTTYOutsideCI verifies that the spinner
+// branch is taken when force-tty is set AND we are not in CI, even if the
+// underlying TTY check returns false.
+func TestWaitForCallbackWithSpinner_ForceTTYOutsideCI(t *testing.T) {
+	unsetCIEnvVars(t)
+
+	viper.Set("force-tty", true)
+	defer viper.Set("force-tty", false)
+
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return false }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	spinnerRan := false
+	origRun := runSpinnerProgramFunc
+	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
+		spinnerRan = true
+		model.done = true
+		model.result = &webflowSpinnerTokenResult{
+			resp: &webflowTokenResponse{
+				AccessToken: webflowAccessToken{AccessKeyID: "AKID_FT_SP", SecretAccessKey: "S"},
+			},
+		}
+		return model, nil
+	}
+	defer func() { runSpinnerProgramFunc = origRun }()
+
+	identity := &userIdentity{
+		name:   "test-ft-spinner",
+		realm:  "realm",
+		config: &schema.Identity{Kind: "aws/user"},
+	}
+
+	resultCh := make(chan webflowResult)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "AKID_FT_SP", resp.AccessToken.AccessKeyID)
+	assert.True(t, spinnerRan, "force-tty should have enabled the spinner branch outside CI")
+}
+
+// TestWaitForCallbackWithSpinner_ForceTTYInsideCISuppressesSpinner verifies
+// that CI suppression wins over force-tty: when CI is detected, the spinner
+// does NOT run even if force-tty is set. This protects CI logs from being
+// spammed with spinner escape sequences when a real TTY is attached.
+func TestWaitForCallbackWithSpinner_ForceTTYInsideCISuppressesSpinner(t *testing.T) {
+	unsetCIEnvVars(t)
+
+	viper.Set("force-tty", true)
+	defer viper.Set("force-tty", false)
+
+	// Simulate CI environment.
+	t.Setenv("CI", "true")
+
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return false }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	spinnerRan := false
+	origRun := runSpinnerProgramFunc
+	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
+		spinnerRan = true
+		return model, nil
+	}
+	defer func() { runSpinnerProgramFunc = origRun }()
+
+	// Set up a token endpoint so the simple path can succeed.
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"accessToken": map[string]string{
-				"accessKeyId":     "AKID_FB",
-				"secretAccessKey": "SECRET_FB",
-				"sessionToken":    "TOKEN_FB",
+				"accessKeyId": "AKID_CI_SIMPLE", "secretAccessKey": "S", "sessionToken": "T",
 			},
 			"expiresIn": 900,
 		})
@@ -1431,11 +1534,197 @@ func TestWaitForCallbackWithSpinner_BubbleteaFallback(t *testing.T) {
 	}
 	defer func() { defaultHTTPClient = origClient }()
 
-	// Pre-populated result channel so the goroutine resolves immediately.
-	// Whether tea.NewProgram succeeds or fails in the test environment, the
-	// function should return valid credentials: if it succeeds, the model's
-	// Update handles the token result; if it fails, the fallback drain path
-	// picks it up. Either path exercises previously-uncovered lines.
+	identity := &userIdentity{
+		name:   "test-ft-ci",
+		realm:  "realm",
+		config: &schema.Identity{Kind: "aws/user"},
+	}
+
+	resultCh := make(chan webflowResult, 1)
+	resultCh <- webflowResult{code: "ci-simple-code", state: "state"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "AKID_CI_SIMPLE", resp.AccessToken.AccessKeyID)
+	assert.False(t, spinnerRan, "CI should suppress the spinner even when force-tty is set")
+}
+
+// unsetCIEnvVars removes every CI-detection environment variable telemetry.IsCI
+// inspects so that tests wanting to reach the TTY branch of
+// waitForCallbackWithSpinner do not get short-circuited to the simple path.
+// Note that t.Setenv(...,"") does NOT work here because telemetry uses
+// os.LookupEnv, which returns ok=true for empty-string values.
+func unsetCIEnvVars(t *testing.T) {
+	t.Helper()
+	for _, envVar := range []string{
+		"CI", "GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "TRAVIS", "JENKINS_URL",
+		"BUILDKITE", "APPVEYOR", "DRONE", "TEAMCITY_VERSION", "BITBUCKET_BUILD_NUMBER",
+		"BITRISE_BUILD_URL", "CODEBUILD_BUILD_ID", "TF_BUILD", "SEMAPHORE",
+	} {
+		orig, had := os.LookupEnv(envVar)
+		_ = os.Unsetenv(envVar)
+		if had {
+			t.Cleanup(func() { _ = os.Setenv(envVar, orig) })
+		}
+	}
+}
+
+// TestWaitForCallbackWithSpinner_SpinnerSuccess exercises the TTY success
+// branch of waitForCallbackWithSpinner by stubbing runSpinnerProgramFunc to
+// simulate bubbletea returning a completed model with a populated result.
+// The function must forward that result's response/error back to the caller.
+func TestWaitForCallbackWithSpinner_SpinnerSuccess(t *testing.T) {
+	unsetCIEnvVars(t)
+
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return true }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	origRun := runSpinnerProgramFunc
+	wantResp := &webflowTokenResponse{
+		AccessToken: webflowAccessToken{
+			AccessKeyID:     "AKID_SPINNER_OK",
+			SecretAccessKey: "SECRET_SPINNER_OK",
+			SessionToken:    "TOKEN_SPINNER_OK",
+		},
+		ExpiresIn: 900,
+	}
+	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
+		// Simulate the tea update loop delivering the token-result message.
+		model.done = true
+		model.result = &webflowSpinnerTokenResult{resp: wantResp}
+		return model, nil
+	}
+	defer func() { runSpinnerProgramFunc = origRun }()
+
+	identity := &userIdentity{
+		name:   "test-spinner-success",
+		realm:  "realm",
+		config: &schema.Identity{Kind: "aws/user"},
+	}
+
+	// resultCh never needs to fire because the stubbed spinner produces the
+	// final state directly. The goroutine inside
+	// startSpinnerExchangeGoroutine will block on <-resultCh / <-ctx.Done(),
+	// which is fine: the outer function returns based on finalModel alone.
+	resultCh := make(chan webflowResult)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "AKID_SPINNER_OK", resp.AccessToken.AccessKeyID)
+	assert.Equal(t, "SECRET_SPINNER_OK", resp.AccessToken.SecretAccessKey)
+}
+
+// TestWaitForCallbackWithSpinner_SpinnerNilResult exercises the
+// finalModel.result == nil branch: the spinner exits cleanly (no run error)
+// but left the model's result unset. The function must surface
+// ErrWebflowAuthFailed.
+func TestWaitForCallbackWithSpinner_SpinnerNilResult(t *testing.T) {
+	unsetCIEnvVars(t)
+
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return true }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	origRun := runSpinnerProgramFunc
+	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
+		model.done = true
+		// Deliberately leave model.result == nil.
+		return model, nil
+	}
+	defer func() { runSpinnerProgramFunc = origRun }()
+
+	identity := &userIdentity{
+		name:   "test-spinner-nil-result",
+		realm:  "realm",
+		config: &schema.Identity{Kind: "aws/user"},
+	}
+
+	resultCh := make(chan webflowResult)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebflowAuthFailed)
+}
+
+// TestWaitForCallbackWithSpinner_SpinnerFallback exercises the fallback path:
+// runSpinnerProgramFunc returns an error, triggering handleSpinnerFallback
+// which drains the exchange goroutine. To make the drain deterministic the
+// test pre-populates resultCh *and* uses a real token server, and crucially
+// uses a synchronization channel to ensure the exchange goroutine completes
+// (writes its result to tokenCh) BEFORE the fake spinner returns its error.
+// This eliminates the previously-observed race between resultCh being read
+// and the context being cancelled.
+func TestWaitForCallbackWithSpinner_SpinnerFallback(t *testing.T) {
+	unsetCIEnvVars(t)
+
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return true }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	identity := &userIdentity{
+		name:   "test-spinner-fallback",
+		realm:  "realm",
+		config: &schema.Identity{Kind: "aws/user"},
+	}
+
+	// Real mock token endpoint — exchange must succeed and return creds.
+	exchangeStarted := make(chan struct{}, 1)
+	exchangeDone := make(chan struct{}, 1)
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case exchangeStarted <- struct{}{}:
+		default:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_FB",
+				"secretAccessKey": "SECRET_FB",
+				"sessionToken":    "TOKEN_FB",
+			},
+			"expiresIn": 900,
+		})
+		select {
+		case exchangeDone <- struct{}{}:
+		default:
+		}
+	}))
+	defer tokenServer.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(tokenServer.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	// Fake spinner: wait for the exchange goroutine to finish its work,
+	// THEN return an error so handleSpinnerFallback drains a known-good
+	// tokenCh (no race between resultCh and context cancellation).
+	origRun := runSpinnerProgramFunc
+	runSpinnerProgramFunc = func(model webflowSpinnerModel) (tea.Model, error) {
+		<-exchangeDone
+		// Give the goroutine a tick to actually write to tokenCh after the
+		// HTTP response is sent (tokenCh send happens after Do() returns).
+		time.Sleep(20 * time.Millisecond)
+		return model, fmt.Errorf("simulated tea run failure")
+	}
+	defer func() { runSpinnerProgramFunc = origRun }()
+
 	resultCh := make(chan webflowResult, 1)
 	resultCh <- webflowResult{code: "fallback-code", state: "state"}
 
@@ -1443,13 +1732,13 @@ func TestWaitForCallbackWithSpinner_BubbleteaFallback(t *testing.T) {
 	defer cancel()
 
 	resp, err := identity.waitForCallbackWithSpinner(ctx, resultCh, "us-east-2", "verifier", "http://127.0.0.1:8080/oauth/callback")
-	if err != nil {
-		// Acceptable outcomes when running in a non-TTY test environment:
-		// the fallback path may hit an error after draining. Log the details
-		// so failures are diagnosable but don't fail the test on this alone.
-		t.Logf("waitForCallbackWithSpinner returned error (acceptable in non-TTY): %v", err)
-		return
+	// Ensure the token server was actually hit.
+	select {
+	case <-exchangeStarted:
+	default:
+		t.Fatal("exchange goroutine did not hit the token server")
 	}
+	require.NoError(t, err, "fallback drain should return the goroutine's exchanged credentials")
 	require.NotNil(t, resp)
 	assert.Equal(t, "AKID_FB", resp.AccessToken.AccessKeyID)
 }
@@ -1571,11 +1860,114 @@ func TestBrowserWebflowInteractive_OpenURLFailure(t *testing.T) {
 	assert.True(t, openCalled, "openURLFunc should have been invoked")
 }
 
+// TestBrowserWebflowNonInteractive_ClosedStdinAllowsCallback is a regression
+// test for the bug where a closed/piped stdin would abort a valid OAuth2
+// callback flow. Previously readStdinAuthCode sent ErrWebflowStdinClosed on
+// errCh the moment Scanner.Scan() returned false, and the enclosing select
+// picked that error before the network callback could arrive.
+//
+// Under the fix, either:
+//  1. browserWebflowNonInteractive skips the stdin reader entirely when
+//     webflowStdinIsReadableFunc reports false (the default for non-TTY
+//     stdin), OR
+//  2. if the reader IS started with an empty/EOF source, the goroutine exits
+//     silently without sending on errCh.
+//
+// This test verifies path (1) — real-world CI case where stdin is not a TTY.
+func TestBrowserWebflowNonInteractive_ClosedStdinAllowsCallback(t *testing.T) {
+	// Do NOT call blockStdin / stdinReaderWith / overrideStdinReadable.
+	// Leave webflowStdinIsReadableFunc at its default: since in `go test`
+	// os.Stdin is not a TTY, defaultWebflowStdinIsReadable returns false.
+	// browserWebflowNonInteractive should therefore skip the stdin goroutine
+	// and wait purely on the callback.
+
+	identity := &userIdentity{
+		name:   "test-closed-stdin-callback",
+		realm:  "realm",
+		config: &schema.Identity{Kind: "aws/user"},
+	}
+
+	// Mock token endpoint returning valid credentials.
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_CLOSED_STDIN",
+				"secretAccessKey": "SECRET_CLOSED_STDIN",
+				"sessionToken":    "TOKEN_CLOSED_STDIN",
+			},
+			"expiresIn": 900,
+		})
+	}))
+	defer tokenServer.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = url.Parse(tokenServer.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	// Fire the OAuth callback asynchronously once the display function is
+	// invoked (that's the signal the callback server is already listening).
+	origDisplay := displayWebflowPlainTextFunc
+	displayWebflowPlainTextFunc = func(authURL string) {
+		go func() {
+			time.Sleep(30 * time.Millisecond)
+			simulateCallback(t, authURL, "closed-stdin-code")
+		}()
+	}
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	creds, err := identity.browserWebflowNonInteractive(ctx, "us-east-2")
+	require.NoError(t, err, "callback path must succeed even with unreadable stdin")
+	require.NotNil(t, creds)
+	assert.Equal(t, "AKID_CLOSED_STDIN", creds.AccessKeyID)
+}
+
+// TestReadStdinAuthCode_CleanEOFExitsSilently verifies the internal contract:
+// readStdinAuthCode must NOT send on errCh when Scanner.Scan() returns false
+// with a nil scanner.Err() (clean EOF). The goroutine should simply exit so
+// the enclosing select can continue waiting for the real OAuth callback.
+func TestReadStdinAuthCode_CleanEOFExitsSilently(t *testing.T) {
+	// Use a pipe whose writer we close immediately: the reader sees clean
+	// EOF (not a read error).
+	overrideStdinReadable(t)
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	orig := webflowStdinReader
+	webflowStdinReader = r
+	t.Cleanup(func() {
+		_ = r.Close()
+		webflowStdinReader = orig
+	})
+	_ = w.Close() // Clean EOF for the reader.
+
+	codeCh, errCh := readStdinAuthCode()
+
+	// Neither channel should fire within a short window: the goroutine must
+	// have exited silently.
+	select {
+	case code := <-codeCh:
+		t.Fatalf("unexpected code on codeCh: %q", code)
+	case e := <-errCh:
+		t.Fatalf("unexpected error on errCh: %v — clean EOF must not be reported", e)
+	case <-time.After(200 * time.Millisecond):
+		// Expected: goroutine exited silently.
+	}
+}
+
 // TestBrowserWebflowNonInteractive_ReadAuthCodeFailure verifies that a
 // scanner error (reader closed unexpectedly) surfaces as
 // ErrWebflowReadAuthCodeFailed.
 func TestBrowserWebflowNonInteractive_ReadAuthCodeFailure(t *testing.T) {
 	// Use a pipe whose read end we close immediately to force scanner.Err().
+	overrideStdinReadable(t)
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	_ = w.Close()

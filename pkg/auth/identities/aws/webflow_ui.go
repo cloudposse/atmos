@@ -89,6 +89,20 @@ type webflowSpinnerTokenResult struct {
 	err  error
 }
 
+// defaultRunSpinnerProgram is the production implementation backing
+// runSpinnerProgramFunc. It constructs a tea.NewProgram bound to stderr and
+// runs it. Kept as a separate function so tests can reference it when
+// restoring the default after overriding the package-level var. The model
+// is intentionally taken by value — bubbletea requires passing the model
+// into tea.NewProgram by value (the framework clones state internally), so
+// a pointer receiver would double-indirect and confuse the API contract.
+//
+//nolint:gocritic // See above: bubbletea's tea.NewProgram takes its model by value.
+func defaultRunSpinnerProgram(model webflowSpinnerModel) (tea.Model, error) {
+	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr))
+	return prog.Run()
+}
+
 // newWebflowSpinnerModel constructs the bubbletea model for the auth spinner.
 func newWebflowSpinnerModel(tokenCh <-chan webflowSpinnerTokenResult, cancel context.CancelFunc) webflowSpinnerModel {
 	s := spinner.New()
@@ -157,6 +171,13 @@ func (m webflowSpinnerModel) View() string {
 
 //nolint:gocritic // Bubbletea framework requires value receivers, not pointer receivers.
 func (m webflowSpinnerModel) checkResult() tea.Cmd {
+	// Poll tokenCh cooperatively so the bubbletea update loop keeps running
+	// (spinner ticks and ctrl+c handling stay responsive). On poll timeout we
+	// re-arm by synchronously invoking a freshly-returned tea.Cmd via
+	// m.checkResult()(). Recursion depth is bounded by
+	// webflowCallbackTimeout / webflowSpinnerPollInterval
+	// (5 min / 100 ms ≈ 3000 frames worst case, well below Go's goroutine
+	// stack limits). This is the standard bubbletea polling idiom.
 	return func() tea.Msg {
 		select {
 		case res := <-m.tokenCh:

@@ -30,14 +30,32 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return m.doFunc(req)
 }
 
+// overrideStdinReadable forces webflowStdinIsReadableFunc to return true for
+// the duration of the test. Required whenever a test swaps webflowStdinReader
+// for a non-os.Stdin reader (pipe, fake, etc.) because the default readability
+// check only returns true for a real terminal os.Stdin. Without this override,
+// the stdin reader goroutine in browserWebflowNonInteractive is never started
+// and stdin-driven tests time out on the callback.
+func overrideStdinReadable(t *testing.T) {
+	t.Helper()
+	orig := webflowStdinIsReadableFunc
+	webflowStdinIsReadableFunc = func() bool { return true }
+	t.Cleanup(func() { webflowStdinIsReadableFunc = orig })
+}
+
 // blockStdin swaps os.Stdin for a pipe whose write end is never written to,
 // so callers reading from stdin block indefinitely. Used by non-interactive
 // webflow tests to prevent the stdin-scanner goroutine from winning the
 // select race (in `go test` the real os.Stdin is closed, producing an
 // immediate EOF). Cleanup restores the original os.Stdin and closes the pipe,
 // which unblocks any stranded reader so it can exit.
+//
+// Also overrides webflowStdinIsReadableFunc so browserWebflowNonInteractive
+// actually starts its reader goroutine; the default readability check only
+// accepts a real terminal os.Stdin.
 func blockStdin(t *testing.T) {
 	t.Helper()
+	overrideStdinReadable(t)
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	orig := webflowStdinReader
@@ -53,9 +71,11 @@ func blockStdin(t *testing.T) {
 
 // stdinReaderWith replaces webflowStdinReader with a pipe whose write end is
 // returned to the caller, enabling tests to inject bytes and then close the
-// writer. Used by the stdin-driven authorization-code tests.
+// writer. Used by the stdin-driven authorization-code tests. Also overrides
+// webflowStdinIsReadableFunc so the reader goroutine is actually started.
 func stdinReaderWith(t *testing.T) *os.File {
 	t.Helper()
+	overrideStdinReadable(t)
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	orig := webflowStdinReader

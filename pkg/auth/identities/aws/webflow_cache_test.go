@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -176,8 +177,8 @@ func TestLoadRefreshCache_EmptyRefreshToken(t *testing.T) {
 
 	cache, loadErr := identity.loadRefreshCache()
 	assert.Nil(t, cache)
-	assert.Error(t, loadErr)
-	assert.Contains(t, loadErr.Error(), "empty")
+	require.Error(t, loadErr)
+	assert.ErrorIs(t, loadErr, errUtils.ErrWebflowEmptyCachedToken)
 }
 
 func TestDeleteRefreshCache_NonExistent(t *testing.T) {

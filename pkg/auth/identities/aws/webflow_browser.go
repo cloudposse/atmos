@@ -10,23 +10,24 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
-
-	tea "github.com/charmbracelet/bubbletea"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // browserWebflow performs the full OAuth2 PKCE browser authentication flow.
 func (i *userIdentity) browserWebflow(ctx context.Context, region string) (*types.AWSCredentials, error) {
 	allowPrompts := types.AllowPrompts(ctx)
 
-	if allowPrompts && webflowIsTTYFunc() {
+	// Use webflowIsInteractive so --force-tty / ATMOS_FORCE_TTY=true drives
+	// the interactive path even in environments where TTY auto-detection
+	// fails (e.g. screenshot generation, nested PTY scenarios).
+	if allowPrompts && webflowIsInteractive() {
 		return i.browserWebflowInteractive(ctx, region)
 	}
 
@@ -81,9 +82,23 @@ func (i *userIdentity) browserWebflowNonInteractive(ctx context.Context, region 
 	// Display URL for manual use.
 	displayWebflowPlainTextFunc(setup.authURL)
 
-	// Read authorization code from stdin in a goroutine while waiting for
-	// the callback server, so either source can satisfy the request.
-	codeCh, errCh := readStdinAuthCode()
+	// Only start the stdin reader when stdin can actually produce user input.
+	// In piped/closed stdin environments (CI, `cmd < file`, `go test`), reading
+	// os.Stdin would return EOF immediately and incorrectly abort the valid
+	// callback flow before the OAuth2 callback has a chance to complete.
+	//
+	// NOTE (known limitation): if the callback wins the race in an interactive
+	// environment, the stdin reader goroutine remains parked on
+	// bufio.Scanner.Scan() because there is no cancellation primitive for a
+	// blocking os.Stdin read. This is acceptable for short-lived
+	// `atmos auth login` invocations (bounded by process exit); repeated auth
+	// calls within a single long-running process could theoretically have the
+	// leaked goroutine steal a later stdin byte.
+	var codeCh <-chan string
+	var errCh <-chan error
+	if webflowStdinIsReadableFunc() {
+		codeCh, errCh = readStdinAuthCode()
+	}
 	return i.awaitNonInteractiveAuthCode(ctx, setup, codeCh, errCh)
 }
 
@@ -130,11 +145,28 @@ func (i *userIdentity) prepareWebflowSession(ctx context.Context, region string)
 
 // readStdinAuthCode spawns a goroutine that reads a single line from
 // webflowStdinReader and delivers either a code or an error via channels.
+//
+// A clean EOF (scanner.Scan returns false with no underlying error) is NOT
+// reported on errCh: the goroutine exits silently so the enclosing select
+// can continue waiting for the OAuth callback or context cancellation.
+// Treating EOF as a fatal error would incorrectly abort a valid callback
+// flow in any environment where stdin is closed/piped at the moment the
+// reader is started — which is the common case for this non-interactive
+// fallback (CI, screenshot capture, `cmd < /dev/null`).
+//
+// Only three outcomes surface to the caller:
+//   - codeCh: a non-empty line was read (user pasted a code)
+//   - errCh(ErrWebflowCodeRequired): the user pressed enter without typing
+//   - errCh(ErrWebflowReadAuthCodeFailed): a non-EOF read error
 func readStdinAuthCode() (<-chan string, <-chan error) {
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		fmt.Fprintf(os.Stderr, "Authorization code: ")
+		// Route the prompt through the UI layer so it is subject to the
+		// same stream abstraction (masking, TTY handling, test capture) as
+		// the rest of atmos's stderr output. See CLAUDE.md §"I/O and UI
+		// Usage": never use fmt.Fprintf(os.Stderr, ...).
+		ui.Write("Authorization code: ")
 		scanner := bufio.NewScanner(webflowStdinReader)
 		if scanner.Scan() {
 			code := strings.TrimSpace(scanner.Text())
@@ -149,7 +181,8 @@ func readStdinAuthCode() (<-chan string, <-chan error) {
 			errCh <- wrapWebflowErr(errUtils.ErrWebflowReadAuthCodeFailed, err)
 			return
 		}
-		errCh <- errUtils.ErrWebflowStdinClosed
+		// Clean EOF — silently exit, leaving the enclosing select to wait
+		// for the callback server or context cancellation.
 	}()
 	return codeCh, errCh
 }
@@ -187,7 +220,11 @@ func (i *userIdentity) exchangeAndProcess(ctx context.Context, setup *webflowSes
 
 // waitForCallbackWithSpinner waits for the OAuth2 callback with a spinner UI.
 func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh <-chan webflowResult, region, verifier, redirectURI string) (*webflowTokenResponse, error) {
-	if !webflowIsTTYFunc() || telemetry.IsCI() {
+	// Run the spinner only when we have an interactive terminal (or
+	// --force-tty) AND we are NOT in CI. CI suppression is preserved even
+	// when a real TTY is attached, because spinner escape sequences pollute
+	// CI logs.
+	if !webflowIsInteractive() || telemetry.IsCI() {
 		return i.waitForCallbackSimple(ctx, resultCh, region, verifier, redirectURI)
 	}
 
@@ -196,8 +233,7 @@ func (i *userIdentity) waitForCallbackWithSpinner(ctx context.Context, resultCh 
 
 	tokenCh := startSpinnerExchangeGoroutine(ctx, resultCh, region, verifier, redirectURI)
 
-	prog := tea.NewProgram(newWebflowSpinnerModel(tokenCh, cancel), tea.WithOutput(os.Stderr))
-	finalModel, err := prog.Run()
+	finalModel, err := runSpinnerProgramFunc(newWebflowSpinnerModel(tokenCh, cancel))
 	if err != nil {
 		return i.handleSpinnerFallback(&spinnerFallbackParams{
 			cancel: cancel, tokenCh: tokenCh, resultCh: resultCh,

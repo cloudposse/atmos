@@ -714,7 +714,6 @@ var (
 	// transient failures (HTTP 5xx, 429, network errors) must preserve the cache.
 	ErrWebflowRefreshTokenRevoked = errors.New("browser refresh token has been revoked")
 	ErrWebflowCodeRequired        = errors.New("authorization code is required")
-	ErrWebflowStdinClosed         = errors.New("no input received (stdin closed)")
 	ErrWebflowReadAuthCodeFailed  = errors.New("failed to read authorization code")
 	ErrWebflowAuthorizationError  = errors.New("authorization error")
 	ErrWebflowMissingCallbackCode = errors.New("missing authorization code in callback")

@@ -25,7 +25,7 @@ func exchangeCodeForCredentials(ctx context.Context, client HTTPClient, p exchan
 
 	body := url.Values{}
 	body.Set("client_id", webflowOAuthClientID)
-	body.Set("grant_type", webflowGrantTypeAuthCode)
+	body.Set(webflowGrantTypeKey, webflowGrantTypeAuthCode)
 	body.Set("code", p.code)
 	body.Set("code_verifier", p.codeVerifier)
 	body.Set("redirect_uri", p.redirectURI)
@@ -39,7 +39,7 @@ func exchangeRefreshToken(ctx context.Context, client HTTPClient, region, refres
 
 	body := url.Values{}
 	body.Set("client_id", webflowOAuthClientID)
-	body.Set("grant_type", webflowGrantTypeRefresh)
+	body.Set(webflowGrantTypeKey, webflowGrantTypeRefresh)
 	body.Set("refresh_token", refreshToken)
 
 	return callTokenEndpoint(ctx, client, region, body)
@@ -55,7 +55,7 @@ func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, bo
 	}
 
 	if statusCode != http.StatusOK {
-		return nil, decodeTokenErrorResponse(respBody, statusCode, endpoint, body.Get("grant_type"))
+		return nil, decodeTokenErrorResponse(respBody, statusCode, endpoint, body.Get(webflowGrantTypeKey))
 	}
 
 	return parseTokenSuccessResponse(respBody)
@@ -63,6 +63,14 @@ func callTokenEndpoint(ctx context.Context, client HTTPClient, region string, bo
 
 // doTokenRequest constructs and executes the HTTP request against the token
 // endpoint and returns the raw body bytes plus HTTP status code.
+//
+// SECURITY: Debug logging here MUST NOT include the request or response body.
+// The request body carries authorization codes, PKCE verifiers, and refresh
+// tokens; the response body carries AWS STS credentials (access key, secret
+// key, session token) and refresh tokens. Any body-level log becomes a secret
+// exfiltration path for users running `atmos --log-level=debug auth login`.
+// Only non-sensitive metadata (endpoint, grant_type, status code) may be
+// logged. If body-level diagnostics are ever needed, redact first.
 func doTokenRequest(ctx context.Context, client HTTPClient, endpoint, region string, body url.Values) ([]byte, int, error) {
 	encodedBody := body.Encode()
 
@@ -72,7 +80,10 @@ func doTokenRequest(ctx context.Context, client HTTPClient, endpoint, region str
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	log.Debug("Token exchange request", "endpoint", endpoint, "body", encodedBody)
+	log.Debug("Token exchange request",
+		"endpoint", endpoint,
+		webflowGrantTypeKey, body.Get(webflowGrantTypeKey),
+	)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -91,7 +102,10 @@ func doTokenRequest(ctx context.Context, client HTTPClient, endpoint, region str
 		return nil, resp.StatusCode, fmt.Errorf("%w: failed to read response: %w", errUtils.ErrWebflowTokenExchange, err)
 	}
 
-	log.Debug("Token exchange response", "status", resp.StatusCode, "body", string(respBody))
+	log.Debug("Token exchange response",
+		"endpoint", endpoint,
+		"status", resp.StatusCode,
+	)
 	return respBody, resp.StatusCode, nil
 }
 

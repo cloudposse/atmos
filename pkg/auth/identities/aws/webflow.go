@@ -19,6 +19,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/mattn/go-isatty"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/browser"
@@ -33,15 +35,18 @@ const (
 	webflowScope               = "openid"
 	webflowCodeChallengeMethod = "SHA-256"
 	webflowResponseType        = "code"
-	webflowGrantTypeAuthCode   = "authorization_code"
-	webflowGrantTypeRefresh    = "refresh_token"
-	webflowCallbackTimeout     = 5 * time.Minute
-	webflowTokenMaxBodyBytes   = 1 << 20 // 1 MB max response body.
-	webflowCacheSubdir         = "aws-webflow"
-	webflowCacheFilename       = "refresh.json"
-	webflowCacheDirPerms       = 0o700
-	webflowCacheFilePerms      = 0o600
-	webflowSessionDuration     = 12 * time.Hour
+	// The webflowGrantTypeKey constant is the form field name used in OAuth2
+	// token requests to advertise the grant type.
+	webflowGrantTypeKey      = "grant_type"
+	webflowGrantTypeAuthCode = "authorization_code"
+	webflowGrantTypeRefresh  = "refresh_token"
+	webflowCallbackTimeout   = 5 * time.Minute
+	webflowTokenMaxBodyBytes = 1 << 20 // 1 MB max response body.
+	webflowCacheSubdir       = "aws-webflow"
+	webflowCacheFilename     = "refresh.json"
+	webflowCacheDirPerms     = 0o700
+	webflowCacheFilePerms    = 0o600
+	webflowSessionDuration   = 12 * time.Hour
 	// Buffer before expiration at which webflowTokenRefreshBuffer triggers a refresh.
 	webflowTokenRefreshBuffer = 1 * time.Minute
 	// Byte length for generated state strings (CSRF protection).
@@ -122,6 +127,35 @@ var displayWebflowPlainTextFunc = displayWebflowDialogPlainText
 // for testing so unit tests can supply a controlled reader without mutating
 // the global os.Stdin (which causes data races with the reader goroutine).
 var webflowStdinReader io.Reader = os.Stdin
+
+// webflowStdinIsReadableFunc reports whether the current webflowStdinReader
+// can produce user input. In production this checks that os.Stdin is a real
+// terminal (not a closed fd, a pipe, or /dev/null), which would cause
+// scanner.Scan to immediately return EOF and incorrectly abort the callback
+// flow. Overridable for testing so pipe-based stdin fixtures can signal
+// "readable" to exercise the stdin paths.
+var webflowStdinIsReadableFunc = defaultWebflowStdinIsReadable
+
+// defaultWebflowStdinIsReadable returns true only when the current reader is
+// os.Stdin AND os.Stdin is attached to a real terminal. In piped/closed stdin
+// environments (CI, `cmd < file`, `go test` without -v) the return value is
+// false so browserWebflowNonInteractive can skip the stdin reader entirely
+// and wait on the OAuth callback instead.
+func defaultWebflowStdinIsReadable() bool {
+	// Only os.Stdin is checked; if tests substitute a different reader they
+	// must also override this function to advertise readability.
+	if webflowStdinReader != os.Stdin {
+		return false
+	}
+	return isatty.IsTerminal(os.Stdin.Fd()) || isatty.IsCygwinTerminal(os.Stdin.Fd())
+}
+
+// runSpinnerProgramFunc runs the bubbletea spinner program and returns the
+// final model plus any run error. Overridable for testing so unit tests can
+// deterministically force either the success path (valid finalModel, nil
+// error) or the fallback path (non-nil error) without relying on whether
+// tea.NewProgram.Run() happens to succeed in the current test environment.
+var runSpinnerProgramFunc = defaultRunSpinnerProgram
 
 // resolveCredentialsViaWebflow attempts to obtain AWS credentials via the OAuth2 browser flow.
 // It first tries to use a cached refresh token, then falls back to the full browser flow.
