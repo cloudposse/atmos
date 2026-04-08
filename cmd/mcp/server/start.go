@@ -279,8 +279,6 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 		BlockedTools:    atmosConfig.AI.Tools.BlockedTools,
 		YOLOMode:        atmosConfig.AI.Tools.YOLOMode,
 	}
-	// Use YOLO mode for MCP to avoid blocking on prompts (client handles permissions).
-	permConfig.YOLOMode = true
 	permChecker := permission.NewChecker(permConfig, permission.NewCLIPrompter())
 
 	// Create tool executor.
@@ -291,14 +289,22 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 }
 
 // getPermissionMode determines the permission mode from config.
+// Default behavior: require confirmation (prompt user).
+// Users must opt-out by setting require_confirmation: false.
 func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
 	if atmosConfig.AI.Tools.YOLOMode {
 		return permission.ModeYOLO
 	}
 
-	if atmosConfig.AI.Tools.RequireConfirmation != nil && *atmosConfig.AI.Tools.RequireConfirmation {
+	// Not set - default to prompting for security.
+	if atmosConfig.AI.Tools.RequireConfirmation == nil {
 		return permission.ModePrompt
 	}
 
+	if *atmosConfig.AI.Tools.RequireConfirmation {
+		return permission.ModePrompt
+	}
+
+	// Explicitly set to false - opt-out of prompting.
 	return permission.ModeAllow
 }
