@@ -38,7 +38,7 @@ AVAILABLE COMMANDS
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
       mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections
       packer [command]                       Manage packer-based machine images for multiple platforms
-      pro [command]                          Access premium features integrated with atmos-pro.com
+      pro [command] [EXPERIMENTAL]           Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
       show [command]                         Execute 'show' commands
       support                                Show Atmos support options
