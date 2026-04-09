@@ -14,7 +14,7 @@ jobs:
       - extras=s3-cache
       - private=false
     container:
-      image: ghcr.io/cloudposse/atmos:latest
+      image: ghcr.io/cloudposse/atmos:1.214.0
     permissions:
       contents: read
       id-token: write
