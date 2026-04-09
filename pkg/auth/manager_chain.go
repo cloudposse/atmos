@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/identities/ambient"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -17,8 +20,50 @@ import (
 // logKeyExpirationChain is the log key for expiration values in chain operations.
 const logKeyExpirationChain = "expiration"
 
+// processCredentialCache is a process-level in-memory cache for authenticated credentials.
+// Unlike keyring/file caches which persist across processes and may contain stale data,
+// this cache only holds credentials authenticated during the current process, so they are
+// guaranteed to be correct. This avoids redundant AssumeRole API calls when multiple
+// components in the same command share the same authentication chain (e.g., during
+// `atmos describe affected` which resolves many `!terraform.state` YAML functions).
+var processCredentialCache sync.Map // key: "realm:chain" string, value: *processCachedCreds
+
+// processCachedCreds holds credentials cached in-memory for the current process.
+type processCachedCreds struct {
+	credentials types.ICredentials
+}
+
+// resetProcessCredentialCache clears the process-level credential cache.
+// This is intended for use in tests to ensure isolation between test cases.
+func resetProcessCredentialCache() {
+	processCredentialCache.Range(func(key, _ any) bool {
+		processCredentialCache.Delete(key)
+		return true
+	})
+}
+
+// chainCacheKey returns a unique cache key for the current chain and realm.
+func (m *manager) chainCacheKey() string {
+	return m.realm.Value + ":" + strings.Join(m.chain, "->")
+}
+
 // authenticateChain performs credential chain authentication with bottom-up validation.
 func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICredentials, error) {
+	// Fast path: check process-level in-memory cache.
+	// Credentials authenticated during this process are guaranteed correct, unlike
+	// keyring/file caches which may hold stale data from previous runs.
+	cacheKey := m.chainCacheKey()
+	if entry, ok := processCredentialCache.Load(cacheKey); ok {
+		cached := entry.(*processCachedCreds)
+		if valid, _ := m.isCredentialValid("process-cache", cached.credentials); valid {
+			log.Debug("Using process-cached credentials for chain", "chain", m.chain)
+			return cached.credentials, nil
+		}
+		// Expired — remove stale entry.
+		processCredentialCache.Delete(cacheKey)
+		log.Debug("Process-cached credentials expired, re-authenticating", "chain", m.chain)
+	}
+
 	// Step 1: Bottom-up validation - check cached credentials from target to root.
 	validFromIndex := m.findFirstValidCachedCredentials()
 
@@ -31,7 +76,17 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	// has cached credentials. This ensures assume-role identities perform the actual
 	// AssumeRole API call rather than using potentially incorrect cached credentials
 	// (e.g., permission set creds incorrectly cached as assume-role creds).
-	return m.authenticateFromIndex(ctx, validFromIndex)
+	creds, err := m.authenticateFromIndex(ctx, validFromIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the successfully authenticated credentials for this process.
+	processCredentialCache.Store(cacheKey, &processCachedCreds{
+		credentials: creds,
+	})
+
+	return creds, nil
 }
 
 // findFirstValidCachedCredentials checks cached credentials from bottom to top of chain.
@@ -137,6 +192,16 @@ func (m *manager) authenticateFromIndex(ctx context.Context, startIndex int) (ty
 	// Handle special case: standalone AWS user identity.
 	if aws.IsStandaloneAWSUserChain(m.chain, m.config.Identities) {
 		return aws.AuthenticateStandaloneAWSUser(ctx, m.chain[0], m.identities)
+	}
+
+	// Handle special case: standalone AWS ambient identity.
+	if aws.IsStandaloneAWSAmbientChain(m.chain, m.config.Identities) {
+		return aws.AuthenticateStandaloneAWSAmbient(ctx, m.chain[0], m.identities)
+	}
+
+	// Handle special case: standalone generic ambient identity.
+	if ambient.IsStandaloneAmbientChain(m.chain, m.config.Identities) {
+		return ambient.AuthenticateStandaloneAmbient(ctx, m.chain[0], m.identities)
 	}
 
 	// Handle regular provider-based authentication chains.
@@ -568,10 +633,10 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
 	}
 
-	// AWS User identities don't require via configuration - they are standalone.
+	// Standalone identities don't require via configuration.
+	// AWS user, AWS ambient, and generic ambient identities are all standalone.
 	if identity.Via == nil {
-		if identity.Kind == "aws/user" {
-			// AWS User is standalone - just add it to the chain and return.
+		if identity.Kind == "aws/user" || identity.Kind == "aws/ambient" || identity.Kind == "ambient" {
 			*chain = append(*chain, identityName)
 			return nil
 		}

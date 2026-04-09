@@ -1,6 +1,8 @@
 package base
 
 import (
+	"strings"
+
 	"github.com/cloudposse/atmos/pkg/ai/types"
 )
 
@@ -38,4 +40,20 @@ func PrependSystemMessages(systemPrompt, atmosMemory string, messages []types.Me
 	result = append(result, messages...)
 
 	return result
+}
+
+// FormatMessagesAsPrompt concatenates conversation messages into a single prompt string.
+// User messages are included as-is; assistant messages are prefixed with "Assistant: ".
+// Used by CLI providers that pass the entire conversation as a single text prompt.
+func FormatMessagesAsPrompt(messages []types.Message) string {
+	var parts []string
+	for _, msg := range messages {
+		switch msg.Role {
+		case types.RoleUser:
+			parts = append(parts, msg.Content)
+		case types.RoleAssistant:
+			parts = append(parts, "Assistant: "+msg.Content)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }

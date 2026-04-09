@@ -1,10 +1,10 @@
-# Provenance Legend:                           
-#   ● [1] Defined in parent stack              
+# Provenance Legend:
+#   ● [1] Defined in parent stack
 #   ○ [N] Inherited/imported (N=2+ levels deep)
-#   ∴ Computed/templated                       
-                                               
+#   ∴ Computed/templated
+
 # Stack: orgs/acme/dev/us-east-1
-                                
+
 import:                                           # ○ [3] mixins/stage/dev.yaml:3
   - catalog/mock/defaults                         # ○ [3] mixins/stage/dev.yaml:3
   - mixins/stage/dev                              # ○ [2] orgs/acme/_defaults.yaml:3

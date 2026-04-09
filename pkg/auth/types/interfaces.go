@@ -299,12 +299,12 @@ type AuthManager interface {
 
 	// ExecuteIntegration executes a named integration.
 	// This authenticates the integration's linked identity first, then executes the integration.
-	// Use this for explicit integration execution via `atmos auth ecr-login <integration>`.
+	// Use this for explicit integration execution via `atmos aws ecr login <integration>`.
 	ExecuteIntegration(ctx context.Context, integrationName string) error
 
 	// ExecuteIdentityIntegrations executes all linked integrations for an identity.
 	// This authenticates the identity first, then executes all its linked integrations.
-	// Use this for `atmos auth ecr-login --identity <identity>`.
+	// Use this for `atmos aws ecr login --identity <identity>`.
 	ExecuteIdentityIntegrations(ctx context.Context, identityName string) error
 
 	// GetIntegration returns the integration config by name.

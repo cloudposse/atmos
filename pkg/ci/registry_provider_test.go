@@ -48,6 +48,10 @@ func (m *mockProvider) OutputWriter() provider.OutputWriter {
 	return nil
 }
 
+func (m *mockProvider) ResolveBase() (*provider.BaseResolution, error) {
+	return nil, nil
+}
+
 func TestRegisterAndGet(t *testing.T) {
 	backup := testSaveAndClearRegistry()
 	defer testRestoreRegistry(backup)
