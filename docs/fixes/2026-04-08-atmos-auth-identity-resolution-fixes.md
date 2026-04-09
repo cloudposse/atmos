@@ -791,22 +791,25 @@ Stack names resolve to `data-staging` and `plat-staging` respectively.
 ### CLI regression tests
 
 `tests/test-cases/auth-identity-resolution-bugs.yaml` wires the fixtures
-into assertions that guard the exec-layer merge path and the non-leak
-guarantee for Category A callers. All three scenarios run through the full
-auth-manager path (no `--identity off`) using mock/aws credentials:
+into three assertions:
 
-- **`describe component mycomponent -s acme-dev`** (Issue #2293) — asserts
-  the imported `_defaults.yaml` default is present in the exec-layer merged
-  output (`auth.identities.dev-identity.default: true`).
+- **`describe component mycomponent -s acme-dev --identity off`**
+  (Issue #2293) — uses `--identity off` to disable auth and queries the
+  exec-layer merged output directly. Asserts
+  `auth.identities.dev-identity.default: true` is present, proving the
+  stack processor followed the `import:` chain into the excluded
+  `_defaults.yaml`. This test guards the exec-layer merge path only (not
+  the auth-manager scan variant).
 - **`describe component monitoring -s data-staging`** (Discussion #122
-  happy path) — asserts data-staging correctly sees its own default via the
-  full NO-SCAN auth-manager path.
+  happy path) — runs through the full NO-SCAN auth-manager path (no
+  `--identity off`). Asserts data-staging correctly sees its own default.
 - **`describe component eks -s plat-staging`** (Discussion #122 non-leak)
-  — asserts `data-default.default` is `null`, not `true`. This is the core
+  — runs through the full NO-SCAN auth-manager path (no `--identity off`).
+  Asserts `data-default.default` is `null`, not `true`. This is the core
   regression guard: if the scanner were still running inside the NO-SCAN
-  variant, it would pick up the `data-default.default: true` from the
-  foreign `data-staging` stack file and inject it here. The `null` assertion
-  proves the NO-SCAN variant never consults other stack files.
+  variant, it would pick up `data-default.default: true` from the foreign
+  `data-staging` stack file. The `null` assertion proves the NO-SCAN
+  variant never consults other stack files.
 
 ### Go unit tests
 
@@ -824,9 +827,10 @@ auth-manager path (no `--identity off`) using mock/aws credentials:
   glob; scanner must expand.
 - `TestLoadStackAuthDefaults_TemplatedImportSkipped` — Go-template import
   path; scanner must skip gracefully (same as today).
-- `TestLoadStackAuthDefaults_CurrentFileWinsOverImport` — when both the
-  importing file and the imported file declare defaults, the importing
-  file's default takes precedence.
+- `TestLoadStackAuthDefaults_ConflictingDefaultsAcrossImportAndFileDiscarded`
+  — when the importing file and the imported file declare defaults for
+  different identities, the merged view has two competing defaults; the
+  `allAgree` check detects the conflict and discards both (Issue #2072).
 - `TestLoadStackAuthDefaults_ImportedDefaultAgreesAcrossStacks` — two
   stacks import the same `_defaults.yaml`; `allAgree` passes.
 - `TestLoadStackAuthDefaults_RelativeImports` — `./` imports resolve

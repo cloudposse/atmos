@@ -684,11 +684,16 @@ auth:
 	assert.True(t, defaults["manifest-identity"], "scanner must skip templated imports gracefully and still surface static defaults from the same file")
 }
 
-func TestLoadStackAuthDefaults_CurrentFileWinsOverImport(t *testing.T) {
-	// When both the importing file and an imported file declare defaults for
-	// DIFFERENT identities, the importing file's default should win for the
-	// purpose of what the scanner reports for that file. (Matches Atmos
-	// inheritance: more specific overrides more general.)
+func TestLoadStackAuthDefaults_ConflictingDefaultsAcrossImportAndFileDiscarded(t *testing.T) {
+	// When the importing file and its imported file declare defaults for
+	// DIFFERENT identities, the merged view of that file contains two
+	// competing defaults. The top-level allAgree check detects the conflict
+	// and discards both — matching Issue #2072 behavior.
+	//
+	// This also serves as a proof that the import WAS followed: if the
+	// scanner had not seen the imported file, only `manifest-identity`
+	// would appear and allAgree would pass (returning a single default).
+	// The empty result proves both were seen and conflicted.
 	tmpDir := t.TempDir()
 	stacksDir := filepath.Join(tmpDir, "stacks")
 	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
@@ -716,19 +721,9 @@ auth:
 		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
 	}
 
-	// Both identities are in the file's merged view, which means TWO defaults
-	// were found. The allAgree check sees a conflict (two different identities)
-	// and discards both — correct pre-existing behavior from Issue #2072 for
-	// the case where a stack pair genuinely disagrees.
-	//
-	// The important assertion here is that the scanner DID see both (import
-	// was followed AND current file was read).
 	defaults, err := LoadStackAuthDefaults(atmosConfig)
 	require.NoError(t, err)
-	// The allAgree discard kicks in — the scanner correctly detects the conflict
-	// between manifest-identity and imported-identity within the merged view of
-	// the single file and returns empty.
-	assert.Empty(t, defaults, "when the merged view of a single file shows two competing defaults, allAgree discards them per Issue #2072")
+	assert.Empty(t, defaults, "two competing defaults from import + file must be discarded by allAgree (Issue #2072)")
 }
 
 func TestLoadStackAuthDefaults_ExplicitFalseRevokesImportedDefault(t *testing.T) {
@@ -881,101 +876,5 @@ import:
 	assert.True(t, defaults["relative-identity"], "./ imports must resolve against the importing file's directory")
 }
 
-func TestResolveAuthImportPaths_MapFormWithPath(t *testing.T) {
-	// Map-form imports (used for context-carrying imports) specify the path
-	// via a `path:` key. The scanner should extract that.
-	tmpDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "target.yaml"), []byte(""), 0o644))
-
-	imp := map[string]any{
-		"path":    "target",
-		"context": map[string]any{"key": "value"},
-	}
-	result := resolveAuthImportPaths(imp, filepath.Join(tmpDir, "importer.yaml"), tmpDir)
-	require.Len(t, result, 1)
-	assert.Equal(t, filepath.Join(tmpDir, "target.yaml"), result[0])
-}
-
-func TestResolveAuthImportPaths_UnknownType(t *testing.T) {
-	// Integer / nil / unrecognized types must return nil (skip gracefully).
-	assert.Nil(t, resolveAuthImportPaths(42, "/tmp/x.yaml", "/tmp"))
-	assert.Nil(t, resolveAuthImportPaths(nil, "/tmp/x.yaml", "/tmp"))
-	assert.Nil(t, resolveAuthImportPaths([]string{"a", "b"}, "/tmp/x.yaml", "/tmp"))
-}
-
-func TestLoadAuthWithImports_NonYAMLExtension(t *testing.T) {
-	// Non-YAML files should return nil without reading.
-	result := loadAuthWithImports("/tmp/readme.md", "/tmp", map[string]bool{})
-	assert.Nil(t, result)
-}
-
-func TestLoadAuthWithImports_NonexistentFile(t *testing.T) {
-	// Unreadable files return nil.
-	result := loadAuthWithImports("/nonexistent/path/file.yaml", "/tmp", map[string]bool{})
-	assert.Nil(t, result)
-}
-
-func TestResolveAuthImportPaths_EmptyStacksBasePathForNonRelative(t *testing.T) {
-	// Non-relative import with empty stacksBasePath cannot be resolved.
-	// This branch guards against tests/callers that forget to set StacksBaseAbsolutePath.
-	result := resolveAuthImportPaths("orgs/acme/_defaults", "/tmp/importer.yaml", "")
-	assert.Nil(t, result, "non-relative imports require a non-empty stacksBasePath")
-}
-
-func TestResolveAuthImportPaths_FallbackToYmlExtension(t *testing.T) {
-	// If the .yaml candidate does not exist, the resolver should fall back to .yml
-	// before giving up. This matches the two-extension convention Atmos stacks use.
-	tmpDir := t.TempDir()
-	// Write a .yml file (NOT .yaml) and try to import it without an extension.
-	ymlPath := filepath.Join(tmpDir, "defaults.yml")
-	require.NoError(t, os.WriteFile(ymlPath, []byte(""), 0o644))
-
-	result := resolveAuthImportPaths("defaults", filepath.Join(tmpDir, "importer.yaml"), tmpDir)
-	require.Len(t, result, 1, "resolver should fall back to .yml when .yaml is absent")
-	assert.Equal(t, ymlPath, result[0])
-}
-
-func TestResolveAuthImportPaths_NonExistentCandidate(t *testing.T) {
-	// Non-glob candidate that does not exist on disk, AND has no .yml fallback,
-	// should return nil. Exercises both the os.Stat miss and the fallback miss.
-	tmpDir := t.TempDir()
-	result := resolveAuthImportPaths("nonexistent-import", filepath.Join(tmpDir, "importer.yaml"), tmpDir)
-	assert.Nil(t, result)
-}
-
-func TestResolveAuthImportPaths_GlobNoMatches(t *testing.T) {
-	// A glob that matches nothing should return nil (not error).
-	tmpDir := t.TempDir()
-	result := resolveAuthImportPaths("mixins/*", filepath.Join(tmpDir, "importer.yaml"), tmpDir)
-	assert.Nil(t, result)
-}
-
-func TestExtractImportPathString_MapAnyAny(t *testing.T) {
-	// yaml.v3 may produce map[any]any for some tag states. The extractor must
-	// handle that variant in addition to map[string]any.
-	imp := map[any]any{
-		"path":    "target",
-		"context": map[any]any{"key": "value"},
-	}
-	assert.Equal(t, "target", extractImportPathString(imp))
-}
-
-func TestExtractImportPathString_MapAnyAnyNonStringPath(t *testing.T) {
-	// map[any]any with a non-string `path` value must return empty string.
-	imp := map[any]any{
-		"path": 42,
-	}
-	assert.Empty(t, extractImportPathString(imp))
-}
-
-func TestExtractImportPathString_MapStringAnyNonStringPath(t *testing.T) {
-	// map[string]any with a non-string `path` value must return empty string.
-	imp := map[string]any{
-		"path": 42,
-	}
-	assert.Empty(t, extractImportPathString(imp))
-}
-
-func TestExtractImportPathString_EmptyString(t *testing.T) {
-	assert.Empty(t, extractImportPathString(""))
-}
+// Helper edge-case tests for resolveAuthImportPaths, extractImportPathString,
+// and loadAuthWithImports are in stack_auth_helpers_test.go (table-driven).
