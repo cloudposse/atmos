@@ -208,33 +208,22 @@ func IsKnownWorkflowError(err error) bool {
 	return false
 }
 
-// checkAndMergeDefaultIdentity checks if there's a default identity configured in atmos.yaml or stack configs.
-// If a default identity is found in stack configs, it merges it into atmosConfig.Auth.
-// Stack defaults take precedence over atmos.yaml defaults (following Atmos inheritance model).
-// Returns true if a default identity exists after merging.
+// checkAndMergeDefaultIdentity checks if there's a default identity configured
+// in atmos.yaml. Previously this function also performed a global raw-YAML
+// pre-scan of every stack file to discover stack-level defaults, but that
+// behavior caused Issues #2293 and discussion #122 (see
+// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md) and has been
+// removed. Stack-level default identities are now resolved by the exec-layer
+// stack processor against the *specific* target stack, which correctly
+// follows `import:` chains without leaking defaults across unrelated stacks.
+//
+// This helper only reads `atmosConfig.Auth.Identities` — the stack processor
+// is expected to have already populated it for the target stack.
 func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
 	if len(atmosConfig.Auth.Identities) == 0 {
 		return false
 	}
 
-	// Always load stack configs - stack defaults take precedence over atmos.yaml.
-	stackDefaults, err := config.LoadStackAuthDefaults(atmosConfig)
-	if err != nil {
-		// On error, fall back to checking atmos.yaml defaults.
-		for _, identity := range atmosConfig.Auth.Identities {
-			if identity.Default {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Merge stack defaults into auth config (stack takes precedence).
-	if len(stackDefaults) > 0 {
-		config.MergeStackAuthDefaults(&atmosConfig.Auth, stackDefaults)
-	}
-
-	// Check if we have a default after merging.
 	for _, identity := range atmosConfig.Auth.Identities {
 		if identity.Default {
 			return true
