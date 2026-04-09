@@ -132,22 +132,48 @@ func CreateAuthManagerFromIdentity(
 	return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
 }
 
-// CreateAuthManagerFromIdentityWithAtmosConfig creates and authenticates an AuthManager from an identity name.
-// This version accepts the full atmosConfig to enable loading stack configs for default identities.
+// CreateAuthManagerFromIdentityWithAtmosConfig creates and authenticates an AuthManager from an
+// identity name using a pre-merged auth config.
 //
-// When identityName is empty and atmosConfig is provided:
-//   - Loads stack configuration files for auth identity defaults
-//   - Applies stack-level defaults on top of atmos.yaml defaults
-//   - When stack defaults are present, they override atmos.yaml identity defaults (stack > atmos.yaml)
+// **This is the NO-SCAN wrapper** — it delegates to `auth.CreateAndAuthenticateManagerWithAtmosConfig`
+// and never runs the global stack-file pre-scanner. Use this for Category A callers that have
+// already merged the target stack's auth section via `ExecuteDescribeComponent` /
+// `MergeComponentAuthFromConfig` (e.g. `atmos describe component`).
 //
-// This solves the chicken-and-egg problem where:
-//   - We need to know the default identity to authenticate
-//   - But stack configs are only loaded after authentication is configured
-//   - Stack-level defaults (auth.identities.*.default: true) would otherwise be ignored
+// For Category B callers (multi-stack commands with no specific target), use
+// `CreateAuthManagerFromIdentityWithStackScan` instead. Using the scan variant on a Category A
+// caller would reintroduce the Discussion #122 cross-stack leak. See
+// `docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md` for the full design rationale.
 func CreateAuthManagerFromIdentityWithAtmosConfig(
 	identityName string,
 	authConfig *schema.AuthConfig,
 	atmosConfig *schema.AtmosConfiguration,
 ) (auth.AuthManager, error) {
 	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, IdentityFlagSelectValue, atmosConfig)
+}
+
+// CreateAuthManagerFromIdentityWithStackScan creates and authenticates an AuthManager, first
+// running the global stack-file pre-scanner (Approach 2) to discover stack-level default
+// identities declared in `auth.identities.<name>.default: true`.
+//
+// **This is the SCAN wrapper** — it delegates to `auth.CreateAndAuthenticateManagerWithStackScan`.
+// Use it for Category B commands that legitimately have no target `(component, stack)` pair and
+// therefore cannot use the exec-layer merge path: `atmos describe stacks`,
+// `atmos describe affected`, `atmos describe dependents`, `atmos list affected`,
+// `atmos list instances`, `atmos aws security`, `atmos aws compliance`, and workflow execution.
+//
+// The scanner now follows `import:` chains, so stack-level defaults declared inside an imported
+// `_defaults.yaml` are visible even when that file is listed under `excluded_paths` — fixing
+// Issue #2293 for multi-stack commands. Conflict handling is unchanged: when two stacks declare
+// different defaults, both are discarded (matches Issue #2072's `allAgree` behavior).
+//
+// Category A callers (terraform/helmfile/describe component/nested auth) must NOT use this
+// variant. Running the scanner on top of a stack-scoped merged config reintroduces Discussion
+// #122's cross-stack leak.
+func CreateAuthManagerFromIdentityWithStackScan(
+	identityName string,
+	authConfig *schema.AuthConfig,
+	atmosConfig *schema.AtmosConfiguration,
+) (auth.AuthManager, error) {
+	return auth.CreateAndAuthenticateManagerWithStackScan(identityName, authConfig, IdentityFlagSelectValue, atmosConfig)
 }
