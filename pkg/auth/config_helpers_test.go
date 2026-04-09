@@ -621,6 +621,50 @@ func TestMergeComponentAuthFromConfig_ComponentDefaultOverridesGlobal(t *testing
 		"global default cleared by component-level override")
 	assert.True(t, result.Identities["component-id"].Default,
 		"component-level default must win")
+
+	// Isolation: the original globalAuth must NOT be mutated.
+	// MergeComponentAuthFromConfig copies via CopyGlobalAuthConfig before
+	// passing to MergeComponentAuthConfig, so clearExistingIdentityDefaults
+	// operates on the copy, not the caller's original.
+	assert.True(t, globalAuth.Identities["global-default"].Default,
+		"original globalAuth must remain untouched after merge (result→src isolation)")
+
+	// Reverse isolation: mutating the result must not affect globalAuth.
+	mutated := result.Identities["component-id"]
+	mutated.Kind = "MUTATED"
+	result.Identities["component-id"] = mutated
+	assert.Equal(t, "aws/assume-role", globalAuth.Identities["component-id"].Kind,
+		"mutating result must not leak back into globalAuth (src→result isolation)")
+}
+
+func TestMergeComponentAuthConfig_DoesNotMutateInput(t *testing.T) {
+	// MergeComponentAuthConfig copies globalAuthConfig internally, so the
+	// caller's original must remain untouched — even when called directly
+	// (not through the MergeComponentAuthFromConfig wrapper).
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"global-default": {Kind: "aws/assume-role", Default: true},
+		},
+	}
+
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"comp-default": map[string]any{"default": true},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	// Input must NOT be mutated.
+	assert.True(t, globalAuth.Identities["global-default"].Default,
+		"MergeComponentAuthConfig must not mutate its input globalAuthConfig")
+
+	// Result must have the component default applied.
+	assert.True(t, result.Identities["comp-default"].Default,
+		"component-level default must be applied in the result")
+	assert.False(t, result.Identities["global-default"].Default,
+		"global default must be cleared in the result when component declares its own")
 }
 
 func TestComponentAuthHasDefault_True(t *testing.T) {

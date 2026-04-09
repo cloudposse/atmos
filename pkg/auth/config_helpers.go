@@ -88,16 +88,21 @@ func MergeComponentAuthConfig(
 	globalAuthConfig *schema.AuthConfig,
 	componentAuthSection map[string]any,
 ) (*schema.AuthConfig, error) {
+	// Work on a copy so the caller's globalAuthConfig is never mutated.
+	// MergeComponentAuthFromConfig already passes a copy, but copying here
+	// makes MergeComponentAuthConfig safe for any future direct caller too.
+	workingGlobalAuth := CopyGlobalAuthConfig(globalAuthConfig)
+
 	// If the component declares its own default identity, clear any existing
-	// defaults from the global config so the component-level default wins.
+	// defaults from the working copy so the component-level default wins.
 	// This matches the precedence pattern used by MergeStackAuthDefaults in
 	// pkg/config/stack_auth_loader.go.
 	if componentAuthHasDefault(componentAuthSection) {
-		clearExistingIdentityDefaults(globalAuthConfig)
+		clearExistingIdentityDefaults(workingGlobalAuth)
 	}
 
 	// Convert global auth config to map for deep merging.
-	globalAuthMap, err := AuthConfigToMap(globalAuthConfig)
+	globalAuthMap, err := AuthConfigToMap(workingGlobalAuth)
 	if err != nil {
 		return nil, err
 	}
