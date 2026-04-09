@@ -8,16 +8,35 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// levelLogger abstracts the level-dispatched logging calls that Write() uses.
+// Production code uses the global Atmos logger via defaultLevelLogger; tests
+// inject a recording implementation to assert level routing.
+type levelLogger interface {
+	Error(msg string, keyvals ...interface{})
+	Warn(msg string, keyvals ...interface{})
+	Info(msg string, keyvals ...interface{})
+	Debug(msg string, keyvals ...interface{})
+}
+
+// atmosLevelLogger delegates to the package-level Atmos log functions.
+type atmosLevelLogger struct{}
+
+func (atmosLevelLogger) Error(msg string, kv ...interface{}) { Error(msg, kv...) }
+func (atmosLevelLogger) Warn(msg string, kv ...interface{})  { Warn(msg, kv...) }
+func (atmosLevelLogger) Info(msg string, kv ...interface{})  { Info(msg, kv...) }
+func (atmosLevelLogger) Debug(msg string, kv ...interface{}) { Debug(msg, kv...) }
+
 // logrusAdapter adapts logrus output to Atmos's charmbracelet/log logger.
 // This allows third-party libraries using logrus to have their logs formatted
 // consistently with Atmos's logging style.
 type logrusAdapter struct {
 	io.Writer
+	logger levelLogger
 }
 
 // newLogrusAdapter creates a new logrus adapter that forwards to Atmos logger.
 func newLogrusAdapter() *logrusAdapter {
-	return &logrusAdapter{}
+	return &logrusAdapter{logger: atmosLevelLogger{}}
 }
 
 // Write implements io.Writer interface and forwards logrus output to Atmos logger.
@@ -47,18 +66,18 @@ func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 		// Route to appropriate log level based on parsed level field.
 		switch strings.ToLower(level) {
 		case "fatal", "panic", "error":
-			Error(msg, fields...)
+			a.logger.Error(msg, fields...)
 		case "warning", "warn":
-			Warn(msg, fields...)
+			a.logger.Warn(msg, fields...)
 		case "debug", "trace":
-			Debug(msg, fields...)
+			a.logger.Debug(msg, fields...)
 		default:
-			Info(msg, fields...)
+			a.logger.Info(msg, fields...)
 		}
 	} else {
 		// Fallback: Not JSON (shouldn't happen with JSONFormatter, but handle gracefully).
 		// Log the raw message at Info level.
-		Info(message)
+		a.logger.Info(message)
 	}
 
 	return len(p), nil

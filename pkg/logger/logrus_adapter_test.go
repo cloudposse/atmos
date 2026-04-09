@@ -7,6 +7,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// recordingLogger captures the level and message of each log call for assertion.
+type recordingLogger struct {
+	level string
+	msg   string
+}
+
+func (r *recordingLogger) Error(msg string, _ ...interface{}) { r.level = "error"; r.msg = msg }
+func (r *recordingLogger) Warn(msg string, _ ...interface{})  { r.level = "warn"; r.msg = msg }
+func (r *recordingLogger) Info(msg string, _ ...interface{})  { r.level = "info"; r.msg = msg }
+func (r *recordingLogger) Debug(msg string, _ ...interface{}) { r.level = "debug"; r.msg = msg }
+
 func TestLogrusAdapter_Write(t *testing.T) {
 	adapter := newLogrusAdapter()
 
@@ -23,65 +34,95 @@ func TestLogrusAdapter_Write(t *testing.T) {
 	assert.Equal(t, len(messageWithNewline), n)
 }
 
-func TestLogrusAdapter_Write_PreservesLogLevel(t *testing.T) {
-	adapter := newLogrusAdapter()
-
+// TestLogrusAdapter_Write_RoutesToCorrectLevel verifies that Write() parses
+// the JSON level field and dispatches to the correct Atmos log level. Uses a
+// recording logger injected into the adapter to capture the actual level each
+// message was routed to.
+func TestLogrusAdapter_Write_RoutesToCorrectLevel(t *testing.T) {
 	tests := []struct {
-		name    string
-		message string
+		name      string
+		message   string
+		wantLevel string
+		wantMsg   string
 	}{
 		{
-			name:    "error level message with structured fields",
-			message: `{"level":"error","msg":"authentication failed","provider":"browser"}` + "\n",
+			name:      "error level",
+			message:   `{"level":"error","msg":"authentication failed","provider":"browser"}` + "\n",
+			wantLevel: "error",
+			wantMsg:   "authentication failed",
 		},
 		{
-			name:    "fatal level message",
-			message: `{"level":"fatal","msg":"critical error","component":"saml2aws"}` + "\n",
+			name:      "fatal routes to error",
+			message:   `{"level":"fatal","msg":"critical error"}` + "\n",
+			wantLevel: "error",
+			wantMsg:   "critical error",
 		},
 		{
-			name:    "panic level message",
-			message: `{"level":"panic","msg":"panic occurred"}` + "\n",
+			name:      "panic routes to error",
+			message:   `{"level":"panic","msg":"panic occurred"}` + "\n",
+			wantLevel: "error",
+			wantMsg:   "panic occurred",
 		},
 		{
-			name:    "warning level message with structured fields",
-			message: `{"level":"warning","msg":"retrying connection","attempts":3}` + "\n",
+			name:      "warning level",
+			message:   `{"level":"warning","msg":"retrying connection"}` + "\n",
+			wantLevel: "warn",
+			wantMsg:   "retrying connection",
 		},
 		{
-			name:    "warn level message (alternate spelling)",
-			message: `{"level":"warn","msg":"warning message"}` + "\n",
+			name:      "warn level (alternate spelling)",
+			message:   `{"level":"warn","msg":"warning message"}` + "\n",
+			wantLevel: "warn",
+			wantMsg:   "warning message",
 		},
 		{
-			name:    "info level message",
-			message: `{"level":"info","msg":"authentication successful"}` + "\n",
+			name:      "info level",
+			message:   `{"level":"info","msg":"authentication successful"}` + "\n",
+			wantLevel: "info",
+			wantMsg:   "authentication successful",
 		},
 		{
-			name:    "debug level message with URL field",
-			message: `{"level":"debug","msg":"processing request","url":"https://idp.example.com"}` + "\n",
+			name:      "debug level",
+			message:   `{"level":"debug","msg":"processing request"}` + "\n",
+			wantLevel: "debug",
+			wantMsg:   "processing request",
 		},
 		{
-			name:    "trace level message",
-			message: `{"level":"trace","msg":"detailed trace information"}` + "\n",
+			name:      "trace routes to debug",
+			message:   `{"level":"trace","msg":"detailed trace"}` + "\n",
+			wantLevel: "debug",
+			wantMsg:   "detailed trace",
 		},
 		{
-			name:    "message without level defaults to info",
-			message: `{"msg":"some message without level"}` + "\n",
+			name:      "missing level defaults to info",
+			message:   `{"msg":"no level field"}` + "\n",
+			wantLevel: "info",
+			wantMsg:   "no level field",
 		},
 		{
-			name:    "mixed case level",
-			message: `{"level":"ERROR","msg":"error in mixed case"}` + "\n",
+			name:      "mixed case level normalized",
+			message:   `{"level":"ERROR","msg":"mixed case error"}` + "\n",
+			wantLevel: "error",
+			wantMsg:   "mixed case error",
 		},
 		{
-			name:    "non-JSON message fallback",
-			message: "plain text log message\n",
+			name:      "non-JSON fallback routes to info",
+			message:   "plain text log message\n",
+			wantLevel: "info",
+			wantMsg:   "plain text log message",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test that Write successfully processes messages with different levels.
+			rec := &recordingLogger{}
+			adapter := &logrusAdapter{logger: rec}
+
 			n, err := adapter.Write([]byte(tt.message))
 			assert.NoError(t, err)
 			assert.Equal(t, len(tt.message), n)
+			assert.Equal(t, tt.wantLevel, rec.level, "message routed to wrong level")
+			assert.Equal(t, tt.wantMsg, rec.msg, "message text mismatch")
 		})
 	}
 }
@@ -127,6 +168,58 @@ func TestConfigureLogrusForAtmos(t *testing.T) {
 
 			// Verify level matches Atmos level.
 			assert.Equal(t, tt.expectedLogrusLevel, logrus.GetLevel())
+		})
+	}
+}
+
+// Edge-case tests for Write() — covers nil, empty, and malformed inputs.
+func TestLogrusAdapter_Write_EdgeCases(t *testing.T) {
+	adapter := newLogrusAdapter()
+
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{
+			name:  "empty byte slice",
+			input: []byte{},
+		},
+		{
+			name:  "nil byte slice",
+			input: nil,
+		},
+		{
+			name:  "whitespace only",
+			input: []byte("   \n"),
+		},
+		{
+			name:  "malformed JSON — truncated",
+			input: []byte(`{"level":"error","msg":"trunc`),
+		},
+		{
+			name:  "malformed JSON — bare brace",
+			input: []byte("{"),
+		},
+		{
+			name:  "JSON array instead of object",
+			input: []byte(`["not","an","object"]` + "\n"),
+		},
+		{
+			name:  "empty JSON object",
+			input: []byte("{}\n"),
+		},
+		{
+			name:  "JSON with missing msg field",
+			input: []byte(`{"level":"error","details":"no msg key"}` + "\n"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Write must never panic or return an error, regardless of input.
+			n, err := adapter.Write(tt.input)
+			assert.NoError(t, err, "Write must never return an error")
+			assert.Equal(t, len(tt.input), n, "Write must return the input length")
 		})
 	}
 }

@@ -738,18 +738,23 @@ func (p *samlProvider) ensureStorageSymlink(symlinkPath, targetPath string) erro
 		return nil
 	}
 
-	// Remove existing path if it exists (wrong symlink, directory, or file).
-	if _, err := os.Lstat(symlinkPath); err == nil {
-		log.Debug("Removing existing .aws/saml2aws", "path", symlinkPath)
-		if err := os.RemoveAll(symlinkPath); err != nil {
-			return fmt.Errorf("failed to remove existing .aws/saml2aws: %w", err)
-		}
+	// Stage the existing path so we can restore it if symlink creation fails.
+	// This is critical on Windows where os.Symlink requires developer mode or
+	// elevated privileges — without staging, a failed symlink leaves the user
+	// with no ~/.aws/saml2aws at all, breaking subsequent browser runs.
+	if err := p.stageExistingPath(symlinkPath); err != nil {
+		return err
 	}
 
-	// Create symlink.
+	// Create symlink. If this fails (e.g. Windows without developer mode),
+	// restore the staged directory so the user is no worse off than before.
 	if err := os.Symlink(targetPath, symlinkPath); err != nil {
+		p.restoreStagedPath(symlinkPath)
 		return fmt.Errorf("failed to create symlink: %w", err)
 	}
+
+	// Clean up staged backup on success.
+	_ = os.RemoveAll(symlinkPath + ".bak")
 
 	log.Debug("Created browser storage symlink", "path", symlinkPath, "target", targetPath)
 	return nil
@@ -768,6 +773,35 @@ func (p *samlProvider) isCorrectSymlink(symlinkPath, expectedTarget string) bool
 
 	target, err := os.Readlink(symlinkPath)
 	return err == nil && target == expectedTarget
+}
+
+// stageExistingPath handles the existing path at symlinkPath before symlink
+// creation. If it's a stale symlink, removes it directly. If it's a directory
+// or file, renames it to .bak so it can be restored on failure.
+func (p *samlProvider) stageExistingPath(symlinkPath string) error {
+	info, lstatErr := os.Lstat(symlinkPath)
+	if lstatErr != nil {
+		return nil //nolint:nilerr // Path does not exist — nothing to stage; this is not an error condition.
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		log.Debug("Removing stale symlink", "path", symlinkPath)
+		return os.Remove(symlinkPath)
+	}
+
+	backupPath := symlinkPath + ".bak"
+	log.Debug("Staging existing storage path", "path", symlinkPath, "backup", backupPath)
+	return os.Rename(symlinkPath, backupPath)
+}
+
+// restoreStagedPath restores a staged .bak path after a failed symlink
+// creation, so the user is no worse off than before.
+func (p *samlProvider) restoreStagedPath(symlinkPath string) {
+	backupPath := symlinkPath + ".bak"
+	if _, err := os.Stat(backupPath); err == nil {
+		_ = os.Rename(backupPath, symlinkPath)
+		log.Warn("Symlink creation failed, restored original storage path")
+	}
 }
 
 // Logout removes provider-specific credential storage.
