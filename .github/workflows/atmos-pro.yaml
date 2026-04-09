@@ -1,5 +1,5 @@
 ---
-name: atmos-pro.ci
+name: atmos.ci
 on: pull_request
 permissions:
   contents: read
