@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -18,6 +19,18 @@ const logKeyIdentity = "identity"
 // stackAuthSection represents the minimal auth section structure for loading.
 type stackAuthSection struct {
 	Auth struct {
+		Identities map[string]struct {
+			Default bool `yaml:"default"`
+		} `yaml:"identities"`
+	} `yaml:"auth"`
+}
+
+// stackAuthFileWithImports parses the top of a stack file to extract both the
+// `import:` list and the `auth:` block. Used by the recursive scanner that
+// follows import chains when looking for default identities.
+type stackAuthFileWithImports struct {
+	Import []any `yaml:"import"`
+	Auth   struct {
 		Identities map[string]struct {
 			Default bool `yaml:"default"`
 		} `yaml:"identities"`
@@ -68,12 +81,16 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 	var allDefaults []defaultSource
 
 	// Load each file for auth defaults.
+	// Uses the recursive import-following scanner so defaults declared in
+	// imported `_defaults.yaml` files are visible even when those files are
+	// listed in `excluded_paths` (the excluded-paths filter only prevents
+	// standalone processing, not import resolution). This fixes Issue #2293
+	// for multi-stack commands that cannot use the exec-layer merge path.
 	for _, filePath := range stackFiles {
-		fileDefaults, err := loadFileForAuthDefaults(filePath)
-		if err != nil {
-			log.Debug("Failed to load file for auth defaults", "file", filePath, "error", err)
-			continue // Non-fatal: skip this file.
-		}
+		// Each top-level stack file gets its own visited set so import cycles
+		// in one file tree don't poison another.
+		visited := make(map[string]bool)
+		fileDefaults := loadAuthWithImports(filePath, atmosConfig.StacksBaseAbsolutePath, visited)
 
 		for identity, isDefault := range fileDefaults {
 			if isDefault {
@@ -190,6 +207,231 @@ func loadFileForAuthDefaults(filePath string) (map[string]bool, error) {
 	}
 
 	return defaults, nil
+}
+
+// yamlExt / ymlExt are the two stack-file extensions the scanner understands.
+// They match the conventions used throughout the Atmos stack processor.
+const (
+	yamlExt = ".yaml"
+	ymlExt  = ".yml"
+)
+
+// loadAuthWithImports recursively reads a stack file and its imports, extracting
+// auth.identities.*.default markers. The importing file's auth section takes
+// precedence over imported files' auth sections when identity names conflict,
+// matching Atmos inheritance semantics (more specific wins over more general).
+//
+// The `visited` map tracks absolute file paths already processed to protect
+// against import cycles. `stacksBasePath` is `atmosConfig.StacksBaseAbsolutePath`
+// — the root that non-relative imports are resolved against. Relative imports
+// (`./foo`, `../bar`) are resolved against the importing file's directory.
+//
+// Returns nil on any unrecoverable error (unreadable file, YAML parse failure,
+// non-YAML extension). Errors are swallowed intentionally — the scanner's
+// contract is best-effort discovery, not strict validation.
+func loadAuthWithImports(filePath, stacksBasePath string, visited map[string]bool) map[string]bool {
+	defer perf.Track(nil, "config.loadAuthWithImports")()
+
+	absPath, ok := markVisited(filePath, visited)
+	if !ok {
+		return nil
+	}
+
+	parsed, ok := readStackAuthFile(absPath)
+	if !ok {
+		return nil
+	}
+
+	result := make(map[string]bool)
+	mergeImportedAuthDefaults(parsed.Import, absPath, stacksBasePath, visited, result)
+	applyCurrentFileAuthDefaults(parsed, result)
+	return result
+}
+
+// markVisited returns the absolute path of filePath and true if it is not yet
+// in the visited set (marking it in-place), or returns false if the file has
+// already been processed (cycle) or the path cannot be resolved.
+func markVisited(filePath string, visited map[string]bool) (string, bool) {
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		return "", false
+	}
+	if visited[absPath] {
+		return "", false
+	}
+	visited[absPath] = true
+	return absPath, true
+}
+
+// readStackAuthFile reads a YAML stack file and parses its top-level `import:`
+// and `auth:` sections. Returns the parsed struct and true on success, or zero
+// value and false for non-YAML extensions, unreadable files, or parse errors
+// (which often just mean the file contains Go templates).
+func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
+	var zero stackAuthFileWithImports
+
+	ext := filepath.Ext(absPath)
+	if ext != yamlExt && ext != ymlExt {
+		return zero, false
+	}
+
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return zero, false
+	}
+
+	var parsed stackAuthFileWithImports
+	if err := yaml.Unmarshal(content, &parsed); err != nil {
+		// Non-fatal: file may contain Go templates that prevent raw YAML parsing.
+		return zero, false
+	}
+	return parsed, true
+}
+
+// mergeImportedAuthDefaults walks each entry in an `import:` list, recursively
+// loads the imported files' auth defaults, and merges them into `result`.
+// Matches Atmos inheritance order: imported defaults are applied first, then
+// the current file overrides via applyCurrentFileAuthDefaults.
+func mergeImportedAuthDefaults(
+	imports []any,
+	importingFile, stacksBasePath string,
+	visited map[string]bool,
+	result map[string]bool,
+) {
+	for _, imp := range imports {
+		importedFiles := resolveAuthImportPaths(imp, importingFile, stacksBasePath)
+		for _, impFile := range importedFiles {
+			for name, isDefault := range loadAuthWithImports(impFile, stacksBasePath, visited) {
+				if isDefault {
+					result[name] = true
+				}
+			}
+		}
+	}
+}
+
+// applyCurrentFileAuthDefaults applies the default flags declared in the
+// current file's `auth.identities` section to `result`. These override any
+// imported defaults by virtue of being processed after
+// mergeImportedAuthDefaults.
+func applyCurrentFileAuthDefaults(parsed stackAuthFileWithImports, result map[string]bool) {
+	for name, identity := range parsed.Auth.Identities {
+		if identity.Default {
+			result[name] = true
+		}
+	}
+}
+
+// resolveAuthImportPaths resolves a single `import:` list entry to absolute file
+// paths on disk. Handles the three Atmos import forms:
+//
+//  1. Plain string: "orgs/acme/_defaults" — resolved against `stacksBasePath`.
+//  2. Glob string:  "mixins/region/*"    — resolved against `stacksBasePath`,
+//     then glob-expanded via `GetGlobMatches` (supports doublestar `**`).
+//  3. Map form with `path:` field:
+//     `- path: orgs/acme/_defaults` — the `path` value is treated as a string.
+//
+// Relative paths (`./foo`, `../bar`) are resolved against the importing file's
+// directory instead of `stacksBasePath`.
+//
+// Returns nil for import forms that cannot be resolved without running Go
+// templates (e.g., `path: "{{ .something }}"`), for paths that do not exist
+// on disk, or for any other error. This is intentional graceful degradation —
+// the scanner is best-effort and never blocks the auth flow on a malformed or
+// templated import.
+func resolveAuthImportPaths(imp any, importingFile, stacksBasePath string) []string {
+	defer perf.Track(nil, "config.resolveAuthImportPaths")()
+
+	importPath := normalizeImportPath(extractImportPathString(imp))
+	if importPath == "" {
+		return nil
+	}
+
+	candidate, ok := buildImportCandidatePath(importPath, importingFile, stacksBasePath)
+	if !ok {
+		return nil
+	}
+
+	return matchImportCandidate(candidate)
+}
+
+// normalizeImportPath returns the raw import path with a `.yaml` extension
+// appended if missing, or empty string if the input is empty or contains a Go
+// template expression (which cannot be resolved without template context).
+func normalizeImportPath(rawPath string) string {
+	if rawPath == "" {
+		return ""
+	}
+	if strings.Contains(rawPath, "{{") {
+		return ""
+	}
+	if filepath.Ext(rawPath) == "" {
+		rawPath += yamlExt
+	}
+	return rawPath
+}
+
+// buildImportCandidatePath joins the normalized import path against either the
+// importing file's directory (for `./` / `../` relative imports) or the stacks
+// base path (for everything else). Returns the candidate path and true, or
+// empty/false if the base path required for resolution is missing.
+func buildImportCandidatePath(importPath, importingFile, stacksBasePath string) (string, bool) {
+	normalized := filepath.FromSlash(importPath)
+	if strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") {
+		return filepath.Join(filepath.Dir(importingFile), normalized), true
+	}
+	if stacksBasePath == "" {
+		return "", false
+	}
+	return filepath.Join(stacksBasePath, normalized), true
+}
+
+// matchImportCandidate returns matching file paths for a candidate. For glob
+// patterns it uses doublestar; for plain paths it uses a direct stat, with a
+// `.yml` fallback when the original `.yaml` candidate does not exist.
+func matchImportCandidate(candidate string) []string {
+	if strings.ContainsAny(candidate, "*?[") {
+		matches, err := u.GetGlobMatches(candidate)
+		if err != nil || len(matches) == 0 {
+			return nil
+		}
+		return matches
+	}
+
+	if _, err := os.Stat(candidate); err == nil {
+		return []string{candidate}
+	}
+
+	// Fall back to .yml if .yaml did not exist.
+	if strings.HasSuffix(candidate, yamlExt) {
+		alt := strings.TrimSuffix(candidate, yamlExt) + ymlExt
+		if _, err := os.Stat(alt); err == nil {
+			return []string{alt}
+		}
+	}
+
+	return nil
+}
+
+// extractImportPathString extracts the path string from an import list entry.
+// Supports plain string imports and map-form imports with a `path` key.
+// Returns empty string for unrecognized forms — the caller treats that as
+// unresolvable and skips the import gracefully.
+func extractImportPathString(imp any) string {
+	switch v := imp.(type) {
+	case string:
+		return v
+	case map[string]any:
+		if p, ok := v["path"].(string); ok {
+			return p
+		}
+	case map[any]any:
+		// yaml.v3 sometimes decodes into map[any]any depending on tag state.
+		if p, ok := v["path"].(string); ok {
+			return p
+		}
+	}
+	return ""
 }
 
 // MergeStackAuthDefaults merges stack-level auth defaults into the auth config.

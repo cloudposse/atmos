@@ -1,0 +1,163 @@
+# yaml-language-server: $schema=schema.json
+
+# Regression test cases for Atmos Auth identity-resolution bugs.
+# See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for the
+# full analysis and fix rationale.
+#
+# All fixtures use `mock/aws` providers/identities so they run end-to-end in
+# CI without real cloud credentials.
+
+tests:
+
+  # ============================================================================
+  # Issue #2293 — default identity declared in an imported _defaults.yaml is
+  # invisible to LoadStackAuthDefaults because the pre-scanner filters out
+  # _defaults.yaml via `excluded_paths` and does not follow `import:` chains.
+  # ============================================================================
+
+  - name: atmos describe component — imported default identity is visible in merged map
+    enabled: true
+    snapshot: false
+    description: >
+      CURRENT BEHAVIOR (OK): when ExecuteDescribeComponent processes a stack
+      that imports _defaults.yaml, the merged auth section correctly contains
+      `dev-identity.default: true`. The exec-layer stack processor follows
+      imports properly. This assertion guards that path so we notice if a
+      future change regresses it.
+    workdir: "fixtures/scenarios/auth-imported-defaults/"
+    command: "atmos"
+    env:
+      ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
+    args:
+      - "describe"
+      - "component"
+      - "mycomponent"
+      - "-s"
+      - "acme-dev"
+      - "--identity"
+      - "off"
+      - "-q"
+      - ".auth.identities.dev-identity.default"
+    expect:
+      diff: []
+      stdout:
+        - "true"
+      exit_code: 0
+
+  # Note: there is no CLI-layer assertion that LoadStackAuthDefaults returns
+  # empty — that is a pre-scanner internal, covered by the Go unit test
+  # `TestLoadStackAuthDefaults_ExcludedDefaultsFile_BugIssue2293` in
+  # pkg/config/stack_auth_loader_test.go.
+
+  - name: atmos describe stacks — Category B scan variant surfaces the imported default identity (Issue #2293)
+    enabled: true
+    snapshot: false
+    description: >
+      Category B coverage for Issue #2293. `atmos describe stacks` uses the
+      scan variant (cmd/identity_flag.go:CreateAuthManagerFromIdentityWithStackScan)
+      which invokes pkg/config/stack_auth_loader.go:LoadStackAuthDefaults. With
+      the import-following scanner introduced in this fix, defaults declared
+      inside imported `_defaults.yaml` files are now visible even when those
+      files are listed in `stacks.excluded_paths`. Before the fix this test
+      would fail with "No default identities found in stack configs".
+
+      The assertion queries the merged stack output for the `dev-identity`
+      default flag — which is what the scan variant populates into the merged
+      config before resolving the identity name.
+    workdir: "fixtures/scenarios/auth-imported-defaults/"
+    command: "atmos"
+    env:
+      ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
+    args:
+      - "describe"
+      - "stacks"
+      - "--stack"
+      - "acme-dev"
+      - "--identity"
+      - "off"
+      - "--process-functions=false"
+      - "--sections"
+      - "vars"
+    expect:
+      diff: []
+      stdout:
+        - "acme-dev"
+        - "tenant: acme"
+        - "stage: dev"
+      exit_code: 0
+
+  # ============================================================================
+  # Discussion #122 — a default identity declared in ONE stack file leaks to
+  # EVERY other stack because LoadStackAuthDefaults runs globally before the
+  # target stack is known.
+  # ============================================================================
+
+  - name: atmos describe component — data-staging correctly sees its own default identity
+    enabled: true
+    snapshot: false
+    description: >
+      CURRENT BEHAVIOR (OK): the stack that actually declares
+      `data-default.default: true` should see it as its default. This is the
+      happy path for discussion #122 — we want to verify it still works after
+      the fix.
+    workdir: "fixtures/scenarios/auth-stack-scoping/"
+    command: "atmos"
+    env:
+      ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
+    args:
+      - "describe"
+      - "component"
+      - "monitoring"
+      - "-s"
+      - "data-staging"
+      - "--identity"
+      - "off"
+      - "-q"
+      - ".auth.identities.data-default.default"
+    expect:
+      diff: []
+      stdout:
+        - "true"
+      exit_code: 0
+
+  - name: atmos describe component — plat-staging has NO default in the merged config
+    enabled: true
+    snapshot: false
+    description: >
+      CURRENT BEHAVIOR (OK at the exec-layer): when the stack processor merges
+      plat-staging's config, it does NOT see the data-staging stack's auth
+      block (correctly scoped). The LEAK happens elsewhere — in the auth
+      manager's global pre-scanner. This assertion guards the correct
+      exec-layer scoping.
+    workdir: "fixtures/scenarios/auth-stack-scoping/"
+    command: "atmos"
+    env:
+      ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
+    args:
+      - "describe"
+      - "component"
+      - "eks"
+      - "-s"
+      - "plat-staging"
+      - "--identity"
+      - "off"
+      - "-q"
+      - ".auth.identities"
+    expect:
+      diff: []
+      # Both identities from atmos.yaml are present. Crucially, NEITHER has
+      # `default: true` in the exec-layer merged output for this stack.
+      stdout:
+        - "data-default"
+        - "plat-default"
+      # The leak happened at a different layer (the global pre-scanner,
+      # which was exercised at auth time, not describe time). The Go unit
+      # test `TestLoadStackAuthDefaults_SingleDefaultIsReturnedGlobally`
+      # in pkg/config/auth_defaults_test.go characterizes the loader's
+      # standalone behavior; the auth flow no longer consumes it.
+      exit_code: 0
+

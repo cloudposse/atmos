@@ -88,7 +88,11 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	}
 
 	// Create AuthManager from identity flag if provided.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+	// Category B: list affected operates on multiple affected components across stacks without a
+	// single target (component, stack) pair. Use the SCAN variant so stack-level defaults
+	// (including defaults declared in imported _defaults.yaml) are discovered. See
+	// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+	authManager, err := auth.CreateAndAuthenticateManagerWithStackScan(
 		opts.IdentityName, &atmosConfig.Auth, cfg.IdentityFlagSelectValue, &atmosConfig,
 	)
 	if err != nil {
