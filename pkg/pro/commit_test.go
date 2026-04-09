@@ -15,9 +15,23 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// initTestIO initializes the I/O context, data writer, and UI formatter
+// required by functions that call data.Writeln or ui.Success/ui.Info.
+func initTestIO(t *testing.T) {
+	t.Helper()
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "failed to initialize I/O context")
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+}
 
 // withTempGitRepo creates an isolated git repository in a temp directory,
 // chdir's into it, and restores the original directory on cleanup.
@@ -550,6 +564,8 @@ func newCommitTestServer(t *testing.T) (*httptest.Server, *dtos.CommitRequest) {
 }
 
 func TestSubmitCommit_Success(t *testing.T) {
+	initTestIO(t)
+
 	server, lastReq := newCommitTestServer(t)
 	defer server.Close()
 
@@ -574,6 +590,8 @@ func TestSubmitCommit_Success(t *testing.T) {
 }
 
 func TestSubmitCommit_APIError(t *testing.T) {
+	initTestIO(t)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"success": false, "errorMessage": "bad request"}`))
@@ -596,6 +614,8 @@ func TestSubmitCommit_APIError(t *testing.T) {
 }
 
 func TestExecuteCommit_HappyPath(t *testing.T) {
+	initTestIO(t)
+
 	server, _ := newCommitTestServer(t)
 	defer server.Close()
 
@@ -654,6 +674,8 @@ func TestExecuteCommit_ValidationErrors(t *testing.T) {
 }
 
 func TestExecuteCommit_NoChanges(t *testing.T) {
+	initTestIO(t)
+
 	withTempGitRepo(t, func(_ string) {
 		atmosConfig := &schema.AtmosConfiguration{}
 		atmosConfig.Settings.Pro.GitHubHeadRef = "feature/test"
