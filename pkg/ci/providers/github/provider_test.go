@@ -107,7 +107,28 @@ func TestResolveGitSHA(t *testing.T) {
 }
 
 func TestProvider_EnsureClient(t *testing.T) {
+	t.Run("succeeds when ATMOS_CI_GITHUB_TOKEN is set", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("GH_TOKEN", "")
+		p := NewProvider()
+		err := p.ensureClient()
+		require.NoError(t, err)
+		assert.NotNil(t, p.client)
+	})
+
+	t.Run("ATMOS_CI_GITHUB_TOKEN takes precedence over GITHUB_TOKEN", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
+		t.Setenv("GITHUB_TOKEN", "github-token")
+		t.Setenv("GH_TOKEN", "gh-token")
+		p := NewProvider()
+		err := p.ensureClient()
+		require.NoError(t, err)
+		assert.NotNil(t, p.client)
+	})
+
 	t.Run("succeeds when GITHUB_TOKEN is set", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "test-token")
 		p := NewProvider()
 		err := p.ensureClient()
@@ -116,7 +137,8 @@ func TestProvider_EnsureClient(t *testing.T) {
 	})
 
 	t.Run("succeeds when GH_TOKEN is set", func(t *testing.T) {
-		// Clear GITHUB_TOKEN to ensure GH_TOKEN fallback works.
+		// Clear higher-priority tokens to ensure GH_TOKEN fallback works.
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "test-token")
 		p := NewProvider()
@@ -126,6 +148,7 @@ func TestProvider_EnsureClient(t *testing.T) {
 	})
 
 	t.Run("fails when no token is available", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "")
 		p := NewProvider()
