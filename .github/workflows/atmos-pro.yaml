@@ -34,7 +34,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "mvdan/gofumpt v0.7.0" > .tool-versions
           atmos toolchain install
           atmos toolchain env --format=github
 
