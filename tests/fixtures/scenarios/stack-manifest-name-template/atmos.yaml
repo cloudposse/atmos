@@ -1,0 +1,14 @@
+base_path: "./"
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/catalog/**"
+  # This name_template should be used when no explicit 'name' is set in the stack manifest.
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+components:
+  terraform:
+    base_path: components/terraform

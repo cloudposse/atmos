@@ -33,6 +33,7 @@ var ErrNoStoredCredentials = errors.New("mock identity has no stored credentials
 type Identity struct {
 	name   string
 	config *schema.Identity
+	realm  string // Credential isolation realm set by auth manager.
 }
 
 // NewIdentity creates a new mock identity.
@@ -59,6 +60,11 @@ func (i *Identity) Kind() string {
 	defer perf.Track(nil, "mock.Identity.Kind")()
 
 	return i.config.Kind
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *Identity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // GetProviderName returns the provider name for this identity.
@@ -108,6 +114,14 @@ func (i *Identity) Environment() (map[string]string, error) {
 	}
 
 	return env, nil
+}
+
+// Paths returns credential files/directories used by this identity.
+func (i *Identity) Paths() ([]types.Path, error) {
+	defer perf.Track(nil, "mock.Identity.Paths")()
+
+	// Mock identity doesn't use filesystem credentials.
+	return []types.Path{}, nil
 }
 
 // PrepareEnvironment prepares environment variables for external processes.

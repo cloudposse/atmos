@@ -1,0 +1,97 @@
+---
+title: atmos terraform test
+sidebar_label: test
+sidebar_class_name: command
+id: test
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to run Terraform tests for an Atmos component, validating the component's configuration and behavior.
+</Intro>
+
+<Screengrab title="atmos terraform test --help" slug="atmos-terraform-test--help" />
+
+## Usage
+
+Execute the `terraform test` command like this:
+
+```shell
+atmos terraform test <component> -s <stack> [options]
+```
+
+This command runs tests for Terraform modules. Tests are written in `.tftest.hcl` or `.tftest.json` files and can validate that your infrastructure code works as expected.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The test execution is handled by native Terraform.
+:::
+## Examples
+
+### Run Tests
+
+```shell
+# Run all tests
+atmos terraform test vpc -s dev
+```
+
+### Run Specific Test Files
+
+```shell
+# Run specific test file
+atmos terraform test vpc -s dev -filter=tests/vpc_test.tftest.hcl
+```
+
+### Verbose Output
+
+```shell
+# Run with verbose output
+atmos terraform test vpc -s dev -verbose
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform test vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform test vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform test` flags such as `-filter` to run specific test files, `-verbose` for detailed output, `-json` for JSON output.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

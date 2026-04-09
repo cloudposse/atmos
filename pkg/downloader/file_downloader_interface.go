@@ -24,6 +24,10 @@ type FileDownloader interface {
 
 	// FetchData fetches content from a given source and returns it as a byte slice
 	FetchData(src string) ([]byte, error)
+
+	// FetchAtomic downloads a file atomically to the destination.
+	// Uses temp file + fsync + atomic rename to prevent partial downloads.
+	FetchAtomic(src, dest string, mode ClientMode, timeout time.Duration) error
 }
 
 // ClientFactory abstracts the creation of a downloader client for better testability.

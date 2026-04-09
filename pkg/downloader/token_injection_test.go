@@ -22,7 +22,7 @@ func TestResolveToken_GitHub(t *testing.T) {
 		expectedTokenSource string
 	}{
 		{
-			name:                "InjectGithubToken true uses ATMOS_GITHUB_TOKEN",
+			name:                "ATMOS_GITHUB_TOKEN takes precedence when both are set",
 			injectGithubToken:   true,
 			atmosGithubToken:    "atmos-token-123",
 			githubToken:         "github-token-456",
@@ -30,25 +30,25 @@ func TestResolveToken_GitHub(t *testing.T) {
 			expectedTokenSource: "ATMOS_GITHUB_TOKEN",
 		},
 		{
-			name:                "InjectGithubToken false uses GITHUB_TOKEN",
-			injectGithubToken:   false,
-			atmosGithubToken:    "atmos-token-123",
+			name:                "Falls back to GITHUB_TOKEN when ATMOS_GITHUB_TOKEN is empty",
+			injectGithubToken:   true,
+			atmosGithubToken:    "",
 			githubToken:         "github-token-456",
 			expectedToken:       "github-token-456",
 			expectedTokenSource: "GITHUB_TOKEN",
 		},
 		{
-			name:                "InjectGithubToken true with empty ATMOS_GITHUB_TOKEN uses ATMOS_GITHUB_TOKEN",
+			name:                "Uses GITHUB_TOKEN when only GITHUB_TOKEN is set",
 			injectGithubToken:   true,
 			atmosGithubToken:    "",
 			githubToken:         "github-token-456",
-			expectedToken:       "",
-			expectedTokenSource: "ATMOS_GITHUB_TOKEN",
+			expectedToken:       "github-token-456",
+			expectedTokenSource: "GITHUB_TOKEN",
 		},
 		{
-			name:                "InjectGithubToken false with empty GITHUB_TOKEN",
-			injectGithubToken:   false,
-			atmosGithubToken:    "atmos-token-123",
+			name:                "Returns empty when both tokens are empty",
+			injectGithubToken:   true,
+			atmosGithubToken:    "",
 			githubToken:         "",
 			expectedToken:       "",
 			expectedTokenSource: "GITHUB_TOKEN",
@@ -87,7 +87,7 @@ func TestResolveToken_Bitbucket(t *testing.T) {
 		expectedTokenSource  string
 	}{
 		{
-			name:                 "InjectBitbucketToken true uses ATMOS_BITBUCKET_TOKEN",
+			name:                 "ATMOS_BITBUCKET_TOKEN takes precedence when both are set",
 			injectBitbucketToken: true,
 			atmosBitbucketToken:  "atmos-bb-token-123",
 			bitbucketToken:       "bb-token-456",
@@ -95,25 +95,25 @@ func TestResolveToken_Bitbucket(t *testing.T) {
 			expectedTokenSource:  "ATMOS_BITBUCKET_TOKEN",
 		},
 		{
-			name:                 "InjectBitbucketToken false uses BITBUCKET_TOKEN",
-			injectBitbucketToken: false,
-			atmosBitbucketToken:  "atmos-bb-token-123",
+			name:                 "Falls back to BITBUCKET_TOKEN when ATMOS_BITBUCKET_TOKEN is empty",
+			injectBitbucketToken: true,
+			atmosBitbucketToken:  "",
 			bitbucketToken:       "bb-token-456",
 			expectedToken:        "bb-token-456",
 			expectedTokenSource:  "BITBUCKET_TOKEN",
 		},
 		{
-			name:                 "InjectBitbucketToken true with empty ATMOS_BITBUCKET_TOKEN",
+			name:                 "Uses BITBUCKET_TOKEN when only BITBUCKET_TOKEN is set",
 			injectBitbucketToken: true,
 			atmosBitbucketToken:  "",
 			bitbucketToken:       "bb-token-456",
-			expectedToken:        "",
-			expectedTokenSource:  "ATMOS_BITBUCKET_TOKEN",
+			expectedToken:        "bb-token-456",
+			expectedTokenSource:  "BITBUCKET_TOKEN",
 		},
 		{
-			name:                 "InjectBitbucketToken false with empty BITBUCKET_TOKEN",
-			injectBitbucketToken: false,
-			atmosBitbucketToken:  "atmos-bb-token-123",
+			name:                 "Returns empty when both tokens are empty",
+			injectBitbucketToken: true,
+			atmosBitbucketToken:  "",
 			bitbucketToken:       "",
 			expectedToken:        "",
 			expectedTokenSource:  "BITBUCKET_TOKEN",
@@ -152,7 +152,7 @@ func TestResolveToken_GitLab(t *testing.T) {
 		expectedTokenSource string
 	}{
 		{
-			name:                "InjectGitlabToken true uses ATMOS_GITLAB_TOKEN",
+			name:                "ATMOS_GITLAB_TOKEN takes precedence when both are set",
 			injectGitlabToken:   true,
 			atmosGitlabToken:    "atmos-gl-token-123",
 			gitlabToken:         "gl-token-456",
@@ -160,25 +160,25 @@ func TestResolveToken_GitLab(t *testing.T) {
 			expectedTokenSource: "ATMOS_GITLAB_TOKEN",
 		},
 		{
-			name:                "InjectGitlabToken false uses GITLAB_TOKEN",
-			injectGitlabToken:   false,
-			atmosGitlabToken:    "atmos-gl-token-123",
+			name:                "Falls back to GITLAB_TOKEN when ATMOS_GITLAB_TOKEN is empty",
+			injectGitlabToken:   true,
+			atmosGitlabToken:    "",
 			gitlabToken:         "gl-token-456",
 			expectedToken:       "gl-token-456",
 			expectedTokenSource: "GITLAB_TOKEN",
 		},
 		{
-			name:                "InjectGitlabToken true with empty ATMOS_GITLAB_TOKEN",
+			name:                "Uses GITLAB_TOKEN when only GITLAB_TOKEN is set",
 			injectGitlabToken:   true,
 			atmosGitlabToken:    "",
 			gitlabToken:         "gl-token-456",
-			expectedToken:       "",
-			expectedTokenSource: "ATMOS_GITLAB_TOKEN",
+			expectedToken:       "gl-token-456",
+			expectedTokenSource: "GITLAB_TOKEN",
 		},
 		{
-			name:                "InjectGitlabToken false with empty GITLAB_TOKEN",
-			injectGitlabToken:   false,
-			atmosGitlabToken:    "atmos-gl-token-123",
+			name:                "Returns empty when both tokens are empty",
+			injectGitlabToken:   true,
+			atmosGitlabToken:    "",
 			gitlabToken:         "",
 			expectedToken:       "",
 			expectedTokenSource: "GITLAB_TOKEN",
@@ -305,6 +305,89 @@ func TestInjectToken_NoToken(t *testing.T) {
 
 	// Verify no token was injected
 	assert.Nil(t, parsedURL.User, "User should be nil when no token is available")
+}
+
+// TestInjectToken_UserSpecifiedCredentials tests that user-specified credentials take precedence over automatic injection.
+func TestInjectToken_UserSpecifiedCredentials(t *testing.T) {
+	tests := []struct {
+		name             string
+		urlString        string
+		host             string
+		expectedUsername string
+		expectedPassword string
+		tokenAvailable   bool
+	}{
+		{
+			name:             "User-specified username and password take precedence over GitHub token",
+			urlString:        "https://myuser:mypass@github.com/user/repo.git",
+			host:             hostGitHub,
+			expectedUsername: "myuser",
+			expectedPassword: "mypass",
+			tokenAvailable:   true,
+		},
+		{
+			name:             "User-specified username only (no password) takes precedence",
+			urlString:        "https://myuser@github.com/user/repo.git",
+			host:             hostGitHub,
+			expectedUsername: "myuser",
+			expectedPassword: "",
+			tokenAvailable:   true,
+		},
+		{
+			name:             "User-specified token format takes precedence over automatic injection",
+			urlString:        "https://x-access-token:ghp_usertoken@github.com/user/repo.git",
+			host:             hostGitHub,
+			expectedUsername: "x-access-token",
+			expectedPassword: "ghp_usertoken",
+			tokenAvailable:   true,
+		},
+		{
+			name:             "GitLab user-specified credentials take precedence",
+			urlString:        "https://myuser:glpat-usertoken@gitlab.com/user/repo.git",
+			host:             hostGitLab,
+			expectedUsername: "myuser",
+			expectedPassword: "glpat-usertoken",
+			tokenAvailable:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parsedURL, err := url.Parse(tt.urlString)
+			assert.NoError(t, err)
+
+			// Store original user info for comparison
+			originalUser := parsedURL.User
+
+			detector := &CustomGitDetector{
+				atmosConfig: &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						InjectGithubToken: tt.tokenAvailable && tt.host == hostGitHub,
+						AtmosGithubToken:  "should-not-be-used",
+						InjectGitlabToken: tt.tokenAvailable && tt.host == hostGitLab,
+						AtmosGitlabToken:  "should-not-be-used",
+					},
+				},
+			}
+
+			detector.injectToken(parsedURL, tt.host)
+
+			// Verify user credentials were NOT overwritten
+			assert.NotNil(t, parsedURL.User, "User should not be nil when URL has pre-existing credentials")
+			assert.Equal(t, originalUser, parsedURL.User, "User credentials should not be modified")
+
+			username := parsedURL.User.Username()
+			password, hasPassword := parsedURL.User.Password()
+
+			assert.Equal(t, tt.expectedUsername, username, "Username should match original")
+			if tt.expectedPassword != "" {
+				assert.True(t, hasPassword, "Password should be present")
+				assert.Equal(t, tt.expectedPassword, password, "Password should match original")
+			} else {
+				assert.False(t, hasPassword, "Password should not be present")
+			}
+		})
+	}
 }
 
 // TestInjectToken_UnknownHost tests injectToken with an unknown host.

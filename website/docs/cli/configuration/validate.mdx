@@ -1,0 +1,139 @@
+---
+title: Validation Settings
+sidebar_label: validate
+sidebar_class_name: command
+id: validate
+description: Configure EditorConfig validation settings in your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+The `validate` section of the `atmos.yaml` configures EditorConfig validation settings. EditorConfig helps maintain consistent coding styles across different editors and IDEs.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+validate:
+  editorconfig:
+    # Skip default EditorConfig rules
+    ignore_defaults: false
+
+    # Preview mode - show what would be checked without failing
+    dry_run: false
+
+    # Output format for validation results
+    format: default
+
+    # Custom EditorConfig file paths to use
+    config_file_paths: []
+
+    # Patterns to exclude from validation
+    exclude:
+      - "vendor/**"
+      - "node_modules/**"
+
+    # Initialize EditorConfig in the project
+    init: false
+
+    # Disable specific checks
+    disable_end_of_line: false
+    disable_insert_final_newline: false
+    disable_indentation: false
+    disable_indent_size: false
+    disable_max_line_length: false
+    disable_trim_trailing_whitespace: false
+```
+</File>
+
+## Fields
+
+<dl>
+  <dt>`editorconfig.ignore_defaults`</dt>
+  <dd>Skip the default EditorConfig rules. Default: `false`.</dd>
+
+  <dt>`editorconfig.dry_run`</dt>
+  <dd>Preview mode - show what would be checked without failing. Default: `false`.</dd>
+
+  <dt>`editorconfig.format`</dt>
+  <dd>Output format for validation results. Default: `default`.</dd>
+
+  <dt>`editorconfig.config_file_paths`</dt>
+  <dd>List of custom EditorConfig file paths to use for validation.</dd>
+
+  <dt>`editorconfig.exclude`</dt>
+  <dd>Glob patterns for files/directories to exclude from validation.</dd>
+
+  <dt>`editorconfig.init`</dt>
+  <dd>Initialize EditorConfig in the project if not present. Default: `false`.</dd>
+
+  <dt>`editorconfig.disable_end_of_line`</dt>
+  <dd>Disable end-of-line character validation. Default: `false`.</dd>
+
+  <dt>`editorconfig.disable_insert_final_newline`</dt>
+  <dd>Disable final newline validation. Default: `false`.</dd>
+
+  <dt>`editorconfig.disable_indentation`</dt>
+  <dd>Disable indentation style validation. Default: `false`.</dd>
+
+  <dt>`editorconfig.disable_indent_size`</dt>
+  <dd>Disable indent size validation. Default: `false`.</dd>
+
+  <dt>`editorconfig.disable_max_line_length`</dt>
+  <dd>Disable maximum line length validation. Default: `false`.</dd>
+
+  <dt>`editorconfig.disable_trim_trailing_whitespace`</dt>
+  <dd>Disable trailing whitespace validation. Default: `false`.</dd>
+</dl>
+
+## Examples
+
+### Basic Validation
+
+Enable EditorConfig validation with default settings:
+
+<File title="atmos.yaml">
+```yaml
+validate:
+  editorconfig: {}
+```
+</File>
+
+### Exclude Vendor Directories
+
+Skip validation for third-party code:
+
+<File title="atmos.yaml">
+```yaml
+validate:
+  editorconfig:
+    exclude:
+      - "vendor/**"
+      - "node_modules/**"
+      - ".terraform/**"
+```
+</File>
+
+### Disable Specific Checks
+
+Disable checks that may cause issues with certain file types:
+
+<File title="atmos.yaml">
+```yaml
+validate:
+  editorconfig:
+    disable_max_line_length: true
+    disable_trim_trailing_whitespace: true
+```
+</File>
+
+<ActionCard title="Run Validation">
+    Use the validate command to check your project files against EditorConfig rules.
+    <div>
+      <PrimaryCTA to="/cli/commands/validate/usage">Validate Commands</PrimaryCTA>
+    </div>
+</ActionCard>

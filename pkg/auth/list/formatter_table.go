@@ -59,8 +59,8 @@ func RenderTable(
 
 	// Handle empty result.
 	if len(providers) == 0 && len(identities) == 0 {
-		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange))
-		output.WriteString(warningStyle.Render("No providers or identities configured."))
+		styles := theme.GetCurrentStyles()
+		output.WriteString(styles.Notice.Render("No providers or identities configured."))
 		output.WriteString(newline)
 	}
 

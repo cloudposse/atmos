@@ -33,6 +33,7 @@ type permissionSetIdentity struct {
 	config           *schema.Identity
 	manager          types.AuthManager // Auth manager for resolving root provider
 	rootProviderName string            // Cached root provider name from PostAuthenticate
+	realm            string            // Credential isolation realm set by auth manager.
 }
 
 // NewPermissionSetIdentity creates a new AWS permission set identity.
@@ -50,6 +51,11 @@ func NewPermissionSetIdentity(name string, config *schema.Identity) (types.Ident
 // Kind returns the identity kind.
 func (i *permissionSetIdentity) Kind() string {
 	return "aws/permission-set"
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *permissionSetIdentity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // Authenticate performs authentication using permission set.
@@ -110,29 +116,57 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 // Validate validates the identity configuration.
 func (i *permissionSetIdentity) Validate() error {
 	if i.config.Principal == nil {
-		return fmt.Errorf("%w: principal is required", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingPrincipal).
+			WithExplanationf("Identity '%s' requires principal configuration", i.name).
+			WithHint("Add 'principal' field with 'name' and 'account' to the identity configuration").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Check permission set name in principal or spec (backward compatibility).
 	var permissionSetName string
 	var ok bool
 	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
-		return fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingPermissionSet).
+			WithExplanationf("Missing permission set name for identity '%s'", i.name).
+			WithHint("Add 'name' field to the identity's principal configuration").
+			WithHint("Example: principal: { name: 'DevAccess', account: { id: '123456789012' } }").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Check account info in principal.
 	var accountSpec map[string]interface{}
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
-		return fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingAccountSpec).
+			WithExplanationf("Missing account specification for identity '%s'", i.name).
+			WithHint("Add 'account' field with 'name' or 'id' to the identity's principal configuration").
+			WithHint("Example: principal: { name: 'DevAccess', account: { id: '123456789012' } }").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 
 	accountName, okName := accountSpec["name"].(string)
 	accountID, okID := accountSpec["id"].(string)
 	if !okName && !okID {
-		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingAccountSpec).
+			WithExplanationf("Account name or ID is required for identity '%s'", i.name).
+			WithHint("Add 'name' or 'id' to the account configuration").
+			WithHint("Example: account: { id: '123456789012' } or account: { name: 'production' }").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 	if accountName == "" && accountID == "" {
-		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingAccountSpec).
+			WithExplanationf("Account name or ID cannot be empty for identity '%s'", i.name).
+			WithHint("Provide a valid account name or ID").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 	return nil
 }
@@ -146,7 +180,8 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	providerName, err := i.resolveRootProviderName()
 	if err == nil {
 		// Get AWS file environment variables.
-		awsFileManager, err := awsCloud.NewAWSFileManager("")
+		// Uses realm for credential isolation between different repositories.
+		awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 		if err != nil {
 			return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 		}
@@ -158,12 +193,25 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 		}
 	}
 
+	// Resolve region through identity chain inheritance.
+	// First checks identity principal, then parent identities, then provider.
+	if region := i.resolveRegion(); region != "" {
+		env["AWS_REGION"] = region
+		env["AWS_DEFAULT_REGION"] = region
+	}
+
 	// Add environment variables from identity config.
 	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value
 	}
 
 	return env, nil
+}
+
+// Paths returns credential files/directories used by this identity.
+func (i *permissionSetIdentity) Paths() ([]types.Path, error) {
+	// Permission set identities don't add additional credential files beyond the provider.
+	return []types.Path{}, nil
 }
 
 // PrepareEnvironment prepares environment variables for external processes.
@@ -178,7 +226,8 @@ func (i *permissionSetIdentity) PrepareEnvironment(ctx context.Context, environ 
 		return environ, fmt.Errorf("failed to get provider name: %w", err)
 	}
 
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	// Uses realm for credential isolation between different repositories.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -186,13 +235,8 @@ func (i *permissionSetIdentity) PrepareEnvironment(ctx context.Context, environ 
 	credentialsFile := awsFileManager.GetCredentialsPath(providerName)
 	configFile := awsFileManager.GetConfigPath(providerName)
 
-	// Get region from identity config if available.
-	region := ""
-	if i.config.Principal != nil {
-		if r, ok := i.config.Principal["region"].(string); ok {
-			region = r
-		}
-	}
+	// Resolve region through identity chain inheritance.
+	region := i.resolveRegion()
 
 	// Use shared AWS environment preparation helper.
 	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
@@ -218,6 +262,33 @@ func (i *permissionSetIdentity) resolveRootProviderName() (string, error) {
 
 	// Fall back to cached value or config.
 	return i.getRootProviderFromVia()
+}
+
+// resolveRegion resolves the AWS region by traversing the identity chain.
+// First checks identity chain for region setting, then falls back to provider's region.
+// This uses the manager's generic chain resolution methods to support inheritance.
+func (i *permissionSetIdentity) resolveRegion() string {
+	// If manager is not available, fall back to direct config check.
+	if i.manager == nil {
+		if region, ok := i.config.Principal["region"].(string); ok && region != "" {
+			return region
+		}
+		return ""
+	}
+
+	// First check identity chain for region setting.
+	if val, ok := i.manager.ResolvePrincipalSetting(i.name, "region"); ok {
+		if region, ok := val.(string); ok && region != "" {
+			return region
+		}
+	}
+
+	// Fall back to provider's region.
+	if provider, ok := i.manager.ResolveProviderConfig(i.name); ok {
+		return provider.Region
+	}
+
+	return ""
 }
 
 // getRootProviderFromVia gets the root provider name using available information.
@@ -257,7 +328,8 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *ty
 	i.rootProviderName = params.ProviderName
 
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
+	// Use realm from params for credential isolation.
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", params.Realm); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %w", errUtils.ErrAwsAuth, err)
 	}
 
@@ -269,6 +341,7 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *ty
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Realm:        params.Realm,
 	}); err != nil {
 		return fmt.Errorf("%w: failed to set auth context: %w", errUtils.ErrAwsAuth, err)
 	}
@@ -383,7 +456,8 @@ func (i *permissionSetIdentity) CredentialsExist() (bool, error) {
 		return false, nil
 	}
 
-	mgr, err := awsCloud.NewAWSFileManager("")
+	// Uses realm for credential isolation between different repositories.
+	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -442,9 +516,10 @@ func (i *permissionSetIdentity) Logout(ctx context.Context) error {
 
 	// Get base_path from provider spec if configured (requires manager to lookup provider config).
 	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
+	// Uses realm for credential isolation between different repositories.
 	basePath := ""
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, i.realm)
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", "identity", i.name, "error", err)
 		return fmt.Errorf("failed to create AWS file manager: %w", err)

@@ -1,0 +1,9 @@
+{
+  "label": "settings",
+  "collapsed": false,
+  "link": {
+    "type": "doc",
+    "id": "settings"
+  },
+  "className": "command"
+}

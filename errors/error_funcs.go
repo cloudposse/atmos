@@ -1,11 +1,13 @@
 package errors
 
 import (
-	"errors"
+	goerrors "errors"
 	"fmt"
 	"os"
-	"os/exec"
+	"strings"
 
+	"github.com/cockroachdb/errors"
+	"github.com/spf13/viper"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
@@ -14,32 +16,181 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
+const (
+	// EnvVerbose is the environment variable name for verbose error output.
+	EnvVerbose = "ATMOS_VERBOSE"
+)
+
 // OsExit is a variable for testing, so we can mock os.Exit.
 var OsExit = os.Exit
 
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
+// atmosConfig is the global Atmos configuration for error handling.
+var atmosConfig *schema.AtmosConfiguration
+
+// verboseFlag holds the value of the --verbose flag.
+var verboseFlag = false
+
+// verboseFlagSet tracks whether the verbose flag was explicitly set via CLI.
+var verboseFlagSet = false
+
+// SetVerboseFlag sets the package-level verboseFlag to the given value and marks verboseFlagSet true.
+func SetVerboseFlag(verbose bool) {
+	verboseFlag = verbose
+	verboseFlagSet = true
+}
+
 // InitializeMarkdown initializes a new Markdown renderer.
-func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
+func InitializeMarkdown(config *schema.AtmosConfiguration) {
+	// Bind ATMOS_VERBOSE environment variable once during initialization.
+	_ = viper.BindEnv(EnvVerbose, EnvVerbose)
+
+	if config == nil {
+		log.Warn("InitializeMarkdown called with nil config")
+		return
+	}
+
 	var err error
-	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	render, err = markdown.NewTerminalMarkdownRenderer(*config)
 	if err != nil {
 		log.Error("failed to initialize Markdown renderer", "error", err)
 	}
+
+	// Store config for error formatting.
+	atmosConfig = config
+
+	// Initialize Sentry if configured.
+	if config.Errors.Sentry.Enabled {
+		if err := InitializeSentry(&config.Errors.Sentry); err != nil {
+			log.Warn("failed to initialize Sentry", "error", err)
+		}
+	}
+}
+
+// GetMarkdownRenderer returns the package-level markdown renderer and may return nil
+// if the renderer has not been initialized via InitializeMarkdown or has been cleared.
+// This function is not safe for concurrent access during initialization.
+func GetMarkdownRenderer() *markdown.Renderer {
+	return render
 }
 
 // printPlainError writes a plain-text error to stderr without Markdown formatting.
+// This is used as a fallback when the markdown renderer is not available.
 func printPlainError(title string, err error, suggestion string) {
+	maskedStderr := os.Stderr
 	if title != "" {
 		title = cases.Title(language.English).String(title)
-		fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
+		fmt.Fprintf(maskedStderr, "\n%s: %v\n", title, err)
 	} else {
-		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+		fmt.Fprintf(maskedStderr, "\nError: %v\n", err)
 	}
 	if suggestion != "" {
-		fmt.Fprintf(os.Stderr, "%s\n", suggestion)
+		fmt.Fprintf(maskedStderr, "%s\n", suggestion)
 	}
+}
+
+// printStructuredPlainError extracts ErrorBuilder enrichments and prints them
+// in a structured plain text format. This is used when the markdown renderer
+// is not available (e.g., during early startup errors before config is loaded).
+func printStructuredPlainError(err error, title string, suggestion string) {
+	if title == "" {
+		title = "Error"
+	}
+	title = cases.Title(language.English).String(title)
+	maskedStderr := os.Stderr
+
+	// Print title and base error message.
+	fmt.Fprintf(maskedStderr, "\n%s: %v\n", title, err)
+
+	// Extract and print explanations (from WithDetail/WithExplanation).
+	printErrorDetails(err)
+
+	// Extract and print hints (skip TITLE: and EXAMPLE: prefixes).
+	printErrorHints(err)
+
+	// Extract and print context (from WithContext).
+	printErrorContext(err)
+
+	// Legacy suggestion fallback.
+	if suggestion != "" {
+		fmt.Fprintf(maskedStderr, "\n%s\n", suggestion)
+	}
+}
+
+// printErrorDetails prints the explanation section from error details.
+func printErrorDetails(err error) {
+	details := errors.GetAllDetails(err)
+	if len(details) == 0 {
+		return
+	}
+	maskedStderr := os.Stderr
+	fmt.Fprintf(maskedStderr, "\nExplanation:\n")
+	for _, d := range details {
+		fmt.Fprintf(maskedStderr, "  • %s\n", d)
+	}
+}
+
+// printErrorHints prints the hints section, filtering out internal prefixes.
+func printErrorHints(err error) {
+	allHints := errors.GetAllHints(err)
+	var userHints []string
+	for _, h := range allHints {
+		if !strings.HasPrefix(h, "TITLE:") && !strings.HasPrefix(h, "EXAMPLE:") {
+			userHints = append(userHints, h)
+		}
+	}
+	if len(userHints) == 0 {
+		return
+	}
+	maskedStderr := os.Stderr
+	fmt.Fprintf(maskedStderr, "\nHints:\n")
+	for _, h := range userHints {
+		fmt.Fprintf(maskedStderr, "  • %s\n", h)
+	}
+}
+
+// printErrorContext prints the context section from safe details.
+func printErrorContext(err error) {
+	contextPairs := extractContextPairs(err)
+	if len(contextPairs) == 0 {
+		return
+	}
+	maskedStderr := os.Stderr
+	fmt.Fprintf(maskedStderr, "\nContext:\n")
+	for _, pair := range contextPairs {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) == 2 {
+			fmt.Fprintf(maskedStderr, "  %s: %s\n", parts[0], parts[1])
+		}
+	}
+}
+
+// extractContextPairs extracts key=value pairs from error safe details.
+// The SafeDetails format is "key1=value1 key2=value2" as generated by ErrorBuilder.WithContext().
+// Note: Values containing spaces will not parse correctly due to the space-separated format.
+// This is a limitation of the underlying SafeDetails storage format.
+func extractContextPairs(err error) []string {
+	safeDetails := errors.GetAllSafeDetails(err)
+	if len(safeDetails) == 0 {
+		return nil
+	}
+
+	var contextPairs []string
+	for _, payload := range safeDetails {
+		// SafeDetails format: space-separated "key=value" pairs.
+		for _, detail := range payload.SafeDetails {
+			pairs := strings.Split(detail, " ")
+			for _, pair := range pairs {
+				pair = strings.TrimSpace(pair)
+				if pair != "" && strings.Contains(pair, "=") {
+					contextPairs = append(contextPairs, pair)
+				}
+			}
+		}
+	}
+	return contextPairs
 }
 
 // CheckErrorAndPrint prints an error message.
@@ -48,9 +199,102 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 		return
 	}
 
-	// If markdown renderer is not initialized, fall back to plain error output.
+	// Capture error to Sentry if configured.
+	if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
+		CaptureError(err)
+	}
+
+	// Use new error formatter if config is available.
+	// Pass title and suggestion to ensure backward compatibility.
+	if atmosConfig != nil {
+		printFormattedError(err, title, suggestion)
+		return
+	}
+
+	// Config not available - use markdown renderer fallback.
+	printMarkdownError(err, title, suggestion)
+}
+
+// printFormattedError prints an error using the new formatter.
+// If title or suggestion are provided, they are incorporated into the formatted output.
+func printFormattedError(err error, title string, suggestion string) {
+	// If legacy title or suggestion are provided, incorporate them into the error.
+	if title != "" || suggestion != "" {
+		// Wrap error with legacy parameters using error builder.
+		builder := Build(err)
+		if suggestion != "" {
+			// Trim leading/trailing whitespace for analysis.
+			trimmed := strings.TrimSpace(suggestion)
+
+			// Check if suggestion contains markdown sections (backward compatibility).
+			// Old code passed suggestions like "\n## Explanation\n..." which should be
+			// added as explanations, not hints, to avoid rendering empty hint sections.
+			if strings.Contains(suggestion, "\n##") || strings.HasPrefix(trimmed, "##") {
+				// Strip the "## Explanation" header if present since formatter adds it.
+				cleaned := strings.TrimLeft(suggestion, "\n")
+				cleaned = strings.TrimPrefix(cleaned, "## Explanation\n")
+				cleaned = strings.TrimPrefix(cleaned, "## Explanation")
+				cleaned = strings.TrimSpace(cleaned)
+				builder = builder.WithExplanation(cleaned)
+			} else {
+				// Only add as hint if it's not empty after trimming.
+				// This prevents rendering empty "## Hints" sections for suggestions
+				// that are just whitespace or newlines.
+				if trimmed != "" {
+					builder = builder.WithHint(trimmed)
+				}
+			}
+		}
+		// Note: title is handled by the formatter's title parameter, not as a hint.
+		err = builder.Err()
+	}
+
+	// Check for --verbose flag (CLI flag > env var > config).
+	verbose := atmosConfig.Errors.Format.Verbose
+
+	// Apply precedence: config < env < CLI.
+	if viper.IsSet(EnvVerbose) {
+		verbose = viper.GetBool(EnvVerbose)
+	}
+	if verboseFlagSet {
+		verbose = verboseFlag
+	}
+
+	// Color mode is now determined by terminal settings (--no-color, --force-color, etc.)
+	// and does not need to be configured here.
+	config := FormatterConfig{
+		Verbose:       verbose,
+		MaxLineLength: DefaultMaxLineLength,
+		Title:         title, // Use provided title if any.
+	}
+	formatted := Format(err, config)
+
+	// Write directly to os.Stderr instead of using ui.MarkdownMessage() to avoid
+	// circular dependencies and ensure error formatting works before UI initialization.
+	//
+	// Why not use ui.MarkdownMessage():
+	// 1. Circular dependency: pkg/ui imports errors package, so errors cannot import ui
+	// 2. Initialization order: Error formatting must work before the UI system is initialized
+	//    (e.g., early startup errors, configuration loading failures)
+	// 3. Self-contained errors package: The errors package is designed to be low-level
+	//    and independent, ensuring errors can always be reported regardless of system state
+	//
+	// The formatted output is already rendered markdown, so writing to stderr is correct.
+	// Note: Error output is not masked to avoid import cycles with pkg/io.
+	_, printErr := os.Stderr.WriteString(formatted + "\n")
+	if printErr != nil {
+		log.Error(printErr)
+		log.Error(err)
+	}
+}
+
+// printMarkdownError renders an error using the Markdown renderer with fallback to plain text.
+func printMarkdownError(err error, title string, suggestion string) {
+	// If markdown renderer is not initialized, fall back to structured plain error output.
+	// This extracts ErrorBuilder enrichments (hints, explanations, context) and displays
+	// them in a readable format, even for early startup errors before config is loaded.
 	if render == nil {
-		printPlainError(title, err, suggestion)
+		printStructuredPlainError(err, title, suggestion)
 		return
 	}
 
@@ -60,8 +304,8 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 	title = cases.Title(language.English).String(title)
 	errorMarkdown, renderErr := render.RenderError(title, err.Error(), suggestion)
 	if renderErr != nil {
-		// Rendering failed - fall back to plain error output.
-		printPlainError(title, err, suggestion)
+		// Rendering failed - fall back to structured plain error output.
+		printStructuredPlainError(err, title, suggestion)
 		return
 	}
 	_, printErr := os.Stderr.WriteString(errorMarkdown + "\n")
@@ -71,33 +315,77 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 	}
 }
 
-// CheckErrorPrintAndExit prints an error message and exits with exit code 1.
+// CheckErrorPrintAndExit prints a non-nil error using the package's error formatter
+// and terminates the process with an appropriate exit code.
+// If the error is an ExitCodeError and its Code is 0, the function exits successfully without printing.
+// If the Code is non-zero it prints the error, closes Sentry if enabled, and exits with that code.
+// For all other errors it prints the error, closes Sentry if enabled, and exits with the code
+// returned by GetExitCode. The provided title and suggestion are used when printing the error.
 func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 	if err == nil {
 		return
 	}
 
+	// Check for ExitCodeError first (from ShellRunner preserving interp.ExitStatus)
+	var exitCodeErr ExitCodeError
+	if goerrors.As(err, &exitCodeErr) {
+		// Special case: exit code 0 means successful completion - don't print error
+		// This allows commands like 'version' to display output and exit successfully
+		// without using os.Exit() directly (which is untestable).
+		if exitCodeErr.Code == 0 {
+			Exit(0)
+			return
+		}
+		// Non-zero exit codes: print error and exit with that code
+		CheckErrorAndPrint(err, title, suggestion)
+
+		// Close Sentry before exiting.
+		if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
+			CloseSentry()
+		}
+
+		Exit(exitCodeErr.Code)
+		return
+	}
+
+	// Print error message for all other error types
 	CheckErrorAndPrint(err, title, suggestion)
 
-	// Check for ExitCodeError (from ShellRunner preserving interp.ExitStatus)
-	var exitCodeErr ExitCodeError
-	if errors.As(err, &exitCodeErr) {
-		Exit(exitCodeErr.Code)
+	// Close Sentry before exiting.
+	if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
+		CloseSentry()
 	}
 
-	// Find the executed command's exit code from the error
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		Exit(exitError.ExitCode())
-	}
+	// Get exit code from error (supports custom codes and exec.ExitError).
+	exitCode := GetExitCode(err)
 
 	// TODO: Refactor so that we only call `os.Exit` in `main()` or `init()` functions.
 	// Exiting here makes it difficult to test.
 	// revive:disable-next-line:deep-exit
-	Exit(1)
+	Exit(exitCode)
 }
 
 // Exit exits the program with the specified exit code.
 func Exit(exitCode int) {
 	OsExit(exitCode)
+}
+
+// WrapComponentDescribeError wraps an error from DescribeComponent, breaking the
+// ErrInvalidComponent chain to prevent triggering component type fallback in detectComponentType.
+//
+// This is critical for proper error propagation when a referenced component is not found.
+// Without breaking the chain, detectComponentType incorrectly tries Helmfile/Packer fallbacks,
+// producing confusing "component not found as Helmfile/Packer" errors instead of clear
+// "referenced component missing" errors.
+//
+// The context parameter describes where the error occurred (e.g., "atmos.Component", "!terraform.output").
+func WrapComponentDescribeError(component, stack string, err error, context string) error {
+	if goerrors.Is(err, ErrInvalidComponent) {
+		// Break the ErrInvalidComponent chain by using ErrDescribeComponent as the base.
+		// The original error message is preserved for debugging via %s (not %w).
+		return fmt.Errorf("%w: %s(%s, %s): %s",
+			ErrDescribeComponent, context, component, stack, err.Error())
+	}
+	// For other errors, preserve the full chain.
+	return fmt.Errorf("%s(%s, %s) failed: %w", context, component, stack, err)
 }

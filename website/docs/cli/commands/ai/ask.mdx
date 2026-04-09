@@ -1,0 +1,282 @@
+---
+title: atmos ai ask
+sidebar_label: ask
+sidebar_class_name: command
+id: ask
+description: Ask the AI assistant a question directly from the command line
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to ask the AI assistant a specific question and get an immediate response, without entering an interactive chat session.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure AI">
+    Learn how to configure AI providers, skills, tools, and sessions in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos ai ask --help" slug="atmos-ai-ask--help" />
+
+## Description
+
+The `atmos ai ask` command allows you to ask questions directly from the command line. The AI assistant analyzes your question in the context of your Atmos configuration and provides a detailed response.
+
+This is ideal for:
+- Quick one-off questions
+- Scripting and automation
+- Getting specific information without interactive mode
+- CI/CD pipeline integration
+
+## Usage
+
+```shell
+atmos ai ask [question]
+```
+
+## Arguments
+
+<dl>
+  <dt>`question`</dt>
+  <dd>The question to ask the AI assistant (required). Use quotes for multi-word questions.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--include <pattern>`</dt>
+  <dd>Add glob patterns to include in context (can be repeated)</dd>
+
+  <dt>`--exclude <pattern>`</dt>
+  <dd>Add glob patterns to exclude from context (can be repeated)</dd>
+
+  <dt>`--no-auto-context`</dt>
+  <dd>Disable automatic context discovery</dd>
+
+  <dt>`--no-tools`</dt>
+  <dd>Disable tool execution for faster, simpler queries</dd>
+
+  <dt>`--mcp <servers>`</dt>
+  <dd>MCP servers to use (comma-separated). Skips automatic server routing and starts only the specified servers. Can be repeated: `--mcp aws-iam --mcp aws-billing`. Use [`atmos mcp list`](/cli/commands/mcp/list) to see available server names. Environment variable: `ATMOS_AI_MCP`</dd>
+</dl>
+
+:::tip Smart MCP Routing
+When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your question using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`, `gemini-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
+:::
+
+## Examples
+
+### General Atmos Questions
+
+<Terminal title="atmos ai ask">
+```console
+$ atmos ai ask "What are Atmos stacks?"
+
+👽 Thinking...
+
+Atmos stacks are configurations that define how components are deployed
+across different environments. A stack is essentially a YAML file that
+specifies:
+
+1. Which components to deploy
+2. Variable values for those components
+3. Environment-specific settings
+4. Stack inheritance relationships
+
+Stacks enable you to:
+- Manage multiple environments (dev, staging, prod)
+- Share common configurations across environments
+- Override settings for specific use cases
+- Organize infrastructure logically
+```
+</Terminal>
+
+### Configuration-Specific Questions
+
+<Terminal title="atmos ai ask (Claude)">
+```console
+$ atmos ai ask "what stacks and components do we have in the infra?"
+
+👽 Thinking...
+
+  I'll list all the available stacks and components in your infrastructure.
+
+  Based on the infrastructure configuration, here are the stacks and components:
+
+  ## Stacks (4 total)
+
+  1. **ue1-network** - Network stack in us-east-1
+  2. **ue1-prod** - Production stack in us-east-1
+  3. **uw2-network** - Network stack in us-west-2
+  4. **uw2-prod** - Production stack in us-west-2
+
+  ## Components by Stack
+
+  ### ue1-network
+
+  • tgw/attachment - Transit Gateway attachment
+  • tgw/hub - Transit Gateway hub
+  • vpc - Virtual Private Cloud
+
+  ### ue1-prod
+
+  • tgw/attachment - Transit Gateway attachment
+  • vpc - Virtual Private Cloud
+
+  ### uw2-network
+
+  • tgw/attachment - Transit Gateway attachment
+  • tgw/cross-region-hub-connector - Cross-region Transit Gateway connector
+  • vpc - Virtual Private Cloud
+
+  ### uw2-prod
+
+  • tgw/attachment - Transit Gateway attachment
+  • vpc - Virtual Private Cloud
+
+  ## Summary
+
+  Your infrastructure is organized across two AWS regions (us-east-1 and us-west-2),
+  with dedicated network and production stacks in each region. The network stacks
+  contain Transit Gateway hubs for network connectivity, while the production stacks
+  use Transit Gateway attachments to connect to the network infrastructure. All stacks
+  include VPC components for network isolation.
+```
+</Terminal>
+
+<Terminal title="atmos ai ask (Gemini)">
+```console
+$ atmos ai ask "what is the metadata section of the vpc component in the ue1-prod stack?"
+
+👽 Thinking...
+
+  The metadata section of the vpc component in the ue1-prod stack is:
+
+    component: mock
+    locked: true
+```
+</Terminal>
+
+<Terminal title="atmos ai ask (Claude)">
+```console
+$ atmos ai ask "what is the metadata section of the vpc component in the ue1-prod stack?"
+
+👽 Thinking...
+
+  I'll help you find the metadata section of the vpc component in the ue1-prod stack.
+
+  Based on the results, the metadata section of the vpc component in the ue1-prod stack is:
+
+    metadata:
+      component: mock
+      locked: true
+
+  This metadata indicates that:
+
+  • The component field is set to "mock" (which is the actual Terraform component being used)
+  • The locked field is set to true (indicating this component configuration is locked)
+```
+</Terminal>
+
+### Component-Specific Questions
+
+```shell
+atmos ai ask "Describe the vpc component in the dev stack"
+atmos ai ask "What variables does the eks component require?"
+atmos ai ask "How is the rds component configured in production?"
+```
+
+### Best Practices Questions
+
+```shell
+atmos ai ask "What's the best way to organize my components?"
+atmos ai ask "How should I structure my stack inheritance?"
+atmos ai ask "What are the security best practices for Atmos?"
+```
+
+### Workflow Questions
+
+```shell
+atmos ai ask "How do I use workflows in Atmos?"
+atmos ai ask "What's the difference between terraform and helmfile components?"
+atmos ai ask "How do I vendor external components?"
+```
+
+### MCP Server Questions
+
+```shell
+# Auto-routing selects the right server automatically
+atmos ai ask "What did we spend on EC2 last month?"
+atmos ai ask "Is GuardDuty enabled in us-east-1?"
+
+# Specify servers directly (skip routing)
+atmos ai ask --mcp aws-iam "List all admin roles"
+atmos ai ask --mcp aws-iam,aws-cloudtrail "Who accessed the admin role?"
+
+# Environment variable
+ATMOS_AI_MCP=aws-billing atmos ai ask "Show our billing summary"
+```
+
+## Advanced Usage
+
+### In Scripts and Automation
+
+```bash
+#!/bin/bash
+
+# Get AI assistance in a script
+response=$(atmos ai ask "What components are affected by changes to networking?")
+echo "$response"
+
+# Use in CI/CD
+if atmos validate stacks; then
+  atmos ai ask "What's the recommended deployment order for these stacks?"
+fi
+```
+
+### Complex Multi-Part Questions
+
+```shell
+# Use quotes for multi-word questions
+atmos ai ask "How do I migrate from one cloud provider to another using Atmos?"
+
+# Ask about specific error messages
+atmos ai ask "I'm getting error 'component not found'. What does this mean and how do I fix it?"
+```
+
+## Output Format
+
+The command outputs:
+1. **Thinking indicator** - Shows the AI is processing
+2. **AI response header** - Identifies the response source
+3. **Formatted response** - Markdown-formatted answer with code blocks, lists, and emphasis
+
+## Comparison with Other Commands
+
+<dl>
+  <dt>`atmos ai ask`</dt>
+  <dd>One-off questions, scripting, quick answers.</dd>
+
+  <dt>`atmos ai chat`</dt>
+  <dd>Extended conversations, learning, exploration.</dd>
+
+</dl>
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start an interactive chat session'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+  {type: 'link', href: '/cli/configuration/ai/skills', label: 'AI Skills', description: 'Install and use 21+ specialized AI skills'},
+]} />

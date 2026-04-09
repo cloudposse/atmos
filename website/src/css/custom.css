@@ -4,6 +4,26 @@
  * work well for content-centric websites.
  */
 
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* No custom width constraints - let Docusaurus handle responsive layout */
+
+/* Accessibility: Visually hidden but available to screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 .navbar__title {
     font-size: 2em;
     backdrop-filter: blur(6px) saturate(180%);
@@ -37,6 +57,15 @@ html[data-theme='dark'] a.navbar__item.navbar__link.latest-release-link {
     position: relative;
     bottom: 2px;
     margin-right: 0;
+}
+
+/* Add drop shadow to alien logo in light mode */
+.navbar__logo img {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+html[data-theme='dark'] .navbar__logo img {
+    filter: none;
 }
 
 div.atmos__effect, html[data-theme='dark'] div.navbar__logo {
@@ -77,28 +106,43 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
     padding-right: 10px;
 }
 
+/* Mobile navbar: ensure hamburger toggle is visible on right side */
+@media (max-width: 996px) {
+    /* Override Docusaurus default absolute positioning on search container */
+    .navbarSearchContainer_NhcR,
+    [class*="navbarSearchContainer"] {
+        position: static !important;
+        right: auto !important;
+    }
+
+    /* Add spacing between search and hamburger */
+    .navbar__toggle {
+        margin-left: 0.75rem;
+    }
+}
+
 .menu__list-item-collapsible {
     font-weight: bold;
 }
 
 ::selection {
     background-color: yellow;
-}
-
-html[data-theme='dark'] body {
-    background-image: url("/static/img/cloudposse-opaque.svg");
+    color: black;
 }
 
 body {
     background-color: var(--ifm-background-color);
-    background-image: url("/static/img/cloudposse-light.svg");
-    background-position: 98% 98%;
-    background-repeat: no-repeat;
-    background-size: 15em;
-    background-attachment: fixed;
     font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     font-size: 17px;
     line-height: 30px;
+}
+
+/* Hide Cloud Posse watermark on mobile */
+@media (max-width: 996px) {
+    body,
+    html[data-theme='dark'] body {
+        background-image: none;
+    }
 }
 
 .language-console pre > code, .language-text pre > code {
@@ -235,6 +279,19 @@ article h1 {
     --announcement-bar-text-color: #fff;
 }
 
+/* Fix announcement bar responsive wrapping at mid-range widths */
+/* Override Docusaurus default fixed 30px height on desktop */
+@media (min-width: 997px) {
+    :root {
+        --docusaurus-announcement-bar-height: auto;
+    }
+}
+
+/* Ensure announcement bar content wraps properly */
+div[class*="announcementBarContent"] {
+    line-height: 1.4;
+}
+
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
     --ifm-color-primary: #3578e5;
@@ -253,14 +310,41 @@ html[data-theme='dark'] {
     --docsearch-searchbox-background: #121526 !important;
 }
 
+/* Modern glassy admonition styling for dark mode */
 [data-theme='dark'] .alert--secondary {
-    --ifm-color-secondary-contrast-background: rgb(145 161 217 / 24%);
-    --ifm-alert-background-color: rgb(145 161 217 / 24%);
+    --ifm-color-secondary-contrast-background: rgba(145, 161, 217, 0.12);
+    --ifm-alert-background-color: rgba(145, 161, 217, 0.12);
+    border: 1px solid rgba(145, 161, 217, 0.30);
 }
 
-[data-theme='dark'] .alert--info {
-    --ifm-color-info-contrast-background: rgb(25, 60, 71, 0.50);
-    --ifm-alert-background-color: rgb(25, 60, 71, 0.50);
+[data-theme='dark'] .alert--info,
+[data-theme='dark'] .theme-admonition-info,
+[data-theme='dark'] .theme-admonition-note {
+    --ifm-color-info-contrast-background: rgba(56, 139, 253, 0.12);
+    --ifm-alert-background-color: rgba(56, 139, 253, 0.12);
+    border: 1px solid rgba(56, 139, 253, 0.35);
+}
+
+[data-theme='dark'] .alert--success,
+[data-theme='dark'] .theme-admonition-tip {
+    --ifm-alert-background-color: rgba(35, 134, 54, 0.12);
+    --ifm-color-success-contrast-background: rgba(35, 134, 54, 0.12);
+    border: 1px solid rgba(46, 160, 67, 0.35);
+}
+
+[data-theme='dark'] .alert--warning,
+[data-theme='dark'] .theme-admonition-warning,
+[data-theme='dark'] .theme-admonition-caution {
+    --ifm-alert-background-color: rgba(187, 128, 9, 0.12);
+    --ifm-color-warning-contrast-background: rgba(187, 128, 9, 0.12);
+    border: 1px solid rgba(210, 153, 34, 0.35);
+}
+
+[data-theme='dark'] .alert--danger,
+[data-theme='dark'] .theme-admonition-danger {
+    --ifm-alert-background-color: rgba(248, 81, 73, 0.12);
+    --ifm-color-danger-contrast-background: rgba(248, 81, 73, 0.12);
+    border: 1px solid rgba(248, 81, 73, 0.35);
 }
 
 .alert--secondary {
@@ -301,6 +385,51 @@ details a.button.button--lg.button--primary p {
 
 [data-theme='dark'] .header-github-link::before {
     background: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='white' d='M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12'/%3E%3C/svg%3E") no-repeat;
+}
+
+/* GitHub Stars Badge */
+.github-stars-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--ifm-navbar-link-color);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.github-stars-badge:hover {
+    text-decoration: none;
+    color: var(--ifm-navbar-link-hover-color);
+}
+
+.github-stars-icon {
+    color: #888;
+    transition: color 0.2s ease;
+}
+
+.github-stars-badge:hover .github-stars-icon {
+    color: #f0b72f;
+}
+
+.github-stars-count {
+    font-variant-numeric: tabular-nums;
+}
+
+[data-theme='dark'] .github-stars-icon {
+    color: #666;
+}
+
+[data-theme='dark'] .github-stars-badge:hover .github-stars-icon {
+    color: #f0b72f;
+}
+
+/* Hide stars badge on smaller screens where navbar space is limited */
+@media (max-width: 1100px) {
+    .github-stars-badge {
+        display: none;
+    }
 }
 
 [data-theme='dark'] ::selection {
@@ -429,6 +558,20 @@ dl dt {
     font-weight: bold;
 }
 
+/* Deep-linkable definition terms - scroll offset for fixed header */
+dt[id] {
+    scroll-margin-top: calc(var(--ifm-navbar-height) + 1rem);
+}
+
+dt[id]:target {
+    animation: def-highlight 2s ease-out;
+}
+
+@keyframes def-highlight {
+    from { background-color: var(--ifm-color-primary-lightest); }
+    to { background-color: transparent; }
+}
+
 dt > em {
     font-weight: 500;
 }
@@ -489,6 +632,11 @@ dd.disambiguation a {
     background-color: transparent !important;
 }
 
+.mermaid svg {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
 html[data-theme='dark'] .markdown h3 {
     color: #b1b1b1;
 }
@@ -512,4 +660,452 @@ sub {
 
 .markdown h3 {
     margin-top: 3em;
+}
+
+/* Modern Blog/Changelog Styling */
+
+/* Year headings on ALL blog pages and sidebar - consistent styling */
+.blog-list-page h3,
+.blog-post-page aside h3,
+aside[class*="sidebar"] h3 {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    margin-top: 2rem !important;
+    margin-bottom: 1.5rem !important;
+    padding-bottom: 0.75rem !important;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+html[data-theme='light'] .blog-list-page h3,
+html[data-theme='light'] .blog-post-page aside h3,
+html[data-theme='light'] aside[class*="sidebar"] h3 {
+    color: rgba(0, 0, 0, 0.6) !important;
+    border-bottom-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Blog pages use standard Docusaurus layout - minimal overrides only */
+
+/* Reduce blog post titles slightly */
+article header h1 {
+    font-size: 2.5rem !important;
+    line-height: 1.2 !important;
+}
+
+.blog-list-page h2 {
+    line-height: 1.2 !important;
+    margin-bottom: 0.5rem !important;
+}
+
+.blog-list-page h2 a {
+    font-size: 2rem !important;
+    line-height: 1.2 !important;
+    color: inherit !important;
+    text-decoration: none !important;
+    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out !important;
+}
+
+.blog-list-page h2 a:hover {
+    opacity: 0.7 !important;
+    text-decoration: none !important;
+    transform: translateX(4px) !important;
+}
+
+html[data-theme="light"] .blog-list-page h2 a:hover {
+    opacity: 0.6 !important;
+}
+
+/* Blog list - restructure layout to move tags inline with date */
+.theme-blog-post-item {
+    position: relative;
+}
+
+/* Move tags from footer to header area */
+.theme-blog-post-item footer {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+}
+
+/* Create inline date/tags layout for blog list */
+.theme-blog-post-item header > div:last-child {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 1rem !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+}
+
+/* Tags on individual blog posts - use absolute positioning to move to header */
+article header {
+    position: relative;
+}
+
+.blog-tags-post-page {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+/* Modern tag container - remove default styling */
+.theme-blog-post-item footer .tags_src-theme-BlogTagsListPage-styles-module,
+.blog-list-page .tags_src-theme-BlogTagsListPage-styles-module {
+    display: inline-flex !important;
+    gap: 0.5rem !important;
+    margin: 0 !important;
+    order: 2 !important;
+}
+
+/* Hide "Tags:" text label completely - multiple approaches */
+.blog-list-page .tags_src-theme-BlogTagsListPage-styles-module::before,
+.blog-post-page .blog-tags-post-page::before,
+.theme-blog-post-item footer > span:first-child {
+    display: none !important;
+    visibility: hidden !important;
+    font-size: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+/* Hide "Tags:" label on individual blog post pages */
+.blog-post-page .blog-tags-post-page b,
+article .blog-tags-post-page b {
+    display: none !important;
+}
+
+/* Force hide any text node containing "Tags:" */
+.blog-list-page footer::before,
+.theme-blog-post-item footer::before {
+    content: none !important;
+}
+
+/* Individual tag styling - modern subtle badges like Next.js sites */
+html[data-theme="dark"] .tag {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.375rem;
+    background: rgba(128, 128, 128, 0.2);
+    color: #fff;
+    opacity: 0.8;
+    border: 1px solid rgba(128, 128, 128, 0.15);
+    text-decoration: none;
+    transition: all 0.15s ease;
+    letter-spacing: 0.01em;
+}
+
+html[data-theme="light"] .tag {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.375rem;
+    color: #1a1d23;
+    background: rgba(0, 0, 0, 0.15);
+    opacity: 0.8;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    text-decoration: none;
+    transition: all 0.15s ease;
+    letter-spacing: 0.01em;
+}
+
+html[data-theme="dark"] .tag:hover {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.3);
+    border-color: rgba(128, 128, 128, 0.25);
+    color: #fff;
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+html[data-theme="light"] .tag:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.2);
+    border-color: rgba(0, 0, 0, 0.18);
+    color: #1a1d23;
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+/* Hide the "Tags:" text by setting font-size to 0 on the text content */
+.theme-blog-post-item footer,
+.blog-list-page footer {
+    font-size: 0;
+}
+
+/* Restore font-size for the actual links (not tags) */
+.theme-blog-post-item footer a:not(.tag),
+.blog-list-page footer a:not(.tag) {
+    font-size: 0.9rem;
+}
+
+/* Additional approach - hide any text nodes */
+.theme-blog-post-item footer > *:not(a):not([class*="tags"]) {
+    display: none;
+}
+
+/* Hide text content that says "Tags:" using negative text-indent */
+.theme-blog-post-item footer,
+.blog-list-page footer {
+    text-indent: -9999px;
+}
+
+.theme-blog-post-item footer *,
+.blog-list-page footer * {
+    text-indent: 0;
+}
+
+/* Better author card styling */
+.avatar__photo {
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+}
+
+.avatar__intro {
+    font-size: 0.95rem;
+}
+
+.avatar__name {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.avatar__subtitle {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* Improve blog post spacing */
+.theme-blog-post-item {
+    margin-bottom: 3rem;
+    padding: 2rem !important;
+    border-radius: 0.75rem !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    transition: all 0.2s ease !important;
+}
+
+.theme-blog-post-item:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    transform: translateY(-2px) !important;
+}
+
+html[data-theme='light'] .theme-blog-post-item {
+    background: rgba(0, 0, 0, 0.02) !important;
+    border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+html[data-theme='light'] .theme-blog-post-item:hover {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Better date and read time styling */
+.theme-blog-post-item time,
+.theme-blog-post-item .blogPostData_node_modules-\@docusaurus-theme-classic-lib-theme-BlogPostItem-Header-Info-styles-module {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+/* Blog post header metadata - date and tags inline */
+article header .margin-vert--md {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+}
+
+/* Modern tag styling - smaller, more subtle */
+/* Move tags to header on individual blog post pages */
+.blog-tags-post-page {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+}
+
+/* Make article header relative for absolute positioning */
+article header {
+    position: relative !important;
+}
+
+/* Style tags on individual blog post - use margin-left for spacing */
+.blog-tags-post-page .tag {
+    margin-left: 0.5rem !important;
+}
+
+/* Hide "Tags:" label on individual blog posts */
+.blog-tags-post-page b {
+    display: none !important;
+}
+
+/* Improve blog excerpt */
+.theme-blog-post-item p {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    margin-top: 1rem;
+}
+
+/* Better Read more link */
+.theme-blog-post-item footer a {
+    font-weight: 600;
+}
+
+/* Fix sidebar sticky positioning - allow native Docusaurus collapse to work */
+.theme-doc-sidebar-container:not([class*="hidden"]) {
+    position: sticky !important;
+    top: var(--ifm-navbar-height) !important;
+    max-height: calc(100vh - var(--ifm-navbar-height)) !important;
+    overflow-y: auto !important;
+    padding-top: 0 !important;
+}
+
+/* Prevent text wrapping in sidebar links */
+.menu__link {
+    white-space: normal;
+    line-height: 1.4;
+}
+
+/* Blog sidebar - match docs sidebar appearance exactly */
+.blog-list-page aside,
+.blog-post-page aside,
+aside[class*="sidebar_"] {
+    position: sticky !important;
+    top: var(--ifm-navbar-height) !important;
+    max-height: calc(100vh - var(--ifm-navbar-height)) !important;
+    overflow-y: auto !important;
+    padding-top: 0 !important;
+}
+
+/* Blog sidebar items - match docs sidebar menu items */
+.theme-blog-sidebar-item {
+    margin-bottom: 0;
+}
+
+.theme-blog-sidebar-item li {
+    max-width: 100%;
+}
+
+.theme-blog-sidebar-item a,
+a[class*="sidebarItemLink"] {
+    font-size: var(--ifm-menu-link-font-size);
+    line-height: var(--ifm-menu-link-line-height);
+    padding: var(--ifm-menu-link-padding-vertical) var(--ifm-menu-link-padding-horizontal);
+    color: var(--ifm-menu-color);
+    text-decoration: none;
+    border-radius: var(--ifm-global-radius);
+    display: block;
+    max-width: 100%;
+    white-space: normal;
+    word-wrap: break-word;
+}
+
+.theme-blog-sidebar-item a:hover,
+a[class*="sidebarItemLink"]:hover {
+    background-color: var(--ifm-menu-color-background-hover);
+    color: var(--ifm-menu-color-active);
+}
+
+/* Table of contents - reasonable width with sticky positioning */
+.theme-doc-toc-desktop,
+div[class*="tableOfContents"] {
+    min-width: 250px;
+    position: sticky;
+    top: var(--ifm-navbar-height);
+    max-height: calc(100vh - var(--ifm-navbar-height));
+    overflow-y: auto;
+}
+
+a[class*="table-of-contents__link"] {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+}
+
+/* Let TOC use natural width on all screen sizes */
+
+/* ==================== */
+/* CHANGELOG FULL WIDTH */
+/* ==================== */
+
+/* Hide sidebar on changelog/blog list page to use full width */
+/* Note: Use specific selectors to avoid hiding navbar-sidebar */
+.blog-list-page aside.theme-doc-sidebar-container,
+.blog-list-page aside[class*="sidebar"],
+.blog-list-page div[class*="BlogSidebar"] {
+    display: none !important;
+}
+
+.blog-list-page main {
+    width: 100%;
+    max-width: none;
+}
+
+/* YAML syntax highlighting - nightOwl theme doesn't style atrule tokens */
+/* YAML keys use atrule token, values use various scalar types */
+.prism-code .token.atrule,
+.token.atrule {
+    color: rgb(127, 219, 202) !important;
+}
+
+.prism-code .token.scalar,
+.token.scalar {
+    color: rgb(173, 219, 103) !important;
+}
+
+/* Ensure YAML punctuation (colons, dashes) are visible */
+.prism-code .token.punctuation,
+.token.punctuation {
+    color: rgb(199, 146, 234);
+}
+
+/* ========================= */
+/* RESIZABLE DOCS SIDEBAR    */
+/* ========================= */
+
+/* Drag handle: invisible strip on right edge of sidebar, visible on hover */
+@media (min-width: 997px) {
+    .theme-doc-sidebar-container {
+        width: var(--doc-sidebar-width, 300px) !important;
+        min-width: var(--doc-sidebar-width, 300px) !important;
+        flex: 0 0 var(--doc-sidebar-width, 300px) !important;
+    }
+
+    .theme-doc-sidebar-container::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: -2px;
+        width: 5px;
+        height: 100%;
+        cursor: col-resize;
+        background: transparent;
+        transition: background 0.15s ease;
+        z-index: 10;
+    }
+
+    .theme-doc-sidebar-container:hover::after {
+        background: var(--ifm-color-primary-lightest);
+        opacity: 0.4;
+    }
+
+    html.sidebar-resizing .theme-doc-sidebar-container::after {
+        background: var(--ifm-color-primary);
+        opacity: 0.6;
+        width: 3px;
+    }
+}
+
+/* During drag: force col-resize cursor and prevent text selection */
+html.sidebar-resizing,
+html.sidebar-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+/* Disable sidebar transition during drag for instant feedback */
+html.sidebar-resizing .theme-doc-sidebar-container {
+    transition: none !important;
 }

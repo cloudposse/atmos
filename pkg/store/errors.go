@@ -20,7 +20,7 @@ var (
 
 	// AWS SSM specific errors.
 	ErrRegionRequired = errors.New("region is required in ssm store configuration")
-	ErrLoadAWSConfig  = errors.New("failed to load AWS configuration")
+	ErrLoadAWSConfig  = errors.New("failed to load AWS config")
 	ErrSetParameter   = errors.New("failed to set parameter")
 	ErrGetParameter   = errors.New("failed to get parameter")
 
@@ -58,6 +58,10 @@ var (
 	ErrParseSSMOptions         = errors.New("failed to parse SSM store options")
 	ErrParseRedisOptions       = errors.New("failed to parse Redis store options")
 	ErrStoreTypeNotFound       = errors.New("store type not found")
+
+	// Identity errors.
+	ErrIdentityNotConfigured   = errors.New("store identity is configured but auth resolver is not set")
+	ErrAuthContextNotAvailable = errors.New("auth context not available for identity")
 
 	// Shared errors.
 	ErrSerializeJSON = errors.New("failed to serialize value to JSON")

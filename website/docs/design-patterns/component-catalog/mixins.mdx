@@ -1,0 +1,339 @@
+---
+title: Mixins
+sidebar_position: 3
+sidebar_label: Mixins
+description: Reusable configuration fragments for common settings
+id: mixins
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+**Mixins** are reusable configuration fragments that encapsulate settings you want to apply consistently. Instead of repeating the same values across multiple stacks, define them once in a mixin and import where needed.
+</Intro>
+
+## Use-cases
+
+Use **Mixins** when:
+
+- You repeat the same configuration across multiple stacks
+
+- You want region-specific defaults (availability zones, region name)
+
+- You want stage-specific defaults (instance sizes, feature flags)
+
+- Different teams should share consistent settings
+
+## Two Places for Mixins
+
+Mixins can live in two locations depending on their scope:
+
+| Location | Scope | Examples |
+|----------|-------|----------|
+| `stacks/mixins/` | Global settings that apply across many components | Region defaults, stage defaults, tenant defaults |
+| `stacks/catalog/<component>/mixins/` | Component-specific feature flags and versions | `vpc/mixins/multi-az`, `eks/mixins/1.27` |
+
+## Common Global Mixin Types
+
+| Mixin Type | Contains | Example |
+|-----------|----------|---------|
+| Region | Region name, AZs, environment abbreviation | `mixins/region/us-east-2.yaml` |
+| Stage | Stage name, stage-specific defaults | `mixins/stage/prod.yaml` |
+| Tenant | Team/OU name, team-specific settings | `mixins/tenant/platform.yaml` |
+
+## Example: Region Mixins
+
+Region mixins encapsulate everything that's consistent for a region:
+
+<File title="stacks/mixins/region/us-east-2.yaml">
+```yaml
+vars:
+  region: us-east-2
+  environment: ue2
+
+# Region-specific component defaults
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones:
+          - us-east-2a
+          - us-east-2b
+          - us-east-2c
+```
+</File>
+
+<File title="stacks/mixins/region/us-west-2.yaml">
+```yaml
+vars:
+  region: us-west-2
+  environment: uw2
+
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones:
+          - us-west-2a
+          - us-west-2b
+          - us-west-2c
+```
+</File>
+
+Now stacks import the region mixin instead of repeating these values:
+
+<File title="stacks/deploy/us-east-2/dev.yaml">
+```yaml
+import:
+  - mixins/region/us-east-2
+  - catalog/vpc/defaults
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        ipv4_primary_cidr_block: "10.10.0.0/16"
+```
+</File>
+
+## Example: Stage Mixins
+
+Stage mixins define defaults for each environment:
+
+<File title="stacks/mixins/stage/dev.yaml">
+```yaml
+vars:
+  stage: dev
+
+# Dev defaults: smaller, cheaper
+components:
+  terraform:
+    vpc:
+      vars:
+        nat_gateway_enabled: false
+        max_subnet_count: 2
+    rds:
+      vars:
+        instance_class: db.t3.small
+```
+</File>
+
+<File title="stacks/mixins/stage/prod.yaml">
+```yaml
+vars:
+  stage: prod
+
+# Prod defaults: full configuration
+components:
+  terraform:
+    vpc:
+      vars:
+        map_public_ip_on_launch: false
+    rds:
+      vars:
+        instance_class: db.r6g.xlarge
+        multi_az: true
+```
+</File>
+
+## Example: Catalog Mixins (Feature Flags)
+
+Mixins inside a component's catalog folder enable optional features:
+
+<File title="stacks/catalog/vpc/mixins/multi-az.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        max_subnet_count: 3
+        availability_zones_count: 3
+```
+</File>
+
+<File title="stacks/catalog/vpc/mixins/nat-gateway.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        nat_gateway_enabled: true
+        nat_instance_enabled: false
+```
+</File>
+
+Stack files pick the features they need:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+  - catalog/vpc/mixins/multi-az      # Enable multi-AZ
+  - catalog/vpc/mixins/nat-gateway   # Enable NAT gateway
+
+vars:
+  stage: prod
+```
+</File>
+
+## Example: Catalog Mixins (Versions)
+
+Version mixins are perfect for components like EKS where different clusters may run different versions:
+
+<File title="stacks/catalog/eks/mixins/1.27.yaml">
+```yaml
+components:
+  terraform:
+    eks/cluster:
+      vars:
+        cluster_kubernetes_version: "1.27"
+        addons:
+          vpc-cni:
+            addon_version: "v1.12.6-eksbuild.2"
+          kube-proxy:
+            addon_version: "v1.27.1-eksbuild.1"
+          coredns:
+            addon_version: "v1.10.1-eksbuild.1"
+```
+</File>
+
+<File title="stacks/catalog/eks/mixins/1.28.yaml">
+```yaml
+components:
+  terraform:
+    eks/cluster:
+      vars:
+        cluster_kubernetes_version: "1.28"
+        addons:
+          vpc-cni:
+            addon_version: "v1.14.1-eksbuild.1"
+          kube-proxy:
+            addon_version: "v1.28.1-eksbuild.1"
+          coredns:
+            addon_version: "v1.10.1-eksbuild.4"
+```
+</File>
+
+Upgrade clusters independently by changing which version mixin they import:
+
+<File title="stacks/deploy/prod/us-east-2.yaml">
+```yaml
+import:
+  - catalog/eks/defaults
+  - catalog/eks/mixins/1.28  # This cluster is on 1.28
+```
+</File>
+
+<File title="stacks/deploy/prod/us-west-2.yaml">
+```yaml
+import:
+  - catalog/eks/defaults
+  - catalog/eks/mixins/1.27  # This cluster is still on 1.27
+```
+</File>
+
+## Import Order Matters
+
+Later imports override earlier ones. Order from general to specific:
+
+```yaml
+import:
+  - catalog/vpc/defaults           # 1. Component defaults (most general)
+  - catalog/vpc/mixins/multi-az    # 2. Feature flags
+  - mixins/region/us-east-2        # 3. Region settings
+  - mixins/stage/prod              # 4. Stage settings (most specific)
+```
+
+## Directory Structure
+
+```console
+stacks/
+├── catalog/                    # Component defaults
+│   ├── vpc/
+│   │   ├── defaults.yaml
+│   │   └── mixins/             # Component-specific mixins
+│   │       ├── multi-az.yaml
+│   │       └── nat-gateway.yaml
+│   └── eks/
+│       ├── defaults.yaml
+│       └── mixins/             # Version mixins
+│           ├── 1.27.yaml
+│           └── 1.28.yaml
+├── mixins/                     # Global mixins
+│   ├── region/
+│   │   ├── us-east-2.yaml
+│   │   └── us-west-2.yaml
+│   └── stage/
+│       ├── dev.yaml
+│       ├── staging.yaml
+│       └── prod.yaml
+└── deploy/                     # Top-level stacks
+    └── us-east-2/
+        ├── dev.yaml
+        └── prod.yaml
+```
+
+## Before and After
+
+**Without mixins** (repetitive):
+
+```yaml title="stacks/deploy/us-east-2/dev.yaml"
+vars:
+  region: us-east-2
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones: [us-east-2a, us-east-2b, us-east-2c]
+        nat_gateway_enabled: false
+```
+
+```yaml title="stacks/deploy/us-east-2/prod.yaml"
+vars:
+  region: us-east-2
+  environment: ue2
+  stage: prod
+
+components:
+  terraform:
+    vpc:
+      vars:
+        availability_zones: [us-east-2a, us-east-2b, us-east-2c]
+        map_public_ip_on_launch: false
+```
+
+**With mixins** (DRY):
+
+```yaml title="stacks/deploy/us-east-2/dev.yaml"
+import:
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - catalog/vpc/defaults
+```
+
+```yaml title="stacks/deploy/us-east-2/prod.yaml"
+import:
+  - mixins/region/us-east-2
+  - mixins/stage/prod
+  - catalog/vpc/defaults
+```
+
+## Related Patterns
+
+- [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) - Uses region mixins
+- [Organizational Hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) - Uses tenant mixins
+- [Component Catalog](/design-patterns/component-catalog) - Component defaults (different from mixins)
+
+## References
+
+- [Mixins](/howto/mixins)
+- [Stack Imports](/stacks/imports)

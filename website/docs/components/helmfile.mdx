@@ -1,0 +1,118 @@
+---
+title: Using Helmfile
+sidebar_position: 4
+sidebar_label: Helmfile
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos natively supports opinionated workflows for [Helmfile](https://github.com/helmfile/helmfile). Helmfile provides a declarative specification for deploying helm charts.
+</Intro>
+
+For a complete list of supported commands, please see the Atmos [helmfile](/cli/commands/helmfile/usage) documentation.
+
+## Stack Configuration
+
+The schema for configuring Helmfile components in Atmos stacks:
+
+```yaml
+components:
+  helmfile:
+    # the slug of the component
+    nginx-ingress:
+
+      # configuration specific to atmos
+      metadata:
+        type: real
+        component: nginx-ingress
+
+      # Settings for integrations
+      settings: {}
+
+      # Variables passed to Helmfile
+      vars:
+        installed: true
+        namespace: ingress
+        chart_version: "4.0.0"
+
+      # Environment variables
+      env:
+        HELM_DEBUG: "true"
+```
+
+### Attributes
+
+<dl>
+  <dt>`vars` (optional)</dt>
+  <dd>
+  Variables passed to Helmfile. These are deep-merged and made available to your Helmfile configuration.
+
+  **Example:**
+  ```yaml
+  vars:
+    installed: true
+    namespace: ingress
+    replica_count: 3
+  ```
+  </dd>
+
+  <dt>`metadata` (optional)</dt>
+  <dd>
+  The `metadata` section extends functionality of the component. See [Common Component Attributes](/stacks/components#metadata-attributes) for details.
+
+  **Example:**
+  ```yaml
+  metadata:
+    type: real
+    component: nginx-ingress
+    inherits:
+      - ingress-defaults
+  ```
+  </dd>
+
+  <dt>`settings` (optional)</dt>
+  <dd>
+  Free-form map for integration configuration.
+  </dd>
+
+  <dt>`env` (optional)</dt>
+  <dd>
+  Environment variables to set when running Helmfile commands.
+
+  **Example:**
+  ```yaml
+  env:
+    HELM_DEBUG: "true"
+    KUBECONFIG: "/path/to/kubeconfig"
+  ```
+  </dd>
+</dl>
+
+## Example: Provision Helmfile Component
+
+To provision a helmfile component using the `atmos` CLI, run the following commands in the container shell:
+
+```shell
+atmos helmfile diff nginx-ingress --stack=ue2-dev
+atmos helmfile apply nginx-ingress --stack=ue2-dev
+```
+
+where:
+
+- `nginx-ingress` is the helmfile component to provision (from the `components/helmfile` folder)
+- `--stack=ue2-dev` is the stack to provision the component into
+
+Short versions of the command-line arguments can be used:
+
+```shell
+atmos helmfile diff nginx-ingress -s ue2-dev
+atmos helmfile apply nginx-ingress -s ue2-dev
+```
+
+## Example: Helmfile Diff
+
+To execute `diff` and `apply` in one step, use `helmfile deploy` command:
+
+```shell
+atmos helmfile deploy nginx-ingress -s ue2-dev
+```

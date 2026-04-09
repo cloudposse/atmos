@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,9 +12,14 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// TestHTTPClient allows tests to inject a custom HTTP client for remote file fetching.
+// This is used to mock GitHub requests in tests.
+var TestHTTPClient *http.Client
 
 // ProcessIncludeTag processes the !include tag with extension-based parsing.
 // It parses files based on their extension, not their content.
@@ -91,9 +97,14 @@ func processIncludeTagInternal(
 			return err
 		}
 	} else {
-		// Local file not found - provide helpful error message
+		// Local file not found - provide helpful error message.
+		// Prefer BasePathAbsolute for the error since it's more informative.
+		errBasePath := atmosConfig.BasePathAbsolute
+		if errBasePath == "" {
+			errBasePath = atmosConfig.BasePath
+		}
 		return fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
-			ErrIncludeYamlFunctionInvalidFile, includeFile, file, atmosConfig.BasePath)
+			ErrIncludeYamlFunctionInvalidFile, includeFile, file, errBasePath)
 	}
 
 	// Apply YQ expression if provided
@@ -110,7 +121,7 @@ func processIncludeTagInternal(
 
 // isRemoteURL checks if the path is a remote URL.
 func isRemoteURL(path string) bool {
-	remoteProtocols := []string{"http://", "https://", "s3://", "gcs://", "git://", "oci://", "scp://", "sftp://"}
+	remoteProtocols := []string{"http://", "https://", "s3://", "gcs://", "git://", "oci://", "scp://", "sftp://", "github://"}
 	for _, protocol := range remoteProtocols {
 		if strings.HasPrefix(path, protocol) {
 			return true
@@ -188,8 +199,13 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 		return absPath
 	}
 
-	// Try relative to the base_path from atmos.yaml
-	atmosManifestPath := filepath.Join(atmosConfig.BasePath, includeFile)
+	// Try relative to the base_path from atmos.yaml.
+	// Prefer BasePathAbsolute (resolved during config init) over BasePath (which may be relative).
+	basePath := atmosConfig.BasePathAbsolute
+	if basePath == "" {
+		basePath = atmosConfig.BasePath
+	}
+	atmosManifestPath := filepath.Join(basePath, includeFile)
 	return resolveAbsolutePath(atmosManifestPath)
 }
 
@@ -209,14 +225,37 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	defer perf.Track(atmosConfig, "utils.processRemoteFile")()
 
-	dl := downloader.NewGoGetterDownloader(atmosConfig)
+	// Convert GitHub URLs to raw URLs if needed.
+	downloadURL := includeFile
+	if isGitHubURL(includeFile) {
+		rawURL, err := github.ConvertToRawURL(includeFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert GitHub URL to raw URL: %w", err)
+		}
+		downloadURL = rawURL
+	}
+
+	// Build options, including test HTTP client if set.
+	var opts []downloader.GoGetterOption
+	if TestHTTPClient != nil {
+		opts = append(opts, downloader.WithHTTPClient(TestHTTPClient))
+	}
+
+	dl := downloader.NewGoGetterDownloader(atmosConfig, opts...)
 
 	if forceRaw {
 		// Always return raw content for !include.raw
-		return dl.FetchAndParseRaw(includeFile)
+		return dl.FetchAndParseRaw(downloadURL)
 	}
 	// Use extension-based parsing for regular !include
-	return dl.FetchAndParseByExtension(includeFile)
+	return dl.FetchAndParseByExtension(downloadURL)
+}
+
+// isGitHubURL checks if the URL is a GitHub URL that needs conversion.
+func isGitHubURL(url string) bool {
+	return strings.HasPrefix(url, "https://github.com/") ||
+		strings.HasPrefix(url, "http://github.com/") ||
+		strings.HasPrefix(url, "github://")
 }
 
 // handleCommentString updates the node for string values that start with '#'.

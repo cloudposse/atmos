@@ -2,7 +2,7 @@
 
 ```bash
  $ atmos terraform generate varfile --file-template {component-path}/{tenant}/{environment}-{stage}.tf.json --format json
-```
+```shell
 
 - Only process the specified stacks (comma-separated values), supporting top-level stack manifest paths or derived Atmos stack names
 
@@ -14,7 +14,7 @@
 
 ```bash
  $ atmos terraform generate varfile --file-template <file_template> --components <component1>,<component2>
-```
+```shell
 
 - Specify the format for the output file.
 

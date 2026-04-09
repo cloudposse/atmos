@@ -2,27 +2,32 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	azureAuth "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/browser"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
@@ -38,6 +43,7 @@ var (
 	consoleIssuer      string
 	consolePrintOnly   bool
 	consoleSkipOpen    bool
+	consoleIsolated    bool
 )
 
 //go:embed markdown/atmos_auth_console_usage.md
@@ -63,7 +69,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
 	// Initialize auth manager.
-	authManager, err := initializeAuthManager()
+	authManager, atmosConfig, err := initializeAuthManager()
 	if err != nil {
 		return err
 	}
@@ -100,13 +106,13 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	// Check if provider supports console access and get the console URL generator.
 	consoleProvider, err := getConsoleProvider(authManager, whoami.Identity)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthConsole, err)
 	}
 
 	// Resolve session duration (flag takes precedence over provider config).
 	sessionDuration, err := resolveConsoleDuration(cmd, authManager, whoami.Provider)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthConsole, err)
 	}
 
 	// Generate console URL.
@@ -124,34 +130,54 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	if consolePrintOnly {
 		// Print to stdout for piping.
-		fmt.Println(consoleURL)
+		fmt.Fprintln(ioLayer.MaskWriter(os.Stdout), consoleURL)
 		return nil
 	}
 
-	// Print formatted output and handle browser opening.
+	// Print formatted output.
 	printConsoleInfo(whoami, duration, false, "")
-	handleBrowserOpen(consoleURL)
+
+	// Only build browser opener when we will actually open the browser.
+	var opener browser.Opener
+	if !consoleSkipOpen && !telemetry.IsCI() {
+		// Resolve isolated session mode: flag > config > default (false).
+		isolated := resolveConsoleIsolated(cmd, atmosConfig)
+
+		// Build browser opener.
+		var opts []browser.Option
+		if isolated {
+			sessionDir, sessionErr := consoleSessionDir(atmosConfig.Auth.Realm, identityName)
+			if sessionErr != nil {
+				return fmt.Errorf("%w: failed to create isolated session directory: %w", errUtils.ErrAuthConsole, sessionErr)
+			}
+			opts = append(opts, browser.WithIsolatedSession(sessionDir))
+		}
+		opener = browser.New(opts...)
+	}
+
+	handleBrowserOpen(consoleURL, opener)
 
 	return nil
 }
 
 // handleBrowserOpen handles opening the console URL in the browser or displaying it.
-func handleBrowserOpen(consoleURL string) {
+func handleBrowserOpen(consoleURL string, opener browser.Opener) {
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 	if !consoleSkipOpen && !telemetry.IsCI() {
-		fmt.Fprintf(os.Stderr, "\n")
-		if err := u.OpenUrl(consoleURL); err != nil {
+		fmt.Fprintf(maskedStderr, "\n")
+		if err := opener.Open(consoleURL); err != nil {
 			// Show URL on error so user can manually open it.
 			printConsoleURL(consoleURL)
 			warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange)).Bold(true)
-			fmt.Fprintf(os.Stderr, "\n%s Failed to open browser: %v\n", warningStyle.Render("Warning:"), err)
-			fmt.Fprintf(os.Stderr, "Please copy the URL above and open it manually.\n")
+			fmt.Fprintf(maskedStderr, "\n%s Failed to open browser: %v\n", warningStyle.Render("Warning:"), err)
+			fmt.Fprintf(maskedStderr, "Please copy the URL above and open it manually.\n")
 		} else {
 			successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
-			fmt.Fprintf(os.Stderr, "%s\n", successStyle.Render("✓ Opened console in browser"))
+			fmt.Fprintf(maskedStderr, "%s\n", successStyle.Render("✓ Opened console in browser"))
 		}
 	} else {
 		// User explicitly skipped opening or running in CI, so show the URL.
-		fmt.Fprintf(os.Stderr, "\n")
+		fmt.Fprintf(maskedStderr, "\n")
 		printConsoleURL(consoleURL)
 	}
 }
@@ -162,23 +188,24 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Width(consoleLabelWidth)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWhite))
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 
 	// Print header.
-	fmt.Fprintf(os.Stderr, "\n%s\n\n", headerStyle.Render("Console URL Generated"))
+	fmt.Fprintf(maskedStderr, "\n%s\n\n", headerStyle.Render("Console URL Generated"))
 
 	// Print fields.
-	fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
-	fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
+	fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
+	fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
 
 	if whoami.Account != "" {
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
+		fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
 	}
 
 	if duration > 0 {
 		// Calculate expiration time.
 		expiresAt := time.Now().Add(duration)
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
+		fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
+		fmt.Fprintf(maskedStderr, consoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
 	}
 
 	// Only print URL if requested (for error cases or --no-open).
@@ -191,7 +218,7 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 func printConsoleURL(consoleURL string) {
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
 	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	fmt.Fprintf(os.Stderr, "\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
 }
 
 // getConsoleProvider returns a ConsoleAccessProvider for the given identity.
@@ -210,8 +237,10 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 		// Return AWS console URL generator with default HTTP client.
 		generator := awsAuth.NewConsoleURLGenerator(nil)
 		return generator, nil
-	case types.ProviderKindAzureOIDC:
-		return nil, fmt.Errorf("%w: Azure console access not yet implemented (coming soon)", errUtils.ErrProviderNotSupported)
+	case types.ProviderKindAzureOIDC, types.ProviderKindAzureCLI, types.ProviderKindAzureDeviceCode:
+		// Return Azure console URL generator.
+		generator := azureAuth.NewConsoleURLGenerator()
+		return generator, nil
 	case types.ProviderKindGCPOIDC:
 		return nil, fmt.Errorf("%w: GCP console access not yet implemented (coming soon)", errUtils.ErrProviderNotSupported)
 	default:
@@ -220,20 +249,21 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 }
 
 // initializeAuthManager loads config and creates the auth manager.
-func initializeAuthManager() (types.AuthManager, error) {
+// Returns the auth manager and the full atmos config (needed for realm and console settings).
+func initializeAuthManager() (types.AuthManager, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "cmd.initializeAuthManager")()
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
+		return nil, nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
+		return nil, nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	return authManager, nil
+	return authManager, &atmosConfig, nil
 }
 
 // resolveIdentityName gets identity from flag or uses default.
@@ -241,15 +271,11 @@ func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (str
 	defer perf.Track(nil, "cmd.resolveIdentityName")()
 
 	// Get identity from flag or use default.
-	// Check if flag was explicitly set by user to ensure command-line precedence.
-	var identityName string
-	if cmd.Flags().Changed(IdentityFlagName) {
-		// Flag was explicitly provided on command line (either with or without value).
-		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
-	} else {
-		// Flag not provided on command line - fall back to viper (config/env).
-		identityName = viper.GetString(IdentityFlagName)
-	}
+	// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
+	// When --identity flag has NoOptDefVal set, using "--identity value" (space-separated)
+	// causes Cobra to interpret it as "--identity" (with NoOptDefVal) plus "value" as positional arg.
+	// GetIdentityFromFlags works around this by also parsing os.Args directly.
+	identityName := GetIdentityFromFlags(cmd, os.Args)
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
@@ -279,7 +305,8 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 		return whoami.Credentials, nil
 	case whoami.CredentialsRef != "":
 		credStore := credentials.NewCredentialStore()
-		creds, err := credStore.Retrieve(whoami.CredentialsRef)
+		// Use realm from whoami info for credential retrieval.
+		creds, err := credStore.Retrieve(whoami.CredentialsRef, whoami.Realm)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to retrieve credentials from store: %w", errUtils.ErrAuthConsole, err)
 		}
@@ -322,6 +349,34 @@ func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, p
 	return duration, nil
 }
 
+// consoleSessionDir returns an XDG data directory for an isolated browser session.
+// The directory is deterministic based on realm+identity, so the same identity
+// reuses its browser profile across invocations.
+func consoleSessionDir(realm, identityName string) (string, error) {
+	h := sha256.Sum256([]byte(realm + "/" + identityName))
+	dirName := hex.EncodeToString(h[:8])
+	return xdg.GetXDGDataDir(filepath.Join("console", "sessions", dirName), xdg.DefaultCacheDirPerm)
+}
+
+// resolveConsoleIsolated resolves whether to use isolated browser sessions.
+// Flag takes precedence over auth.console.isolated config.
+func resolveConsoleIsolated(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) bool {
+	defer perf.Track(nil, "cmd.resolveConsoleIsolated")()
+
+	// Flag explicitly set by user takes precedence.
+	if cmd.Flags().Changed("isolated") {
+		return consoleIsolated
+	}
+
+	// Check auth.console config.
+	if atmosConfig.Auth.Console != nil && atmosConfig.Auth.Console.Isolated != nil {
+		return *atmosConfig.Auth.Console.Isolated
+	}
+
+	// Default: no isolation (backward-compatible).
+	return false
+}
+
 func init() {
 	authConsoleCmd.Flags().StringVar(&consoleDestination, "destination", "",
 		"Console page to navigate to. Supports full URLs or shorthand aliases like 's3', 'ec2', 'lambda', etc.")
@@ -333,6 +388,8 @@ func init() {
 		"Print the console URL to stdout without opening browser")
 	authConsoleCmd.Flags().BoolVar(&consoleSkipOpen, "no-open", false,
 		"Generate URL but don't open browser automatically")
+	authConsoleCmd.Flags().BoolVar(&consoleIsolated, "isolated", false,
+		"Open console in an isolated browser session (requires Chrome/Chromium). Enables multiple simultaneous console sessions.")
 
 	// Register autocomplete for destination flag (AWS service aliases).
 	if err := authConsoleCmd.RegisterFlagCompletionFunc("destination", destinationFlagCompletion); err != nil {

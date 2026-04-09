@@ -782,8 +782,8 @@ func (p *GCPProvider) Logout(ctx context.Context) error
 
 ## 12. References
 
-- [PRD: Atmos Auth](pkg/auth/docs/prd/PRD-Atmos-Auth.md)
-- [Atmos Error Handling Strategy](docs/prd/error-handling-strategy.md)
-- [Atmos Testing Strategy](docs/prd/testing-strategy.md)
+- [PRD: Atmos Auth](../../pkg/auth/docs/PRD/PRD-Atmos-Auth.md)
+- [Atmos Error Handling Strategy](./error-handling-strategy.md)
+- [Atmos Testability Refactoring Strategy](./testability-refactoring-strategy.md)
 - [Charmbracelet Huh Documentation](https://github.com/charmbracelet/huh)
 - [Charmbracelet Lipgloss Documentation](https://github.com/charmbracelet/lipgloss)

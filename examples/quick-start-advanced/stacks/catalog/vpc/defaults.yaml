@@ -4,6 +4,7 @@ components:
       metadata:
         # Point to the Terraform component
         component: vpc
+        description: "Virtual Private Cloud with subnets and NAT gateway"
       settings:
         # The `vpc` component depends on the `vpc-flow-logs-bucket` component in the same stack
         depends_on:

@@ -8,6 +8,7 @@
       "deploy_run_init": true,
       "init_run_reconfigure": true,
       "auto_generate_backend_file": false,
+      "auto_generate_files": false,
       "command": "",
       "shell": {
         "prompt": ""
@@ -17,7 +18,12 @@
       },
       "plan": {
         "skip_planfile": false
-      }
+      },
+      "planfiles": {
+        "default": ""
+      },
+      "plugin_cache": true,
+      "ci": {}
     },
     "helmfile": {
       "base_path": "",
@@ -25,11 +31,24 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
-      "command": ""
+      "cluster_name_template": "",
+      "cluster_name": "",
+      "command": "",
+      "auto_generate_files": false
     },
     "packer": {
       "base_path": "",
-      "command": ""
+      "command": "",
+      "auto_generate_files": false
+    },
+    "ansible": {
+      "base_path": "",
+      "command": "",
+      "auto_generate_files": false
+    },
+    "list": {
+      "format": "",
+      "columns": null
     },
     "Plugins": null
   },
@@ -42,7 +61,12 @@
       "**/_defaults.yaml"
     ],
     "name_pattern": "{stage}",
-    "name_template": ""
+    "name_template": "",
+    "list": {
+      "format": "",
+      "columns": null
+    },
+    "inherit": {}
   },
   "workflows": {
     "base_path": "",
@@ -54,6 +78,13 @@
   "logs": {
     "file": "/dev/stderr",
     "level": "Info"
+  },
+  "errors": {
+    "format": {},
+    "sentry": {
+      "enabled": false,
+      "dsn": ""
+    }
   },
   "integrations": {
     "atlantis": {}
@@ -75,7 +106,7 @@
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
-      "pager": "0",
+      "pager": "false",
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
@@ -91,6 +122,7 @@
         "enabled": false
       }
     },
+    "experimental": "warn",
     "docs": {
       "max_width": 0,
       "pagination": false
@@ -128,11 +160,12 @@
     "InjectGithubToken": true,
     "GithubToken": "",
     "AtmosGithubToken": "",
-    "InjectBitbucketToken": false,
+    "GithubUsername": "",
+    "InjectBitbucketToken": true,
     "BitbucketToken": "",
     "AtmosBitbucketToken": "",
     "BitbucketUsername": "",
-    "InjectGitlabToken": false,
+    "InjectGitlabToken": true,
     "AtmosGitlabToken": "",
     "GitlabToken": "",
     "pro": {
@@ -145,6 +178,9 @@
       "endpoint": "https://us.i.posthog.com",
       "token": "phc_TEST_TOKEN_PLACEHOLDER",
       "logging": false
+    },
+    "provision": {
+      "workdir": {}
     }
   },
   "describe": {
@@ -158,6 +194,7 @@
     }
   },
   "initialized": true,
+  "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
     "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"
@@ -168,13 +205,11 @@
   "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
   "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
-    "Check": {
-      "Enabled": false,
-      "Timeout": 0,
-      "Frequency": ""
-    }
+    "check": {},
+    "constraint": {}
   },
   "validate": {
     "editorconfig": {}
@@ -192,6 +227,7 @@
     }
   },
   "auth": {
+    "realm": "<hash>",
     "logs": {
       "file": "",
       "level": ""
@@ -206,5 +242,57 @@
     "host": "",
     "file": "",
     "profile_type": ""
-  }
+  },
+  "toolchain": {
+    "install_path": "",
+    "file_path": "",
+    "tools_dir": "",
+    "versions_file": "",
+    "use_tool_versions": false,
+    "use_lock_file": false
+  },
+  "profiles": {},
+  "metadata": {},
+  "list": {
+    "components": {
+      "format": "",
+      "columns": null
+    },
+    "instances": {
+      "format": "",
+      "columns": null
+    },
+    "stacks": {
+      "format": "",
+      "columns": null
+    }
+  },
+  "ci": {
+    "output": {},
+    "summary": {},
+    "checks": {
+      "statuses": {}
+    },
+    "comments": {},
+    "templates": {}
+  },
+  "ai": {
+    "sessions": {
+      "auto_compact": {}
+    },
+    "tools": {},
+    "instructions": {},
+    "web_search": {},
+    "context": {}
+  },
+  "aws": {
+    "security": {
+      "sources": {},
+      "tag_mapping": {}
+    }
+  },
+  "mcp": {
+    "routing": {}
+  },
+  "lsp": {}
 }

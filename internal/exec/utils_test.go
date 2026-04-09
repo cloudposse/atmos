@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -163,7 +164,7 @@ func TestGenerateComponentProviderOverrides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateComponentProviderOverrides(tt.providerOverrides)
+			result := generateComponentProviderOverrides(tt.providerOverrides, nil)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -256,14 +257,23 @@ func TestGenerateComponentBackendConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:               "empty-backend-type-returns-error",
+			backendType:        "",
+			backendConfig:      map[string]any{},
+			terraformWorkspace: "",
+			expected:           nil,
+			expectError:        true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := generateComponentBackendConfig(tt.backendType, tt.backendConfig, tt.terraformWorkspace)
+			result, err := generateComponentBackendConfig(tt.backendType, tt.backendConfig, tt.terraformWorkspace, nil)
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrBackendTypeRequired)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, result)

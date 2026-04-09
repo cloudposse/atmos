@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Multi-file Packer component test - uses directory-based templates.
+# No settings.packer.template is specified, so Atmos defaults to "."
+# which tells Packer to load all *.pkr.hcl files from the component directory.
+
+components:
+  packer:
+    aws/multi-file:
+      # NOTE: No settings.packer.template - tests directory mode default
+      settings:
+        packer:
+          source_ami: "ami-0013ceeff668b979b"
+          region: "us-east-2"
+      metadata:
+        component: aws/multi-file
+      vars:
+        ami_name: "multi-file-test-ami"
+        source_ami: "{{ .settings.packer.source_ami }}"
+        region: "{{ .settings.packer.region }}"
+        ssh_username: "ec2-user"
+        skip_create_ami: true
+        manifest_file_name: "manifest.json"
+        tags:
+          Name: "multi-file-test"
+          ManagedBy: "atmos"

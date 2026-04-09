@@ -2,13 +2,23 @@ package schema
 
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
-	Logs       Logs                `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
-	Keyring    KeyringConfig       `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
-	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
-	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
+	// Realm provides credential isolation between different repositories or customer environments.
+	// Different repositories with the same identity names will have isolated credentials.
+	// If not set, defaults to a SHA256 hash of the CLI config path (first 8 characters).
+	// Can also be set via ATMOS_AUTH_REALM environment variable (highest precedence).
+	Realm        string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
+	Logs         Logs                   `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Keyring      KeyringConfig          `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
+	Console      *AuthConsoleConfig     `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
+	Providers    map[string]Provider    `yaml:"providers" json:"providers" mapstructure:"providers"`
+	Identities   map[string]Identity    `yaml:"identities" json:"identities" mapstructure:"identities"`
+	Integrations map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 	// IdentityCaseMap maps lowercase identity names to their original case.
 	// This is populated during config loading to work around Viper's case-insensitive behavior.
 	IdentityCaseMap map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// RealmSource indicates how the realm was resolved (env/config/config-path/default).
+	// This is set during config loading and is not user-configurable.
+	RealmSource string `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // KeyringConfig defines keyring backend configuration for credential storage.
@@ -19,21 +29,22 @@ type KeyringConfig struct {
 
 // Provider defines an authentication provider configuration.
 type Provider struct {
-	Kind                  string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	StartURL              string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
-	URL                   string                 `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
-	Region                string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
-	Username              string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
-	Password              string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
-	Driver                string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
-	ProviderType          string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
-	DownloadBrowserDriver bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
-	BrowserType           string                 `yaml:"browser_type,omitempty" json:"browser_type,omitempty" mapstructure:"browser_type"`                                  // Browser engine type: chromium, firefox, webkit, chrome, msedge, etc.
-	BrowserExecutablePath string                 `yaml:"browser_executable_path,omitempty" json:"browser_executable_path,omitempty" mapstructure:"browser_executable_path"` // Path to custom browser executable.
-	Session               *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
-	Console               *ConsoleConfig         `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
-	Default               bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
-	Spec                  map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	Kind                    string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
+	StartURL                string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
+	URL                     string                 `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	Region                  string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	Username                string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Password                string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
+	Driver                  string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
+	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
+	DownloadBrowserDriver   bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
+	BrowserType             string                 `yaml:"browser_type,omitempty" json:"browser_type,omitempty" mapstructure:"browser_type"`                                  // Browser engine type: chromium, firefox, webkit, chrome, msedge, etc.
+	BrowserExecutablePath   string                 `yaml:"browser_executable_path,omitempty" json:"browser_executable_path,omitempty" mapstructure:"browser_executable_path"` // Path to custom browser executable.
+	AutoProvisionIdentities *bool                  `yaml:"auto_provision_identities,omitempty" json:"auto_provision_identities,omitempty" mapstructure:"auto_provision_identities"`
+	Session                 *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	Console                 *ConsoleConfig         `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
+	Default                 bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Spec                    map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
 }
 
 // SessionConfig defines session configuration for providers.
@@ -46,12 +57,23 @@ type ConsoleConfig struct {
 	SessionDuration string `yaml:"session_duration,omitempty" json:"session_duration,omitempty" mapstructure:"session_duration"` // Duration string (e.g., "12h"). Max: 12h for AWS.
 }
 
+// AuthConsoleConfig defines global console behavior settings under auth.console.
+type AuthConsoleConfig struct {
+	Isolated *bool `yaml:"isolated,omitempty" json:"isolated,omitempty" mapstructure:"isolated"` // Enable isolated browser sessions per identity.
+}
+
 // Identity defines an authentication identity configuration.
 type Identity struct {
-	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Kind    string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Default bool   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	// Required marks this identity for automatic authentication without prompting.
+	// Multiple identities can be required. Required identities that are not default
+	// are authenticated as secondary — their profiles are written to the shared
+	// credentials file for multi-account Terraform components.
+	Required    bool                   `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
+	Provider    string                 `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider name for direct provider association (for provisioned identities).
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
-	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"`
+	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
 	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
@@ -64,6 +86,44 @@ type IdentityVia struct {
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
+// Principal defines the principal information for an identity (for provisioned identities).
+// This is a helper struct for creating provisioned identities programmatically.
+type Principal struct {
+	Name    string   `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Account *Account `yaml:"account,omitempty" json:"account,omitempty" mapstructure:"account"`
+}
+
+// Account defines account information for a principal.
+type Account struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	ID   string `yaml:"id,omitempty" json:"id,omitempty" mapstructure:"id"`
+}
+
+// ToMap converts a Principal struct to a map[string]interface{} for use in Identity.Principal.
+func (p *Principal) ToMap() map[string]interface{} {
+	if p == nil {
+		return make(map[string]interface{})
+	}
+
+	result := make(map[string]interface{})
+	if p.Name != "" {
+		result["name"] = p.Name
+	}
+	if p.Account != nil {
+		account := make(map[string]interface{})
+		if p.Account.Name != "" {
+			account["name"] = p.Account.Name
+		}
+		if p.Account.ID != "" {
+			account["id"] = p.Account.ID
+		}
+		if len(account) > 0 {
+			result["account"] = account
+		}
+	}
+	return result
+}
+
 // EnvironmentVariable defines an environment variable with preserved case sensitivity.
 type EnvironmentVariable struct {
 	Key   string `yaml:"key" json:"key" mapstructure:"key"`
@@ -72,6 +132,62 @@ type EnvironmentVariable struct {
 
 // ComponentAuthConfig defines auth configuration at the component level.
 type ComponentAuthConfig struct {
-	Providers  map[string]Provider `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
-	Identities map[string]Identity `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+	Realm        string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
+	Providers    map[string]Provider    `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
+	Identities   map[string]Identity    `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+	Integrations map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
+}
+
+// Integration defines a client-only credential materialization (e.g., ECR, EKS).
+// Integrations derive credentials from identities for service-specific access.
+type Integration struct {
+	Kind string           `yaml:"kind" json:"kind" mapstructure:"kind"` // Integration type (e.g., "aws/ecr", "aws/eks").
+	Via  *IntegrationVia  `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
+	Spec *IntegrationSpec `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
+}
+
+// IntegrationVia defines how an integration connects to an identity.
+type IntegrationVia struct {
+	Identity string `yaml:"identity" json:"identity" mapstructure:"identity"` // Identity providing credentials.
+}
+
+// IntegrationSpec defines the spec configuration for integrations.
+type IntegrationSpec struct {
+	AutoProvision *bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
+	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
+	Cluster       *EKSCluster  `yaml:"cluster,omitempty" json:"cluster,omitempty" mapstructure:"cluster"`                      // EKS cluster for aws/eks integrations.
+}
+
+// ECRRegistry represents an ECR registry configuration for aws/ecr integrations.
+type ECRRegistry struct {
+	AccountID string `yaml:"account_id" json:"account_id" mapstructure:"account_id"`
+	Region    string `yaml:"region" json:"region" mapstructure:"region"`
+}
+
+// EKSCluster represents an EKS cluster configuration for aws/eks integrations.
+type EKSCluster struct {
+	// Name is the EKS cluster name (required).
+	Name string `yaml:"name" json:"name" mapstructure:"name"`
+
+	// Region is the AWS region where the cluster is located (required).
+	Region string `yaml:"region" json:"region" mapstructure:"region"`
+
+	// Alias is the context name in kubeconfig (optional, defaults to cluster ARN).
+	Alias string `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
+
+	// Kubeconfig contains kubeconfig file settings (optional).
+	Kubeconfig *KubeconfigSettings `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty" mapstructure:"kubeconfig"`
+}
+
+// KubeconfigSettings configures kubeconfig file behavior.
+type KubeconfigSettings struct {
+	// Path is a custom kubeconfig file path (optional, defaults to XDG path).
+	Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
+
+	// Mode is the file permission mode as an octal string (optional, defaults to "0600").
+	// Parsed via strconv.ParseUint(mode, 8, 32) at config-load time.
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+
+	// Update determines how to handle existing kubeconfig: "merge" (default), "replace", or "error".
+	Update string `yaml:"update,omitempty" json:"update,omitempty" mapstructure:"update"`
 }

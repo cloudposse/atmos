@@ -16,11 +16,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,8 +37,12 @@ const (
 // isInteractive checks if we're running in an interactive terminal.
 // For SSO device flow, we need stderr to be a TTY so the user can see the authentication URL.
 // We check stderr (not stdin) because that's where we output the authentication instructions.
+// Respects --force-tty / ATMOS_FORCE_TTY for environments where TTY detection fails.
 func isInteractive() bool {
-	return term.IsTTYSupportForStderr()
+	if viper.GetBool("force-tty") {
+		return true
+	}
+	return isTTY()
 }
 
 // ssoProvider implements AWS IAM Identity Center authentication.
@@ -47,6 +52,8 @@ type ssoProvider struct {
 	startURL     string
 	region       string
 	cacheStorage CacheStorage
+	ssoClient    ssoClient // For dependency injection in tests.
+	realm        string    // Credential isolation realm set by auth manager.
 }
 
 // NewSSOProvider creates a new AWS SSO provider.
@@ -85,6 +92,11 @@ func (p *ssoProvider) Name() string {
 	return p.name
 }
 
+// SetRealm sets the credential isolation realm for this provider.
+func (p *ssoProvider) SetRealm(realm string) {
+	p.realm = realm
+}
+
 // PreAuthenticate is a no-op for SSO provider.
 func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 	return nil
@@ -113,7 +125,16 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 
 	// Check if we're in a headless environment - SSO device flow requires user interaction.
 	if !isInteractive() {
-		return nil, fmt.Errorf("%w: SSO device flow requires an interactive terminal (no TTY detected). Use environment credentials or service account authentication in headless environments", errUtils.ErrAuthenticationFailed)
+		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithExplanation("AWS SSO device flow requires an interactive terminal (TTY) for user authorization").
+			WithHint("Use 'aws sso login' to authenticate before running Atmos in headless environments").
+			WithHint("For CI/CD pipelines, use AWS environment credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)").
+			WithHint("For GitHub Actions, use OIDC authentication with aws/assume-role identity").
+			WithContext("provider", p.name).
+			WithContext("start_url", p.startURL).
+			WithContext("region", p.region).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Build config options.
@@ -131,10 +152,18 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 
 	log.Debug("Loading AWS config for SSO authentication", "region", p.region)
 	// Initialize AWS config for the SSO region with isolated environment
-	// to avoid conflicts with external AWS env vars.
+	// to avoid conflicts with external AWS env vars and shared config files.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAuthenticationFailed, err)
+		return nil, errUtils.Build(errUtils.ErrLoadAWSConfig).
+			WithExplanationf("Failed to load AWS configuration for SSO authentication in region '%s'", p.region).
+			WithHint("Verify that the AWS region is valid and accessible").
+			WithHint("Check your network connectivity and AWS service availability").
+			WithContext("provider", p.name).
+			WithContext("region", p.region).
+			WithContext("start_url", p.startURL).
+			WithExitCode(1).
+			Err()
 	}
 	log.Debug("AWS config loaded successfully")
 
@@ -148,7 +177,16 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		ClientType: aws.String("public"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to register SSO client: %w", errUtils.ErrAuthenticationFailed, err)
+		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithExplanation("Failed to register SSO client with AWS IAM Identity Center").
+			WithHint("Verify your AWS SSO configuration in atmos.yaml is correct").
+			WithHintf("Ensure the start_url '%s' is valid and accessible", p.startURL).
+			WithHint("Check that AWS SSO is enabled in your AWS account").
+			WithContext("provider", p.name).
+			WithContext("start_url", p.startURL).
+			WithContext("region", p.region).
+			WithExitCode(1).
+			Err()
 	}
 	log.Debug("SSO client registered successfully")
 
@@ -160,7 +198,16 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		StartUrl:     aws.String(p.startURL),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to start device authorization: %w", errUtils.ErrAuthenticationFailed, err)
+		return nil, errUtils.Build(errUtils.ErrSSODeviceAuthFailed).
+			WithExplanation("Failed to initiate AWS SSO device authorization flow").
+			WithHint("Verify your AWS SSO session is active with 'aws sso login'").
+			WithHintf("Check that the SSO start URL '%s' is correct in your atmos.yaml", p.startURL).
+			WithHint("Ensure your AWS account has SSO enabled and configured").
+			WithContext("provider", p.name).
+			WithContext("start_url", p.startURL).
+			WithContext("region", p.region).
+			WithExitCode(1).
+			Err()
 	}
 	log.Debug("Device authorization started")
 
@@ -220,7 +267,7 @@ func (p *ssoProvider) promptDeviceAuth(authResp *ssooidc.StartDeviceAuthorizatio
 
 	// Open browser if not in CI. The browser open will work if there's a display available.
 	if !telemetry.IsCI() && authResp.VerificationUriComplete != nil && *authResp.VerificationUriComplete != "" {
-		if err := utils.OpenUrl(*authResp.VerificationUriComplete); err != nil {
+		if err := browser.New().Open(*authResp.VerificationUriComplete); err != nil {
 			log.Debug("Failed to open browser automatically", "error", err)
 		} else {
 			log.Debug("Browser opened successfully")
@@ -324,16 +371,81 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this provider.
+//
+//nolint:dupl // SSO and SAML providers have identical path logic but are separate implementations
+func (p *ssoProvider) Paths() ([]authTypes.Path, error) {
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	// Use AWSFileManager to get correct provider-namespaced paths with realm isolation.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
+	if err != nil {
+		return nil, err
+	}
+
+	paths := []authTypes.Path{
+		{
+			Location: fileManager.GetCredentialsPath(p.name),
+			Type:     authTypes.PathTypeFile,
+			Required: true,
+			Purpose:  fmt.Sprintf("AWS credentials file for provider %s", p.name),
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+		{
+			Location: fileManager.GetConfigPath(p.name),
+			Type:     authTypes.PathTypeFile,
+			Required: false, // Config file is optional.
+			Purpose:  fmt.Sprintf("AWS config file for provider %s", p.name),
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+	}
+
+	// Add AWS cache directory if it can be determined (contains SSO and CLI cache).
+	// This directory should be writable so the AWS SDK can update cache.
+	awsCacheDir := fileManager.GetCachePath()
+	if awsCacheDir != "" {
+		paths = append(paths, authTypes.Path{
+			Location: awsCacheDir,
+			Type:     authTypes.PathTypeDirectory,
+			Required: false, // Cache is optional - AWS SDK will create if needed.
+			Purpose:  "AWS SDK cache directory (SSO tokens, CLI cache)",
+			Metadata: map[string]string{
+				"read_only": "false", // Cache must be writable.
+			},
+		})
+	}
+
+	return paths, nil
+}
+
 // PrepareEnvironment prepares environment variables for external processes.
 // For SSO providers, this method is typically not called directly since SSO providers
 // authenticate to get identity credentials, which then have their own PrepareEnvironment.
-// However, we implement it for interface compliance.
+// However, we implement it for interface compliance and inject AWS_REGION.
 func (p *ssoProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "aws.ssoProvider.PrepareEnvironment")()
 
+	// Create a copy to avoid modifying the input map.
+	result := make(map[string]string, len(environ))
+	for k, v := range environ {
+		result[k] = v
+	}
+
+	// Inject provider-specific environment variables (AWS_REGION).
 	// SSO provider doesn't write credential files itself - that's done by identities.
-	// Just return the environment unchanged.
-	return environ, nil
+	providerEnv, err := p.Environment()
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range providerEnv {
+		result[k] = v
+	}
+
+	return result, nil
 }
 
 // Note: SSO caching is now handled at the manager level to prevent duplicate entries.
@@ -370,7 +482,7 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	// Create and run the spinner.
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	s.Style = theme.GetCurrentStyles().Spinner
 
 	model := spinnerModel{
 		spinner:    s,
@@ -393,7 +505,13 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	// Get the result from the final model.
 	finalSpinner := finalModel.(spinnerModel)
 	if finalSpinner.result == nil {
-		return "", time.Time{}, fmt.Errorf("%w: no result received", errUtils.ErrAuthenticationFailed)
+		return "", time.Time{}, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithExplanation("AWS SSO authentication did not complete").
+			WithHint("The authentication flow was interrupted unexpectedly").
+			WithHint("Try running the authentication again").
+			WithContext("provider", p.name).
+			WithExitCode(1).
+			Err()
 	}
 	if finalSpinner.result.err != nil {
 		return "", time.Time{}, finalSpinner.result.err
@@ -519,11 +637,27 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 			continue
 		}
 
-		return "", time.Time{}, fmt.Errorf("%w: failed to create token: %w", errUtils.ErrAuthenticationFailed, err)
+		return "", time.Time{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
+			WithExplanation("Failed to create AWS SSO access token").
+			WithHint("Ensure you completed the device authorization in your browser").
+			WithHint("The verification code may have expired - try authenticating again").
+			WithContext("provider", p.name).
+			WithContext("start_url", p.startURL).
+			WithExitCode(1).
+			Err()
 	}
 
 	if accessToken == "" {
-		return "", time.Time{}, fmt.Errorf("%w: authentication timed out", errUtils.ErrAuthenticationFailed)
+		return "", time.Time{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
+			WithExplanation("AWS SSO authentication timed out waiting for browser confirmation").
+			WithHint("Complete the device authorization in your browser within the time limit").
+			WithHint("Visit the verification URL and enter the code displayed earlier").
+			WithHint("Try running 'aws sso login' to verify your SSO configuration").
+			WithContext("provider", p.name).
+			WithContext("start_url", p.startURL).
+			WithContext("region", p.region).
+			WithExitCode(1).
+			Err()
 	}
 	return accessToken, tokenExpiresAt, nil
 }
@@ -540,7 +674,8 @@ func (p *ssoProvider) Logout(ctx context.Context) error {
 	// Get base_path from provider spec if configured.
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use realm for credential isolation between different repositories.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
 	}
@@ -560,7 +695,8 @@ func (p *ssoProvider) GetFilesDisplayPath() string {
 
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use realm for credential isolation between different repositories.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
 		return "~/.aws/atmos"
 	}

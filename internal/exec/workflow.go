@@ -2,17 +2,19 @@ package exec
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -29,9 +31,18 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Check if --stack flag is provided to determine if stacks should be processed.
+	// Workflows only require stacks configuration when --stack is explicitly passed.
+	flags := cmd.Flags()
+	commandLineStack, err := flags.GetString("stack")
+	if err != nil {
+		return err
+	}
+	processStacks := commandLineStack != ""
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
 		return err
 	}
@@ -51,24 +62,58 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowName = args[0]
 	}
 
-	flags := cmd.Flags()
-
 	if workflowFile == "" {
 		workflowFile, err = flags.GetString("file")
 		if err != nil {
 			return err
 		}
+		// If file is not provided, attempt auto-discovery.
 		if workflowFile == "" {
-			return errors.New("'--file' flag is required to specify a workflow manifest")
+			matches, err := findWorkflowAcrossFiles(workflowName, &atmosConfig)
+			if err != nil {
+				return err
+			}
+
+			switch {
+			case len(matches) == 0:
+				return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
+					WithHintf("No workflow found with name `%s`", workflowName).
+					WithHint("Use 'atmos describe workflows' to see all available workflows").
+					WithExitCode(1).
+					Err()
+			case len(matches) == 1:
+				// Single match - use it automatically.
+				workflowFile = matches[0].File
+			default:
+				// Multiple matches - show interactive selector in TTY, error in CI.
+				if !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+					// Non-interactive environment - list matching files and error.
+					fileList := make([]string, len(matches))
+					for i, match := range matches {
+						fileList[i] = match.File
+					}
+					// Sort for deterministic output (important for tests and snapshots).
+					sort.Strings(fileList)
+					return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
+						WithHintf("Multiple workflow files contain workflow `%s`", workflowName).
+						WithHintf("Matching files: %s", strings.Join(fileList, ", ")).
+						WithHintf("Use --file flag to specify which one: atmos workflow %s --file <file>", workflowName).
+						WithExitCode(1).
+						Err()
+				}
+				// TTY mode - show interactive selector.
+				workflowFile, err = promptForWorkflowFile(matches)
+				if err != nil {
+					if errors.Is(err, errUtils.ErrUserAborted) {
+						return errUtils.ErrUserAborted
+					}
+					return err
+				}
+			}
 		}
 	}
 
 	dryRun, err := flags.GetBool("dry-run")
-	if err != nil {
-		return err
-	}
-
-	commandLineStack, err := flags.GetString("stack")
 	if err != nil {
 		return err
 	}
@@ -100,12 +145,10 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		errUtils.CheckErrorPrintAndExit(
-			ErrWorkflowFileNotFound,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nThe workflow manifest file `%s` does not exist.", filepath.ToSlash(workflowPath)),
-		)
-		return ErrWorkflowFileNotFound
+		return errUtils.Build(errUtils.ErrWorkflowFileNotFound).
+			WithHintf("The workflow manifest file `%s` does not exist", filepath.ToSlash(workflowPath)).
+			WithExitCode(1).
+			Err()
 	}
 
 	fileContent, err := os.ReadFile(workflowPath)
@@ -123,12 +166,11 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if workflowManifest.Workflows == nil {
-		errUtils.CheckErrorPrintAndExit(
-			ErrInvalidWorkflowManifest,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nThe workflow manifest `%s` must be a map with the top-level `workflows:` key.", filepath.ToSlash(workflowPath)),
-		)
-		return ErrInvalidWorkflowManifest
+		return errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
+			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key", filepath.ToSlash(workflowPath)).
+			WithHint("Add a top-level 'workflows:' key to the manifest file").
+			WithExitCode(1).
+			Err()
 	}
 
 	workflowConfig = workflowManifest.Workflows
@@ -138,14 +180,14 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		for w := range workflowConfig {
 			validWorkflows = append(validWorkflows, w)
 		}
-		// sorting so that the output is deterministic
+		// sorting so that the output is deterministic.
 		sort.Strings(validWorkflows)
-		errUtils.CheckErrorPrintAndExit(
-			ErrWorkflowNoWorkflow,
-			"Workflow Error",
-			fmt.Sprintf("\n## Explanation\nNo workflow exists with the name `%s`\n### Available workflows:\n%s", workflowName, FormatList(validWorkflows)),
-		)
-		return ErrWorkflowNoWorkflow
+
+		return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
+			WithHintf("No workflow exists with name `%s`", workflowName).
+			WithHintf("Available workflows in %s: %s", filepath.Base(workflowPath), u.FormatList(validWorkflows)).
+			WithExitCode(1).
+			Err()
 	} else {
 		workflowDefinition = i
 	}

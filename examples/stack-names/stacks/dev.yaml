@@ -1,0 +1,9 @@
+# This stack uses the filename as its name (no explicit `name` field).
+# Reference with: atmos terraform plan mock -s dev
+
+components:
+  terraform:
+    mock:
+      vars:
+        environment: development
+        enabled: true

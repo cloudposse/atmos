@@ -1,0 +1,243 @@
+---
+title: "atmos list instances"
+id: "list-instances"
+sidebar_label: instances
+sidebar_class_name: command
+description: Use this command to list all Atmos component instances across stacks
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to list all component instances across stacks, showing each unique component-stack combination. Upload instance metadata to Atmos Pro for centralized tracking and management.
+</Intro>
+
+<Screengrab title="atmos list instances --help" slug="atmos-list-instances--help" />
+
+## Usage
+
+```shell
+atmos list instances [flags]
+```
+
+## Description
+
+The `atmos list instances` command displays all component instances defined across your Atmos stacks. Each instance represents a unique combination of a component and stack. This command is useful for:
+
+- Getting an overview of all deployed/configured infrastructure
+- Finding specific component instances across stacks
+- Filtering instances by stack pattern or custom criteria
+- Uploading instance inventory to Atmos Pro for centralized management
+
+## Flags
+
+<dl>
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree` (default: `table`)</dd>
+
+  <dt>`--delimiter`</dt>
+  <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
+
+  <dt>`--provenance`</dt>
+  <dd>Show import provenance in tree format. Only works with `--format=tree`. Displays the import hierarchy showing which files each component inherits from.</dd>
+
+  <dt>`--columns`</dt>
+  <dd>Columns to display (comma-separated). Overrides `components.list.columns` configuration in atmos.yaml</dd>
+
+  <dt>`--stack` / `-s`</dt>
+  <dd>Filter by stack pattern (supports glob patterns, e.g., `plat-*-prod`)</dd>
+
+  <dt>`--filter`</dt>
+  <dd>Filter expression using YQ syntax (e.g., `.vars.region == "us-east-1"`)</dd>
+
+  <dt>`--query` / `-q`</dt>
+  <dd>YQ expression to filter values (e.g., `.vars.region`)</dd>
+
+  <dt>`--sort`</dt>
+  <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
+
+  <dt>`--upload`</dt>
+  <dd>Upload instances to Atmos Pro API (requires Pro configuration)</dd>
+</dl>
+
+## Examples
+
+List all instances in table format:
+```shell
+atmos list instances
+```
+
+Filter instances by stack pattern:
+```shell
+# List instances in all production stacks
+atmos list instances --stack "*-prod"
+
+# List instances in a specific stack
+atmos list instances --stack tenant1-ue2-dev
+```
+
+Output in different formats:
+```shell
+# JSON format for machine processing
+atmos list instances --format json
+
+# YAML format for configuration review
+atmos list instances --format yaml
+
+# CSV format for spreadsheet compatibility
+atmos list instances --format csv
+```
+
+Filter instances using YQ expressions:
+```shell
+# Find all instances in us-east-1 region
+atmos list instances --filter '.vars.region == "us-east-1"'
+
+# Find enabled VPC components
+atmos list instances --filter '.component == "vpc" and .enabled == true'
+```
+
+Sort instances:
+```shell
+# Sort by stack name ascending
+atmos list instances --sort stack:asc
+
+# Multi-column sort
+atmos list instances --sort "stack:asc,component:desc"
+```
+
+Upload instances to Atmos Pro:
+```shell
+atmos list instances --upload
+```
+
+View instances in tree format:
+```shell
+# Tree view without import details
+atmos list instances --format tree
+
+# Tree view with import provenance (shows inheritance chain)
+atmos list instances --format tree --provenance
+```
+
+## Tree Format with Import Provenance
+
+The `tree` format provides a hierarchical view of your component instances organized by stack. When combined with the `--provenance` flag, it shows the complete import chain for each component, making it easy to understand configuration inheritance.
+
+### Tree Format Structure
+
+The tree format displays:
+- **Stacks** as top-level nodes
+- **Components** as child nodes under each stack
+- **Import hierarchy** (when `--provenance` is enabled) showing the chain of stack configuration files
+
+### Import Provenance
+
+When you enable `--provenance`, each component shows its import chain - the sequence of stack configuration files it inherits from. This is particularly useful for:
+
+- **Debugging configuration** - See exactly where each component's configuration comes from
+- **Understanding inheritance** - Visualize the complete import chain
+- **Auditing changes** - Track which base configurations affect which components
+- **Documentation** - Generate visual representations of stack dependencies
+
+Example tree output with provenance:
+```
+Component Instances
+│
+├── tenant1-ue2-dev
+│   ├── vpc
+│   │   ├── stacks/tenant1/ue2/dev
+│   │   ├── stacks/tenant1/ue2/_defaults
+│   │   └── stacks/catalog/vpc
+│   └── eks
+│       ├── stacks/tenant1/ue2/dev
+│       ├── stacks/tenant1/ue2/_defaults
+│       └── stacks/catalog/eks
+```
+
+The import chain is shown from most specific (top) to most general (bottom), reflecting how Atmos merges configurations.
+
+## Custom Columns Configuration
+
+You can customize the columns displayed by `atmos list instances` in your `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+components:
+  list:
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Component
+        value: "{{ .component }}"
+      - name: Tenant
+        value: "{{ .vars.tenant }}"
+      - name: Environment
+        value: "{{ .vars.environment }}"
+      - name: Stage
+        value: "{{ .vars.stage }}"
+      - name: Region
+        value: "{{ .vars.region }}"
+      - name: Description
+        value: "{{ .metadata.description }}"
+      - name: Enabled
+        value: "{{ .enabled }}"
+```
+
+### Available Template Fields
+
+Column `value` fields support Go template syntax with access to:
+
+- `.stack` - Stack name (e.g., `tenant1-ue2-dev`)
+- `.component` - Component name (e.g., `vpc`)
+- `.atmos_component` - Atmos component identifier
+- `.atmos_component_type` - Component type (`terraform`, `helmfile`, etc.)
+- `.vars` - All component variables (e.g., `.vars.region`, `.vars.tenant`)
+- `.settings` - Component settings (e.g., `.settings.spacelift.workspace_enabled`)
+- `.metadata` - Component metadata (e.g., `.metadata.description`)
+- `.env` - Environment variables
+- `.enabled` - Whether component is enabled (boolean)
+- `.locked` - Whether component is locked (boolean)
+- `.abstract` - Whether component is abstract (boolean)
+
+### Template Functions
+
+Columns support template functions for data transformation:
+
+```yaml
+components:
+  list:
+    columns:
+      - name: Region (Upper)
+        value: "{{ .vars.region | upper }}"
+      - name: Short Description
+        value: "{{ .metadata.description | truncate 50 }}"
+      - name: Has Monitoring
+        value: "{{ if .vars.monitoring_enabled }}Yes{{ else }}No{{ end }}"
+```
+
+### Override Columns via CLI
+
+Override configured columns using the `--columns` flag:
+
+```shell
+# Display only stack and component columns
+atmos list instances --columns stack,component
+
+# Display custom subset
+atmos list instances --columns "stack,component,vars.region,enabled"
+```
+
+:::tip
+- Use `--format tree --provenance` to visualize component import hierarchies
+- Use the `--filter` flag for complex filtering with YQ syntax
+- Combine `--stack` (glob pattern) with `--filter` (YQ expression) for precise filtering
+- The `--upload` flag sends instance data to Atmos Pro for centralized infrastructure management
+- Use `--format json` or `--format yaml` for programmatic processing
+:::
+
+## Related Commands
+
+- [`atmos list components`](/cli/commands/list/components) - List all components
+- [`atmos list stacks`](/cli/commands/list/stacks) - List all stacks
+- [`atmos describe component`](/cli/commands/describe/component) - Get detailed component configuration

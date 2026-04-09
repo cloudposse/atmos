@@ -3,8 +3,11 @@ package hooks
 type HookEvent string
 
 const (
-	AfterTerraformApply  HookEvent = "after.terraform.apply"
-	BeforeTerraformApply HookEvent = "before.terraform.apply"
-	AfterTerraformPlan   HookEvent = "after.terraform.plan"
-	BeforeTerraformPlan  HookEvent = "before.terraform.plan"
+	BeforeTerraformInit   HookEvent = "before.terraform.init"
+	AfterTerraformApply   HookEvent = "after.terraform.apply"
+	BeforeTerraformApply  HookEvent = "before.terraform.apply"
+	AfterTerraformPlan    HookEvent = "after.terraform.plan"
+	BeforeTerraformPlan   HookEvent = "before.terraform.plan"
+	BeforeTerraformDeploy HookEvent = "before.terraform.deploy"
+	AfterTerraformDeploy  HookEvent = "after.terraform.deploy"
 )

@@ -4,6 +4,10 @@
   "title": "JSON Schema for Atmos Stack Manifest files. Version 1.0. https://atmos.tools",
   "type": "object",
   "properties": {
+    "name": {
+      "type": "string",
+      "description": "Logical name for this stack. Takes precedence over name_template and name_pattern from atmos.yaml."
+    },
     "import": {
       "$ref": "#/definitions/import"
     },
@@ -27,6 +31,9 @@
     },
     "settings": {
       "$ref": "#/definitions/settings"
+    },
+    "locals": {
+      "$ref": "#/definitions/locals"
     },
     "components": {
       "$ref": "#/definitions/components"
@@ -204,6 +211,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -276,6 +286,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -296,6 +309,9 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
             }
           },
           "required": []
@@ -322,6 +338,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -380,6 +399,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             }
@@ -408,6 +430,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -466,6 +491,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             }
@@ -496,6 +524,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "name": {
+              "type": "string",
+              "description": "Logical component identity used for workspace key prefix auto-generation. Inheritable from base components."
+            },
             "type": {
               "type": "string",
               "enum": [
@@ -674,6 +706,20 @@
     "env": {
       "title": "env",
       "description": "Env section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "locals": {
+      "title": "locals",
+      "description": "File-scoped local variables for use within templates. Locals are resolved before other sections and can reference each other within the same file. Unlike vars and settings, locals do NOT inherit across file boundaries.",
       "oneOf": [
         {
           "type": "string",
@@ -1125,6 +1171,75 @@
                       },
                       "type": {
                         "type": "string"
+                      },
+                      "retry": {
+                        "title": "retry",
+                        "description": "Retry configuration for workflow step execution",
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^!include"
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "max_attempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Maximum number of retry attempts"
+                              },
+                              "initial_delay": {
+                                "type": "string",
+                                "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                              },
+                              "max_delay": {
+                                "type": "string",
+                                "description": "Maximum delay between retries (e.g., '30s', '1m')"
+                              },
+                              "backoff_strategy": {
+                                "type": "string",
+                                "enum": [
+                                  "constant",
+                                  "linear",
+                                  "exponential"
+                                ],
+                                "description": "Strategy for increasing delay between retries"
+                              },
+                              "multiplier": {
+                                "type": "number",
+                                "minimum": 1,
+                                "description": "Multiplier for exponential/linear backoff"
+                              },
+                              "random_jitter": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "description": "Random jitter factor (0-1) to add to delays"
+                              },
+                              "max_elapsed_time": {
+                                "type": "string",
+                                "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+                              }
+                            },
+                            "required": []
+                          }
+                        ]
+                      },
+                      "working_directory": {
+                        "type": "string",
+                        "description": "Working directory for the workflow step"
+                      },
+                      "identity": {
+                        "type": "string",
+                        "description": "Identity to use for the workflow step"
+                      },
+                      "env": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Environment variables for the workflow step"
                       }
                     },
                     "required": [
@@ -1180,6 +1295,287 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "component_auth": {
+      "title": "component_auth",
+      "description": "Component-level authentication configuration. Allows overriding or extending global auth providers and identities for specific components.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."
+            },
+            "providers": {
+              "$ref": "#/definitions/auth_providers"
+            },
+            "identities": {
+              "$ref": "#/definitions/auth_identities"
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "auth_providers": {
+      "title": "auth_providers",
+      "description": "Authentication providers configuration. Keys are provider names, values are provider configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/auth_provider"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "auth_provider": {
+      "title": "auth_provider",
+      "description": "Authentication provider configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Provider type (e.g., 'aws/iam-identity-center', 'aws/credentials')"
+            },
+            "start_url": {
+              "type": "string",
+              "description": "SSO start URL for AWS IAM Identity Center"
+            },
+            "url": {
+              "type": "string",
+              "description": "Provider URL"
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for the provider"
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether this is the default provider"
+            },
+            "session": {
+              "$ref": "#/definitions/auth_session"
+            },
+            "console": {
+              "$ref": "#/definitions/auth_console"
+            },
+            "auto_provision_identities": {
+              "type": "boolean",
+              "description": "Whether to auto-provision identities when authenticating with this provider"
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Provider-specific configuration"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "auth_identities": {
+      "title": "auth_identities",
+      "description": "Authentication identities configuration. Keys are identity names, values are identity configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/auth_identity"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "auth_identity": {
+      "title": "auth_identity",
+      "description": "Authentication identity configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Identity type (e.g., 'aws/permission-set', 'aws/assume-role')"
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether this is the default identity"
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Whether this identity is automatically authenticated without prompting. Required identities are authenticated before commands run."
+            },
+            "provider": {
+              "type": "string",
+              "description": "Provider name for direct provider association"
+            },
+            "via": {
+              "$ref": "#/definitions/auth_identity_via"
+            },
+            "principal": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Principal information (role name, account, etc.)",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Principal name (e.g., permission set name, role name)"
+                },
+                "account": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Account name"
+                    },
+                    "id": {
+                      "type": "string",
+                      "description": "Account ID"
+                    }
+                  }
+                }
+              }
+            },
+            "credentials": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Static credentials configuration"
+            },
+            "alias": {
+              "type": "string",
+              "description": "Alias for the identity"
+            },
+            "env": {
+              "type": "array",
+              "description": "Environment variables to set when using this identity",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "value"
+                ]
+              }
+            },
+            "session": {
+              "$ref": "#/definitions/auth_session"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "auth_identity_via": {
+      "title": "auth_identity_via",
+      "description": "Specifies how an identity connects to a provider or chains from another identity.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "type": "string",
+              "description": "Provider name to authenticate through"
+            },
+            "identity": {
+              "type": "string",
+              "description": "Identity name to chain from (for role chaining)"
+            }
+          }
+        }
+      ]
+    },
+    "auth_session": {
+      "title": "auth_session",
+      "description": "Session configuration for authentication.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "duration": {
+              "type": "string",
+              "description": "Session duration (e.g., '1h', '12h')"
+            }
+          }
+        }
+      ]
+    },
+    "auth_console": {
+      "title": "auth_console",
+      "description": "Web console access configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session_duration": {
+              "type": "string",
+              "description": "Console session duration (e.g., '12h'). Max: 12h for AWS."
+            }
+          }
         }
       ]
     }

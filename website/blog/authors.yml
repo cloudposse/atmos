@@ -1,11 +1,78 @@
+# Default atmos author - replace with actual contributors
 atmos:
-  name: atmos
-  title: atmos
+  name: Atmos Team
+  title: Atmos Team
   url: https://github.com/cloudposse/atmos
   image_url: https://github.com/cloudposse/atmos/raw/main/docs/img/atmos-logo-128.svg
+
+nitrocode:
+  name: nitrocode
+  title: CEO of Infralicious
+  url: https://github.com/nitrocode
+  image_url: https://github.com/nitrocode.png
 
 osterman:
   name: Erik Osterman
   title: Founder @ Cloud Posse
   url: https://github.com/osterman
   image_url: https://github.com/osterman.png
+
+aknysh:
+  name: Andriy Knysh
+  title: Principal Architect @ Cloud Posse
+  url: https://github.com/aknysh
+  image_url: https://github.com/aknysh.png
+
+Nuru:
+  name: Jeremy Randall
+  title: Staff Engineer @ Cloud Posse
+  url: https://github.com/Nuru
+  image_url: https://github.com/Nuru.png
+
+gberenice:
+  name: Berenice Greenstein
+  title: Director of Growth Marketing @ Cloud Posse
+  url: https://github.com/gberenice
+  image_url: https://github.com/gberenice.png
+
+Benbentwo:
+  name: Ben Smith
+  title: Software Engineer
+  url: https://github.com/Benbentwo
+  image_url: https://github.com/Benbentwo.png
+
+jamengual:
+  name: PePe Amengual
+  title: Principal @ Slalom Build
+  url: https://github.com/jamengual
+  image_url: https://github.com/jamengual.png
+
+goruha:
+  name: Igor Rodionov
+  title: Principal Engineer @ Cloud Posse
+  url: https://github.com/goruha
+  image_url: https://github.com/goruha.png
+
+milldr:
+  name: Daniel Miller
+  title: Staff Engineer @ Cloud Posse
+  url: https://github.com/milldr
+  image_url: https://github.com/milldr.png
+
+rosesecurity:
+  name: Michael Rosenfeld
+  title: Community Contributor @ Cloud Posse
+  url: https://github.com/rosesecurity
+  image_url: https://github.com/rosesecurity.png
+
+shirkevich:
+  name: Mikhail Shirkov
+  title: Senior Engineer @ NXT:FWD
+  url: https://github.com/shirkevich
+  image_url: https://github.com/shirkevich.png
+
+gitbluf:
+  name: Marko Petrovic
+  title: Mission Critical Engineer @ SchubergPhilis
+  url: https://github.com/gitbluf
+  image_url: https://github.com/gitbluf.png

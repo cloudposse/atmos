@@ -462,7 +462,8 @@ func TestSetAWSProfileEnv(t *testing.T) {
 	})
 
 	t.Run("Profile set when none existed", func(t *testing.T) {
-		// Don't set AWS_PROFILE - it will be unset by default in subtest
+		// Ensure AWS_PROFILE is unset in this test's environment.
+		t.Setenv("AWS_PROFILE", "")
 		cleanup := setAWSProfileEnv("test-profile")
 		assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
 		cleanup()
@@ -512,4 +513,61 @@ func TestRequireGitCommitConfig_MissingName(t *testing.T) {
 	// This test creates a temp git config context which is complex
 	// Instead, we rely on the function skipping if config is missing
 	// The actual behavior is tested in WithConfig test above
+}
+
+// TestRequireTerraform tests that RequireTerraform wrapper works.
+func TestRequireTerraform(t *testing.T) {
+	// Just call it to ensure it doesn't panic
+	// Will skip if terraform not installed
+	RequireTerraform(t)
+}
+
+// TestRequirePacker tests that RequirePacker wrapper works.
+func TestRequirePacker(t *testing.T) {
+	// Just call it to ensure it doesn't panic
+	// Will skip if packer not installed
+	RequirePacker(t)
+}
+
+// TestRequireHelmfile tests that RequireHelmfile wrapper works.
+func TestRequireHelmfile(t *testing.T) {
+	// Just call it to ensure it doesn't panic
+	// Will skip if helmfile not installed
+	RequireHelmfile(t)
+}
+
+// TestSkipIfShort tests the short mode skip function.
+func TestSkipIfShort(t *testing.T) {
+	// This test doesn't actually call SkipIfShort since that would skip the test
+	// Instead we verify the function exists and is callable
+	if testing.Short() {
+		// In short mode, calling SkipIfShort would skip
+		t.Log("In short mode - SkipIfShort would skip this test")
+	} else {
+		// Not in short mode - calling SkipIfShort is a no-op
+		SkipIfShort(t)
+		// If we get here, we didn't skip
+		assert.True(t, true, "SkipIfShort did not skip when not in short mode")
+	}
+}
+
+// TestSkipOnDarwinARM64 tests the darwin/arm64 skip function.
+func TestSkipOnDarwinARM64(t *testing.T) {
+	// Enable precondition checks
+	os.Unsetenv("ATMOS_TEST_SKIP_PRECONDITION_CHECKS")
+
+	// Call the function with a test reason
+	// It will only actually skip on darwin/arm64
+	SkipOnDarwinARM64(t, "test reason for skipping")
+
+	// If we're not on darwin/arm64, we'll continue
+	// If we are on darwin/arm64, the test will skip
+	t.Log("Not on darwin/arm64 or preconditions disabled")
+}
+
+// TestRequireAzureCredentials tests the Azure credentials check.
+func TestRequireAzureCredentials(t *testing.T) {
+	// Just call it to ensure it doesn't panic
+	// Will skip if Azure credentials not available
+	RequireAzureCredentials(t)
 }

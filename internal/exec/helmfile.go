@@ -3,23 +3,39 @@
 package exec
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/helmfile"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+const (
+	// ComponentTypeHelmfile is the component type identifier for helmfile.
+	componentTypeHelmfile = "helmfile"
+
+	// Log key constants.
+	logKeyCluster = "cluster"
 )
 
 // ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
 func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := ProcessCommandLineArgs("helmfile", cmd, args, additionalArgsAndFlags)
+	info, err := ProcessCommandLineArgs(componentTypeHelmfile, cmd, args, additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
@@ -46,18 +62,22 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	if info.SubCommand == "version" {
+		tenv, err := dependencies.ForComponent(&atmosConfig, componentTypeHelmfile, nil, nil)
+		if err != nil {
+			return err
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
-			info.Command,
+			tenv.Resolve(info.Command),
 			[]string{info.SubCommand},
 			"",
-			nil,
+			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr,
 		)
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -73,20 +93,65 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if the component exists as a helmfile component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "helmfile", info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypeHelmfile, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
+	// Auto-generate files BEFORE path validation when the following conditions hold.
+	// 1. auto_generate_files is enabled.
+	// 2. Component has a generate section.
+	// 3. Not in dry-run mode (to avoid filesystem modifications).
+	// This allows generating entire components from stack configuration.
+	if atmosConfig.Components.Helmfile.AutoGenerateFiles && !info.DryRun { //nolint:nestif
+		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
+		if generateSection != nil {
+			// Ensure component directory exists for file generation.
+			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
+				return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
+			}
+
+			// Generate files before path validation.
+			if genErr := GenerateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
+				return errors.Join(errUtils.ErrFileOperation, genErr)
+			}
+		}
+	}
+
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "helmfile")
-		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
+		// Check if component has source configured for JIT provisioning.
+		if provSource.HasSource(info.ComponentSection) {
+			// Run JIT source provisioning before path validation.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.HelmfileComponentType, info.ComponentSection, info.AuthContext); err != nil {
+				return fmt.Errorf("failed to auto-provision component source: %w", err)
+			}
+
+			// Check if source provisioner set a workdir path (source + workdir case).
+			// If so, use that path instead of the component path.
+			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+				componentPath = workdirPath
+				componentPathExists = true
+				err = nil // Clear any previous error since we have a valid workdir path.
+			} else {
+				// Re-check if component path now exists after provisioning (source only case).
+				componentPathExists, err = u.IsDirectory(componentPath)
+			}
+		}
+
+		// If still doesn't exist, return the error.
+		if err != nil || !componentPathExists {
+			// Get the base path for the error message, respecting the user's actual config.
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypeHelmfile)
+			return fmt.Errorf("%w: '%s' points to the Helmfile component '%s', but it does not exist in '%s'",
+				errUtils.ErrInvalidComponent,
+				info.ComponentFromArg,
+				info.FinalComponent,
+				basePath,
+			)
+		}
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
@@ -100,10 +165,18 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		// Allow read-only commands, block modification commands.
 		switch info.SubCommand {
 		case "sync", "apply", "deploy", "delete", "destroy":
-			return fmt.Errorf("component `%s` is locked and cannot be modified (metadata.locked = true)",
+			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
 	}
+
+	// Resolve and install component dependencies.
+	tenv, err := dependencies.ForComponent(&atmosConfig, componentTypeHelmfile, info.StackSection, info.ComponentSection)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 
 	// Print component variables.
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
@@ -151,29 +224,73 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	envVarsEKS := []string{}
 
 	if atmosConfig.Components.Helmfile.UseEKS {
-		// Prepare AWS profile.
-		helmAwsProfile := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
-		log.Debug("Using AWS_PROFILE", "profile", helmAwsProfile)
+		// Resolve cluster name using the helmfile package.
+		clusterInput := helmfile.ClusterNameInput{
+			FlagValue:   info.ClusterName,
+			ConfigValue: atmosConfig.Components.Helmfile.ClusterName,
+			Template:    atmosConfig.Components.Helmfile.ClusterNameTemplate,
+			Pattern:     atmosConfig.Components.Helmfile.ClusterNamePattern,
+		}
+
+		clusterResult, err := helmfile.ResolveClusterName(
+			clusterInput,
+			&context,
+			&atmosConfig,
+			info.ComponentSection,
+			ProcessTmpl,
+		)
+		if err != nil {
+			return err
+		}
+
+		clusterName := clusterResult.ClusterName
+		if clusterResult.IsDeprecated {
+			log.Warn("cluster_name_pattern is deprecated, use cluster_name_template with Go template syntax instead")
+		}
+		log.Debug("Using cluster name", logKeyCluster, clusterName, "source", clusterResult.Source)
+
+		// Resolve AWS auth using the helmfile package.
+		authInput := helmfile.AuthInput{
+			Identity:       info.Identity,
+			ProfilePattern: atmosConfig.Components.Helmfile.HelmAwsProfilePattern,
+		}
+
+		authResult, err := helmfile.ResolveAWSAuth(authInput, &context)
+		if err != nil {
+			return err
+		}
+
+		useIdentityAuth := authResult.UseIdentityAuth
+		helmAwsProfile := authResult.Profile
+		if authResult.IsDeprecated {
+			log.Warn("helm_aws_profile_pattern is deprecated, use --identity flag instead")
+		}
+		log.Debug("Using AWS auth", "source", authResult.Source, "useIdentity", useIdentityAuth)
 
 		// Download kubeconfig by running `aws eks update-kubeconfig`.
-		kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
-		clusterName := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
-		log.Debug("Downloading and saving kubeconfig", "cluster", clusterName, "path", kubeconfigPath)
+		kubeconfigPath := filepath.Join(atmosConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix+"-kubecfg")
+		log.Debug("Downloading and saving kubeconfig", logKeyCluster, clusterName, "path", kubeconfigPath)
+
+		// Build aws eks update-kubeconfig command args.
+		awsArgs := []string{
+			"eks",
+			"update-kubeconfig",
+			fmt.Sprintf("--name=%s", clusterName),
+			fmt.Sprintf("--region=%s", context.Region),
+			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
+		}
+
+		// Add profile flag if using deprecated profile pattern (not identity auth).
+		if !useIdentityAuth && helmAwsProfile != "" {
+			awsArgs = append([]string{"--profile", helmAwsProfile}, awsArgs...)
+		}
 
 		err = ExecuteShellCommand(
 			atmosConfig,
-			"aws",
-			[]string{
-				"--profile",
-				helmAwsProfile,
-				"eks",
-				"update-kubeconfig",
-				fmt.Sprintf("--name=%s", clusterName),
-				fmt.Sprintf("--region=%s", context.Region),
-				fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
-			},
+			tenv.Resolve("aws"),
+			awsArgs,
 			componentPath,
-			nil,
+			tenv.EnvVars(),
 			info.DryRun,
 			info.RedirectStdErr,
 		)
@@ -181,10 +298,11 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			return err
 		}
 
-		envVarsEKS = append(envVarsEKS, []string{
-			fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
-			fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
-		}...)
+		// Set environment variables for helmfile execution.
+		if !useIdentityAuth && helmAwsProfile != "" {
+			envVarsEKS = append(envVarsEKS, fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile))
+		}
+		envVarsEKS = append(envVarsEKS, fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 	}
 
 	// Print command info.
@@ -257,7 +375,9 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		envVars = append(envVars, fmt.Sprintf("REGION=%s", context.Region))
 	}
 
-	if atmosConfig.Components.Helmfile.KubeconfigPath != "" {
+	// Set KUBECONFIG: When UseEKS is true, the EKS-specific kubeconfig (from envVarsEKS)
+	// takes precedence over the general KubeconfigPath setting.
+	if atmosConfig.Components.Helmfile.KubeconfigPath != "" && !atmosConfig.Components.Helmfile.UseEKS {
 		envVars = append(envVars, fmt.Sprintf("KUBECONFIG=%s", atmosConfig.Components.Helmfile.KubeconfigPath))
 	}
 
@@ -283,6 +403,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		WithEnvironment(info.SanitizedEnv),
 	)
 	if err != nil {
 		return err

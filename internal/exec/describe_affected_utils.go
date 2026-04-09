@@ -1,11 +1,15 @@
 package exec
 
 import (
+	"errors"
 	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -24,6 +28,7 @@ func executeDescribeAffected(
 	processYamlFunctions bool,
 	skip []string,
 	excludeLocked bool,
+	authManager auth.AuthManager,
 ) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, error) {
 	localRepoHead, err := localRepo.Head()
 	if err != nil {
@@ -49,48 +54,94 @@ func executeDescribeAffected(
 		processYamlFunctions,
 		false,
 		skip,
-		nil, // AuthManager passed from describe affected command layer
+		authManager,
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+
+	// Clear base component cache between current and remote stack processing
+	// to prevent cache contamination (cache keys don't include path information).
+	ClearBaseComponentConfigCache()
 
 	localRepoFileSystemPathAbs, err := filepath.Abs(localRepoFileSystemPath)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	basePath := atmosConfig.BasePath
-
-	// Handle `atmos` absolute base path.
-	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
-	// If the `atmos` base path is absolute, find the relative path between the local repo path and the `atmos` base path.
-	// This relative path (the difference) is then used below to join with the remote (cloned) target repo path.
-	if filepath.IsAbs(basePath) {
-		basePath, err = filepath.Rel(localRepoFileSystemPathAbs, basePath)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	}
-
-	// Update paths to point to the cloned remote repo dir
+	// Save current paths before modification.
+	currentBasePath := atmosConfig.BasePath
+	currentBasePathAbsolute := atmosConfig.BasePathAbsolute
 	currentStacksBaseAbsolutePath := atmosConfig.StacksBaseAbsolutePath
 	currentStacksTerraformDirAbsolutePath := atmosConfig.TerraformDirAbsolutePath
 	currentStacksHelmfileDirAbsolutePath := atmosConfig.HelmfileDirAbsolutePath
 	currentStacksPackerDirAbsolutePath := atmosConfig.PackerDirAbsolutePath
 	currentStacksStackConfigFilesAbsolutePaths := atmosConfig.StackConfigFilesAbsolutePaths
 
-	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath)
-	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
-	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
-	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Packer.BasePath)
-	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinPaths(
-		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
-		atmosConfig.StackConfigFilesRelativePaths,
-	)
+	// Compute the relative paths from the git repo root to the current absolute paths.
+	// This handles the case where atmos is run from a subdirectory (e.g., -C examples/demo-stacks).
+	// We need to preserve the subdirectory path when constructing remote paths.
+	baseRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentBasePathAbsolute)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	stacksRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksBaseAbsolutePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	terraformRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksTerraformDirAbsolutePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	helmfileRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksHelmfileDirAbsolutePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	packerRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksPackerDirAbsolutePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Update paths to point to the remote repo dir using the computed relative paths.
+	// BasePath and BasePathAbsolute must be updated so that !include can resolve files
+	// relative to the base path in the remote repo (fix for GitHub issue #2090).
+	remoteBasePath := filepath.Join(remoteRepoFileSystemPath, baseRelPath)
+	atmosConfig.BasePath = remoteBasePath
+	atmosConfig.BasePathAbsolute = remoteBasePath
+	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, stacksRelPath)
+	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, terraformRelPath)
+	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, helmfileRelPath)
+	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, packerRelPath)
+
+	// Re-scan the BASE (remote) directory for stack config files.
+	// This is necessary to detect deleted stacks - files that exist in BASE but not in HEAD.
+	// We cannot simply convert HEAD's file paths to BASE paths, as that would miss files
+	// that only exist in BASE.
+	remoteIncludeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, atmosConfig.Stacks.IncludedPaths)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	remoteExcludeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, atmosConfig.Stacks.ExcludedPaths)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	remoteStackConfigFilesAbsolutePaths, _, _, err := cfg.FindAllStackConfigsInPathsForStack(
+		*atmosConfig,
+		stack, // Apply the same stack filter if provided.
+		remoteIncludeStackAbsPaths,
+		remoteExcludeStackAbsPaths,
+	)
+	if err != nil {
+		// Propagate unexpected errors (permission issues, invalid paths, etc.) to avoid silently
+		// producing incorrect results.
+		if !errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+			return nil, nil, nil, err
+		}
+		// No stack manifests found in BASE means all stacks were deleted in HEAD.
+		log.Debug("No stack manifests found in BASE, using empty list", "error", err)
+		remoteStackConfigFilesAbsolutePaths = []string{}
+	}
+	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths
 
 	remoteStacks, err := ExecuteDescribeStacks(
 		atmosConfig,
@@ -103,13 +154,15 @@ func executeDescribeAffected(
 		processYamlFunctions,
 		false,
 		skip,
-		nil, // AuthManager passed from describe affected command layer
+		authManager,
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	// Restore atmosConfig
+	// Restore atmosConfig.
+	atmosConfig.BasePath = currentBasePath
+	atmosConfig.BasePathAbsolute = currentBasePathAbsolute
 	atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
 	atmosConfig.TerraformDirAbsolutePath = currentStacksTerraformDirAbsolutePath
 	atmosConfig.HelmfileDirAbsolutePath = currentStacksHelmfileDirAbsolutePath
@@ -178,6 +231,7 @@ func executeDescribeAffected(
 		includeSettings,
 		stack,
 		excludeLocked,
+		localRepoFileSystemPathAbs,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -188,6 +242,8 @@ func executeDescribeAffected(
 
 // findAffected returns a list of all affected components in all stacks.
 // Uses parallel processing for improved performance.
+// The gitRepoRoot parameter is the absolute path to the git repository root, used to resolve
+// relative file paths from git diff.
 func findAffected(
 	currentStacks *map[string]any,
 	remoteStacks *map[string]any,
@@ -197,6 +253,7 @@ func findAffected(
 	includeSettings bool,
 	stackToFilter string,
 	excludeLocked bool,
+	gitRepoRoot string,
 ) ([]schema.Affected, error) {
 	// Use parallel implementation for significant performance improvement (40-60% faster).
 	return findAffectedParallel(
@@ -208,5 +265,6 @@ func findAffected(
 		includeSettings,
 		stackToFilter,
 		excludeLocked,
+		gitRepoRoot,
 	)
 }

@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	realm "github.com/cloudposse/atmos/pkg/auth/realm"
 	schema "github.com/cloudposse/atmos/pkg/schema"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -128,6 +129,21 @@ func (mr *MockProviderMockRecorder) Name() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockProvider)(nil).Name))
 }
 
+// Paths mocks base method.
+func (m *MockProvider) Paths() ([]Path, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Paths")
+	ret0, _ := ret[0].([]Path)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Paths indicates an expected call of Paths.
+func (mr *MockProviderMockRecorder) Paths() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paths", reflect.TypeOf((*MockProvider)(nil).Paths))
+}
+
 // PreAuthenticate mocks base method.
 func (m *MockProvider) PreAuthenticate(manager AuthManager) error {
 	m.ctrl.T.Helper()
@@ -157,6 +173,18 @@ func (mr *MockProviderMockRecorder) PrepareEnvironment(ctx, environ any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareEnvironment", reflect.TypeOf((*MockProvider)(nil).PrepareEnvironment), ctx, environ)
 }
 
+// SetRealm mocks base method.
+func (m *MockProvider) SetRealm(arg0 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRealm", arg0)
+}
+
+// SetRealm indicates an expected call of SetRealm.
+func (mr *MockProviderMockRecorder) SetRealm(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRealm", reflect.TypeOf((*MockProvider)(nil).SetRealm), arg0)
+}
+
 // Validate mocks base method.
 func (m *MockProvider) Validate() error {
 	m.ctrl.T.Helper()
@@ -169,6 +197,45 @@ func (m *MockProvider) Validate() error {
 func (mr *MockProviderMockRecorder) Validate() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockProvider)(nil).Validate))
+}
+
+// MockProvisioner is a mock of Provisioner interface.
+type MockProvisioner struct {
+	ctrl     *gomock.Controller
+	recorder *MockProvisionerMockRecorder
+	isgomock struct{}
+}
+
+// MockProvisionerMockRecorder is the mock recorder for MockProvisioner.
+type MockProvisionerMockRecorder struct {
+	mock *MockProvisioner
+}
+
+// NewMockProvisioner creates a new mock instance.
+func NewMockProvisioner(ctrl *gomock.Controller) *MockProvisioner {
+	mock := &MockProvisioner{ctrl: ctrl}
+	mock.recorder = &MockProvisionerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockProvisioner) EXPECT() *MockProvisionerMockRecorder {
+	return m.recorder
+}
+
+// ProvisionIdentities mocks base method.
+func (m *MockProvisioner) ProvisionIdentities(ctx context.Context, creds ICredentials) (*ProvisioningResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProvisionIdentities", ctx, creds)
+	ret0, _ := ret[0].(*ProvisioningResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProvisionIdentities indicates an expected call of ProvisionIdentities.
+func (mr *MockProvisionerMockRecorder) ProvisionIdentities(ctx, creds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProvisionIdentities", reflect.TypeOf((*MockProvisioner)(nil).ProvisionIdentities), ctx, creds)
 }
 
 // MockIdentity is a mock of Identity interface.
@@ -298,6 +365,21 @@ func (mr *MockIdentityMockRecorder) Logout(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockIdentity)(nil).Logout), ctx)
 }
 
+// Paths mocks base method.
+func (m *MockIdentity) Paths() ([]Path, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Paths")
+	ret0, _ := ret[0].([]Path)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Paths indicates an expected call of Paths.
+func (mr *MockIdentityMockRecorder) Paths() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paths", reflect.TypeOf((*MockIdentity)(nil).Paths))
+}
+
 // PostAuthenticate mocks base method.
 func (m *MockIdentity) PostAuthenticate(ctx context.Context, params *PostAuthenticateParams) error {
 	m.ctrl.T.Helper()
@@ -325,6 +407,18 @@ func (m *MockIdentity) PrepareEnvironment(ctx context.Context, environ map[strin
 func (mr *MockIdentityMockRecorder) PrepareEnvironment(ctx, environ any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareEnvironment", reflect.TypeOf((*MockIdentity)(nil).PrepareEnvironment), ctx, environ)
+}
+
+// SetRealm mocks base method.
+func (m *MockIdentity) SetRealm(arg0 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRealm", arg0)
+}
+
+// SetRealm indicates an expected call of SetRealm.
+func (mr *MockIdentityMockRecorder) SetRealm(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRealm", reflect.TypeOf((*MockIdentity)(nil).SetRealm), arg0)
 }
 
 // Validate mocks base method.
@@ -378,6 +472,49 @@ func (m *MockAuthManager) Authenticate(ctx context.Context, identityName string)
 func (mr *MockAuthManagerMockRecorder) Authenticate(ctx, identityName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authenticate", reflect.TypeOf((*MockAuthManager)(nil).Authenticate), ctx, identityName)
+}
+
+// AuthenticateProvider mocks base method.
+func (m *MockAuthManager) AuthenticateProvider(ctx context.Context, providerName string) (*WhoamiInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthenticateProvider", ctx, providerName)
+	ret0, _ := ret[0].(*WhoamiInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthenticateProvider indicates an expected call of AuthenticateProvider.
+func (mr *MockAuthManagerMockRecorder) AuthenticateProvider(ctx, providerName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateProvider", reflect.TypeOf((*MockAuthManager)(nil).AuthenticateProvider), ctx, providerName)
+}
+
+// ExecuteIdentityIntegrations mocks base method.
+func (m *MockAuthManager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteIdentityIntegrations", ctx, identityName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecuteIdentityIntegrations indicates an expected call of ExecuteIdentityIntegrations.
+func (mr *MockAuthManagerMockRecorder) ExecuteIdentityIntegrations(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteIdentityIntegrations", reflect.TypeOf((*MockAuthManager)(nil).ExecuteIdentityIntegrations), ctx, identityName)
+}
+
+// ExecuteIntegration mocks base method.
+func (m *MockAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteIntegration", ctx, integrationName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecuteIntegration indicates an expected call of ExecuteIntegration.
+func (mr *MockAuthManagerMockRecorder) ExecuteIntegration(ctx, integrationName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteIntegration", reflect.TypeOf((*MockAuthManager)(nil).ExecuteIntegration), ctx, integrationName)
 }
 
 // GetCachedCredentials mocks base method.
@@ -467,6 +604,21 @@ func (mr *MockAuthManagerMockRecorder) GetIdentities() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIdentities", reflect.TypeOf((*MockAuthManager)(nil).GetIdentities))
 }
 
+// GetIntegration mocks base method.
+func (m *MockAuthManager) GetIntegration(integrationName string) (*schema.Integration, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIntegration", integrationName)
+	ret0, _ := ret[0].(*schema.Integration)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetIntegration indicates an expected call of GetIntegration.
+func (mr *MockAuthManagerMockRecorder) GetIntegration(integrationName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIntegration", reflect.TypeOf((*MockAuthManager)(nil).GetIntegration), integrationName)
+}
+
 // GetProviderForIdentity mocks base method.
 func (m *MockAuthManager) GetProviderForIdentity(identityName string) string {
 	m.ctrl.T.Helper()
@@ -508,6 +660,20 @@ func (m *MockAuthManager) GetProviders() map[string]schema.Provider {
 func (mr *MockAuthManagerMockRecorder) GetProviders() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProviders", reflect.TypeOf((*MockAuthManager)(nil).GetProviders))
+}
+
+// GetRealm mocks base method.
+func (m *MockAuthManager) GetRealm() realm.RealmInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRealm")
+	ret0, _ := ret[0].(realm.RealmInfo)
+	return ret0
+}
+
+// GetRealm indicates an expected call of GetRealm.
+func (mr *MockAuthManagerMockRecorder) GetRealm() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRealm", reflect.TypeOf((*MockAuthManager)(nil).GetRealm))
 }
 
 // GetStackInfo mocks base method.
@@ -553,45 +719,45 @@ func (mr *MockAuthManagerMockRecorder) ListProviders() *gomock.Call {
 }
 
 // Logout mocks base method.
-func (m *MockAuthManager) Logout(ctx context.Context, identityName string) error {
+func (m *MockAuthManager) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Logout", ctx, identityName)
+	ret := m.ctrl.Call(m, "Logout", ctx, identityName, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Logout indicates an expected call of Logout.
-func (mr *MockAuthManagerMockRecorder) Logout(ctx, identityName any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) Logout(ctx, identityName, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthManager)(nil).Logout), ctx, identityName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthManager)(nil).Logout), ctx, identityName, deleteKeychain)
 }
 
 // LogoutAll mocks base method.
-func (m *MockAuthManager) LogoutAll(ctx context.Context) error {
+func (m *MockAuthManager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogoutAll", ctx)
+	ret := m.ctrl.Call(m, "LogoutAll", ctx, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // LogoutAll indicates an expected call of LogoutAll.
-func (mr *MockAuthManagerMockRecorder) LogoutAll(ctx any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) LogoutAll(ctx, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutAll", reflect.TypeOf((*MockAuthManager)(nil).LogoutAll), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutAll", reflect.TypeOf((*MockAuthManager)(nil).LogoutAll), ctx, deleteKeychain)
 }
 
 // LogoutProvider mocks base method.
-func (m *MockAuthManager) LogoutProvider(ctx context.Context, providerName string) error {
+func (m *MockAuthManager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogoutProvider", ctx, providerName)
+	ret := m.ctrl.Call(m, "LogoutProvider", ctx, providerName, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // LogoutProvider indicates an expected call of LogoutProvider.
-func (mr *MockAuthManagerMockRecorder) LogoutProvider(ctx, providerName any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) LogoutProvider(ctx, providerName, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutProvider", reflect.TypeOf((*MockAuthManager)(nil).LogoutProvider), ctx, providerName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutProvider", reflect.TypeOf((*MockAuthManager)(nil).LogoutProvider), ctx, providerName, deleteKeychain)
 }
 
 // PrepareShellEnvironment mocks base method.
@@ -607,6 +773,36 @@ func (m *MockAuthManager) PrepareShellEnvironment(ctx context.Context, identityN
 func (mr *MockAuthManagerMockRecorder) PrepareShellEnvironment(ctx, identityName, currentEnv any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareShellEnvironment", reflect.TypeOf((*MockAuthManager)(nil).PrepareShellEnvironment), ctx, identityName, currentEnv)
+}
+
+// ResolvePrincipalSetting mocks base method.
+func (m *MockAuthManager) ResolvePrincipalSetting(identityName, key string) (any, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolvePrincipalSetting", identityName, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ResolvePrincipalSetting indicates an expected call of ResolvePrincipalSetting.
+func (mr *MockAuthManagerMockRecorder) ResolvePrincipalSetting(identityName, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolvePrincipalSetting", reflect.TypeOf((*MockAuthManager)(nil).ResolvePrincipalSetting), identityName, key)
+}
+
+// ResolveProviderConfig mocks base method.
+func (m *MockAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveProviderConfig", identityName)
+	ret0, _ := ret[0].(*schema.Provider)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ResolveProviderConfig indicates an expected call of ResolveProviderConfig.
+func (mr *MockAuthManagerMockRecorder) ResolveProviderConfig(identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveProviderConfig", reflect.TypeOf((*MockAuthManager)(nil).ResolveProviderConfig), identityName)
 }
 
 // Validate mocks base method.
@@ -663,76 +859,76 @@ func (m *MockCredentialStore) EXPECT() *MockCredentialStoreMockRecorder {
 }
 
 // Delete mocks base method.
-func (m *MockCredentialStore) Delete(alias string) error {
+func (m *MockCredentialStore) Delete(alias, arg1 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", alias)
+	ret := m.ctrl.Call(m, "Delete", alias, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *MockCredentialStoreMockRecorder) Delete(alias any) *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) Delete(alias, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockCredentialStore)(nil).Delete), alias)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockCredentialStore)(nil).Delete), alias, arg1)
 }
 
 // IsExpired mocks base method.
-func (m *MockCredentialStore) IsExpired(alias string) (bool, error) {
+func (m *MockCredentialStore) IsExpired(alias, arg1 string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsExpired", alias)
+	ret := m.ctrl.Call(m, "IsExpired", alias, arg1)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // IsExpired indicates an expected call of IsExpired.
-func (mr *MockCredentialStoreMockRecorder) IsExpired(alias any) *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) IsExpired(alias, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsExpired", reflect.TypeOf((*MockCredentialStore)(nil).IsExpired), alias)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsExpired", reflect.TypeOf((*MockCredentialStore)(nil).IsExpired), alias, arg1)
 }
 
 // List mocks base method.
-func (m *MockCredentialStore) List() ([]string, error) {
+func (m *MockCredentialStore) List(arg0 string) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List")
+	ret := m.ctrl.Call(m, "List", arg0)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // List indicates an expected call of List.
-func (mr *MockCredentialStoreMockRecorder) List() *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) List(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockCredentialStore)(nil).List))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockCredentialStore)(nil).List), arg0)
 }
 
 // Retrieve mocks base method.
-func (m *MockCredentialStore) Retrieve(alias string) (ICredentials, error) {
+func (m *MockCredentialStore) Retrieve(alias, arg1 string) (ICredentials, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Retrieve", alias)
+	ret := m.ctrl.Call(m, "Retrieve", alias, arg1)
 	ret0, _ := ret[0].(ICredentials)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Retrieve indicates an expected call of Retrieve.
-func (mr *MockCredentialStoreMockRecorder) Retrieve(alias any) *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) Retrieve(alias, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockCredentialStore)(nil).Retrieve), alias)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockCredentialStore)(nil).Retrieve), alias, arg1)
 }
 
 // Store mocks base method.
-func (m *MockCredentialStore) Store(alias string, creds ICredentials) error {
+func (m *MockCredentialStore) Store(alias string, creds ICredentials, arg2 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Store", alias, creds)
+	ret := m.ctrl.Call(m, "Store", alias, creds, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Store indicates an expected call of Store.
-func (mr *MockCredentialStoreMockRecorder) Store(alias, creds any) *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) Store(alias, creds, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockCredentialStore)(nil).Store), alias, creds)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockCredentialStore)(nil).Store), alias, creds, arg2)
 }
 
 // Type mocks base method.

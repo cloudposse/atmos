@@ -199,9 +199,13 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 
-	// Define the working directory
+	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	component := "c1"
 
@@ -333,22 +337,16 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 }
 
 func TestDescribeComponent_Packer(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
-
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Define the working directory
+	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{
@@ -381,6 +379,72 @@ func TestDescribeComponent_Packer(t *testing.T) {
 	assert.Equal(t, "arn:aws:iam::PROD_ACCOUNT_ID:role/ROLE_NAME", val)
 }
 
+func TestDescribeComponent_Ansible(t *testing.T) {
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	// Define the working directory.
+	workDir := "../../examples/demo-ansible"
+	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+	}
+
+	component := "hello-world"
+
+	// Test detecting ansible component in dev stack.
+	res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "dev",
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
+	assert.NoError(t, err)
+
+	val, err := u.EvaluateYqExpression(&atmosConfig, res, ".vars.app_name")
+	assert.Nil(t, err)
+	assert.Equal(t, "my-app", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".vars.app_version")
+	assert.Nil(t, err)
+	assert.Equal(t, "1.0.0-dev", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".component_info.component_type")
+	assert.Nil(t, err)
+	assert.Equal(t, "ansible", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".stack")
+	assert.Nil(t, err)
+	assert.Equal(t, "dev", val)
+
+	// Test prod stack with overrides.
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "prod",
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
+	assert.NoError(t, err)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".vars.app_version")
+	assert.Nil(t, err)
+	assert.Equal(t, "2.0.0", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, res, ".vars.app_port")
+	assert.Nil(t, err)
+	assert.Equal(t, 443, val)
+}
+
 func TestDescribeComponentWithProvenance(t *testing.T) {
 	// Clear cache to ensure fresh processing.
 	ClearBaseComponentConfigCache()
@@ -401,9 +465,13 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Define the working directory - using quick-start-advanced as it has a good mix of configs
+	// Define the working directory - using quick-start-advanced as it has a good mix of configs.
 	workDir := "../../examples/quick-start-advanced"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	component := "vpc-flow-logs-bucket"
 	stack := "plat-ue2-dev"

@@ -1,0 +1,13 @@
+# Valid YAML but invalid schema - wrong types and values
+components:
+  terraform:
+    base_path: 12345  # Should be string, not number
+
+stacks:
+  base_path: ["invalid", "array"]  # Should be string, not array
+
+# Invalid nested structure
+base_path:
+  some:
+    nested:
+      invalid: structure

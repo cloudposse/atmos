@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -16,6 +17,41 @@ const (
 	CredentialStoreTypeMemory        = "memory"
 	CredentialStoreTypeFile          = "file"
 )
+
+// PathType indicates what kind of filesystem entity the path represents.
+type PathType string
+
+const (
+	// PathTypeFile indicates a single file (e.g., ~/.aws/credentials).
+	PathTypeFile PathType = "file"
+	// PathTypeDirectory indicates a directory (e.g., ~/.azure/).
+	PathTypeDirectory PathType = "directory"
+)
+
+// Path represents a credential file or directory used by the provider/identity.
+type Path struct {
+	// Location is the filesystem path (may contain ~ for home directory).
+	Location string `json:"location"`
+
+	// Type indicates if this is a file or directory.
+	Type PathType `json:"type"`
+
+	// Required indicates if path must exist for provider to function.
+	// If false, missing paths are optional (provider works without them).
+	Required bool `json:"required"`
+
+	// Purpose describes what this path is used for (helps with debugging/logging).
+	// Examples: "AWS credentials file", "Azure config directory", "GCP service account key"
+	Purpose string `json:"purpose"`
+
+	// Metadata holds optional provider-specific information.
+	// Consumers can use this for advanced features without breaking interface.
+	// Examples:
+	//   - "selinux_label": "system_u:object_r:container_file_t:s0" (future SELinux support)
+	//   - "read_only": "true" (hint that path should be read-only)
+	//   - "mount_target": "/workspace/.aws" (suggested container path)
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
 
 // Provider defines the interface that all authentication providers must implement.
 type Provider interface {
@@ -38,6 +74,11 @@ type Provider interface {
 	// Environment returns environment variables that should be set for this provider.
 	Environment() (map[string]string, error)
 
+	// Paths returns credential files/directories used by this provider.
+	// Returns empty slice if provider doesn't use filesystem credentials (e.g., GitHub tokens).
+	// Consumers decide how to use these paths (mount, copy, delete, etc.).
+	Paths() ([]Path, error)
+
 	// PrepareEnvironment prepares environment variables for external processes (Terraform, workflows, etc.).
 	// Takes current environment and returns modified environment suitable for the provider's SDK/CLI.
 	// Implementations should:
@@ -55,6 +96,21 @@ type Provider interface {
 	// Returns the configured path if set, otherwise a default path.
 	// For display purposes only (may use ~ for home directory).
 	GetFilesDisplayPath() string
+
+	// SetRealm sets the credential isolation realm for this provider.
+	// Called by the auth manager after provider construction to propagate the realm
+	// to all providers. The realm is used for credential file paths.
+	SetRealm(realm string)
+}
+
+// Provisioner is an optional interface that providers can implement
+// to auto-provision identities from external sources (e.g., AWS SSO permission sets).
+// Provisioning is run after successful provider authentication and is non-fatal.
+type Provisioner interface {
+	// ProvisionIdentities provisions identities from the external source.
+	// Returns provisioned identities and metadata, or error if provisioning fails.
+	// Implementations should be non-fatal - errors are logged but don't block authentication.
+	ProvisionIdentities(ctx context.Context, creds ICredentials) (*ProvisioningResult, error)
 }
 
 // PostAuthenticateParams contains parameters for PostAuthenticate method.
@@ -64,7 +120,8 @@ type PostAuthenticateParams struct {
 	ProviderName string
 	IdentityName string
 	Credentials  ICredentials
-	Manager      AuthManager // Auth manager for resolving provider chains
+	Manager      AuthManager // Auth manager for resolving provider chains.
+	Realm        string      // Credential isolation realm for file storage.
 }
 
 // Identity defines the interface that all authentication identities must implement.
@@ -84,6 +141,11 @@ type Identity interface {
 
 	// Environment returns environment variables that should be set for this identity.
 	Environment() (map[string]string, error)
+
+	// Paths returns credential files/directories used by this identity.
+	// Returns empty slice if identity doesn't use filesystem credentials.
+	// Paths are in addition to provider paths (identities can add more files).
+	Paths() ([]Path, error)
 
 	// PrepareEnvironment prepares environment variables for external processes (Terraform, workflows, etc.).
 	// Takes current environment (already modified by provider's PrepareEnvironment) and returns
@@ -112,6 +174,12 @@ type Identity interface {
 	// Used with noop keyring to enable credential validation in whoami.
 	// Returns nil, nil if identity doesn't support loading credentials from storage.
 	LoadCredentials(ctx context.Context) (ICredentials, error)
+
+	// SetRealm sets the credential isolation realm for this identity.
+	// Called by the auth manager after identity construction to propagate the realm
+	// to all identities in the authentication chain.
+	// The realm is used for all credential storage and file operations.
+	SetRealm(realm string)
 }
 
 // AuthManager manages the overall authentication process.
@@ -129,6 +197,14 @@ type AuthManager interface {
 	// This may trigger interactive authentication flows (SSO device prompts, etc.).
 	// Use this when you want to force fresh authentication (e.g., `auth login` command).
 	Authenticate(ctx context.Context, identityName string) (*WhoamiInfo, error)
+
+	// AuthenticateProvider performs authentication directly with a provider.
+	// This is used for provider-level operations like SSO auto-provisioning where
+	// you want to authenticate to a provider without specifying a particular identity.
+	// If the provider has auto_provision_identities enabled, this will trigger
+	// automatic discovery and provisioning of all available identities.
+	// Use this when you want to authenticate to a provider (e.g., `auth login --provider sso-prod`).
+	AuthenticateProvider(ctx context.Context, providerName string) (*WhoamiInfo, error)
 
 	// Whoami returns information about the specified identity's credentials.
 	// First checks for cached credentials, then falls back to chain authentication
@@ -178,6 +254,10 @@ type AuthManager interface {
 	// GetStackInfo returns the current stack info pointer associated with this manager.
 	GetStackInfo() *schema.ConfigAndStacksInfo
 
+	// GetRealm returns the computed realm information for this auth manager.
+	// The realm provides credential isolation between different repositories.
+	GetRealm() realm.RealmInfo
+
 	// ListProviders returns all available provider names.
 	ListProviders() []string
 
@@ -188,16 +268,19 @@ type AuthManager interface {
 	GetProviders() map[string]schema.Provider
 
 	// Logout removes credentials for the specified identity and its authentication chain.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	Logout(ctx context.Context, identityName string) error
+	Logout(ctx context.Context, identityName string, deleteKeychain bool) error
 
 	// LogoutProvider removes all credentials for the specified provider.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	LogoutProvider(ctx context.Context, providerName string) error
+	LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error
 
 	// LogoutAll removes all cached credentials for all identities.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	LogoutAll(ctx context.Context) error
+	LogoutAll(ctx context.Context, deleteKeychain bool) error
 
 	// GetEnvironmentVariables returns the environment variables for an identity
 	// without performing authentication or validation.
@@ -213,24 +296,57 @@ type AuthManager interface {
 	// Returns environment variables as a list of "KEY=VALUE" strings ready for subprocess.
 	// Use this for all subprocess invocations: Terraform, Helmfile, Packer, workflows, custom commands, auth shell, etc.
 	PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error)
+
+	// ExecuteIntegration executes a named integration.
+	// This authenticates the integration's linked identity first, then executes the integration.
+	// Use this for explicit integration execution via `atmos aws ecr login <integration>`.
+	ExecuteIntegration(ctx context.Context, integrationName string) error
+
+	// ExecuteIdentityIntegrations executes all linked integrations for an identity.
+	// This authenticates the identity first, then executes all its linked integrations.
+	// Use this for `atmos aws ecr login --identity <identity>`.
+	ExecuteIdentityIntegrations(ctx context.Context, identityName string) error
+
+	// GetIntegration returns the integration config by name.
+	GetIntegration(integrationName string) (*schema.Integration, error)
+
+	// ResolvePrincipalSetting traverses the identity chain and returns the first
+	// non-empty value for the given key in Principal configuration.
+	// The chain is traversed from the target identity backwards through parent identities.
+	// This is a provider-agnostic mechanism for inheriting settings through the chain.
+	// Returns the value and true if found, nil and false otherwise.
+	ResolvePrincipalSetting(identityName, key string) (interface{}, bool)
+
+	// ResolveProviderConfig returns the provider configuration at the root of
+	// the identity's authentication chain.
+	// This allows identities to access provider-level settings without knowing
+	// the specific provider name.
+	// Returns the provider config and true if found, nil and false otherwise.
+	ResolveProviderConfig(identityName string) (*schema.Provider, bool)
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.
+// All methods that operate on credentials require a realm parameter to ensure
+// complete isolation between different repositories or customer environments.
 type CredentialStore interface {
-	// Store stores credentials for the given alias.
-	Store(alias string, creds ICredentials) error
+	// Store stores credentials for the given alias within the specified realm.
+	// The realm provides credential isolation - the same alias in different realms
+	// refers to completely separate credentials.
+	Store(alias string, creds ICredentials, realm string) error
 
-	// Retrieve retrieves credentials for the given alias.
-	Retrieve(alias string) (ICredentials, error)
+	// Retrieve retrieves credentials for the given alias within the specified realm.
+	// Returns error if no credentials exist for the alias in the given realm.
+	Retrieve(alias string, realm string) (ICredentials, error)
 
-	// Delete deletes credentials for the given alias.
-	Delete(alias string) error
+	// Delete deletes credentials for the given alias within the specified realm.
+	Delete(alias string, realm string) error
 
-	// List returns all stored credential aliases.
-	List() ([]string, error)
+	// List returns all stored credential aliases within the specified realm.
+	// Returns only aliases that belong to the given realm.
+	List(realm string) ([]string, error)
 
-	// IsExpired checks if credentials for the given alias are expired.
-	IsExpired(alias string) (bool, error)
+	// IsExpired checks if credentials for the given alias are expired within the specified realm.
+	IsExpired(alias string, realm string) (bool, error)
 
 	// Type returns the type of credential store (e.g., "system-keyring", "noop").
 	Type() string

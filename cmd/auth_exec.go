@@ -14,8 +14,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // authExecCmd executes a command with authentication environment variables.
@@ -35,7 +37,8 @@ var authExecCmd = &cobra.Command{
 // executeAuthExecCommand is the main execution function for auth exec command.
 func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
-	checkAtmosConfig()
+	// Skip stack validation since auth exec only needs auth configuration, not stack manifests.
+	checkAtmosConfig(WithStackValidation(false))
 
 	return executeAuthExecCommandCore(cmd, args)
 }
@@ -48,19 +51,19 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Validate command args before attempting authentication.
 	if len(commandArgs) == 0 {
-		return errors.Join(errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
 	// Create auth manager
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Get identity from extracted flag or use default.
@@ -83,7 +86,7 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	if identityName == "" || forceSelect {
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
 		}
 		identityName = defaultIdentity
 	}
@@ -101,54 +104,51 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return errUtils.ErrUserAborted
 			}
-			return errors.Join(errUtils.ErrAuthenticationFailed, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
 		}
 	}
 
 	// Prepare shell environment with file-based credentials.
-	// Start with current OS environment and let PrepareShellEnvironment configure auth.
-	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, os.Environ())
+	// Start with current OS environment + global env from atmos.yaml and let PrepareShellEnvironment configure auth.
+	// PrepareShellEnvironment sanitizes the env (removes IRSA/credential vars) and adds auth vars.
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
 		return fmt.Errorf("failed to prepare command environment: %w", err)
 	}
 
-	// Convert environment list to map for executeCommandWithEnv.
-	envMap := make(map[string]string)
-	for _, envVar := range envList {
-		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-			key := envVar[:idx]
-			value := envVar[idx+1:]
-			envMap[key] = value
-		}
+	// Execute the command with the sanitized environment directly.
+	// The envList already includes os.Environ() (sanitized) + auth vars,
+	// so we pass it as the complete subprocess environment.
+	err = executeCommandWithEnv(commandArgs, envList)
+	if err != nil {
+		// For any subprocess error, provide a tip about refreshing credentials.
+		// This helps users when AWS tokens are expired or invalid.
+		printAuthExecTip(identityName)
+		return err
 	}
-
-	// Execute the command with authentication environment
-	return executeCommandWithEnv(commandArgs, envMap)
+	return nil
 }
 
-// executeCommandWithEnv executes a command with additional environment variables.
-func executeCommandWithEnv(args []string, envVars map[string]string) error {
+// executeCommandWithEnv executes a command with a complete environment.
+// The env parameter should be a fully prepared environment (e.g., from PrepareShellEnvironment).
+// It is used directly as the subprocess environment without re-reading os.Environ().
+func executeCommandWithEnv(args []string, env []string) error {
 	if len(args) == 0 {
-		return errors.Join(errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
-	// Prepare the command
+	// Prepare the command.
 	cmdName := args[0]
 	cmdArgs := args[1:]
 
-	// Look for the command in PATH
+	// Look for the command in PATH.
 	cmdPath, err := exec.LookPath(cmdName)
 	if err != nil {
-		return errors.Join(errUtils.ErrCommandNotFound, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCommandNotFound, err)
 	}
 
-	// Prepare environment variables
-	env := os.Environ()
-	for key, value := range envVars {
-		env = append(env, fmt.Sprintf("%s=%s", key, value))
-	}
-
-	// Execute the command
+	// Execute the command with the provided environment directly.
 	execCmd := exec.Command(cmdPath, cmdArgs...)
 	execCmd.Env = env
 	execCmd.Stdin = os.Stdin
@@ -165,7 +165,7 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 				return errUtils.ExitCodeError{Code: status.ExitStatus()}
 			}
 		}
-		return errors.Join(errUtils.ErrSubcommandFailed, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrSubcommandFailed, err)
 	}
 
 	return nil
@@ -237,6 +237,13 @@ func extractIdentityFlag(args []string) (identityValue string, commandArgs []str
 	}
 
 	return identityValue, commandArgs
+}
+
+// printAuthExecTip prints a helpful tip when auth exec fails.
+func printAuthExecTip(identityName string) {
+	ui.Writeln("")
+	ui.Info("Tip: If credentials are expired, refresh with:")
+	ui.Writef("     atmos auth login --identity %s\n", identityName)
 }
 
 func init() {

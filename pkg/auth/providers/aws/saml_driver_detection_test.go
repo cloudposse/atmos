@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -193,6 +194,10 @@ func TestHasPlaywrightDriversOrCanDownload(t *testing.T) {
 			t.Setenv("HOME", homeDir)        // Linux/macOS.
 			t.Setenv("USERPROFILE", homeDir) // Windows.
 
+			// Clear homedir cache to ensure environment variables take effect.
+			t.Cleanup(homedir.Reset)
+			homedir.Reset()
+
 			provider := &samlProvider{
 				config: &schema.Provider{
 					DownloadBrowserDriver: tt.downloadBrowserDriver,
@@ -282,6 +287,10 @@ func TestGetDriver_WithPlaywrightDrivers(t *testing.T) {
 			// Override home directory for cross-platform compatibility.
 			t.Setenv("HOME", homeDir)        // Linux/macOS.
 			t.Setenv("USERPROFILE", homeDir) // Windows.
+
+			// Clear homedir cache to ensure environment variables take effect.
+			t.Cleanup(homedir.Reset)
+			homedir.Reset()
 
 			provider := &samlProvider{
 				url: tt.url,

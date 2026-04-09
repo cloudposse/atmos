@@ -1,0 +1,15 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    # Reference shared mock component with slash in name
+    infra/vpc:
+      metadata:
+        component: mock
+      vars:
+        foo: "infra-vpc-foo"
+        bar: "infra-vpc-bar"
+        tags:
+          Name: "dev-vpc"
+          Environment: "dev"

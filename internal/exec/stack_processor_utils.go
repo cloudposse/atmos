@@ -2,6 +2,7 @@ package exec
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,260 +14,368 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var (
-	// File content sync map.
-	getFileContentSyncMap = sync.Map{}
+// Mutex to serialize writes to importsConfig maps during parallel import processing.
+var importsConfigLock = &sync.Mutex{}
 
-	// Mutex to serialize writes to importsConfig maps during parallel import processing.
-	importsConfigLock = &sync.Mutex{}
-
-	// The mergeContexts stores MergeContexts keyed by stack file path when provenance tracking is enabled.
-	// This is used to capture provenance data for the describe component command.
-	mergeContexts   = make(map[string]*m.MergeContext)
-	mergeContextsMu sync.RWMutex
-
-	// Deprecated: Use SetMergeContextForStack/GetMergeContextForStack instead.
-	lastMergeContext   *m.MergeContext
-	lastMergeContextMu sync.RWMutex
-
-	// Base component inheritance cache to avoid re-processing the same inheritance chains.
-	// Cache key: "stack:component:baseComponent" -> BaseComponentConfig.
-	// No cache invalidation needed - configuration is immutable per command execution.
-	baseComponentConfigCache   = make(map[string]*schema.BaseComponentConfig)
-	baseComponentConfigCacheMu sync.RWMutex
-
-	// JSON schema compilation cache to avoid re-compiling the same schema for every stack file.
-	// Cache key: absolute file path to schema file -> compiled schema.
-	// No cache invalidation needed - schemas are immutable per command execution.
-	jsonSchemaCache   = make(map[string]*jsonschema.Schema)
-	jsonSchemaCacheMu sync.RWMutex
-)
-
-// SetMergeContextForStack stores the merge context for a specific stack file.
-func SetMergeContextForStack(stackFile string, ctx *m.MergeContext) {
-	defer perf.Track(nil, "exec.SetMergeContextForStack")()
-
-	mergeContextsMu.Lock()
-	defer mergeContextsMu.Unlock()
-	mergeContexts[stackFile] = ctx
+// extractLocalsResult holds the results of parsing raw YAML and extracting locals.
+type extractLocalsResult struct {
+	locals    map[string]any // Resolved locals.
+	settings  map[string]any // Settings section (for template context).
+	vars      map[string]any // Vars section (for template context).
+	env       map[string]any // Env section (for template context).
+	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
 }
 
-// GetMergeContextForStack retrieves the merge context for a specific stack file.
-func GetMergeContextForStack(stackFile string) *m.MergeContext {
-	defer perf.Track(nil, "exec.GetMergeContextForStack")()
+// extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
+// This function is called BEFORE template processing to make locals available during template execution.
+// The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
+// The locals resolver handles resolving self-references between locals.
+// Returns the resolved locals and other sections (settings, vars, env) that should be available during template processing.
+//
+// Locals are extracted and merged in order of specificity:
+// 1. Global locals (root level)
+// 2. Section-specific locals (terraform, helmfile, packer sections)
+//
+// Section-specific locals inherit from and can override global locals.
+// All resolved locals are flattened into a single map for template processing.
+func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
+	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
 
-	mergeContextsMu.RLock()
-	defer mergeContextsMu.RUnlock()
-	return mergeContexts[stackFile]
+	// Parse raw YAML to extract the structure.
+	// YAML treats template expressions like {{ .locals.X }} as plain strings,
+	// so parsing succeeds even with unresolved templates.
+	// Use Atmos's YAML unmarshaling which properly handles custom tags like !terraform.state
+	// by converting them to strings (e.g., "!terraform.state component .output").
+	// Create a default config if nil (UnmarshalYAMLFromFile requires non-nil config).
+	configToUse := atmosConfig
+	if configToUse == nil {
+		configToUse = &schema.AtmosConfiguration{}
+	}
+	rawConfig, err := u.UnmarshalYAMLFromFile[map[string]any](configToUse, yamlContent, filePath)
+	if err != nil {
+		// Provide a helpful hint if the file might contain Go template directives
+		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
+		// as templates first, which allows non-YAML-valid Go template syntax.
+		hint := ""
+		if !strings.HasSuffix(filePath, u.TemplateExtension) {
+			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
+		}
+		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)
+	}
+
+	if rawConfig == nil {
+		return &extractLocalsResult{}, nil
+	}
+
+	// Derive the stack name from the file path so that YAML functions like
+	// !terraform.state (2-arg form) can resolve their implicit stack reference.
+	// Previously, an empty string was passed here, which caused !terraform.state
+	// to fail with "stack is required" (see GitHub issue #2080).
+	currentStack := deriveStackNameForLocals(atmosConfig, rawConfig, filePath)
+
+	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath, currentStack)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
+	}
+
+	return buildLocalsResult(rawConfig, localsCtx), nil
 }
 
-// ClearMergeContexts clears all stored merge contexts.
-func ClearMergeContexts() {
-	defer perf.Track(nil, "exec.ClearMergeContexts")()
+// deriveStackNameForLocals derives the stack name from the file path and raw config
+// so that YAML functions in locals (like !terraform.state) can use stack context.
+// This uses the same logic as describe_locals.go (deriveStackName) to compute the
+// stack name from the file path, vars section, and atmos config.
+// Returns empty string if the stack name cannot be determined.
+func deriveStackNameForLocals(atmosConfig *schema.AtmosConfiguration, rawConfig map[string]any, filePath string) string {
+	if atmosConfig == nil {
+		return ""
+	}
 
-	mergeContextsMu.Lock()
-	defer mergeContextsMu.Unlock()
-	mergeContexts = make(map[string]*m.MergeContext)
+	// Extract vars section for stack name derivation.
+	var varsSection map[string]any
+	if vs, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
+		varsSection = vs
+	}
+
+	// Compute relative stack file name from file path.
+	stackFileName := computeStackFileName(atmosConfig, filePath)
+	if stackFileName == "" {
+		return ""
+	}
+
+	return deriveStackName(atmosConfig, stackFileName, varsSection, rawConfig)
 }
 
-// SetLastMergeContext stores the merge context for later retrieval.
-// Deprecated: Use SetMergeContextForStack instead.
-func SetLastMergeContext(ctx *m.MergeContext) {
-	defer perf.Track(nil, "exec.SetLastMergeContext")()
+// computeStackFileName computes the relative stack file name from an absolute file path
+// by stripping the stacks base path prefix and the file extension.
+// This produces a name like "deploy/dev" or "orgs/acme/plat/dev/us-east-1".
+func computeStackFileName(atmosConfig *schema.AtmosConfiguration, filePath string) string {
+	if atmosConfig == nil {
+		return ""
+	}
 
-	lastMergeContextMu.Lock()
-	defer lastMergeContextMu.Unlock()
-	lastMergeContext = ctx
+	// Get the absolute stacks base path.
+	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	absStacksBasePath, err := filepath.Abs(stacksBasePath)
+	if err != nil {
+		return ""
+	}
+
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return ""
+	}
+
+	// Strip the base path prefix.
+	rel, err := filepath.Rel(absStacksBasePath, absFilePath)
+	if err != nil {
+		return ""
+	}
+
+	// Remove known stack/template suffixes (longest first to handle .yaml.tmpl correctly).
+	for _, suffix := range []string{
+		u.YamlTemplateExtension, // .yaml.tmpl
+		u.YmlTemplateExtension,  // .yml.tmpl
+		u.YamlFileExtension,     // .yaml
+		u.YmlFileExtension,      // .yml
+	} {
+		if strings.HasSuffix(rel, suffix) {
+			rel = strings.TrimSuffix(rel, suffix)
+
+			break
+		}
+	}
+
+	return rel
 }
 
-// GetLastMergeContext retrieves the last stored merge context.
-// Deprecated: Use GetMergeContextForStack instead.
-func GetLastMergeContext() *m.MergeContext {
-	defer perf.Track(nil, "exec.GetLastMergeContext")()
+// buildLocalsResult builds an extractLocalsResult from raw config and resolved locals context.
+func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extractLocalsResult {
+	result := &extractLocalsResult{
+		locals: localsCtx.MergeForTemplateContext(),
+	}
 
-	lastMergeContextMu.RLock()
-	defer lastMergeContextMu.RUnlock()
-	return lastMergeContext
+	// Detect locals section presence (including empty locals).
+	// This allows empty locals: {} to still enable template context.
+	if _, ok := rawConfig[cfg.LocalsSectionName]; ok {
+		result.hasLocals = true
+	}
+	if localsCtx.HasTerraformLocals || localsCtx.HasHelmfileLocals || localsCtx.HasPackerLocals {
+		result.hasLocals = true
+	}
+
+	// Ensure locals map is never nil when hasLocals is true.
+	if result.hasLocals && result.locals == nil {
+		result.locals = make(map[string]any)
+	}
+
+	// Extract settings, vars, env sections for template context.
+	if settings, ok := rawConfig[cfg.SettingsSectionName].(map[string]any); ok {
+		result.settings = settings
+	}
+	if vars, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
+		result.vars = vars
+	}
+	if env, ok := rawConfig[cfg.EnvSectionName].(map[string]any); ok {
+		result.env = env
+	}
+
+	return result
 }
 
-// ClearLastMergeContext clears the stored merge context.
-// Deprecated: Use ClearMergeContexts instead.
-func ClearLastMergeContext() {
-	defer perf.Track(nil, "exec.ClearLastMergeContext")()
+// processTemplatesInSection processes Go templates in a section (settings, vars, or env) using the provided context.
+// This allows sections to reference resolved locals and other processed sections.
+// Returns the processed section or an error if template processing fails.
+// IMPORTANT: Uses ignoreMissingTemplateValues=false so that templates referencing values not in the
+// current context (like {{ .atmos_component }}) will fail, and the caller can fall back to raw values.
+// This preserves those templates for later processing when the full context is available.
+func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section map[string]any, context map[string]any, filePath string) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.processTemplatesInSection")()
 
-	lastMergeContextMu.Lock()
-	defer lastMergeContextMu.Unlock()
-	lastMergeContext = nil
+	if len(section) == 0 {
+		return section, nil
+	}
+
+	// Convert section to YAML for template processing.
+	yamlStr, err := u.ConvertToYAML(section)
+	if err != nil {
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to convert section to YAML: %w", err))
+	}
+
+	// Quick check: if no template markers, return as-is.
+	if !strings.Contains(yamlStr, "{{") {
+		return section, nil
+	}
+
+	// Process templates in the YAML string.
+	// Use ignoreMissingTemplateValues=false so templates with missing values fail
+	// (e.g., {{ .atmos_component }} when component context isn't available yet).
+	// The caller will fall back to raw values, preserving templates for later processing.
+	processed, err := ProcessTmpl(atmosConfig, filePath, yamlStr, context, false)
+	if err != nil {
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to process templates in section: %w", err))
+	}
+
+	// Parse the processed YAML back to a map.
+	var result map[string]any
+	if err := yaml.Unmarshal([]byte(processed), &result); err != nil {
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to parse processed section YAML: %w", err))
+	}
+
+	return result, nil
 }
 
-// getCachedBaseComponentConfig retrieves a cached base component config if it exists.
-// Returns a deep copy to prevent mutations affecting the cache.
-func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig, *[]string, bool) {
-	defer perf.Track(nil, "exec.getCachedBaseComponentConfig")()
+// extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
+// Returns the updated context and any error encountered during locals extraction.
+// Note: The "locals" key in context is reserved for file-scoped locals and will override
+// any user-provided "locals" key in the import context.
+// Settings, vars, and env sections are also added to the context so templates can reference them.
+// For template files (.tmpl), YAML parse errors are logged and the function continues
+// without locals, since template files may contain Go template syntax that isn't valid YAML
+// until after template processing.
+func extractAndAddLocalsToContext(
+	atmosConfig *schema.AtmosConfiguration,
+	yamlContent string,
+	filePath string,
+	relativeFilePath string,
+	context map[string]any,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
 
-	baseComponentConfigCacheMu.RLock()
-	defer baseComponentConfigCacheMu.RUnlock()
-
-	cached, found := baseComponentConfigCache[cacheKey]
-	if !found {
-		return nil, nil, false
+	// Enforce file-scoped locals: clear any inherited locals from parent context.
+	// Locals are file-scoped and should NOT inherit across file boundaries.
+	// This ensures that each file only has access to its own locals.
+	if context != nil {
+		delete(context, cfg.LocalsSectionName)
 	}
 
-	// Deep copy to prevent external mutations from affecting the cache.
-	// All map fields must be deep copied since they are mutable.
-	copyConfig := schema.BaseComponentConfig{
-		FinalBaseComponentName:              cached.FinalBaseComponentName,
-		BaseComponentCommand:                cached.BaseComponentCommand,
-		BaseComponentBackendType:            cached.BaseComponentBackendType,
-		BaseComponentRemoteStateBackendType: cached.BaseComponentRemoteStateBackendType,
+	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
+	if localsErr != nil {
+		// For template files (.tmpl), YAML parse errors are expected since the raw content
+		// may contain Go template syntax that isn't valid YAML until after processing.
+		// Log the error and continue without locals - template processing will happen next.
+		if strings.HasSuffix(filePath, u.TemplateExtension) {
+			log.Trace("Skipping locals extraction for template file with invalid YAML", "file", relativeFilePath, "error", localsErr)
+			return context, nil
+		}
+		// Circular dependencies in locals are a stack misconfiguration error.
+		// Return a helpful error with hints on how to fix it.
+		if stderrors.Is(localsErr, errUtils.ErrLocalsCircularDep) {
+			return context, errUtils.Build(errUtils.ErrLocalsCircularDep).
+				WithCause(localsErr).
+				WithContext("file", relativeFilePath).
+				WithHintf("Fix the circular dependency in '%s'", relativeFilePath).
+				WithHint("Ensure locals don't reference each other in a cycle").
+				WithHintf("Use 'atmos describe locals --stack %s' to inspect locals", relativeFilePath).
+				WithExitCode(1).
+				Err()
+		}
+		return context, localsErr
 	}
 
-	// Deep copy all map fields.
-	var err error
-	if copyConfig.BaseComponentVars, err = m.DeepCopyMap(cached.BaseComponentVars); err != nil {
-		// If deep copy fails, return not found to force reprocessing.
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentSettings, err = m.DeepCopyMap(cached.BaseComponentSettings); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentEnv, err = m.DeepCopyMap(cached.BaseComponentEnv); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentAuth, err = m.DeepCopyMap(cached.BaseComponentAuth); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(cached.BaseComponentProviders); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(cached.BaseComponentHooks); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentBackendSection, err = m.DeepCopyMap(cached.BaseComponentBackendSection); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(cached.BaseComponentRemoteStateBackendSection); err != nil {
-		return nil, nil, false
+	// Only modify context if a locals section exists in the file.
+	// This preserves the original behavior where files without locals don't trigger
+	// template processing (see the len(context) > 0 check in ProcessBaseStackConfig).
+	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
+	// which should still enable template context.
+	if !extractResult.hasLocals {
+		return context, nil
 	}
 
-	// Deep copy the slice.
-	copyBaseComponents := make([]string, len(cached.ComponentInheritanceChain))
-	copy(copyBaseComponents, cached.ComponentInheritanceChain)
-	copyConfig.ComponentInheritanceChain = copyBaseComponents
-
-	return &copyConfig, &copyBaseComponents, true
-}
-
-// cacheBaseComponentConfig stores a base component config in the cache.
-// Stores a deep copy to prevent external mutations from affecting the cache.
-func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfig) {
-	defer perf.Track(nil, "exec.cacheBaseComponentConfig")()
-
-	baseComponentConfigCacheMu.Lock()
-	defer baseComponentConfigCacheMu.Unlock()
-
-	// Deep copy to prevent external mutations from affecting the cache.
-	// All map fields must be deep copied since they are mutable.
-	copyConfig := schema.BaseComponentConfig{
-		FinalBaseComponentName:              config.FinalBaseComponentName,
-		BaseComponentCommand:                config.BaseComponentCommand,
-		BaseComponentBackendType:            config.BaseComponentBackendType,
-		BaseComponentRemoteStateBackendType: config.BaseComponentRemoteStateBackendType,
+	// Initialize context if nil.
+	if context == nil {
+		context = make(map[string]any)
 	}
 
-	// Deep copy all map fields.
-	var err error
-	if copyConfig.BaseComponentVars, err = m.DeepCopyMap(config.BaseComponentVars); err != nil {
-		// If deep copy fails, don't cache - log and return.
-		return
+	// Add resolved locals to the template context first.
+	// This allows settings/vars/env templates to reference locals.
+	context[cfg.LocalsSectionName] = extractResult.locals
+	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
+
+	// Process templates in settings, vars, env sections using the resolved locals.
+	// This enables bidirectional references between locals and settings:
+	//   locals:
+	//     stage: dev
+	//   settings:
+	//     context:
+	//       stage_from_local: '{{ .locals.stage }}'  # Now resolves to "dev"
+	//   vars:
+	//     setting_value: '{{ .settings.context.stage_from_local }}'  # Now resolves to "dev"
+	//
+	// Note: We need to process these sections AFTER locals are resolved so they can reference .locals,
+	// but BEFORE adding them to the context so vars can reference the resolved settings values.
+	// Seed section context with any external import context so that settings/vars/env
+	// templates referencing import-provided values can resolve during section processing.
+	// Locals are always overridden to ensure file-scoped locality.
+	localsOnlyContext := map[string]any{}
+	for k, v := range context {
+		localsOnlyContext[k] = v
 	}
-	if copyConfig.BaseComponentSettings, err = m.DeepCopyMap(config.BaseComponentSettings); err != nil {
-		return
+	localsOnlyContext[cfg.LocalsSectionName] = extractResult.locals
+
+	// Process templates in settings if it contains template expressions.
+	if extractResult.settings != nil {
+		processedSettings, err := processTemplatesInSection(atmosConfig, extractResult.settings, localsOnlyContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in settings section", "file", relativeFilePath, "error", err)
+			// Fall back to raw settings on error.
+			context[cfg.SettingsSectionName] = extractResult.settings
+		} else {
+			context[cfg.SettingsSectionName] = processedSettings
+		}
 	}
-	if copyConfig.BaseComponentEnv, err = m.DeepCopyMap(config.BaseComponentEnv); err != nil {
-		return
+	if extractResult.vars != nil {
+		// For vars, we need locals, external context, and processed settings available.
+		varsContext := map[string]any{}
+		for k, v := range localsOnlyContext {
+			varsContext[k] = v
+		}
+		if processedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok {
+			varsContext[cfg.SettingsSectionName] = processedSettings
+		}
+		processedVars, err := processTemplatesInSection(atmosConfig, extractResult.vars, varsContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in vars section", "file", relativeFilePath, "error", err)
+			// Fall back to raw vars on error.
+			context[cfg.VarsSectionName] = extractResult.vars
+		} else {
+			context[cfg.VarsSectionName] = processedVars
+		}
 	}
-	if copyConfig.BaseComponentAuth, err = m.DeepCopyMap(config.BaseComponentAuth); err != nil {
-		return
+	if extractResult.env != nil {
+		// For env, we need locals, external context, processed settings, and processed vars.
+		envContext := map[string]any{}
+		for k, v := range localsOnlyContext {
+			envContext[k] = v
+		}
+		if processedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok {
+			envContext[cfg.SettingsSectionName] = processedSettings
+		}
+		if processedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok {
+			envContext[cfg.VarsSectionName] = processedVars
+		}
+		processedEnv, err := processTemplatesInSection(atmosConfig, extractResult.env, envContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in env section", "file", relativeFilePath, "error", err)
+			// Fall back to raw env on error.
+			context[cfg.EnvSectionName] = extractResult.env
+		} else {
+			context[cfg.EnvSectionName] = processedEnv
+		}
 	}
-	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(config.BaseComponentProviders); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(config.BaseComponentHooks); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentBackendSection, err = m.DeepCopyMap(config.BaseComponentBackendSection); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(config.BaseComponentRemoteStateBackendSection); err != nil {
-		return
-	}
 
-	// Deep copy the slice.
-	copyBaseComponents := make([]string, len(config.ComponentInheritanceChain))
-	copy(copyBaseComponents, config.ComponentInheritanceChain)
-	copyConfig.ComponentInheritanceChain = copyBaseComponents
-
-	baseComponentConfigCache[cacheKey] = &copyConfig
-}
-
-// getCachedCompiledSchema retrieves a cached compiled JSON schema if it exists.
-// The compiled schema is thread-safe for concurrent validation operations.
-func getCachedCompiledSchema(schemaPath string) (*jsonschema.Schema, bool) {
-	defer perf.Track(nil, "exec.getCachedCompiledSchema")()
-
-	jsonSchemaCacheMu.RLock()
-	defer jsonSchemaCacheMu.RUnlock()
-
-	schema, found := jsonSchemaCache[schemaPath]
-	return schema, found
-}
-
-// cacheCompiledSchema stores a compiled JSON schema in the cache.
-// The compiled schema is thread-safe and can be safely shared across goroutines.
-func cacheCompiledSchema(schemaPath string, schema *jsonschema.Schema) {
-	defer perf.Track(nil, "exec.cacheCompiledSchema")()
-
-	jsonSchemaCacheMu.Lock()
-	defer jsonSchemaCacheMu.Unlock()
-
-	jsonSchemaCache[schemaPath] = schema
-}
-
-// ClearBaseComponentConfigCache clears the base component config cache.
-// This should be called between independent operations (like tests) to ensure fresh processing.
-func ClearBaseComponentConfigCache() {
-	baseComponentConfigCacheMu.Lock()
-	defer baseComponentConfigCacheMu.Unlock()
-	baseComponentConfigCache = make(map[string]*schema.BaseComponentConfig)
-}
-
-// ClearJsonSchemaCache clears the JSON schema cache.
-// This should be called between independent operations (like tests) to ensure fresh processing.
-func ClearJsonSchemaCache() {
-	jsonSchemaCacheMu.Lock()
-	defer jsonSchemaCacheMu.Unlock()
-	jsonSchemaCache = make(map[string]*jsonschema.Schema)
-}
-
-// ClearFileContentCache clears the file content cache.
-// This should be called between independent operations (like tests) to ensure fresh processing.
-func ClearFileContentCache() {
-	defer perf.Track(nil, "exec.ClearFileContentCache")()
-
-	getFileContentSyncMap.Range(func(key, value interface{}) bool {
-		getFileContentSyncMap.Delete(key)
-		return true
-	})
+	return context, nil
 }
 
 // stackProcessResult holds the result of processing a single stack in parallel.
@@ -289,6 +398,7 @@ func ProcessYAMLConfigFiles(
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
 	packerComponentsBasePath string,
+	ansibleComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -335,7 +445,7 @@ func ProcessYAMLConfigFiles(
 				mergeContext.EnableProvenance()
 			}
 
-			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
+			deepMergedStackConfig, importsConfig, stackConfig, _, _, _, _, mergeContext, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				stackBasePath,
 				p,
@@ -343,7 +453,7 @@ func ProcessYAMLConfigFiles(
 				nil,
 				ignoreMissingFiles,
 				false,
-				false,
+				atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
 				false,
 				map[string]any{},
 				map[string]any{},
@@ -355,6 +465,14 @@ func ProcessYAMLConfigFiles(
 			if err != nil {
 				results <- stackProcessResult{index: i, err: err}
 				return
+			}
+
+			if mergeContext != nil {
+				if len(mergeContext.ImportChain) > 0 {
+					log.Trace("After processing file, merge context has import chain", "file", stackFileName, "import_chain_length", len(mergeContext.ImportChain), "import_chain", mergeContext.ImportChain)
+				} else {
+					log.Trace("After processing file, merge context has empty import chain", "file", stackFileName)
+				}
 			}
 
 			var imports []string
@@ -373,6 +491,7 @@ func ProcessYAMLConfigFiles(
 				terraformComponentsBasePath,
 				helmfileComponentsBasePath,
 				packerComponentsBasePath,
+				ansibleComponentsBasePath,
 				p,
 				deepMergedStackConfig,
 				processStackDeps,
@@ -478,7 +597,7 @@ func ProcessYAMLConfigFile(
 	}
 
 	// Call the context-aware version
-	deepMerged, imports, stackConfig, terraformInline, terraformImports, helmfileInline, helmfileImports, err := ProcessYAMLConfigFileWithContext(
+	deepMerged, imports, stackConfig, terraformInline, terraformImports, helmfileInline, helmfileImports, mergeContext, err := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		basePath,
 		filePath,
@@ -531,6 +650,7 @@ func ProcessYAMLConfigFileWithContext(
 	map[string]any,
 	map[string]any,
 	map[string]any,
+	*m.MergeContext,
 	error,
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFileWithContext")()
@@ -552,6 +672,21 @@ func ProcessYAMLConfigFileWithContext(
 		atmosManifestJsonSchemaFilePath,
 		mergeContext,
 	)
+}
+
+// importFileResult holds the result of processing a single import file in parallel.
+type importFileResult struct {
+	index                        int
+	importFile                   string
+	yamlConfig                   map[string]any
+	yamlConfigRaw                map[string]any
+	terraformOverridesInline     map[string]any
+	terraformOverridesImports    map[string]any
+	helmfileOverridesInline      map[string]any
+	helmfileOverridesImports     map[string]any
+	importRelativePathWithoutExt string
+	mergeContext                 *m.MergeContext
+	err                          error
 }
 
 // processYAMLConfigFileWithContextInternal is the internal recursive implementation.
@@ -581,10 +716,13 @@ func processYAMLConfigFileWithContextInternal(
 	map[string]any,
 	map[string]any,
 	map[string]any,
+	*m.MergeContext,
 	error,
 ) {
 	var stackConfigs []map[string]any
 	relativeFilePath := u.TrimBasePathFromPath(basePath+"/", filePath)
+
+	log.Trace("Processing YAML config file", "file", relativeFilePath)
 
 	// Initialize or update merge context with current file.
 	if mergeContext == nil {
@@ -595,6 +733,7 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 	mergeContext = mergeContext.WithFile(relativeFilePath)
+	log.Trace("Merge context updated with file", "file", relativeFilePath, "import_chain_length", len(mergeContext.ImportChain), "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
@@ -623,34 +762,76 @@ func processYAMLConfigFileWithContextInternal(
 	// This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
 	if err != nil {
 		if ignoreMissingFiles || skipIfMissing {
-			return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
+			return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil, nil
 		} else {
-			return nil, nil, nil, nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, nil, nil, nil, err
 		}
 	}
 	if stackYamlConfig == "" {
-		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil
+		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil, nil
+	}
+
+	// Track whether context was originally provided from outside (e.g., via import context).
+	// This is important because we should only process templates during import when:
+	// 1. The file has a .tmpl extension, OR
+	// 2. Context was explicitly passed from outside (not just extracted from the file itself).
+	// Without this check, files with locals/settings/vars/env sections would have their templates
+	// processed prematurely, before component-specific context (like atmos_component) is available.
+	originalContextProvided := len(context) > 0
+
+	// Extract and resolve file-scoped locals before template processing.
+	// Locals can reference other locals using {{ .locals.X }} syntax.
+	// The resolved locals are added to the template context so they're available during template processing.
+	// This enables patterns like:
+	//   locals:
+	//     stage: prod
+	//     name_prefix: "{{ .locals.stage }}-app"
+	//   components:
+	//     terraform:
+	//       myapp:
+	//         vars:
+	//           name: "{{ .locals.name_prefix }}"
+	if !skipTemplatesProcessingInImports {
+		var localsErr error
+		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
+		if localsErr != nil {
+			if mergeContext != nil {
+				return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
+			}
+			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
+		}
 	}
 
 	stackManifestTemplatesProcessed := stackYamlConfig
 	stackManifestTemplatesErrorMessage := ""
 
-	// Process `Go` templates in the imported stack manifest if it has a template extension
-	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates
-	// Other .tmpl files are processed only when context is provided (backward compatibility)
+	// Process `Go` templates in the imported stack manifest if it has a template extension.
+	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates.
+	// Other .tmpl files are processed only when context is provided (backward compatibility).
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
 		var tmplErr error
 		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if tmplErr != nil {
-			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+			// If template processing failed and the only context is from file extraction
+			// (locals/settings/vars/env, not from an explicit import context), this is likely
+			// due to templates referencing component context (like {{ .atmos_component }}) that
+			// isn't available during import. Fall back to the raw content — these templates will
+			// be processed later in ProcessStacks when the full component context is available.
+			if !originalContextProvided {
+				log.Debug("Template processing deferred for file with file-extracted context only",
+					"file", relativeFilePath, "error", tmplErr)
+				stackManifestTemplatesProcessed = stackYamlConfig
+			} else {
+				if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+					stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
+				}
+				wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
+				if mergeContext != nil {
+					return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+				}
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 			}
-			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, tmplErr)
-			if mergeContext != nil {
-				return nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
-			}
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 		}
 	}
 
@@ -665,11 +846,29 @@ func processYAMLConfigFileWithContextInternal(
 			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
 			// Then format it with context information
 			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
-			return nil, nil, nil, nil, nil, nil, nil, e
+			return nil, nil, nil, nil, nil, nil, nil, nil, e
 		} else {
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
-			return nil, nil, nil, nil, nil, nil, nil, e
+			return nil, nil, nil, nil, nil, nil, nil, nil, e
 		}
+	}
+
+	// Store resolved file-level sections in stackConfigMap so they're available during describe_stacks.
+	// The context contains resolved values from extractAndAddLocalsToContext, but the YAML content
+	// (and thus stackConfigMap) may still have unresolved template expressions.
+	// By updating stackConfigMap with resolved values, we ensure templates like {{ .locals.X }}
+	// and {{ .vars.X }} can be resolved correctly.
+	if resolvedLocals, ok := context[cfg.LocalsSectionName].(map[string]any); ok && len(resolvedLocals) > 0 {
+		stackConfigMap[cfg.LocalsSectionName] = resolvedLocals
+	}
+	if resolvedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok && len(resolvedVars) > 0 {
+		stackConfigMap[cfg.VarsSectionName] = resolvedVars
+	}
+	if resolvedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok && len(resolvedSettings) > 0 {
+		stackConfigMap[cfg.SettingsSectionName] = resolvedSettings
+	}
+	if resolvedEnv, ok := context[cfg.EnvSectionName].(map[string]any); ok && len(resolvedEnv) > 0 {
+		stackConfigMap[cfg.EnvSectionName] = resolvedEnv
 	}
 
 	// Enable provenance tracking in merge context if tracking is enabled
@@ -684,12 +883,12 @@ func processYAMLConfigFileWithContextInternal(
 		// jsonschema: invalid jsonType: map[interface {}]interface {}
 		dataJson, err := u.ConvertToJSONFast(stackConfigMap)
 		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, nil, nil, nil, err
 		}
 
 		dataFromJson, err := u.ConvertFromJSON(dataJson)
 		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, nil, nil, nil, err
 		}
 
 		atmosManifestJsonSchemaValidationErrorFormat := "Atmos manifest JSON Schema validation error in the file '%s':\n%v"
@@ -703,21 +902,21 @@ func processYAMLConfigFileWithContextInternal(
 
 			atmosManifestJsonSchemaFileReader, err := os.Open(atmosManifestJsonSchemaFilePath)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 			defer func() {
 				_ = atmosManifestJsonSchemaFileReader.Close()
 			}()
 
 			if err := compiler.AddResource(atmosManifestJsonSchemaFilePath, atmosManifestJsonSchemaFileReader); err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 
 			compiler.Draft = jsonschema.Draft2020
 
 			compiledSchema, err = compiler.Compile(atmosManifestJsonSchemaFilePath)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 
 			// Store compiled schema in cache for reuse.
@@ -730,11 +929,11 @@ func processYAMLConfigFileWithContextInternal(
 			case *jsonschema.ValidationError:
 				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
 				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+					return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
 				}
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
+				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
 			default:
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
+				return nil, nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 		}
 	}
@@ -744,19 +943,19 @@ func processYAMLConfigFileWithContextInternal(
 	// Global overrides in this stack manifest
 	if i, ok := stackConfigMap[cfg.OverridesSectionName]; ok {
 		if globalOverrides, ok = i.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidOverridesSection, relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidOverridesSection, relativeFilePath)
 		}
 	}
 
 	// Terraform overrides in this stack manifest
 	if o, ok := stackConfigMap[cfg.TerraformSectionName]; ok {
 		if globalTerraformSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformSection, relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformSection, relativeFilePath)
 		}
 
 		if i, ok := globalTerraformSection[cfg.OverridesSectionName]; ok {
 			if terraformOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformOverridesSection, relativeFilePath)
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidTerraformOverridesSection, relativeFilePath)
 			}
 		}
 	}
@@ -764,12 +963,12 @@ func processYAMLConfigFileWithContextInternal(
 	// Helmfile overrides in this stack manifest
 	if o, ok := stackConfigMap[cfg.HelmfileSectionName]; ok {
 		if globalHelmfileSection, ok = o.(map[string]any); !ok {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileSection, relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileSection, relativeFilePath)
 		}
 
 		if i, ok := globalHelmfileSection[cfg.OverridesSectionName]; ok {
 			if helmfileOverrides, ok = i.(map[string]any); !ok {
-				return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileOverridesSection, relativeFilePath)
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the stack manifest '%s'", errUtils.ErrInvalidHelmfileOverridesSection, relativeFilePath)
 			}
 		}
 	}
@@ -780,7 +979,7 @@ func processYAMLConfigFileWithContextInternal(
 		mergeContext,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	parentHelmfileOverridesInline, err = m.MergeWithContext(
@@ -789,13 +988,13 @@ func processYAMLConfigFileWithContextInternal(
 		mergeContext,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// Find and process all imports
 	importStructs, err := ProcessImportSection(stackConfigMap, relativeFilePath)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// Record provenance for each import if provenance tracking is enabled.
@@ -829,25 +1028,13 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 
-	// importFileResult holds the result of processing a single import file in parallel.
-	type importFileResult struct {
-		index                        int
-		importFile                   string
-		yamlConfig                   map[string]any
-		yamlConfigRaw                map[string]any
-		terraformOverridesInline     map[string]any
-		terraformOverridesImports    map[string]any
-		helmfileOverridesInline      map[string]any
-		helmfileOverridesImports     map[string]any
-		importRelativePathWithoutExt string
-		err                          error
-	}
-
+	//nolint:staticcheck // atmosConfig nil check is present.
+	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 	for _, importStruct := range importStructs {
 		imp := importStruct.Path
 
 		if imp == "" {
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
+			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
 		// If the import file is specified without extension, use `.yaml` as default
@@ -889,7 +1076,7 @@ func processYAMLConfigFileWithContextInternal(
 			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
 				relativeFilePath,
 				imp)
-			return nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+			return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
 		}
 
 		// Find all import matches in the glob
@@ -903,7 +1090,7 @@ func processYAMLConfigFileWithContextInternal(
 				// The import was not found -> check if the import is a Go template; if not, return the error
 				isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
 				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, err2
+					return nil, nil, nil, nil, nil, nil, nil, nil, err2
 				}
 
 				// If the import is not a Go template and SkipIfMissing is false, return the error
@@ -914,13 +1101,13 @@ func processYAMLConfigFileWithContextInternal(
 							relativeFilePath,
 							err,
 						)
-						return nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
 					} else if importMatches == nil {
 						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
 							imp,
 							relativeFilePath,
 						)
-						return nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
 					}
 				}
 			}
@@ -933,7 +1120,7 @@ func processYAMLConfigFileWithContextInternal(
 		listOfMaps := []map[string]any{importStruct.Context, context}
 		mergedContext, err := m.MergeWithContext(atmosConfig, listOfMaps, mergeContext)
 		if err != nil {
-			return nil, nil, nil, nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, nil, nil, nil, err
 		}
 
 		// Initialize provenance storage before parallel processing to avoid data races.
@@ -961,7 +1148,9 @@ func processYAMLConfigFileWithContextInternal(
 					terraformOverridesInline,
 					terraformOverridesImports,
 					helmfileOverridesInline,
-					helmfileOverridesImports, processErr := processYAMLConfigFileWithContextInternal(
+					helmfileOverridesImports,
+					importMergeContext,
+					processErr := processYAMLConfigFileWithContextInternal(
 					atmosConfig,
 					basePath,
 					file,
@@ -969,7 +1158,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergedContext,
 					ignoreMissingFiles,
 					importStruct.SkipTemplatesProcessing,
-					importStruct.IgnoreMissingTemplateValues,
+					importStruct.IgnoreMissingTemplateValues || (atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues),
 					importStruct.SkipIfMissing,
 					parentTerraformOverridesInline,
 					parentTerraformOverridesImports,
@@ -1002,6 +1191,7 @@ func processYAMLConfigFileWithContextInternal(
 					helmfileOverridesInline:      helmfileOverridesInline,
 					helmfileOverridesImports:     helmfileOverridesImports,
 					importRelativePathWithoutExt: importRelativePathWithoutExt,
+					mergeContext:                 importMergeContext,
 					err:                          nil,
 				}
 			}(i, importFile)
@@ -1011,10 +1201,14 @@ func processYAMLConfigFileWithContextInternal(
 		wg.Wait()
 
 		// Sequentially merge results in the original import order to preserve Atmos inheritance.
+		log.Trace("Processing import results", "count", len(results), "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 		for _, result := range results {
 			if result.err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, result.err
+				return nil, nil, nil, nil, nil, nil, nil, nil, result.err
 			}
+
+			// Store merge context for imported files if provenance tracking is enabled.
+			processImportProvenanceTracking(atmosConfig, &result, mergeContext)
 
 			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
 			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
@@ -1024,7 +1218,7 @@ func processYAMLConfigFileWithContextInternal(
 				mergeContext,
 			)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, err
+				return nil, nil, nil, nil, nil, nil, nil, nil, err
 			}
 
 			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
@@ -1035,7 +1229,7 @@ func processYAMLConfigFileWithContextInternal(
 				mergeContext,
 			)
 			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, err
+				return nil, nil, nil, nil, nil, nil, nil, nil, err
 			}
 
 			// Append to stackConfigs in order.
@@ -1081,7 +1275,7 @@ func processYAMLConfigFileWithContextInternal(
 		mergeContext,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// Helmfile `overrides`
@@ -1091,7 +1285,7 @@ func processYAMLConfigFileWithContextInternal(
 		mergeContext,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// Add the `overrides` section to all components in this stack manifest
@@ -1129,7 +1323,7 @@ func processYAMLConfigFileWithContextInternal(
 	stackConfigsDeepMerged, err := m.MergeWithContext(atmosConfig, stackConfigs, mergeContext)
 	if err != nil {
 		// The error already contains context information from MergeWithContext
-		return nil, nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, err
 	}
 
 	// NOTE: We don't store merge context here because ProcessYAMLConfigFileWithContext
@@ -1143,6 +1337,7 @@ func processYAMLConfigFileWithContextInternal(
 		parentTerraformOverridesImports,
 		parentHelmfileOverridesInline,
 		parentHelmfileOverridesImports,
+		mergeContext,
 		nil
 }
 
@@ -1394,7 +1589,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 	return result, nil
 }
 
-// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
+// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty.
 func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
 		if len(s) > 0 {
@@ -1409,38 +1604,6 @@ func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck 
 		}
 	}
 	return false
-}
-
-// GetFileContent tries to read and return the file content from the sync map if it exists in the map,
-// otherwise it reads the file, stores its content in the map and returns the content.
-func GetFileContent(filePath string) (string, error) {
-	defer perf.Track(nil, "exec.GetFileContent")()
-
-	existingContent, found := getFileContentSyncMap.Load(filePath)
-	if found && existingContent != nil {
-		return fmt.Sprintf("%s", existingContent), nil
-	}
-
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", err
-	}
-	getFileContentSyncMap.Store(filePath, content)
-
-	return string(content), nil
-}
-
-// GetFileContentWithoutCache reads file content without using the cache.
-// Used when provenance tracking is enabled to ensure fresh reads with position tracking.
-func GetFileContentWithoutCache(filePath string) (string, error) {
-	defer perf.Track(nil, "exec.GetFileContentWithoutCache")()
-
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", err
-	}
-
-	return string(content), nil
 }
 
 // ProcessBaseComponentConfig processes base component(s) config.
@@ -1471,6 +1634,7 @@ func ProcessBaseComponentConfig(
 	}
 
 	// Process normally if not cached.
+	visited := make(map[string]bool)
 	err := processBaseComponentConfigInternal(
 		atmosConfig,
 		baseComponentConfig,
@@ -1481,6 +1645,7 @@ func ProcessBaseComponentConfig(
 		componentBasePath,
 		checkBaseComponentExists,
 		baseComponents,
+		visited,
 	)
 	if err != nil {
 		return err
@@ -1504,22 +1669,40 @@ func processBaseComponentConfigInternal(
 	componentBasePath string,
 	checkBaseComponentExists bool,
 	baseComponents *[]string,
+	visited map[string]bool,
 ) error {
 	if component == baseComponent {
 		return nil
 	}
 
+	// Cycle detection: check if we've already visited this (component, baseComponent) pair
+	// on the current DFS path. The defer delete ensures entries are cleaned up on backtrack,
+	// so diamond inheritance (shared ancestor reached via sibling branches) is not falsely
+	// flagged as circular.
+	visitKey := component + ":" + baseComponent
+	if visited[visitKey] {
+		return fmt.Errorf("%w: '%s' -> '%s' in the stack '%s'",
+			errUtils.ErrCircularComponentInheritance, component, baseComponent, stack)
+	}
+	visited[visitKey] = true
+	defer delete(visited, visitKey)
+
 	var baseComponentVars map[string]any
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentAuth map[string]any
+	var baseComponentDependencies map[string]any
+	var baseComponentLocals map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
+	var baseComponentGenerate map[string]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[string]any
+	var baseComponentSourceSection map[string]any
+	var baseComponentProvisionSection map[string]any
 	var baseComponentMap map[string]any
 	var ok bool
 
@@ -1538,27 +1721,35 @@ func processBaseComponentConfigInternal(
 			baseComponentMap = baseComponentMapOfStrings
 		}
 
-		// First, process the base component(s) of this base component
-		if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
-			baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
-			if !ok {
-				return fmt.Errorf("%w 'component:' of the component '%s' in the stack '%s'",
-					errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
-			}
+		// First, process the base component(s) of this base component.
+		// Skip component chain resolution for abstract components — their metadata.component
+		// is a pointer to the Terraform directory but should not trigger inheritance traversal.
+		// Following it on processed data (where mergeComponentConfigurations has promoted
+		// metadata.component to a top-level "component" key) can create circular references.
+		isAbstract := isAbstractComponent(baseComponentMap)
+		if !isAbstract {
+			if baseComponentOfBaseComponent, baseComponentOfBaseComponentExist := baseComponentMap["component"]; baseComponentOfBaseComponentExist {
+				baseComponentOfBaseComponentString, ok := baseComponentOfBaseComponent.(string)
+				if !ok {
+					return fmt.Errorf("%w 'component:' of the component '%s' in the stack '%s'",
+						errUtils.ErrInvalidComponentAttribute, baseComponent, stack)
+				}
 
-			err := processBaseComponentConfigInternal(
-				atmosConfig,
-				baseComponentConfig,
-				allComponentsMap,
-				baseComponent,
-				stack,
-				baseComponentOfBaseComponentString,
-				componentBasePath,
-				checkBaseComponentExists,
-				baseComponents,
-			)
-			if err != nil {
-				return err
+				err := processBaseComponentConfigInternal(
+					atmosConfig,
+					baseComponentConfig,
+					allComponentsMap,
+					baseComponent,
+					stack,
+					baseComponentOfBaseComponentString,
+					componentBasePath,
+					checkBaseComponentExists,
+					baseComponents,
+					visited,
+				)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -1601,6 +1792,7 @@ func processBaseComponentConfigInternal(
 						componentBasePath,
 						checkBaseComponentExists,
 						baseComponents,
+						visited,
 					)
 					if err != nil {
 						return err
@@ -1637,6 +1829,20 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentDependenciesSection, baseComponentDependenciesSectionExist := baseComponentMap[cfg.DependenciesSectionName]; baseComponentDependenciesSectionExist {
+			baseComponentDependencies, ok = baseComponentDependenciesSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.dependencies' in the stack '%s'", errUtils.ErrInvalidComponentDependencies, baseComponent, stack)
+			}
+		}
+
+		if baseComponentLocalsSection, baseComponentLocalsSectionExist := baseComponentMap[cfg.LocalsSectionName]; baseComponentLocalsSectionExist {
+			baseComponentLocals, ok = baseComponentLocalsSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.locals' in the stack '%s'", errUtils.ErrInvalidComponentLocals, baseComponent, stack)
+			}
+		}
+
 		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
@@ -1648,6 +1854,13 @@ func processBaseComponentConfigInternal(
 			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.hooks' in the stack '%s'", errUtils.ErrInvalidComponentHooks, baseComponent, stack)
+			}
+		}
+
+		if baseComponentGenerateSection, baseComponentGenerateSectionExist := baseComponentMap[cfg.GenerateSectionName]; baseComponentGenerateSectionExist {
+			baseComponentGenerate, ok = baseComponentGenerateSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.generate' in the stack '%s'", errUtils.ErrInvalidComponentGenerate, baseComponent, stack)
 			}
 		}
 
@@ -1678,6 +1891,27 @@ func processBaseComponentConfigInternal(
 			baseComponentRemoteStateBackendSection, ok = i.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.remote_state_backend' in the stack '%s'", errUtils.ErrInvalidComponentRemoteStateBackend, baseComponent, stack)
+			}
+		}
+
+		// Base component source (when source inheritance is enabled).
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			if i, ok2 := baseComponentMap[cfg.SourceSectionName]; ok2 {
+				baseComponentSourceSection, ok = i.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%w '%s.source' in the stack '%s'", errUtils.ErrInvalidComponentSource, baseComponent, stack)
+				}
+			}
+		}
+
+		// Base component provision (when source inheritance is enabled).
+		// Provision follows the same inheritance rules as source.
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			if i, ok2 := baseComponentMap[cfg.ProvisionSectionName]; ok2 {
+				baseComponentProvisionSection, ok = i.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%w '%s.provision' in the stack '%s'", errUtils.ErrInvalidComponentProvision, baseComponent, stack)
+				}
 			}
 		}
 
@@ -1721,6 +1955,44 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentAuth = merged
 
+		// Base component `dependencies`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentDependencies = merged
+
+		// Base component `locals` (for template processing, not passed to terraform/helmfile).
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentLocals, baseComponentLocals})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentLocals = merged
+
+		// Base component `metadata` (when metadata inheritance is enabled).
+		// Merge all metadata fields except 'inherits' and 'type'.
+		// - 'inherits' is the meta-property defining inheritance, not inherited itself.
+		// - 'type' is per-component and should not be inherited.
+		if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() {
+			baseMetadataForMerge := make(map[string]any)
+			for k, v := range componentMetadata {
+				// Skip 'inherits' - it's the meta-property defining inheritance, not inherited itself.
+				if k == cfg.InheritsSectionName {
+					continue
+				}
+				// Skip 'type' - component type is per-component, not inherited.
+				if k == "type" {
+					continue
+				}
+				baseMetadataForMerge[k] = v
+			}
+			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentMetadata, baseMetadataForMerge})
+			if err != nil {
+				return err
+			}
+			baseComponentConfig.BaseComponentMetadata = merged
+		}
+
 		// Base component `providers`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
 		if err != nil {
@@ -1734,6 +2006,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentHooks = merged
+
+		// Base component `generate`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentGenerate = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
@@ -1757,6 +2036,25 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentRemoteStateBackendSection = merged
+
+		// Base component `source` (when source inheritance is enabled).
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentSourceSection, baseComponentSourceSection})
+			if err != nil {
+				return err
+			}
+			baseComponentConfig.BaseComponentSourceSection = merged
+		}
+
+		// Base component `provision` (when source inheritance is enabled).
+		// Provision follows the same inheritance rules as source.
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProvisionSection, baseComponentProvisionSection})
+			if err != nil {
+				return err
+			}
+			baseComponentConfig.BaseComponentProvisionSection = merged
+		}
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {

@@ -10,6 +10,7 @@ import Link from '@docusaurus/Link'
 import Intro from '@site/src/components/Intro'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import SecondaryCTA from '@site/src/components/SecondaryCTA'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Atmos is a CLI and a powerful enterprise-grade workflow automation tool for DevOps. It's also a framework that prescribes patterns and best practices to structure and organize components and stacks to design for organizational complexity and provision multi-account environments for complex organizations.
@@ -21,7 +22,7 @@ One of the main principles of Atmos is the separation of configuration from code
 
 Atmos separates the components (logic) and stacks (configuration of the components for different environments) so they can be independently managed and evolved. In the case of using Terraform, the components are [Terraform root modules](https://developer.hashicorp.com/terraform/language/modules#the-root-module).
 
-In many cases, with enterprise-grade infrastructures (multi-org, multi-tenant, multi-account, multi-region, multi-team), the configuration is much more complicated than the code. That's what Atmos is trying to solve - to make the configuration manageable, reusable (by using [Imports](/core-concepts/stacks/imports), [Inheritance](/core-concepts/stacks/inheritance), and other Atmos features) and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself), and to make the code completely generic.
+In many cases, with enterprise-grade infrastructures (multi-org, multi-tenant, multi-account, multi-region, multi-team), the configuration is much more complicated than the code. That's what Atmos is trying to solve - to make the configuration manageable, reusable (by using [Imports](/stacks/imports), [Inheritance](/howto/inheritance), and other Atmos features) and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself), and to make the code completely generic.
 
 In this Quick Start guide, we describe how to provision infrastructure managed by Terraform into different AWS environments. Atmos manages the configurations for the environments.
 
@@ -32,3 +33,9 @@ In this Quick Start guide, we describe how to provision infrastructure managed b
 <SecondaryCTA to="/quick-start/advanced">
     Try our Advanced Tutorial
 </SecondaryCTA>
+
+## Explore an Example Project
+
+Browse the complete source code for our Quick Start example.
+
+<EmbedExample example="quick-start-simple" showReadme={false} />

@@ -1,0 +1,274 @@
+---
+title: Markdown Styling
+sidebar_label: markdown
+sidebar_position: 3
+sidebar_class_name: command
+description: Configure custom markdown styling for Atmos CLI output
+id: markdown-styling
+slug: /cli/configuration/settings/markdown-styling
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+# Markdown Styling
+
+<Intro>
+Configure how Atmos displays markdown content in the terminal.
+</Intro>
+
+## Configuration
+
+Configure markdown styling in your `atmos.yaml` configuration file:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  # Terminal settings for displaying content
+  terminal:
+    max_width: 120  # Maximum width for terminal output
+    pager: true     # Use pager for long output
+    unicode: true
+
+    # Markdown element styling
+    markdown:
+      document:
+        color: "#FFFFFF"
+      heading:
+        color: "#00A3E0"
+        bold: true
+      code_block:
+        color: "#00A3E0"
+        margin: 1
+      link:
+        color: "#00A3E0"
+        underline: true
+      strong:
+        color: "#9B51E0"
+        bold: true
+      emph:
+        color: "#9B51E0"
+        italic: true
+
+```
+</File>
+
+## Style Properties
+
+Each markdown element supports the following properties:
+
+### Common Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `color` | string | Text color in hex format (e.g., "#FFFFFF") |
+| `background_color` | string | Background color in hex format |
+| `bold` | boolean | Whether to make the text bold |
+| `italic` | boolean | Whether to make the text italic |
+| `underline` | boolean | Whether to underline the text |
+| `margin` | number | Space around the element |
+| `indent` | number | Indentation level |
+
+### Element-Specific Properties
+
+#### Document
+
+Base styling for all text content.
+
+Supports all common properties.
+
+#### Headings (H1-H6)
+
+Individual styling for each heading level (1-6).
+
+  ```markdown
+  # Heading 1
+  ## Heading 2
+  ### Heading 3
+  etc...
+  ```
+
+**Supports:**
+- H1 supports additional `background_color` property
+- All heading levels support `margin` for vertical spacing
+
+#### Code Blocks
+
+Styling for multi-line code blocks (aka code fences).
+
+````markdown
+```
+this is a codeblock
+```
+````
+
+**Supports:**
+- `margin` for visual separation
+- Color applies to the entire block
+
+#### Block Quotes
+
+Styling for quoted text. Supports all common properties.
+
+```markdown
+>
+> This is quoted text
+>
+```
+
+**Supports:**
+- `indent` property controls quote indentation
+
+#### Links
+
+Styling for hyperlinks.
+
+```
+[This is a link](https://example.com/)
+```
+
+**Supports:**
+- `underline` property specifically for links
+- Color applies to both link text and underline
+
+## Default Styles
+
+If no custom styles are configured, Atmos uses a built-in default theme related to the default atmos brand colors:
+
+```yaml
+# Built-in default theme
+settings:
+  markdown:
+    document:
+      color: "#FFFFFF"  # White text
+    heading:
+      color: "#00A3E0"  # Blue headings
+      bold: true
+    h1:
+      color: "#FFFFFF"  # White text
+      background_color: "#9B51E0"  # Purple background
+      bold: true
+      margin: 2
+    code_block:
+      color: "#00A3E0"  # Blue code
+      margin: 1
+    link:
+      color: "#00A3E0"  # Blue links
+      underline: true
+```
+
+## Terminal Compatibility
+
+Atmos uses [termenv](https://github.com/muesli/termenv) and [glamour](https://github.com/charmbracelet/glamour) to automatically detect and adapt to your terminal's capabilities:
+
+- **Full Color Support (24-bit)**
+  - Renders exact hex colors as specified in your config
+  - Detected via `$COLORTERM=truecolor` or `$TERM` containing `24bit`/`truecolor`
+  - Examples: iTerm2, Terminal.app, Windows Terminal
+
+- **256 Color Support**
+  - Automatically maps hex colors to nearest ANSI 256 colors
+  - Detected via `$TERM` containing `256color`
+  - Examples: xterm-256color terminals
+
+- **Basic Color Support (8/16 colors)**
+  - Automatically maps to basic ANSI colors
+  - Used when `$TERM` indicates basic terminal
+  - Examples: xterm, vt100, basic SSH sessions
+
+- **No Color Support**
+  - Falls back to plain text with basic formatting
+  - Used when `$TERM=dumb` or no color support detected
+  - Examples: Basic terminals, some CI environments
+
+The color degradation is handled automatically by termenv's color profile detection. You don't need to configure anything - your styles will work everywhere, automatically adjusting to each terminal's capabilities.
+
+## Examples
+
+### Error Messages
+Custom styling can help distinguish different types of messages:
+
+```yaml
+settings:
+  markdown:
+    # General heading styles
+    heading:
+      color: "#00A3E0"  # Blue for standard headings
+      bold: true
+
+    # Code blocks for command examples
+    code_block:
+      color: "#00FFFF"  # Cyan for code examples
+      margin: 1
+
+    # Emphasized text for warnings/errors
+    emph:
+      color: "#FF6B6B"  # Red for emphasis in error messages
+      italic: true
+
+    # Strong text for important messages
+    strong:
+      color: "#FF6B6B"  # Red for important parts
+      bold: true
+```
+
+### Help Text
+
+Atmos uses the [Glamour](https://github.com/charmbracelet/glamour) library for markdown rendering and styling. The styling is handled automatically based on your terminal's capabilities and color profile.
+
+Key features of the markdown rendering:
+
+- **Auto-styling**: Adapts to your terminal's color scheme
+- **Word wrapping**: Automatically adjusts to terminal width
+- **Emoji support**: Renders emoji characters when available
+- **Rich formatting**: Supports headings, code blocks, links, and other markdown elements
+
+The styling is managed internally by Glamour and does not require manual configuration in your atmos settings.
+
+## Best Practices
+
+1. **Color Contrast**: Ensure sufficient contrast between text and background colors for readability.
+2. **Consistent Styling**: Use a consistent color scheme across different elements.
+3. **Terminal Support**: Test your styling in different terminals to ensure compatibility.
+4. **Accessibility**: Consider color-blind users when choosing your color scheme.
+
+## Troubleshooting
+
+1. **Verify Terminal Supports True Color:**
+
+    - **Check `$COLORTERM`:**
+      ```bash
+      echo $COLORTERM
+      ```
+      **Expected Output:** `truecolor` or `24bit`
+
+    - **Check `$TERM`:**
+      ```bash
+      echo $TERM
+      ```
+      **Recommended Values:** `xterm-256color`, `xterm-direct`, `xterm-truecolor`
+
+2. **Ensure Your Terminal Emulator Supports True Color:**
+
+    - Use a terminal emulator known for true color support (e.g., Terminal.app, iTerm2, Windows Terminal, etc).
+
+3. **Configure Environment Variables Correctly:**
+
+    - Set `$TERM` to a value that supports true color:
+      ```bash
+      export TERM=xterm-256color
+      ```
+      Add this to your shell's configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make it permanent.
+
+4. **Validate `atmos.yaml` Configuration:**
+
+    - Ensure colors are in hex format, boolean values are `true`/`false` (not quoted strings), and numbers are integers.
+    - Use a YAML linter to validate the syntax.
+    - Try removing custom styles to see if default styles work.
+
+
+
+## See Also
+
+- [CLI Configuration](/cli/configuration)
+- [Command Reference](/cli/commands)

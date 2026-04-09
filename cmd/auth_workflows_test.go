@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +104,10 @@ func TestAuth_EnvCommand_E2E(t *testing.T) {
 // TestAuth_ExecCommand_E2E tests the complete workflow of logging in and
 // using the auth exec command to run commands with authenticated environment.
 func TestAuth_ExecCommand_E2E(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo, sh -c)")
+	}
+
 	tk := NewTestKit(t)
 	_ = setupMockAuthDir(t, tk)
 

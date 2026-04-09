@@ -1,0 +1,9 @@
+# Workdir provisioner output
+.workdir/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl

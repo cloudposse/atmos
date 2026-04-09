@@ -1,0 +1,289 @@
+---
+title: "Atmos Roadmap 2025-2026"
+sidebar_label: "Roadmap"
+sidebar_position: 2
+description: "Atmos product roadmap - from fragmented infrastructure tooling to unified orchestration."
+hide_table_of_contents: true
+hide_title: true
+---
+
+import {
+  SlideDeck,
+  Slide,
+  SlideTitle,
+  SlideSubtitle,
+  SlideContent,
+  SlideNotes,
+} from '@site/src/components/SlideDeck';
+import Link from '@docusaurus/Link';
+import { useState, useEffect, useRef } from 'react';
+import { roadmapConfig } from '@site/src/data/roadmap';
+
+export const renderInlineCode = (text) => {
+  const parts = text.split(/(`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={i} className="slide-inline-code">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+};
+
+export const StatusBadge = ({ status }) => {
+  const badgeClass = status === 'shipped' ? 'slide-badge--shipped' :
+                     status === 'in-progress' ? 'slide-badge--in-progress' : 'slide-badge--planned';
+  const label = status === 'shipped' ? 'Shipped' :
+                status === 'in-progress' ? 'In Progress' : 'Planned';
+  return <span className={`slide-badge ${badgeClass}`}>{label}</span>;
+};
+
+export const StatusIcon = ({ status }) => {
+  const iconClass = status === 'shipped' ? 'slide-status-icon--shipped' :
+                    status === 'in-progress' ? 'slide-status-icon--in-progress' : 'slide-status-icon--planned';
+  const icon = status === 'shipped' ? '✓' :
+               status === 'in-progress' ? '→' : '○';
+  return <span className={`slide-status-icon ${iconClass}`}>{icon}</span>;
+};
+
+export const MilestoneLinks = ({ milestone }) => {
+  if (!milestone.changelog && !milestone.docs && !milestone.pr) return null;
+  return (
+    <span style={{marginLeft: '0.5rem'}}>
+      {milestone.changelog && (
+        <Link to={`/changelog/${milestone.changelog}`} className="slide-link-badge">
+          Announcement
+        </Link>
+      )}
+      {milestone.docs && (
+        <Link to={milestone.docs} className="slide-link-badge slide-link-badge--docs">
+          Docs
+        </Link>
+      )}
+      {milestone.pr && (
+        <Link
+          to={`https://github.com/cloudposse/atmos/pull/${milestone.pr}`}
+          className="slide-link-badge"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          PR #{milestone.pr}
+        </Link>
+      )}
+    </span>
+  );
+};
+
+export const ProgressBar = ({ progress }) => (
+  <div className="slide-progress-bar">
+    <div className="slide-progress-bar__track">
+      <div className="slide-progress-bar__fill" style={{width: `${progress}%`}} />
+    </div>
+    <span className="slide-progress-bar__label">{progress}%</span>
+  </div>
+);
+
+export const MilestoneList = ({ milestones }) => (
+  <ul className="slide-milestone-list">
+    {milestones.map((milestone) => (
+      <li key={milestone.label}>
+        <StatusIcon status={milestone.status} />
+        <span>
+          {renderInlineCode(milestone.label)}
+          <MilestoneLinks milestone={milestone} />
+        </span>
+      </li>
+    ))}
+  </ul>
+);
+
+export const PaginatedMilestones = ({ milestones, itemsPerPage = 4 }) => {
+  const [currentPage, setCurrentPage] = useState(0);
+  const containerRef = useRef(null);
+
+  // Sort: featured first, then shipped, then in-progress, then planned
+  const sorted = [
+    ...milestones.filter(m => m.category === 'featured'),
+    ...milestones.filter(m => m.category !== 'featured' && m.status === 'shipped'),
+    ...milestones.filter(m => m.status === 'in-progress' && m.category !== 'featured'),
+    ...milestones.filter(m => m.status === 'planned' && m.category !== 'featured'),
+  ].filter((m, i, arr) => arr.findIndex(x => x.label === m.label) === i); // dedupe
+
+  // Chunk into pages
+  const pages = [];
+  for (let i = 0; i < sorted.length; i += itemsPerPage) {
+    pages.push(sorted.slice(i, i + itemsPerPage));
+  }
+  const totalPages = pages.length;
+
+  // Keyboard navigation: Shift+Left/Right when this component is visible
+  useEffect(() => {
+    if (totalPages <= 1) return;
+    const handleKeyDown = (e) => {
+      if (!e.shiftKey) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      // Only respond if this component is visible (current slide)
+      const el = containerRef.current;
+      if (!el || el.offsetParent === null) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      // Check if element is in viewport
+      if (rect.top >= window.innerHeight || rect.bottom <= 0) return;
+      if (e.key === 'ArrowLeft') {
+        setCurrentPage(p => Math.max(0, p - 1));
+      } else {
+        setCurrentPage(p => Math.min(totalPages - 1, p + 1));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [totalPages]);
+
+  if (totalPages === 0) return null;
+
+  return (
+    <div ref={containerRef} className="slide-paginated-milestones">
+      <MilestoneList milestones={pages[currentPage] || []} />
+      {totalPages > 1 && (
+        <div className="slide-pagination-dots">
+          {pages.map((_, i) => (
+            <button
+              key={i}
+              className={`slide-dot ${i === currentPage ? 'slide-dot--active' : ''}`}
+              onClick={() => setCurrentPage(i)}
+              aria-label={`Page ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+<SlideDeck title="Atmos Roadmap 2025-2026">
+
+{/* Slide 1: Title */}
+<Slide layout="title">
+  <SlideTitle>Atmos Roadmap 2025-2026</SlideTitle>
+  <SlideSubtitle>Reducing Tool Fatigue</SlideSubtitle>
+  <SlideNotes>
+    Welcome to the Atmos roadmap presentation. This deck covers our vision,
+    current initiatives, and where we're headed in 2025 and 2026.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 2: Vision */}
+<Slide layout="content">
+  <SlideTitle>Vision</SlideTitle>
+  <SlideContent>
+    <p style={{fontSize: '1.4em', lineHeight: '1.6'}}>{roadmapConfig.vision}</p>
+  </SlideContent>
+  <SlideNotes>
+    Our vision is to provide one tool that orchestrates your entire infrastructure
+    lifecycle. As convenient as a PaaS, but as flexible as Terraform, sitting on
+    top of the tools you already know and love.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 3: Theme */}
+<Slide layout="content">
+  <SlideTitle>{roadmapConfig.theme.title}</SlideTitle>
+  <SlideContent>
+    <p style={{fontSize: '1.2em', lineHeight: '1.6'}}>{roadmapConfig.theme.description}</p>
+  </SlideContent>
+  <SlideNotes>
+    The theme for this roadmap period is reducing tool fatigue. We're taking the sprawl
+    of infrastructure tooling and bringing it into a cohesive, discoverable,
+    zero-config experience that works identically whether you're running locally
+    or in CI.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 4: Highlights */}
+<Slide layout="content">
+  <SlideTitle>Key Achievements</SlideTitle>
+  <ul className="slide-milestone-list">
+    {roadmapConfig.highlights.map((highlight) => (
+      <li key={highlight.id}>
+        <StatusIcon status="shipped" />
+        <span>
+          <strong>{highlight.label}:</strong> {highlight.before} → {highlight.after} — {highlight.description}
+        </span>
+      </li>
+    ))}
+  </ul>
+  <SlideNotes>
+    Before diving into initiatives, let's highlight some key achievements.
+    Test coverage went from less than 20% to 74% - a 54% improvement.
+    We moved from per-PR releases to a predictable weekly release cadence.
+    And we've consolidated dozens of third-party tools into minimal dependencies.
+  </SlideNotes>
+</Slide>
+
+{/* Featured Initiatives Slides */}
+{roadmapConfig.featured.map((feature) => {
+  const initiative = roadmapConfig.initiatives.find(i => i.id === feature.id);
+  const milestones = initiative?.milestones || [];
+
+  return (
+    <Slide key={feature.id} layout="content">
+      <SlideTitle>
+        {feature.title}
+        <StatusBadge status={feature.status} />
+      </SlideTitle>
+      <SlideSubtitle>{feature.tagline}</SlideSubtitle>
+      <SlideContent>
+        <p>{feature.description}</p>
+      </SlideContent>
+      {milestones.length > 0 && <PaginatedMilestones milestones={milestones} />}
+      <SlideNotes>
+        {feature.title}: {feature.description}
+        {'\n\n'}
+        Benefits: {feature.benefits}
+      </SlideNotes>
+    </Slide>
+  );
+})}
+
+{/* Remaining Initiative Slides (not in featured) */}
+{roadmapConfig.initiatives
+  .filter(initiative => !roadmapConfig.featured.some(f => f.id === initiative.id))
+  .map((initiative) => {
+    return (
+      <Slide key={initiative.id} layout="content">
+        <SlideTitle>
+          {initiative.title}
+          <StatusBadge status={initiative.status} />
+        </SlideTitle>
+        <SlideSubtitle>{initiative.tagline}</SlideSubtitle>
+        <ProgressBar progress={initiative.progress} />
+        <SlideContent>
+          <p>{initiative.description}</p>
+        </SlideContent>
+        <PaginatedMilestones milestones={initiative.milestones} />
+        <SlideNotes>
+          {initiative.title}: {initiative.description}
+        </SlideNotes>
+      </Slide>
+    );
+  })}
+
+{/* Closing Slide */}
+<Slide layout="title">
+  <SlideTitle>Get Started with Atmos</SlideTitle>
+  <SlideSubtitle>atmos.tools</SlideSubtitle>
+  <SlideContent>
+    <div style={{textAlign: 'left', display: 'inline-block'}}>
+      <p>Documentation: <a href="https://atmos.tools" target="_blank" rel="noopener noreferrer">atmos.tools</a></p>
+      <p>Roadmap: <a href="https://atmos.tools/roadmap" target="_blank" rel="noopener noreferrer">atmos.tools/roadmap</a></p>
+      <p>GitHub: <a href="https://github.com/cloudposse/atmos" target="_blank" rel="noopener noreferrer">github.com/cloudposse/atmos</a></p>
+      <p>Community: <a href="https://cloudposse.com/slack" target="_blank" rel="noopener noreferrer">cloudposse.com/slack</a></p>
+    </div>
+  </SlideContent>
+  <SlideNotes>
+    Thank you for your interest in Atmos! Visit atmos.tools for documentation,
+    check out the roadmap to see what's coming, explore our GitHub repository,
+    and join our Slack community to connect with other users and contributors.
+  </SlideNotes>
+</Slide>
+
+</SlideDeck>

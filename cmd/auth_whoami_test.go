@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -10,8 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestAuthWhoamiCmd(t *testing.T) {
@@ -243,4 +248,77 @@ func TestWhoamiJSONOutput(t *testing.T) {
 	assert.Contains(t, string(jsonData), `"identity": "test-identity"`)
 	assert.Contains(t, string(jsonData), `"provider": "test-provider"`)
 	assert.Contains(t, string(jsonData), `"account": "123456789012"`)
+}
+
+func TestPrintWhoamiHuman_ShowsWarningWhenInvalid(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Initialize I/O context for UI layer.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+
+	// Create whoami info with expired credentials.
+	expTime := time.Now().Add(-1 * time.Hour) // Expired 1 hour ago.
+	whoamiInfo := &authTypes.WhoamiInfo{
+		Identity:   "test-identity",
+		Provider:   "aws-user",
+		Account:    "123456789012",
+		Principal:  "TestUser",
+		Expiration: &expTime,
+	}
+
+	// Call the function with isValid=false - it should not panic.
+	// The actual output formatting is tested by the UI layer tests.
+	assert.NotPanics(t, func() {
+		printWhoamiHuman(whoamiInfo, false)
+	})
+}
+
+func TestPrintWhoamiHuman_NoWarningWhenValid(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Initialize I/O context for UI layer.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+
+	// Create whoami info with valid credentials.
+	expTime := time.Now().Add(1 * time.Hour) // Expires in 1 hour.
+	whoamiInfo := &authTypes.WhoamiInfo{
+		Identity:   "test-identity",
+		Provider:   "aws-user",
+		Account:    "123456789012",
+		Principal:  "TestUser",
+		Expiration: &expTime,
+	}
+
+	// Call the function with isValid=true - it should not panic.
+	// The actual output formatting is tested by the UI layer tests.
+	assert.NotPanics(t, func() {
+		printWhoamiHuman(whoamiInfo, true)
+	})
+}
+
+type notImplementedCreds struct{}
+
+func (c *notImplementedCreds) IsExpired() bool { return false }
+func (c *notImplementedCreds) GetExpiration() (*time.Time, error) {
+	return nil, nil
+}
+func (c *notImplementedCreds) BuildWhoamiInfo(*authTypes.WhoamiInfo) {}
+func (c *notImplementedCreds) Validate(context.Context) (*authTypes.ValidationInfo, error) {
+	return nil, errUtils.ErrNotImplemented
+}
+
+func TestValidateCredentials_FallsBackOnNotImplemented(t *testing.T) {
+	whoamiInfo := &authTypes.WhoamiInfo{
+		Identity:    "test-identity",
+		Credentials: &notImplementedCreds{},
+	}
+
+	isValid := validateCredentials(context.Background(), whoamiInfo)
+	assert.True(t, isValid, "should fall back to expiration check when validation is not implemented")
 }

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,16 +14,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestMergeEnvVars(t *testing.T) {
-	// Set up test environment variables
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: PATH case-sensitivity and HOME behavior differ")
+	}
+
+	// Set up test environment variables.
 	t.Setenv("PATH", "/usr/bin")
 	t.Setenv("TF_CLI_ARGS_plan", "-lock=false")
 	t.Setenv("HOME", "/home/test")
 
-	// Atmos environment variables to merge
+	// Atmos environment variables to merge.
 	componentEnv := []string{
 		"TF_CLI_ARGS_plan=-compact-warnings",
 		"ATMOS_VAR=value",
@@ -30,9 +36,9 @@ func TestMergeEnvVars(t *testing.T) {
 		"NEW_VAR=newvalue",
 	}
 
-	merged := mergeEnvVars(componentEnv)
+	merged := envpkg.MergeSystemEnv(componentEnv)
 
-	// Convert the merged list back to a map for easier assertions
+	// Convert the merged list back to a map for easier assertions.
 	mergedMap := make(map[string]string)
 	for _, env := range merged {
 		parts := strings.SplitN(env, "=", 2)
@@ -217,7 +223,7 @@ func TestConvertEnvMapToSlice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertEnvMapToSlice(tt.input)
+			result := envpkg.ConvertMapToSlice(tt.input)
 			assert.Len(t, result, len(tt.expected))
 
 			// Convert result back to map for easier comparison.
@@ -394,7 +400,7 @@ func TestMergeEnvVarsSimple(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := mergeEnvVarsSimple(tt.newEnvList)
+			result := envpkg.MergeSystemEnvSimple(tt.newEnvList)
 
 			// Convert result to map for easier comparison.
 			resultMap := make(map[string]string)
@@ -457,11 +463,10 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envVars := map[string]string{
-				"TEST_VAR": "test_value",
-			}
+			envVars := []string{"TEST_VAR=test_value"}
+			atmosConfig := &schema.AtmosConfiguration{}
 
-			err := ExecAuthShellCommand(nil, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
+			err := ExecAuthShellCommand(atmosConfig, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
 
 			if tt.expectedCode == 0 {
 				assert.NoError(t, err)
@@ -476,6 +481,10 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 }
 
 func TestExecuteShellCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo) and paths (/dev/stderr, /dev/stdout)")
+	}
+
 	atmosConfig := schema.AtmosConfiguration{}
 
 	t.Run("dry run mode", func(t *testing.T) {
@@ -579,9 +588,169 @@ func TestExecuteShellCommand(t *testing.T) {
 		)
 		assert.NoError(t, err)
 	})
+
+	t.Run("ATMOS_FORCE_TTY preserved when explicitly set in step env", func(t *testing.T) {
+		// When ATMOS_FORCE_TTY is explicitly set in the step environment, ExecuteShellCommand
+		// must not add a second copy. envKeyIsSet guards the auto-injection.
+		// We verify the subprocess sees the explicit value, not a duplicate.
+		outFile := filepath.Join(t.TempDir(), "force_tty.txt")
+
+		// Ensure ATMOS_FORCE_TTY is absent from parent env. t.Setenv("ATMOS_FORCE_TTY", "")
+		// leaves the key present, which causes envKeyIsSet to suppress auto-injection for
+		// the wrong reason (key present rather than because the step env set it explicitly).
+		if orig, wasSet := os.LookupEnv("ATMOS_FORCE_TTY"); wasSet {
+			require.NoError(t, os.Unsetenv("ATMOS_FORCE_TTY"))
+			t.Cleanup(func() { os.Setenv("ATMOS_FORCE_TTY", orig) })
+		}
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			[]string{"-c", fmt.Sprintf(`printenv ATMOS_FORCE_TTY > %s`, outFile)},
+			".",
+			[]string{"ATMOS_FORCE_TTY=explicit-value"},
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "explicit-value\n", string(content),
+			"ATMOS_FORCE_TTY should not be overridden by auto-injection")
+	})
+
+	t.Run("ATMOS_FORCE_TTY from parent env suppresses auto-injection", func(t *testing.T) {
+		// When ATMOS_FORCE_TTY is already in the parent environment (os.Environ()),
+		// auto-injection must not add a duplicate. The subprocess should see the parent value.
+		outFile := filepath.Join(t.TempDir(), "force_tty_parent.txt")
+
+		t.Setenv("ATMOS_FORCE_TTY", "from-parent")
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			[]string{"-c", fmt.Sprintf(`printenv ATMOS_FORCE_TTY > %s`, outFile)},
+			".",
+			nil, // no step-level env
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "from-parent\n", string(content),
+			"ATMOS_FORCE_TTY from parent env should be preserved, not duplicated")
+	})
+
+	t.Run("ATMOS_FORCE_TTY not auto-injected in non-TTY environment", func(t *testing.T) {
+		// In a non-TTY test environment, ATMOS_FORCE_TTY must not be auto-injected.
+		// The subprocess should not see it unless explicitly provided.
+		outFile := filepath.Join(t.TempDir(), "force_tty_absent.txt")
+
+		// Ensure ATMOS_FORCE_TTY is truly absent from parent env. t.Setenv("ATMOS_FORCE_TTY", "")
+		// leaves the key present: envKeyIsSet matches it and suppresses injection for the wrong
+		// reason (key present rather than no TTY), yielding a false positive — ${VAR:-default}
+		// expands to default for both unset and empty, hiding the incorrect skip path.
+		if orig, wasSet := os.LookupEnv("ATMOS_FORCE_TTY"); wasSet {
+			require.NoError(t, os.Unsetenv("ATMOS_FORCE_TTY"))
+			t.Cleanup(func() { os.Setenv("ATMOS_FORCE_TTY", orig) })
+		}
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			// Print "not-set" if ATMOS_FORCE_TTY is absent, otherwise print its value.
+			[]string{"-c", fmt.Sprintf(`echo "${ATMOS_FORCE_TTY:-not-set}" > %s`, outFile)},
+			".",
+			nil, // no explicit ATMOS_FORCE_TTY
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		// Test runner has no real TTY (stderr is not a terminal), so auto-injection is skipped.
+		assert.Equal(t, "not-set\n", string(content),
+			"ATMOS_FORCE_TTY should not be auto-injected when parent has no TTY")
+	})
+}
+
+func TestEnvKeyIsSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      []string
+		key      string
+		expected bool
+	}{
+		{
+			name:     "key present with value",
+			env:      []string{"FOO=bar", "BAZ=qux"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key present empty value",
+			env:      []string{"FOO=", "BAZ=qux"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key not present",
+			env:      []string{"FOO=bar", "BAZ=qux"},
+			key:      "MISSING",
+			expected: false,
+		},
+		{
+			name:     "partial key match does not count",
+			env:      []string{"ATMOS_FORCE_TTY_EXTRA=true"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: false,
+		},
+		{
+			name:     "ATMOS_FORCE_TTY present",
+			env:      []string{"ATMOS_FORCE_TTY=true"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: true,
+		},
+		{
+			name:     "empty env",
+			env:      nil,
+			key:      "ANY_KEY",
+			expected: false,
+		},
+		{
+			name:     "duplicate keys returns true on first match",
+			env:      []string{"FOO=first", "FOO=second"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key as value does not match",
+			env:      []string{"OTHER=ATMOS_FORCE_TTY"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: false,
+		},
+		{
+			name:     "key with equals in value",
+			env:      []string{"FOO=bar=baz"},
+			key:      "FOO",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := envKeyIsSet(tt.env, tt.key)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestExecuteShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo, ls, env, grep)")
+	}
+
 	t.Run("simple echo command", func(t *testing.T) {
 		err := ExecuteShell(
 			"echo 'test'",

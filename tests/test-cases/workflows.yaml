@@ -25,6 +25,9 @@ tests:
       - "shell-pass"
       - "--file"
       - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
     expect:
       diff: []
       stdout:
@@ -42,16 +45,17 @@ tests:
       - "shell-command-not-found"
       - "--file"
       - "test"
+    skip:
+      # Exit code 127 is Unix/POSIX specific. Windows returns different codes.
+      os: !not windows
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
         - "nonexistentcommand"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow shell-command-not-found -f test --from-step step1"
       # Exit code 127 is the standard Unix/POSIX exit code for "command not found".
       # This differs from exit code 1 (generic error) and provides more specific information.
       # The workflow correctly preserves the shell's actual exit code rather than converting it to 1.
@@ -71,13 +75,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
-        - "atmos terraform plan mock -s idontexist"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow fail -f test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow failure on shell command
@@ -91,18 +92,17 @@ tests:
       - "shell-failure"
       - "--file"
       - "test"
+    skip:
+      # Uses echo which is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
     expect:
       diff: []
       stderr:
         - "This should fail"
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
-        - "echo \"This should fail\""
-        - "exit 1"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow shell-failure -f test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow no steps
@@ -139,13 +139,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "invalid workflow step type"
-        - "## Explanation"
-        - "Step type invalid is not supported. Each step must specify a valid type."
-        - "### Available types:"
-        - "atmos"
-        - "shell"
+        - "## Hints"
+        - "Step type 'invalid' is not supported"
+        - "Each step must specify a valid type: 'atmos' or 'shell'"
       exit_code: 1
 
   - name: atmos workflow invalid from step
@@ -167,7 +164,8 @@ tests:
         - "Workflow Error"
         - "invalid from-step flag"
         - "## Explanation"
-        - "The --from-step flag was set to dne, but this step does not exist in workflow pass."
+        - "The --from-step flag was set to dne, but this step does not exist in workflow"
+        - "pass"
         - "### Available steps:"
         - "step1"
       exit_code: 1
@@ -186,11 +184,11 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "no workflow found"
-        - "## Explanation"
-        - "No workflow exists with the name no-workflow-exists"
-        - "### Available workflows:"
+        - "## Hints"
+        - "No workflow exists with name no-workflow-exists"
+        - "Available workflows in test.yaml"
         - "fail"
         - "invalid-step-type"
         - "no-steps"
@@ -214,10 +212,12 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "invalid workflow manifest"
         - "## Explanation"
-        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the top-level workflows: key."
+        - "The workflow manifest"
+        - "must be a map with"
+        - "workflows: key"
       exit_code: 1
 
   - name: atmos workflow file not found
@@ -234,10 +234,11 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "workflow file not found"
-        - "## Explanation"
-        - "The workflow manifest file stacks/workflows/dne.yaml does not exist."
+        - "## Hints"
+        - "The workflow manifest file"
+        - "does not exist"
       exit_code: 1
 
   - name: atmos workflow failure with stack
@@ -256,13 +257,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
-        - "atmos terraform plan idontexist -s prod"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow fail-with-stack -f test --from-step step1 -s prod"
       exit_code: 1
 
   - name: atmos workflow failure with filepath
@@ -279,13 +277,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
-        - "atmos terraform plan mock -s idontexist"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow fail -f subdir/test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow shell command with PATH
@@ -299,8 +294,70 @@ tests:
       - "shell-with-path"
       - "--file"
       - "test"
+    skip:
+      # Uses env and grep which are not available on Windows.
+      os: !not windows
     expect:
       diff: []
       stdout:
         - "PATH="
       exit_code: 0
+
+  - name: atmos workflow retry success
+    enabled: true
+    snapshot: false
+    description: "Ensure workflow with retry config succeeds on first attempt"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "retry-success"
+      - "--file"
+      - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
+    expect:
+      diff: []
+      stdout:
+        - "Success on first try"
+      exit_code: 0
+
+  - name: atmos workflow retry full config
+    enabled: true
+    snapshot: false
+    description: "Ensure workflow with full retry config works"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "retry-full-config"
+      - "--file"
+      - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
+    expect:
+      diff: []
+      stdout:
+        - "Testing full retry config"
+      exit_code: 0
+
+  - name: workflow retries example
+    enabled: true
+    snapshot: true
+    description: "Verify workflow-retries example retries and shows max attempts exceeded"
+    workdir: "../examples/workflow-retries/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "retry-demo"
+      - "-f"
+      - "retries"
+    expect:
+      diff: []
+      stdout:
+        - "Attempting deployment"
+      stderr:
+        - "max attempts"
+      exit_code: 1

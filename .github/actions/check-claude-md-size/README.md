@@ -1,62 +1,187 @@
-# Check CLAUDE.md Size Action
+# Check Markdown File Size Action
 
-Validates that CLAUDE.md does not exceed the configured size limit to maintain performance.
+GitHub Action to validate that PR-modified markdown files do not exceed size limits. Uses glob patterns for flexible file matching and only checks files actually modified in the pull request for efficiency.
 
-## Inputs
+## Features
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|---------|
-| `file-path` | Path to CLAUDE.md file | No | `CLAUDE.md` |
-| `max-size` | Maximum file size in characters | No | `40000` |
-| `github-token` | GitHub token for posting comments | Yes | - |
-
-## Outputs
-
-| Output | Description |
-|--------|-------------|
-| `size` | Current file size in characters |
-| `exceeds-limit` | Whether the file exceeds the size limit (true/false) |
-| `usage-percent` | Percentage of limit used |
+- **PR-Modified Files Only**: Only checks files changed in the pull request using `git diff`
+- **Glob Pattern Matching**: Flexible file matching with wildcards (e.g., `*.md`, `.claude/agents/*.md`)
+- **Smart PR Comments**: Posts/updates comments with actionable guidance
+- **CI Integration**: Fails check if any file exceeds the limit
+- **Efficient**: No unnecessary checks of unmodified files
 
 ## Usage
 
-### Basic Usage
+### Check Specific File
+
+Check a single markdown file (only if modified in PR):
 
 ```yaml
-- name: Check CLAUDE.md size
-  uses: ./.github/actions/check-claude-md-size
+- uses: ./.github/actions/check-claude-md-size
   with:
+    file-patterns: 'CLAUDE.md'
+    max-size: 40000
     github-token: ${{ github.token }}
 ```
 
-### Custom Configuration
+### Check Multiple Files with Glob Patterns
+
+Check all markdown files matching a pattern (only those modified in PR):
 
 ```yaml
-- name: Check CLAUDE.md size
-  uses: ./.github/actions/check-claude-md-size
+- uses: ./.github/actions/check-claude-md-size
   with:
-    file-path: CLAUDE.md
+    file-patterns: '.claude/agents/*.md'
+    max-size: 25000
+    github-token: ${{ github.token }}
+```
+
+### Check Multiple Patterns
+
+Space-separated patterns to match different file locations:
+
+```yaml
+- uses: ./.github/actions/check-claude-md-size
+  with:
+    file-patterns: 'CLAUDE.md .claude/agents/*.md docs/prd/*.md'
     max-size: 40000
-    github-token: ${{ secrets.GITHUB_TOKEN }}
+    github-token: ${{ github.token }}
+```
+
+The action uses GitHub CLI (`gh pr view`) to get the list of modified files in the PR, then filters them against the provided patterns.
+
+## Inputs
+
+| Name | Description | Required | Default |
+|------|-------------|----------|---------|
+| `file-patterns` | Space-separated glob patterns for files to check (e.g., `"CLAUDE.md .claude/agents/*.md"`) | No | `CLAUDE.md` |
+| `max-size` | Maximum file size in bytes | No | `40000` |
+| `github-token` | GitHub token for posting PR comments | Yes | - |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| `size` | Current file size in bytes (single file pattern mode only) |
+| `exceeds-limit` | Whether any file exceeds the size limit (`true`/`false`) |
+| `usage-percent` | Percentage of size limit used (single file pattern mode only) |
+| `all-files-ok` | Whether all files pass size check (`true`/`false`) |
+
+## How It Works
+
+1. **Fetches PR files**: Uses `gh pr view --json files` to get all files modified in the PR
+2. **Pattern matching**: Filters modified files against provided glob patterns using bash pattern matching
+3. **Size checking**: Validates each matched file against the size limit
+4. **Reports results**: Posts/updates PR comment if any files exceed the limit
+
+## Examples
+
+### Check CLAUDE.md
+
+```yaml
+name: CLAUDE.md Size Check
+on:
+  pull_request:
+    paths:
+      - 'CLAUDE.md'
+      - '.github/workflows/claude.yml'
+      - '.github/actions/check-claude-md-size/**'
+
+jobs:
+  size-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/check-claude-md-size
+        with:
+          file-patterns: 'CLAUDE.md'
+          max-size: 40000
+          github-token: ${{ github.token }}
+```
+
+### Check All Agent Files
+
+```yaml
+name: Agent Quality Checks
+on:
+  pull_request:
+    paths:
+      - '.claude/agents/**'
+      - '.github/workflows/agents.yml'
+      - '.github/actions/check-claude-md-size/**'
+
+jobs:
+  agent-size-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/check-claude-md-size
+        with:
+          file-patterns: '.claude/agents/*.md'
+          max-size: 25000
+          github-token: ${{ github.token }}
 ```
 
 ## Behavior
 
-1. **File Size Check**: Validates the file size against the configured limit
-2. **PR Comments**: Posts/updates warning or success comments on pull requests
-3. **CI Integration**: Fails the check if the file exceeds the limit
-4. **Smart Comments**: Updates existing comments rather than creating duplicates
+### When No Files Modified
 
-## Error Messages
+- ✅ Prints "No files modified in this PR"
+- ✅ Workflow passes
+- ℹ️ No PR comment posted
 
-If the file exceeds the limit, the action will:
-- Post a warning comment to the PR with actionable guidance
-- Fail the CI check to prevent merging
-- Show the exact size, limit, and overage percentage
+### When Modified Files Pass
 
-## Success Messages
+- ✅ Prints size summary for each modified file
+- ✅ Updates any existing warning comment to success
+- ✅ Workflow passes
 
-When the file is within limits and a previous warning exists:
-- Updates the warning comment to a success message
-- Shows current usage percentage
-- Passes the CI check
+**Console Output:**
+```
+File patterns: .claude/agents/*.md
+Fetching changed files for PR #1761...
+✅ agent-developer.md: 23514 bytes (94% of limit)
+```
+
+### When Modified Files Exceed Limit
+
+- ❌ Lists oversized files with details
+- ❌ Posts PR comment with specific guidance
+- ❌ Fails workflow check
+
+**PR Comment Example:**
+```markdown
+> [!WARNING]
+> #### Modified Files Too Large
+>
+> The following modified files exceed the **25000 byte** size limit:
+>
+> - `agent-developer.md`: **27000 bytes** (over by 2000 bytes, ~8%)
+>
+> **Action needed:** Please compress the oversized files. Consider:
+> - Removing verbose explanations
+> - Consolidating redundant examples
+> - Keeping only essential requirements
+> - Moving detailed guides to separate docs in `docs/` or `docs/prd/`
+>
+> All MANDATORY requirements must be preserved.
+```
+
+## Smart Comment Management
+
+- Uses `<!-- claude-md-size-check -->` marker for identification
+- Updates existing comments instead of creating duplicates
+- Switches from warning to success when issues are resolved
+- Only posts comments on pull requests (skips direct pushes)
+
+## Integration
+
+This action is used by:
+- `.github/workflows/claude.yml` - CLAUDE.md size enforcement
+- `.github/workflows/agents.yml` - Agent file size enforcement
+
+## Related
+
+- `CLAUDE.md` - Main development guidelines
+- `.claude/agents/` - Claude agent definitions
+- `docs/prd/claude-agent-architecture.md` - Agent architecture and size guidelines

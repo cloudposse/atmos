@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -26,7 +25,6 @@ var ErrNoLayers = errors.New("the OCI image does not have any layers")
 
 const (
 	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components
-	githubTokenEnv     = "GITHUB_TOKEN"
 )
 
 var defaultOCIFileSystem = filesystem.NewOSFileSystem()
@@ -37,7 +35,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 }
 
 // processOciImageWithFS processes an OCI image using a FileSystem implementation.
-func processOciImageWithFS(_ *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
+func processOciImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
 	tempDir, err := fs.MkdirTemp("", uuid.New().String())
 	if err != nil {
 		return errors.Join(errUtils.ErrCreateTempDirectory, err)
@@ -54,7 +52,7 @@ func processOciImageWithFS(_ *schema.AtmosConfiguration, imageName string, destD
 		return errors.Join(errUtils.ErrInvalidImageReference, err)
 	}
 
-	descriptor, err := pullImage(ref)
+	descriptor, err := pullImage(atmosConfig, ref)
 	if err != nil {
 		return errors.Join(errUtils.ErrPullImage, err)
 	}
@@ -88,30 +86,87 @@ func processOciImageWithFS(_ *schema.AtmosConfiguration, imageName string, destD
 }
 
 // pullImage pulls an OCI image from the specified reference and returns its descriptor.
-func pullImage(ref name.Reference) (*remote.Descriptor, error) {
-	var opts []remote.Option
-	opts = append(opts, remote.WithAuth(authn.Anonymous))
+// Authentication precedence:
+// 1. User's Docker credentials (~/.docker/config.json via DefaultKeychain) - highest precedence
+// 2. ATMOS_GITHUB_TOKEN or GITHUB_TOKEN environment variables (for ghcr.io only)
+// 3. Anonymous authentication - fallback.
+func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*remote.Descriptor, error) {
+	var authMethod authn.Authenticator
+	var authSource string
 
-	// Get registry from parsed reference
 	registry := ref.Context().Registry.Name()
-	if strings.EqualFold(registry, "ghcr.io") {
-		githubToken := os.Getenv(githubTokenEnv)
-		if githubToken != "" {
-			opts = append(opts, remote.WithAuth(&authn.Basic{
-				Username: "oauth2",
-				Password: githubToken,
-			}))
-			log.Debug("Using GitHub token for authentication", "registry", registry)
-		}
+
+	// First, try to use credentials from the user's Docker config.
+	// This allows users to authenticate with `docker login` and have those credentials respected.
+	keychainAuth, err := authn.DefaultKeychain.Resolve(ref.Context())
+	if err != nil {
+		log.Debug("DefaultKeychain resolution failed, will try other auth methods", "error", err)
+	} else if keychainAuth != authn.Anonymous {
+		// User has credentials configured for this registry - highest precedence
+		authMethod = keychainAuth
+		authSource = "Docker keychain (~/.docker/config.json)"
 	}
 
-	descriptor, err := remote.Get(ref, opts...)
+	// If no user credentials, try environment variable token injection for ghcr.io
+	if authMethod == nil && strings.EqualFold(registry, "ghcr.io") {
+		authMethod, authSource = getGHCRAuth(atmosConfig)
+	}
+
+	// Fall back to anonymous authentication if no credentials found
+	if authMethod == nil {
+		authMethod = authn.Anonymous
+		authSource = "anonymous"
+	}
+
+	log.Debug("Authenticating to OCI registry", "registry", registry, "method", authSource)
+
+	descriptor, err := remote.Get(ref, remote.WithAuth(authMethod))
 	if err != nil {
-		log.Error("Failed to pull OCI image", "image", ref.Name(), "error", err)
+		log.Error("Failed to pull OCI image", "image", ref.Name(), "registry", registry, "auth", authSource, "error", err)
 		return nil, fmt.Errorf("failed to pull image '%s': %w", ref.Name(), err)
 	}
 
 	return descriptor, nil
+}
+
+// getGHCRAuth returns authentication credentials for GitHub Container Registry (ghcr.io).
+// It tries ATMOS_GITHUB_TOKEN first, then falls back to GITHUB_TOKEN.
+// Requires github_username to be configured for authentication.
+func getGHCRAuth(atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, string) {
+	atmosToken := strings.TrimSpace(atmosConfig.Settings.AtmosGithubToken)
+	githubToken := strings.TrimSpace(atmosConfig.Settings.GithubToken)
+	githubUsername := strings.TrimSpace(atmosConfig.Settings.GithubUsername)
+
+	var token string
+	var tokenSource string
+
+	if atmosToken != "" {
+		token = atmosToken
+		tokenSource = "ATMOS_GITHUB_TOKEN"
+	} else if githubToken != "" {
+		token = githubToken
+		tokenSource = "GITHUB_TOKEN"
+	}
+
+	if token == "" {
+		return nil, ""
+	}
+
+	// GHCR requires a username; use configured github_username.
+	username := githubUsername
+	if username == "" {
+		// No safe implicit fallback here; return nil to allow caller to choose anon/fail.
+		log.Debug("GHCR token found but no username provided; set settings.github_username or ATMOS_GITHUB_USERNAME/GITHUB_ACTOR.")
+		return nil, ""
+	}
+
+	authMethod := &authn.Basic{
+		Username: username,
+		Password: token,
+	}
+	authSource := fmt.Sprintf("environment variable (%s with username %s)", tokenSource, username)
+
+	return authMethod, authSource
 }
 
 // processLayer processes a single OCI layer and extracts its contents to the specified destination directory.

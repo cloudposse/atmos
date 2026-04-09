@@ -1,0 +1,25 @@
+# Component Path Resolution Test Fixture
+# This fixture is specifically designed to test component path resolution features:
+# - Relative path resolution (.)
+# - Nested component paths (nested/component)
+# - Ambiguous path detection (multiple components referencing same terraform folder)
+# - Parent directory atmos.yaml discovery
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info

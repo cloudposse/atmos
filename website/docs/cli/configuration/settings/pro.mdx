@@ -1,0 +1,216 @@
+---
+title: Atmos Pro
+sidebar_position: 5
+sidebar_label: pro
+sidebar_class_name: command
+description: Configure Atmos Pro integration for stack locking and workspace management
+id: pro
+slug: /cli/configuration/settings/pro
+---
+
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Configure Atmos Pro integration for stack locking, status reporting, and workspace management across your organization.
+</Intro>
+
+## Overview
+
+Atmos Pro provides centralized management capabilities for teams using Atmos at scale:
+
+- **Stack Locking** — Prevent concurrent modifications to the same stack
+- **Status Reporting** — Track deployment status and history
+- **Workspace Management** — Organize teams and projects
+
+## Configuration
+
+The only required setting is your `workspace_id`. All other settings have sensible defaults and can be left unset.
+
+<Tabs>
+<TabItem value="minimal" label="Minimal" default>
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    workspace_id: "your-workspace-id"
+```
+</File>
+
+</TabItem>
+<TabItem value="advanced" label="Advanced">
+
+Override defaults only if needed. All fields shown below are optional except `workspace_id`.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    base_url: "https://app.cloudposse.com"
+    endpoint: "api/v1"
+    workspace_id: "your-workspace-id"
+    max_payload_bytes: 4194304
+    github_oidc:
+      request_url: ""
+      request_token: ""
+```
+</File>
+
+</TabItem>
+</Tabs>
+
+## Configuration Reference
+
+<dl>
+  <dt>`settings.pro.base_url`</dt>
+  <dd>
+    Base URL for the Atmos Pro API.
+
+    - **Type:** `string`
+    - **Default:** `https://app.cloudposse.com`
+    - **Environment Variable:** `ATMOS_PRO_BASE_URL`
+  </dd>
+
+  <dt>`settings.pro.endpoint`</dt>
+  <dd>
+    API endpoint path appended to the base URL.
+
+    - **Type:** `string`
+    - **Default:** `api/v1`
+    - **Environment Variable:** `ATMOS_PRO_ENDPOINT`
+  </dd>
+
+  <dt>`settings.pro.workspace_id`</dt>
+  <dd>
+    Atmos Pro workspace identifier. Required for authentication. This value is not a secret and is safe to commit to version control.
+
+    - **Type:** `string`
+    - **Default:** (none)
+    - **Environment Variable:** `ATMOS_PRO_WORKSPACE_ID`
+  </dd>
+
+  <dt>`settings.pro.token`</dt>
+  <dd>
+    Bearer token for Atmos Pro API authentication. Atmos Pro does not issue API keys or personal access tokens — the only way to obtain a bearer token is by performing an OIDC token exchange against the Atmos Pro API. This is intended for advanced integrations outside of GitHub Actions.
+
+    - **Type:** `string`
+    - **Default:** (none)
+    - **Environment Variable:** `ATMOS_PRO_TOKEN`
+  </dd>
+
+  <dt>`settings.pro.max_payload_bytes`</dt>
+  <dd>
+    Maximum payload size (in bytes) before Atmos automatically chunks upload requests to Atmos Pro. When `atmos describe affected --upload` or `atmos list instances --upload` produces a payload larger than this threshold, it is split into multiple smaller requests with batch metadata for server-side reassembly.
+
+    - **Type:** `integer`
+    - **Default:** `4194304` (4 MB)
+  </dd>
+
+  <dt>`settings.pro.github_oidc.request_url`</dt>
+  <dd>
+    GitHub Actions OIDC token request URL. Automatically set in GitHub Actions via the `ACTIONS_ID_TOKEN_REQUEST_URL` environment variable.
+
+    - **Type:** `string`
+  </dd>
+
+  <dt>`settings.pro.github_oidc.request_token`</dt>
+  <dd>
+    GitHub Actions OIDC request token. Automatically set in GitHub Actions via the `ACTIONS_ID_TOKEN_REQUEST_TOKEN` environment variable.
+
+    - **Type:** `string`
+  </dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_PRO_BASE_URL`</dt>
+  <dd>Override the Atmos Pro API base URL. Maps to `settings.pro.base_url`.</dd>
+
+  <dt>`ATMOS_PRO_ENDPOINT`</dt>
+  <dd>Override the API endpoint path. Maps to `settings.pro.endpoint`.</dd>
+
+  <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
+  <dd>Workspace identifier for authentication. Not a secret. Maps to `settings.pro.workspace_id`.</dd>
+
+  <dt>`ATMOS_PRO_TOKEN`</dt>
+  <dd>Bearer token obtained via OIDC token exchange (advanced). Maps to `settings.pro.token`.</dd>
+
+  <dt>`ATMOS_PRO_RUN_ID`</dt>
+  <dd>CI/CD run identifier. Set automatically in CI environments for tracking.</dd>
+</dl>
+
+## Authentication
+
+### GitHub OIDC Token Exchange
+
+For GitHub Actions workflows, use OIDC token exchange for secure, token-less authentication. This is the recommended approach.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    workspace_id: "your-workspace-id"
+    github_oidc:
+      request_url: !env ACTIONS_ID_TOKEN_REQUEST_URL
+      request_token: !env ACTIONS_ID_TOKEN_REQUEST_TOKEN
+```
+</File>
+
+In your GitHub Actions workflow:
+
+```yaml
+name: Deploy Infrastructure
+on: push
+
+permissions:
+  id-token: write  # Required for OIDC token request
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy with Atmos
+        run: |
+          atmos pro lock vpc -s prod/us-east-1
+          atmos terraform apply vpc -s prod/us-east-1
+          atmos pro unlock vpc -s prod/us-east-1
+```
+
+<details>
+<summary>Advanced: Bearer Token Authentication</summary>
+
+Atmos Pro does not issue API keys or personal access tokens. The only way to obtain a bearer token is by
+performing your own OIDC token exchange against the Atmos Pro API. This is intended for advanced integrations
+outside of GitHub Actions, such as custom CI/CD pipelines that handle OIDC flows independently.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    token: !env ATMOS_PRO_TOKEN
+```
+</File>
+
+Pass the bearer token via environment variable:
+
+```bash
+export ATMOS_PRO_TOKEN="<bearer-token-from-oidc-exchange>"
+atmos pro lock vpc -s prod/us-east-1
+```
+
+</details>
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/pro/lock', label: 'atmos pro lock', description: 'Lock a stack to prevent concurrent modifications'},
+  {type: 'link', href: '/cli/commands/pro/unlock', label: 'atmos pro unlock', description: 'Unlock a previously locked stack'},
+]} />

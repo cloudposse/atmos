@@ -8,10 +8,13 @@ description: Execute a command with authentication environment variables set for
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Run any tool (Terraform, AWS CLI, kubectl, etc.) with the right cloud identity injected automatically into the environment. Use `exec` when you want a one-off command to inherit secure, temporary credentials without polluting your shell session.
 </Intro>
+
+<DemoVideo id="auth-exec" title="atmos auth exec" showCaption={false} />
 
 <Screengrab title="atmos auth exec --help" slug="atmos-auth-exec--help" />
 
@@ -37,6 +40,8 @@ atmos auth exec [--identity <name>] -- <command> [args...]
 
 ## Examples
 
+### AWS Examples
+
 ```shell
 # Run terraform with authenticated env (uses default identity)
 atmos auth exec -- terraform plan -var-file=env.tfvars
@@ -47,8 +52,36 @@ atmos auth exec --identity -- aws sts get-caller-identity
 # Use a specific identity
 atmos auth exec --identity prod-admin -- aws sts get-caller-identity
 
-# Inspect env
+# Inspect AWS env vars
 atmos auth exec -- env | grep AWS
+```
+
+### Azure Examples
+
+```shell
+# Run Azure CLI with authenticated identity
+atmos auth exec --identity azure-dev -- az group list
+
+# Run Terraform with Azure credentials
+atmos auth exec --identity azure-prod -- terraform plan -var-file=azure.tfvars
+
+# Verify Azure credentials
+atmos auth exec --identity azure-dev -- az account show
+
+# Inspect Azure env vars
+atmos auth exec -- env | grep -E '^(AZURE_|ARM_)'
+```
+
+### CI/CD Examples (Azure OIDC)
+
+In GitHub Actions or other CI/CD environments with OIDC support:
+
+```shell
+# Run Terraform with Azure OIDC credentials
+atmos auth exec --identity azure-prod -- terraform apply -auto-approve
+
+# Run Azure CLI commands with OIDC identity
+atmos auth exec --identity azure-prod -- az resource list --resource-group my-rg
 ```
 
 ## Flags

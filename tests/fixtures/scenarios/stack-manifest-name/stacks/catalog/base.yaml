@@ -1,0 +1,10 @@
+# Base catalog imported by stacks
+vars:
+  region: us-east-1
+
+components:
+  terraform:
+    vpc:
+      component: mock
+      vars:
+        enabled: true

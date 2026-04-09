@@ -1,0 +1,218 @@
+---
+title: Component Archetypes
+sidebar_position: 6
+sidebar_label: Component Archetypes
+description: Pre-configured component variants for common use cases
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import PillBox from '@site/src/components/PillBox'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+**Component Archetypes** are pre-configured variants of a component for specific use cases. Instead of configuring each instance from scratch, you define archetypes like `s3-bucket/public`, `s3-bucket/logging`, or `s3-bucket/artifacts` that encapsulate best practices for that use case.
+</Intro>
+
+:::note This is NOT Mixins
+Archetypes live in the catalog folder alongside component defaults. For actual mixins (reusable fragments like region defaults), see the [Mixins](/design-patterns/component-catalog/mixins) pattern.
+:::
+
+## Use-cases
+
+Use **Component Archetypes** when:
+
+- A component has distinct use cases with different configurations (e.g., S3 buckets for logging vs. public content)
+
+- You want to encode best practices for each use case
+
+- Teams should pick from approved configurations rather than configuring from scratch
+
+## Example: S3 Bucket Archetypes
+
+S3 buckets are a classic example—you rarely want the same configuration for every bucket:
+
+### Directory Structure
+
+```console
+stacks/
+├── catalog/
+│   └── s3-bucket/
+│       ├── defaults.yaml   # Base configuration (abstract)
+│       ├── public.yaml     # Public website hosting
+│       ├── logging.yaml    # Log storage
+│       └── artifacts.yaml  # Build artifacts
+└── deploy/
+    └── prod.yaml
+```
+
+### Base Configuration
+
+<File title="stacks/catalog/s3-bucket/defaults.yaml">
+```yaml
+components:
+  terraform:
+    s3-bucket/defaults:
+      metadata:
+        type: abstract
+      vars:
+        enabled: true
+        versioning_enabled: true
+        block_public_acls: true
+        block_public_policy: true
+        ignore_public_acls: true
+        restrict_public_buckets: true
+```
+</File>
+
+### Public Bucket Archetype
+
+For static website hosting:
+
+<File title="stacks/catalog/s3-bucket/public.yaml">
+```yaml
+import:
+  - catalog/s3-bucket/defaults
+
+components:
+  terraform:
+    s3-bucket/public:
+      metadata:
+        type: abstract
+        inherits:
+          - s3-bucket/defaults
+      vars:
+        # Allow public access for website hosting
+        block_public_acls: false
+        block_public_policy: false
+        restrict_public_buckets: false
+        website_configuration:
+          index_document: index.html
+          error_document: error.html
+```
+</File>
+
+### Logging Bucket Archetype
+
+For centralized log storage:
+
+<File title="stacks/catalog/s3-bucket/logging.yaml">
+```yaml
+import:
+  - catalog/s3-bucket/defaults
+
+components:
+  terraform:
+    s3-bucket/logging:
+      metadata:
+        type: abstract
+        inherits:
+          - s3-bucket/defaults
+      vars:
+        # Optimized for log storage
+        versioning_enabled: false
+        lifecycle_rules:
+          - id: expire-old-logs
+            enabled: true
+            expiration:
+              days: 90
+          - id: transition-to-glacier
+            enabled: true
+            transition:
+              days: 30
+              storage_class: GLACIER
+```
+</File>
+
+### Artifacts Bucket Archetype
+
+For CI/CD build artifacts:
+
+<File title="stacks/catalog/s3-bucket/artifacts.yaml">
+```yaml
+import:
+  - catalog/s3-bucket/defaults
+
+components:
+  terraform:
+    s3-bucket/artifacts:
+      metadata:
+        type: abstract
+        inherits:
+          - s3-bucket/defaults
+      vars:
+        # Short retention for build artifacts
+        lifecycle_rules:
+          - id: expire-old-artifacts
+            enabled: true
+            expiration:
+              days: 30
+```
+</File>
+
+### Using Archetypes in Stacks
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - catalog/s3-bucket/public
+  - catalog/s3-bucket/logging
+  - catalog/s3-bucket/artifacts
+
+components:
+  terraform:
+    # Website bucket
+    website-assets:
+      metadata:
+        component: s3-bucket
+        inherits:
+          - s3-bucket/public
+      vars:
+        bucket_name: acme-website-assets
+
+    # Centralized logging
+    central-logs:
+      metadata:
+        component: s3-bucket
+        inherits:
+          - s3-bucket/logging
+      vars:
+        bucket_name: acme-central-logs
+
+    # CI/CD artifacts
+    build-artifacts:
+      metadata:
+        component: s3-bucket
+        inherits:
+          - s3-bucket/artifacts
+      vars:
+        bucket_name: acme-build-artifacts
+```
+</File>
+
+## Common Archetype Patterns
+
+| Component | Archetypes |
+|-----------|------------|
+| S3 Bucket | `public`, `logging`, `artifacts`, `data-lake`, `backups` |
+| RDS | `primary`, `replica`, `analytics` |
+| Lambda | `api-handler`, `scheduled-task`, `event-processor` |
+| IAM Role | `service-role`, `cross-account`, `admin` |
+
+## When to Use This vs Mixins
+
+| Approach | Location | Best For |
+|----------|----------|----------|
+| [Mixins](/design-patterns/component-catalog/mixins) | `stacks/mixins/` | Shared settings (region, stage) that apply to many components |
+| Archetypes | `stacks/catalog/<component>/` | Pre-configured variants for specific use cases |
+
+## Related Patterns
+
+- [Mixins](/design-patterns/component-catalog/mixins) - Reusable fragments in the mixins folder
+- [Component Catalog](/design-patterns/component-catalog) - Base component defaults
+- [Abstract Component](/design-patterns/inheritance-patterns/abstract-component) - Prevent base components from being deployed
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Inherit between components
+
+## References
+
+- [Catalogs](/howto/catalogs)

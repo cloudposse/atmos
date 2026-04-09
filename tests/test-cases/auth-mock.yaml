@@ -23,6 +23,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"
@@ -44,6 +45,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"
@@ -63,6 +65,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"
@@ -88,12 +91,14 @@ tests:
     command: "atmos"
     env:
       ATMOS_KEYRING_TYPE: "memory"
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "whoami"
       - "--identity"
       - "mock-identity"
     expect:
+      ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
       diff:
         - "Expires"
         - "Last Updated"
@@ -195,7 +200,7 @@ tests:
       diff: []
       stderr: []
       stdout:
-        - "export AWS_PROFILE='mock-identity'"
+        - "export AWS_PROFILE=mock-identity"
       exit_code: 0
 
   - name: atmos auth env without --login returns config env vars
@@ -217,7 +222,7 @@ tests:
       diff: []
       stderr: []
       stdout:
-        - "export AWS_PROFILE='mock-identity'"
+        - "export AWS_PROFILE=mock-identity"
       exit_code: 0
 
   # ============================================================================
@@ -240,6 +245,9 @@ tests:
       - "--"
       - "echo"
       - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
     expect:
       diff: []
       stderr: []
@@ -345,6 +353,6 @@ tests:
       - "validate"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0

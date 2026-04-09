@@ -72,11 +72,11 @@ While we generally advise against using code generation for application logic (c
 creating configurations where appropriate, such as developer environments and SaaS tenants.
 These configurations ought to be committed.
 
-Also, consider if you can [use templates](/core-concepts/stacks/templates) instead.
+Also, consider if you can [use templates](/templates) instead.
 
 ## Use Mixin Pattern for Snippets of Stack Configuration
 
-Employ the [mixin pattern](/core-concepts/stacks/inheritance/mixins) for clarity when there there is brief configuration snippets that are reusable. Steer clear
+Employ the [mixin pattern](/howto/mixins) for clarity when there are brief configuration snippets that are reusable. Steer clear
 of minimal stack configurations simply for the sake of DRYness as it frequently leads to too many levels of imports.
 
 ## Use YAML Anchors to DRY Configuration
@@ -85,7 +85,7 @@ YAML anchors are pretty sweet and you don’t get those with tfvars.
 
 :::important YAML Anchors Gotchas
 When you define [YAML anchors](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases), they can only be used within the scope of the
-same file. This is not an Atmos limitation, but how YAML works. For example, do not work together with [imports](/core-concepts/stacks/imports),
+same file. This is not an Atmos limitation, but how YAML works. For example, do not work together with [imports](/stacks/imports),
 where you define an anchor in one stack configuration and try to use it in another.
 :::
 

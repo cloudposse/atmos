@@ -1,0 +1,304 @@
+---
+title: Using the Remote State Module
+sidebar_position: 3
+sidebar_label: Remote State Module
+description: Use native Terraform to read outputs from other components
+id: remote-state-module
+slug: /stacks/sharing-state/remote-state-module
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Note from '@site/src/components/Note'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+The `remote-state` Terraform module provides a native HCL approach to reading outputs from other Atmos components.
+This method keeps all component dependencies within Terraform code rather than stack configurations.
+</Intro>
+
+:::tip Consider YAML Functions First
+For most use cases, [`!terraform.state`](/stacks/sharing-state/terraform-state) in stack YAML is recommended because:
+- It's faster (no provider initialization required)
+- Dependencies are visible in stack configurations
+- No additional Terraform code needed
+
+Use the remote-state module when you prefer keeping dependencies in HCL.
+:::
+
+<KeyPoints>
+- Native Terraform/HCL approach for reading component outputs
+- Uses the `cloudposse/stack-config/yaml//modules/remote-state` module
+- Stack-aware - automatically resolves component context
+- Keeps component dependencies in Terraform code
+</KeyPoints>
+
+## When to Use the Remote State Module
+
+Use the remote-state module when you:
+- Prefer keeping all component logic in Terraform HCL
+- Want to use Terraform's native remote state patterns
+- Need conditional remote state lookups based on Terraform logic
+- Are working with teams more familiar with Terraform than YAML
+
+## Basic Usage
+
+Add a `remote-state.tf` file to your component that reads outputs from other components:
+
+<File title="components/terraform/eks/remote-state.tf">
+```hcl
+module "vpc" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  # The Atmos component name to read outputs from
+  component = "vpc"
+
+  # Pass the current component's context
+  context = module.this.context
+}
+```
+</File>
+
+Then use the outputs in your component:
+
+<File title="components/terraform/eks/main.tf">
+```hcl
+resource "aws_eks_cluster" "this" {
+  name = var.cluster_name
+
+  vpc_config {
+    # Use outputs from the vpc component
+    subnet_ids         = module.vpc.outputs.private_subnet_ids
+    security_group_ids = [module.vpc.outputs.security_group_id]
+  }
+}
+```
+</File>
+
+## How It Works
+
+The remote-state module:
+
+1. Uses the `context` to determine the current stack
+2. Looks up the specified component's configuration in that stack
+3. Reads the component's Terraform state from the configured backend
+4. Returns all outputs as a map via `module.<name>.outputs`
+
+The module uses the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) provider internally to process Atmos stack configurations.
+
+## Cross-Stack References
+
+Read outputs from components in different stacks by overriding context variables:
+
+<File title="components/terraform/app/remote-state.tf">
+```hcl
+# Read VPC from the same stack
+module "vpc" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "vpc"
+  context   = module.this.context
+}
+
+# Read database from a different stage (e.g., shared-services account)
+module "rds" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "rds"
+
+  # Override stage to point to shared-services account
+  stage = "shared"
+
+  context = module.this.context
+}
+
+# Read from a different region
+module "global_dns" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component   = "route53"
+  environment = "gbl"  # global region
+
+  context = module.this.context
+}
+```
+</File>
+
+## Using Variables for Component Names
+
+Make the remote state lookup configurable via variables:
+
+<File title="components/terraform/app/variables.tf">
+```hcl
+variable "vpc_component_name" {
+  type        = string
+  default     = "vpc"
+  description = "Name of the VPC component to read outputs from"
+}
+
+variable "vpc_stage_override" {
+  type        = string
+  default     = null
+  description = "Override stage for VPC lookup (e.g., for shared VPC)"
+}
+```
+</File>
+
+<File title="components/terraform/app/remote-state.tf">
+```hcl
+module "vpc" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = var.vpc_component_name
+
+  # Override stage if specified
+  stage = coalesce(var.vpc_stage_override, module.this.stage)
+
+  context = module.this.context
+}
+```
+</File>
+
+Then configure the component in your stack:
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        vpc_component_name: vpc/production
+        vpc_stage_override: network  # Read VPC from network account
+```
+</File>
+
+## Conditional Remote State
+
+Use Terraform's count or for_each for conditional lookups:
+
+<File title="components/terraform/app/remote-state.tf">
+```hcl
+variable "flow_logs_enabled" {
+  type    = bool
+  default = false
+}
+
+# Only look up the bucket if flow logs are enabled
+module "vpc_flow_logs_bucket" {
+  count = var.flow_logs_enabled ? 1 : 0
+
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "vpc-flow-logs-bucket"
+  context   = module.this.context
+}
+```
+</File>
+
+<File title="components/terraform/app/main.tf">
+```hcl
+resource "aws_flow_log" "default" {
+  count = var.flow_logs_enabled ? 1 : 0
+
+  log_destination = module.vpc_flow_logs_bucket[0].outputs.bucket_arn
+  vpc_id          = module.vpc.outputs.vpc_id
+  traffic_type    = "ALL"
+}
+```
+</File>
+
+## atmos.yaml Configuration
+
+The remote-state module uses the `terraform-provider-utils` provider, which needs to find your `atmos.yaml` configuration. Ensure `atmos.yaml` is discoverable:
+
+<Note>
+The provider searches for `atmos.yaml` in these locations (highest to lowest priority):
+1. `ATMOS_CLI_CONFIG_PATH` environment variable
+2. Current working directory
+3. `~/.atmos/atmos.yaml`
+4. `/usr/local/etc/atmos/atmos.yaml`
+</Note>
+
+For CI/CD environments, set the environment variables:
+
+```bash
+export ATMOS_CLI_CONFIG_PATH=/path/to/atmos/config
+export ATMOS_BASE_PATH=/path/to/repo
+```
+
+## Complete Example
+
+Here's a full example of a component that reads from multiple other components:
+
+<File title="components/terraform/eks/remote-state.tf">
+```hcl
+# Read VPC configuration
+module "vpc" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "vpc"
+  context   = module.this.context
+}
+
+# Read IAM roles from identity account
+module "iam_roles" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "eks-iam-roles"
+  stage     = "identity"
+  context   = module.this.context
+}
+
+# Read KMS key for encryption
+module "kms" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "kms"
+  context   = module.this.context
+}
+```
+</File>
+
+<File title="components/terraform/eks/main.tf">
+```hcl
+module "eks" {
+  source = "terraform-aws-modules/eks/aws"
+
+  cluster_name    = var.cluster_name
+  cluster_version = var.cluster_version
+
+  vpc_id     = module.vpc.outputs.vpc_id
+  subnet_ids = module.vpc.outputs.private_subnet_ids
+
+  cluster_encryption_config = {
+    provider_key_arn = module.kms.outputs.key_arn
+    resources        = ["secrets"]
+  }
+}
+```
+</File>
+
+## Comparison with YAML Functions
+
+| Aspect | Remote State Module | `!terraform.state` |
+|--------|--------------------|--------------------|
+| Definition location | Terraform HCL | Stack YAML |
+| Visibility | In component code | In stack configuration |
+| Conditional logic | Terraform count/for_each | Not supported |
+| Performance | Medium | Fastest |
+| Provider required | Yes (terraform-provider-utils) | No |
+
+<ActionCard title="Consider Using !terraform.state">
+For simpler use cases where you don't need Terraform-level conditionals, `!terraform.state` provides faster performance and keeps dependencies visible in stack configurations.
+<PrimaryCTA to="/stacks/sharing-state/terraform-state">Learn More</PrimaryCTA>
+</ActionCard>

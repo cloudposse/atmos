@@ -117,7 +117,7 @@ func BenchmarkProcessCustomYamlTagsOverhead(b *testing.B) {
 	b.Run("WithoutCycleDetection", func(b *testing.B) {
 		// Simulate old behavior (direct processing without context).
 		for i := 0; i < b.N; i++ {
-			result := processNodes(atmosConfig, input, "test-stack", nil, nil)
+			result, _ := processNodes(atmosConfig, input, "test-stack", nil, nil)
 			_ = result
 		}
 	})

@@ -1,0 +1,177 @@
+---
+title: Using Geodesic with Atmos Devcontainers
+sidebar_label: Geodesic
+sidebar_position: 4
+id: using-geodesic
+description: Run Geodesic toolbox using atmos devcontainer commands.
+---
+
+:::note
+`atmos devcontainer` requires minimum Atmos version `v1.201.0`
+:::
+
+This guide explains how to use [Geodesic](https://github.com/cloudposse/geodesic) with `atmos devcontainer` commands.
+
+## Overview
+
+[Geodesic](https://github.com/cloudposse/geodesic) is a robust Linux toolbox container, crafted to optimize DevOps workflows. It comes pre-loaded with essential DevOps tools and dependencies, providing a consistent development environment without requiring software installation on individual workstations.
+
+[Dev Containers](https://containers.dev) (Development Containers) are a standardized way to define and run development environments inside containers. They provide consistent, reproducible environments with all necessary tools and dependencies pre-configured.
+
+With `atmos devcontainer` commands, you can run Geodesic as a dev container with:
+- Native Docker/Podman integration
+- Configuration in `atmos.yaml`
+- Standard [dev container specification](https://containers.dev) support
+- Consistent CLI experience across all Atmos commands
+
+Learn more in the [Devcontainer Documentation](/cli/commands/devcontainer).
+
+## Setup Steps
+
+### 1. Add Devcontainer Configuration to atmos.yaml
+
+Add a top-level `devcontainer` section to your `atmos.yaml`:
+
+```yaml
+devcontainer:
+  geodesic:
+    spec: !include devcontainer.json
+```
+
+### 2. Create devcontainer.json
+
+Create a `devcontainer.json` file in your repository root (same directory as `atmos.yaml`) with your Geodesic configuration:
+
+```json
+{
+  "name": "Geodesic",
+  "image": "cloudposse/geodesic:latest",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace",
+  "mounts": [
+    "type=bind,source=${localEnv:HOME}/.config,target=/root/.config",
+    "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws",
+    "type=bind,source=${localEnv:HOME}/.ssh,target=/root/.ssh,readonly",
+    "type=bind,source=${localEnv:HOME}/.kube,target=/root/.kube",
+    "type=bind,source=${localEnv:HOME}/.terraform.d,target=/root/.terraform.d"
+  ],
+  "containerEnv": {
+    "ATMOS_BASE_PATH": "/workspace",
+    "ATMOS_XDG_CONFIG_HOME": "/root/.config",
+    "ATMOS_XDG_DATA_HOME": "/root/.local/share",
+    "ATMOS_XDG_CACHE_HOME": "/root/.cache",
+    "TERM": "${localEnv:TERM}"
+  },
+  "remoteUser": "root",
+  "runArgs": [
+    "--hostname=geodesic"
+  ]
+}
+```
+
+### 3. Use Geodesic Commands
+
+Common commands for working with Geodesic:
+
+| Command | Description |
+|---------|-------------|
+| `atmos devcontainer shell geodesic` | Start interactive shell in Geodesic |
+| `atmos devcontainer start geodesic` | Start Geodesic container (without attaching) |
+| `atmos devcontainer attach geodesic` | Attach to running Geodesic container |
+| `atmos devcontainer stop geodesic` | Stop Geodesic container |
+| `atmos devcontainer exec geodesic -- <cmd>` | Execute command in running container |
+
+### 4. (Optional) Add Shell Alias
+
+For convenience, add a shell alias to your `atmos.yaml`:
+
+```yaml
+aliases:
+  shell: "devcontainer shell geodesic"
+```
+
+Now you can use:
+```bash
+atmos shell  # Equivalent to: atmos devcontainer shell geodesic
+```
+
+## Configuration Reference
+
+### Basic Configuration
+
+```yaml
+devcontainer:
+  geodesic:
+    spec:
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+```
+
+### Advanced Configuration
+
+```yaml
+devcontainer:
+  geodesic:
+    settings:
+      runtime: podman  # Optional: docker, podman, or omit for auto-detect
+    spec:
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+      containerEnv:
+        ATMOS_BASE_PATH: "/workspace"
+        ATMOS_IDENTITY: "acme-identity"  # For atmos auth integration
+      remoteUser: "root"
+      runArgs:
+        - "--hostname=geodesic"
+```
+
+## Integration with Atmos Auth
+
+If you're using `atmos auth`, ensure your devcontainer mounts the credentials:
+
+```json
+{
+  "mounts": [
+    "type=bind,source=${localEnv:HOME}/.config/atmos,target=/root/.config/atmos,readonly"
+  ],
+  "containerEnv": {
+    "ATMOS_IDENTITY": "acme-identity"
+  }
+}
+```
+
+See [Configuring Geodesic with Atmos Auth](/tutorials/configuring-geodesic) for complete authentication setup.
+
+## Troubleshooting
+
+### Issue: "Command not found: atmos devcontainer"
+
+**Solution**: Upgrade to Atmos v1.200.0 or later:
+```bash
+atmos version  # Check current version
+```
+
+### Issue: Container doesn't start
+
+**Solution**: Verify your configuration with:
+```bash
+atmos validate devcontainer
+```
+
+### Issue: Workspace not mounted
+
+**Cause**: Incorrect `workspaceMount` configuration.
+
+**Solution**: Ensure the mount uses your actual repository path:
+```json
+{
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace"
+}
+```
+
+## Next Steps
+
+- Review the [Devcontainer CLI Reference](/cli/commands/devcontainer)
+- Learn about [devcontainer configuration](/cli/commands/devcontainer/config)
+- Explore the [complete examples](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer)

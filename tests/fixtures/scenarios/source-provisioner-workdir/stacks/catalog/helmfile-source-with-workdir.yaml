@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Helmfile component with BOTH source AND workdir enabled
+# This demonstrates the combined workflow for helmfile:
+# 1. When workdir enabled, vendors directly to .workdir/helmfile/<stack>-nginx-workdir/
+# 2. Helmfile runs in the isolated workdir
+
+components:
+  helmfile:
+    nginx-workdir:
+      source:
+        uri: "github.com/cloudposse-archives/helmfiles//releases/nginx-ingress"
+        version: "0.126.0"
+        included_paths:
+          - "*.yaml"
+        excluded_paths:
+          - "*.md"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+        environment: "helmfile-source-with-workdir"

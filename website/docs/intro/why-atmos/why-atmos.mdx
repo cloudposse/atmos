@@ -1,0 +1,75 @@
+---
+title: "The Terraform Maturity Journey"
+description: Understanding the natural evolution of Terraform adoption and how Atmos helps
+sidebar_label: Terraform Maturity Journey
+sidebar_position: 9
+id: why-atmos
+---
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+
+# The Terraform Maturity Journey
+<Intro>
+Every team using Terraform goes through a similar evolution as their infrastructure grows. This is normal, expected, and part of the learning process. Atmos helps you skip the painful parts by providing proven patterns from day one.
+</Intro>
+
+## A Common Path
+
+If you're using Terraform, you've probably experienced—or will soon experience—a familiar progression. It typically goes something like this:
+
+**Stage 1:** You start simple, maybe managing a single AWS account with a few Terraform files.
+
+**Stage 2:** You add another environment. Dev and prod are basically the same, right? Copy-paste works... for now.
+
+**Stage 3:** You need multiple regions. And multiple accounts. Suddenly copy-paste doesn't scale.
+
+**Stage 4:** Someone discovers Terraform modules. Progress! But now you're managing module versions across dozens of places.
+
+**Stage 5:** You realize you need a better way to share configuration. `.tfvars` files everywhere.
+
+Sound familiar? **This is the natural evolution of infrastructure complexity**. Every team goes through it.
+
+## Why This Happens
+
+When you start with Terraform, you're learning infrastructure-as-code. The last thing you need is a complicated framework.
+
+So you keep it simple. And simple works great... until it doesn't.
+
+The problem isn't Terraform. Terraform is powerful and flexible. The problem is **configuration management at scale**. As you add more:
+
+- Environments (dev, staging, prod, DR...)
+- Regions (us-east-1, eu-west-1, ap-southeast-1...)
+- Accounts (per-team, per-product, shared services...)
+- Teams (platform, security, data, ML...)
+
+Your configuration becomes exponentially more complex than your code.
+
+**This is where most teams realize they need a framework.**
+
+## How Atmos Helps
+
+Just like you wouldn't build a web app without React or Rails, you don't have to build Terraform infrastructure without a framework.
+
+Atmos provides:
+
+- **Proven patterns** - Organizational conventions that scale from 1 to 100+ accounts
+- **Configuration as data** - YAML-based configs separate from Terraform code
+- **DRY architecture** - Import and inherit configuration, write it once
+- **Component library approach** - Reuse infrastructure patterns across teams
+- **Enterprise-ready** - Built for multi-account, multi-region, multi-cloud complexity
+
+## The Journey Without Atmos
+
+From [Cloud Posse's experience working with startups to Fortune 100 companies](https://cloudposse.com), here's the typical journey we see teams take when using Terraform without a framework.
+
+**You don't have to go through all these stages.** Atmos lets you skip directly to the end state.
+
+:::tip Start at the Destination
+[You can skip this entire journey by using Atmos from the start.](/intro/why-atmos/nirvana) 😎
+:::
+
+## Where Are You on the Journey?
+
+Recognizing your current stage helps you understand what challenges to expect and how Atmos can help.
+
+<DocCardList/>

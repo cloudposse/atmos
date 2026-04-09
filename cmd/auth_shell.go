@@ -61,14 +61,14 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 	atmosConfigPtr := &atmosConfig
 
 	// Create auth manager.
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Get identity from extracted flag or use default.
@@ -91,7 +91,7 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	if identityName == "" || forceSelect {
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
 		}
 		identityName = defaultIdentity
 	}
@@ -109,12 +109,13 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return errUtils.ErrUserAborted
 			}
-			return errors.Join(errUtils.ErrAuthenticationFailed, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
 		}
 	}
 
 	// Prepare shell environment with file-based credentials.
 	// Start with current OS environment and let PrepareShellEnvironment configure auth.
+	// PrepareShellEnvironment sanitizes the env (removes IRSA/credential vars) and adds auth vars.
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, os.Environ())
 	if err != nil {
 		return fmt.Errorf("failed to prepare shell environment: %w", err)
@@ -129,18 +130,9 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Get provider name from the identity to display in shell messages.
 	providerName := authManager.GetProviderForIdentity(identityName)
 
-	// Execute the shell with authentication environment.
-	// ExecAuthShellCommand expects env vars as a map, so convert the list.
-	envMap := make(map[string]string)
-	for _, envVar := range envList {
-		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-			key := envVar[:idx]
-			value := envVar[idx+1:]
-			envMap[key] = value
-		}
-	}
-
-	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, providerName, envMap, shell, shellArgs)
+	// Execute the shell with the sanitized environment directly.
+	// envList already includes os.Environ() (sanitized) + auth vars.
+	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, providerName, envList, shell, shellArgs)
 }
 
 // extractAuthShellFlags extracts --identity and --shell flags from args and returns the remaining shell args.

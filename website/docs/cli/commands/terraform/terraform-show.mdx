@@ -1,0 +1,97 @@
+---
+title: atmos terraform show
+sidebar_label: show
+sidebar_class_name: command
+id: show
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to display human-readable output from the Terraform state or planfile for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform show --help" slug="atmos-terraform-show--help" />
+
+## Usage
+
+Execute the `terraform show` command like this:
+
+```shell
+atmos terraform show <component> -s <stack> [options]
+```
+
+This command provides a human-readable view of either a Terraform state file or a plan file. It's useful for inspecting current state or reviewing planned changes.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The show operation itself is handled by native Terraform.
+:::
+## Examples
+
+### Show Current State
+
+```shell
+# Display the current state
+atmos terraform show vpc -s dev
+```
+
+### Show Plan File
+
+```shell
+# Display a specific plan file
+atmos terraform show vpc -s dev planfile.tfplan
+```
+
+### Show with JSON Output
+
+```shell
+# Get state in JSON format
+atmos terraform show vpc -s dev -json
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform show vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform show vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform show` flags such as `-json` for JSON output, `-no-color` to disable colors.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

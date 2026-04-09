@@ -1,12 +1,67 @@
 package exec
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestCheckPackerConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		wantErr     bool
+		errType     error
+	}{
+		{
+			name: "valid packer config with base path",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Packer: schema.Packer{
+						BasePath: "components/packer",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing packer base path",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Packer: schema.Packer{
+						BasePath: "",
+					},
+				},
+			},
+			wantErr: true,
+			errType: errUtils.ErrMissingPackerBasePath,
+		},
+		{
+			name:        "empty atmos config",
+			atmosConfig: &schema.AtmosConfiguration{},
+			wantErr:     true,
+			errType:     errUtils.ErrMissingPackerBasePath,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkPackerConfig(tt.atmosConfig)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errType != nil {
+					assert.True(t, errors.Is(err, tt.errType), "expected error type %v, got %v", tt.errType, err)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
 
 func TestGetPackerTemplateFromSettings(t *testing.T) {
 	tests := []struct {

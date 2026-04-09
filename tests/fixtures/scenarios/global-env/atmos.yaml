@@ -1,0 +1,27 @@
+base_path: "./"
+
+# Global environment variables that apply to ALL subprocesses spawned by atmos.
+# These have the lowest priority and can be overridden by stack-level env vars.
+env:
+  GLOBAL_ENV_FROM_ATMOS: "atmos-yaml-value"
+  OVERRIDE_ME: "atmos-value"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+    apply_auto_approve: true
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

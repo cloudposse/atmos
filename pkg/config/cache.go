@@ -3,18 +3,17 @@ package config
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -50,10 +49,6 @@ var withCacheFileLock func(cacheFile string, fn func() error) error
 // loadCacheWithReadLock is a platform-specific function for loading cache with read locks.
 // It is set during init() in cache_lock_unix.go.
 var loadCacheWithReadLock func(cacheFile string) (CacheConfig, error)
-
-// writeFileAtomic is a platform-specific function for atomic file writing.
-// It is set during init() in cache_atomic_unix.go or cache_atomic_windows.go.
-var writeFileAtomic func(filename string, data []byte, perm os.FileMode) error
 
 func LoadCache() (CacheConfig, error) {
 	cacheFile, err := GetCacheFilePath()
@@ -121,8 +116,9 @@ func SaveCache(cfg CacheConfig) error {
 			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
-		// Write atomically.
-		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
+		// Write atomically using filesystem package.
+		fs := filesystem.NewOSFileSystem()
+		if err := fs.WriteFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
 			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
@@ -183,8 +179,9 @@ func UpdateCache(update func(*CacheConfig)) error {
 			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
-		// Write atomically.
-		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
+		// Write atomically using filesystem package.
+		fs := filesystem.NewOSFileSystem()
+		if err := fs.WriteFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
 			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
@@ -194,9 +191,9 @@ func UpdateCache(update func(*CacheConfig)) error {
 // shouldCheckForUpdatesAt is a helper for testing that checks if an update is due
 // based on the provided timestamps and frequency.
 func shouldCheckForUpdatesAt(lastChecked int64, frequency string, now int64) bool {
-	interval, err := parseFrequency(frequency)
+	interval, err := duration.Parse(frequency)
 	if err != nil {
-		// Log warning and default to daily if we can't parse
+		// Log warning and default to daily if we can't parse.
 		log.Warn("Unsupported check for update frequency encountered. Defaulting to daily", "frequency", frequency)
 		interval = 86400 // daily
 	}
@@ -207,56 +204,4 @@ func shouldCheckForUpdatesAt(lastChecked int64, frequency string, now int64) boo
 // configured frequency and the time of the last check.
 func ShouldCheckForUpdates(lastChecked int64, frequency string) bool {
 	return shouldCheckForUpdatesAt(lastChecked, frequency, time.Now().Unix())
-}
-
-// parseFrequency attempts to parse the frequency string in three ways:
-// 1. As an integer (seconds)
-// 2. As a duration with a suffix (e.g., "1h", "5m", "30s")
-// 3. As one of the predefined keywords (daily, hourly, etc.)
-func parseFrequency(frequency string) (int64, error) {
-	freq := strings.TrimSpace(frequency)
-
-	if intVal, err := strconv.ParseInt(freq, 10, 64); err == nil {
-		if intVal > 0 {
-			return intVal, nil
-		}
-	}
-
-	// Parse duration with suffix
-	if len(freq) > 1 {
-		unit := freq[len(freq)-1]
-		valPart := freq[:len(freq)-1]
-		if valInt, err := strconv.ParseInt(valPart, 10, 64); err == nil && valInt > 0 {
-			switch unit {
-			case 's':
-				return valInt, nil
-			case 'm':
-				return valInt * 60, nil
-			case 'h':
-				return valInt * 3600, nil
-			case 'd':
-				return valInt * 86400, nil
-			default:
-				return 0, fmt.Errorf("unrecognized duration unit: %s", string(unit))
-			}
-		}
-	}
-
-	// Handle predefined keywords
-	switch freq {
-	case "minute":
-		return 60, nil
-	case "hourly":
-		return 3600, nil
-	case "daily":
-		return 86400, nil
-	case "weekly":
-		return 604800, nil
-	case "monthly":
-		return 2592000, nil
-	case "yearly":
-		return 31536000, nil
-	default:
-		return 0, fmt.Errorf("unrecognized frequency: %s", freq)
-	}
 }

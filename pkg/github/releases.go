@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-github/v59/github"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -75,12 +76,25 @@ func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 		if remaining < githubAPIMinRateLimitThreshold {
 			resetTime := rateLimits.Core.Reset.Time
 			waitDuration := time.Until(resetTime)
-			return nil, fmt.Errorf("%w: only %d requests remaining, resets at %s (in %s). Consider setting ATMOS_GITHUB_TOKEN or GITHUB_TOKEN for higher limits",
-				errUtils.ErrGitHubRateLimitExceeded,
-				remaining,
-				resetTime.Format(time.RFC3339),
-				waitDuration.Round(time.Second),
-			)
+
+			builder := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+				WithExplanation(fmt.Sprintf("Only %d requests remaining, resets at %s (in %s)",
+					remaining,
+					resetTime.Format(time.RFC3339),
+					waitDuration.Round(time.Second)))
+
+			if httpClient.GetGitHubTokenFromEnv() != "" {
+				builder.
+					WithHint("Your GitHub token may be invalid or expired").
+					WithHint("Verify your token: `gh auth status`").
+					WithHint("Try re-authenticating: `gh auth login`")
+			} else {
+				builder.
+					WithHint("Authenticate with GitHub CLI: `gh auth login`").
+					WithHint("Or set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable")
+			}
+
+			return nil, builder.Err()
 		}
 	}
 
@@ -219,4 +233,40 @@ func GetLatestReleaseInfo(owner, repo string) (*github.RepositoryRelease, error)
 	}
 
 	return release, nil
+}
+
+// GetReleaseVersions fetches release versions as strings (tag names without 'v' prefix).
+// Returns only non-prerelease versions, suitable for toolchain version management.
+func GetReleaseVersions(owner, repo string, limit int) ([]string, error) {
+	defer perf.Track(nil, "github.GetReleaseVersions")()
+
+	log.Debug("Fetching release versions from GitHub API", logFieldOwner, owner, logFieldRepo, repo, "limit", limit)
+
+	releases, err := GetReleases(ReleasesOptions{
+		Owner:              owner,
+		Repo:               repo,
+		Limit:              limit,
+		IncludePrereleases: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	versions := make([]string, 0, len(releases))
+	for _, release := range releases {
+		if release.TagName != nil {
+			// Remove 'v' prefix if present
+			version := *release.TagName
+			if len(version) > 0 && version[0] == 'v' {
+				version = version[1:]
+			}
+			versions = append(versions, version)
+		}
+	}
+
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("%w: no non-prerelease versions for %s/%s", ErrNoVersionsFound, owner, repo)
+	}
+
+	return versions, nil
 }

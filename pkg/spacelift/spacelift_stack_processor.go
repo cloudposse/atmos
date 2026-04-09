@@ -1,12 +1,12 @@
 package spacelift
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/pkg/errors"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -21,6 +21,7 @@ func CreateSpaceliftStacks(
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
 	packerComponentsBasePath string,
+	ansibleComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -39,6 +40,7 @@ func CreateSpaceliftStacks(
 			terraformComponentsBasePath,
 			helmfileComponentsBasePath,
 			packerComponentsBasePath,
+			ansibleComponentsBasePath,
 			filePaths,
 			processStackDeps,
 			processComponentDeps,
@@ -63,6 +65,7 @@ func CreateSpaceliftStacks(
 			atmosConfig.TerraformDirAbsolutePath,
 			atmosConfig.HelmfileDirAbsolutePath,
 			atmosConfig.PackerDirAbsolutePath,
+			atmosConfig.AnsibleDirAbsolutePath,
 			atmosConfig.StackConfigFilesAbsolutePaths,
 			processStackDeps,
 			processComponentDeps,

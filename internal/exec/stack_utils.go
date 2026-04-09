@@ -26,18 +26,23 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	var err error
 	var tmpl string
 
-	if atmosConfig.Stacks.NameTemplate != "" {
+	// Stack name precedence: name (from manifest) > name_template > name_pattern > filename.
+	switch {
+	case configAndStacksInfo.StackManifestName != "":
+		contextPrefix = configAndStacksInfo.StackManifestName
+	case atmosConfig.Stacks.NameTemplate != "":
 		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
 		contextPrefix = tmpl
-	} else if atmosConfig.Stacks.NamePattern != "" {
+	case atmosConfig.Stacks.NamePattern != "":
 		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, atmosConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
 		if err != nil {
-			return "", err
+			// Fall back to filename when pattern validation fails.
+			contextPrefix = strings.ReplaceAll(configAndStacksInfo.Stack, "/", "-")
 		}
-	} else {
+	default:
 		contextPrefix = strings.Replace(configAndStacksInfo.Stack, "/", "-", -1)
 	}
 
@@ -175,27 +180,53 @@ func BuildDependentStackNameFromDependsOn(
 }
 
 // BuildComponentPath builds component path (path to the component's physical location on disk).
+// The optional componentNameFallback parameter is used when the "component" field is not set
+// in the componentSectionMap (e.g., for JIT vendored components with "source" attribute).
 func BuildComponentPath(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSectionMap *map[string]any,
 	componentType string,
+	componentNameFallback ...string,
 ) string {
 	defer perf.Track(atmosConfig, "exec.BuildComponentPath")()
 
-	var componentPath string
-
-	if stackComponentSection, ok := (*componentSectionMap)[cfg.ComponentSectionName].(string); ok {
-		switch componentType {
-		case cfg.TerraformComponentType:
-			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, stackComponentSection)
-		case cfg.HelmfileComponentType:
-			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, stackComponentSection)
-		case cfg.PackerComponentType:
-			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, stackComponentSection)
-		}
+	// Determine the component folder name.
+	componentFolder := GetComponentFolder(componentSectionMap, componentNameFallback...)
+	if componentFolder == "" {
+		return ""
 	}
 
-	return componentPath
+	// Build the full path based on component type.
+	switch componentType {
+	case cfg.TerraformComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, componentFolder)
+	case cfg.HelmfileComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder)
+	case cfg.PackerComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder)
+	default:
+		return ""
+	}
+}
+
+// GetComponentFolder extracts the component folder name from a component section.
+// It checks for an explicit "component" field, falling back to componentNameFallback if provided.
+// This ensures components with "source" (JIT vendored) or without explicit "component" field
+// still have their folder resolved correctly.
+func GetComponentFolder(componentSectionMap *map[string]any, componentNameFallback ...string) string {
+	defer perf.Track(nil, "exec.GetComponentFolder")()
+
+	// Check for explicit "component" field.
+	if stackComponentSection, ok := (*componentSectionMap)[cfg.ComponentSectionName].(string); ok && stackComponentSection != "" {
+		return stackComponentSection
+	}
+
+	// Use fallback if provided.
+	if len(componentNameFallback) > 0 && componentNameFallback[0] != "" {
+		return componentNameFallback[0]
+	}
+
+	return ""
 }
 
 // GetStackNamePattern returns the stack name pattern.

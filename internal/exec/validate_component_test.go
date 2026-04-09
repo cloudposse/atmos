@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,46 @@ import (
 )
 
 // Test the functions of validate_component.go.
+
+func TestGetBasePathToUse(t *testing.T) {
+	tests := []struct {
+		name         string
+		atmosConfig  *schema.AtmosConfiguration
+		expectedPath string
+	}{
+		{
+			name: "returns BasePathAbsolute when set",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePathAbsolute: "/absolute/path",
+				BasePath:         "/relative/path",
+			},
+			expectedPath: "/absolute/path",
+		},
+		{
+			name: "returns BasePath when BasePathAbsolute is empty",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePathAbsolute: "",
+				BasePath:         "/relative/path",
+			},
+			expectedPath: "/relative/path",
+		},
+		{
+			name: "returns empty when both are empty",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePathAbsolute: "",
+				BasePath:         "",
+			},
+			expectedPath: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getBasePathToUse(tt.atmosConfig)
+			assert.Equal(t, tt.expectedPath, result)
+		})
+	}
+}
 
 func TestFindValidationSection(t *testing.T) {
 	tests := []struct {
@@ -285,6 +326,9 @@ errors["process_env section is empty"] {
 }
 
 func TestValidateComponentInternal_ProcessEnvSectionContent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows: uses Unix-specific shell commands")
+	}
 	// Test specifically that the process environment section contains expected content.
 
 	// Create a temporary directory for testing.
@@ -985,6 +1029,10 @@ func TestExecuteValidateComponent_WithComponentValidationSettings(t *testing.T) 
 	// Change to the test fixtures directory.
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
 	t.Chdir(fixturesDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	info := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(info, true)

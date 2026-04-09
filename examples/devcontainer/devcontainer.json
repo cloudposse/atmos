@@ -1,0 +1,42 @@
+{
+  "name": "Geodesic",
+  "image": "cloudposse/geodesic:latest",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace",
+
+  "mounts": [
+    "type=bind,source=${localEnv:HOME}/.config,target=/root/.config",
+    "type=bind,source=${localEnv:HOME}/.ssh,target=/root/.ssh,readonly",
+    "type=bind,source=${localEnv:HOME}/.kube,target=/root/.kube",
+    "type=bind,source=${localEnv:HOME}/.terraform.d,target=/root/.terraform.d"
+  ],
+
+  "forwardPorts": [8080, 3000],
+
+  "portsAttributes": {
+    "8080": {
+      "label": "Web Server",
+      "protocol": "http"
+    },
+    "3000": {
+      "label": "Development Server",
+      "protocol": "http"
+    }
+  },
+
+  "containerEnv": {
+    "ATMOS_BASE_PATH": "/workspace",
+    "ATMOS_XDG_CONFIG_HOME": "/root/.config",
+    "ATMOS_XDG_DATA_HOME": "/root/.local/share",
+    "ATMOS_XDG_CACHE_HOME": "/root/.cache",
+    "TERM": "${localEnv:TERM}"
+  },
+
+  "remoteUser": "root",
+
+  "runArgs": [
+    "--hostname=geodesic"
+  ],
+
+  "userEnvProbe": "loginInteractiveShell"
+}

@@ -1,11 +1,11 @@
 - Validate all the schemas
 
-```bash
+```shell
  $ atmos validate schema
 ```
 
 - Validate specific schema
 
-```
+```shell
  $ atmos validate schema [schemaToValidate]
 ```

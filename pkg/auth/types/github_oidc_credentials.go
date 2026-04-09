@@ -49,7 +49,8 @@ func (c *OIDCCredentials) GetExpiration() (*time.Time, error) {
 	if claims.Exp == 0 {
 		return nil, nil
 	}
-	t := time.Unix(claims.Exp, 0).UTC()
+	// Convert to local timezone for display to user.
+	t := time.Unix(claims.Exp, 0).Local()
 	return &t, nil
 }
 

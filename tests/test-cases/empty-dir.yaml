@@ -45,6 +45,9 @@ tests:
     description: "Check that atmos command outputs helpful information to get started"
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
+    env:
+      # Set explicit config path to prevent parent directory search
+      ATMOS_CLI_CONFIG_PATH: "."
     args: []
     expect:
       diff: []

@@ -1,0 +1,10 @@
+{
+  "label": "components",
+  "className": "command",
+  "collapsed": true,
+  "collapsible": true,
+  "link": {
+    "type": "doc",
+    "id": "stacks/components/index"
+  }
+}

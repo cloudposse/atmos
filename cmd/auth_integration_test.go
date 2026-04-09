@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,6 +24,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 
 	// Create test auth configuration
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-aws-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -55,6 +57,9 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 
 	t.Run("AuthManager Integration", func(t *testing.T) {
 		// Create auth manager with all dependencies
+		authStackInfo := &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
 
@@ -62,7 +67,8 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 			authConfig,
 			credStore,
 			validator,
-			nil,
+			authStackInfo,
+			"",
 		)
 		require.NoError(t, err)
 		assert.NotNil(t, authManager)
@@ -190,11 +196,13 @@ func TestAuthCommandCompletion(t *testing.T) {
 		// Call the completion function.
 		completions, directive := completionFunc(authEnvCmd, []string{}, "")
 
-		// Verify we get the expected formats.
-		assert.Equal(t, 3, len(completions))
+		// Verify we get the expected formats (json + env.SupportedFormats).
+		assert.Equal(t, 5, len(completions))
 		assert.Contains(t, completions, "json")
 		assert.Contains(t, completions, "bash")
 		assert.Contains(t, completions, "dotenv")
+		assert.Contains(t, completions, "env")
+		assert.Contains(t, completions, "github")
 		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
 	})
 
@@ -219,6 +227,14 @@ func TestAuthCommandCompletion(t *testing.T) {
 
 // TestAuthEnvFormatCompletion specifically tests the format flag completion.
 func TestAuthEnvFormatCompletion(t *testing.T) {
+	// Build expected formats: json + env.SupportedFormats.
+	// JSON is handled separately in auth_env.go, not via pkg/env.
+	expectedFormats := make([]string, 0, len(env.SupportedFormats)+1)
+	expectedFormats = append(expectedFormats, "json")
+	for _, f := range env.SupportedFormats {
+		expectedFormats = append(expectedFormats, string(f))
+	}
+
 	t.Run("format flag provides correct completions", func(t *testing.T) {
 		// Get the completion function for the format flag.
 		completionFunc, exists := authEnvCmd.GetFlagCompletionFunc("format")
@@ -228,7 +244,7 @@ func TestAuthEnvFormatCompletion(t *testing.T) {
 		completions, directive := completionFunc(authEnvCmd, []string{}, "")
 
 		// Verify all supported formats are present.
-		assert.ElementsMatch(t, SupportedFormats, completions)
+		assert.ElementsMatch(t, expectedFormats, completions)
 		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
 	})
 
@@ -241,7 +257,7 @@ func TestAuthEnvFormatCompletion(t *testing.T) {
 		completions, _ := completionFunc(authEnvCmd, []string{}, "js")
 
 		// Should still return all formats (filtering is done by shell).
-		assert.ElementsMatch(t, SupportedFormats, completions)
+		assert.ElementsMatch(t, expectedFormats, completions)
 	})
 }
 

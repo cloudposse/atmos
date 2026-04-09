@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -273,7 +275,7 @@ func (c *testCreds) Validate(ctx context.Context) (*types.ValidationInfo, error)
 	return &types.ValidationInfo{Expiration: c.exp}, nil
 }
 
-func (s *testStore) Store(alias string, creds types.ICredentials) error {
+func (s *testStore) Store(alias string, creds types.ICredentials, realm string) error {
 	if s.data == nil {
 		s.data = map[string]any{}
 	}
@@ -281,7 +283,7 @@ func (s *testStore) Store(alias string, creds types.ICredentials) error {
 	return nil
 }
 
-func (s *testStore) Retrieve(alias string) (types.ICredentials, error) {
+func (s *testStore) Retrieve(alias string, realm string) (types.ICredentials, error) {
 	if s.retrieveErr != nil {
 		if err, ok := s.retrieveErr[alias]; ok {
 			return nil, err
@@ -296,9 +298,9 @@ func (s *testStore) Retrieve(alias string) (types.ICredentials, error) {
 	}
 	return v.(types.ICredentials), nil
 }
-func (s *testStore) Delete(alias string) error { delete(s.data, alias); return nil }
-func (s *testStore) List() ([]string, error)   { return nil, nil }
-func (s *testStore) IsExpired(alias string) (bool, error) {
+func (s *testStore) Delete(alias string, realm string) error { delete(s.data, alias); return nil }
+func (s *testStore) List(realm string) ([]string, error)     { return nil, nil }
+func (s *testStore) IsExpired(alias string, realm string) (bool, error) {
 	if s.expired != nil {
 		return s.expired[alias], nil
 	}
@@ -325,11 +327,13 @@ func (p *testProvider) Authenticate(_ context.Context) (types.ICredentials, erro
 }
 func (p *testProvider) Validate() error                         { return nil }
 func (p *testProvider) Environment() (map[string]string, error) { return map[string]string{}, nil }
+func (p *testProvider) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (p *testProvider) Logout(_ context.Context) error          { return nil }
 func (p *testProvider) GetFilesDisplayPath() string             { return "~/.aws/atmos" }
 func (p *testProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
+func (p *testProvider) SetRealm(_ string) {}
 
 func TestManager_getProviderForIdentity_NameAndAlias(t *testing.T) {
 	m := &manager{
@@ -493,10 +497,9 @@ func TestManager_Whoami_FallbackAuthenticationFails(t *testing.T) {
 	info, err := m.Whoami(context.Background(), "dev")
 
 	// Should return error.
-	// Note: Returns the original GetCachedCredentials error, not the Authenticate error.
 	assert.Error(t, err)
 	assert.Nil(t, info)
-	assert.Contains(t, err.Error(), "no credentials found")
+	assert.Contains(t, err.Error(), "failed to authenticate via credential chain")
 }
 
 func TestManager_Whoami_FallbackAuthenticationSucceeds(t *testing.T) {
@@ -665,6 +668,12 @@ func (m *mockIdentityForFallback) PrepareEnvironment(_ context.Context, environ 
 	return environ, nil
 }
 
+func (m *mockIdentityForFallback) Paths() ([]types.Path, error) {
+	return []types.Path{}, nil
+}
+
+func (m *mockIdentityForFallback) SetRealm(_ string) {}
+
 func TestManager_initializeProvidersAndIdentities(t *testing.T) {
 	// Providers: invalid kind.
 	m := &manager{config: &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}}
@@ -693,11 +702,14 @@ func TestManager_findFirstValidCachedCredentials(t *testing.T) {
 	expiredExp := now.Add(-1 * time.Hour) // Expired: expired 1 hour ago.
 	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 
-	// Both id1 and id2 have valid credentials -> should return id2 (last in chain).
+	// Both id1 and id2 have valid credentials -> should return id1 (second-to-last).
+	// The target identity (last in chain) is always skipped to force re-authentication
+	// via its Authenticate() method, preventing stale cached credentials from being
+	// returned without performing the actual API call (e.g., AssumeRole).
 	s.data["id2"] = &testCreds{exp: &validExp}
 	s.data["id1"] = &testCreds{exp: &validExp}
 	idx := m.findFirstValidCachedCredentials()
-	require.Equal(t, 2, idx)
+	require.Equal(t, 1, idx)
 
 	// id2 expired, id1 still valid -> should pick id1.
 	s.data["id2"] = &testCreds{exp: &expiredExp}
@@ -725,6 +737,7 @@ func (s stubUserID) Authenticate(_ context.Context, _ types.ICredentials) (types
 }
 func (s stubUserID) Validate() error                         { return nil }
 func (s stubUserID) Environment() (map[string]string, error) { return map[string]string{}, nil }
+func (s stubUserID) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
@@ -734,6 +747,7 @@ func (s stubUserID) LoadCredentials(_ context.Context) (types.ICredentials, erro
 func (s stubUserID) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
+func (s stubUserID) SetRealm(_ string) {}
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
 	creds := &testCreds{}
@@ -799,6 +813,7 @@ func (s stubPSIdentity) Authenticate(_ context.Context, base types.ICredentials)
 }
 func (s stubPSIdentity) Validate() error                         { return nil }
 func (s stubPSIdentity) Environment() (map[string]string, error) { return s.env, nil }
+func (s stubPSIdentity) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	if s.postCalled != nil {
 		*s.postCalled = true
@@ -814,32 +829,33 @@ func (s stubPSIdentity) LoadCredentials(_ context.Context) (types.ICredentials, 
 func (s stubPSIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
+func (s stubPSIdentity) SetRealm(_ string) {}
 
 func TestNewAuthManager_ParamValidation(t *testing.T) {
 	t.Run("nil config", func(t *testing.T) {
-		_, err := NewAuthManager(nil, &testStore{}, dummyValidator{}, nil)
+		_, err := NewAuthManager(nil, &testStore{}, dummyValidator{}, nil, "")
 		assert.ErrorIs(t, err, errUtils.ErrNilParam)
 	})
 	t.Run("nil store", func(t *testing.T) {
-		_, err := NewAuthManager(&schema.AuthConfig{}, nil, dummyValidator{}, nil)
+		_, err := NewAuthManager(&schema.AuthConfig{}, nil, dummyValidator{}, nil, "")
 		assert.ErrorIs(t, err, errUtils.ErrNilParam)
 	})
 	t.Run("nil validator", func(t *testing.T) {
-		_, err := NewAuthManager(&schema.AuthConfig{}, &testStore{}, nil, nil)
+		_, err := NewAuthManager(&schema.AuthConfig{}, &testStore{}, nil, nil, "")
 		assert.ErrorIs(t, err, errUtils.ErrNilParam)
 	})
 }
 
 func TestNewAuthManager_InitializeErrors(t *testing.T) {
 	t.Run("invalid provider kind", func(t *testing.T) {
-		cfg := &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}
-		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil)
+		cfg := &schema.AuthConfig{Realm: "test-realm", Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}
+		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil, "")
 		assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
 	})
 
 	t.Run("invalid identity kind", func(t *testing.T) {
-		cfg := &schema.AuthConfig{Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}
-		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil)
+		cfg := &schema.AuthConfig{Realm: "test-realm", Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}
+		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil, "")
 		assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
 	})
 }
@@ -972,78 +988,6 @@ func TestManager_ListProviders(t *testing.T) {
 	assert.Contains(t, providers, "github")
 }
 
-func TestManager_GetProviders(t *testing.T) {
-	expectedProviders := map[string]schema.Provider{
-		"sso":  {Kind: "aws/iam-identity-center", Region: "us-east-1"},
-		"saml": {Kind: "aws/saml", URL: "https://example.com", Region: "us-west-2"},
-	}
-
-	m := &manager{
-		config: &schema.AuthConfig{
-			Providers: expectedProviders,
-		},
-	}
-
-	providers := m.GetProviders()
-	assert.Equal(t, expectedProviders, providers)
-	assert.Equal(t, "aws/iam-identity-center", providers["sso"].Kind)
-	assert.Equal(t, "aws/saml", providers["saml"].Kind)
-	assert.Equal(t, "us-east-1", providers["sso"].Region)
-	assert.Equal(t, "us-west-2", providers["saml"].Region)
-}
-
-func TestManager_GetIdentities(t *testing.T) {
-	expectedIdentities := map[string]schema.Identity{
-		"dev":  {Kind: "aws/user", Default: true},
-		"prod": {Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/Prod"}},
-	}
-
-	m := &manager{
-		config: &schema.AuthConfig{
-			Identities: expectedIdentities,
-		},
-	}
-
-	identities := m.GetIdentities()
-	assert.Equal(t, expectedIdentities, identities)
-	assert.Equal(t, "aws/user", identities["dev"].Kind)
-	assert.Equal(t, "aws/assume-role", identities["prod"].Kind)
-	assert.True(t, identities["dev"].Default)
-	assert.False(t, identities["prod"].Default)
-}
-
-func TestManager_GetStackInfo(t *testing.T) {
-	stackInfo := &schema.ConfigAndStacksInfo{
-		ComponentEnvSection: schema.AtmosSectionMapType{"TEST": "value"},
-		Identity:            "test-identity",
-	}
-
-	m := &manager{
-		stackInfo: stackInfo,
-	}
-
-	result := m.GetStackInfo()
-	assert.Equal(t, stackInfo, result)
-	assert.Equal(t, "value", result.ComponentEnvSection["TEST"])
-	assert.Equal(t, "test-identity", result.Identity)
-}
-
-func TestManager_GetChain_Empty(t *testing.T) {
-	m := &manager{}
-
-	chain := m.GetChain()
-	assert.Empty(t, chain)
-}
-
-func TestManager_GetChain_WithData(t *testing.T) {
-	m := &manager{
-		chain: []string{"provider", "identity1", "identity2"},
-	}
-
-	chain := m.GetChain()
-	assert.Equal(t, []string{"provider", "identity1", "identity2"}, chain)
-}
-
 // stubIdentity implements types.Identity minimally for provider lookups.
 type stubIdentity struct{ provider string }
 
@@ -1054,6 +998,7 @@ func (s stubIdentity) Authenticate(_ context.Context, _ types.ICredentials) (typ
 }
 func (s stubIdentity) Validate() error                         { return nil }
 func (s stubIdentity) Environment() (map[string]string, error) { return nil, nil }
+func (s stubIdentity) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
@@ -1063,6 +1008,7 @@ func (s stubIdentity) LoadCredentials(_ context.Context) (types.ICredentials, er
 func (s stubIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
+func (s stubIdentity) SetRealm(_ string) {}
 
 func TestBuildAuthenticationChain_Basic(t *testing.T) {
 	m := &manager{config: &schema.AuthConfig{
@@ -1328,6 +1274,10 @@ func (s *stubEnvIdentity) Environment() (map[string]string, error) {
 	return s.env, s.envErr
 }
 
+func (s *stubEnvIdentity) Paths() ([]types.Path, error) {
+	return []types.Path{}, nil
+}
+
 func (s *stubEnvIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
@@ -1343,6 +1293,7 @@ func (s *stubEnvIdentity) LoadCredentials(_ context.Context) (types.ICredentials
 func (s *stubEnvIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
+func (s *stubEnvIdentity) SetRealm(_ string) {}
 
 func TestManager_GetEnvironmentVariables(t *testing.T) {
 	tests := []struct {
@@ -1524,6 +1475,754 @@ func TestManager_buildWhoamiInfoFromEnvironment(t *testing.T) {
 				assert.NotNil(t, info.Credentials)
 			} else {
 				assert.Nil(t, info.Credentials)
+			}
+		})
+	}
+}
+
+// Mock provisioner for testing provisionIdentities.
+type mockProvisioner struct {
+	testProvider
+	provisionResult *types.ProvisioningResult
+	provisionError  error
+}
+
+func (m *mockProvisioner) ProvisionIdentities(ctx context.Context, creds types.ICredentials) (*types.ProvisioningResult, error) {
+	return m.provisionResult, m.provisionError
+}
+
+func TestManager_provisionIdentities_ProviderDoesNotSupportProvisioning(t *testing.T) {
+	// Test that provisionIdentities skips providers that don't implement Provisioner.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provider := &testProvider{name: "test-provider"}
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should not panic and should return without error (non-fatal).
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provider, creds)
+	})
+}
+
+func TestManager_provisionIdentities_NoIdentitiesProvisioned(t *testing.T) {
+	// Test that provisionIdentities handles empty result gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider: testProvider{name: "test-provider"},
+		provisionResult: &types.ProvisioningResult{
+			Identities: map[string]*schema.Identity{},
+			Metadata: types.ProvisioningMetadata{
+				Counts: &types.ProvisioningCounts{
+					Accounts:   0,
+					Roles:      0,
+					Identities: 0,
+				},
+			},
+		},
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle empty result gracefully.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_provisionIdentities_ProvisioningError(t *testing.T) {
+	// Test that provisionIdentities handles errors gracefully (non-fatal).
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider:   testProvider{name: "test-provider"},
+		provisionError: fmt.Errorf("provisioning failed"),
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle error gracefully (non-fatal operation).
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_provisionIdentities_NilResult(t *testing.T) {
+	// Test that provisionIdentities handles nil result gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider:    testProvider{name: "test-provider"},
+		provisionResult: nil,
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle nil result gracefully.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_writeProvisionedIdentities_Success(t *testing.T) {
+	// Test successful write of provisioned identities.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	result := &types.ProvisioningResult{
+		Provider: "test-provider",
+		Identities: map[string]*schema.Identity{
+			"test-identity": {
+				Provider: "test-provider",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "test",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	err := mgr.writeProvisionedIdentities(result)
+	require.NoError(t, err)
+
+	// Verify the file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
+
+	// Verify file contains expected content.
+	data, err := os.ReadFile(expectedPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "test-identity")
+	assert.Contains(t, string(data), "test-provider")
+}
+
+func TestManager_removeProvisionedIdentitiesCache_Success(t *testing.T) {
+	// Test successful removal of provisioned identities cache.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create a provisioning result and write it to cache first.
+	result := &types.ProvisioningResult{
+		Provider: "test-provider",
+		Identities: map[string]*schema.Identity{
+			"test-identity": {
+				Provider: "test-provider",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "test",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	err := mgr.writeProvisionedIdentities(result)
+	require.NoError(t, err)
+
+	// Verify the file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
+
+	// Remove the cache.
+	err = mgr.removeProvisionedIdentitiesCache("test-provider")
+	require.NoError(t, err)
+
+	// Verify the file was removed.
+	assert.NoFileExists(t, expectedPath)
+}
+
+func TestManager_removeProvisionedIdentitiesCache_FileDoesNotExist(t *testing.T) {
+	// Test that removeProvisionedIdentitiesCache handles non-existent files gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Try to remove a cache that doesn't exist - should succeed (no-op).
+	err := mgr.removeProvisionedIdentitiesCache("nonexistent-provider")
+	// The Remove method should handle this gracefully.
+	assert.NoError(t, err)
+}
+
+func TestManager_removeProvisionedIdentitiesCache_WriterCreationFailure(t *testing.T) {
+	// Test that removeProvisionedIdentitiesCache returns error when writer creation fails.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Set XDG_CACHE_HOME to a regular file (not a directory).
+	// This prevents NewProvisioningWriter from creating the required subdirectory,
+	// causing a deterministic failure on all platforms (Windows, macOS, Linux).
+	tempDir := t.TempDir()
+	blocker := filepath.Join(tempDir, "xdg-cache-file")
+	require.NoError(t, os.WriteFile(blocker, []byte{}, 0o600))
+	t.Setenv("XDG_CACHE_HOME", blocker)
+
+	err := mgr.removeProvisionedIdentitiesCache("test-provider")
+	assert.Error(t, err)
+}
+
+func TestManager_provisionIdentities_SuccessPath(t *testing.T) {
+	// Test successful provisioning and caching of identities.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider: testProvider{name: "test-provider"},
+		provisionResult: &types.ProvisioningResult{
+			Provider: "test-provider",
+			Identities: map[string]*schema.Identity{
+				"test-identity-1": {
+					Provider: "test-provider",
+				},
+				"test-identity-2": {
+					Provider: "test-provider",
+				},
+			},
+			Metadata: types.ProvisioningMetadata{
+				Source: "test",
+				Counts: &types.ProvisioningCounts{
+					Accounts:   2,
+					Roles:      5,
+					Identities: 2,
+				},
+			},
+		},
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should successfully provision and cache identities.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+
+	// Verify the cache file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
+}
+
+func TestManager_GetIdentities(t *testing.T) {
+	// Test GetIdentities returns the configured identities.
+	expectedIdentities := map[string]schema.Identity{
+		"identity1": {Kind: "aws/permission-set", Provider: "aws-sso"},
+		"identity2": {Kind: "aws/assume-role", Provider: "aws-saml"},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Identities: expectedIdentities,
+		},
+	}
+
+	result := mgr.GetIdentities()
+	assert.Equal(t, expectedIdentities, result)
+}
+
+func TestManager_GetProviders(t *testing.T) {
+	// Test GetProviders returns the configured providers.
+	expectedProviders := map[string]schema.Provider{
+		"aws-sso":  {Kind: "aws/iam-identity-center", Region: "us-east-1"},
+		"aws-saml": {Kind: "aws/saml", Region: "us-west-2"},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Providers: expectedProviders,
+		},
+	}
+
+	result := mgr.GetProviders()
+	assert.Equal(t, expectedProviders, result)
+}
+
+func TestManager_SetupAuthLogging(t *testing.T) {
+	tests := []struct {
+		name           string
+		logLevel       string
+		expectedPrefix string
+	}{
+		{
+			name:           "sets auth prefix and Debug level",
+			logLevel:       "Debug",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Info level",
+			logLevel:       "Info",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Warning level",
+			logLevel:       "Warning",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Error level",
+			logLevel:       "Error",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix with empty log level",
+			logLevel:       "",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix with invalid log level",
+			logLevel:       "InvalidLevel",
+			expectedPrefix: "atmos-auth",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Import log package to check state.
+			log := require.New(t)
+
+			mgr := &manager{
+				config: &schema.AuthConfig{
+					Logs: schema.Logs{
+						Level: tt.logLevel,
+					},
+				},
+			}
+
+			// Call setupAuthLogging and immediately call cleanup.
+			cleanup := mgr.setupAuthLogging()
+
+			// Verify prefix was set (we can't easily check the actual prefix value
+			// without accessing internal logger state, but we verify cleanup works).
+			log.NotNil(cleanup, "cleanup function should be returned")
+
+			// Call cleanup to restore state.
+			cleanup()
+
+			// After cleanup, verify we can still log (no panic).
+			// This is a basic sanity check that cleanup worked.
+		})
+	}
+}
+
+func TestManager_SetupAuthLogging_RestoresState(t *testing.T) {
+	// This test verifies that setupAuthLogging restores the original log state.
+	log := require.New(t)
+
+	// The log package is already imported at the file level, we can't test
+	// the actual level restoration without more complex mocking.
+	// This test verifies the cleanup function doesn't panic.
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Logs: schema.Logs{
+				Level: "Debug",
+			},
+		},
+	}
+
+	// Setup auth logging.
+	cleanup := mgr.setupAuthLogging()
+	log.NotNil(cleanup, "cleanup function should be returned")
+
+	// Call cleanup - should not panic.
+	cleanup()
+}
+
+func TestManager_AuthenticateProvider_Success(t *testing.T) {
+	// Create test credentials with expiration.
+	exp := time.Now().Add(time.Hour)
+	creds := &testCreds{exp: &exp}
+
+	provider := &testProvider{
+		name:  "test-provider",
+		creds: creds,
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"test-provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	whoami, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	require.NoError(t, err)
+	assert.NotNil(t, whoami)
+	assert.Equal(t, "test-provider", whoami.Provider)
+	assert.Empty(t, whoami.Identity, "provider-only auth should not have identity")
+	// Note: testCreds doesn't populate expiration in whoami like AWSCredentials would
+}
+
+func TestManager_AuthenticateProvider_ProviderNotFound(t *testing.T) {
+	mgr := &manager{
+		config:          &schema.AuthConfig{},
+		providers:       map[string]types.Provider{},
+		credentialStore: &testStore{},
+	}
+
+	_, err := mgr.AuthenticateProvider(context.Background(), "nonexistent-provider")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProviderNotFound)
+}
+
+func TestManager_AuthenticateProvider_CaseInsensitive(t *testing.T) {
+	// Test that provider name lookup is case-insensitive.
+	provider := &testProvider{
+		name:  "Test-Provider",
+		creds: &testCreds{},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"Test-Provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	// Try lowercase.
+	whoami, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	require.NoError(t, err)
+	assert.Equal(t, "Test-Provider", whoami.Provider, "should use original case")
+
+	// Try uppercase.
+	whoami, err = mgr.AuthenticateProvider(context.Background(), "TEST-PROVIDER")
+	require.NoError(t, err)
+	assert.Equal(t, "Test-Provider", whoami.Provider, "should use original case")
+}
+
+func TestManager_AuthenticateProvider_AuthenticationFailure(t *testing.T) {
+	provider := &testProvider{
+		name:    "test-provider",
+		authErr: fmt.Errorf("authentication failed"),
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"test-provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	_, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+}
+
+func TestManager_ResolvePrincipalSetting(t *testing.T) {
+	tests := []struct {
+		name           string
+		identities     map[string]schema.Identity
+		targetIdentity string
+		key            string
+		expectedValue  interface{}
+		expectedFound  bool
+	}{
+		{
+			name: "returns value from current identity",
+			identities: map[string]schema.Identity{
+				"dev": {
+					Kind:      "aws/permission-set",
+					Via:       &schema.IdentityVia{Provider: "sso"},
+					Principal: map[string]any{"region": "us-west-2"},
+				},
+			},
+			targetIdentity: "dev",
+			key:            "region",
+			expectedValue:  "us-west-2",
+			expectedFound:  true,
+		},
+		{
+			name: "returns value from parent identity when not set on current",
+			identities: map[string]schema.Identity{
+				"parent": {
+					Kind:      "aws/permission-set",
+					Via:       &schema.IdentityVia{Provider: "sso"},
+					Principal: map[string]any{"region": "eu-west-1"},
+				},
+				"child": {
+					Kind:      "aws/assume-role",
+					Via:       &schema.IdentityVia{Identity: "parent"},
+					Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/test"},
+				},
+			},
+			targetIdentity: "child",
+			key:            "region",
+			expectedValue:  "eu-west-1",
+			expectedFound:  true,
+		},
+		{
+			name: "current identity overrides parent",
+			identities: map[string]schema.Identity{
+				"parent": {
+					Kind:      "aws/permission-set",
+					Via:       &schema.IdentityVia{Provider: "sso"},
+					Principal: map[string]any{"region": "eu-west-1"},
+				},
+				"child": {
+					Kind:      "aws/assume-role",
+					Via:       &schema.IdentityVia{Identity: "parent"},
+					Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/test", "region": "ap-south-1"},
+				},
+			},
+			targetIdentity: "child",
+			key:            "region",
+			expectedValue:  "ap-south-1",
+			expectedFound:  true,
+		},
+		{
+			name: "returns false when key not found in chain",
+			identities: map[string]schema.Identity{
+				"dev": {
+					Kind:      "aws/permission-set",
+					Via:       &schema.IdentityVia{Provider: "sso"},
+					Principal: map[string]any{"name": "dev"},
+				},
+			},
+			targetIdentity: "dev",
+			key:            "region",
+			expectedValue:  nil,
+			expectedFound:  false,
+		},
+		{
+			name:           "returns false for non-existent identity",
+			identities:     map[string]schema.Identity{},
+			targetIdentity: "nonexistent",
+			key:            "region",
+			expectedValue:  nil,
+			expectedFound:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authConfig := &schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"sso": {Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://example.awsapps.com/start"},
+				},
+				Identities: tt.identities,
+			}
+
+			m := &manager{
+				config:          authConfig,
+				providers:       make(map[string]types.Provider),
+				identities:      make(map[string]types.Identity),
+				credentialStore: &testStore{},
+			}
+
+			val, found := m.ResolvePrincipalSetting(tt.targetIdentity, tt.key)
+			assert.Equal(t, tt.expectedFound, found)
+			assert.Equal(t, tt.expectedValue, val)
+		})
+	}
+}
+
+func TestManager_ResolveProviderConfig(t *testing.T) {
+	tests := []struct {
+		name           string
+		providers      map[string]schema.Provider
+		identities     map[string]schema.Identity
+		targetIdentity string
+		expectedRegion string
+		expectedFound  bool
+	}{
+		{
+			name: "returns provider for direct identity",
+			providers: map[string]schema.Provider{
+				"sso": {Kind: "aws/iam-identity-center", Region: "us-west-2", StartURL: "https://example.awsapps.com/start"},
+			},
+			identities: map[string]schema.Identity{
+				"dev": {
+					Kind: "aws/permission-set",
+					Via:  &schema.IdentityVia{Provider: "sso"},
+				},
+			},
+			targetIdentity: "dev",
+			expectedRegion: "us-west-2",
+			expectedFound:  true,
+		},
+		{
+			name: "returns provider for chained identity",
+			providers: map[string]schema.Provider{
+				"sso": {Kind: "aws/iam-identity-center", Region: "eu-central-1", StartURL: "https://example.awsapps.com/start"},
+			},
+			identities: map[string]schema.Identity{
+				"parent": {
+					Kind: "aws/permission-set",
+					Via:  &schema.IdentityVia{Provider: "sso"},
+				},
+				"child": {
+					Kind: "aws/assume-role",
+					Via:  &schema.IdentityVia{Identity: "parent"},
+				},
+			},
+			targetIdentity: "child",
+			expectedRegion: "eu-central-1",
+			expectedFound:  true,
+		},
+		{
+			name:           "returns false for non-existent identity",
+			providers:      map[string]schema.Provider{},
+			identities:     map[string]schema.Identity{},
+			targetIdentity: "nonexistent",
+			expectedRegion: "",
+			expectedFound:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authConfig := &schema.AuthConfig{
+				Providers:  tt.providers,
+				Identities: tt.identities,
+			}
+
+			m := &manager{
+				config:          authConfig,
+				providers:       make(map[string]types.Provider),
+				identities:      make(map[string]types.Identity),
+				credentialStore: &testStore{},
+			}
+
+			provider, found := m.ResolveProviderConfig(tt.targetIdentity)
+			assert.Equal(t, tt.expectedFound, found)
+			if found {
+				assert.Equal(t, tt.expectedRegion, provider.Region)
+			}
+		})
+	}
+}
+
+func TestInitializeIdentities(t *testing.T) {
+	tests := []struct {
+		name             string
+		identities       map[string]schema.Identity
+		stackInfo        *schema.ConfigAndStacksInfo
+		expectError      bool
+		expectedSentinel error
+		expectedDetails  []string
+		expectedCount    int
+	}{
+		{
+			name:       "empty kind with profile suggests profile mismatch",
+			identities: map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo: &schema.ConfigAndStacksInfo{
+				ProfilesFromArg: []string{"marketplace"},
+			},
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"core-root/terraform", "is not configured in the", "marketplace"},
+		},
+		{
+			name:             "empty kind without profile suggests specifying one",
+			identities:       map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo:        &schema.ConfigAndStacksInfo{},
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"core-root/terraform", "is not configured", "Did you forget to specify a profile?"},
+		},
+		{
+			name:             "empty kind with nil stackInfo suggests specifying profile",
+			identities:       map[string]schema.Identity{"core-root/terraform": {Kind: ""}},
+			stackInfo:        nil,
+			expectError:      true,
+			expectedSentinel: errUtils.ErrInvalidIdentityConfig,
+			expectedDetails:  []string{"Did you forget to specify a profile?"},
+		},
+		{
+			name:          "valid kind succeeds",
+			identities:    map[string]schema.Identity{"mock-identity": {Kind: "mock"}},
+			stackInfo:     &schema.ConfigAndStacksInfo{},
+			expectError:   false,
+			expectedCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				config: &schema.AuthConfig{
+					Identities: tt.identities,
+				},
+				identities: make(map[string]types.Identity),
+				stackInfo:  tt.stackInfo,
+			}
+
+			err := m.initializeIdentities()
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedSentinel)
+				details := cockroachErrors.GetAllDetails(err)
+				require.NotEmpty(t, details)
+				for _, expected := range tt.expectedDetails {
+					assert.Contains(t, details[0], expected)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, m.identities, tt.expectedCount)
 			}
 		})
 	}

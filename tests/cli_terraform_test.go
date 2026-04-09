@@ -8,11 +8,21 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func TestCLITerraformClean(t *testing.T) {
-	// Skip if atmosRunner is not initialized
-	if atmosRunner == nil || skipReason != "" {
+	// Initialize atmosRunner if not already done.
+	if atmosRunner == nil {
+		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
+		if err := atmosRunner.Build(); err != nil {
+			t.Skipf("Failed to initialize Atmos: %v", err)
+		}
+	}
+
+	// Skip if there's a skip reason.
+	if skipReason != "" {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
@@ -27,8 +37,8 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Force clean everything (no TTY available in CI)
 	runTerraformCleanCommand(t, "--force")
-	// Clean specific component with force (no TTY available in CI)
-	runTerraformCleanCommand(t, "mycomponent", "--force")
+	// Clean specific component with force (requires --stack after refactor)
+	runTerraformCleanCommand(t, "mycomponent", "-s", "nonprod", "--force")
 	// Clean component with stack with force (no TTY available in CI)
 	runTerraformCleanCommand(t, "mycomponent", "-s", "nonprod", "--force")
 
@@ -66,13 +76,9 @@ func runTerraformApply(t *testing.T, environment string) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	t.Cleanup(func() {
-		if t.Failed() {
-			t.Logf("Terraform stdout:\n%s", stdout.String())
-			t.Logf("Terraform stderr:\n%s", stderr.String())
-		}
-	})
 	if err != nil {
+		t.Logf("Terraform stdout:\n%s", stdout.String())
+		t.Logf("Terraform stderr:\n%s", stderr.String())
 		t.Fatalf("Failed to run terraform apply mycomponent -s %s: %v", environment, stderr.String())
 	}
 }

@@ -5,101 +5,60 @@
  * LICENSE file in the root directory of this source tree.
  */
 import React, {memo, useState} from 'react';
-import {useThemeConfig} from '@docusaurus/theme-common';
+import useGlobalData from '@docusaurus/useGlobalData';
 import type {BlogSidebarItem} from '@docusaurus/plugin-content-blog';
 import Heading from '@theme/Heading';
+import {compareVersionsDescending} from '@site/src/components/ChangelogTimeline/utils';
 
-// Custom function to group by year and month.
-function groupBlogSidebarItemsByYearMonth(
+interface ReleaseGroup {
+  release: string;
+  items: BlogSidebarItem[];
+}
+
+/**
+ * Groups blog sidebar items by release version using the releaseMap from global data.
+ * Posts without a release are grouped under 'unreleased'.
+ */
+function groupBlogSidebarItemsByRelease(
   items: BlogSidebarItem[],
-): Map<string, Map<string, BlogSidebarItem[]>> {
-  // Temporary structure to store month data with numeric values for sorting.
-  interface MonthData {
-    items: BlogSidebarItem[];
-    monthNum: number;
-  }
-  const yearMonthMap = new Map<string, Map<string, MonthData>>();
+  releaseMap: Record<string, string>,
+): ReleaseGroup[] {
+  const releaseGroups = new Map<string, BlogSidebarItem[]>();
 
   items.forEach((item) => {
-    const date = new Date(item.date);
-
-    // Validate date.
-    if (isNaN(date.getTime())) {
-      console.warn(`Invalid date for blog item: ${item.date}`);
-      return;
+    const release = releaseMap[item.permalink] || 'unreleased';
+    if (!releaseGroups.has(release)) {
+      releaseGroups.set(release, []);
     }
-
-    const year = `${date.getFullYear()}`;
-    // Use 'default' locale to respect site's i18n configuration.
-    const month = date.toLocaleString('default', { month: 'long' });
-    const monthNum = date.getMonth(); // 0-11
-
-    if (!yearMonthMap.has(year)) {
-      yearMonthMap.set(year, new Map());
-    }
-
-    const monthMap = yearMonthMap.get(year)!;
-    if (!monthMap.has(month)) {
-      monthMap.set(month, { items: [], monthNum });
-    }
-
-    monthMap.get(month)!.items.push(item);
+    releaseGroups.get(release)!.push(item);
   });
 
-  // Sort years descending.
-  const sortedYears = Array.from(yearMonthMap.keys()).sort((a, b) => parseInt(b) - parseInt(a));
-  const result = new Map<string, Map<string, BlogSidebarItem[]>>();
+  // Sort releases: unreleased first, then by version descending.
+  const sortedReleases = Array.from(releaseGroups.keys()).sort(compareVersionsDescending);
 
-  sortedYears.forEach((year) => {
-    const monthMap = yearMonthMap.get(year)!;
-    // Sort months chronologically within each year (descending) using numeric month values.
-    const sortedMonths = Array.from(monthMap.entries()).sort((a, b) => {
-      return b[1].monthNum - a[1].monthNum; // Descending order (11, 10, ..., 0)
-    });
-
-    const sortedMonthMap = new Map<string, BlogSidebarItem[]>();
-    sortedMonths.forEach(([month, monthData]) => {
-      sortedMonthMap.set(month, monthData.items);
-    });
-
-    result.set(year, sortedMonthMap);
-  });
-
-  return result;
+  return sortedReleases.map((release) => ({
+    release,
+    items: releaseGroups.get(release)!,
+  }));
 }
 
-function BlogSidebarYearGroup({year, yearGroupHeadingClassName, children}: {
-  year: string;
-  yearGroupHeadingClassName?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div role="group">
-      <Heading as="h3" className={yearGroupHeadingClassName}>
-        {year}
-      </Heading>
-      {children}
-    </div>
-  );
-}
-
-function CollapsibleMonthGroup({
-  year,
-  month,
-  monthGroupHeadingClassName,
+function CollapsibleReleaseGroup({
+  release,
   children,
   isDefaultOpen,
+  releaseGroupHeadingClassName,
 }: {
-  year: string;
-  month: string;
-  monthGroupHeadingClassName?: string;
+  release: string;
   children: React.ReactNode;
   isDefaultOpen: boolean;
+  releaseGroupHeadingClassName?: string;
 }) {
   const [isOpen, setIsOpen] = useState(isDefaultOpen);
+  const isUnreleased = release === 'unreleased';
+  const displayRelease = isUnreleased ? 'Unreleased' : release;
 
   return (
-    <div role="group" style={{marginLeft: '0.5rem'}}>
+    <div role="group">
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -108,11 +67,9 @@ function CollapsibleMonthGroup({
           width: '100%',
           background: 'none',
           border: 'none',
-          padding: 0,
+          padding: '0.5rem 0',
           cursor: 'pointer',
           textAlign: 'left',
-          marginTop: '0.5rem',
-          marginBottom: '0.5rem',
         }}
         aria-expanded={isOpen}
       >
@@ -133,19 +90,37 @@ function CollapsibleMonthGroup({
         </svg>
         <Heading
           as="h4"
-          className={monthGroupHeadingClassName}
+          className={releaseGroupHeadingClassName}
           style={{
-            fontSize: '0.875rem',
+            fontSize: '0.9rem',
             margin: 0,
             fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            color: 'var(--ifm-color-gray-600)',
-            opacity: 0.8,
           }}
         >
-          {month}
+          {displayRelease}
         </Heading>
+        {!isUnreleased && (
+          <a
+            href={`https://github.com/cloudposse/atmos/releases/tag/${release}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              marginLeft: '0.5rem',
+              color: 'var(--ifm-color-emphasis-600)',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+            title="View release on GitHub"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14">
+              <path
+                fill="currentColor"
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+              />
+            </svg>
+          </a>
+        )}
       </button>
       {isOpen && <div>{children}</div>}
     </div>
@@ -157,48 +132,26 @@ function BlogSidebarContent({items, yearGroupHeadingClassName, ListComponent}: {
   yearGroupHeadingClassName?: string;
   ListComponent: React.ComponentType<{items: BlogSidebarItem[]}>;
 }) {
-  const themeConfig = useThemeConfig();
-  if (themeConfig.blog.sidebar.groupByYear) {
-    const itemsByYearMonth = groupBlogSidebarItemsByYearMonth(items);
+  const globalData = useGlobalData();
+  const releaseData = globalData['blog-release-data']?.default as {releaseMap: Record<string, string>} | undefined;
+  const releaseMap = releaseData?.releaseMap || {};
 
-    // Determine the most recent month (first in iteration order).
-    let firstMonthKey: string | null = null;
-    for (const [year, monthMap] of itemsByYearMonth.entries()) {
-      for (const month of monthMap.keys()) {
-        firstMonthKey = `${year}-${month}`;
-        break;
-      }
-      if (firstMonthKey) break;
-    }
+  const groupedByRelease = groupBlogSidebarItemsByRelease(items, releaseMap);
 
-    return (
-      <>
-        {Array.from(itemsByYearMonth.entries()).map(([year, monthMap]) => (
-          <BlogSidebarYearGroup
-            key={year}
-            year={year}
-            yearGroupHeadingClassName={yearGroupHeadingClassName}>
-            {Array.from(monthMap.entries()).map(([month, monthItems]) => {
-              const monthKey = `${year}-${month}`;
-              const isDefaultOpen = monthKey === firstMonthKey;
-
-              return (
-                <CollapsibleMonthGroup
-                  key={monthKey}
-                  year={year}
-                  month={month}
-                  monthGroupHeadingClassName={yearGroupHeadingClassName}
-                  isDefaultOpen={isDefaultOpen}>
-                  <ListComponent items={monthItems} />
-                </CollapsibleMonthGroup>
-              );
-            })}
-          </BlogSidebarYearGroup>
-        ))}
-      </>
-    );
-  } else {
-    return <ListComponent items={items} />;
-  }
+  return (
+    <>
+      {groupedByRelease.map((group, index) => (
+        <CollapsibleReleaseGroup
+          key={group.release}
+          release={group.release}
+          isDefaultOpen={index === 0}
+          releaseGroupHeadingClassName={yearGroupHeadingClassName}
+        >
+          <ListComponent items={group.items} />
+        </CollapsibleReleaseGroup>
+      ))}
+    </>
+  );
 }
+
 export default memo(BlogSidebarContent);

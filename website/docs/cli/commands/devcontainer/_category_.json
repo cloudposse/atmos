@@ -1,0 +1,7 @@
+{
+  "label": "devcontainer",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/devcontainer/devcontainer"
+  }
+}

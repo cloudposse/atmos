@@ -67,6 +67,66 @@ func TestSanitizeOutput(t *testing.T) {
 			input:    "token=phc_ABC123def456GHI789jkl012MNO345pqr678",
 			expected: "token=phc_TEST_TOKEN_PLACEHOLDER",
 		},
+		{
+			name:     "macOS temp directory path should be normalized",
+			input:    "TRCE  Using test Git root override path=/var/folders/_l/91ns3hs96sd11p4_lzxh1l140000gn/T/TestCLICommands2870082120/001/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "Linux temp directory path should be normalized",
+			input:    "TRCE  Using test Git root override path=/tmp/TestCLICommands2870082120/001/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "macOS temp home directory path should be normalized",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/var/folders/ly/sz00b8054kv_85k1m9_0dmfc0000gn/T/TestCLICommands123456789/001/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
+		{
+			name:     "Linux temp home directory path should be normalized",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/tmp/TestCLICommands123456789/001/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
+		{
+			name:     "GitHub Actions macOS runner path should be normalized for mock-git-root",
+			input:    "TRCE  Using test Git root override path=/Users/runner/work/atmos/atmos/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "GitHub Actions macOS runner path should be normalized for .atmos",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/Users/runner/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
+		{
+			name:     "GitHub Actions Linux runner path should be normalized for mock-git-root",
+			input:    "TRCE  Using test Git root override path=/home/runner/work/atmos/atmos/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "GitHub Actions Linux runner path should be normalized for .atmos",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/home/runner/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
+		{
+			name:     "Windows path should be normalized for mock-git-root",
+			input:    "TRCE  Using test Git root override path=D:/a/atmos/atmos/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "Windows path should be normalized for .atmos",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=C:/Users/runner/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
+		{
+			name:     "Already sanitized repo path with mock-git-root should be normalized",
+			input:    "TRCE  Using test Git root override path=/absolute/path/to/repo/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "Already sanitized repo path with .atmos should be normalized",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/absolute/path/to/repo/some/subdir/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
 	}
 
 	for _, tt := range tests {
@@ -313,6 +373,496 @@ func TestSanitizeOutput_WindowsCIFailureScenario(t *testing.T) {
 			// Note: This test uses the actual repo root, so it will only verify
 			// that the current fix (case-insensitive regex) works.
 			// The simulated repoRoot parameter would require refactoring sanitizeOutput.
+			result, err := sanitizeOutput(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_WithCustomReplacements tests the custom replacement functionality.
+func TestSanitizeOutput_WithCustomReplacements(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		replacements map[string]string
+		expected     string
+	}{
+		{
+			name:  "Single custom replacement",
+			input: "session-123456 started",
+			replacements: map[string]string{
+				`session-[0-9]+`: "session-12345",
+			},
+			expected: "session-12345 started",
+		},
+		{
+			name:  "Multiple custom replacements",
+			input: "session-987654 with temp_abcdef and id-xyz789",
+			replacements: map[string]string{
+				`session-[0-9]+`: "session-12345",
+				`temp_[a-z]+`:    "temp_xyz",
+				`id-[a-z0-9]+`:   "id-123",
+			},
+			expected: "session-12345 with temp_xyz and id-123",
+		},
+		{
+			name:  "Custom replacement with standard sanitization",
+			input: "Processing file with build-2025-01-15-1234",
+			replacements: map[string]string{
+				`build-\d{4}-\d{2}-\d{2}-\d+`: "build-2025-01-01-0000",
+			},
+			expected: "Processing file with build-2025-01-01-0000",
+		},
+		{
+			name:  "Custom replacement with capture groups",
+			input: "User john.doe@example.com logged in",
+			replacements: map[string]string{
+				`[a-z.]+@[a-z.]+`: "user@example.com",
+			},
+			expected: "User user@example.com logged in",
+		},
+		{
+			name:         "Empty custom replacements should not affect output",
+			input:        "No replacements here",
+			replacements: map[string]string{
+				// Empty map.
+			},
+			expected: "No replacements here",
+		},
+		{
+			name:         "Nil custom replacements should not affect output",
+			input:        "No replacements here",
+			replacements: nil,
+			expected:     "No replacements here",
+		},
+		{
+			name:  "Custom replacement with special regex characters",
+			input: "Price: $99.99 (USD)",
+			replacements: map[string]string{
+				`\$\d+\.\d+`: "$$XX.XX", // Use $$ to escape $ in replacement string
+			},
+			expected: "Price: $XX.XX (USD)",
+		},
+		{
+			name:  "Multiple occurrences of same pattern",
+			input: "token-abc123 and token-def456 and token-ghi789",
+			replacements: map[string]string{
+				`token-[a-z0-9]+`: "token-REDACTED",
+			},
+			expected: "token-REDACTED and token-REDACTED and token-REDACTED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var opts []sanitizeOption
+			if tt.replacements != nil {
+				opts = append(opts, WithCustomReplacements(tt.replacements))
+			}
+			result, err := sanitizeOutput(tt.input, opts...)
+			require.NoError(t, err, "sanitizeOutput should not return error")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_CustomReplacements_InvalidRegex tests error handling for invalid regex patterns.
+func TestSanitizeOutput_CustomReplacements_InvalidRegex(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		replacements map[string]string
+		expectError  bool
+	}{
+		{
+			name:  "Invalid regex - unclosed bracket",
+			input: "test input",
+			replacements: map[string]string{
+				`[invalid`: "replacement",
+			},
+			expectError: true,
+		},
+		{
+			name:  "Invalid regex - unclosed parenthesis",
+			input: "test input",
+			replacements: map[string]string{
+				`(unclosed`: "replacement",
+			},
+			expectError: true,
+		},
+		{
+			name:  "Valid regex should succeed",
+			input: "test-123 input",
+			replacements: map[string]string{
+				`test-\d+`: "test-000",
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := []sanitizeOption{WithCustomReplacements(tt.replacements)}
+			result, err := sanitizeOutput(tt.input, opts...)
+
+			if tt.expectError {
+				assert.Error(t, err, "Expected error for invalid regex pattern")
+				assert.Contains(t, err.Error(), "failed to compile custom replacement pattern")
+			} else {
+				assert.NoError(t, err, "Expected no error for valid regex pattern")
+				assert.NotEmpty(t, result)
+			}
+		})
+	}
+}
+
+// TestSanitizeOutput_CustomReplacements_Combined tests custom replacements combined with standard sanitization.
+func TestSanitizeOutput_CustomReplacements_Combined(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		input        string
+		replacements map[string]string
+		expected     string
+	}{
+		{
+			name:  "Custom replacement after path sanitization",
+			input: fmt.Sprintf("Deploying %s/component with session-987654", repoRoot),
+			replacements: map[string]string{
+				`session-[0-9]+`: "session-12345",
+			},
+			expected: "Deploying /absolute/path/to/repo/component with session-12345",
+		},
+		{
+			name:  "PostHog token and custom replacement",
+			input: "token=phc_real_token_here and build-2025-01-15-9999",
+			replacements: map[string]string{
+				`build-\d{4}-\d{2}-\d{2}-\d+`: "build-2025-01-01-0000",
+			},
+			expected: "token=phc_TEST_TOKEN_PLACEHOLDER and build-2025-01-01-0000",
+		},
+		{
+			name:  "Multiple sanitization types",
+			input: fmt.Sprintf("%s/file with phc_ABC123 and request-id-xyz789", repoRoot),
+			replacements: map[string]string{
+				`request-id-[a-z0-9]+`: "request-id-00000",
+			},
+			expected: "/absolute/path/to/repo/file with phc_TEST_TOKEN_PLACEHOLDER and request-id-00000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := []sanitizeOption{WithCustomReplacements(tt.replacements)}
+			result, err := sanitizeOutput(tt.input, opts...)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_WordWrappedPaths verifies that paths broken across lines by terminal
+// width wrapping are correctly rejoined before sanitization. This handles cases where
+// glamour/terminal rendering wraps long paths at arbitrary positions, breaking paths mid-word.
+func TestSanitizeOutput_WordWrappedPaths(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Normalize to forward slashes for cross-platform consistency.
+	// This matches how sanitizeOutput() normalizes paths internally.
+	repoRoot = filepath.ToSlash(repoRoot)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Path not wrapped (baseline)",
+			input:    fmt.Sprintf("%s/tests/fixtures/file.txt", repoRoot),
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Path wrapped mid-word in last segment",
+			input:    fmt.Sprintf("%s/tests/fixtures/file.txt", repoRoot[:len(repoRoot)-3]+"\n"+repoRoot[len(repoRoot)-3:]),
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Path wrapped mid-word near end",
+			input:    fmt.Sprintf("%s/tests/fixtures/file.txt", repoRoot[:len(repoRoot)-5]+"\n"+repoRoot[len(repoRoot)-5:]),
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Multiple paths with one wrapped",
+			input:    fmt.Sprintf("First: %s/file1.txt\nSecond: %s/file2.txt", repoRoot, repoRoot[:len(repoRoot)-2]+"\n"+repoRoot[len(repoRoot)-2:]),
+			expected: "First: /absolute/path/to/repo/file1.txt\nSecond: /absolute/path/to/repo/file2.txt",
+		},
+		{
+			name:     "Error message with wrapped path",
+			input:    fmt.Sprintf("**Error:** path not found\n\n💡 Hint: Check path: %s/tests/fixtures/file.txt", repoRoot[:len(repoRoot)-2]+"\n"+repoRoot[len(repoRoot)-2:]),
+			expected: "**Error:** path not found\n\n💡 Hint: Check path: /absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := sanitizeOutput(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_WordWrappedPathsSpecificBreaks tests specific word-wrap scenarios
+// that were observed in CI failures.
+func TestSanitizeOutput_WordWrappedPathsSpecificBreaks(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Normalize to forward slashes for cross-platform consistency.
+	// This matches how sanitizeOutput() normalizes paths internally.
+	repoRoot = filepath.ToSlash(repoRoot)
+
+	// Build test paths by inserting newlines at specific positions within the repo root.
+	// This simulates terminal width wrapping at arbitrary character positions.
+
+	tests := []struct {
+		name        string
+		breakOffset int // Offset from end of repoRoot to insert newline
+		suffix      string
+		expected    string
+	}{
+		{
+			name:        "Break 1 char from end",
+			breakOffset: 1,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+		{
+			name:        "Break 2 chars from end",
+			breakOffset: 2,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+		{
+			name:        "Break 3 chars from end",
+			breakOffset: 3,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+		{
+			name:        "Break 5 chars from end",
+			breakOffset: 5,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+		{
+			name:        "Break 10 chars from end",
+			breakOffset: 10,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.breakOffset >= len(repoRoot) {
+				t.Skip("Break offset exceeds repo root length")
+			}
+
+			// Insert newline at the specified offset from the end.
+			breakPoint := len(repoRoot) - tt.breakOffset
+			wrappedPath := repoRoot[:breakPoint] + "\n" + repoRoot[breakPoint:] + tt.suffix
+
+			result, err := sanitizeOutput(wrappedPath)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result, "Failed for input: %q", wrappedPath)
+		})
+	}
+}
+
+// TestSanitizeOutput_WordWrappedPathsRealWorldScenarios tests real-world scenarios
+// that were observed in CI test failures.
+func TestSanitizeOutput_WordWrappedPathsRealWorldScenarios(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Normalize to forward slashes for cross-platform consistency.
+	// This matches how sanitizeOutput() normalizes paths internally.
+	repoRoot = filepath.ToSlash(repoRoot)
+
+	// Simulate the exact error format that caused CI failures.
+	testPath := repoRoot + "/tests/fixtures/scenarios/complete/stacks"
+
+	tests := []struct {
+		name     string
+		builder  func() string
+		expected string
+	}{
+		{
+			name: "Hint with path wrapped mid-word",
+			builder: func() string {
+				// Simulate path wrapped at arbitrary position (like "da-\nnang").
+				if len(repoRoot) > 5 {
+					breakPoint := len(repoRoot) - 3
+					return fmt.Sprintf("💡 Path points to stacks:\n%s\n%s", repoRoot[:breakPoint], repoRoot[breakPoint:]+"/tests/fixtures/scenarios/complete/stacks")
+				}
+				return fmt.Sprintf("💡 Path points to stacks:\n%s", testPath)
+			},
+			expected: "💡 Path points to stacks: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name: "Stacks directory with wrapped path",
+			builder: func() string {
+				if len(repoRoot) > 5 {
+					breakPoint := len(repoRoot) - 3
+					return fmt.Sprintf("Stacks directory: %s\n%s", repoRoot[:breakPoint], repoRoot[breakPoint:]+"/tests/fixtures/scenarios/complete/stacks")
+				}
+				return fmt.Sprintf("Stacks directory: %s", testPath)
+			},
+			expected: "Stacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name: "Full error output with multiple wrapped paths",
+			builder: func() string {
+				if len(repoRoot) > 5 {
+					breakPoint := len(repoRoot) - 3
+					wrappedPath := repoRoot[:breakPoint] + "\n" + repoRoot[breakPoint:]
+					return fmt.Sprintf(`**Error:** path is not within Atmos component directories
+
+## Hints
+
+💡 Path points to the stacks configuration directory, not a component:
+%s/tests/fixtures/scenarios/complete/stacks
+
+Stacks directory: %s/tests/fixtures/scenarios/complete/stacks
+
+💡 Components are located in component directories`, wrappedPath, wrappedPath)
+				}
+				return fmt.Sprintf(`**Error:** path is not within Atmos component directories
+
+## Hints
+
+💡 Path points to the stacks configuration directory, not a component:
+%s
+
+Stacks directory: %s
+
+💡 Components are located in component directories`, testPath, testPath)
+			},
+			expected: `**Error:** path is not within Atmos component directories
+
+## Hints
+
+💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
+
+Stacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
+
+💡 Components are located in component directories`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := tt.builder()
+			result, err := sanitizeOutput(input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_WindowsLineEndingsInHintPaths verifies that hint path normalization
+// works correctly with Windows CRLF line endings (\r\n) as well as Unix LF (\n).
+// This test reproduces the Windows CI failure where hint paths were word-wrapped differently.
+func TestSanitizeOutput_WindowsLineEndingsInHintPaths(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Build a path that's part of the repo.
+	testPath := repoRoot + "/tests/fixtures/scenarios/complete/stacks"
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Hint path on same line (Unix LF)",
+			input:    fmt.Sprintf("💡 Path points to the stacks configuration directory, not a component: %s", testPath),
+			expected: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name:     "Hint path on next line (Unix LF)",
+			input:    fmt.Sprintf("💡 Path points to the stacks configuration directory, not a component:\n%s", testPath),
+			expected: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name:     "Hint path on next line (Windows CRLF)",
+			input:    fmt.Sprintf("💡 Path points to the stacks configuration directory, not a component:\r\n%s", testPath),
+			expected: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name:     "Multi-line error with Windows CRLF",
+			input:    fmt.Sprintf("**Error:** path is not within Atmos component directories\r\n\r\n## Hints\r\n\r\n💡 Path points to the stacks configuration directory, not a component:\r\n%s\r\n\r\nStacks directory: %s", testPath, testPath),
+			expected: "**Error:** path is not within Atmos component directories\n\n## Hints\n\n💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks\n\nStacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Note: In production, normalizeLineEndings is called BEFORE sanitizeOutput.
+			// This test verifies that the path joining logic in sanitizeOutput works
+			// with both LF and CRLF line endings. However, callers should normalize
+			// line endings first to ensure consistent behavior.
+			normalized := normalizeLineEndings(tt.input)
+			result, err := sanitizeOutput(normalized)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_WindowsBackslashPaths verifies that Windows-style paths
+// with backslashes are correctly sanitized on all platforms.
+// Note: The wrapped path handling only works with forward slashes because
+// sanitizeOutput normalizes paths to forward slashes before building the regex.
+// This matches real-world behavior where CLI output is already normalized.
+func TestSanitizeOutput_WindowsBackslashPaths(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Normalize to forward slashes first, then convert to Windows-style for testing.
+	normalizedRoot := filepath.ToSlash(repoRoot)
+	windowsStyleRoot := strings.ReplaceAll(normalizedRoot, "/", "\\")
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Windows backslash path",
+			input:    windowsStyleRoot + "\\tests\\fixtures\\file.txt",
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Mixed slashes (forward and back)",
+			input:    windowsStyleRoot + "/tests\\fixtures/file.txt",
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Windows path in error message",
+			input:    fmt.Sprintf("**Error:** path not found: %s\\tests\\file.txt", windowsStyleRoot),
+			expected: "**Error:** path not found: /absolute/path/to/repo/tests/file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			result, err := sanitizeOutput(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)

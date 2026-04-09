@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -54,117 +53,48 @@ func TestAuthContextWrapperGetStackInfo(t *testing.T) {
 	assert.Equal(t, "us-west-2", stackInfo.AuthContext.AWS.Region)
 }
 
-// TestAuthContextWrapperStubMethodsPanic verifies that stub methods panic when called.
-// These methods should never be called since the wrapper is only used for propagating
-// existing auth context, not for performing authentication.
-func TestAuthContextWrapperStubMethodsPanic(t *testing.T) {
-	wrapper := newAuthContextWrapper(&schema.AuthContext{})
+// TestAuthContextWrapperResolvePrincipalSetting verifies ResolvePrincipalSetting returns nil, false.
+// The wrapper doesn't have access to identity/provider configuration, only auth context.
+func TestAuthContextWrapperResolvePrincipalSetting(t *testing.T) {
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile: "test-identity",
+			Region:  "us-west-2",
+		},
+	}
 
-	t.Run("GetCachedCredentials panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_, _ = wrapper.GetCachedCredentials(context.TODO(), "test")
-		}, "GetCachedCredentials should panic")
-	})
+	wrapper := newAuthContextWrapper(authContext)
 
-	t.Run("Authenticate panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_, _ = wrapper.Authenticate(context.TODO(), "test")
-		}, "Authenticate should panic")
-	})
+	// ResolvePrincipalSetting should always return nil, false for the wrapper.
+	// It only propagates existing auth context, not full identity configuration.
+	val, found := wrapper.ResolvePrincipalSetting("any-identity", "region")
+	assert.Nil(t, val, "ResolvePrincipalSetting should return nil")
+	assert.False(t, found, "ResolvePrincipalSetting should return false")
 
-	t.Run("Whoami panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_, _ = wrapper.Whoami(context.TODO(), "test")
-		}, "Whoami should panic")
-	})
+	val, found = wrapper.ResolvePrincipalSetting("test-identity", "any-key")
+	assert.Nil(t, val, "ResolvePrincipalSetting should return nil for any key")
+	assert.False(t, found, "ResolvePrincipalSetting should return false for any key")
+}
 
-	t.Run("Validate panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.Validate()
-		}, "Validate should panic")
-	})
+// TestAuthContextWrapperResolveProviderConfig verifies ResolveProviderConfig returns nil, false.
+// The wrapper doesn't have access to provider configuration.
+func TestAuthContextWrapperResolveProviderConfig(t *testing.T) {
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile: "test-identity",
+			Region:  "us-west-2",
+		},
+	}
 
-	t.Run("GetDefaultIdentity panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_, _ = wrapper.GetDefaultIdentity(false)
-		}, "GetDefaultIdentity should panic")
-	})
+	wrapper := newAuthContextWrapper(authContext)
 
-	t.Run("ListProviders panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.ListProviders()
-		}, "ListProviders should panic")
-	})
+	// ResolveProviderConfig should always return nil, false for the wrapper.
+	// It only propagates existing auth context, not provider configuration.
+	provider, found := wrapper.ResolveProviderConfig("any-identity")
+	assert.Nil(t, provider, "ResolveProviderConfig should return nil")
+	assert.False(t, found, "ResolveProviderConfig should return false")
 
-	t.Run("Logout panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.Logout(context.TODO(), "test")
-		}, "Logout should panic")
-	})
-
-	t.Run("GetChain panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.GetChain()
-		}, "GetChain should panic")
-	})
-
-	t.Run("ListIdentities panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.ListIdentities()
-		}, "ListIdentities should panic")
-	})
-
-	t.Run("GetProviderForIdentity panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.GetProviderForIdentity("test")
-		}, "GetProviderForIdentity should panic")
-	})
-
-	t.Run("GetFilesDisplayPath panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.GetFilesDisplayPath("test")
-		}, "GetFilesDisplayPath should panic")
-	})
-
-	t.Run("GetProviderKindForIdentity panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_, _ = wrapper.GetProviderKindForIdentity("test")
-		}, "GetProviderKindForIdentity should panic")
-	})
-
-	t.Run("GetIdentities panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.GetIdentities()
-		}, "GetIdentities should panic")
-	})
-
-	t.Run("GetProviders panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.GetProviders()
-		}, "GetProviders should panic")
-	})
-
-	t.Run("LogoutProvider panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.LogoutProvider(context.TODO(), "test")
-		}, "LogoutProvider should panic")
-	})
-
-	t.Run("LogoutAll panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_ = wrapper.LogoutAll(context.TODO())
-		}, "LogoutAll should panic")
-	})
-
-	t.Run("GetEnvironmentVariables panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_, _ = wrapper.GetEnvironmentVariables("test")
-		}, "GetEnvironmentVariables should panic")
-	})
-
-	t.Run("PrepareShellEnvironment panics", func(t *testing.T) {
-		assert.Panics(t, func() {
-			_, _ = wrapper.PrepareShellEnvironment(context.TODO(), "test", nil)
-		}, "PrepareShellEnvironment should panic")
-	})
+	provider, found = wrapper.ResolveProviderConfig("test-identity")
+	assert.Nil(t, provider, "ResolveProviderConfig should return nil for any identity")
+	assert.False(t, found, "ResolveProviderConfig should return false for any identity")
 }

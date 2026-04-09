@@ -1,0 +1,171 @@
+---
+title: Atmos Use-Cases
+id: use-cases
+slug: /use-cases
+sidebar_label: Use-cases
+sidebar_position: 3
+---
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import ActionCard from '@site/src/components/ActionCard'
+import UseCaseCard from '@site/src/components/UseCaseCard'
+import FeatureGrid from '@site/src/components/FeatureGrid'
+import {
+  RiCloudLine,
+  RiStackshareLine,
+  RiGlobalLine,
+  RiUserSettingsLine,
+  RiGroupLine,
+  RiShieldLine,
+  RiDraftLine
+} from 'react-icons/ri'
+
+<Intro>
+Atmos has proven time and again that it works great for these key use cases. Whether you're managing a handful of environments or hundreds, Atmos provides the structure and flexibility to scale your infrastructure operations.
+</Intro>
+
+Click any use case below to see how Atmos helps and which features enable it.
+
+<KeyPoints title="Common Scenarios">
+- Multi-account cloud environments with dozens to hundreds of AWS accounts
+- Cross-platform deployments spanning AWS, GCP, and Azure
+- SaaS platforms requiring tenant isolation and rapid onboarding
+- Regulated industries needing consistent compliance controls
+</KeyPoints>
+
+## Enterprise Scale
+
+<FeatureGrid columns={1}>
+  <UseCaseCard
+    icon={<RiCloudLine />}
+    title="Multi-Account Cloud Environments"
+    description="Suitable for organizations using multiple cloud accounts to separate different projects, teams, or stages of development."
+    highlights={[
+      "Centralized configuration management across all accounts",
+      "Consistent naming conventions and tagging strategies",
+      "Reduced drift between environments",
+      "Single pane of glass for infrastructure operations"
+    ]}
+    enabledBy={["Stacks", "Inheritance", "Vendoring", "GitHub Actions"]}
+    docLinks={[
+      { label: "Learn Stacks", to: "/learn/stacks" },
+      { label: "Design Patterns", to: "/design-patterns" }
+    ]}
+  />
+
+  <UseCaseCard
+    icon={<RiStackshareLine />}
+    title="Cross-Platform Cloud Architectures"
+    description="Ideal for businesses that need to manage configuration of services across AWS, GCP, Azure, and other cloud providers to build a cohesive system."
+    highlights={[
+      "Same configuration patterns across all clouds",
+      "Unified deployment workflows regardless of provider",
+      "Consistent compliance and governance policies",
+      "Simplified multi-cloud strategy execution"
+    ]}
+    enabledBy={["Components", "Native Terraform", "Stacks"]}
+    docLinks={[
+      { label: "Components Guide", to: "/components" },
+      { label: "Terraform Commands", to: "/cli/commands/terraform/usage" }
+    ]}
+  />
+
+  <UseCaseCard
+    icon={<RiGlobalLine />}
+    title="Multi-Region Deployments"
+    description="Atmos facilitates streamlined multi-region deployments by enabling businesses to define baseline configurations and extend them across regions with DRY principles."
+    highlights={[
+      "Define region-agnostic baselines once",
+      "Override only region-specific settings",
+      "Consistent disaster recovery configurations",
+      "Simplified global infrastructure rollouts"
+    ]}
+    enabledBy={["Imports", "Inheritance", "Workflow Orchestration"]}
+    docLinks={[
+      { label: "Imports Guide", to: "/stacks/imports" },
+      { label: "Inheritance", to: "/howto/inheritance" }
+    ]}
+  />
+
+  <UseCaseCard
+    icon={<RiUserSettingsLine />}
+    title="Self-Service Infrastructure"
+    description="Allows teams to manage their infrastructure needs independently, using predefined templates and policies while maintaining organizational standards."
+    highlights={[
+      "Developers deploy without waiting for approval",
+      "Guardrails prevent non-compliant configurations",
+      "Platform team maintains control over standards",
+      "Reduced ticket queues and faster time-to-market"
+    ]}
+    enabledBy={["Service Catalogs", "Terminal UI", "Custom Commands", "Schema Validation"]}
+    docLinks={[
+      { label: "Service Catalogs", to: "/howto/catalogs" },
+      { label: "Terminal UI", to: "/cli" }
+    ]}
+  />
+</FeatureGrid>
+
+## Specialized Scenarios
+
+<FeatureGrid columns={1}>
+  <UseCaseCard
+    icon={<RiGroupLine />}
+    title="Multi-Tenant SaaS Systems"
+    description="Perfect for SaaS companies looking to host multiple customers within a unified infrastructure with proper isolation and rapid tenant onboarding."
+    highlights={[
+      "Define baseline tenant configuration once",
+      "Onboard new tenants through pure configuration",
+      "No additional code development required",
+      "Consistent security policies across all tenants"
+    ]}
+    enabledBy={["Inheritance", "Mixins", "OPA Policies", "Service Catalogs"]}
+    docLinks={[
+      { label: "Inheritance", to: "/howto/inheritance" },
+      { label: "Mixins", to: "/howto/mixins" }
+    ]}
+  />
+
+  <UseCaseCard
+    icon={<RiShieldLine />}
+    title="Compliant Infrastructure"
+    description="Atmos empowers DevOps and SecOps teams to create vetted configurations that comply with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards."
+    highlights={[
+      "Policies enforced as code, not documentation",
+      "Audit-ready configuration history in Git",
+      "Approved patterns shared via service catalogs",
+      "Automated compliance validation in CI/CD"
+    ]}
+    enabledBy={["OPA Policies", "Schema Validation", "Vendoring", "Service Catalogs"]}
+    docLinks={[
+      { label: "OPA Validation", to: "/validation/opa" },
+      { label: "Component Libraries", to: "/components" }
+    ]}
+  />
+
+  <UseCaseCard
+    icon={<RiDraftLine />}
+    title="Service Catalogs & Landing Zones"
+    description="Provides businesses the ability to craft ready-to-use templates and guidelines for setting up cloud environments quickly and consistently."
+    highlights={[
+      "Pre-built blueprints for common architectures",
+      "Standardized landing zones for new projects",
+      "Faster project kickoff with proven patterns",
+      "Organizational best practices encoded in catalogs"
+    ]}
+    enabledBy={["Service Catalogs", "Components", "Workflow Orchestration", "Terraform Provider"]}
+    docLinks={[
+      { label: "Service Catalogs", to: "/stacks/catalogs" },
+      { label: "Workflows", to: "/workflows" }
+    ]}
+  />
+</FeatureGrid>
+
+<ActionCard
+  title="Don't see your use case?"
+  primaryCtaText="Ask in Slack"
+  primaryCtaLink="/community/slack"
+  secondaryCtaText="Join Office Hours"
+  secondaryCtaLink="/community/office-hours"
+>
+Our community is happy to help you evaluate if Atmos fits your needs. Join us every week for Office Hours or ask questions in the #atmos Slack channel.
+</ActionCard>

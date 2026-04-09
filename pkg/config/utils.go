@@ -8,11 +8,14 @@ import (
 	"strconv"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack.
@@ -51,7 +54,12 @@ func FindAllStackConfigsInPathsForStack(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				return nil, nil, false, err
+				return nil, nil, false, errUtils.Build(err).
+					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
+					WithHint("Check that the stacks directory exists and contains stack configuration files").
+					WithContext("pattern", patterns[0]).
+					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
+					Err()
 			}
 			// If there's no error but still no matches, we continue to the next path
 			// This happens when the pattern is valid but no files match it
@@ -103,7 +111,7 @@ func FindAllStackConfigsInPathsForStack(
 	}
 
 	if len(absolutePaths) == 0 {
-		return nil, nil, false, fmt.Errorf("no matches found for the provided stack '%s' in the paths %v", stack, includeStackPaths)
+		return nil, nil, false, fmt.Errorf("%w for the provided stack '%s' in the paths %v", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
 	}
 
 	return absolutePaths, relativePaths, false, nil
@@ -144,7 +152,12 @@ func FindAllStackConfigsInPaths(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, errUtils.Build(err).
+					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
+					WithHint("Check that the stacks directory exists and contains stack configuration files").
+					WithContext("pattern", patterns[0]).
+					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
+					Err()
 			}
 			// If there's no error but still no matches, we continue to the next path
 			// This happens when the pattern is valid but no files match it
@@ -186,6 +199,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	if len(basePath) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_BASE_PATH", basePath)
 		atmosConfig.BasePath = basePath
+		atmosConfig.BasePathSource = basePathSourceRuntime
 	}
 
 	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
@@ -392,6 +406,9 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 
+	// Note: ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE and ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR
+	// are handled via Viper bindEnv in setEnv() and populated during Unmarshal, not here.
+
 	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
 	if len(listMergeStrategy) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_SETTINGS_LIST_MERGE_STRATEGY", listMergeStrategy)
@@ -423,8 +440,96 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 
 	if len(atmosConfig.Logs.Level) > 0 {
 		if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+			// Extract explanation from error message (format: "sentinel\nexplanation").
+			errMsg := err.Error()
+			parts := strings.SplitN(errMsg, "\n", 2)
+			if len(parts) > 1 {
+				// Return error with explanation preserved.
+				return fmt.Errorf("%w\n%s", log.ErrInvalidLogLevel, parts[1])
+			}
 			return err
 		}
+	}
+
+	// Validate version constraint.
+	if err := validateVersionConstraint(atmosConfig.Version.Constraint); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// getVersionEnforcement returns the enforcement level, checking env var override.
+func getVersionEnforcement(configEnforcement string) string {
+	if envEnforcement := os.Getenv("ATMOS_VERSION_ENFORCEMENT"); envEnforcement != "" { //nolint:forbidigo
+		return envEnforcement
+	}
+	if configEnforcement == "" {
+		return "fatal"
+	}
+	return configEnforcement
+}
+
+// buildVersionConstraintError builds the error for unsatisfied version constraint.
+func buildVersionConstraintError(constraint schema.VersionConstraint) error {
+	builder := errUtils.Build(errUtils.ErrVersionConstraint).
+		WithExplanationf("This configuration requires Atmos version %s, but you are running %s",
+			constraint.Require, version.Version).
+		WithHint("Please upgrade: https://atmos.tools/install").
+		WithContext("required", constraint.Require).
+		WithContext("current", version.Version).
+		WithExitCode(1)
+
+	if constraint.Message != "" {
+		builder = builder.WithHint(constraint.Message)
+	}
+
+	return builder.Err()
+}
+
+// warnVersionConstraint logs a warning for unsatisfied version constraint.
+func warnVersionConstraint(constraint schema.VersionConstraint) {
+	ui.Warning(fmt.Sprintf(
+		"Atmos version constraint not satisfied\n  Required: %s\n  Current:  %s",
+		constraint.Require,
+		version.Version,
+	))
+	if constraint.Message != "" {
+		ui.Warning(constraint.Message)
+	}
+}
+
+// validateVersionConstraint validates the current Atmos version against the constraint
+// specified in atmos.yaml. Uses the Atmos error builder pattern - no deep exits.
+func validateVersionConstraint(constraint schema.VersionConstraint) error {
+	if constraint.Require == "" {
+		return nil
+	}
+
+	enforcement := getVersionEnforcement(constraint.Enforcement)
+	if enforcement == "silent" {
+		return nil
+	}
+
+	satisfied, err := version.ValidateConstraint(constraint.Require)
+	if err != nil {
+		return errUtils.Build(errors.Join(errUtils.ErrInvalidVersionConstraint, err)).
+			WithHint("Please use valid semver constraint syntax").
+			WithHint("Reference: https://github.com/hashicorp/go-version").
+			WithContext("constraint", constraint.Require).
+			WithExitCode(1).
+			Err()
+	}
+
+	if satisfied {
+		return nil
+	}
+
+	switch enforcement {
+	case "fatal":
+		return buildVersionConstraintError(constraint)
+	case "warn":
+		warnVersionConstraint(constraint)
 	}
 
 	return nil
@@ -469,6 +574,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
+		atmosConfig.BasePathSource = basePathSourceRuntime
 		log.Debug(cmdLineArg, BasePathFlag, configAndStacksInfo.BasePath)
 	}
 	return nil
@@ -590,12 +696,13 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *
 
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.LogsLevel) > 0 {
-		if _, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
+		normalizedLevel, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel)
+		if err != nil {
 			return err
 		}
-		// Only set the log level if validation passes
-		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
-		log.Debug(cmdLineArg, LogsLevelFlag, configAndStacksInfo.LogsLevel)
+		// Set the normalized log level (title case, with aliases resolved)
+		atmosConfig.Logs.Level = string(normalizedLevel)
+		log.Debug(cmdLineArg, LogsLevelFlag, atmosConfig.Logs.Level)
 	}
 	if len(configAndStacksInfo.LogsFile) > 0 {
 		atmosConfig.Logs.File = configAndStacksInfo.LogsFile

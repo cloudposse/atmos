@@ -1,8 +1,12 @@
 ---
 slug: interactive-identity-selection
-title: "Interactive Identity Selection for Auth Login"
-authors: [atmos]
-tags: [enhancement, auth]
+title: Interactive Identity Selection for Auth Login
+sidebar_label: Interactive Identity Selection
+authors:
+  - osterman
+tags:
+  - enhancement
+release: v1.196.0
 ---
 
 Running `atmos auth login` without specifying an identity is now more user-friendly. When no `--identity` flag is provided, Atmos presents an interactive selector to choose from your configured identities.

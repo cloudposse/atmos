@@ -1,0 +1,17 @@
+base_path: "../.."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "scenarios/atmos-yaml-functions-merge/stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "workflows/**/*"
+  name_template: "{{ .vars.stage }}"
+
+# Test different list merge strategies with YAML functions.
+settings:
+  list_merge_strategy: "replace"  # Can be: replace, append, merge

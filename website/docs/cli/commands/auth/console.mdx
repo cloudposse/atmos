@@ -6,11 +6,15 @@ id: console
 description: Open cloud provider web console in your default browser using authenticated credentials.
 ---
 import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
-:::note Purpose
+<Intro>
 Use this command to quickly access your cloud provider's web console (AWS, Azure, GCP) using your authenticated Atmos identity credentials, eliminating the need to manually copy credentials or log in separately.
-:::
+</Intro>
+
+<DemoVideo id="auth-console" title="atmos auth console" showCaption={false} />
 
 <Screengrab title="atmos auth console --help" slug="atmos-auth-console--help" />
 
@@ -210,6 +214,17 @@ atmos auth console --destination iam
 
     **Example:** `atmos auth console --no-open`
   </dd>
+
+  <dt>`--isolated`</dt>
+  <dd>
+    Open the console in an isolated browser session. Each identity gets its own Chrome browser profile, allowing multiple console sessions to run simultaneously without logout conflicts.
+
+    Requires Google Chrome or Chromium. If Chrome is not found, falls back to the default browser with a warning.
+
+    **Default:** `false`, or the value of `auth.console.isolated_sessions` in `atmos.yaml`
+
+    **Example:** `atmos auth console --identity prod-admin --isolated`
+  </dd>
 </dl>
 
 ## How It Works
@@ -230,9 +245,9 @@ For AWS identities, Atmos uses the [AWS Federation Endpoint](https://docs.aws.am
 Console signin tokens are valid for 15 minutes and should be treated as sensitive. Never share console URLs or paste them in logs or chat applications.
 :::
 
-### Azure and GCP (Coming Soon)
+### GCP (Coming Soon)
 
-Support for Azure Portal and Google Cloud Console is planned for future releases. The command structure will remain the same across all providers.
+Support for Google Cloud Console is planned for future releases. The command structure will remain the same across all providers.
 
 ## Provider Support
 
@@ -240,7 +255,7 @@ Support for Azure Portal and Google Cloud Console is planned for future releases
 |----------|--------|-------|
 | AWS (IAM Identity Center) | ✅ Supported | Full support with federation endpoint |
 | AWS (SAML) | ✅ Supported | Full support with federation endpoint |
-| Azure | 🚧 Planned | Coming in future release |
+| Azure | ✅ Supported | Opens Azure Portal with configured subscription |
 | GCP | 🚧 Planned | Coming in future release |
 
 ## Common Use Cases
@@ -255,10 +270,10 @@ atmos auth console --identity prod-oncall --duration 2h
 ### Multi-Account Workflows
 
 ```shell
-# Switch between different account consoles
-atmos auth console --identity dev-account
-atmos auth console --identity staging-account
-atmos auth console --identity prod-account
+# Open multiple account consoles simultaneously with isolated sessions
+atmos auth console --identity dev-account --isolated
+atmos auth console --identity staging-account --isolated
+atmos auth console --identity prod-account --isolated
 ```
 
 ### CI/CD Integration
@@ -299,11 +314,23 @@ atmos auth console --print-only | xclip   # Linux
 
 **Problem**: The authenticated identity's provider doesn't support console access yet.
 
-**Solution**: Check the Provider Support table above. Azure and GCP support is coming soon.
+**Solution**: Check the Provider Support table above. Azure is supported; GCP support is planned for a future release.
 
 ## Configuration
 
-You can configure default console session duration for providers in your `atmos.yaml`:
+### Global Console Settings
+
+Configure console behavior for all identities under `auth.console`:
+
+```yaml
+auth:
+  console:
+    isolated_sessions: true  # Open each identity in its own browser session
+```
+
+### Provider Console Settings
+
+Configure per-provider console settings like session duration:
 
 ```yaml
 auth:
@@ -325,9 +352,24 @@ auth:
 ### Configuration Options
 
 <dl>
+  <dt>`auth.console.isolated_sessions`</dt>
+  <dd>
+    Enable isolated browser sessions for all identities. Each identity opens in its own Chrome browser context, allowing multiple console sessions to run simultaneously without logout conflicts.
+
+    Requires Google Chrome or Chromium. Falls back to the default browser if Chrome is not found.
+
+    Session data is stored under the platform-specific XDG data directory (e.g., `~/.local/share/atmos/console/sessions/` on Linux, `~/Library/Application Support/atmos/console/sessions/` on macOS, `%APPDATA%\atmos\console\sessions\` on Windows) and is keyed by realm and identity name, so reopening the same identity reuses its browser session.
+
+    **Type:** Boolean
+
+    **Default:** `false`
+
+    **Override:** Use the `--isolated` flag to override per command
+  </dd>
+
   <dt>`console.session_duration`</dt>
   <dd>
-    Default session duration for web console access when using this provider.
+    Default session duration for web console access when using this provider. Configured per provider.
 
     **Format:** Go duration string (e.g., `1h`, `4h`, `12h`)
 

@@ -1,0 +1,57 @@
+---
+title: atmos devcontainer attach
+sidebar_label: attach
+sidebar_class_name: command
+id: attach
+description: Attach to a running devcontainer
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to attach to a running devcontainer and get an interactive shell. If the container is not running, it will be started automatically.
+</Intro>
+
+<Screengrab title="atmos devcontainer attach --help" slug="atmos-devcontainer-attach--help" />
+
+## Usage
+
+```shell
+atmos devcontainer attach <name> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to attach to</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Attach to a devcontainer
+atmos devcontainer attach geodesic
+
+# Attach to a specific instance
+atmos devcontainer attach terraform --instance project-a
+```
+
+## Behavior
+
+- Opens an interactive shell (`/bin/bash` by default) in the container
+- Uses login shell (`-l` flag) if `userEnvProbe` is set to `loginShell` or `loginInteractiveShell` in the devcontainer configuration
+- Automatically starts the container if it's not running
+- Inherits your terminal size and supports full TTY features
+
+## See Also
+
+- [`atmos devcontainer start`](/cli/commands/devcontainer/start)
+- [`atmos devcontainer exec`](/cli/commands/devcontainer/exec)

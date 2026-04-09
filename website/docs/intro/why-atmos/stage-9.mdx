@@ -1,0 +1,48 @@
+---
+title: "Stage 9: DIY CI/CD with Terraform"
+description: Terraform is deployed with a CI/CD pipeline
+sidebar_label: "Stage 9: CI/CD Challenges"
+sidebar_position: 10
+id: stage-9
+---
+import Link from '@docusaurus/Link'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+With the greater adoption of Terraform and DevOps principles, Developers are now using Terraform daily. They decide to use the same patterns for deploying applications with Terraform.
+</Intro>
+
+Only Terraform is exceptionally different from deploying containerized apps. There are no rollbacks. It's more akin to performing database migrations without transactions (YOLO!). It's a scary business. Controls are needed.
+
+1. Developers stick their scripts in a CI/CD pipeline with hardcoded credentials set in the environment variables.
+2. Pipeline posts comments for each commit on every PR containing the raw output of the `terraform plan`, to validate what *should* happen during `terraform apply`.
+3. On merge to main, `terraform apply` is run *without* a planfile. 🤞
+
+:::warning New Problems
+- _Still using Jenkins? 🧌🔥_
+- CI/CD system promoted to *God Mode*. 🤞 Static administrative cloud credentials are exposed as environment variables, ripe for exfiltration
+- No visibility into the impact of the changes across multiple environments at the same time
+<details>
+<summary>And then there's...</summary>
+- No recourse for when a `terraform apply` fails
+- Inadequate security mechanisms create a critical risk of catastrophic business loss
+- Lack of plan file storage means incorrect implementation of plan/apply workflows
+- Missing project-level locks, so PRs can easily clobber each other, rolling back state.
+- The entire organization is spammed by GitHub comments every time someone pushes a commit, and a plan is run on the PR
+- Automated drift detection is still missing, so you have no idea if what is in `main` is actually deployed
+</details>
+:::
+
+## Realization
+
+So, it turns out that implementing CI/CD was not as straightforward as developers thought.
+It was not as easy as deploying a container that could be easily rolled back. It's more like performing
+database migrations without transactions. That's a scary business, and controls are needed.
+
+Developers have [hit a wall](/intro/why-atmos/stage-10) and realize they [need a better way to manage their Terraform code](/intro/why-atmos/nirvana).
+
+<Link
+    to="/intro/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    Try Atmos!
+</Link>

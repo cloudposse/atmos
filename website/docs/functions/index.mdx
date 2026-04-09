@@ -31,7 +31,7 @@ YAML functions are **native YAML features** that work with the YAML parser. They
 **Example:**
 ```yaml
 # Safe and predictable - the function receives and returns proper YAML types
-vpc_id: !terraform.output vpc.vpc_id
+vpc_id: !terraform.output vpc vpc_id
 environment: !env AWS_ENVIRONMENT
 config: !include common-config.yaml
 ```
@@ -92,11 +92,11 @@ If you must use template functions:
 
 If you have existing template functions, consider migrating to YAML functions:
 
-| Instead of (Template) | Use (YAML) |
-|----------------------|------------|
-| `{{ exec "command" }}` | `!exec command` |
-| `{{ env "VAR" }}` | `!env VAR` |
-| `{{ toJson .values }}` | Native YAML structures |
+| Instead of (Template)         | Use (YAML)                                |
+|-------------------------------|-------------------------------------------|
+| `{{ exec "command" }}`        | `!exec command`                           |
+| `{{ env "VAR" }}`             | `!env VAR`                                |
+| `{{ toJson .values }}`        | Native YAML structures                    |
 | Reading outputs via templates | `!terraform.output` or `!terraform.state` |
 
 ## Performance Considerations

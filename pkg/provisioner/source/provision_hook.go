@@ -1,0 +1,485 @@
+package source
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/duration"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
+)
+
+// HookEventBeforeTerraformInit is the hook event for before terraform init.
+const HookEventBeforeTerraformInit = provisioner.HookEvent("before.terraform.init")
+
+// DirPermissions is the default permission mode for directories.
+const DirPermissions = 0o755
+
+// invocationDoneKey is the componentConfig key set after AutoProvisionSource completes
+// (whether it provisioned or skipped). It prevents re-provisioning within the same command
+// invocation when the source provisioner is called both from resolveAndProvisionComponentPath
+// and from the before.terraform.init hook (prepareInitExecution). Without this guard a zero
+// TTL deletes the varfiles and backend config written between the two calls.
+const invocationDoneKey = "_atmos_source_provisioned"
+
+func init() {
+	// Register source provisioner to run before terraform init.
+	// This enables JIT (Just-in-Time) source vendoring on first use.
+	_ = provisioner.RegisterProvisioner(provisioner.Provisioner{
+		Type:      "source",
+		HookEvent: HookEventBeforeTerraformInit,
+		Func:      autoProvisionSourceTerraform,
+	})
+}
+
+// autoProvisionSourceTerraform is a wrapper for the hook system that always uses terraform as component type.
+// This matches the HookEventBeforeTerraformInit event.
+func autoProvisionSourceTerraform(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	componentConfig map[string]any,
+	authContext *schema.AuthContext,
+) error {
+	return AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext)
+}
+
+// AutoProvisionSource automatically vendors component source on first use.
+// This enables JIT (Just-in-Time) vendoring - sources are fetched automatically
+// when running terraform/helmfile/packer commands if the target directory doesn't exist.
+//
+// Parameters:
+// - componentType: the type of component ("terraform", "helmfile", or "packer").
+//
+// Behavior:
+// - If component has no source configured: skip (not an error).
+// - If target directory already exists: skip (use CRUD commands for updates).
+// - If workdir is enabled: download source directly to workdir path.
+// - If workdir is NOT enabled: download source to component path.
+func AutoProvisionSource(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	componentType string,
+	componentConfig map[string]any,
+	authContext *schema.AuthContext,
+) (retErr error) {
+	defer perf.Track(atmosConfig, "source.AutoProvisionSource")()
+
+	sourceSpec, component, err := extractSourceAndComponent(componentConfig)
+	if err != nil {
+		return err
+	}
+	if sourceSpec == nil {
+		return nil // No source configured - skip.
+	}
+
+	// Guard against double-invocation within the same command lifecycle.
+	// AutoProvisionSource is called both directly (from resolveAndProvisionComponentPath)
+	// and indirectly via the before.terraform.init hook (from prepareInitExecution).
+	// Without this check a zero TTL would delete varfiles and backend configs that were
+	// written to the workdir between the two calls, causing the subprocess to fail with
+	// "file does not exist" errors.  Once this function completes (provision or skip),
+	// no further provisioning should happen for this invocation.
+	if _, done := componentConfig[invocationDoneKey]; done {
+		return nil
+	}
+	// Mark as complete when this call returns successfully so any subsequent call
+	// (e.g., the before.terraform.init hook) is a no-op for this invocation.
+	defer func() {
+		if retErr == nil {
+			componentConfig[invocationDoneKey] = struct{}{}
+		}
+	}()
+
+	// Apply global TTL default if not set per-component.
+	applyGlobalTTLDefault(sourceSpec, atmosConfig, componentType)
+
+	stack, _ := componentConfig["atmos_stack"].(string)
+
+	targetDir, isWorkdir, err := determineSourceTargetDirectory(atmosConfig, componentType, component, componentConfig)
+	if err != nil {
+		return wrapProvisionError(err, "Failed to determine target directory", component)
+	}
+
+	// Check if provisioning is needed (version change, URI change, or fresh workdir).
+	needs, reason := needsProvisioning(targetDir, sourceSpec, isWorkdir)
+	if !needs {
+		// No provisioning needed - touch LastAccessed and return.
+		if isWorkdir {
+			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
+				// Non-critical error - log and continue.
+				ui.Warning(fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
+			}
+			componentConfig[workdir.WorkdirPathKey] = targetDir
+		}
+		return nil
+	}
+
+	// Log reason for re-provisioning.
+	if reason != "" {
+		ui.Info(reason)
+	}
+
+	// Vendor the source to target directory.
+	if err := vendorToTarget(ctx, atmosConfig, sourceSpec, targetDir, component); err != nil {
+		return err
+	}
+
+	// Write workdir metadata (when workdir is enabled).
+	if isWorkdir {
+		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
+			// Non-critical error - log and continue.
+			ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
+		}
+		componentConfig[workdir.WorkdirPathKey] = targetDir
+	}
+	return nil
+}
+
+// applyGlobalTTLDefault sets the source TTL from the global config if not already set per-component.
+func applyGlobalTTLDefault(sourceSpec *schema.VendorComponentSource, atmosConfig *schema.AtmosConfiguration, componentType string) {
+	if sourceSpec.TTL != "" {
+		return
+	}
+	switch componentType {
+	case cfg.TerraformComponentType:
+		if atmosConfig.Components.Terraform.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
+		}
+	case cfg.HelmfileComponentType:
+		if atmosConfig.Components.Helmfile.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Helmfile.Source.TTL
+		}
+	case cfg.PackerComponentType:
+		if atmosConfig.Components.Packer.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
+		}
+	}
+}
+
+// extractSourceAndComponent extracts source spec and component name from config.
+func extractSourceAndComponent(componentConfig map[string]any) (*schema.VendorComponentSource, string, error) {
+	sourceSpec, err := ExtractSource(componentConfig)
+	if err != nil {
+		return nil, "", errUtils.Build(errUtils.ErrSourceProvision).
+			WithCause(err).
+			WithExplanation("Invalid source configuration").
+			Err()
+	}
+	if sourceSpec == nil {
+		return nil, "", nil
+	}
+
+	component := extractComponentName(componentConfig)
+	if component == "" {
+		return nil, "", errUtils.Build(errUtils.ErrSourceProvision).
+			WithExplanation("Component name not found in configuration").
+			Err()
+	}
+	return sourceSpec, component, nil
+}
+
+// vendorToTarget creates the target directory and vendors the source.
+func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, targetDir, component string) error {
+	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", component)
+	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", targetDir)
+
+	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		if err := os.MkdirAll(targetDir, DirPermissions); err != nil {
+			return errUtils.Build(errUtils.ErrSourceProvision).
+				WithCause(err).
+				WithExplanation("Failed to create target directory").
+				WithContext("path", targetDir).
+				Err()
+		}
+
+		if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
+			return errUtils.Build(errUtils.ErrSourceProvision).
+				WithCause(err).
+				WithExplanation("Failed to auto-provision component source").
+				WithContext("component", component).
+				WithContext("source", sourceSpec.Uri).
+				WithContext("target", targetDir).
+				WithHint("Verify source URI is accessible and credentials are valid").
+				Err()
+		}
+
+		return nil
+	})
+}
+
+// wrapProvisionError wraps an error with provision context.
+func wrapProvisionError(err error, explanation, component string) error {
+	return errUtils.Build(errUtils.ErrSourceProvision).
+		WithCause(err).
+		WithExplanation(explanation).
+		WithContext("component", component).
+		Err()
+}
+
+// determineSourceTargetDirectory determines where to download the source.
+// Returns the target directory path and whether it's a workdir path.
+//
+// Priority:
+// 1. If workdir is enabled: .workdir/<componentType>/<stack>-<component>/.
+// 2. Otherwise: components/<componentType>/<component>/.
+func determineSourceTargetDirectory(
+	atmosConfig *schema.AtmosConfiguration,
+	componentType string,
+	component string,
+	componentConfig map[string]any,
+) (string, bool, error) {
+	// Check if workdir is enabled.
+	if isWorkdirEnabled(componentConfig) {
+		// Get stack name for workdir path.
+		stack, _ := componentConfig["atmos_stack"].(string)
+		if stack == "" {
+			return "", false, errUtils.Build(errUtils.ErrSourceProvision).
+				WithExplanation("Stack name required when workdir is enabled").
+				WithHint("The 'atmos_stack' field is required for workdir provisioning").
+				Err()
+		}
+
+		basePath := atmosConfig.BasePath
+		if basePath == "" {
+			basePath = "."
+		}
+
+		workdirPath := workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
+		return workdirPath, true, nil
+	}
+
+	// No workdir - use standard component path.
+	targetDir, err := DetermineTargetDirectory(atmosConfig, componentType, component, componentConfig)
+	if err != nil {
+		return "", false, err
+	}
+	return targetDir, false, nil
+}
+
+// isWorkdirEnabled checks if provision.workdir.enabled is set to true.
+func isWorkdirEnabled(componentConfig map[string]any) bool {
+	provisionConfig, ok := componentConfig["provision"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	workdirConfig, ok := provisionConfig["workdir"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	enabled, ok := workdirConfig["enabled"].(bool)
+	return ok && enabled
+}
+
+// needsProvisioning checks if the target directory needs provisioning.
+// Returns (true, reason) if:
+//   - Directory doesn't exist or is empty.
+//   - Version has changed from what's in metadata.
+//   - URI has changed from what's in metadata.
+//   - No metadata exists (fresh workdir).
+//
+// Returns (false, "") if the existing workdir is up-to-date.
+func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource, isWorkdir bool) (bool, string) {
+	// Check if directory exists and has content.
+	if !isNonEmptyDir(targetDir) {
+		return true, ""
+	}
+
+	// For non-workdir targets, existence is sufficient - no metadata tracking.
+	if !isWorkdir {
+		return false, ""
+	}
+
+	// Directory exists and has content - check metadata for version/URI changes.
+	metadata, err := workdir.ReadMetadata(targetDir)
+	if err != nil || metadata == nil {
+		return true, "No metadata found, re-provisioning"
+	}
+
+	// Check for version/URI changes.
+	changed, reason := checkMetadataChanges(metadata, sourceSpec)
+	if changed {
+		return changed, reason
+	}
+
+	// Check TTL-based cache expiration.
+	if sourceSpec.TTL != "" {
+		expired, ttlReason := isSourceCacheExpired(sourceSpec.TTL, metadata.UpdatedAt)
+		if expired {
+			return true, ttlReason
+		}
+	}
+
+	return false, ""
+}
+
+// isNonEmptyDir checks if the path exists, is a directory, and contains at least one entry
+// (excluding the .atmos metadata directory).
+func isNonEmptyDir(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+
+	// Count entries excluding .atmos metadata directory.
+	for _, entry := range entries {
+		if entry.Name() != workdir.AtmosDir {
+			return true
+		}
+	}
+	return false
+}
+
+// checkMetadataChanges compares metadata with source spec for version/URI changes.
+// Returns (true, reason) if changes detected, (false, "") if up-to-date.
+func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.VendorComponentSource) (bool, string) {
+	// Check for version changes (including version removal).
+	if sourceSpec.Version != metadata.SourceVersion {
+		oldVer := metadata.SourceVersion
+		newVer := sourceSpec.Version
+		if oldVer == "" {
+			oldVer = "(none)"
+		}
+		if newVer == "" {
+			newVer = "(none)"
+		}
+		return true, fmt.Sprintf("Source version changed (%s → %s)", oldVer, newVer)
+	}
+
+	if sourceSpec.Uri != metadata.SourceURI {
+		return true, fmt.Sprintf("Source URI changed (%s → %s)", metadata.SourceURI, sourceSpec.Uri)
+	}
+
+	return false, ""
+}
+
+// isSourceCacheExpired checks if the source cache has expired based on TTL.
+// A TTL of "0" or "0s" means always expired (always re-pull).
+func isSourceCacheExpired(ttl string, updatedAt time.Time) (bool, string) {
+	// Handle zero TTL explicitly (always expired).
+	if isZeroTTL(ttl) {
+		return true, fmt.Sprintf("Source cache expired (TTL: %s, always re-pull)", ttl)
+	}
+
+	ttlDuration, err := duration.ParseDuration(ttl)
+	if err != nil {
+		return true, fmt.Sprintf("Invalid source TTL %q; forcing re-provision to avoid stale cache", ttl)
+	}
+
+	if time.Since(updatedAt) > ttlDuration {
+		return true, fmt.Sprintf("Source cache expired (TTL: %s, last updated: %s)",
+			ttl, updatedAt.Format(time.RFC3339))
+	}
+	return false, ""
+}
+
+// isZeroTTL checks if the TTL string represents a zero duration.
+func isZeroTTL(ttl string) bool {
+	return ttl == "0" || ttl == "0s" || ttl == "0m" || ttl == "0h" || ttl == "0d"
+}
+
+// isLocalSource determines if a source URI refers to a local path.
+// Local sources start with ".", absolute paths (OS-specific), or are relative paths without remote indicators.
+func isLocalSource(uri string) bool {
+	// Relative paths starting with . or ..
+	if strings.HasPrefix(uri, ".") {
+		return true
+	}
+	// Absolute paths (OS-specific, including Windows paths like C:\...).
+	if filepath.IsAbs(uri) {
+		return true
+	}
+	// File scheme.
+	if strings.HasPrefix(uri, "file://") {
+		return true
+	}
+	// Remote indicators - if any of these are present, it's remote.
+	remoteIndicators := []string{
+		"://",        // Any URL scheme (https://, git://, s3://, etc.).
+		"github.com", // GitHub.
+		"gitlab.com", // GitLab.
+		"bitbucket.", // Bitbucket.
+		"git::",      // Git getter prefix.
+		"s3::",       // S3 getter prefix.
+		"gcs::",      // GCS getter prefix.
+	}
+	for _, indicator := range remoteIndicators {
+		if strings.Contains(uri, indicator) {
+			return false
+		}
+	}
+	// Default: paths without remote indicators are local.
+	return true
+}
+
+// writeWorkdirMetadata writes workdir metadata based on source type (local or remote).
+func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *schema.VendorComponentSource) error {
+	now := time.Now()
+
+	// Read existing metadata to preserve CreatedAt if it exists.
+	existingMetadata, _ := workdir.ReadMetadata(workdirPath)
+
+	// Determine source type based on URI.
+	sourceType := workdir.SourceTypeRemote
+	if isLocalSource(sourceSpec.Uri) {
+		sourceType = workdir.SourceTypeLocal
+	}
+
+	metadata := &workdir.WorkdirMetadata{
+		Component:     component,
+		Stack:         stack,
+		SourceType:    sourceType,
+		Source:        sourceSpec.Uri, // Keep source field for backward compatibility.
+		SourceURI:     sourceSpec.Uri,
+		SourceVersion: sourceSpec.Version,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		LastAccessed:  now,
+		ContentHash:   "", // Content hash is computed separately for local sources.
+	}
+
+	// Preserve original CreatedAt and ContentHash if metadata already existed.
+	if existingMetadata != nil {
+		metadata.CreatedAt = existingMetadata.CreatedAt
+		// Preserve content hash for local sources (may have been computed by workdir provisioner).
+		if sourceType == workdir.SourceTypeLocal && existingMetadata.ContentHash != "" {
+			metadata.ContentHash = existingMetadata.ContentHash
+		}
+	}
+
+	return workdir.WriteMetadata(workdirPath, metadata)
+}
+
+// extractComponentName extracts the component name from config.
+// Priority: componentConfig["component"] > componentConfig["metadata"]["component"].
+func extractComponentName(componentConfig map[string]any) string {
+	// Try component field first (highest priority).
+	if component, ok := componentConfig["component"].(string); ok && component != "" {
+		return component
+	}
+
+	// Fall back to metadata.component.
+	if metadata, ok := componentConfig["metadata"].(map[string]any); ok {
+		if component, ok := metadata["component"].(string); ok && component != "" {
+			return component
+		}
+	}
+
+	return ""
+}

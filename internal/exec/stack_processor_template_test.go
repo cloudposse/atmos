@@ -151,7 +151,7 @@ metadata:
 			require.NoError(t, err)
 
 			// Process the file
-			result, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
+			result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				tempDir,
 				filePath,
@@ -317,7 +317,7 @@ components:
 
 	// Process the main stack file
 	stackPath := filepath.Join(tempDir, "stack.yaml")
-	result, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
 		atmosConfig,
 		tempDir,
 		stackPath,
@@ -387,7 +387,7 @@ components:
 	}
 
 	// Test with skipTemplatesProcessingInImports = true
-	result, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
 		atmosConfig,
 		tempDir,
 		templateFile,
@@ -419,7 +419,7 @@ components:
 	assert.Equal(t, 10, vars["value"])
 
 	// Test with skipTemplatesProcessingInImports = false
-	result2, _, _, _, _, _, _, err2 := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result2, _, _, _, _, _, _, _, err2 := ProcessYAMLConfigFileWithContext( //nolint:dogsled
 		atmosConfig,
 		tempDir,
 		templateFile,
@@ -449,4 +449,113 @@ components:
 	// The template should be evaluated
 	assert.Equal(t, "3", vars2["computed"])
 	assert.Equal(t, 10, vars2["value"])
+}
+
+// TestGlobalIgnoreMissingTemplateValues tests that the global templates.settings.ignore_missing_template_values
+// setting in atmos.yaml is used as a fallback when per-import ignore_missing_template_values is not set.
+func TestGlobalIgnoreMissingTemplateValues(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a main stack file that imports a catalog file with context but missing template vars.
+	mainStack := `
+import:
+  - path: catalog/component.yaml
+    context:
+      flavor: blue
+`
+
+	// The catalog file uses a template variable {{ .undeclared_var }} which is not in the context.
+	catalogFile := `
+components:
+  terraform:
+    "{{ .flavor }}/cluster":
+      vars:
+        flavor: "{{ .flavor }}"
+        extra: "{{ .undeclared_var }}"
+`
+
+	// Write test files.
+	err := os.MkdirAll(filepath.Join(tempDir, "catalog"), 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tempDir, "stack.yaml"), []byte(mainStack), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tempDir, "catalog", "component.yaml"), []byte(catalogFile), 0o644)
+	require.NoError(t, err)
+
+	// Test 1: Without the global setting, missing template values should cause an error.
+	atmosConfigNoIgnore := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:                     true,
+				IgnoreMissingTemplateValues: false,
+			},
+		},
+		Logs: schema.Logs{Level: "Info"},
+	}
+
+	stackPath := filepath.Join(tempDir, "stack.yaml")
+	_, _, _, _, _, _, _, _, err = ProcessYAMLConfigFileWithContext( //nolint:dogsled
+		atmosConfigNoIgnore,
+		tempDir,
+		stackPath,
+		map[string]map[string]any{},
+		nil,
+		false, // ignoreMissingFiles
+		false, // skipTemplatesProcessingInImports
+		false, // ignoreMissingTemplateValues (import-level)
+		false, // skipIfMissing
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+	)
+	assert.Error(t, err, "expected an error when ignore_missing_template_values is false and template vars are missing")
+
+	// Test 2: With the global setting enabled, missing template values should not cause an error.
+	atmosConfigWithIgnore := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:                     true,
+				IgnoreMissingTemplateValues: true, // Global setting.
+			},
+		},
+		Logs: schema.Logs{Level: "Info"},
+	}
+
+	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+		atmosConfigWithIgnore,
+		tempDir,
+		stackPath,
+		map[string]map[string]any{},
+		nil,
+		false, // ignoreMissingFiles
+		false, // skipTemplatesProcessingInImports
+		false, // ignoreMissingTemplateValues (import-level, not set; global should apply)
+		false, // skipIfMissing
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+	)
+	require.NoError(t, err, "expected no error when global ignore_missing_template_values is true")
+	require.NotNil(t, result)
+
+	// Verify the component was created with the available template values.
+	components, ok := result["components"].(map[string]any)
+	require.True(t, ok)
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok)
+	cluster, ok := terraform["blue/cluster"].(map[string]any)
+	require.True(t, ok)
+	vars, ok := cluster["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "blue", vars["flavor"])
 }

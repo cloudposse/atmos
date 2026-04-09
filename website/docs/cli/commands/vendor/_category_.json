@@ -1,6 +1,5 @@
 {
   "label": "vendor",
-  "position": 11,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

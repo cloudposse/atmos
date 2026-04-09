@@ -84,6 +84,32 @@ func RequireAWSProfile(t *testing.T, profileName string) {
 	}
 }
 
+// RequireAWSCredentials checks if AWS credentials are available through any standard method.
+// It uses the AWS SDK to validate that credentials can be loaded from environment variables,
+// shared credentials file, EC2 instance metadata, or any other credential source.
+func RequireAWSCredentials(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Try to load the AWS config using the default credential chain
+	ctx := context.Background()
+	cfgOpts := []func(*config.LoadOptions) error{}
+	cfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
+	if err != nil {
+		t.Skipf("AWS credentials not available: %v. Configure AWS credentials or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", err)
+	}
+
+	// Loading the config succeeds even without credentials, so we need to actually
+	// try to retrieve credentials to verify they exist
+	_, err = cfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		t.Skipf("AWS credentials not available: %v. Configure AWS credentials or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", err)
+	}
+}
+
 // RequireAzureCredentials checks if Azure credentials appear to be configured.
 // This function looks for common Azure credential sources:
 // - Environment variables (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
@@ -391,6 +417,26 @@ func RequireOCIAuthentication(t *testing.T) {
 		t.Skipf("GitHub token not configured: required for GitHub API access (OCI images, cloning repos, avoiding rate limits). Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable, or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
 	}
 
+	// Token exists — probe ghcr.io to verify this specific token can actually pull images.
+	// A bot token may exist but not have access to the ghcr.io registry used by tests.
+	client := &http.Client{Timeout: httpTimeout}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://ghcr.io/v2/", nil)
+	if err != nil {
+		t.Logf("Warning: Could not create ghcr.io request: %v", err)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+githubToken)
+		resp, reqErr := client.Do(req) //nolint:gosec // URL is a hardcoded constant (ghcr.io), not user input.
+		if reqErr != nil {
+			t.Skipf("Cannot reach ghcr.io: %v. OCI registry access required. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to skip.", reqErr)
+		}
+		resp.Body.Close()
+		// 401 = unauthorized (wrong/expired token); 403 = forbidden (no read:packages scope).
+		// Both indicate the token cannot pull OCI images from ghcr.io.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			t.Skipf("GitHub token exists but is not authorized for ghcr.io (HTTP %d). OCI integration test requires a token with 'read:packages' scope.", resp.StatusCode)
+		}
+	}
+
 	// Token exists, log that authentication is available
 	t.Logf("GitHub authentication available via token")
 }
@@ -445,4 +491,84 @@ func SkipOnDarwinARM64(t *testing.T, reason string) {
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
 	}
+}
+
+const (
+	// Container runtime names.
+	containerRuntimeDocker = "docker"
+	containerRuntimePodman = "podman"
+)
+
+// RequireContainerRuntime checks if a container runtime (Docker or Podman) is available.
+// It prefers Docker but will accept Podman if Docker is not available.
+// Returns the name of the available runtime ("docker" or "podman").
+func RequireContainerRuntime(t *testing.T) string {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return containerRuntimeDocker // Default assumption when checks are disabled
+	}
+
+	// Try Docker first
+	if cmd := exec.Command(containerRuntimeDocker, "version"); cmd.Run() == nil {
+		t.Logf("Container runtime available: Docker")
+		return containerRuntimeDocker
+	}
+
+	// Try Podman as fallback
+	if cmd := exec.Command(containerRuntimePodman, "version"); cmd.Run() == nil {
+		t.Logf("Container runtime available: Podman")
+		return containerRuntimePodman
+	}
+
+	t.Skipf("No container runtime available. Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/getting-started/installation), or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	return ""
+}
+
+// RequireDocker checks if Docker is available and running.
+// Use this for tests that specifically require Docker (not Podman).
+func RequireDocker(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if docker command exists
+	_, err := exec.LookPath(containerRuntimeDocker)
+	if err != nil {
+		t.Skipf("Docker not found in PATH. Install Docker (https://docs.docker.com/get-docker/) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Check if Docker daemon is running
+	cmd := exec.Command(containerRuntimeDocker, "info")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Docker daemon not running. Start Docker or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	t.Logf("Docker is available and running")
+}
+
+// RequirePodman checks if Podman is available and running.
+// Use this for tests that specifically require Podman (not Docker).
+func RequirePodman(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if podman command exists
+	_, err := exec.LookPath(containerRuntimePodman)
+	if err != nil {
+		t.Skipf("Podman not found in PATH. Install Podman (https://podman.io/getting-started/installation) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Check if Podman is working
+	cmd := exec.Command(containerRuntimePodman, "info")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Podman not working properly. Check Podman installation or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	t.Logf("Podman is available and working")
 }

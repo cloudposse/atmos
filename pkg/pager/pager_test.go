@@ -6,7 +6,21 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
+
+// setupTestWriter initializes I/O context and data writer for tests.
+// This ensures tests that may trigger data.Write() operations don't depend on globals.
+func setupTestWriter(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("Failed to initialize I/O context: %v", err)
+	}
+	data.InitWriter(ioCtx)
+}
 
 func TestPageCreator_Run(t *testing.T) {
 	tests := []struct {
@@ -46,6 +60,8 @@ func TestPageCreator_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			setupTestWriter(t)
+
 			// Track whether newTeaProgram was called and capture the model.
 			teaProgramCalled := false
 			var capturedModel *model
@@ -77,6 +93,9 @@ func TestPageCreator_Run(t *testing.T) {
 				},
 				isTTYSupportForStdout: func() bool {
 					return tt.isTTYSupported
+				},
+				isTTYAccessible: func() bool {
+					return true // Mock /dev/tty as accessible
 				},
 			}
 
@@ -118,6 +137,8 @@ func (m *simpleTestModel) View() string {
 }
 
 func TestPageCreator_Run_WithError(t *testing.T) {
+	setupTestWriter(t)
+
 	// Test error handling by creating a pageCreator that simulates an error
 	expectedErr := errors.New("simulated tea program error")
 
@@ -133,6 +154,10 @@ func TestPageCreator_Run_WithError(t *testing.T) {
 		isTTYSupportForStdout: func() bool {
 			return true
 		},
+		isTTYAccessible: func() bool {
+			return true // Mock /dev/tty as accessible
+		},
+		enablePager: true,
 	}
 
 	err := pc.Run("Test", "Content")
@@ -190,6 +215,8 @@ func TestNewWithAtmosConfig(t *testing.T) {
 }
 
 func TestPageCreator_Run_ModelCreation(t *testing.T) {
+	setupTestWriter(t)
+
 	title := "Test Title"
 	content := "Test Content"
 
@@ -208,6 +235,9 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 		},
 		isTTYSupportForStdout: func() bool {
 			return true
+		},
+		isTTYAccessible: func() bool {
+			return true // Mock /dev/tty as accessible
 		},
 		enablePager: true,
 	}
@@ -232,33 +262,45 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 func TestPageCreator_Run_WithoutPager(t *testing.T) {
 	// Test scenarios where pager is not used
 	testCases := []struct {
-		name         string
-		enablePager  bool
-		ttySupported bool
-		contentFits  bool
+		name          string
+		enablePager   bool
+		ttySupported  bool
+		ttyAccessible bool
+		contentFits   bool
 	}{
 		{
-			name:         "pager disabled",
-			enablePager:  false,
-			ttySupported: true,
-			contentFits:  false,
+			name:          "pager disabled",
+			enablePager:   false,
+			ttySupported:  true,
+			ttyAccessible: true,
+			contentFits:   false,
 		},
 		{
-			name:         "no TTY support",
-			enablePager:  true,
-			ttySupported: false,
-			contentFits:  false,
+			name:          "no TTY support",
+			enablePager:   true,
+			ttySupported:  false,
+			ttyAccessible: true,
+			contentFits:   false,
 		},
 		{
-			name:         "TTY supported but content fits",
-			enablePager:  true,
-			ttySupported: true,
-			contentFits:  true,
+			name:          "TTY supported but content fits",
+			enablePager:   true,
+			ttySupported:  true,
+			ttyAccessible: true,
+			contentFits:   true,
+		},
+		{
+			name:          "TTY supported but not accessible - skips pager",
+			enablePager:   true,
+			ttySupported:  true,
+			ttyAccessible: false,
+			contentFits:   false,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			setupTestWriter(t)
 			teaProgramCalled := false
 
 			pc := &pageCreator{
@@ -273,6 +315,9 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 				isTTYSupportForStdout: func() bool {
 					return tc.ttySupported
 				},
+				isTTYAccessible: func() bool {
+					return tc.ttyAccessible
+				},
 			}
 
 			err := pc.Run("Test", "Content")
@@ -280,4 +325,165 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 			assert.False(t, teaProgramCalled, "Tea program should not be called when content should be printed directly")
 		})
 	}
+}
+
+func TestMaskContent(t *testing.T) {
+	t.Run("masks content with initialized io context", func(t *testing.T) {
+		// Initialize I/O context.
+		err := iolib.Initialize()
+		assert.NoError(t, err)
+
+		// Test with normal content.
+		content := "Hello, World!"
+		result := maskContent(content)
+		assert.Equal(t, content, result) // No secrets to mask, should be unchanged.
+	})
+
+	t.Run("returns content unchanged when no secrets", func(t *testing.T) {
+		// Initialize I/O context.
+		_ = iolib.Initialize()
+
+		content := "This is normal text without any secrets"
+		result := maskContent(content)
+		assert.Equal(t, content, result)
+	})
+}
+
+func TestDataWriter_Write(t *testing.T) {
+	t.Run("writes content using data package", func(t *testing.T) {
+		// Initialize writer.
+		setupTestWriter(t)
+
+		writer := &dataWriter{}
+		err := writer.Write("test content")
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles empty content", func(t *testing.T) {
+		setupTestWriter(t)
+
+		writer := &dataWriter{}
+		err := writer.Write("")
+		assert.NoError(t, err)
+	})
+}
+
+func TestPageCreator_WriteContent(t *testing.T) {
+	t.Run("writes content with valid writer", func(t *testing.T) {
+		setupTestWriter(t)
+
+		pc := &pageCreator{
+			writer: &dataWriter{},
+		}
+
+		err := pc.writeContent("test content")
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles nil writer with fallback", func(t *testing.T) {
+		// Initialize I/O context for masking fallback.
+		_ = iolib.Initialize()
+
+		pc := &pageCreator{
+			writer: nil,
+		}
+
+		// Should not panic, and should use fallback.
+		err := pc.writeContent("test content")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns error from writer", func(t *testing.T) {
+		pc := &pageCreator{
+			writer: &errorWriter{err: errors.New("write failed")},
+		}
+
+		err := pc.writeContent("test content")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to write content")
+	})
+}
+
+// errorWriter is a mock writer that always returns an error.
+type errorWriter struct {
+	err error
+}
+
+func (w *errorWriter) Write(content string) error {
+	return w.err
+}
+
+func TestIsTTYAccessible(t *testing.T) {
+	// This is an integration test that checks the actual isTTYAccessible function.
+	// The result depends on the environment.
+	t.Run("returns bool without panicking", func(t *testing.T) {
+		// Just verify it doesn't panic and returns a bool.
+		result := isTTYAccessible()
+		// Can't assert specific value as it depends on environment.
+		_ = result
+	})
+}
+
+func TestPageCreator_IntegrationScenarios(t *testing.T) {
+	t.Run("full flow with enabled pager and fitting content", func(t *testing.T) {
+		setupTestWriter(t)
+
+		pc := &pageCreator{
+			enablePager: true,
+			writer:      &dataWriter{},
+			newTeaProgram: func(model tea.Model, opts ...tea.ProgramOption) *tea.Program {
+				return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))
+			},
+			contentFitsTerminal: func(content string) bool {
+				return true // Content fits, no pager needed.
+			},
+			isTTYSupportForStdout: func() bool {
+				return true
+			},
+			isTTYAccessible: func() bool {
+				return true
+			},
+		}
+
+		err := pc.Run("Title", "Short content")
+		assert.NoError(t, err)
+	})
+
+	t.Run("full flow with disabled pager", func(t *testing.T) {
+		setupTestWriter(t)
+
+		pc := &pageCreator{
+			enablePager: false,
+			writer:      &dataWriter{},
+		}
+
+		err := pc.Run("Title", "Content")
+		assert.NoError(t, err)
+	})
+}
+
+func TestWriterInterface(t *testing.T) {
+	t.Run("dataWriter implements Writer interface", func(t *testing.T) {
+		var w Writer = &dataWriter{}
+		assert.NotNil(t, w)
+	})
+
+	t.Run("errorWriter implements Writer interface", func(t *testing.T) {
+		var w Writer = &errorWriter{err: errors.New("test")}
+		assert.NotNil(t, w)
+	})
+}
+
+func TestPageCreatorInterface(t *testing.T) {
+	t.Run("New returns valid PageCreator", func(t *testing.T) {
+		// New() returns PageCreator interface - compiler verifies compliance.
+		pc := New()
+		assert.NotNil(t, pc)
+	})
+
+	t.Run("NewWithAtmosConfig returns valid PageCreator", func(t *testing.T) {
+		// NewWithAtmosConfig() returns PageCreator interface - compiler verifies compliance.
+		pc := NewWithAtmosConfig(true)
+		assert.NotNil(t, pc)
+	})
 }

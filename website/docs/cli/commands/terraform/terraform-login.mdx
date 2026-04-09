@@ -1,0 +1,99 @@
+---
+title: atmos terraform login
+sidebar_label: login
+sidebar_class_name: command
+id: login
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to authenticate with Terraform Cloud or Terraform Enterprise for an Atmos component in a stack.
+</Intro>
+
+:::warning Terraform Only
+This command is specific to Terraform and is not available in OpenTofu. OpenTofu removed Terraform Cloud integration features.
+:::
+
+<Screengrab title="atmos terraform login --help" slug="atmos-terraform-login--help" />
+
+## Usage
+
+Execute the `terraform login` command like this:
+
+```shell
+atmos terraform login <component> [hostname] -s <stack> [options]
+```
+
+This command retrieves an API token from Terraform Cloud or Terraform Enterprise and saves it locally for use with other commands that require authentication.
+
+:::info Atmos Behavior
+This is a pure passthrough command. Atmos does not perform automatic initialization or workspace management for `terraform login`. The command is executed directly to manage Terraform Cloud credentials.
+:::
+## Examples
+
+### Login to Terraform Cloud
+
+```shell
+# Login to app.terraform.io (default)
+atmos terraform login vpc -s dev
+```
+
+### Login to Terraform Enterprise
+
+```shell
+# Login to a specific host
+atmos terraform login vpc -s dev terraform.company.com
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+
+    <dt>`hostname` <em>(optional)</em></dt>
+    <dd>
+        Optional hostname of Terraform Cloud or Terraform Enterprise (e.g., `terraform.company.com`). If not provided, defaults to `app.terraform.io`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform login vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform login vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform login` flags, such as an optional hostname argument. The token is saved in the credentials file.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

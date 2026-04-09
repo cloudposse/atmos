@@ -109,8 +109,11 @@ commands:
         # steps support Go templates
         steps:
           - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
-  - name: terraform
-    description: Execute 'terraform' commands
+  # Note: Using 'tf-custom' instead of 'terraform' to avoid conflict with the built-in
+  # terraform command which already has a --stack flag. Custom subcommands cannot
+  # redefine flags that exist on their parent command.
+  - name: tf-custom
+    description: Execute custom 'terraform' commands
     # subcommands
     commands:
       - name: provision

@@ -1,0 +1,12 @@
+# Test fixture for profile testing
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+logs:
+  level: Info
+  file: "/dev/stderr"

@@ -1,0 +1,345 @@
+---
+title: Versioning Schemes
+sidebar_position: 8
+sidebar_label: Versioning Schemes
+description: Common versioning schemes for naming component versions in Atmos
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<PillBox>Atmos Reference</PillBox>
+<Intro>
+**Versioning Schemes** are naming conventions used to identify different versions of infrastructure components. This reference documents common schemes and when to use each. Different [version management patterns](/design-patterns/version-management) work best with specific schemes.
+</Intro>
+
+Choosing the right versioning scheme depends on your operational model and how you track component evolution. Schemes fall into two broad categories: **number-based** (fixed points representing immutable versions) and **label-based** (moving targets representing stages or channels).
+
+<KeyPoints>
+- Number-based schemes (SemVer, CalVer) create immutable version identifiers
+- Label-based schemes (Maturity Levels, Environment Names) represent stages that evolve
+- Different patterns work best with specific schemes
+- Schemes can be mixed for different operational needs
+</KeyPoints>
+
+## Number-Based Schemes
+
+Number-based schemes create **fixed points** - each identifier refers to a specific, immutable version. These work well with [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning) where you need explicit version tracking.
+
+### Semantic Versioning (SemVer)
+
+Uses `MAJOR.MINOR.PATCH` format (e.g., `1.2.3`, `2.0.0`) following [semver.org](https://semver.org) conventions:
+- **MAJOR**: Breaking changes, incompatible API changes
+- **MINOR**: New features, backward compatible
+- **PATCH**: Bug fixes, backward compatible
+
+<File title="SemVer Example">
+```
+components/terraform/
+  vpc/
+    1.0.0/      # Initial stable release
+    1.1.0/      # Added IPv6 support (backward compatible)
+    1.1.1/      # Fixed subnet calculation bug
+    2.0.0/      # Breaking: Changed variable names
+```
+</File>
+
+**When to use:**
+- Vendoring from external sources with semantic versioning
+- Managing component libraries with clear API contracts
+- Need to communicate change impact (breaking vs. non-breaking)
+
+**Examples:**
+- `vpc/1.2.3` - VPC component version 1.2.3
+- `eks/2.0.0` - EKS component version 2.0.0 (breaking changes from 1.x)
+- `rds/1.14.2` - RDS component version 1.14.2
+
+### Calendar Versioning (CalVer)
+
+Uses date-based formats (e.g., `2024.10.1`, `2024-10-01`) where version reflects when it was created:
+- **YYYY.MM.DD**: Full date format
+- **YYYY.MM.MICRO**: Year.Month with incrementing counter
+- **YY.MM**: Short year and month
+
+<File title="CalVer Example">
+```
+components/terraform/
+  vpc/
+    2024.10.1/  # First release in October 2024
+    2024.10.2/  # Second release in October 2024
+    2024.11.1/  # First release in November 2024
+```
+</File>
+
+**When to use:**
+- Time-based release cycles (monthly updates, quarterly releases)
+- Compliance requirements for temporal tracking
+- Want to immediately see age of component versions
+
+**Examples:**
+- `vpc/2024.10.1` - VPC component from October 2024, first release
+- `platform/2024-Q4-1` - Platform component from Q4 2024
+- `security/24.10` - Security component from October 2024
+
+### Sequential Versioning
+
+Simple incrementing numbers (e.g., `v1`, `v2`, `v3`) without semantic meaning:
+
+<File title="Sequential Example">
+```
+components/terraform/
+  vpc/
+    v1/   # First version
+    v2/   # Second version
+    v3/   # Third version
+```
+</File>
+
+**When to use:**
+- Rapid prototyping where semantic versioning is overhead
+- Internal components without strict API contracts
+- Simple progression without communicating change type
+
+**Examples:**
+- `vpc/v1`, `vpc/v2`, `vpc/v3`
+- `app/r1`, `app/r2` (using "r" for release)
+
+### Major/Minor Versioning
+
+Simplified SemVer using only `MAJOR.MINOR` (e.g., `1.0`, `2.0`, `1.1`):
+
+<File title="Major/Minor Example">
+```
+components/terraform/
+  vpc/
+    1.0/   # First major version
+    1.1/   # Added features
+    2.0/   # Breaking changes
+```
+</File>
+
+**When to use:**
+- Want semantic meaning without patch-level granularity
+- Smaller teams with less frequent releases
+- Balance between simplicity and meaning
+
+**Examples:**
+- `vpc/1.0` - VPC major version 1
+- `eks/2.1` - EKS version 2.1 with enhancements
+- `platform/3.0` - Platform version 3 (breaking changes)
+
+## Label-Based Schemes
+
+Label-based schemes create **moving targets** - the label stays the same but points to different versions over time. These work well with [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels) where environments follow stages that evolve.
+
+### Maturity Levels
+
+Uses stability indicators (e.g., `alpha`, `beta`, `stable`, `rc`) showing component readiness:
+
+<File title="Maturity Levels Example">
+```
+components/terraform/
+  alpha/
+    vpc/     # Experimental, may change
+    eks/     # Latest features, higher risk
+  beta/
+    vpc/     # Release candidate, stabilizing
+    eks/     # Pre-production testing
+  stable/
+    vpc/     # Production-ready
+    eks/     # Proven, minimal changes
+```
+</File>
+
+**Common maturity levels:**
+- **alpha**: Experimental, frequent changes, not production-ready
+- **beta**: Feature complete, stabilizing, release candidate
+- **rc** (Release Candidate): Final testing before stable
+- **stable**: Production-ready, minimal changes
+- **lts** (Long-Term Support): Extended support window
+
+**When to use:**
+- Technology-focused teams comfortable with software release terms
+- Need clear stability expectations independent of environments
+- Components at different maturity levels
+
+**Examples:**
+- `alpha/vpc` - VPC in alpha testing
+- `beta/platform` - Platform in beta stage
+- `stable/security` - Stable security components
+
+### Environment Names
+
+Uses deployment stage names (e.g., `dev`, `staging`, `prod`) aligned with infrastructure tiers:
+
+<File title="Environment Names Example">
+```
+components/terraform/
+  dev/
+    vpc/     # Development track
+    eks/     # Latest changes land here
+  staging/
+    vpc/     # Pre-production validation
+    eks/     # Production candidate
+  prod/
+    vpc/     # Production track
+    eks/     # Stable, proven versions
+```
+</File>
+
+**Common environment names:**
+- **dev** / **development**: Development environment track
+- **staging** / **preprod**: Pre-production validation
+- **prod** / **production**: Production environment track
+- **sandbox**: Experimental playground
+- **qa**: Quality assurance/testing
+
+**When to use:**
+- Direct mapping to infrastructure environments
+- Teams think in terms of deployment stages
+- Idiomatic with [Git Flow](/design-patterns/version-management/git-flow-branches-as-channels) where branches map to environments
+
+**Examples:**
+- `dev/vpc` - VPC for development environments
+- `staging/platform` - Platform for staging
+- `prod/security` - Security for production
+
+## Hybrid Approaches
+
+Combining schemes for specific operational needs:
+
+### Version + Stage
+Combine number with label for explicit tracking within stages:
+
+<File title="Hybrid: Version + Stage">
+```
+components/terraform/
+  prod-v1.2.3/     # Production at version 1.2.3
+  staging-v1.3.0/  # Staging testing version 1.3.0
+  dev-v1.4.0/      # Development working on 1.4.0
+```
+</File>
+
+### Date + Maturity
+Combine CalVer with maturity for temporal and stability tracking:
+
+<File title="Hybrid: Date + Maturity">
+```
+components/terraform/
+  2024.10-stable/  # October 2024 stable release
+  2024.11-beta/    # November 2024 beta
+  2024.12-alpha/   # December 2024 alpha
+```
+</File>
+
+**When to use hybrids:**
+- Need both temporal tracking AND stability indication
+- Complex compliance requirements
+- Multiple teams with different needs
+
+## Choosing a Versioning Scheme
+
+Consider these factors when selecting a scheme:
+
+| Factor | Number-Based (SemVer, CalVer) | Label-Based (Maturity, Environment) |
+|--------|-------------------------------|-------------------------------------|
+| **Immutability** | Fixed versions never change | Labels point to evolving versions |
+| **Use Case** | Strict version pinning | Release tracks/channels |
+| **Rollback** | Pin to specific version number | Revert entire track/channel |
+| **Promotion** | Update pins to new version | Promote version to next label |
+| **Overhead** | Track many version numbers | Manage fewer labels |
+| **Pattern Fit** | [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning) | [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels) |
+
+### Pattern-Specific Recommendations
+
+Different [version management patterns](/design-patterns/version-management) work best with specific schemes:
+
+**[Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)**
+- **Recommended**: SemVer, CalVer, Major/Minor, Sequential
+- Creates immutable version folders
+- Example: `vpc/1.2.3`, `platform/2024.10.1`
+
+**[Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)**
+- **Recommended**: Maturity Levels, Environment Names
+- Creates moving track folders
+- Example: `alpha/vpc`, `dev/platform`
+
+**[Git Flow: Branches as Channels](/design-patterns/version-management/git-flow-branches-as-channels)**
+- **Recommended**: Environment Names (branches ARE environments)
+- Branches carry version semantics
+- Example: `channels/dev`, `channels/staging`, `channels/prod`
+
+**[Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)**
+- **Recommended**: Simple naming, Sequential if needed
+- Explicit folder structure without complex versioning
+- Example: `vpc/`, `eks/`, or `vpc-v1/`, `vpc-v2/`
+
+## Best Practices
+
+### 1. Be Consistent Within Components
+Use the same scheme across all versions of a component:
+
+```
+# GOOD: Consistent SemVer
+vpc/1.0.0/
+vpc/1.1.0/
+vpc/2.0.0/
+
+# BAD: Mixing schemes
+vpc/1.0.0/
+vpc/stable/
+vpc/2024.10/
+```
+
+### 2. Document Your Scheme
+Maintain clear documentation of which schemes you're using and why:
+
+<File title="docs/versioning-policy.md">
+```markdown
+# Versioning Policy
+
+## Platform Components
+- Scheme: SemVer (MAJOR.MINOR.PATCH)
+- Location: `components/terraform/{component}/{version}/`
+- Example: `vpc/1.2.3/`
+
+## Application Components
+- Scheme: Maturity Levels
+- Location: `components/terraform/{maturity}/{component}/`
+- Example: `alpha/api-gateway/`
+```
+</File>
+
+### 3. Match Scheme to Operational Model
+Choose schemes that align with how your team thinks about versions:
+- **Technology teams**: Maturity Levels (alpha, beta, stable)
+- **Operations teams**: Environment Names (dev, staging, prod)
+- **Compliance-driven**: CalVer for temporal tracking
+- **Library management**: SemVer for clear API contracts
+
+### 4. Consider Migration Paths
+Plan for scheme changes as your needs evolve:
+- Start simple (Sequential, Simple folders)
+- Add semantic meaning as needed (SemVer, Maturity Levels)
+- Maintain backward compatibility during transitions
+
+## Summary
+
+Versioning schemes provide naming conventions for component versions. Choose based on whether you need:
+
+- **Fixed points** (SemVer, CalVer, Sequential) → Use with Strict Version Pinning
+- **Moving targets** (Maturity Levels, Environment Names) → Use with Release Tracks/Channels
+
+The right scheme depends on your operational model, team culture, and which [version management pattern](/design-patterns/version-management) you're implementing. Start with simpler schemes and add complexity only when the benefits justify the overhead.
+
+:::tip
+Different components can use different schemes based on their needs. Platform components might use SemVer while application components use maturity levels.
+:::
+
+## Related Patterns
+
+- [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning) - Works with number-based schemes
+- [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels) - Works with label-based schemes
+- [Git Flow: Branches as Channels](/design-patterns/version-management/git-flow-branches-as-channels) - Idiomatic with environment names
+- [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) - Works with simple naming

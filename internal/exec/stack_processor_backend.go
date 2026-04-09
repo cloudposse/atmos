@@ -22,6 +22,7 @@ type terraformBackendConfig struct {
 	atmosConfig                 *schema.AtmosConfiguration
 	component                   string
 	baseComponentName           string
+	componentMetadata           map[string]any
 	globalBackendType           string
 	globalBackendSection        map[string]any
 	baseComponentBackendType    string
@@ -67,11 +68,11 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 	// Set backend-specific defaults.
 	switch finalComponentBackendType {
 	case "s3":
-		setS3BackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName)
+		setS3BackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata)
 	case "gcs":
-		setGCSBackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName)
+		setGCSBackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata)
 	case azurermBackendName:
-		err := setAzureBackendKey(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentBackendSection, cfg.globalBackendSection)
+		err := setAzureBackendKey(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, cfg.componentBackendSection, cfg.globalBackendSection)
 		if err != nil {
 			return "", nil, err
 		}
@@ -81,10 +82,14 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 }
 
 // setS3BackendDefaults sets AWS S3 backend defaults.
-func setS3BackendDefaults(backend map[string]any, component string, baseComponentName string) {
+// Priority for workspace_key_prefix: explicit config > metadata.name > metadata.component > Atmos component name.
+func setS3BackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any) {
 	if p, ok := backend["workspace_key_prefix"].(string); !ok || p == "" {
 		workspaceKeyPrefix := component
-		if baseComponentName != "" {
+		// Priority: metadata.name > metadata.component (baseComponentName) > Atmos component name.
+		if metadataName, ok := metadata["name"].(string); ok && metadataName != "" {
+			workspaceKeyPrefix = metadataName
+		} else if baseComponentName != "" {
 			workspaceKeyPrefix = baseComponentName
 		}
 		backend["workspace_key_prefix"] = strings.ReplaceAll(workspaceKeyPrefix, "/", "-")
@@ -92,10 +97,14 @@ func setS3BackendDefaults(backend map[string]any, component string, baseComponen
 }
 
 // setGCSBackendDefaults sets Google GCS backend defaults.
-func setGCSBackendDefaults(backend map[string]any, component string, baseComponentName string) {
+// Priority for prefix: explicit config > metadata.name > metadata.component > Atmos component name.
+func setGCSBackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any) {
 	if p, ok := backend["prefix"].(string); !ok || p == "" {
 		prefix := component
-		if baseComponentName != "" {
+		// Priority: metadata.name > metadata.component (baseComponentName) > Atmos component name.
+		if metadataName, ok := metadata["name"].(string); ok && metadataName != "" {
+			prefix = metadataName
+		} else if baseComponentName != "" {
 			prefix = baseComponentName
 		}
 		backend["prefix"] = strings.ReplaceAll(prefix, "/", "-")
@@ -103,10 +112,12 @@ func setGCSBackendDefaults(backend map[string]any, component string, baseCompone
 }
 
 // setAzureBackendKey sets the Azure backend key if not present.
+// Priority for key: explicit config > metadata.name > metadata.component > Atmos component name.
 func setAzureBackendKey(
 	finalComponentBackend map[string]any,
 	component string,
 	baseComponentName string,
+	metadata map[string]any,
 	componentBackendSection map[string]any,
 	globalBackendSection map[string]any,
 ) error {
@@ -128,8 +139,11 @@ func setAzureBackendKey(
 	}
 
 	// Determine the component name for the key.
+	// Priority: metadata.name > metadata.component (baseComponentName) > Atmos component name.
 	azureKeyPrefixComponent := component
-	if baseComponentName != "" {
+	if metadataName, ok := metadata["name"].(string); ok && metadataName != "" {
+		azureKeyPrefixComponent = metadataName
+	} else if baseComponentName != "" {
 		azureKeyPrefixComponent = baseComponentName
 	}
 

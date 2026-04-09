@@ -1,0 +1,61 @@
+package flags
+
+import (
+	"github.com/cloudposse/atmos/pkg/flags/global"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// CommandOptions is the base interface all strongly-typed interpreters implement.
+// Each command type (Terraform, Helmfile, Auth, etc.) has its own interpreter struct
+// that embeds GlobalFlags and provides command-specific fields.
+//
+// This enables strongly-typed access to flags instead of weak map-based access:
+//
+//	// ❌ Weak typing (old way with map access)
+//	stack := atmosFlags["stack"].(string)  // runtime type assertion, can panic
+//
+//	// ✅ Strong typing (new way with interpreter)
+//	stack := interpreter.Stack  // compile-time type safety
+type CommandOptions interface {
+	// GetGlobalFlags returns the global flags available to all commands.
+	GetGlobalFlags() *global.Flags
+
+	// GetPositionalArgs returns positional arguments (e.g., component name, subcommand).
+	GetPositionalArgs() []string
+
+	// GetSeparatedArgs returns arguments to pass to underlying tools (Terraform, Helmfile, etc.).
+	GetSeparatedArgs() []string
+}
+
+// BaseOptions provides common implementation for CommandOptions interface.
+// Command-specific interpreters should embed this (or just embed global.Flags directly).
+type BaseOptions struct {
+	global.Flags    // Embedded global flags.
+	positionalArgs  []string
+	passThroughArgs []string
+}
+
+// NewBaseOptions creates a new BaseOptions with the given arguments.
+func NewBaseOptions(globalFlags *global.Flags, positionalArgs, passThroughArgs []string) BaseOptions {
+	defer perf.Track(nil, "flags.NewBaseOptions")()
+
+	return BaseOptions{
+		Flags:           *globalFlags,
+		positionalArgs:  positionalArgs,
+		passThroughArgs: passThroughArgs,
+	}
+}
+
+// GetPositionalArgs implements CommandOptions.
+func (b *BaseOptions) GetPositionalArgs() []string {
+	defer perf.Track(nil, "flags.BaseOptions.GetPositionalArgs")()
+
+	return b.positionalArgs
+}
+
+// GetSeparatedArgs implements CommandOptions.
+func (b *BaseOptions) GetSeparatedArgs() []string {
+	defer perf.Track(nil, "flags.BaseOptions.GetSeparatedArgs")()
+
+	return b.passThroughArgs
+}

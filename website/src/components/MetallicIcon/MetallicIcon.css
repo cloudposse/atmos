@@ -1,0 +1,11 @@
+/* Metallic Icon - gradient background with mask (matches apps repo exactly) */
+.metallic-icon {
+  display: inline-block;
+  /* Metallic gradient from stone-600 via stone-200 to stone-600 */
+  background: linear-gradient(
+    to bottom left,
+    #57534e 0%,
+    #e7e5e4 50%,
+    #57534e 100%
+  );
+}

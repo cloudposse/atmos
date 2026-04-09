@@ -30,6 +30,7 @@ const (
 type Provider struct {
 	name   string
 	config *schema.Provider
+	realm  string // Credential isolation realm set by auth manager.
 }
 
 // NewProvider creates a new mock provider.
@@ -58,6 +59,11 @@ func (p *Provider) Name() string {
 	defer perf.Track(nil, "mock.Provider.Name")()
 
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *Provider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for the mock provider.
@@ -123,4 +129,12 @@ func (p *Provider) GetFilesDisplayPath() string {
 	defer perf.Track(nil, "mock.Provider.GetFilesDisplayPath")()
 
 	return "~/.mock/credentials"
+}
+
+// Paths returns mock credential file paths for mounting into containers.
+func (p *Provider) Paths() ([]types.Path, error) {
+	defer perf.Track(nil, "mock.Provider.Paths")()
+
+	// Mock providers return an empty list since they don't use real credential files.
+	return []types.Path{}, nil
 }

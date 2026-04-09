@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/spf13/viper"
 	ini "gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -25,6 +26,10 @@ import (
 const (
 	PermissionRWX = 0o700
 	PermissionRW  = 0o600
+
+	// Directory names.
+	awsDirName      = "aws" // AWS credential subdirectory name under the auth base directory.
+	awsCacheDirName = "aws" // AWS SDK cache directory name under XDG_CACHE_HOME.
 
 	// File locking timeouts.
 	fileLockTimeout = 10 * time.Second
@@ -93,6 +98,7 @@ func acquireFileLock(lockPath string) (*flock.Flock, error) {
 // AWSFileManager provides helpers to manage AWS credentials/config files.
 type AWSFileManager struct {
 	baseDir string
+	realm   string // Realm for credential isolation (optional).
 }
 
 // LoadINIFile loads an INI file with options that preserve section comments.
@@ -105,15 +111,18 @@ func LoadINIFile(path string) (*ini.File, error) {
 
 // NewAWSFileManager creates a new AWS file manager instance.
 // BasePath is optional and can be empty to use defaults.
+// Realm is optional and provides credential isolation between different Atmos configurations.
 // Precedence: 1) basePath parameter from provider spec, 2) XDG config directory.
 //
 // Default path follows XDG Base Directory Specification:
-//   - Linux: $XDG_CONFIG_HOME/atmos/aws (default: ~/.config/atmos/aws)
-//   - macOS: ~/Library/Application Support/atmos/aws
-//   - Windows: %APPDATA%\atmos\aws
+//   - Linux/macOS: $XDG_CONFIG_HOME/atmos (default: ~/.config/atmos)
+//   - Windows: %APPDATA%\atmos
+//
+// With realm: {baseDir}/{realm}/aws/{provider}/credentials
+// Without realm: {baseDir}/aws/{provider}/credentials
 //
 // Respects ATMOS_XDG_CONFIG_HOME and XDG_CONFIG_HOME environment variables.
-func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
+func NewAWSFileManager(basePath, realm string) (*AWSFileManager, error) {
 	var baseDir string
 
 	if basePath != "" {
@@ -124,13 +133,13 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 		}
 		baseDir = expanded
 	} else {
-		// Default: Use XDG config directory for AWS credentials.
-		// This keeps Atmos-managed AWS credentials under Atmos's namespace,
+		// Default: Use XDG config directory for Atmos credentials.
+		// This keeps Atmos-managed credentials under Atmos's namespace,
 		// following the same pattern as cache and keyring storage.
 		var err error
-		baseDir, err = xdg.GetXDGConfigDir("aws", PermissionRWX)
+		baseDir, err = xdg.GetXDGConfigDir("", PermissionRWX)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get XDG config directory for AWS: %w", err)
+			return nil, fmt.Errorf("failed to get XDG config directory for Atmos: %w", err)
 		}
 
 		// Check for legacy ~/.aws/atmos path and warn if found.
@@ -139,6 +148,7 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 
 	return &AWSFileManager{
 		baseDir: baseDir,
+		realm:   realm,
 	}, nil
 }
 
@@ -549,23 +559,87 @@ func (m *AWSFileManager) GetBaseDir() string {
 	return m.baseDir
 }
 
+// GetRealm returns the realm used for credential isolation.
+func (m *AWSFileManager) GetRealm() string {
+	return m.realm
+}
+
 // GetDisplayPath returns a user-friendly display path (with ~ if under home directory).
+// Path includes realm subdirectory when realm is configured.
 func (m *AWSFileManager) GetDisplayPath() string {
-	homeDir, err := homedir.Dir()
-	if err == nil && homeDir != "" && strings.HasPrefix(m.baseDir, homeDir) {
-		return strings.Replace(m.baseDir, homeDir, "~", 1)
+	var basePath string
+	if m.realm != "" {
+		basePath = filepath.Join(m.baseDir, m.realm)
+	} else {
+		basePath = m.baseDir
 	}
-	return m.baseDir
+
+	homeDir, err := homedir.Dir()
+	if err == nil && homeDir != "" && strings.HasPrefix(basePath, homeDir) {
+		return strings.Replace(basePath, homeDir, "~", 1)
+	}
+	return basePath
 }
 
 // GetCredentialsPath returns the path to the credentials file for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/credentials (with realm)
+// or {baseDir}/aws/{provider}/credentials (without realm, backward-compatible).
 func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
-	return filepath.Join(m.baseDir, providerName, "credentials")
+	return filepath.Join(m.baseDir, m.realm, awsDirName, providerName, "credentials")
 }
 
 // GetConfigPath returns the path to the config file for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/config (with realm)
+// or {baseDir}/aws/{provider}/config (without realm, backward-compatible).
 func (m *AWSFileManager) GetConfigPath(providerName string) string {
-	return filepath.Join(m.baseDir, providerName, "config")
+	return filepath.Join(m.baseDir, m.realm, awsDirName, providerName, "config")
+}
+
+// GetCachePath returns the AWS SDK cache directory path.
+// AWS SDK uses ~/.aws/sso/cache or $XDG_CACHE_HOME/aws/sso/cache for SSO cache.
+// Returns empty string if cache directory cannot be determined.
+func (m *AWSFileManager) GetCachePath() string {
+	// Check for XDG_CACHE_HOME environment variable first.
+	// Use viper to respect environment variable precedence.
+	v := viper.New()
+	if err := v.BindEnv("XDG_CACHE_HOME"); err != nil {
+		// Binding failed, fall back to default path.
+		return m.getDefaultCachePath()
+	}
+
+	cacheDir := strings.TrimSpace(v.GetString("XDG_CACHE_HOME"))
+	if cacheDir == "" {
+		// XDG not set, fall back to default path.
+		return m.getDefaultCachePath()
+	}
+
+	// Expand tilde if present using homedir.Expand for correct handling.
+	// This properly handles ~/foo, ~user/foo, and other tilde cases.
+	if strings.HasPrefix(cacheDir, "~") {
+		expandedDir, err := homedir.Expand(cacheDir)
+		if err != nil {
+			// Expansion failed on tilde path, fall back to default.
+			// Using an unexpanded tilde would create an invalid relative path.
+			return m.getDefaultCachePath()
+		}
+		if expandedDir == "" {
+			// Expansion returned empty, fall back to default.
+			return m.getDefaultCachePath()
+		}
+		cacheDir = expandedDir
+	}
+
+	// XDG is set, use $XDG_CACHE_HOME/aws/sso/cache.
+	return filepath.Join(cacheDir, awsCacheDirName, "sso", "cache")
+}
+
+// getDefaultCachePath returns the default AWS cache path ~/.aws/sso/cache.
+func (m *AWSFileManager) getDefaultCachePath() string {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".aws", "sso", "cache")
 }
 
 // GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice.
@@ -581,10 +655,12 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 }
 
 // Cleanup removes AWS files for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/ (with realm)
+// or {baseDir}/aws/{provider}/ (without realm).
 func (m *AWSFileManager) Cleanup(providerName string) error {
 	defer perf.Track(nil, "aws.files.Cleanup")()
 
-	providerDir := filepath.Join(m.baseDir, providerName)
+	providerDir := filepath.Join(m.baseDir, m.realm, awsDirName, providerName)
 
 	log.Debug("Cleaning up AWS files directory",
 		"provider", providerName,
@@ -667,16 +743,27 @@ func (m *AWSFileManager) removeIniSection(filePath, sectionName string) error {
 	return nil
 }
 
-// CleanupAll removes entire base directory (all providers).
+// CleanupAll removes the realm-specific directory (all providers for this realm).
+// Only removes credentials for the current realm, preserving other realms.
+// Path structure: {baseDir}/{realm}/ (with realm) or {baseDir}/aws/ (without realm).
 func (m *AWSFileManager) CleanupAll() error {
 	defer perf.Track(nil, "aws.files.CleanupAll")()
 
-	if err := os.RemoveAll(m.baseDir); err != nil {
+	var targetDir string
+	if m.realm != "" {
+		// With realm: remove the entire realm directory.
+		targetDir = filepath.Join(m.baseDir, m.realm)
+	} else {
+		// Without realm: remove only the aws subdirectory to avoid deleting the entire baseDir.
+		targetDir = filepath.Join(m.baseDir, awsDirName)
+	}
+
+	if err := os.RemoveAll(targetDir); err != nil {
 		// If directory doesn't exist, that's not an error (already cleaned up).
 		if os.IsNotExist(err) {
 			return nil
 		}
-		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, m.baseDir, "failed to cleanup all AWS files")
+		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, targetDir, "failed to cleanup all AWS files for realm")
 		return ErrCleanupAWSFiles
 	}
 

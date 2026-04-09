@@ -2,14 +2,20 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -17,12 +23,24 @@ const (
 	// Character constants.
 	newline = "\n"
 	tab     = "\t"
+	space   = " "
+
+	// ANSI escape sequences.
+	clearLine = "\r\x1b[K" // Carriage return + clear from cursor to end of line
+
+	// Format templates.
+	iconMessageFormat = "%s %s"
+
+	// Formatting constants.
+	paragraphIndent      = "  " // 2-space indent for paragraph continuation
+	paragraphIndentWidth = 2    // Width of paragraph indent
 )
 
 var (
 	// Global formatter instance and I/O context.
 	globalIO        io.Context
 	globalFormatter *formatter
+	globalTerminal  terminal.Terminal
 	formatterMu     sync.RWMutex
 )
 
@@ -40,11 +58,117 @@ func InitFormatter(ioCtx io.Context) {
 
 	// Create terminal instance with I/O writer for automatic masking
 	// terminal.Write() → io.Write(UIStream) → masking → stderr
-	globalTerminal := terminal.New(terminal.WithIO(termWriter))
+	globalTerminal = terminal.New(terminal.WithIO(termWriter))
+
+	// Configure lipgloss global color profile based on terminal capabilities.
+	// This ensures that all lipgloss styles (including theme.Styles) respect
+	// terminal color settings like NO_COLOR.
+	configureColorProfile(globalTerminal)
 
 	// Create formatter with I/O context and terminal
 	globalFormatter = NewFormatter(ioCtx, globalTerminal).(*formatter)
 	Format = globalFormatter // Also expose for advanced use
+}
+
+// ReinitFormatter re-creates the global formatter with a fresh I/O context.
+// This is needed after output capture (os.Pipe) is stopped, because the original
+// InitFormatter() ran while pipes were active — terminal detection saw pipes instead
+// of the real terminal and cached ColorNone. After capture restores os.Stdout/os.Stderr,
+// calling ReinitFormatter() re-detects the real terminal and restores color support.
+func ReinitFormatter() {
+	defer perf.Track(nil, "ui.ReinitFormatter")()
+
+	ioCtx, err := io.NewContext()
+	if err != nil {
+		log.Debug("ui.ReinitFormatter: failed to create I/O context", "error", err)
+		return
+	}
+	InitFormatter(ioCtx)
+}
+
+// Reset clears all UI globals (formatter, I/O, terminal).
+// This is primarily used in tests to ensure clean state between test executions.
+func Reset() {
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	globalIO = nil
+	globalFormatter = nil
+	globalTerminal = nil
+	Format = nil
+}
+
+// configureColorProfile sets the global lipgloss color profile based on terminal capabilities.
+// This ensures all lipgloss styles respect NO_COLOR and other terminal color settings.
+func configureColorProfile(term terminal.Terminal) {
+	profile := term.ColorProfile()
+
+	// Map terminal color profile to termenv profile for lipgloss
+	var termProfile termenv.Profile
+	switch profile {
+	case terminal.ColorNone:
+		termProfile = termenv.Ascii
+	case terminal.Color16:
+		termProfile = termenv.ANSI
+	case terminal.Color256:
+		termProfile = termenv.ANSI256
+	case terminal.ColorTrue:
+		termProfile = termenv.TrueColor
+	default:
+		termProfile = termenv.Ascii
+	}
+
+	setColorProfileInternal(termProfile)
+}
+
+// setColorProfileInternal applies a color profile to all color-dependent systems.
+// This centralizes the color profile configuration for lipgloss, theme, and logger.
+func setColorProfileInternal(profile termenv.Profile) {
+	// Set the global lipgloss color profile
+	lipgloss.SetColorProfile(profile)
+
+	// Force theme styles to be regenerated with the new color profile.
+	// This is critical because theme.CurrentStyles caches lipgloss styles that
+	// bake in ANSI codes at creation time. When the color profile changes,
+	// we must regenerate the styles.
+	theme.InvalidateStyleCache()
+
+	// Reinitialize logger to respect the new color profile.
+	// The logger is initialized in init() with a default color profile,
+	// so we need to explicitly reconfigure it when the color profile changes.
+	log.Default().SetColorProfile(profile)
+}
+
+// SetColorProfile sets the color profile for all UI systems (lipgloss, theme, logger).
+// This is primarily intended for testing when environment variables are set after
+// package initialization. For normal operation, color profiles are automatically
+// configured during InitFormatter() based on terminal capabilities.
+//
+// Example usage in tests:
+//
+//	t.Setenv("NO_COLOR", "1")
+//	ui.SetColorProfile(termenv.Ascii)
+func SetColorProfile(profile termenv.Profile) {
+	setColorProfileInternal(profile)
+}
+
+// GetColorProfile returns the configured termenv color profile.
+// Use this instead of termenv.ColorProfile() to respect atmos's terminal detection.
+// This ensures colors degrade gracefully in terminals that don't support TrueColor
+// (like macOS Terminal.app which only supports 256 colors until macOS Tahoe).
+//
+// The returned profile respects:
+//   - --force-color flag (returns TrueColor for screenshot generation).
+//   - --no-color / NO_COLOR env var (returns Ascii).
+//   - Terminal capabilities detected via COLORTERM env var.
+//
+// Example usage.
+//
+//	profile := ui.GetColorProfile()
+//	glamour.WithColorProfile(profile)
+func GetColorProfile() termenv.Profile {
+	defer perf.Track(nil, "ui.GetColorProfile")()
+
+	return lipgloss.DefaultRenderer().ColorProfile()
 }
 
 // getFormatter returns the global formatter instance.
@@ -61,13 +185,16 @@ func getFormatter() (*formatter, error) {
 // Package-level functions that delegate to the global formatter.
 
 // Markdown writes rendered markdown to stdout (data channel).
-// Use this for help text, documentation, and other pipeable content.
-func Markdown(content string) error {
+// Use this for help text, documentation, and other pipeable formatted content.
+// Note: Delegates to globalFormatter.Markdown() for rendering, then writes to data channel.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Markdown(content string) {
 	formatterMu.RLock()
 	defer formatterMu.RUnlock()
 
 	if globalFormatter == nil || globalIO == nil {
-		return errUtils.ErrUIFormatterNotInitialized
+		log.Debug("ui.Markdown called before InitFormatter")
+		return
 	}
 
 	rendered, err := globalFormatter.Markdown(content)
@@ -76,24 +203,27 @@ func Markdown(content string) error {
 		rendered = content
 	}
 
-	_, writeErr := fmt.Fprint(globalIO.Data(), rendered)
-	return writeErr
+	if _, writeErr := fmt.Fprint(globalIO.Data(), rendered); writeErr != nil {
+		log.Debug("ui.Markdown write failed", "error", writeErr)
+	}
 }
 
 // Markdownf writes formatted markdown to stdout (data channel).
-func Markdownf(format string, a ...interface{}) error {
+func Markdownf(format string, a ...interface{}) {
 	content := fmt.Sprintf(format, a...)
-	return Markdown(content)
+	Markdown(content)
 }
 
 // MarkdownMessage writes rendered markdown to stderr (UI channel).
 // Use this for formatted UI messages and errors.
-func MarkdownMessage(content string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func MarkdownMessage(content string) {
 	formatterMu.RLock()
 	defer formatterMu.RUnlock()
 
 	if globalFormatter == nil || globalIO == nil {
-		return errUtils.ErrUIFormatterNotInitialized
+		log.Debug("ui.MarkdownMessage called before InitFormatter")
+		return
 	}
 
 	rendered, err := globalFormatter.Markdown(content)
@@ -102,124 +232,341 @@ func MarkdownMessage(content string) error {
 		rendered = content
 	}
 
-	_, writeErr := fmt.Fprint(globalIO.UI(), rendered)
-	return writeErr
+	if _, writeErr := fmt.Fprint(globalIO.UI(), rendered); writeErr != nil {
+		log.Debug("ui.MarkdownMessage write failed", "error", writeErr)
+	}
 }
 
 // MarkdownMessagef writes formatted markdown to stderr (UI channel).
-func MarkdownMessagef(format string, a ...interface{}) error {
+func MarkdownMessagef(format string, a ...interface{}) {
 	content := fmt.Sprintf(format, a...)
-	return MarkdownMessage(content)
+	MarkdownMessage(content)
 }
 
 // Success writes a success message with green checkmark to stderr (UI channel).
 // Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Success(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Success(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Success called before InitFormatter")
+		return
 	}
 	formatted := f.Success(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Success write failed", "error", writeErr)
+	}
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
 // Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Successf(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Successf(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Successf called before InitFormatter")
+		return
 	}
 	formatted := f.Successf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Successf write failed", "error", writeErr)
+	}
 }
 
 // Error writes an error message with red X to stderr (UI channel).
 // Flow: ui.Error() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Error(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Error(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Error called before InitFormatter")
+		return
 	}
 	formatted := f.Error(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Error write failed", "error", writeErr)
+	}
 }
 
 // Errorf writes a formatted error message with red X to stderr (UI channel).
 // Flow: ui.Errorf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Errorf(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Errorf(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Errorf called before InitFormatter")
+		return
 	}
 	formatted := f.Errorf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Errorf write failed", "error", writeErr)
+	}
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
 // Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Warning(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Warning(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Warning called before InitFormatter")
+		return
 	}
 	formatted := f.Warning(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Warning write failed", "error", writeErr)
+	}
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
 // Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Warningf(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Warningf(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Warningf called before InitFormatter")
+		return
 	}
 	formatted := f.Warningf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Warningf write failed", "error", writeErr)
+	}
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
 // Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Info(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Info(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Info called before InitFormatter")
+		return
 	}
 	formatted := f.Info(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Info write failed", "error", writeErr)
+	}
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
 // Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Infof(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Infof(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Infof called before InitFormatter")
+		return
 	}
 	formatted := f.Infof(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Infof write failed", "error", writeErr)
+	}
+}
+
+// Toast writes a toast message with custom icon to stderr (UI channel).
+// Flow: ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Toast(icon, message string) {
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Toast called before InitFormatter")
+		return
+	}
+	formatted := f.Toast(icon, message) // formatter.Toast() already includes trailing newline
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Toast write failed", "error", writeErr)
+	}
+}
+
+// Toastf writes a formatted toast message with custom icon to stderr (UI channel).
+// Flow: ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Toastf(icon, format string, a ...interface{}) {
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Toastf called before InitFormatter")
+		return
+	}
+	formatted := f.Toastf(icon, format, a...) // formatter.Toastf() already includes trailing newline
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Toastf write failed", "error", writeErr)
+	}
+}
+
+// Hint writes a hint/tip message with lightbulb icon to stderr (UI channel).
+// This is a convenience wrapper with themed hint icon and muted color.
+// Flow: ui.Hint() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Hint(text string) {
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Hint called before InitFormatter")
+		return
+	}
+	formatted := f.Hint(text) + newline
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Hint write failed", "error", writeErr)
+	}
+}
+
+// Hintf writes a formatted hint/tip message with lightbulb icon to stderr (UI channel).
+// This is a convenience wrapper with themed hint icon and muted color.
+// Flow: ui.Hintf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Hintf(format string, a ...interface{}) {
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Hintf called before InitFormatter")
+		return
+	}
+	formatted := f.Hintf(format, a...) + newline
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Hintf write failed", "error", writeErr)
+	}
+}
+
+// Experimental writes an experimental feature notification with test tube icon to stderr (UI channel).
+// This is used to notify users when they're using an experimental feature that may change.
+// The notification behavior is controlled by settings.experimental in atmos.yaml (silence, disable, warn, error).
+// The caller (root.go PersistentPreRun) handles the config check - this function just outputs.
+// Flow: ui.Experimental() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Experimental(feature string) {
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Experimental called before InitFormatter")
+		return
+	}
+
+	formatted := f.Experimental(feature) + newline
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Experimental write failed", "error", writeErr)
+	}
+}
+
+// Experimentalf writes a formatted experimental feature notification with test tube icon to stderr (UI channel).
+// Flow: ui.Experimentalf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Experimentalf(format string, a ...interface{}) {
+	Experimental(fmt.Sprintf(format, a...))
 }
 
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Write(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Write(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Write called before InitFormatter")
+		return
 	}
-	return f.terminal.Write(text)
+	if writeErr := f.terminal.Write(text); writeErr != nil {
+		log.Debug("ui.Write write failed", "error", writeErr)
+	}
+}
+
+// FormatSuccess returns a success message with green checkmark as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatSuccess(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted
+		return "✓ " + text
+	}
+	return f.Success(text)
+}
+
+// FormatError returns an error message with red X as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatError(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted
+		return "✗ " + text
+	}
+	return f.Error(text)
+}
+
+// FormatInline renders inline markdown (backticks, bold, etc.) without icons or newlines.
+// Use this for spinner progress messages or other single-line styled text.
+func FormatInline(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		return text
+	}
+	rendered, err := f.renderToastMarkdownInline(text)
+	if err != nil {
+		return text
+	}
+	return rendered
+}
+
+// Badge returns a styled badge with the given text, background color, and foreground color.
+// Badges are compact labels with background styling, typically used for status indicators.
+// The background and foreground should be hex colors (e.g., "#FF9800", "#000000").
+// Use this when you need the formatted string without writing (e.g., in help text).
+func Badge(text, background, foreground string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted.
+		return "[" + text + "]"
+	}
+	return f.Badge(text, background, foreground)
+}
+
+// FormatExperimentalBadge returns an "EXPERIMENTAL" badge using theme colors.
+// Use this to indicate experimental features in help text or command descriptions.
+func FormatExperimentalBadge() string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted.
+		return "[EXPERIMENTAL]"
+	}
+	if !f.SupportsColor() {
+		return "[EXPERIMENTAL]"
+	}
+	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
 }
 
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writef() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Writef(format string, a ...interface{}) error {
-	return Write(fmt.Sprintf(format, a...))
+func Writef(format string, a ...interface{}) {
+	Write(fmt.Sprintf(format, a...))
 }
 
 // Writeln writes text followed by a newline to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writeln() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Writeln(text string) error {
-	return Write(text + newline)
+func Writeln(text string) {
+	Write(text + newline)
+}
+
+// ClearLine clears the current line in the terminal and returns cursor to the beginning.
+// Respects NO_COLOR and terminal capabilities - uses ANSI escape sequences only when supported.
+// When colors are disabled, only writes carriage return to move cursor to start of line.
+// This is useful for replacing spinner messages or other dynamic output with final status messages.
+// Flow: ui.ClearLine() → ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+//
+// Example usage:
+//
+//	ui.ClearLine()
+//	ui.Success("Operation completed successfully")
+func ClearLine() {
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalTerminal == nil {
+		log.Debug("ui.ClearLine called before InitFormatter")
+		return
+	}
+
+	// Only use ANSI clear sequence if terminal supports colors.
+	// When NO_COLOR=1 or color is disabled, just use carriage return.
+	if globalTerminal.ColorProfile() != terminal.ColorNone {
+		Write(clearLine) // \r\x1b[K - carriage return + clear to EOL
+	} else {
+		Write("\r") // Just carriage return when colors disabled
+	}
 }
 
 // Format exposes the global formatter for advanced use cases.
@@ -231,13 +578,14 @@ var Format Formatter
 type formatter struct {
 	ioCtx    io.Context
 	terminal terminal.Terminal
-	styles   *StyleSet
+	styles   *theme.StyleSet
 }
 
 // NewFormatter creates a new Formatter with I/O context and terminal.
 // Most code should use the package-level functions instead (ui.Markdown, ui.Success, etc.).
 func NewFormatter(ioCtx io.Context, term terminal.Terminal) Formatter {
-	styles := generateStyleSet(term.ColorProfile())
+	// Use theme-aware styles based on configured theme
+	styles := theme.GetCurrentStyles()
 
 	return &formatter{
 		ioCtx:    ioCtx,
@@ -246,7 +594,7 @@ func NewFormatter(ioCtx io.Context, term terminal.Terminal) Formatter {
 	}
 }
 
-func (f *formatter) Styles() *StyleSet {
+func (f *formatter) Styles() *theme.StyleSet {
 	return f.styles
 }
 
@@ -266,17 +614,186 @@ func (f *formatter) ColorProfile() terminal.ColorProfile {
 //   - style: The lipgloss style to apply (determines color)
 //   - text: The message text
 //
-// Returns formatted string: "{icon} {text}" with color applied (or plain if no color support).
+// Returns formatted string: "{colored icon} {text}" where only the icon is colored.
 func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text string) string {
 	if !f.SupportsColor() {
-		return fmt.Sprintf("%s %s", icon, text)
+		return fmt.Sprintf(iconMessageFormat, icon, text)
 	}
-	return style.Render(fmt.Sprintf("%s %s", icon, text))
+	// Style only the icon, not the entire message.
+	styledIcon := style.Render(icon)
+	return fmt.Sprintf(iconMessageFormat, styledIcon, text)
 }
 
-// Semantic formatting - delegates to StatusMessage with appropriate icons and styles.
+// Toast renders markdown text with an icon prefix and auto-indents multi-line content.
+// Returns the formatted string with a trailing newline.
+func (f *formatter) Toast(icon, message string) string {
+	result, _ := f.toastMarkdown(icon, nil, message)
+	return result + newline
+}
+
+// Toastf renders formatted markdown text with an icon prefix.
+func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
+	return f.Toast(icon, fmt.Sprintf(format, a...))
+}
+
+// Badge renders a styled badge with background color, foreground color, bold text, and padding.
+// Badges are compact labels used for status indicators like [EXPERIMENTAL], [BETA], etc.
+func (f *formatter) Badge(text, background, foreground string) string {
+	if !f.SupportsColor() {
+		return "[" + text + "]"
+	}
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(background)).
+		Foreground(lipgloss.Color(foreground)).
+		Bold(true).
+		Padding(0, 1).
+		Render(text)
+}
+
+// toastMarkdown renders markdown text with preserved newlines, an icon prefix, and auto-indents multi-line content.
+// Uses a compact stylesheet for toast-style inline formatting.
+func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text string) (string, error) {
+	// Render markdown with toast-specific compact stylesheet
+	rendered, err := f.renderToastMarkdown(text)
+	if err != nil {
+		return "", err
+	}
+
+	// Glamour adds 1 leading newline and 2 trailing newlines to every output.
+	// Remove these, but preserve any newlines that were in the original message.
+	rendered = strings.TrimPrefix(rendered, newline)         // Remove Glamour's leading newline
+	rendered = strings.TrimSuffix(rendered, newline+newline) // Remove Glamour's trailing newlines
+	// If there's still a trailing newline, it was from the original message.
+	if !strings.HasSuffix(rendered, newline) && strings.HasSuffix(text, newline) {
+		// Original had trailing newline but rendering lost it, add it back.
+		rendered += newline
+	}
+
+	// Style the icon if color is supported
+	var styledIcon string
+	if f.SupportsColor() && style != nil {
+		styledIcon = style.Render(icon)
+	} else {
+		styledIcon = icon
+	}
+
+	// Split by newlines and trim trailing padding that Glamour adds.
+	lines := atmosansi.TrimTrailingWhitespace(rendered, paragraphIndent, paragraphIndentWidth)
+
+	// Remove trailing empty/whitespace-only lines that Glamour may add.
+	// Glamour can output extra padded lines before trailing newlines.
+	// Note: Intentional trailing newlines from the original text are also stripped
+	// because they would cause extra indented empty lines in multi-line output.
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	if len(lines) == 0 {
+		// Empty message: return icon + space for consistency with iconMessageFormat.
+		return fmt.Sprintf(iconMessageFormat, styledIcon, ""), nil
+	}
+
+	if len(lines) == 1 {
+		// For single line: trim leading spaces from Glamour's paragraph indent
+		// since the icon+space already provides visual separation.
+		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+		line := atmosansi.TrimLeftSpaces(lines[0])
+		return fmt.Sprintf(iconMessageFormat, styledIcon, line), nil
+	}
+
+	// Multi-line: trim leading spaces from first line (goes next to icon).
+	// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+	lines[0] = atmosansi.TrimLeftSpaces(lines[0])
+
+	// Multi-line: first line with icon, rest indented to align under first line's text.
+	result := fmt.Sprintf(iconMessageFormat, styledIcon, lines[0])
+
+	// Calculate indent: icon width + 1 space from iconMessageFormat.
+	// Use lipgloss.Width to handle multi-cell characters like emojis.
+	iconWidth := lipgloss.Width(icon)
+	indent := strings.Repeat(space, iconWidth+1) // +1 for the space in "%s %s" format.
+
+	for i := 1; i < len(lines); i++ {
+		// Glamour already added 2-space paragraph indent, replace with our calculated indent.
+		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+		line := atmosansi.TrimLeftSpaces(lines[i])
+		result += newline + indent + line
+	}
+
+	return result, nil
+}
+
+// renderToastMarkdownFromStylesheet renders markdown using a provided stylesheet getter.
+// This is the shared implementation used by both renderToastMarkdown and renderToastMarkdownInline.
+// Uses the custom markdown renderer with extended syntax support (highlight, badge, admonitions).
+func (f *formatter) renderToastMarkdownFromStylesheet(content string, getStylesheet func(string) ([]byte, error), wordWrap int) (string, error) {
+	var opts []markdown.CustomRendererOption
+
+	if wordWrap > 0 {
+		opts = append(opts, markdown.WithWordWrap(wordWrap))
+		opts = append(opts, markdown.WithPreservedNewLines())
+	} else {
+		opts = append(opts, markdown.WithWordWrap(0))
+	}
+
+	// Set color profile using lipgloss's detected profile.
+	opts = append(opts, markdown.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
+
+	if f.terminal.ColorProfile() != terminal.ColorNone {
+		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
+		if themeName == "" {
+			themeName = "default"
+		}
+		glamourStyle, err := getStylesheet(themeName)
+		if err == nil {
+			opts = append(opts, markdown.WithStylesFromJSONBytes(glamourStyle))
+		}
+	}
+
+	renderer, err := markdown.NewCustomRenderer(opts...)
+	if err != nil {
+		// Degrade gracefully: return plain content if renderer creation fails.
+		return content, err
+	}
+	defer renderer.Close()
+
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		// Degrade gracefully: return plain content if rendering fails.
+		return content, err
+	}
+
+	return rendered, nil
+}
+
+// renderToastMarkdown renders markdown with the standard toast stylesheet.
+// Note: Glamour adds padding to fill width - we trim it with trimTrailingWhitespace().
+func (f *formatter) renderToastMarkdown(content string) (string, error) {
+	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
+	if maxWidth == 0 {
+		// Use terminal width if available.
+		termWidth := f.terminal.Width(terminal.Stdout)
+		if termWidth > 0 {
+			maxWidth = termWidth
+		}
+	}
+	return f.renderToastMarkdownFromStylesheet(content, theme.GetGlamourStyleForTheme, maxWidth)
+}
+
+// renderToastMarkdownInline renders markdown with the inline stylesheet (no newlines).
+// This is designed for single-line output like spinner progress messages.
+func (f *formatter) renderToastMarkdownInline(content string) (string, error) {
+	rendered, err := f.renderToastMarkdownFromStylesheet(content, theme.GetGlamourStyleForInline, 0)
+	if err != nil {
+		return content, err
+	}
+	return strings.TrimSpace(rendered), nil
+}
+
+// Semantic formatting - all use toastMarkdown for markdown rendering and icon styling.
 func (f *formatter) Success(text string) string {
-	return f.StatusMessage("✓", &f.styles.Success, text)
+	result, _ := f.toastMarkdown("✓", &f.styles.Success, text)
+	return result
 }
 
 func (f *formatter) Successf(format string, a ...interface{}) string {
@@ -284,7 +801,8 @@ func (f *formatter) Successf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Warning(text string) string {
-	return f.StatusMessage("⚠", &f.styles.Warning, text)
+	result, _ := f.toastMarkdown("⚠", &f.styles.Warning, text)
+	return result
 }
 
 func (f *formatter) Warningf(format string, a ...interface{}) string {
@@ -292,7 +810,8 @@ func (f *formatter) Warningf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Error(text string) string {
-	return f.StatusMessage("✗", &f.styles.Error, text)
+	result, _ := f.toastMarkdown("✗", &f.styles.Error, text)
+	return result
 }
 
 func (f *formatter) Errorf(format string, a ...interface{}) string {
@@ -300,11 +819,89 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	return f.StatusMessage("ℹ", &f.styles.Info, text)
+	result, _ := f.toastMarkdown("ℹ", &f.styles.Info, text)
+	return result
 }
 
 func (f *formatter) Infof(format string, a ...interface{}) string {
 	return f.Info(fmt.Sprintf(format, a...))
+}
+
+func (f *formatter) Experimental(feature string) string {
+	var message string
+	if feature != "" {
+		message = fmt.Sprintf("`%s` is an experimental feature. [Learn more](https://atmos.tools/experimental)", feature)
+	} else {
+		message = "Experimental feature. [Learn more](https://atmos.tools/experimental)"
+	}
+	result, _ := f.toastMarkdown(theme.IconExperimental, &f.styles.Muted, message)
+	return result
+}
+
+func (f *formatter) Experimentalf(format string, a ...interface{}) string {
+	return f.Experimental(fmt.Sprintf(format, a...))
+}
+
+func (f *formatter) Hint(text string) string {
+	// Render the icon with muted style.
+	var styledIcon string
+	if f.SupportsColor() {
+		styledIcon = f.styles.Muted.Render("💡")
+	} else {
+		styledIcon = "💡"
+	}
+
+	// Render the text with inline markdown and apply muted style.
+	styledText := f.renderInlineMarkdownWithBase(text, &f.styles.Muted)
+
+	return fmt.Sprintf(iconMessageFormat, styledIcon, styledText)
+}
+
+// renderInlineMarkdownWithBase renders inline markdown and applies a base style to the result.
+// This is useful for rendering markdown within styled contexts like hints.
+func (f *formatter) renderInlineMarkdownWithBase(text string, baseStyle *lipgloss.Style) string {
+	// Render markdown using toast renderer for compact inline formatting.
+	rendered, err := f.renderToastMarkdown(text)
+	if err != nil {
+		// Degrade gracefully: apply base style to plain text.
+		if f.SupportsColor() && baseStyle != nil {
+			return baseStyle.Render(text)
+		}
+		return text
+	}
+
+	// Clean up Glamour's extra newlines.
+	rendered = strings.TrimPrefix(rendered, newline)
+	rendered = strings.TrimSuffix(rendered, newline+newline)
+	rendered = strings.TrimSuffix(rendered, newline)
+
+	// Trim trailing padding and leading indent from Glamour.
+	lines := atmosansi.TrimTrailingWhitespace(rendered, paragraphIndent, paragraphIndentWidth)
+	if len(lines) == 0 {
+		return ""
+	}
+
+	// For single line, trim leading spaces.
+	// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+	if len(lines) == 1 {
+		rendered = atmosansi.TrimLeftSpaces(lines[0])
+	} else {
+		// Multi-line: trim first line and rejoin.
+		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+		lines[0] = atmosansi.TrimLeftSpaces(lines[0])
+		rendered = strings.Join(lines, newline)
+	}
+
+	// Apply base style if color is supported.
+	if f.SupportsColor() && baseStyle != nil {
+		return baseStyle.Render(rendered)
+	}
+
+	return rendered
+}
+
+func (f *formatter) Hintf(format string, a ...interface{}) string {
+	return f.Hint(fmt.Sprintf(format, a...))
 }
 
 func (f *formatter) Muted(text string) string {
@@ -338,6 +935,11 @@ func (f *formatter) Label(text string) string {
 // Markdown returns the rendered markdown string (pure function, no I/O).
 // For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage().
 func (f *formatter) Markdown(content string) (string, error) {
+	return f.renderMarkdown(content, false)
+}
+
+// renderMarkdown is the internal markdown rendering implementation.
+func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (string, error) {
 	// Determine max width from config or terminal
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {
@@ -348,17 +950,43 @@ func (f *formatter) Markdown(content string) (string, error) {
 		}
 	}
 
-	// Build glamour options based on color profile
+	// Account for document left indent to prevent text overflow.
+	// The glamour stylesheet adds theme.DocumentIndent spaces on the left.
+	// Must match the Indent value in pkg/ui/theme/converter.go.
+	const documentIndent = 2
+	if maxWidth > documentIndent {
+		maxWidth -= documentIndent
+	}
+
+	// Build glamour options with theme-aware styling
 	var opts []glamour.TermRendererOption
 
 	if maxWidth > 0 {
 		opts = append(opts, glamour.WithWordWrap(maxWidth))
 	}
 
-	// Select style based on color profile
-	styleName := f.selectMarkdownStyle()
-	if styleName != "" {
-		opts = append(opts, glamour.WithStylePath(styleName))
+	// Preserve newlines if requested
+	if preserveNewlines {
+		opts = append(opts, glamour.WithPreservedNewLines())
+	}
+
+	// Use atmos-configured color profile (not glamour's auto-detection) to ensure
+	// consistent color rendering across all output paths.
+	opts = append(opts, glamour.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
+
+	// Use theme-aware glamour styles.
+	if f.terminal.ColorProfile() != terminal.ColorNone {
+		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
+		if themeName == "" {
+			themeName = "default"
+		}
+		glamourStyle, err := theme.GetGlamourStyleForTheme(themeName)
+		if err == nil {
+			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
+		}
+		// Fallback to notty style if theme conversion fails.
+	} else {
+		opts = append(opts, glamour.WithStylePath("notty"))
 	}
 
 	renderer, err := glamour.NewTermRenderer(opts...)
@@ -374,56 +1002,6 @@ func (f *formatter) Markdown(content string) (string, error) {
 		return content, err
 	}
 
-	return rendered, nil
-}
-
-// selectMarkdownStyle returns the glamour style name based on terminal color profile.
-// This will be replaced with full theme system from PR #1433.
-func (f *formatter) selectMarkdownStyle() string {
-	switch f.terminal.ColorProfile() {
-	case terminal.ColorNone:
-		return "notty"
-	case terminal.Color16, terminal.Color256, terminal.ColorTrue:
-		// Use dark style as default - this will be theme-aware in PR #1433
-		return "dark"
-	default:
-		return ""
-	}
-}
-
-// generateStyleSet creates a StyleSet based on color profile.
-// This is a simplified version - will be replaced by theme system from PR #1433.
-func generateStyleSet(profile terminal.ColorProfile) *StyleSet {
-	if profile == terminal.ColorNone {
-		// No color - return styles with no formatting
-		return &StyleSet{
-			Title:   lipgloss.NewStyle(),
-			Heading: lipgloss.NewStyle(),
-			Body:    lipgloss.NewStyle(),
-			Muted:   lipgloss.NewStyle(),
-			Success: lipgloss.NewStyle(),
-			Warning: lipgloss.NewStyle(),
-			Error:   lipgloss.NewStyle(),
-			Info:    lipgloss.NewStyle(),
-			Link:    lipgloss.NewStyle(),
-			Command: lipgloss.NewStyle(),
-			Label:   lipgloss.NewStyle(),
-		}
-	}
-
-	// Use existing theme.Styles for now
-	// This will be replaced with full theme system from PR #1433
-	return &StyleSet{
-		Title:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.ColorCyan)),
-		Heading: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBlue)),
-		Body:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWhite)),
-		Muted:   theme.Styles.GrayText,
-		Success: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen)),
-		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange)),
-		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed)),
-		Info:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)),
-		Link:    theme.Styles.Link,
-		Command: theme.Styles.CommandName,
-		Label:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.ColorBlue)),
-	}
+	// Remove trailing whitespace that glamour adds for padding.
+	return atmosansi.TrimLinesRight(rendered), nil
 }

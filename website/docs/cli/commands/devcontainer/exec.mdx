@@ -1,0 +1,127 @@
+---
+title: atmos devcontainer exec
+sidebar_label: exec
+sidebar_class_name: command
+id: exec
+description: Execute a command in a running devcontainer
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to execute a specific command inside a running devcontainer without attaching to an interactive shell.
+</Intro>
+
+<Screengrab title="atmos devcontainer exec --help" slug="atmos-devcontainer-exec--help" />
+
+## Usage
+
+```shell
+atmos devcontainer exec <name> -- <command> [args...]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to execute the command in</dd>
+
+  <dt>`command` <em>(after `--`)</em></dt>
+  <dd>The command and arguments to execute in the container</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`)</dd>
+
+  <dt>`--interactive, -i`</dt>
+  <dd>Enable interactive TTY mode for full terminal support (tab completion, colors, etc.). **Note**: Output masking is not available in interactive mode due to TTY limitations.</dd>
+
+  <dt>`--pty`</dt>
+  <dd>**Experimental**: Use PTY mode with masking support. Provides both TTY features AND output masking. **Platform**: macOS and Linux only (not available on Windows).</dd>
+</dl>
+
+## Examples
+
+```shell
+# Run a single command (non-interactive, output masked)
+atmos devcontainer exec geodesic -- terraform version
+
+# Run a command with arguments
+atmos devcontainer exec geodesic -- atmos terraform plan vpc -s dev
+
+# Check environment variables (output masked)
+atmos devcontainer exec geodesic -- env | grep AWS
+
+# Use interactive mode for full TTY support
+atmos devcontainer exec geodesic --interactive -- bash
+atmos devcontainer exec geodesic -i -- vim ~/.bashrc
+
+# Execute in a specific instance
+atmos devcontainer exec terraform --instance project-a -- terraform init
+```
+
+## Behavior
+
+- Executes the command in the running container
+- Streams stdout and stderr to your terminal
+- Returns the exit code of the command
+- Container must be running (use `atmos devcontainer start` first)
+- **Automatic masking**: Output is automatically masked based on patterns configured in `atmos.yaml`
+
+## Output Masking
+
+Atmos provides three execution modes with different tradeoffs between TTY features and output masking.
+
+For complete masking configuration (patterns, options, use cases), see the [Secret Masking Configuration](/cli/configuration/settings/mask) documentation.
+
+### 1. Non-Interactive Mode (Default)
+
+Output masking works reliably. Sensitive data like AWS keys, GitHub tokens, and other secrets are automatically redacted according to your mask configuration.
+
+```shell
+atmos devcontainer exec geodesic -- env | grep AWS
+# AWS_ACCESS_KEY_ID=***MASKED***
+# AWS_SECRET_ACCESS_KEY=***MASKED***
+```
+
+**Use when**: You need automatic masking of sensitive data in command output.
+
+### 2. Interactive Mode (`--interactive`)
+
+Full TTY support (tab completion, colors, cursor control), but output masking is not available due to TTY data flowing at the kernel level.
+
+```shell
+atmos devcontainer exec geodesic --interactive -- bash
+# Inside bash: echo $AWS_SECRET_ACCESS_KEY shows actual value
+```
+
+**Use when**: You need full TTY features like tab completion or interactive editors.
+
+### 3. PTY Mode (`--pty`) **EXPERIMENTAL**
+
+Provides **both** TTY features AND output masking using a PTY (pseudo-terminal) proxy layer.
+
+```shell
+atmos devcontainer exec geodesic --pty -- bash
+# Full TTY + automatic masking of sensitive data
+```
+
+**Platform support**: macOS and Linux only (not available on Windows)
+
+**Use when**: You need both TTY features AND masking protection (experimental feature, feedback welcome).
+
+:::tip Mode Selection Guide
+- **Non-interactive** (default): Masking works, no TTY features
+- **Interactive** (`--interactive`): Full TTY, no masking
+- **PTY** (`--pty`): Both TTY + masking (experimental, Unix only)
+- For interactive shells, consider [`atmos devcontainer shell`](/cli/commands/devcontainer/shell) instead
+:::
+
+## See Also
+
+- [`atmos devcontainer attach`](/cli/commands/devcontainer/attach)
+- [`atmos devcontainer start`](/cli/commands/devcontainer/start)
+- [`atmos devcontainer shell`](/cli/commands/devcontainer/shell) - Interactive shell (masking not available)

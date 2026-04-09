@@ -89,7 +89,7 @@ variable "skip_create_ami" {
 }
 
 variable "ami_tags" {
-  type = map(string)
+  type        = map(string)
   description = "AMI tags"
 }
 

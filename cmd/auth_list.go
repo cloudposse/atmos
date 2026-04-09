@@ -3,20 +3,22 @@ package cmd
 import (
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authList "github.com/cloudposse/atmos/pkg/auth/list"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -137,7 +139,7 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load auth manager.
-	authManager, err := loadAuthManagerForList()
+	authManager, atmosConfig, err := loadAuthManagerForList(cmd)
 	if err != nil {
 		return err
 	}
@@ -150,6 +152,15 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 	filteredProviders, filteredIdentities, err := applyFilters(providers, identities, filters)
 	if err != nil {
 		return err
+	}
+
+	// When no providers or identities are configured, check if profiles exist
+	// that might contain auth configuration and suggest using --profile.
+	// Use the unfiltered lists to avoid false positives when filters narrow results to empty.
+	if len(providers) == 0 && len(identities) == 0 {
+		if suggestion := suggestProfilesForAuth(atmosConfig); suggestion != nil {
+			return suggestion
+		}
 	}
 
 	// Get output format.
@@ -337,7 +348,7 @@ func renderJSON(providers map[string]schema.Provider, identities map[string]sche
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		return "", errors.Join(errUtils.ErrParseFile, fmt.Errorf("failed to marshal JSON: %w", err))
+		return "", fmt.Errorf("%w: failed to marshal JSON: %w", errUtils.ErrParseFile, err)
 	}
 
 	return string(data) + "\n", nil
@@ -359,25 +370,60 @@ func renderYAML(providers map[string]schema.Provider, identities map[string]sche
 
 	data, err := yaml.Marshal(output)
 	if err != nil {
-		return "", errors.Join(errUtils.ErrParseFile, fmt.Errorf("failed to marshal YAML: %w", err))
+		return "", fmt.Errorf("%w: failed to marshal YAML: %w", errUtils.ErrParseFile, err)
 	}
 
 	return string(data), nil
 }
 
-// loadAuthManager loads the auth manager (helper from auth_whoami.go).
-func loadAuthManagerForList() (authTypes.AuthManager, error) {
+// suggestProfilesForAuth checks if profiles exist and returns a helpful error
+// suggesting the user try --profile when no auth providers/identities are configured.
+func suggestProfilesForAuth(atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "cmd.suggestProfilesForAuth")()
+
+	mgr := profile.NewProfileManager()
+	profiles, err := mgr.ListProfiles(atmosConfig)
+	if err != nil || len(profiles) == 0 {
+		return nil
+	}
+
+	// Collect profile names.
+	profileNames := make([]string, 0, len(profiles))
+	for _, p := range profiles {
+		profileNames = append(profileNames, p.Name)
+	}
+
+	return errUtils.Build(errUtils.ErrAuthNotConfigured).
+		WithExplanation("No authentication providers or identities are configured in the current configuration").
+		WithHintf("Available profiles: `%s`", strings.Join(profileNames, "`, `")).
+		WithHint("Try: `atmos auth list --profile <name>` to load auth configuration from a profile").
+		WithHint("Run `atmos profile list` for detailed information about each profile").
+		WithExitCode(1).
+		Err()
+}
+
+// loadAuthManagerForList loads the auth manager and returns the atmos config for profile discovery.
+func loadAuthManagerForList(cmd *cobra.Command) (authTypes.AuthManager, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "cmd.loadAuthManagerForList")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, fmt.Errorf("failed to load atmos config: %w", err))
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
 	}
 
-	manager, err := createAuthManager(&atmosConfig.Auth)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, fmt.Errorf("failed to create auth manager: %w", err))
+		return nil, nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
-	return manager, nil
+	manager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
+
+	return manager, &atmosConfig, nil
 }

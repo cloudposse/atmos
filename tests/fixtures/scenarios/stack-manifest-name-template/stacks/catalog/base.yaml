@@ -1,0 +1,7 @@
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        enabled: true

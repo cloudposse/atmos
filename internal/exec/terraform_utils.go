@@ -10,10 +10,37 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const commandStr = "command"
+
+// affectedDepOrderParams holds parameters for executing an affected component in dependency order.
+type affectedDepOrderParams struct {
+	AffectedComponent string
+	AffectedStack     string
+	ParentComponent   string
+	ParentStack       string
+	Dependents        []schema.Dependent
+}
+
+// shouldProcessStacks determines whether to process stacks and check stack configuration.
+// Based on the command type and provided arguments.
+func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (shouldProcess bool, shouldCheckStack bool) {
+	// For clean command, special logic applies.
+	if info.SubCommand == "clean" {
+		// Only process if component is provided.
+		shouldProcess = info.ComponentFromArg != ""
+		// Only check stack if stack is provided.
+		shouldCheckStack = info.Stack != ""
+		return shouldProcess, shouldCheckStack
+	}
+
+	// For all other commands, always process and check stack.
+	return true, true
+}
 
 func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 	if len(atmosConfig.Components.Terraform.BasePath) < 1 {
@@ -52,7 +79,7 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
 		// Use retry logic on Windows to handle file locking
-		deleteErr := retryOnWindows(func() error {
+		deleteErr := tfoutput.RetryOnWindows(func() error {
 			return os.Remove(filePath)
 		})
 
@@ -68,19 +95,48 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	}
 }
 
-func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
-	shouldProcessStacks := true
-	shouldCheckStack := true
-
-	if info.SubCommand == "clean" {
-		if info.ComponentFromArg == "" {
-			shouldProcessStacks = false
-		}
-		shouldCheckStack = info.Stack != ""
-
+// isTerraformCurrentWorkspace reports whether the given workspace name matches the workspace
+// recorded in the .terraform/environment file inside componentPath.
+// This is used to detect the edge case where the environment file already names the target
+// workspace but the corresponding state directory was deleted (e.g. by a previous test or a
+// partial cleanup on Windows).  In that scenario `terraform workspace new <name>` returns exit
+// code 1 even though we are already in the right workspace, so we should not treat the failure
+// as a fatal error.
+//
+// TF_DATA_DIR resolution: the envList parameter carries the subprocess env vars (typically
+// info.ComponentEnvList).  If TF_DATA_DIR is set there, it takes precedence over the parent
+// process env, ensuring this helper reads the same data directory that the terraform subprocess
+// would use.  A relative TF_DATA_DIR is joined to componentPath, matching Terraform's own
+// resolution relative to the process working directory.
+func isTerraformCurrentWorkspace(componentPath, workspace string, envList []string) bool {
+	tfDataDir := envVarFromList(envList, "TF_DATA_DIR")
+	if tfDataDir == "" {
+		//nolint:forbidigo // TF_DATA_DIR is a Terraform convention, not an Atmos config var.
+		tfDataDir = os.Getenv("TF_DATA_DIR")
 	}
-
-	return shouldProcessStacks, shouldCheckStack
+	if tfDataDir == "" {
+		tfDataDir = ".terraform"
+	}
+	if !filepath.IsAbs(tfDataDir) {
+		tfDataDir = filepath.Join(componentPath, tfDataDir)
+	}
+	envFile := filepath.Join(filepath.Clean(tfDataDir), "environment")
+	data, err := os.ReadFile(envFile) //nolint:gosec // Path is constructed from componentPath + TF_DATA_DIR, not user input.
+	if err != nil {
+		// Only treat a missing file as "default workspace active".
+		// Other errors (permission denied, I/O error) are not equivalent
+		// to the workspace being "default" and must return false.
+		if errors.Is(err, os.ErrNotExist) && workspace == "default" {
+			return true
+		}
+		return false
+	}
+	// An empty file also indicates the default workspace.
+	recorded := strings.TrimSpace(string(data))
+	if recorded == "" {
+		return workspace == "default"
+	}
+	return recorded == workspace
 }
 
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
@@ -91,7 +147,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 		log.Debug("Writing the backend config to file.", "file", backendFileName)
 
 		if !info.DryRun {
-			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
+			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace, info.AuthContext)
 			if err != nil {
 				return err
 			}
@@ -114,7 +170,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
 		if !info.DryRun {
-			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
+			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection, info.AuthContext)
 			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o600)
 			return err
 		}
@@ -177,68 +233,6 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	return true
 }
 
-// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
-func executeTerraformAffectedComponentInDepOrder(
-	info *schema.ConfigAndStacksInfo,
-	affectedList []schema.Affected,
-	affectedComponent string,
-	affectedStack string,
-	parentComponent string,
-	parentStack string,
-	dependents []schema.Dependent,
-	args *DescribeAffectedCmdArgs,
-) error {
-	var logFunc func(msg any, keyvals ...any)
-	if info.DryRun {
-		logFunc = log.Info
-	} else {
-		logFunc = log.Debug
-	}
-
-	info.Component = affectedComponent
-	info.ComponentFromArg = affectedComponent
-	info.Stack = affectedStack
-
-	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
-
-	if args.IncludeDependents && parentComponent != "" && parentStack != "" {
-		logFunc("Executing", commandStr, command, "dependency of component", parentComponent, "in stack", parentStack)
-	} else {
-		logFunc("Executing", commandStr, command)
-	}
-
-	if !info.DryRun {
-		// Execute the terraform command for the affected component
-		err := ExecuteTerraform(*info)
-		if err != nil {
-			return err
-		}
-	}
-
-	for i := 0; i < len(dependents); i++ {
-		dep := &dependents[i]
-		if args.IncludeDependents || isComponentInStackAffected(affectedList, dep.StackSlug) {
-			if !dep.IncludedInDependents {
-				err := executeTerraformAffectedComponentInDepOrder(
-					info,
-					affectedList,
-					dep.Component,
-					dep.Stack,
-					affectedComponent,
-					affectedStack,
-					dep.Dependents,
-					args,
-				)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // walkTerraformComponents iterates over all Terraform components in the provided stacks map.
 // For each component it calls the provided function, stopping if the function returns an error.
 func walkTerraformComponents(
@@ -277,26 +271,29 @@ func walkTerraformComponents(
 }
 
 // processTerraformComponent performs filtering and execution logic for a single Terraform component.
+// Returns true if the component was processed (passed all filters), false otherwise.
+// The executeFn parameter allows callers to inject a custom executor (used for testing without gomonkey).
 func processTerraformComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	stackName, componentName string,
 	componentSection map[string]any,
 	logFunc func(msg any, keyvals ...any),
-) error {
+	executeFn func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error,
+) (bool, error) {
 	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
-		return nil
+		return false, nil
 	}
 
-	// Skip abstract components
+	// Skip abstract components.
 	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
-		return nil
+		return false, nil
 	}
 
-	// Skip disabled components
+	// Skip disabled components.
 	if !isComponentEnabled(metadataSection, componentName) {
-		return nil
+		return false, nil
 	}
 
 	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
@@ -304,24 +301,96 @@ func processTerraformComponent(
 	if info.Query != "" {
 		queryResult, err := u.EvaluateYqExpression(atmosConfig, componentSection, info.Query)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
 			logFunc("Skipping the component because the query criteria not satisfied", commandStr, command, "query", info.Query)
-			return nil
+			return false, nil
 		}
 	}
 
 	logFunc("Executing", commandStr, command)
 
-	if !info.DryRun {
-		info.Component = componentName
-		info.ComponentFromArg = componentName
-		info.Stack = stackName
-		info.StackFromArg = stackName
+	// Show user-facing progress for dry-run mode.
+	if info.DryRun {
+		ui.Successf("Would %s `%s` in `%s` (dry run)", info.SubCommand, componentName, stackName)
+		return true, nil
+	}
 
+	info.Component = componentName
+	info.ComponentFromArg = componentName
+	info.Stack = stackName
+	info.StackFromArg = stackName
+
+	if err := executeFn(*info); err != nil {
+		return true, err
+	}
+
+	return true, nil
+}
+
+// logFuncForDryRun returns log.Info for dry-run mode, log.Debug otherwise.
+func logFuncForDryRun(dryRun bool) func(msg any, keyvals ...any) {
+	if dryRun {
+		return log.Info
+	}
+	return log.Debug
+}
+
+// shouldProcessDependent checks if a dependent should be processed.
+func shouldProcessDependent(dep *schema.Dependent, affectedList []schema.Affected, includeDependents bool) bool {
+	if dep.IncludedInDependents {
+		return false
+	}
+	return includeDependents || isComponentInStackAffected(affectedList, dep.StackSlug)
+}
+
+// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
+func executeTerraformAffectedComponentInDepOrder(
+	info *schema.ConfigAndStacksInfo,
+	affectedList []schema.Affected,
+	params *affectedDepOrderParams,
+	args *DescribeAffectedCmdArgs,
+) error {
+	logFunc := logFuncForDryRun(info.DryRun)
+
+	info.Component = params.AffectedComponent
+	info.ComponentFromArg = params.AffectedComponent
+	info.Stack = params.AffectedStack
+
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, params.AffectedComponent, params.AffectedStack)
+
+	if args.IncludeDependents && params.ParentComponent != "" && params.ParentStack != "" {
+		logFunc("Executing", commandStr, command, "dependency of component", params.ParentComponent, "in stack", params.ParentStack)
+	} else {
+		logFunc("Executing", commandStr, command)
+	}
+
+	if !info.DryRun {
 		if err := ExecuteTerraform(*info); err != nil {
+			return err
+		}
+	}
+
+	for i := 0; i < len(params.Dependents); i++ {
+		dep := &params.Dependents[i]
+		if !shouldProcessDependent(dep, affectedList, args.IncludeDependents) {
+			continue
+		}
+		err := executeTerraformAffectedComponentInDepOrder(
+			info,
+			affectedList,
+			&affectedDepOrderParams{
+				AffectedComponent: dep.Component,
+				AffectedStack:     dep.Stack,
+				ParentComponent:   params.AffectedComponent,
+				ParentStack:       params.AffectedStack,
+				Dependents:        dep.Dependents,
+			},
+			args,
+		)
+		if err != nil {
 			return err
 		}
 	}
@@ -340,7 +409,7 @@ func parseUploadStatusFlag(args []string, flagName string) bool {
 		return true
 	}
 
-	// Check for --flag=value forms
+	// Check for --flag=value forms.
 	for _, arg := range args {
 		if strings.HasPrefix(arg, flagPrefix) {
 			value := strings.TrimPrefix(arg, flagPrefix)

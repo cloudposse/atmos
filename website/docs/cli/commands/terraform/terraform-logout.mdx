@@ -1,0 +1,94 @@
+---
+title: atmos terraform logout
+sidebar_label: logout
+sidebar_class_name: command
+id: logout
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to remove Terraform Cloud or Terraform Enterprise credentials for an Atmos component in a stack.
+</Intro>
+
+:::warning Terraform Only
+This command is specific to Terraform and is not available in OpenTofu. OpenTofu removed Terraform Cloud integration features.
+:::
+
+<Screengrab title="atmos terraform logout --help" slug="atmos-terraform-logout--help" />
+
+## Usage
+
+Execute the `terraform logout` command like this:
+
+```shell
+atmos terraform logout <component> -s <stack> [options]
+```
+
+This command removes locally-stored API tokens for Terraform Cloud or Terraform Enterprise.
+
+:::info Atmos Behavior
+This is a pure passthrough command. Atmos does not perform automatic initialization or workspace management for `terraform logout`. The command is executed directly to manage Terraform Cloud credentials.
+:::
+## Examples
+
+### Logout from Terraform Cloud
+
+```shell
+# Logout from app.terraform.io (default)
+atmos terraform logout vpc -s dev
+```
+
+### Logout from Terraform Enterprise
+
+```shell
+# Logout from a specific host
+atmos terraform logout vpc -s dev terraform.company.com
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform logout vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform logout vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform logout` flags such as Takes an optional hostname argument to specify which credentials to remove..
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

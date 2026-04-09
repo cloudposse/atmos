@@ -1,0 +1,148 @@
+---
+title: atmos toolchain registry
+sidebar_label: registry
+sidebar_class_name: command
+id: usage
+description: Manage and explore toolchain registries to discover CLI tools for your infrastructure workflows.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Manage and explore toolchain registries. View available tools, search across registries, and discover new CLI tools to add to your infrastructure workflows.
+</Intro>
+
+<Screengrab title="atmos toolchain registry --help" slug="atmos-toolchain-registry--help" />
+
+## Overview
+
+The `atmos toolchain registry` commands provide access to toolchain registries like the [Aqua registry](https://github.com/aquaproj/aqua-registry), enabling you to:
+
+- **Explore available tools** - Browse 1,000+ CLI tools from configured registries
+- **Search for tools** - Find tools by name, owner, or description
+- **View registry information** - See tool counts, sources, and registry metadata
+- **Check installation status** - See which tools are installed vs. available
+
+## Subcommands
+
+<dl>
+  <dt>`list [registry-name]`</dt>
+  <dd>List all configured registries or tools from a specific registry</dd>
+
+  <dt>`search <query>`</dt>
+  <dd>Search for tools across all configured registries</dd>
+</dl>
+
+## Registry Types
+
+Atmos supports multiple registry types with priority-based precedence:
+
+### Aqua Registry (Default)
+
+The official [Aqua registry](https://github.com/aquaproj/aqua-registry) provides:
+- 1,000+ pre-configured tools
+- Community-maintained definitions
+- GitHub releases and HTTP sources
+- Automatic version detection
+
+### Custom Registries
+
+Configure additional registries in `atmos.yaml`:
+
+```yaml
+toolchain:
+  registries:
+    # Corporate/private registry (highest priority)
+    - name: corporate
+      type: aqua
+      source: file://./custom-registry/registry.yaml
+      priority: 100
+
+    # Official Aqua registry (fallback)
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+```
+
+See the [Custom Registries](/cli/commands/toolchain/usage#custom-registries) section for more details.
+
+## Quick Examples
+
+### List All Registries
+
+```shell
+atmos toolchain registry list
+```
+
+Shows all configured registries with tool counts and sources.
+
+### Browse Registry Tools
+
+```shell
+atmos toolchain registry list aqua
+```
+
+Lists all tools available in the Aqua registry with installation status.
+
+### Search for Tools
+
+```shell
+atmos toolchain registry search terraform
+```
+
+Finds all tools matching "terraform" across all registries, showing which are installed.
+
+## Use Cases
+
+### Discover New Tools
+
+Explore the registry to find tools for your infrastructure workflows:
+
+```shell
+# Search for Kubernetes tools
+atmos toolchain registry search kubernetes
+
+# Search for Terraform-related tools
+atmos toolchain registry search terraform
+
+# Search for AWS tools
+atmos toolchain registry search aws
+```
+
+### Verify Tool Availability
+
+Check if a tool is available before adding it:
+
+```shell
+atmos toolchain registry search tflint
+atmos toolchain add tflint@0.44.1
+```
+
+### Explore Registry Contents
+
+Browse all available tools in a registry:
+
+```shell
+# List all tools with pagination
+atmos toolchain registry list aqua
+
+# Limit results
+atmos toolchain registry list aqua --limit 20
+
+# Output as JSON for scripting
+atmos toolchain registry list aqua --format json
+```
+
+## Related Commands
+
+- [`atmos toolchain search`](/cli/commands/toolchain/search) - Alias to `registry search`
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install tools from registries
+- [`atmos toolchain info`](/cli/commands/toolchain/info) - View tool configuration details
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Custom Registries](/cli/commands/toolchain/usage#custom-registries) - Configure multiple registries
+- [Aqua Registry](https://github.com/aquaproj/aqua-registry) - Browse the official registry

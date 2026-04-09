@@ -20,16 +20,18 @@ const ActionCard = ({ title = "Ready to learn this topic?",
     <div className="action-card">
       <h2>{title}</h2>
       <div>{children}</div>
-      {primaryLink && (
-        <PrimaryCTA to={primaryLink}>
-          {primaryText || "Read More"}
-        </PrimaryCTA>
-      )}
-      {secondaryCtaLink && (
-        <SecondaryCTA to={secondaryCtaLink}>
-          {secondaryCtaText || "Read More"}
-        </SecondaryCTA>
-      )}
+      <div className="action-card__cta-group">
+        {primaryLink && (
+          <PrimaryCTA to={primaryLink}>
+            {primaryText || "Read More"}
+          </PrimaryCTA>
+        )}
+        {secondaryCtaLink && (
+          <SecondaryCTA to={secondaryCtaLink}>
+            {secondaryCtaText || "Read More"}
+          </SecondaryCTA>
+        )}
+      </div>
     </div>
   );
 };

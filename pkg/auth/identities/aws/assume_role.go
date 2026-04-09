@@ -21,7 +21,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const maxSessionNameLength = 64
+const (
+	maxSessionNameLength = 64
+	// DefaultAWSRegion is the default region used when no region is specified in identity config.
+	// This is used for AssumeRole and AssumeRoleWithWebIdentity operations.
+	defaultAWSRegion = "us-east-1"
+	// PrincipalDurationKey is the key name for duration in the Principal map.
+	principalDurationKey = "duration"
+)
 
 // assumeRoleIdentity implements AWS assume role identity.
 type assumeRoleIdentity struct {
@@ -31,6 +38,7 @@ type assumeRoleIdentity struct {
 	roleArn          string
 	manager          types.AuthManager // Auth manager for resolving root provider
 	rootProviderName string            // Cached root provider name from PostAuthenticate
+	realm            string            // Credential isolation realm set by auth manager.
 }
 
 // newSTSClient creates an STS client using the base credentials and configured region.
@@ -40,7 +48,7 @@ func (i *assumeRoleIdentity) newSTSClient(ctx context.Context, awsBase *types.AW
 		region = awsBase.Region
 	}
 	if region == "" {
-		region = "us-east-1"
+		region = defaultAWSRegion
 	}
 	// Persist the resolved region back onto the identity so it is available for serialization.
 	i.region = region
@@ -76,7 +84,7 @@ func (i *assumeRoleIdentity) toAWSCredentials(result *sts.AssumeRoleOutput) (typ
 	// Ensure a non-empty region is serialized.
 	finalRegion := i.region
 	if finalRegion == "" {
-		finalRegion = "us-east-1"
+		finalRegion = defaultAWSRegion
 	}
 	return &types.AWSCredentials{
 		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
@@ -99,11 +107,11 @@ func (i *assumeRoleIdentity) buildAssumeRoleInput() *sts.AssumeRoleInput {
 	if externalID, ok := i.config.Principal["external_id"].(string); ok && externalID != "" {
 		input.ExternalId = aws.String(externalID)
 	}
-	if durationStr, ok := i.config.Principal["duration"].(string); ok && durationStr != "" {
+	if durationStr, ok := i.config.Principal[principalDurationKey].(string); ok && durationStr != "" {
 		if duration, err := time.ParseDuration(durationStr); err == nil {
 			input.DurationSeconds = aws.Int32(int32(duration.Seconds()))
 		} else {
-			log.Warn("Invalid duration specified for assume role", "duration", durationStr)
+			log.Warn("Invalid duration specified for assume role", principalDurationKey, durationStr)
 		}
 	}
 	return input
@@ -132,18 +140,37 @@ func (i *assumeRoleIdentity) Kind() string {
 	return "aws/assume-role"
 }
 
+// SetRealm sets the credential isolation realm for this identity.
+func (i *assumeRoleIdentity) SetRealm(realm string) {
+	i.realm = realm
+}
+
 // Authenticate performs authentication using assume role.
 func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates.
 
-	awsBase, ok := baseCreds.(*types.AWSCredentials)
-	if !ok {
-		return nil, fmt.Errorf("%w: base AWS credentials are required for assume-role", errUtils.ErrInvalidIdentityConfig)
-	}
-
 	// Validate identity configuration, sets roleArn and region.
 	if err := i.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: invalid assume role identity: %w", errUtils.ErrInvalidIdentityConfig, err)
+	}
+
+	// Check if base credentials are OIDC credentials.
+	if oidcCreds, ok := baseCreds.(*types.OIDCCredentials); ok {
+		// Use AssumeRoleWithWebIdentity for OIDC credentials.
+		return i.assumeRoleWithWebIdentity(ctx, oidcCreds)
+	}
+
+	// Otherwise, use standard AssumeRole with AWS credentials.
+	awsBase, ok := baseCreds.(*types.AWSCredentials)
+	if !ok {
+		return nil, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+			WithExplanationf("Invalid credentials type for assume-role identity '%s'", i.name).
+			WithHint("Base credentials must be AWS credentials or OIDC credentials").
+			WithHint("Verify the authentication chain is configured correctly in atmos.yaml").
+			WithContext("identity", i.name).
+			WithContext("role_arn", i.roleArn).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Create STS client with base credentials.
@@ -157,22 +184,174 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
+		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithExplanationf("Failed to assume IAM role '%s'", i.roleArn).
+			WithHint("Verify the role ARN is correct in your atmos.yaml configuration").
+			WithHint("Ensure your AWS account has permissions to assume this role").
+			WithHint("Check that the role's trust policy allows the source identity to assume it").
+			WithHint("If using external_id, verify it matches the role's trust policy").
+			WithContext("identity", i.name).
+			WithContext("role_arn", i.roleArn).
+			WithContext("region", i.region).
+			WithExitCode(1).
+			Err()
 	}
 	return i.toAWSCredentials(result)
+}
+
+// assumeRoleWithWebIdentity performs AssumeRoleWithWebIdentity using OIDC token.
+//
+// This method implements AWS AssumeRoleWithWebIdentity authentication, which allows applications
+// to obtain temporary AWS credentials by presenting a web identity token (JWT) from an identity
+// provider (e.g., GitHub Actions OIDC, Google, Facebook, Amazon Cognito).
+//
+// Key differences from standard AssumeRole:
+//   - Does NOT require existing AWS credentials (access keys, session token)
+//   - Authenticates using the web identity token itself
+//   - Enables keyless authentication for CI/CD and mobile applications
+//
+// AWS SDK v2 behavior: Unlike SDK v1, which automatically used anonymous credentials for this
+// operation, SDK v2 requires explicit configuration to prevent the SDK from attempting to
+// resolve credentials from the environment (EC2 IMDS, env vars, ~/.aws/credentials, etc.).
+// Without anonymous credentials, the SDK may hang trying to resolve credentials or fail with
+// signing errors.
+//
+// Reference: https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
+// "Calling AssumeRoleWithWebIdentity does not require the use of AWS security credentials.".
+func (i *assumeRoleIdentity) assumeRoleWithWebIdentity(ctx context.Context, oidcCreds *types.OIDCCredentials) (types.ICredentials, error) {
+	// Resolve region from identity config or default.
+	region := i.region
+	if region == "" {
+		region = defaultAWSRegion
+	}
+	i.region = region
+
+	// Build config options.
+	configOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(region),
+		// AssumeRoleWithWebIdentity uses web identity token authentication,
+		// not AWS signature authentication. Use anonymous credentials to prevent
+		// the SDK from attempting to resolve credentials from EC2 metadata service,
+		// environment variables, or shared credential files.
+		//
+		// Why this is critical:
+		// - On EC2/ECS: Prevents using instance role credentials instead of the web identity token
+		// - In CI/CD: Avoids hanging on credential resolution attempts
+		// - With ambient credentials: Prevents signing errors from using wrong credentials
+		//
+		// This follows the same pattern as SSO device flow (sso.go) and permission set
+		// authentication (permission_set.go), which also use bearer token authentication
+		// rather than AWS signature v4.
+		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
+	}
+
+	// Add custom endpoint resolver if configured.
+	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+		configOpts = append(configOpts, resolverOpt)
+	}
+
+	// Load config with isolated environment to avoid conflicts with external AWS env vars.
+	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrInvalidIdentityConfig, err)
+	}
+
+	// Create STS client.
+	stsClient := sts.NewFromConfig(cfg)
+
+	// Build AssumeRoleWithWebIdentity input.
+	input := i.buildAssumeRoleWithWebIdentityInput(oidcCreds)
+
+	// Call AssumeRoleWithWebIdentity.
+	result, err := stsClient.AssumeRoleWithWebIdentity(ctx, input)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithExplanationf("Failed to assume IAM role '%s' using web identity (OIDC)", i.roleArn).
+			WithHint("Verify the role ARN is correct in your atmos.yaml configuration").
+			WithHint("Ensure the OIDC token is valid and not expired").
+			WithHint("Check that the role's trust policy allows the OIDC provider").
+			WithHint("For GitHub Actions OIDC, verify the repository and workflow are authorized").
+			WithContext("identity", i.name).
+			WithContext("role_arn", i.roleArn).
+			WithContext("region", i.region).
+			WithExitCode(1).
+			Err()
+	}
+
+	return i.toAWSCredentialsFromWebIdentity(result)
+}
+
+// buildAssumeRoleWithWebIdentityInput constructs the STS AssumeRoleWithWebIdentityInput.
+func (i *assumeRoleIdentity) buildAssumeRoleWithWebIdentityInput(oidcCreds *types.OIDCCredentials) *sts.AssumeRoleWithWebIdentityInput {
+	raw := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
+	sessionName := sanitizeRoleSessionName(raw)
+
+	input := &sts.AssumeRoleWithWebIdentityInput{
+		RoleArn:          aws.String(i.roleArn),
+		RoleSessionName:  aws.String(sessionName),
+		WebIdentityToken: aws.String(oidcCreds.Token),
+	}
+
+	// Add duration if specified.
+	if durationStr, ok := i.config.Principal[principalDurationKey].(string); ok && durationStr != "" {
+		if duration, err := time.ParseDuration(durationStr); err == nil {
+			input.DurationSeconds = aws.Int32(int32(duration.Seconds()))
+		} else {
+			log.Warn("Invalid duration specified for assume role with web identity", principalDurationKey, durationStr)
+		}
+	}
+
+	return input
+}
+
+// toAWSCredentialsFromWebIdentity converts STS AssumeRoleWithWebIdentity output to AWSCredentials.
+func (i *assumeRoleIdentity) toAWSCredentialsFromWebIdentity(result *sts.AssumeRoleWithWebIdentityOutput) (types.ICredentials, error) {
+	if result == nil || result.Credentials == nil {
+		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrAuthenticationFailed)
+	}
+
+	expiration := ""
+	if result.Credentials != nil && result.Credentials.Expiration != nil {
+		expiration = result.Credentials.Expiration.Format(time.RFC3339)
+	}
+
+	// Ensure a non-empty region is serialized.
+	finalRegion := i.region
+	if finalRegion == "" {
+		finalRegion = defaultAWSRegion
+	}
+
+	return &types.AWSCredentials{
+		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
+		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken:    aws.ToString(result.Credentials.SessionToken),
+		Region:          finalRegion,
+		Expiration:      expiration,
+	}, nil
 }
 
 // Validate validates the identity configuration.
 func (i *assumeRoleIdentity) Validate() error {
 	if i.config.Principal == nil {
-		return fmt.Errorf("%w: principal is required", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingPrincipal).
+			WithExplanationf("Identity '%s' requires principal configuration", i.name).
+			WithHint("Add 'principal' field with 'assume_role' to the identity configuration").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Check role ARN in principal or spec (backward compatibility).
 	var roleArn string
 	var ok bool
 	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
-		return fmt.Errorf("%w: assume_role is required in principal", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingAssumeRole).
+			WithExplanationf("Missing 'assume_role' configuration for identity '%s'", i.name).
+			WithHint("Add 'assume_role' field to the identity's principal configuration").
+			WithHint("Example: principal: { assume_role: 'arn:aws:iam::123456789012:role/MyRole' }").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 	i.roleArn = roleArn
 
@@ -195,7 +374,7 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	}
 
 	// Get AWS file environment variables.
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -206,12 +385,25 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 		env[envVar.Key] = envVar.Value
 	}
 
+	// Resolve region through identity chain inheritance.
+	// First checks identity principal, then parent identities, then provider.
+	if region := i.resolveRegion(); region != "" {
+		env["AWS_REGION"] = region
+		env["AWS_DEFAULT_REGION"] = region
+	}
+
 	// Add environment variables from identity config.
 	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value
 	}
 
 	return env, nil
+}
+
+// Paths returns credential files/directories used by this identity.
+func (i *assumeRoleIdentity) Paths() ([]types.Path, error) {
+	// Assume role identities don't add additional credential files beyond the provider.
+	return []types.Path{}, nil
 }
 
 // PrepareEnvironment prepares environment variables for external processes.
@@ -226,7 +418,7 @@ func (i *assumeRoleIdentity) PrepareEnvironment(ctx context.Context, environ map
 		return environ, fmt.Errorf("failed to get provider name: %w", err)
 	}
 
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -234,8 +426,8 @@ func (i *assumeRoleIdentity) PrepareEnvironment(ctx context.Context, environ map
 	credentialsFile := awsFileManager.GetCredentialsPath(providerName)
 	configFile := awsFileManager.GetConfigPath(providerName)
 
-	// Get region from identity if available.
-	region := i.region
+	// Resolve region through identity chain inheritance.
+	region := i.resolveRegion()
 
 	// Use shared AWS environment preparation helper.
 	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
@@ -288,6 +480,36 @@ func (i *assumeRoleIdentity) getRootProviderFromVia() (string, error) {
 	return "", fmt.Errorf("%w: cannot determine root provider for identity %q before authentication", errUtils.ErrInvalidAuthConfig, i.name)
 }
 
+// resolveRegion resolves the AWS region by traversing the identity chain.
+// First checks identity chain for region setting, then falls back to provider's region.
+// This uses the manager's generic chain resolution methods to support inheritance.
+func (i *assumeRoleIdentity) resolveRegion() string {
+	// If manager is not available, fall back to direct config check or cached region.
+	if i.manager == nil {
+		if i.region != "" {
+			return i.region
+		}
+		if region, ok := i.config.Principal["region"].(string); ok && region != "" {
+			return region
+		}
+		return ""
+	}
+
+	// First check identity chain for region setting.
+	if val, ok := i.manager.ResolvePrincipalSetting(i.name, "region"); ok {
+		if region, ok := val.(string); ok && region != "" {
+			return region
+		}
+	}
+
+	// Fall back to provider's region.
+	if provider, ok := i.manager.ResolveProviderConfig(i.name); ok {
+		return provider.Region
+	}
+
+	return ""
+}
+
 // SetManagerAndProvider sets the manager and root provider name on the identity.
 // This is used when loading cached credentials to allow the identity to resolve provider information.
 func (i *assumeRoleIdentity) SetManagerAndProvider(manager types.AuthManager, rootProviderName string) {
@@ -310,7 +532,8 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 	i.rootProviderName = params.ProviderName
 
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
+	// Use realm from params for credential isolation.
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", params.Realm); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 
@@ -322,6 +545,7 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Realm:        params.Realm,
 	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
@@ -385,7 +609,7 @@ func (i *assumeRoleIdentity) CredentialsExist() (bool, error) {
 		return false, err
 	}
 
-	mgr, err := awsCloud.NewAWSFileManager("")
+	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -444,9 +668,10 @@ func (i *assumeRoleIdentity) Logout(ctx context.Context) error {
 
 	// Get base_path from provider spec if configured (requires manager to lookup provider config).
 	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
+	// Uses realm for credential isolation between different repositories.
 	basePath := ""
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, i.realm)
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", "identity", i.name, "error", err)
 		return fmt.Errorf("failed to create AWS file manager: %w", err)

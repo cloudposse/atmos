@@ -1,0 +1,283 @@
+---
+title: Helmfile Configuration
+sidebar_position: 3
+sidebar_label: helmfile
+sidebar_class_name: command
+id: helmfile
+description: Configure Helmfile component behavior in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Configure how Atmos executes Helmfile commands for Kubernetes deployments, including EKS integration, kubeconfig management, and cluster name configuration.
+</Intro>
+
+:::warning Breaking Change in v1.x
+The `use_eks` setting now defaults to `false` (previously `true`). If you use helmfile with EKS clusters, you must explicitly add `use_eks: true` to your configuration. See the [Helmfile EKS Modernization](/changelog/helmfile-eks-modernization) blog post for migration details.
+:::
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helmfile:
+    # Executable to run
+    command: helmfile
+
+    # Base path to Helmfile components
+    base_path: components/helmfile
+
+    # Enable EKS integration (default: false)
+    use_eks: true
+
+    # Path for kubeconfig files (required when use_eks is true)
+    kubeconfig_path: /dev/shm
+
+    # Cluster name configuration (choose one approach):
+
+    # Option 1: Explicit cluster name (simplest)
+    cluster_name: "my-eks-cluster"
+
+    # Option 2: Go template for dynamic cluster names (recommended)
+    cluster_name_template: "{{ .vars.namespace }}-{{ .vars.environment }}-{{ .vars.stage }}-eks"
+
+    # Option 3: Token replacement pattern (deprecated, use cluster_name_template)
+    # cluster_name_pattern: "{namespace}-{environment}-{stage}-eks-cluster"
+
+    # AWS profile pattern (deprecated, use --identity flag instead)
+    # helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`command`</dt>
+  <dd>
+    Specifies the executable to run for Helmfile commands. Defaults to `helmfile`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_COMMAND`
+    **Command-line flag:** `--helmfile-command`
+
+    Examples:
+    - `helmfile` - Use Helmfile from PATH
+    - `/usr/local/bin/helmfile` - Use specific binary
+  </dd>
+
+  <dt>`base_path`</dt>
+  <dd>
+    Directory containing Helmfile component directories. Supports absolute and relative paths.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_BASE_PATH`
+    **Command-line flag:** `--helmfile-dir`
+  </dd>
+
+  <dt>`use_eks`</dt>
+  <dd>
+    When `true`, Atmos configures AWS EKS integration for kubeconfig management. When `false` (default), Atmos uses the existing kubeconfig.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_USE_EKS`
+    **Default:** `false`
+  </dd>
+
+  <dt>`kubeconfig_path`</dt>
+  <dd>
+    Directory where Atmos stores generated kubeconfig files. Required when `use_eks` is `true`. Using `/dev/shm` (shared memory) is recommended for security as files are not persisted to disk.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH`
+  </dd>
+
+  <dt>`cluster_name`</dt>
+  <dd>
+    Explicit EKS cluster name to connect to. This is the simplest option when you have a fixed cluster name.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME`
+
+    Example: `my-eks-cluster`
+  </dd>
+
+  <dt>`cluster_name_template`</dt>
+  <dd>
+    Go template for generating EKS cluster names dynamically. Has access to the full component section including `vars`, `settings`, and other configuration.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_TEMPLATE`
+
+    Example: `{{ .vars.namespace }}-{{ .vars.environment }}-{{ .vars.stage }}-eks`
+
+    This generates cluster names like `acme-ue1-prod-eks` based on component variables.
+  </dd>
+
+  <dt>`cluster_name_pattern`</dt>
+  <dd>
+    :::warning Deprecated
+    Use `cluster_name_template` with Go template syntax instead. This option uses token replacement and will log a deprecation warning.
+    :::
+
+    Pattern for generating EKS cluster names using token replacement. Supports context variables:
+    - `{namespace}` - Organization namespace
+    - `{tenant}` - Tenant identifier
+    - `{environment}` - Environment (e.g., `ue1`, `uw2`)
+    - `{stage}` - Stage (e.g., `dev`, `prod`)
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN`
+
+    Example: `{namespace}-{tenant}-{environment}-{stage}-eks-cluster`
+  </dd>
+
+  <dt>`helm_aws_profile_pattern`</dt>
+  <dd>
+    :::warning Deprecated
+    Use the `--identity` flag instead for AWS authentication. This option uses token replacement and will log a deprecation warning.
+    :::
+
+    Pattern for generating AWS profile names used by Helm. Supports the same context variables as `cluster_name_pattern`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN`
+
+    Example: `{namespace}-{tenant}-gbl-{stage}-helm`
+  </dd>
+</dl>
+
+## Command-Line Flags
+
+<dl>
+  <dt>`--cluster-name`</dt>
+  <dd>
+    Override the configured cluster name. Takes precedence over all configuration options.
+
+    Example: `atmos helmfile apply nginx -s prod --cluster-name=override-cluster`
+  </dd>
+
+  <dt>`--identity`</dt>
+  <dd>
+    Specify the identity to use for AWS authentication. Integrates with the Atmos identity system instead of using profile patterns.
+
+    Example: `atmos helmfile apply nginx -s prod --identity=prod-admin`
+  </dd>
+</dl>
+
+## Cluster Name Precedence
+
+When `use_eks` is enabled, the cluster name is determined in this order:
+
+1. `--cluster-name` flag (highest priority)
+2. `cluster_name` configuration
+3. `cluster_name_template` expanded with Go templates
+4. `cluster_name_pattern` expanded with token replacement (deprecated)
+
+## AWS Authentication Precedence
+
+When `use_eks` is enabled, AWS authentication is determined in this order:
+
+1. `--identity` flag (recommended)
+2. `helm_aws_profile_pattern` (deprecated)
+
+## EKS Integration
+
+When `use_eks` is enabled, Atmos automatically:
+
+1. Generates kubeconfig files for EKS clusters
+2. Configures AWS credentials (via identity or profile)
+3. Sets up the correct cluster context before running Helmfile
+
+The kubeconfig is written to the path specified by `kubeconfig_path`.
+
+## Examples
+
+### Using with Existing Kubeconfig (Non-EKS)
+
+For non-EKS Kubernetes clusters (k3s, GKE, AKS, etc.), simply disable EKS integration:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helmfile:
+    base_path: components/helmfile
+    use_eks: false  # Use existing KUBECONFIG
+```
+</File>
+
+### Using with EKS and Identity Authentication
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helmfile:
+    base_path: components/helmfile
+    use_eks: true
+    kubeconfig_path: /dev/shm
+    cluster_name_template: "{{ .vars.namespace }}-{{ .vars.stage }}-eks"
+```
+</File>
+
+```bash
+# Use identity for AWS authentication
+atmos helmfile apply nginx -s prod --identity=prod-admin
+```
+
+### Using with Explicit Cluster Name
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helmfile:
+    base_path: components/helmfile
+    use_eks: true
+    kubeconfig_path: /dev/shm
+    cluster_name: "production-eks-cluster"
+```
+</File>
+
+### Overriding Cluster Name at Runtime
+
+```bash
+# Override any configured template/pattern with --cluster-name flag
+atmos helmfile apply nginx -s prod --identity=prod-admin --cluster-name=other-cluster
+```
+
+## Migration from Legacy Configuration
+
+If you have an existing configuration using the deprecated options:
+
+<File title="Before (deprecated)">
+```yaml
+components:
+  helmfile:
+    use_eks: true  # was default
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+```
+</File>
+
+<File title="After (recommended)">
+```yaml
+components:
+  helmfile:
+    use_eks: true  # must be explicit now
+    kubeconfig_path: /dev/shm
+    cluster_name_template: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster"
+```
+</File>
+
+Use the `--identity` flag instead of `helm_aws_profile_pattern`:
+
+```bash
+atmos helmfile apply my-component -s prod --identity=prod-admin
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/helmfile/usage', label: 'atmos helmfile', description: 'Execute Helmfile commands'},
+  {type: 'link', href: '/cli/commands/helmfile/generate-varfile', label: 'atmos helmfile generate varfile', description: 'Generate variable files for Helmfile'},
+]} />
+
+## Related
+
+- [Component Configuration Overview](/cli/configuration/components)
+- [Helmfile Components](/components/helmfile)
+- [Stack Configuration](/cli/configuration/stacks)
+- [Helmfile EKS Modernization (Breaking Change)](/changelog/helmfile-eks-modernization)

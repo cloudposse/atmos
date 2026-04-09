@@ -5,13 +5,20 @@ import (
 	"path/filepath"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
-
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
 func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	// Check if a provisioner (source or workdir) set a workdir path.
+	// This takes precedence over the standard component path.
+	// Use filepath.FromSlash to normalize path separators for cross-platform compatibility.
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+		return filepath.FromSlash(workdirPath)
+	}
+
 	// If we have a resolved absolute path, use GetComponentPath.
 	// Otherwise, just construct the path directly (for tests and simple cases).
 	if atmosConfig.TerraformDirAbsolutePath != "" {
@@ -75,6 +82,13 @@ func constructTerraformComponentPlanfilePath(atmosConfig *schema.AtmosConfigurat
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack.
 func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	// Check if a provisioner (source or workdir) set a workdir path.
+	// This takes precedence over the standard component path.
+	// Use filepath.FromSlash to normalize path separators for cross-platform compatibility.
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+		return filepath.FromSlash(workdirPath)
+	}
+
 	// If we have a resolved absolute path, use GetComponentPath.
 	// Otherwise, just construct the path directly (for tests and simple cases).
 	if atmosConfig.HelmfileDirAbsolutePath != "" {
@@ -136,6 +150,13 @@ func constructPackerComponentVarfilePath(atmosConfig *schema.AtmosConfiguration,
 
 // constructPackerComponentWorkingDir constructs the working dir for a Packer component in a stack.
 func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	// Check if a provisioner (source or workdir) set a workdir path.
+	// This takes precedence over the standard component path.
+	// Use filepath.FromSlash to normalize path separators for cross-platform compatibility.
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+		return filepath.FromSlash(workdirPath)
+	}
+
 	// If we have a resolved absolute path, use GetComponentPath.
 	// Otherwise, just construct the path directly (for tests and simple cases).
 	if atmosConfig.PackerDirAbsolutePath != "" {

@@ -1,0 +1,531 @@
+---
+title: Import Stack Configurations
+sidebar_label: import
+sidebar_class_name: command
+id: imports
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Imports let you split stack configurations across multiple files and reuse them. Each import is deep-merged on top of previous imports, building up the final configuration.
+</Intro>
+
+## Use Cases
+
+- **DRY Configuration:** Reduce duplication by sharing common settings across stacks.
+- **Blueprints:** Define reusable baselines that any stack can import as a starting point.
+- **Service Catalogs:** Provide golden-path configurations that teams can compose into architectures.
+
+:::warning Pitfalls!
+Overusing imports can make configurations harder to understand. We recommend limiting import depth to maintain clarity. Review our [best practices](/best-practices/stacks) for practical guidance.
+:::
+
+## Configuration
+
+Define an `import` section at the top of any stack configuration:
+```yaml
+import:
+  - catalog/file1 # First import "file1" from the catalog
+  - catalog/file2 # Second import "file2" from the catalog, deep merging on top of the first import
+  - catalog/file3 # Third import "file3" from the catalog, deep merging on top of the preceding imports
+```
+
+The base path for imports is specified in the [`atmos.yaml`](/cli/configuration) in the `stacks.base_path` section.
+
+If no file extension is used, Atmos appends `.yaml` automatically.
+
+### Automatic Template File Detection
+
+When importing files without an extension, Atmos searches for template versions automatically. The search order is:
+
+1. `.yaml`
+2. `.yml`
+3. `.yaml.tmpl`
+4. `.yml.tmpl`
+
+If both a `.yaml` and a `.yaml.tmpl` version exist, Atmos uses the template version. Template files are skipped during `atmos validate stacks` since they contain placeholders that are invalid YAML before rendering.
+
+## Import Path Resolution
+
+Atmos supports two types of import paths:
+
+### Base-Relative Paths (Default)
+Most imports use paths relative to the `stacks.base_path` configured in `atmos.yaml`:
+- `catalog/vpc/defaults`
+- `mixins/region/us-east-2`
+- `orgs/acme/_defaults`
+
+These paths are resolved from the base stacks directory, regardless of where the importing file is located.
+
+### File-Relative Paths
+Imports starting with `.` or `..` are relative to the current file's directory:
+- `./_defaults` - imports from the same directory as the current file
+- `../shared/_defaults` - imports from a sibling `shared` directory
+
+This is useful when you want to import files that are co-located with the current configuration.
+
+## Remote Imports
+
+Atmos supports importing stack configurations from remote sources using [go-getter](https://github.com/hashicorp/go-getter) URL schemes. This enables sharing configurations across repositories, teams, or organizations.
+
+### Supported Schemes
+
+<dl>
+  <dt>`git::` - Git Repositories</dt>
+  <dd>Import from Git repositories over HTTPS or SSH.</dd>
+
+  <dt>`github.com/` - GitHub Shorthand</dt>
+  <dd>Shorthand syntax for GitHub repositories.</dd>
+
+  <dt>`s3::` - Amazon S3</dt>
+  <dd>Import from S3 buckets using AWS credentials.</dd>
+
+  <dt>`gcs::` - Google Cloud Storage</dt>
+  <dd>Import from GCS buckets using Google Cloud credentials.</dd>
+
+  <dt>`https://` / `http://` - HTTP(S)</dt>
+  <dd>Import from any HTTP(S) URL.</dd>
+
+  <dt>`file://` - Local Files</dt>
+  <dd>Import from absolute local file paths.</dd>
+</dl>
+
+### Git Repository Examples
+
+Import from a Git repository:
+
+```yaml
+import:
+  # HTTPS with specific ref (branch, tag, or commit)
+  - git::https://github.com/acme/infrastructure.git//stacks/catalog/vpc?ref=v1.2.0
+
+  # SSH authentication
+  - git::git@github.com:acme/infrastructure.git//stacks/catalog/eks?ref=main
+
+  # GitHub shorthand
+  - github.com/acme/infrastructure//stacks/catalog/rds?ref=v2.0.0
+```
+
+The `//` separates the repository URL from the path within the repository. The `?ref=` parameter specifies the Git ref (branch, tag, or commit SHA).
+
+### S3 Examples
+
+Import from Amazon S3:
+
+```yaml
+import:
+  # Basic S3 import
+  - s3::https://s3.amazonaws.com/acme-configs/stacks/catalog/vpc.yaml
+
+  # With region specified
+  - s3::https://s3-us-west-2.amazonaws.com/acme-configs/stacks/catalog/eks.yaml
+```
+
+S3 imports use your AWS credentials from the environment or AWS config files.
+
+### HTTP(S) Examples
+
+Import from any HTTP(S) URL:
+
+```yaml
+import:
+  # Direct HTTPS import
+  - https://raw.githubusercontent.com/acme/configs/main/stacks/catalog/vpc.yaml
+
+  # From internal artifact server
+  - https://artifacts.internal.acme.com/stacks/v1.0.0/defaults.yaml
+```
+
+### Best Practices for Remote Imports
+
+1. **Pin Versions:** Always use `?ref=` with a specific tag or commit SHA for Git imports to ensure reproducible builds.
+
+2. **Cache Considerations:** Remote imports are cached locally. Use `atmos vendor pull` to refresh cached imports.
+
+3. **Authentication:** Configure appropriate credentials for private repositories or buckets via environment variables or credential files.
+
+4. **Fallback to Local:** Consider vendoring critical remote imports locally using `atmos vendor pull` for offline access and faster builds.
+
+For more details on go-getter URL formats, see the [go-getter documentation](https://github.com/hashicorp/go-getter#url-format).
+
+## Conventions
+
+We recommend placing all baseline "imports" in the `stacks/catalog` folder, however, they can exist anywhere.
+
+Use [mixins](/howto/mixins) for reusable snippets of configurations that alter the behavior of Stacks in some way.
+
+### The _defaults.yaml Pattern
+
+Many Atmos projects use `_defaults.yaml` as a naming convention for default configurations at each level of the hierarchy. This is purely a convention—Atmos has no special handling for these files. They must be explicitly imported like any other file.
+
+The underscore prefix ensures they:
+- Sort to the top of directory listings (lexicographic sorting)
+- Are visually distinct from actual stack configurations
+- Are excluded from stack discovery (via `excluded_paths` configuration)
+
+:::info
+The `_defaults.yaml` pattern is a common convention, not an Atmos feature. These files are only excluded from stack discovery because they match the pattern in `excluded_paths` configuration. They must always be explicitly imported to take effect.
+:::
+
+For a complete explanation of this pattern, see the [_defaults.yaml Design Pattern](/design-patterns/stack-organization/defaults-pattern) documentation.
+
+## Imports Schema
+
+The `import` section accepts a list of strings (simple paths) or a list of objects (when using templates or feature flags).
+
+### Imports without Templates
+
+For a list of paths to the imported files, just provide a list of strings like this:
+
+  ```yaml title="stacks/orgs/cp/tenant1/test1/us-east-2.yaml"
+  import:
+    - mixins/region/us-east-2
+    - orgs/cp/tenant1/test1/_defaults
+    - catalog/terraform/top-level-component1
+    - catalog/terraform/test-component
+    - catalog/terraform/vpc
+    - catalog/helmfile/echo-server
+  ```
+
+### Imports with Templates
+
+Sometimes you may want to import files that use Go templates. Templates can be used with or without providing a `context` - files with `.yaml.tmpl` or `.yml.tmpl` extensions are always processed as Go templates.
+
+:::important
+  Files with the `.yaml.tmpl` or `.yml.tmpl` extension are always processed as Go templates, regardless of whether `context` is provided.
+  This allows you to use template functions that don't require context (like `{{ now }}`, `{{ env "VAR" }}`, `{{ uuidv4 }}`, etc.) even without providing context variables.
+  If you don't want a file to be processed as a template, use the `.yaml` or `.yml` extension instead.
+  The `skip_templates_processing` flag can be used to explicitly skip template processing for any imported file.
+  Templating must be enabled in [`atmos.yaml`](/templates) for Atmos to process the imported files as Go templates.
+:::
+
+For example, here we import a file with a template and provide a `context` to passing two variables.
+
+  ```yaml
+  import:
+    - path: "catalog/something.yaml.tmpl" # Path to the imported file with the required .tmpl extension for Go templates
+      context:
+        foo: bar
+        baz: qux
+      skip_templates_processing: false
+      ignore_missing_template_values: false
+      skip_if_missing: false
+    - path: "catalog/something.yaml.tmpl"
+      context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: true
+      skip_if_missing: true
+  ```
+
+You can also use templates without providing any context variables. This is useful for including dynamic values that don't depend on context:
+
+  ```yaml
+  import:
+    # This template file uses functions that don't require context
+    - path: "catalog/metadata.yaml.tmpl"
+      # No context needed - the template can use functions like:
+      # {{ now | date "2006-01-02" }}
+      # {{ env "BUILD_NUMBER" }}
+      # {{ uuidv4 }}
+      # {{ randAlphaNum 10 }}
+  ```
+
+Example template file (`catalog/metadata.yaml.tmpl`) without context:
+
+  ```yaml
+  metadata:
+    generated_at: {{ now | date "2006-01-02T15:04:05Z07:00" }}
+    build_number: {{ env "BUILD_NUMBER" | default "local" }}
+    deployment_id: {{ uuidv4 }}
+    version: "1.0.0"
+  ```
+
+The `import` section supports the following fields:
+
+<dl>
+  <dt>`path` - (string) **required**</dt>
+  <dd>The path to the imported file</dd>
+
+  <dt>`context` - (map)</dt>
+  <dd>An optional freeform map of context variables that are applied as template variables to the imported file (if the imported file is
+  a [Go template](https://pkg.go.dev/text/template))</dd>
+
+  <dt>`skip_templates_processing` - (boolean)</dt>
+  <dd>Skip template processing for the imported file. Can be used if the imported file uses `Go` templates that should not be interpreted by atmos. For example, sometimes configurations for components may pass Go template strings not intended for atmos.</dd>
+
+  <dt>`ignore_missing_template_values` - (boolean)</dt>
+  <dd>Process templates but skip any values missing from the `context` instead of throwing an error. Useful when the imported file contains Go templates for external systems (e.g. Datadog) that Atmos should not evaluate. Unlike `skip_templates_processing` which skips all template processing, this option still evaluates templates that have matching context values. To apply this globally to all imports without setting it on each one, use the [`templates.settings.ignore_missing_template_values`](/cli/configuration/templates) setting in `atmos.yaml`.</dd>
+
+  <dt>`skip_if_missing` - (boolean)</dt>
+  <dd>Skip the import without error if the file does not exist.</dd>
+
+</dl>
+
+A combination of the two formats is also supported:
+
+  ```yaml
+  import:
+    - mixins/region/us-east-2
+    - orgs/cp/tenant1/test1/_defaults
+    - path: "<path_to_atmos_manifest1>"
+    - path: "<path_to_atmos_manifest2>"
+      context: {}
+      skip_templates_processing: false
+      ignore_missing_template_values: true
+  ```
+
+## Templated Imports
+
+Atmos supports [Go templates](https://pkg.go.dev/text/template) and [Sprig functions](http://masterminds.github.io/sprig/) in imported files. This lets you parameterize a configuration and reuse it with different values via the import `context`.
+
+For example, we can define the following configuration for EKS Atmos components in the `catalog/terraform/eks_cluster.yaml.tmpl` template file:
+
+```yaml title="stacks/catalog/terraform/eks_cluster.yaml.tmpl"
+# Imports can also be parameterized using `Go` templates
+import: []
+
+components:
+  terraform:
+    "eks-{{ .flavor }}/cluster":
+      metadata:
+        component: "test/test-component"
+      vars:
+        enabled: "{{ .enabled }}"
+        name: "eks-{{ .flavor }}"
+        service_1_name: "{{ .service_1_name }}"
+        service_2_name: "{{ .service_2_name }}"
+        tags:
+          flavor: "{{ .flavor }}"
+```
+
+:::note
+
+Since `Go` processes files ending in `.yaml.tmpl` text files with templates, we can parameterize the Atmos component name `eks-{{ .flavor }}/cluster` and any values in any sections (`vars`, `locals`, `settings`, `env`, `backend`, etc.), and even the `import` section in the imported file (if the file imports other configurations).
+
+:::
+
+Then we can import the template into a top-level stack multiple times providing different context variables to each import:
+
+```yaml title="stacks/orgs/cp/tenant1/test1/us-west-2.yaml"
+import:
+  - path: "mixins/region/us-west-2"
+  - path: "orgs/cp/tenant1/test1/_defaults"
+
+  # This import with the provided context will dynamically generate
+  # a new Atmos component `eks-blue/cluster` in the current stack
+  - path: "catalog/terraform/eks_cluster.yaml.tmpl"
+    context:
+      flavor: "blue"
+      enabled: true
+      service_1_name: "blue-service-1"
+      service_2_name: "blue-service-2"
+
+  # This import with the provided context will dynamically generate
+  # a new Atmos component `eks-green/cluster` in the current stack
+  - path: "catalog/terraform/eks_cluster.yaml.tmpl"
+    context:
+      flavor: "green"
+      enabled: false
+      service_1_name: "green-service-1"
+      service_2_name: "green-service-2"
+```
+
+Now we can execute the following Atmos commands to describe and provision the dynamically generated EKS components into the stack:
+
+```shell
+atmos describe component eks-blue/cluster -s tenant1-uw2-test-1
+atmos describe component eks-green/cluster -s tenant1-uw2-test-1
+
+atmos terraform apply eks-blue/cluster -s tenant1-uw2-test-1
+atmos terraform apply eks-green/cluster -s tenant1-uw2-test-1
+```
+
+All the parameterized variables get their values from the `context`:
+
+```yaml title="atmos describe component eks-blue/cluster -s tenant1-uw2-test-1"
+vars:
+  enabled: true
+  environment: uw2
+  name: eks-blue
+  namespace: cp
+  region: us-west-2
+  service_1_name: blue-service-1
+  service_2_name: blue-service-2
+  stage: test-1
+  tags:
+    flavor: blue
+  tenant: tenant1
+```
+
+```yaml title="atmos describe component eks-green/cluster -s tenant1-uw2-test-1"
+vars:
+  enabled: true
+  environment: uw2
+  name: eks-green
+  namespace: cp
+  region: us-west-2
+  service_1_name: green-service-1
+  service_2_name: green-service-2
+  stage: test-1
+  tags:
+    flavor: green
+  tenant: tenant1
+```
+
+## Hierarchical Imports with Context
+
+Atmos supports hierarchical imports with context.
+This will allow you to parameterize the entire chain of stack configurations and dynamically generate components in stacks.
+
+For example, let's create the configuration `stacks/catalog/terraform/eks_cluster_hierarchical.yaml.tmpl` with the following content:
+
+```yaml title="stacks/catalog/terraform/eks_cluster_hierarchical.yaml.tmpl"
+import:
+  # Use `region.yaml.tmpl` `Go` template and provide `context` for it.
+  # This can also be done by using `Go` templates in the import path itself.
+  # - path: "mixins/region/{{ .region }}"
+  - path: "mixins/region/region.yaml.tmpl"
+    # `Go` templates in `context`
+    context:
+      region: "{{ .region }}"
+      environment: "{{ .environment }}"
+
+  # `Go` templates in the import path
+  - path: "orgs/cp/{{ .tenant }}/{{ .stage }}/_defaults"
+
+components:
+  terraform:
+    # Parameterize Atmos component name
+    "eks-{{ .flavor }}/cluster":
+      metadata:
+        component: "test/test-component"
+      vars:
+        # Parameterize variables
+        enabled: "{{ .enabled }}"
+        name: "eks-{{ .flavor }}"
+        service_1_name: "{{ .service_1_name }}"
+        service_2_name: "{{ .service_2_name }}"
+        tags:
+          flavor: "{{ .flavor }}"
+```
+
+Then we can import the template into a top-level stack multiple times providing different context variables to each import and to the imports for
+the entire inheritance chain (which `catalog/terraform/eks_cluster_hierarchical.yaml.tmpl` imports itself):
+
+```yaml title="stacks/orgs/cp/tenant1/test1/us-west-1.yaml"
+import:
+
+  # This import with the provided hierarchical context will dynamically generate
+  # a new Atmos component `eks-blue/cluster` in the `tenant1-uw1-test1` stack
+  - path: "catalog/terraform/eks_cluster_hierarchical.yaml.tmpl"
+    context:
+      # Context variables for the EKS component
+      flavor: "blue"
+      enabled: true
+      service_1_name: "blue-service-1"
+      service_2_name: "blue-service-2"
+      # Context variables for the hierarchical imports
+      # `catalog/terraform/eks_cluster_hierarchical.yaml.tmpl` imports other parameterized configurations
+      tenant: "tenant1"
+      region: "us-west-1"
+      environment: "uw1"
+      stage: "test1"
+
+  # This import with the provided hierarchical context will dynamically generate
+  # a new Atmos component `eks-green/cluster` in the `tenant1-uw1-test1` stack
+  - path: "catalog/terraform/eks_cluster_hierarchical.yaml.tmpl"
+    context:
+      # Context variables for the EKS component
+      flavor: "green"
+      enabled: false
+      service_1_name: "green-service-1"
+      service_2_name: "green-service-2"
+      # Context variables for the hierarchical imports
+      # `catalog/terraform/eks_cluster_hierarchical.yaml.tmpl` imports other parameterized configurations
+      tenant: "tenant1"
+      region: "us-west-1"
+      environment: "uw1"
+      stage: "test1"
+```
+
+When processing hierarchical imports, Atmos:
+
+1. Processes imports in the order they are listed
+2. Passes the parent's `context` to each imported file
+3. If a child file defines its own `context`, merges it with the parent — child values win on conflicts
+4. Repeats this recursively through the entire import chain
+
+We are now able to dynamically generate the components `eks-blue/cluster` and `eks-green/cluster` in the stack `tenant1-uw1-test1` and can
+execute the following Atmos commands to provision the components into the stack:
+
+```shell
+atmos terraform apply eks-blue/cluster -s tenant1-uw1-test-1
+atmos terraform apply eks-green/cluster -s tenant1-uw1-test-1
+```
+
+All the parameterized variables get their values from the hierarchical `context` settings:
+
+```yaml title="atmos describe component eks-blue/cluster -s tenant1-uw1-test-1"
+vars:
+  enabled: true
+  environment: uw1
+  name: eks-blue
+  namespace: cp
+  region: us-west-1
+  service_1_name: blue-service-1
+  service_2_name: blue-service-2
+  stage: test-1
+  tags:
+    flavor: blue
+  tenant: tenant1
+```
+
+:::warning Use Sparingly
+Templated imports are powerful but make configurations harder to read and debug. Prefer plain imports and [inheritance](/howto/inheritance) when possible. Reserve templates for cases where the duplication would be excessive — such as generating many similar components from a single definition.
+:::
+
+## Conditional Variables in Templates
+
+Use [Sprig functions](http://masterminds.github.io/sprig/) like `hasKey` to conditionally include variables based on the provided `context`:
+
+```yaml
+components:
+  terraform:
+    eks/iam-role/{{ .app_name }}/{{ .service_environment }}:
+      metadata:
+        component: eks/iam-role
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        enabled: {{ .enabled }}
+        tags:
+          Service: {{ .app_name }}
+        service_account_name: {{ .app_name }}
+        service_account_namespace: {{ .service_account_namespace }}
+        {{ if hasKey . "iam_managed_policy_arns" }}
+        iam_managed_policy_arns:
+          {{ range $i, $iam_managed_policy_arn := .iam_managed_policy_arns }}
+          - '{{ $iam_managed_policy_arn }}'
+          {{ end }}
+        {{- end }}
+        {{ if hasKey . "iam_source_policy_documents" }}
+        iam_source_policy_documents:
+          {{ range $i, $iam_source_policy_document := .iam_source_policy_documents }}
+          - '{{ $iam_source_policy_document }}'
+          {{ end }}
+        {{- end }}
+```
+
+The `iam_managed_policy_arns` and `iam_source_policy_documents` variables will be included in the component configuration only if the
+provided `context` object has the `iam_managed_policy_arns` and `iam_source_policy_documents` fields.
+
+## Summary
+
+Imports with context let you parameterize entire configuration files and generate component variations from a single template — useful for patterns like [EKS blue-green deployments](https://aws.amazon.com/blogs/containers/kubernetes-cluster-upgrade-the-blue-green-deployment-strategy/).
+
+## Related
+
+- [Configure CLI](/quick-start/advanced/configure-cli)
+- [Create Atmos Stacks](/quick-start/advanced/create-atmos-stacks)

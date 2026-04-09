@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
@@ -12,28 +14,33 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
+var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--base', '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
 type DescribeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) DescribeAffectedExec
 
 type DescribeAffectedCmdArgs struct {
 	CLIConfig                   *schema.AtmosConfiguration
+	Base                        string // Unified base commit (ref or SHA). Takes precedence over Ref/SHA.
 	CloneTargetRef              bool
 	Format                      string
 	IncludeDependents           bool
 	IncludeSettings             bool
 	IncludeSpaceliftAdminStacks bool
 	OutputFile                  string
+	GithubOutputFile            string // Output file for $GITHUB_OUTPUT format (key=value).
 	Ref                         string
 	RepoPath                    string
 	SHA                         string
@@ -48,6 +55,8 @@ type DescribeAffectedCmdArgs struct {
 	Skip                        []string
 	ExcludeLocked               bool
 	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	HeadSHAOverride             string           // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
+	CIEventType                 string           // CI event type (e.g., "pull_request", "push") for upload validation.
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -67,6 +76,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefClone func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -81,6 +91,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	executeDescribeAffectedWithTargetRefCheckout func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -93,6 +104,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		excludeLocked bool,
+		authManager auth.AuthManager,
 	) ([]schema.Affected, *plumbing.Reference, *plumbing.Reference, string, error)
 	addDependentsToAffected func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -102,6 +114,7 @@ type describeAffectedExec struct {
 		processYamlFunctions bool,
 		skip []string,
 		onlyInStack string,
+		authManager auth.AuthManager,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -152,10 +165,10 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	}
 	SetDescribeAffectedFlagValueInCliArgs(flags, &result)
 
-	if result.Format != "yaml" && result.Format != "json" {
+	if result.Format != "yaml" && result.Format != "json" && result.Format != "matrix" {
 		return DescribeAffectedCmdArgs{}, ErrInvalidFormat
 	}
-	if result.RepoPath != "" && (result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
+	if result.RepoPath != "" && (result.Base != "" || result.Ref != "" || result.SHA != "" || result.SSHKeyPath != "" || result.SSHKeyPassword != "") {
 		return DescribeAffectedCmdArgs{}, ErrRepoPathConflict
 	}
 
@@ -167,6 +180,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	defer perf.Track(nil, "exec.SetDescribeAffectedFlagValueInCliArgs")()
 
 	flagsKeyValue := map[string]any{
+		"base":                           &describe.Base,
 		"ref":                            &describe.Ref,
 		"sha":                            &describe.SHA,
 		"repo-path":                      &describe.RepoPath,
@@ -184,6 +198,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"stack":                          &describe.Stack,
 		"format":                         &describe.Format,
 		"file":                           &describe.OutputFile,
+		"output-file":                    &describe.GithubOutputFile,
 		"query":                          &describe.Query,
 		"verbose":                        &describe.Verbose,
 		"exclude-locked":                 &describe.ExcludeLocked,
@@ -211,7 +226,21 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-	// When uploading, always include dependents and settings for all affected components
+	// Resolve --base flag: auto-detect ref vs SHA and populate the appropriate field.
+	if describe.Base != "" {
+		if ci.IsCommitSHA(describe.Base) {
+			describe.SHA = describe.Base
+		} else {
+			describe.Ref = describe.Base
+		}
+	}
+
+	// Auto-detect base from CI environment when ci.enabled is true and no explicit base provided.
+	if describe.Ref == "" && describe.SHA == "" && describe.CLIConfig != nil && describe.CLIConfig.CI.Enabled {
+		resolveBaseFromCI(describe)
+	}
+
+	// When uploading, always include dependents and settings for all affected components.
 	if describe.Upload {
 		describe.IncludeDependents = true
 		describe.IncludeSettings = true
@@ -219,6 +248,40 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	if describe.Format == "" {
 		describe.Format = "json"
 	}
+}
+
+// resolveBaseFromCI attempts to auto-detect the base commit from the CI provider.
+func resolveBaseFromCI(describe *DescribeAffectedCmdArgs) {
+	defer perf.Track(nil, "exec.resolveBaseFromCI")()
+
+	p := ci.Detect()
+	if p == nil {
+		return
+	}
+
+	resolution, err := p.ResolveBase()
+	if err != nil {
+		log.Warn("Failed to auto-detect CI base", "provider", p.Name(), "error", err)
+		return
+	}
+	if resolution == nil {
+		return
+	}
+
+	describe.Ref = resolution.Ref
+	describe.SHA = resolution.SHA
+	describe.HeadSHAOverride = resolution.HeadSHA
+	describe.CIEventType = resolution.EventType
+
+	base := resolution.SHA
+	if base == "" {
+		base = resolution.Ref
+	}
+	log.Info("Auto-detected CI base",
+		"provider", p.Name(),
+		"event", resolution.EventType,
+		"base", base,
+		"source", resolution.Source)
 }
 
 // Execute executes `describe affected` command.
@@ -242,6 +305,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	case a.CloneTargetRef:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefClone(
@@ -257,6 +321,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	default:
 		affected, headHead, baseHead, repoUrl, err = d.executeDescribeAffectedWithTargetRefCheckout(
@@ -270,6 +335,7 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 			a.ProcessYamlFunctions,
 			a.Skip,
 			a.ExcludeLocked,
+			a.AuthManager,
 		)
 	}
 	if err != nil {
@@ -278,16 +344,27 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 
 	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack, a.AuthManager)
 		if err != nil {
 			return err
 		}
+	}
+
+	// Strip unnecessary fields when uploading to Atmos Pro to reduce payload size
+	// and stay within serverless function payload limits.
+	if a.Upload {
+		affected = StripAffectedForUpload(affected)
 	}
 
 	return d.view(a, repoUrl, headHead, baseHead, affected)
 }
 
 func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
+	// Handle matrix format specially - it bypasses the normal view flow.
+	if a.Format == "matrix" {
+		return writeMatrixOutput(affected, a.GithubOutputFile)
+	}
+
 	if a.Query == "" {
 		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
 			return err
@@ -309,15 +386,31 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, repoUrl string, headHead, baseHead *plumbing.Reference, affected []schema.Affected) error {
 	log.Debug("Affected components and stacks:")
 
-	err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
-	if err != nil {
-		return err
+	// When uploading, suppress the large JSON dump unless verbose mode or file output is requested.
+	if !args.Upload || args.Verbose || args.OutputFile != "" {
+		err := viewWithScroll(&viewWithScrollProps{d.pageCreator, d.IsTTYSupportForStdout, d.printOrWriteToFile, d.atmosConfig, "Affected components and stacks", args.Format, args.OutputFile, affected})
+		if err != nil {
+			return err
+		}
 	}
 
 	if !args.Upload {
 		return nil
 	}
-	// Parse the repo URL
+
+	// Validate that the CI event is a pull_request event when uploading.
+	// Atmos Pro only processes pull_request webhooks, so push events cannot be correlated.
+	if args.CIEventType != "" && args.CIEventType != "pull_request" && args.CIEventType != "pull_request_target" {
+		return errUtils.Build(
+			fmt.Errorf("%w: detected CI event %q, but Atmos Pro only supports pull_request events", errUtils.ErrUploadRequiresPullRequestEvent, args.CIEventType),
+		).
+			WithHint("Ensure your workflow triggers on pull_request events when using --upload.").
+			WithHint("Push events and other event types are not supported for Atmos Pro uploads.").
+			WithHint("See https://atmos.tools/integrations/pro for supported CI configurations.").
+			Err()
+	}
+
+	// Parse the repo URL.
 	gitURL, err := giturl.NewGitURL(repoUrl)
 	if err != nil {
 		return err
@@ -326,11 +419,21 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	log.Debug("Creating API client")
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(d.atmosConfig)
 	if err != nil {
-		return err
+		log.Warn("Failed to create Atmos Pro API client for upload. The describe affected result is unaffected.", "error", err)
+		return nil
+	}
+
+	// Use the PR head SHA from the CI event payload when available.
+	// This ensures the upload SHA matches what Atmos Pro indexed from the webhook,
+	// regardless of which commit the workflow has checked out (e.g., merge commit vs PR head).
+	headSHA := headHead.Hash().String()
+	if args.HeadSHAOverride != "" {
+		headSHA = args.HeadSHAOverride
+		log.Debug("Using PR head SHA for upload correlation", "headSHA", headSHA, "localHEAD", headHead.Hash().String())
 	}
 
 	req := dtos.UploadAffectedStacksRequest{
-		HeadSHA:   headHead.Hash().String(),
+		HeadSHA:   headSHA,
 		BaseSHA:   baseHead.Hash().String(),
 		RepoURL:   repoUrl,
 		RepoName:  gitURL.GetRepoName(),
@@ -341,7 +444,14 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 
 	log.Debug("Preparing upload affected stacks request", "req", req)
 
-	return apiClient.UploadAffectedStacks(&req)
+	if uploadErr := apiClient.UploadAffectedStacks(&req); uploadErr != nil {
+		ui.Error("Failed to upload affected stacks to Atmos Pro")
+		return uploadErr
+	}
+
+	ui.Successf("Uploaded %d affected component(s) to Atmos Pro", len(affected))
+
+	return nil
 }
 
 type viewWithScrollProps struct {
@@ -409,5 +519,72 @@ func viewConfig(v *viewConfigProps) error {
 	if err := v.pageCreator.Run(v.displayName, content); err != nil {
 		return err
 	}
+	return nil
+}
+
+// MatrixOutput represents the GitHub Actions matrix strategy format.
+type MatrixOutput struct {
+	Include []MatrixEntry `json:"include"`
+}
+
+// MatrixEntry represents a single entry in the matrix include array.
+type MatrixEntry struct {
+	Stack         string `json:"stack"`
+	Component     string `json:"component"`
+	ComponentPath string `json:"component_path"`
+	ComponentType string `json:"component_type"`
+}
+
+// convertAffectedToMatrix converts the affected list to GitHub Actions matrix format.
+func convertAffectedToMatrix(affected []schema.Affected) MatrixOutput {
+	matrix := MatrixOutput{
+		Include: make([]MatrixEntry, 0, len(affected)),
+	}
+	for i := range affected {
+		a := &affected[i]
+		entry := MatrixEntry{
+			Stack:         a.Stack,
+			Component:     a.Component,
+			ComponentPath: a.ComponentPath,
+			ComponentType: a.ComponentType,
+		}
+		matrix.Include = append(matrix.Include, entry)
+	}
+	return matrix
+}
+
+// writeMatrixOutput writes the matrix output to stdout or a file.
+// If outputFile is specified (for $GITHUB_OUTPUT), writes in key=value format.
+// Otherwise, writes JSON to stdout.
+func writeMatrixOutput(affected []schema.Affected, outputFile string) error {
+	matrix := convertAffectedToMatrix(affected)
+	matrixJSON, err := json.Marshal(matrix)
+	if err != nil {
+		return fmt.Errorf("failed to marshal matrix output: %w", err)
+	}
+
+	if outputFile != "" {
+		// Write to file in key=value format for $GITHUB_OUTPUT.
+		// Using 0644 permissions - matrix contains only stack/component names, not secrets.
+		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
+		if err != nil {
+			return fmt.Errorf("failed to open output file %s: %w", outputFile, err)
+		}
+		defer f.Close()
+
+		// Write matrix=<json> format.
+		if _, err := fmt.Fprintf(f, "matrix=%s\n", string(matrixJSON)); err != nil {
+			return fmt.Errorf("failed to write to output file %s: %w", outputFile, err)
+		}
+		// Also write count for convenience.
+		if _, err := fmt.Fprintf(f, "affected_count=%d\n", len(affected)); err != nil {
+			return fmt.Errorf("failed to write count to output file %s: %w", outputFile, err)
+		}
+		log.Debug("Wrote matrix output to file", "file", outputFile, "count", len(affected))
+		return nil
+	}
+
+	// Write to stdout.
+	_ = data.Writeln(string(matrixJSON))
 	return nil
 }

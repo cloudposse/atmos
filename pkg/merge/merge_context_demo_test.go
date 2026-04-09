@@ -8,8 +8,8 @@ import (
 // TestMergeContextErrorDemo demonstrates the enhanced error formatting.
 // This simulates what users will see when a merge error occurs..
 func TestMergeContextErrorDemo(t *testing.T) {
-	// Simulate the kind of error that mergo would return
-	mergoError := errors.New("cannot override two slices with different type ([]interface {}, string)")
+	// Simulate the kind of error that deepMergeNative returns on type mismatch.
+	mergeError := errors.New("cannot override two slices with different type ([]interface {}, string)")
 
 	// Create a merge context that simulates a real import chain
 	ctx := NewMergeContext()
@@ -18,7 +18,7 @@ func TestMergeContextErrorDemo(t *testing.T) {
 	ctx = ctx.WithFile("stacks/dev/environment.yaml")
 
 	// Format the error with context
-	enhancedError := ctx.FormatError(mergoError)
+	enhancedError := ctx.FormatError(mergeError)
 
 	// The test passes if we successfully format the error
 	if enhancedError != nil {
@@ -43,10 +43,10 @@ func TestMergeContextRealWorldScenario(t *testing.T) {
 	ctx = ctx.WithFile("stacks/deploy/prod/us-east-1.yaml")
 
 	// Simulate the error
-	mergoError := errors.New("cannot override two slices with different type ([]interface {}, string)")
+	mergeError := errors.New("cannot override two slices with different type ([]interface {}, string)")
 
 	// Format with context
-	enhancedError := ctx.FormatError(mergoError,
+	enhancedError := ctx.FormatError(mergeError,
 		"This error occurred while processing VPC configuration",
 		"The 'subnets' field appears to have conflicting types")
 

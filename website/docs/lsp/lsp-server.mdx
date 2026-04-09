@@ -1,0 +1,948 @@
+---
+title: Atmos LSP Server for IDE Integration
+sidebar_label: LSP Server
+sidebar_position: 2
+description: Language Server Protocol (LSP) server that enables IDE integration for Atmos stack files with validation, autocomplete, and hover documentation
+---
+
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+# Atmos LSP Server
+
+<Experimental />
+
+The **Atmos LSP Server** enables IDE and editor integration for Atmos stack files. It provides real-time syntax validation, intelligent autocomplete, hover documentation, and error diagnostics directly in your editor as you work with Atmos configuration files.
+
+:::tip
+Looking for generic YAML/Terraform validation for Atmos AI? See the [LSP Client](/lsp/lsp-client), which connects to external language servers (yaml-ls, terraform-ls).
+:::
+
+## Features
+
+### Syntax Validation
+
+The LSP server validates YAML syntax and Atmos-specific structure in real-time:
+
+- YAML syntax errors (invalid indentation, incorrect types)
+- Atmos structure validation (import arrays, component maps)
+- Component name validation
+- Variable structure validation
+- Precise error locations with line numbers
+
+### Basic Autocomplete
+
+Get suggestions based on current line context:
+
+- Top-level keywords: `import`, `components`, `vars`, `settings`, `metadata`
+- Component types: `terraform`, `helmfile`
+- Stack configuration options
+- Import path suggestions
+- Variable definitions
+
+**Note:** Completions are based on current line matching, not full YAML hierarchy parsing. For example, typing "comp" on a new line suggests "components".
+
+### Hover Documentation
+
+Hover over Atmos keywords to see inline documentation explaining their purpose and usage.
+
+### Transport Options
+
+The Atmos LSP Server supports multiple transport mechanisms:
+
+- **stdio** (default) - Standard input/output for local IDE integration
+- **tcp** - TCP server for remote connections
+- **websocket** - WebSocket server for web-based editors
+
+## Quick Start
+
+Get started with Atmos LSP Server in 3 steps:
+
+### 1. Start the LSP Server
+
+Start the Atmos LSP Server with the default stdio transport:
+
+<Terminal title="shell">
+```bash
+# Start LSP server (stdio transport for IDE integration)
+atmos lsp start
+
+# Or with TCP transport (for remote connections)
+atmos lsp start --transport tcp --address localhost:7777
+
+# Or with WebSocket transport (for web editors)
+atmos lsp start --transport websocket --address localhost:8080
+```
+</Terminal>
+
+:::tip Transport Selection
+- **stdio** (default): Use for local IDE integration (VS Code, Neovim, etc.)
+- **tcp**: Use for remote development or when stdio isn't available
+- **websocket**: Use for web-based editors
+:::
+
+### 2. Configure Your Editor
+
+Configure your editor to connect to the Atmos LSP Server. See [Editor Configuration](#editor-configuration) below for specific examples.
+
+### 3. Open Atmos Stack Files
+
+Open any Atmos stack file (`.yaml` or `.yml`) in your editor and start getting real-time feedback!
+
+## Command Options
+
+### `atmos lsp start`
+
+Starts the Atmos Language Server Protocol (LSP) server.
+
+**Flags:**
+
+<dl>
+  <dt>`--transport`</dt>
+  <dd>Transport protocol: `stdio`, `tcp`, or `websocket` (default: `stdio`)</dd>
+
+  <dt>`--address`</dt>
+  <dd>Address for tcp/websocket transports in `host:port` format (default: `localhost:7777`)</dd>
+</dl>
+
+**Examples:**
+
+<Terminal title="shell">
+```bash
+# Start with stdio (default, for IDE integration)
+atmos lsp start
+
+# Explicitly specify stdio transport
+atmos lsp start --transport stdio
+
+# Start TCP server on default port
+atmos lsp start --transport tcp
+
+# Start TCP server on custom port
+atmos lsp start --transport tcp --address localhost:9000
+
+# Start WebSocket server
+atmos lsp start --transport websocket --address localhost:8080
+
+# Start WebSocket on a specific interface
+atmos lsp start --transport websocket --address 127.0.0.1:8080
+```
+</Terminal>
+
+## Editor Configuration
+
+Configure your editor to connect to the Atmos LSP Server. The configuration varies by editor but follows a similar pattern: specify the command to start the server and which file types to activate for.
+
+<Tabs>
+  <TabItem value="vscode" label="VS Code" default>
+
+Create or update `.vscode/settings.json` in your workspace or use a VS Code extension.
+
+#### Option 1: Using Generic LSP Extension
+
+Install the [vscode-language-server-client](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.vscode-clangd) or create a custom extension.
+
+<File title=".vscode/settings.json">
+```json
+{
+  "languageServerExample.trace.server": "verbose",
+  "atmos.lsp.enable": true,
+  "atmos.lsp.command": "atmos",
+  "atmos.lsp.args": ["lsp", "start", "--transport", "stdio"],
+  "atmos.lsp.filetypes": ["yaml", "yml"]
+}
+```
+</File>
+
+#### Option 2: Using tasks.json to Start Server
+
+<File title=".vscode/tasks.json">
+```json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Atmos LSP Server",
+      "type": "shell",
+      "command": "atmos",
+      "args": ["lsp", "start"],
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": ".",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting Atmos LSP server",
+          "endsPattern": "LSP server ready"
+        }
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      }
+    }
+  ]
+}
+```
+</File>
+
+Then configure the LSP client in `settings.json`:
+
+<File title=".vscode/settings.json">
+```json
+{
+  "yaml.customTags": [],
+  "files.associations": {
+    "**/stacks/**/*.yaml": "yaml",
+    "**/stacks/**/*.yml": "yaml",
+    "atmos.yaml": "yaml"
+  }
+}
+```
+</File>
+
+#### Option 3: Create Custom VS Code Extension
+
+For the best experience, create a custom VS Code extension. Create a new directory with:
+
+<File title="package.json">
+```json
+{
+  "name": "atmos-lsp",
+  "displayName": "Atmos LSP Client",
+  "description": "Language Server Protocol client for Atmos",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:yaml"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "Atmos LSP",
+      "properties": {
+        "atmos.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Atmos LSP server"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  }
+}
+```
+</File>
+
+<File title="src/extension.ts">
+```typescript
+import * as path from 'path';
+import { workspace, ExtensionContext } from 'vscode';
+import {
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions
+} from 'vscode-languageclient/node';
+
+let client: LanguageClient;
+
+export function activate(context: ExtensionContext) {
+  const serverOptions: ServerOptions = {
+    command: 'atmos',
+    args: ['lsp', 'start', '--transport', 'stdio']
+  };
+
+  const clientOptions: LanguageClientOptions = {
+    documentSelector: [
+      { scheme: 'file', language: 'yaml', pattern: '**/stacks/**/*.{yaml,yml}' },
+      { scheme: 'file', language: 'yaml', pattern: '**/atmos.yaml' }
+    ],
+    synchronize: {
+      fileEvents: workspace.createFileSystemWatcher('**/*.{yaml,yml}')
+    }
+  };
+
+  client = new LanguageClient(
+    'atmosLsp',
+    'Atmos LSP Server',
+    serverOptions,
+    clientOptions
+  );
+
+  client.start();
+}
+
+export function deactivate(): Thenable<void> | undefined {
+  if (!client) {
+    return undefined;
+  }
+  return client.stop();
+}
+```
+</File>
+
+  </TabItem>
+  <TabItem value="neovim" label="Neovim">
+
+Neovim has excellent built-in LSP support. Configure using `nvim-lspconfig` or manually.
+
+#### Using nvim-lspconfig
+
+<File title="~/.config/nvim/lua/lsp/atmos.lua">
+```lua
+local lspconfig = require('lspconfig')
+local configs = require('lspconfig.configs')
+
+-- Define Atmos LSP server configuration
+if not configs.atmos_ls then
+  configs.atmos_ls = {
+    default_config = {
+      cmd = { 'atmos', 'lsp', 'start', '--transport', 'stdio' },
+      filetypes = { 'yaml', 'yml' },
+      root_dir = lspconfig.util.root_pattern('atmos.yaml', '.git'),
+      settings = {},
+      single_file_support = true,
+    },
+    docs = {
+      description = [[
+        Language server for Atmos stack configuration files.
+        Provides validation, autocomplete, and hover documentation.
+      ]],
+    },
+  }
+end
+
+-- Setup Atmos LSP server
+lspconfig.atmos_ls.setup{
+  on_attach = function(client, bufnr)
+    -- Enable completion triggered by <c-x><c-o>
+    vim.api.nvim_buf_set_option(bufnr, 'omnifunc', 'v:lua.vim.lsp.omnifunc')
+
+    -- Mappings
+    local bufopts = { noremap=true, silent=true, buffer=bufnr }
+    vim.keymap.set('n', 'gD', vim.lsp.buf.declaration, bufopts)
+    vim.keymap.set('n', 'gd', vim.lsp.buf.definition, bufopts)
+    vim.keymap.set('n', 'K', vim.lsp.buf.hover, bufopts)
+    vim.keymap.set('n', 'gi', vim.lsp.buf.implementation, bufopts)
+    vim.keymap.set('n', '<space>D', vim.lsp.buf.type_definition, bufopts)
+    vim.keymap.set('n', '<space>rn', vim.lsp.buf.rename, bufopts)
+    vim.keymap.set('n', '<space>ca', vim.lsp.buf.code_action, bufopts)
+    vim.keymap.set('n', 'gr', vim.lsp.buf.references, bufopts)
+    vim.keymap.set('n', '<space>f', function() vim.lsp.buf.format { async = true } end, bufopts)
+  end,
+  flags = {
+    debounce_text_changes = 150,
+  },
+  -- Only activate for Atmos-related YAML files
+  filetypes = { 'yaml' },
+  root_dir = lspconfig.util.root_pattern('atmos.yaml', 'stacks/', '.git'),
+}
+```
+</File>
+
+Then source it in your `init.lua`:
+
+<File title="~/.config/nvim/init.lua">
+```lua
+-- Load Atmos LSP configuration
+require('lsp.atmos')
+
+-- Optional: Auto-start LSP for YAML files in Atmos projects
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "yaml",
+  callback = function()
+    local root = vim.fn.findfile('atmos.yaml', '.;')
+    if root ~= '' then
+      vim.cmd('LspStart atmos_ls')
+    end
+  end,
+})
+```
+</File>
+
+#### Manual Configuration (without nvim-lspconfig)
+
+<File title="~/.config/nvim/init.lua">
+```lua
+-- Atmos LSP configuration
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'yaml',
+  callback = function()
+    -- Only start for Atmos projects
+    local root = vim.fn.findfile('atmos.yaml', '.;')
+    if root == '' then
+      return
+    end
+
+    vim.lsp.start({
+      name = 'atmos-lsp',
+      cmd = { 'atmos', 'lsp', 'start', '--transport', 'stdio' },
+      root_dir = vim.fs.dirname(vim.fs.find({'atmos.yaml', '.git'}, { upward = true })[1]),
+      settings = {},
+    })
+  end,
+})
+```
+</File>
+
+  </TabItem>
+  <TabItem value="vim-lsp" label="Vim (vim-lsp)">
+
+Install [vim-lsp](https://github.com/prabirshrestha/vim-lsp) for LSP support in Vim.
+
+<File title="~/.vimrc">
+```vim
+" Install vim-lsp via vim-plug
+Plug 'prabirshrestha/vim-lsp'
+Plug 'prabirshrestha/asyncomplete.vim'
+Plug 'prabirshrestha/asyncomplete-lsp.vim'
+
+" Register Atmos LSP server
+if executable('atmos')
+  augroup LspAtmos
+    autocmd!
+    autocmd User lsp_setup call lsp#register_server({
+      \ 'name': 'atmos-lsp',
+      \ 'cmd': {server_info->['atmos', 'lsp', 'start', '--transport', 'stdio']},
+      \ 'allowlist': ['yaml', 'yml'],
+      \ 'workspace_config': {},
+      \ 'root_uri': {server_info->lsp#utils#path_to_uri(
+      \   lsp#utils#find_nearest_parent_file_directory(
+      \     lsp#utils#get_buffer_path(),
+      \     ['atmos.yaml', '.git']
+      \   ))},
+      \ })
+  augroup END
+endif
+
+" Optional: Enable diagnostics
+let g:lsp_diagnostics_enabled = 1
+let g:lsp_diagnostics_echo_cursor = 1
+
+" Optional: Key mappings
+function! s:on_lsp_buffer_enabled() abort
+  setlocal omnifunc=lsp#complete
+  nmap <buffer> gd <plug>(lsp-definition)
+  nmap <buffer> gr <plug>(lsp-references)
+  nmap <buffer> K <plug>(lsp-hover)
+  nmap <buffer> <leader>rn <plug>(lsp-rename)
+endfunction
+
+augroup lsp_install
+  au!
+  autocmd User lsp_buffer_enabled call s:on_lsp_buffer_enabled()
+augroup END
+```
+</File>
+
+  </TabItem>
+  <TabItem value="coc-nvim" label="Vim (coc.nvim)">
+
+If you use [coc.nvim](https://github.com/neoclide/coc.nvim), configure it via `:CocConfig`:
+
+<File title="coc-settings.json">
+```json
+{
+  "languageserver": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["lsp", "start", "--transport", "stdio"],
+      "filetypes": ["yaml", "yml"],
+      "rootPatterns": ["atmos.yaml", ".git"],
+      "settings": {},
+      "trace.server": "verbose"
+    }
+  }
+}
+```
+</File>
+
+  </TabItem>
+  <TabItem value="emacs-lsp" label="Emacs (lsp-mode)">
+
+Configure using [lsp-mode](https://emacs-lsp.github.io/lsp-mode/):
+
+<File title="~/.emacs.d/init.el">
+```elisp
+;; Ensure lsp-mode is installed
+(use-package lsp-mode
+  :ensure t
+  :hook ((yaml-mode . lsp-deferred))
+  :commands (lsp lsp-deferred))
+
+;; Register Atmos LSP server
+(with-eval-after-load 'lsp-mode
+  (add-to-list 'lsp-language-id-configuration '(yaml-mode . "yaml"))
+
+  (lsp-register-client
+   (make-lsp-client
+    :new-connection (lsp-stdio-connection '("atmos" "lsp" "start" "--transport" "stdio"))
+    :activation-fn (lsp-activate-on "yaml")
+    :server-id 'atmos-lsp
+    :priority 10
+    :add-on? nil
+    :multi-root t
+    :initialization-options (lambda () (ht))
+    :notification-handlers (ht)
+    :action-handlers (ht)
+    :library-folders-fn nil
+    :before-file-open-fn nil
+    :initialized-fn nil
+    :remote? nil
+    :completion-in-comments? nil
+    :path->uri-fn nil
+    :uri->path-fn nil
+    :environment-fn nil
+    :after-open-fn nil
+    :async-request-handlers (ht)
+    :download-server-fn nil
+    :download-in-progress? nil
+    :buffers (ht)
+    :synchronize-sections nil)))
+
+;; Optional: Enable only for Atmos projects
+(defun my/enable-atmos-lsp ()
+  "Enable Atmos LSP if in an Atmos project."
+  (when (locate-dominating-file default-directory "atmos.yaml")
+    (lsp-deferred)))
+
+(add-hook 'yaml-mode-hook #'my/enable-atmos-lsp)
+```
+</File>
+
+  </TabItem>
+  <TabItem value="emacs-eglot" label="Emacs (eglot)">
+
+Configure using [eglot](https://github.com/joaotavora/eglot) (built-in to Emacs 29+):
+
+<File title="~/.emacs.d/init.el">
+```elisp
+;; Eglot is built-in starting Emacs 29
+(require 'eglot)
+
+;; Register Atmos LSP server
+(add-to-list 'eglot-server-programs
+             '(yaml-mode . ("atmos" "lsp" "start" "--transport" "stdio")))
+
+;; Enable for YAML files in Atmos projects
+(defun my/yaml-mode-setup ()
+  "Enable Eglot for YAML files in Atmos projects."
+  (when (locate-dominating-file default-directory "atmos.yaml")
+    (eglot-ensure)))
+
+(add-hook 'yaml-mode-hook #'my/yaml-mode-setup)
+
+;; Optional: Key bindings
+(with-eval-after-load 'eglot
+  (define-key eglot-mode-map (kbd "C-c l r") 'eglot-rename)
+  (define-key eglot-mode-map (kbd "C-c l a") 'eglot-code-actions)
+  (define-key eglot-mode-map (kbd "C-c l f") 'eglot-format))
+```
+</File>
+
+  </TabItem>
+  <TabItem value="sublime" label="Sublime Text">
+
+Install the [LSP package](https://packagecontrol.io/packages/LSP) for Sublime Text:
+
+1. Open Command Palette: `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux)
+2. Run: `Package Control: Install Package`
+3. Search and install: `LSP`
+
+Then configure Atmos LSP server:
+
+<File title="Preferences → Package Settings → LSP → Settings">
+```json
+{
+  "clients": {
+    "atmos-lsp": {
+      "enabled": true,
+      "command": ["atmos", "lsp", "start", "--transport", "stdio"],
+      "selector": "source.yaml",
+      "schemes": ["file"],
+      "settings": {},
+      "env": {},
+      "languageId": "yaml"
+    }
+  },
+  "only_show_lsp_completions": false,
+  "show_diagnostics_panel_on_save": 1
+}
+```
+</File>
+
+  </TabItem>
+  <TabItem value="jetbrains" label="IntelliJ IDEA">
+
+Install the LSP Support plugin:
+
+1. Go to `Preferences → Plugins`
+2. Search for "LSP Support" or install from [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/10209-lsp-support)
+3. Install and restart
+
+Configure the Atmos LSP server:
+
+1. Go to `Preferences → Languages & Frameworks → Language Server Protocol → Server Definitions`
+2. Click `+` to add a new server definition:
+   - **Extension**: `yaml;yml`
+   - **Path**: Raw command
+   - **Command**: `atmos lsp start --transport stdio`
+
+**Alternatively**, create a custom LSP configuration file:
+
+<File title=".idea/lsp/atmos.xml">
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="LanguageServerProvider">
+    <lsp>
+      <server>
+        <name>Atmos LSP</name>
+        <command>atmos lsp start --transport stdio</command>
+        <languages>
+          <language id="yaml"/>
+        </languages>
+      </server>
+    </lsp>
+  </component>
+</project>
+```
+</File>
+
+  </TabItem>
+  <TabItem value="cursor" label="Cursor">
+
+Cursor uses the same configuration as VS Code. Follow the instructions in the **VS Code** tab.
+
+<File title=".vscode/settings.json">
+```json
+{
+  "atmos.lsp.enable": true,
+  "files.associations": {
+    "**/stacks/**/*.yaml": "yaml",
+    "**/stacks/**/*.yml": "yaml",
+    "atmos.yaml": "yaml"
+  }
+}
+```
+</File>
+
+  </TabItem>
+  <TabItem value="zed" label="Zed">
+
+Zed has built-in LSP support. Configure in `~/.config/zed/settings.json`:
+
+<File title="~/.config/zed/settings.json">
+```json
+{
+  "lsp": {
+    "atmos-lsp": {
+      "binary": {
+        "path": "atmos",
+        "arguments": ["lsp", "start", "--transport", "stdio"]
+      },
+      "settings": {},
+      "language_ids": {
+        "YAML": "yaml"
+      }
+    }
+  },
+  "languages": {
+    "YAML": {
+      "language_servers": ["atmos-lsp"],
+      "format_on_save": "on",
+      "tab_size": 2
+    }
+  }
+}
+```
+</File>
+
+  </TabItem>
+  <TabItem value="helix" label="Helix">
+
+Configure Helix in `~/.config/helix/languages.toml`:
+
+<File title="~/.config/helix/languages.toml">
+```toml
+[[language]]
+name = "yaml"
+language-servers = ["atmos-lsp"]
+
+[language-server.atmos-lsp]
+command = "atmos"
+args = ["lsp", "start", "--transport", "stdio"]
+```
+</File>
+
+  </TabItem>
+</Tabs>
+
+## Editor Feature Matrix
+
+<dl>
+  <dt>**VS Code**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Neovim**</dt>
+  <dd>Setup: Moderate. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Vim (vim-lsp)**</dt>
+  <dd>Setup: Moderate. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+
+  <dt>**Vim (coc.nvim)**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Emacs (lsp-mode)**</dt>
+  <dd>Setup: Moderate. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Emacs (eglot)**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+
+  <dt>**Sublime Text**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+
+  <dt>**IntelliJ IDEA**</dt>
+  <dd>Setup: Moderate. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Good.</dd>
+
+  <dt>**Cursor**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Excellent.</dd>
+
+  <dt>**Zed**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+
+  <dt>**Helix**</dt>
+  <dd>Setup: Easy. Autocomplete: Yes. Diagnostics: Yes. Hover: Yes. Go to Definition: Planned. Rating: Great.</dd>
+</dl>
+
+**Legend:** Yes = Fully supported. Planned = Stub implemented, will be enhanced in future versions. Rating: Excellent (highly recommended), Great (recommended), Good (acceptable).
+
+## Troubleshooting
+
+### LSP Server Not Starting
+
+**Symptoms:**
+- Editor shows "LSP server failed to start"
+- No autocomplete or diagnostics appear
+
+**Solutions:**
+
+1. **Verify Atmos is installed and in PATH:**
+   ```bash
+   which atmos
+   atmos --version
+   ```
+
+2. **Test server manually:**
+   ```bash
+   atmos lsp start --transport stdio
+   # Should show: "Starting Atmos LSP server..."
+   ```
+
+3. **Check editor logs for errors:**
+   - **VS Code:** Output → Select "Atmos LSP" from dropdown
+   - **Neovim:** `:LspLog` or `:lua vim.lsp.set_log_level("debug")`
+   - **Vim:** Check `:messages`
+   - **Emacs:** `*lsp-log*` buffer
+
+4. **Ensure correct command syntax:**
+   ```bash
+   # Correct
+   atmos lsp start --transport stdio
+
+   # Incorrect
+   atmos lsp start --stdio  # Wrong flag name
+   ```
+
+### No Diagnostics Shown
+
+**Symptoms:**
+- LSP server starts but no errors/warnings appear
+- Autocomplete works but validation doesn't
+
+**Solutions:**
+
+1. **Verify file is recognized as YAML:**
+   - Check file extension is `.yaml` or `.yml`
+   - Verify editor recognizes file as YAML type
+
+2. **Check LSP server is initialized:**
+   - **Neovim:** `:LspInfo` - should show "atmos_ls" or "atmos-lsp" as active
+   - **Vim:** `:LspStatus` - should show server running
+   - **VS Code:** Look for LSP indicator in status bar
+
+3. **Introduce a known error to test:**
+   ```yaml
+   import: "not-an-array"  # Should error: import must be array
+   ```
+
+4. **Check Atmos logs:**
+   ```bash
+   ATMOS_LOGS_LEVEL=Debug atmos lsp start --transport stdio
+   ```
+
+### Autocomplete Not Working
+
+**Symptoms:**
+- No suggestions appear when typing
+- Empty autocomplete menu
+
+**Solutions:**
+
+1. **Trigger autocomplete manually:**
+   - **VS Code:** `Ctrl+Space`
+   - **Neovim:** `Ctrl+X Ctrl+O` (insert mode)
+   - **Vim:** `Ctrl+X Ctrl+O` (insert mode)
+   - **Emacs:** `M-x completion-at-point`
+
+2. **Verify LSP capabilities:**
+   - Server should advertise `completionProvider` capability
+   - Check with `:LspInfo` (Neovim) or editor's LSP diagnostics
+
+3. **Check trigger characters:**
+   - Autocomplete triggers on: `.`, `:`, `/`
+   - Try typing these characters after keywords
+
+4. **Ensure omnifunc is set (Vim/Neovim):**
+   ```vim
+   :set omnifunc?
+   " Should show: omnifunc=lsp#complete or v:lua.vim.lsp.omnifunc
+   ```
+
+### Server Crashes or Hangs
+
+**Symptoms:**
+- LSP server stops responding
+- Editor shows "server disconnected"
+
+**Solutions:**
+
+1. **Check for large files:**
+   - LSP server may struggle with very large YAML files (>10,000 lines)
+   - Try breaking up large stack files
+
+2. **Restart the server:**
+   - **VS Code:** `Cmd+Shift+P` → "Reload Window"
+   - **Neovim:** `:LspRestart`
+   - **Vim:** Restart editor
+
+3. **Check system resources:**
+   ```bash
+   # Monitor CPU/memory usage
+   top -p $(pgrep atmos)
+   ```
+
+4. **Enable debug logging:**
+   ```bash
+   ATMOS_LOGS_LEVEL=Debug atmos lsp start --transport stdio 2>atmos-lsp.log
+   ```
+
+5. **Report issue:**
+   - Include debug logs
+   - Provide minimal reproduction case
+   - Report at: https://github.com/cloudposse/atmos/issues
+
+### TCP/WebSocket Connection Issues
+
+**Symptoms:**
+- Editor can't connect to TCP/WebSocket server
+- Connection refused errors
+
+**Solutions:**
+
+1. **Verify server is running:**
+   ```bash
+   # For TCP
+   lsof -i :7777
+   netstat -an | grep 7777
+
+   # For WebSocket
+   lsof -i :8080
+   netstat -an | grep 8080
+   ```
+
+2. **Test connection manually:**
+   ```bash
+   # For TCP
+   telnet localhost 7777
+   nc localhost 7777
+
+   # For WebSocket
+   curl -i -N -H "Connection: Upgrade" \
+     -H "Upgrade: websocket" \
+     http://localhost:8080
+   ```
+
+3. **Check firewall settings:**
+   ```bash
+   # macOS
+   sudo pfctl -sr | grep 7777
+
+   # Linux
+   sudo iptables -L | grep 7777
+   ```
+
+4. **Try different port:**
+   ```bash
+   atmos lsp start --transport tcp --address localhost:9999
+   ```
+
+### File Type Not Detected
+
+**Symptoms:**
+- LSP doesn't activate for some YAML files
+- Works in some directories but not others
+
+**Solutions:**
+
+1. **Verify file associations in editor:**
+   - **VS Code:** Check `files.associations` in settings
+   - **Neovim:** Check `:set filetype?`
+   - **Vim:** Check `:set filetype?`
+
+2. **Add explicit file pattern matching:**
+   - Configure editor to recognize all YAML files in project
+   - Use patterns like `**/stacks/**/*.yaml`
+
+3. **Check root directory detection:**
+   - LSP server looks for `atmos.yaml` or `.git`
+   - Ensure one of these exists in project root
+
+4. **Manually set file type:**
+   - **Neovim/Vim:** `:set filetype=yaml`
+   - **VS Code:** Click language indicator in status bar
+
+## Security
+
+- **stdio** (default) — No network exposure. Most secure for local development.
+- **tcp/websocket** — Bind to `localhost` only. Use SSH tunneling for remote access. Never expose directly to the internet.
+
+## Limitations & Roadmap
+
+### Current Limitations
+
+- **Go to Definition**: Stub implemented, full implementation planned
+- **Find References**: Not yet implemented
+- **Rename Symbol**: Not yet implemented
+- **Code Actions**: Not yet implemented
+- **Semantic Tokens**: Not yet implemented
+
+
+## Related Documentation
+
+- [LSP Client](/lsp/lsp-client) — External LSP server integration for AI validation
+- [LSP Command Reference](/cli/commands/lsp/start) — CLI flags and examples
+- [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) — Protocol specification

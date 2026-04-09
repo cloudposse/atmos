@@ -7,13 +7,33 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const defaultWidth = 80
+
+// trimTrailingSpaces removes trailing spaces and tabs from each line while preserving blank lines.
+// IMPORTANT: This function ONLY removes whitespace at the END of lines (before the \n).
+// It NEVER removes newlines themselves. Newlines must always be preserved.
+// Only trailing spaces and tabs (horizontal whitespace) are removed.
+//
+// Line breaks and spacing should be controlled by:
+//   - Markdown content itself (blank lines between paragraphs, etc.)
+//   - Markdown stylesheets (renderer configuration)
+//   - NOT by post-processing that removes newlines
+func trimTrailingSpaces(s string) string {
+	lines := strings.Split(s, newline)
+	for i, line := range lines {
+		// Only trim trailing spaces and tabs, NOT newlines.
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, newline)
+}
 
 // Renderer is a markdown renderer using Glamour.
 type Renderer struct {
@@ -27,9 +47,11 @@ type Renderer struct {
 
 // NewRenderer creates a new Markdown renderer with the given options.
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,                              // default width
+		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
 		atmosConfig:           &atmosConfig,
@@ -65,6 +87,71 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(int(r.width)),
+		glamour.WithStylesFromJSONBytes(style),
+		glamour.WithColorProfile(r.profile),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	r.renderer = renderer
+	return r, nil
+}
+
+// NewHelpRenderer creates a new Markdown renderer specifically for command help text.
+// This uses the Cloud Posse color scheme (grayscale + purple) with transparent backgrounds.
+func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	defer perf.Track(atmosConfig, "markdown.NewHelpRenderer")()
+
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
+	r := &Renderer{
+		width:                 defaultWidth,                              // default width
+		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
+		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		isTTYSupportForStderr: term.IsTTYSupportForStderr,
+		atmosConfig:           atmosConfig,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	// Convert width safely from uint to int.
+	width := r.width
+	maxInt := ^uint(0) >> 1
+	if width > maxInt {
+		width = maxInt
+	}
+	wordWrap := int(width) // #nosec G115 -- width is validated above
+
+	if atmosConfig.Settings.Terminal.NoColor {
+		renderer, err := glamour.NewTermRenderer(
+			glamour.WithStandardStyle(styles.AsciiStyle),
+			glamour.WithWordWrap(wordWrap),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		r.renderer = renderer
+		return r, nil
+	}
+
+	// Get help-specific style.
+	style, err := GetHelpStyle()
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize glamour renderer with help style.
+	// Note: Do NOT use WithAutoStyle() as it overrides our custom styles.
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithWordWrap(wordWrap),
 		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),
@@ -115,6 +202,12 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		// Fallback to ASCII rendering for non-TTY stdout
 		result, err = r.RenderAsciiWithoutWordWrap(content)
 	}
+	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
+		result = trimTrailingSpaces(result)
+	}
 	return result, err
 }
 
@@ -125,43 +218,51 @@ func (r *Renderer) Render(content string) (string, error) {
 	if r.isTTYSupportForStdout() {
 		rendered, err = r.renderer.Render(content)
 	} else {
-		// Fallback to ASCII rendering for non-TTY stdout
+		// Fallback to ASCII rendering for non-TTY stdout.
 		rendered, err = r.RenderAscii(content)
 	}
 	if err != nil {
 		return "", err
 	}
-	// Remove duplicate URLs and trailing newlines
-	lines := strings.Split(rendered, "\n")
+	// Post-process the rendered output to handle trailing newlines and command styling.
+	lines := strings.Split(rendered, newline)
 	var result []string
 
-	// Create a purple style
+	// Create a purple style for command examples.
 	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "$") && term.IsTTYSupportForStdout() {
-			// Add custom styling for command examples
+			// Add custom styling for command examples.
 			styled := purpleStyle.Styled(line)
 			result = append(result, " "+styled)
 		} else {
 			// Keep all lines including blank lines for proper markdown paragraph spacing.
-			result = append(result, line)
+			// But remove trailing whitespace that glamour adds for padding.
+			result = append(result, strings.TrimRight(line, " \t"))
 		}
 	}
 
-	// Remove only trailing blank lines
+	// Remove only trailing blank lines.
 	for len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
 		result = result[:len(result)-1]
 	}
 
-	// Add a single newline at the end plus extra spacing
-	return strings.Join(result, "\n"), nil
+	// Join lines and trim trailing spaces from each line.
+	output := strings.Join(result, newline)
+	return trimTrailingSpaces(output), nil
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	// Get minimal style with just list indentation (no colors) for ASCII mode.
+	style, err := GetListIndentStyle()
+	if err != nil {
+		return "", err
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithWordWrap(0),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),
@@ -169,12 +270,25 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return renderer.Render(content)
+	result, err := renderer.Render(content)
+	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
+		result = trimTrailingSpaces(result)
+	}
+	return result, err
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
+	// Get minimal style with just list indentation (no colors) for ASCII mode.
+	style, err := GetListIndentStyle()
+	if err != nil {
+		return "", err
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithWordWrap(int(r.width)),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),
@@ -182,7 +296,14 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return renderer.Render(content)
+	result, err := renderer.Render(content)
+	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
+		result = trimTrailingSpaces(result)
+	}
+	return result, err
 }
 
 // RenderWorkflow renders workflow documentation with specific styling.
@@ -216,11 +337,16 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 
 // RenderErrorf renders an error message with specific styling.
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
+	var result string
+	var err error
 	if r.isTTYSupportForStderr() {
-		return r.Render(content)
+		result, err = r.Render(content)
+	} else {
+		// Fallback to ASCII rendering for non-TTY stderr
+		result, err = r.RenderAscii(content)
 	}
-	// Fallback to ASCII rendering for non-TTY stderr
-	return r.RenderAscii(content)
+	// Note: trimTrailingSpaces already applied in Render() and RenderAscii()
+	return result, err
 }
 
 // RenderSuccess renders a success message with specific styling.

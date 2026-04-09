@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -80,7 +81,7 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 func PrintfMarkdown(format string, a ...interface{}) {
 	defer perf.Track(nil, "utils.PrintfMarkdown")()
 
-	printfMarkdownTo(os.Stdout, format, a...)
+	printfMarkdownTo(ioLayer.MaskWriter(os.Stdout), format, a...)
 }
 
 // PrintfMarkdownToTUI prints a message in Markdown format to stderr.
@@ -89,15 +90,20 @@ func PrintfMarkdown(format string, a ...interface{}) {
 func PrintfMarkdownToTUI(format string, a ...interface{}) {
 	defer perf.Track(nil, "utils.PrintfMarkdownToTUI")()
 
-	printfMarkdownTo(os.Stderr, format, a...)
+	printfMarkdownTo(ioLayer.MaskWriter(os.Stderr), format, a...)
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.
-func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
-	defer perf.Track(&atmosConfig, "utils.InitializeMarkdown")()
+func InitializeMarkdown(atmosConfig *schema.AtmosConfiguration) {
+	defer perf.Track(atmosConfig, "utils.InitializeMarkdown")()
+
+	if atmosConfig == nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: atmos configuration is nil"), "", "")
+		return
+	}
 
 	var err error
-	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	render, err = markdown.NewTerminalMarkdownRenderer(*atmosConfig)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: %w", err), "", "")
 	}

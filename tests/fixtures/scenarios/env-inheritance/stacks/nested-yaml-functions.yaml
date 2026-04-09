@@ -1,0 +1,29 @@
+# Stack that tests nested YAML functions
+# This demonstrates what happens when one !env references another !env result
+import:
+  - globals
+  - catalog/test-component
+
+vars:
+  stage: nested-yaml-functions
+
+components:
+  terraform:
+    test-component-nested:
+      metadata:
+        component: test-component
+      env:
+        # First level: FOO is defined in globals.yaml as "bar"
+        FIRST_LEVEL: !env FOO
+
+        # Second level: Try to reference FIRST_LEVEL which was just set above
+        # This tests if YAML functions can reference results from other YAML functions
+        SECOND_LEVEL: !env FIRST_LEVEL
+
+        # Third level: Define a new value via !exec
+        EXEC_RESULT: !exec echo "hello-from-exec"
+
+        # Fourth level: Try to reference the !exec result
+        REFERENCE_EXEC: !env EXEC_RESULT
+      vars:
+        stage: "nested-yaml-functions"

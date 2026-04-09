@@ -1,0 +1,19 @@
+# CI Profile - Settings
+# Optimized for CI/CD pipelines with minimal output and no interactive features
+
+settings:
+  terminal:
+    color: false  # No color in CI logs
+    max_width: 80  # Narrow output for log readability
+    unicode: false  # ASCII-only for compatibility
+    syntax_highlighting:
+      enabled: false  # Disable for faster processing
+    title: false
+    alerts: false
+
+logs:
+  level: Info  # Standard logging for CI
+  file: "/dev/stderr"
+
+# Disable interactive prompts in CI
+# (These settings ensure CI pipelines never hang waiting for user input)

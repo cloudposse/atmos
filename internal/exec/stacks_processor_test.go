@@ -41,6 +41,7 @@ func TestDefaultStacksProcessor_ExecuteDescribeStacks(t *testing.T) {
 		false,      // processYamlFunctions
 		false,      // includeEmptyStacks
 		[]string{}, // skip
+		nil,        // authManager
 	)
 
 	// With no stacks and ignoreMissingFiles=true, we expect success with empty result.

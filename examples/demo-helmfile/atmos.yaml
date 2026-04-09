@@ -17,6 +17,9 @@ components:
   helmfile:
     base_path: "components/helmfile"
     use_eks: false
+    # Explicitly unset kubeconfig_path to prevent inheriting /dev/shm from repo root atmos.yaml
+    # The CI workflow sets KUBECONFIG env var directly
+    kubeconfig_path: ""
 
 stacks:
   base_path: "stacks"

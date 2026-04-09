@@ -1,0 +1,17 @@
+vars:
+  stage: "test"
+
+components:
+  terraform:
+    test-component:
+      vars:
+        # Nested variable structure to reproduce issue #1753
+        # OpenTofu 1.8+ supports variable interpolation in module source
+        context:
+          build:
+            module_path: "./modules/example"
+            module_version: "v1.0.0"
+
+        # Also add some flat variables for comparison
+        simple_var: "simple_value"
+        another_var: "another_value"

@@ -1,0 +1,66 @@
+---
+title: "Stage 10: Terraform Bankruptcy 💥"
+description: Teams start looking for alternatives out of frustration.
+sidebar_label: "Stage 10: Terraform Bankruptcy"
+sidebar_position: 11
+id: stage-10
+---
+import Link from '@docusaurus/Link'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+import Definition from '@site/src/components/Definition'
+
+<Intro>
+At this point, developers might be ready to throw in the towel on Terraform.
+They question the hype and wonder if it's all worth it.
+
+They might even start looking for alternatives like [CDK](https://aws.amazon.com/cdk/),
+[CDK TF](https://developer.hashicorp.com/terraform/cdktf), [Pulumi](https://www.pulumi.com/),
+or platforms like [Crossplane](https://www.crossplane.io/).
+</Intro>
+
+
+As the complexity and scale of Terraform projects reach a tipping point, developers face a stark realization.
+This wasn't easy. Questions arise about the inherent difficulties of managing sprawling infrastructure code bases
+using Terraform, leading to a moment of reckoning. Some might question if Terraform is still the right tool for them.
+
+:::danger
+
+- Scripts all over the place that call Terraform
+- No clear separation of concerns
+- Inconsistent conventions, or a total lack of conventions
+- Disorganized project structures
+- Interdependencies that complicate deployment processes
+- Unsafe CI/CD practices and hardcoded credentials
+- Incomplete or out-of-date documentation
+- **No one understands how it all works anymore ⚠️**
+
+:::
+
+## But the problem isn't Terraform.
+
+**The problem is how they are using Terraform.**
+
+Changing the tool, will not change the outcome. Even if they decide to switch to a different tool,
+they will face the same challenges, just with a different set of limitations.
+
+Terraform is not a framework. It's a tool. One that can be used by a framework. Just as Docker is not Kubernetes.
+
+What developers _really_ need is a coherent strategy with some rigor for approaching cloud architecture that translates to
+how they manage the configuration and design all the components that comprise their infrastructure.
+
+It's not a surprise that teams fail with Terraform. Most developers never get the opportunity to write their own framework from scratch;
+Instead, they use one that is well-established and proven by countless enterprises and supported by a community.
+So why should we expect DevOps teams to be equipped and prepared to design an extensible framework when they’ve never done it before?
+
+## Realization
+
+After a little bit of Googling, searching Reddit and asking around, they then [stumble upon Atmos](/intro/why-atmos/nirvana). A framework that will make their lives easier.
+
+<Definition term="framework" />
+
+<Link
+    to="/intro/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    Try Atmos!
+</Link>

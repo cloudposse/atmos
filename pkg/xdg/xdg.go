@@ -10,12 +10,16 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DefaultCacheDirPerm is the default permission for cache directories.
+const DefaultCacheDirPerm = 0o755
+
 func init() {
 	// Override adrg/xdg defaults for macOS to follow CLI tool conventions.
 	// This must happen in init() to ensure it runs before any code uses xdg.ConfigHome, etc.
 	// CLI tools use ~/.config on all platforms for consistency, while GUI apps use
 	// platform-specific locations like ~/Library/Application Support on macOS.
 	if runtime.GOOS == "darwin" {
+		//nolint:forbidigo // os.UserHomeDir() needed here to override adrg/xdg library defaults in init()
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
 			// Override macOS defaults to use CLI tool conventions.
@@ -45,6 +49,28 @@ func GetXDGDataDir(subpath string, perm os.FileMode) (string, error) {
 // The directory is created if it doesn't exist.
 func GetXDGConfigDir(subpath string, perm os.FileMode) (string, error) {
 	return getXDGDir("XDG_CONFIG_HOME", "ATMOS_XDG_CONFIG_HOME", xdg.ConfigHome, subpath, perm)
+}
+
+// LookupXDGConfigDir resolves the Atmos config directory path without creating it.
+// Use this for read-only checks where directory creation is not desired.
+func LookupXDGConfigDir(subpath string) string {
+	return lookupXDGDir("XDG_CONFIG_HOME", "ATMOS_XDG_CONFIG_HOME", xdg.ConfigHome, subpath)
+}
+
+// lookupXDGDir resolves an XDG directory path without creating it.
+func lookupXDGDir(xdgVar, atmosVar string, defaultDir string, subpath string) string {
+	v := viper.New()
+	// Best-effort bind; fall through to default on error.
+	_ = v.BindEnv(atmosVar, atmosVar)
+	_ = v.BindEnv(xdgVar, xdgVar)
+
+	if dir := v.GetString(atmosVar); dir != "" {
+		return filepath.Join(dir, "atmos", subpath)
+	}
+	if dir := v.GetString(xdgVar); dir != "" {
+		return filepath.Join(dir, "atmos", subpath)
+	}
+	return filepath.Join(defaultDir, "atmos", subpath)
 }
 
 // getXDGDir is the internal implementation for getting XDG directories.

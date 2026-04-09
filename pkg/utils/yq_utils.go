@@ -79,13 +79,25 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	}
 
 	trimmedResult := strings.TrimSpace(result)
-	if isSimpleStringStartingWithHash(trimmedResult) {
+
+	// Handle scalar strings that could be misinterpreted by the YAML parser.
+	// When yq returns a scalar with UnwrapScalar=true, special characters like trailing
+	// colons can cause the YAML parser to misinterpret the value as a map.
+	// E.g., "arn:aws:secretsmanager:...::password::" would become {"password:": null}.
+	if isScalarString(trimmedResult) {
 		return trimmedResult, nil
 	}
+
 	var node yaml.Node
 	err = yaml.Unmarshal([]byte(result), &node)
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to unmarshal result: %w", err)
+	}
+
+	// Check if the YAML parser misinterpreted a scalar string as a map.
+	// This happens when the string contains colons that look like YAML map syntax.
+	if isMisinterpretedScalar(&node, trimmedResult) {
+		return trimmedResult, nil
 	}
 
 	processYAMLNode(&node)
@@ -102,8 +114,68 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	return res, nil
 }
 
-func isSimpleStringStartingWithHash(s string) bool {
-	return strings.HasPrefix(s, "#") && !strings.Contains(s, "\n")
+// isScalarString checks if the yq result appears to be a simple scalar string value
+// that should not be parsed as YAML. This handles edge cases where the YAML parser
+// would misinterpret the string (e.g., strings ending with colons).
+func isScalarString(s string) bool {
+	// Handle strings starting with # (comments would be stripped by YAML parser).
+	if strings.HasPrefix(s, "#") && !strings.Contains(s, "\n") {
+		return true
+	}
+	// Empty strings should go through YAML parsing which converts them to nil.
+	// This is the expected behavior for YQ default value expressions.
+	if s == "" {
+		return false
+	}
+	// Check for YAML flow syntax (maps or arrays).
+	if strings.HasPrefix(s, "{") || strings.HasPrefix(s, "[") {
+		return false
+	}
+	// Check for multi-line content (could be a YAML document).
+	if strings.Contains(s, "\n") {
+		return false
+	}
+	// Single-line strings ending with colons that don't have ": " pattern
+	// are likely scalar values (like ARNs) that would be misinterpreted as maps.
+	if strings.HasSuffix(s, ":") {
+		if !strings.Contains(s, ": ") {
+			return true
+		}
+	}
+	return false
+}
+
+// isYAMLNullValue checks if a YAML node represents a null value.
+func isYAMLNullValue(node *yaml.Node) bool {
+	return node.Kind == yaml.ScalarNode && (node.Value == "" || node.Tag == "!!null")
+}
+
+// keyMatchesOriginalWithColon checks if the key plus trailing colon(s) matches the original string.
+// Only single (:) and double (::) colon suffixes are handled, as real-world values like AWS ARNs
+// use at most :: as a separator. Triple or more colons are not matched intentionally.
+func keyMatchesOriginalWithColon(key, original string) bool {
+	return key+":" == original || key+"::" == original
+}
+
+// isMisinterpretedScalar checks if the YAML parser has misinterpreted a scalar string as a map.
+// This happens when a string ends with colons (e.g., "value:" or "value::") which YAML
+// interprets as a map key with a null value.
+func isMisinterpretedScalar(node *yaml.Node, originalResult string) bool {
+	// Navigate to document content if this is a document node.
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		node = node.Content[0]
+	}
+	// Only check mapping nodes with exactly one key-value pair.
+	if node.Kind != yaml.MappingNode || len(node.Content) != 2 {
+		return false
+	}
+	keyNode := node.Content[0]
+	valueNode := node.Content[1]
+	// Check if this is a misinterpreted scalar: null value and key matches original with colon.
+	if !isYAMLNullValue(valueNode) || keyNode.Kind != yaml.ScalarNode {
+		return false
+	}
+	return keyMatchesOriginalWithColon(keyNode.Value, originalResult)
 }
 
 func processYAMLNode(node *yaml.Node) {

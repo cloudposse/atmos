@@ -90,17 +90,18 @@ type pkgComponentVendor struct {
 }
 
 type modelVendor struct {
-	packages    []pkgVendor
-	index       int
-	width       int
-	height      int
-	spinner     spinner.Model
-	progress    progress.Model
-	done        bool
-	dryRun      bool
-	failedPkg   int
-	atmosConfig *schema.AtmosConfiguration
-	isTTY       bool
+	packages       []pkgVendor
+	index          int
+	width          int
+	height         int
+	spinner        spinner.Model
+	progress       progress.Model
+	done           bool
+	dryRun         bool
+	failedPkg      int
+	failedPkgNames []string
+	atmosConfig    *schema.AtmosConfiguration
+	isTTY          bool
 }
 
 func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
@@ -128,11 +129,27 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	}
 
 	if model.failedPkg > 0 {
-		return fmt.Errorf("%w: %d", ErrVendorComponents, model.failedPkg)
+		return vendorFailureError(model.failedPkg, len(model.packages), model.failedPkgNames)
 	}
 	return nil
 }
 
+// vendorFailureError builds a descriptive error listing the names of the
+// components that failed to vendor.
+func vendorFailureError(failedCount, totalCount int, failedNames []string) error {
+	explanation := fmt.Sprintf("Failed to vendor %d of %d components: %s",
+		failedCount, totalCount, strings.Join(failedNames, ", "))
+	return errUtils.Build(ErrVendorComponents).
+		WithExplanation(explanation).
+		Err()
+}
+
+// newModelVendor constructs a modelVendor prepared to run vendor installations
+// from the provided slice of pkgComponentVendor or pkgAtmosVendor.
+// It initializes the progress bar and spinner, converts the input slice into a
+// unified []pkgVendor, and sets dryRun, atmosConfig, and TTY detection on the
+// returned model. If pkgs is empty the returned model has done set to true.
+// The function never performs network or filesystem operations.
 func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 	pkgs []T,
 	dryRun bool,
@@ -144,7 +161,7 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 		progress.WithoutPercentage(),
 	)
 	s := spinner.New()
-	s.Style = theme.Styles.Link
+	s.Style = theme.GetCurrentStyles().Spinner
 
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
@@ -248,6 +265,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		}
 		mark = xMark
 		m.failedPkg++
+		m.failedPkgNames = append(m.failedPkgNames, pkg.name)
 	}
 	version := ""
 	if pkg.version != "" {
@@ -369,7 +387,11 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 	switch p.pkgType {
 	case pkgTypeRemote:
 		// Use go-getter to download remote packages
-		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, *tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
+		opts := []downloader.GoGetterOption{}
+		if p.atmosVendorSource.Retry != nil {
+			opts = append(opts, downloader.WithRetryConfig(p.atmosVendorSource.Retry))
+		}
+		if err := downloader.NewGoGetterDownloader(atmosConfig, opts...).Fetch(p.uri, *tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package: %w", err)
 		}
 

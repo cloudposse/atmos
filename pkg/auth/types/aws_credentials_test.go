@@ -34,28 +34,9 @@ func TestAWSCredentials_IsExpired(t *testing.T) {
 }
 
 func TestAWSCredentials_GetExpiration(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-
-	// Blank.
-	c := &AWSCredentials{}
-	exp, err := c.GetExpiration()
-	assert.NoError(t, err)
-	assert.Nil(t, exp)
-
-	// Valid.
-	c.Expiration = now.Add(30 * time.Minute).Format(time.RFC3339)
-	exp, err = c.GetExpiration()
-	assert.NoError(t, err)
-	if assert.NotNil(t, exp) {
-		assert.WithinDuration(t, now.Add(30*time.Minute), *exp, time.Second)
-	}
-
-	// Invalid.
-	c.Expiration = "bogus"
-	exp, err = c.GetExpiration()
-	assert.Nil(t, exp)
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+	testGetExpiration(t, &AWSCredentials{}, func(c interface{}, exp string) {
+		c.(*AWSCredentials).Expiration = exp
+	})
 }
 
 func TestAWSCredentials_BuildWhoamiInfo(t *testing.T) {

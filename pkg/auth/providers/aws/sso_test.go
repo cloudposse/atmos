@@ -3,14 +3,17 @@ package aws
 import (
 	"context"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -120,7 +123,7 @@ func TestSSOProvider_PreAuthenticate_NoOp(t *testing.T) {
 
 func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	// Prevent browser launch during device auth flow and shorten network timeouts.
-	t.Setenv("GO_TEST", "1") // utils.OpenUrl early-exits when set.
+	t.Setenv("GO_TEST", "1") // browser.Open early-exits when set.
 	t.Setenv("CI", "1")      // promptDeviceAuth avoids opening in CI.
 
 	config := &schema.Provider{
@@ -146,7 +149,7 @@ func TestSSOProvider_promptDeviceAuth_SafeInCI(t *testing.T) {
 	t.Setenv("CI", "1")
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
 	require.NoError(t, err)
-	// With a full verification URL, OpenUrl is skipped under GO_TEST and CI.
+	// With a full verification URL, browser.Open is skipped under GO_TEST and CI.
 	url := "https://company.awsapps.com/start/#/device?user_code=WDDD-HRQV"
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
@@ -199,7 +202,7 @@ func TestSSOProvider_NameAndPreAuthenticate_NoOp(t *testing.T) {
 }
 
 func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
-	t.Setenv("GO_TEST", "1") // ensure OpenUrl returns quickly
+	t.Setenv("GO_TEST", "1") // ensure browser.Open returns quickly.
 	t.Setenv("CI", "")       // not CI
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x"})
 	require.NoError(t, err)
@@ -308,7 +311,7 @@ func TestSSOProvider_GetFilesDisplayPath(t *testing.T) {
 				Region:   testRegion,
 				StartURL: testStartURL,
 			},
-			expected: "atmos/aws", // XDG path contains atmos/aws
+			expected: "atmos", // XDG path contains atmos (aws is added in subdirectories).
 		},
 		{
 			name: "custom base_path",
@@ -394,9 +397,9 @@ func TestSSOProvider_Logout_ErrorPaths(t *testing.T) {
 
 func TestIsTTY(t *testing.T) {
 	// isTTY checks if stderr is a terminal.
-	// In test environment, this will typically return false.
+	// In test environment, stderr is not a terminal.
 	result := isTTY()
-	assert.IsType(t, false, result)
+	assert.False(t, result, "isTTY should return false in test environment (stderr is not a terminal)")
 }
 
 func TestDisplayVerificationDialog(t *testing.T) {
@@ -491,18 +494,21 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
 
-	// Create a context with a very short timeout to simulate cancellation.
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	// Create a context with a short timeout to simulate cancellation.
+	// Use 1ms timeout (not nanoseconds) for cross-platform compatibility.
+	// Windows has ~15.6ms timer resolution, so very short timeouts may not work reliably.
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 
-	// Wait for context to expire.
-	time.Sleep(10 * time.Millisecond)
+	// Wait for context to expire. Use 50ms to ensure the timeout has triggered
+	// across all platforms including Windows with its coarser timer resolution.
+	time.Sleep(50 * time.Millisecond)
 
 	// Note: We can't easily test pollForAccessToken in isolation without a real OIDC client.
 	// The context cancellation is tested indirectly through the Authenticate method.
 	// This test primarily verifies that the provider is set up correctly for context handling.
 	assert.NotNil(t, provider)
-	assert.Equal(t, ctx.Err(), context.DeadlineExceeded)
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
 }
 
 func TestPollResult_Structure(t *testing.T) {
@@ -801,13 +807,264 @@ func TestPromptDeviceAuth_VariousURLFormats(t *testing.T) {
 }
 
 func TestIsInteractive(t *testing.T) {
-	// Test isInteractive function.
+	// Test isInteractive function without force-tty.
+	// In test environment (no TTY), this returns false via isTTY() fallback.
+	prevForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", false)
+	t.Cleanup(func() { viper.Set("force-tty", prevForceTTY) })
+
 	result := isInteractive()
-	// In test environment, this typically returns false, but we just verify it doesn't panic.
-	assert.IsType(t, false, result)
+	// Test runner has no real TTY, so isTTY() returns false.
+	assert.False(t, result, "isInteractive should return false in non-TTY test environment when force-tty is not set")
+}
+
+func TestIsInteractive_ForceTTY(t *testing.T) {
+	// Test that force-tty viper setting overrides the TTY check.
+	prevForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", prevForceTTY) })
+
+	result := isInteractive()
+	assert.True(t, result, "isInteractive should return true when force-tty is set")
+}
+
+func TestSSOProvider_Paths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
+
+	provider, err := NewSSOProvider("test-sso", &schema.Provider{
+		Kind:     "aws/iam-identity-center",
+		StartURL: testStartURL,
+		Region:   testRegion,
+	})
+	require.NoError(t, err)
+
+	paths, err := provider.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 3, "should return credentials, config, and cache paths")
+
+	// Verify credentials file
+	assert.Equal(t, authTypes.PathTypeFile, paths[0].Type)
+	assert.True(t, paths[0].Required)
+	assert.Contains(t, paths[0].Location, "credentials")
+	assert.Contains(t, paths[0].Purpose, "credentials")
+	assert.Equal(t, "true", paths[0].Metadata["read_only"])
+
+	// Verify config file
+	assert.Equal(t, authTypes.PathTypeFile, paths[1].Type)
+	assert.False(t, paths[1].Required, "config file is optional")
+	assert.Contains(t, paths[1].Location, "config")
+	assert.Contains(t, paths[1].Purpose, "config")
+	assert.Equal(t, "true", paths[1].Metadata["read_only"])
+
+	// Verify cache directory
+	assert.Equal(t, authTypes.PathTypeDirectory, paths[2].Type)
+	assert.False(t, paths[2].Required, "cache is optional")
+	assert.Contains(t, paths[2].Purpose, "cache")
+	assert.Equal(t, "false", paths[2].Metadata["read_only"], "cache must be writable")
+
+	t.Logf("Provider paths:")
+	for i, p := range paths {
+		t.Logf("  [%d] %s: %s (type=%s, required=%v)",
+			i, p.Purpose, p.Location, p.Type, p.Required)
+	}
 }
 
 // stringPtr is a helper to create string pointers.
 func stringPtr(s string) *string {
 	return &s
+}
+
+func TestSSOProvider_SetRealm(t *testing.T) {
+	providerConfig := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, providerConfig)
+	require.NoError(t, err)
+
+	// Initially realm should be empty.
+	assert.Empty(t, provider.realm, "realm should be empty initially")
+
+	// Set realm.
+	provider.SetRealm("test-realm")
+	assert.Equal(t, "test-realm", provider.realm, "realm should be set to test-realm")
+
+	// Update realm.
+	provider.SetRealm("another-realm")
+	assert.Equal(t, "another-realm", provider.realm, "realm should be updated to another-realm")
+}
+
+func TestSSOProvider_Authenticate_NonInteractive_ErrorMessage(t *testing.T) {
+	// Test that the non-interactive error is the correct sentinel error.
+	t.Setenv("CI", "1") // Force non-interactive mode.
+
+	providerConfig := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, providerConfig)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	_, err = provider.Authenticate(ctx)
+	assert.Error(t, err)
+	// The error should wrap ErrAuthenticationFailed.
+	assert.ErrorContains(t, err, "authentication failed")
+}
+
+func TestNewSSOProvider_InvalidProviderKind(t *testing.T) {
+	// Test that NewSSOProvider rejects non-SSO provider kinds.
+	config := &schema.Provider{
+		Kind:     "aws/static",
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+	assert.Contains(t, err.Error(), "invalid provider kind for SSO provider")
+}
+
+func TestNewSSOProvider_MissingStartURL(t *testing.T) {
+	// Test that NewSSOProvider requires start_url.
+	config := &schema.Provider{
+		Kind:   testSSOKind,
+		Region: testRegion,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+	assert.Contains(t, err.Error(), "start_url is required")
+}
+
+func TestNewSSOProvider_MissingRegion(t *testing.T) {
+	// Test that NewSSOProvider requires region.
+	config := &schema.Provider{
+		Kind:     testSSOKind,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+	assert.Contains(t, err.Error(), "region is required")
+}
+
+func TestSSOProvider_PrepareEnvironment(t *testing.T) {
+	// Test PrepareEnvironment method.
+	// Note: SSO providers don't write credential files - that's done by identities.
+	// PrepareEnvironment injects AWS_REGION and returns a new map (not modifying input).
+	config := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	inputEnv := map[string]string{
+		"TEST_VAR":    "test_value",
+		"ANOTHER_VAR": "another_value",
+		"AWS_PROFILE": "existing_profile",
+	}
+
+	resultEnv, err := provider.PrepareEnvironment(ctx, inputEnv)
+	assert.NoError(t, err)
+
+	// Verify returned environment is a new map (not the same reference).
+	// Pointer comparison ensures we got a different map.
+	assert.NotSame(t, &inputEnv, &resultEnv, "PrepareEnvironment should return a new map, not the same reference")
+
+	// Modify the result to ensure input isn't affected.
+	resultEnv["NEW_KEY"] = "new_value"
+	assert.NotContains(t, inputEnv, "NEW_KEY", "Input map should not be modified")
+	delete(resultEnv, "NEW_KEY") // Clean up for later assertions.
+
+	// Verify all existing entries are preserved.
+	assert.Equal(t, "test_value", resultEnv["TEST_VAR"])
+	assert.Equal(t, "another_value", resultEnv["ANOTHER_VAR"])
+	assert.Equal(t, "existing_profile", resultEnv["AWS_PROFILE"])
+
+	// SSO provider's PrepareEnvironment injects AWS_REGION from provider config.
+	// It doesn't inject AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE, etc.
+	// Those are handled by identities (like permission-set) that use the SSO provider.
+	assert.Equal(t, testRegion, resultEnv["AWS_REGION"], "AWS_REGION should be set from provider config")
+	assert.NotEmpty(t, resultEnv["AWS_REGION"], "AWS_REGION should not be empty")
+}
+
+// TestSSOProvider_Validate_ErrorCases tests validation error paths.
+func TestSSOProvider_Validate_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      *schema.Provider
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "missing start_url",
+			config: &schema.Provider{
+				Kind:   testSSOKind,
+				Region: testRegion,
+			},
+			expectError: true,
+			errorMsg:    "start_url",
+		},
+		{
+			name: "missing region",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				StartURL: testStartURL,
+			},
+			expectError: true,
+			errorMsg:    "region",
+		},
+		{
+			name: "empty start_url",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: "",
+			},
+			expectError: true,
+			errorMsg:    "start_url",
+		},
+		{
+			name: "empty region",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				StartURL: testStartURL,
+				Region:   "",
+			},
+			expectError: true,
+			errorMsg:    "region",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewSSOProvider(testProviderName, tt.config)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
+				err = provider.Validate()
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

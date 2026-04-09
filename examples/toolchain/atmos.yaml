@@ -1,0 +1,144 @@
+# Atmos Toolchain Configuration Example
+#
+# This example demonstrates toolchain integration with:
+# 1. Inline registry for custom tool definitions
+# 2. Official Aqua registry as fallback for standard tools
+# 3. Automatic tool installation for custom commands and workflows
+# 4. Component-level tool dependencies (e.g., opentofu per component)
+
+# Base path for resolving relative paths (current directory)
+# This ensures paths like "stacks" and "workflows" are relative to this directory
+base_path: "."
+
+toolchain:
+  # Install path for toolchain binaries (default: .tools)
+  install_path: .tools
+
+  # Versions file tracking installed tools (default: .tool-versions)
+  # Uses ASDF format: one line per tool with space-separated versions
+  # Use short tool names (aliases), not org/repo format
+  versions_file: .tool-versions
+
+  # Aliases map short names to full tool specifications (owner/repo)
+  # This allows .tool-versions to use short names like "jq" instead of "jqlang/jq"
+  aliases:
+    jq: jqlang/jq
+    yq: mikefarah/yq
+
+  # Registries for tool resolution (checked in priority order)
+  registries:
+    # Inline registry (highest priority)
+    # Tools defined directly in atmos.yaml without external files
+    - name: my-inline-tools
+      type: atmos
+      priority: 150
+      tools:
+        # jq - JSON processor
+        # Note: jq moved from stedolan/jq to jqlang/jq
+        # Version tags use "jq-" prefix (e.g., jq-1.7.1)
+        # macOS binaries use "macos" not "darwin"
+        jqlang/jq:
+          type: github_release
+          url: "jq-{{.OS}}-{{.Arch}}"
+          binary_name: jq
+          version_prefix: "jq-"
+          overrides:
+            - goos: darwin
+              replacements:
+                darwin: macos
+
+        # yq - YAML/JSON/XML processor
+        mikefarah/yq:
+          type: github_release
+          url: "yq_{{.OS}}_{{.Arch}}"
+          format: tar.gz
+          binary_name: yq
+          version_prefix: "v"
+
+    # Official Aqua public registry (fallback)
+    # Contains 1000+ popular development tools
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+# Tool Resolution:
+# 1. Check my-inline-tools registry first (priority 150)
+# 2. Check aqua-public registry (priority 10)
+# 3. Error if tool not found in any registry
+#
+# Testing:
+#   atmos toolchain install jqlang/jq    # Resolves from inline registry
+#   atmos toolchain install terraform    # Resolves from aqua-public
+#   atmos toolchain list                 # Shows all installed tools
+
+# Components configuration for terraform.
+# The mock component demonstrates component-level tool dependencies.
+# Since this example uses OpenTofu (not HashiCorp Terraform), we set
+# command: tofu so Atmos invokes the correct binary.
+components:
+  terraform:
+    command: tofu
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+# Stacks configuration.
+# Stack files in stacks/deploy/ define component configurations.
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths: []
+  name_pattern: "{stage}"
+
+# Workflows configuration
+workflows:
+  base_path: "workflows"
+
+# Custom Commands
+# These commands demonstrate different ways to use toolchain integration.
+commands:
+  - name: demo
+    description: Demonstrate toolchain integration with custom commands
+    commands:
+      # Example 1: Implicit dependencies from .tool-versions
+      # No dependencies declared - uses tools from .tool-versions automatically
+      - name: which
+        description: Verify toolchain tools are in PATH (uses .tool-versions)
+        steps:
+          - "echo 'jq:' && which jq"
+          - "echo 'yq:' && which yq"
+
+      # Example 2: Exact version pinning
+      # Override .tool-versions with a specific version
+      - name: pinned
+        description: Use exact pinned versions (overrides .tool-versions)
+        dependencies:
+          tools:
+            jq: "1.7.1"
+        steps:
+          - echo "Using pinned jq 1.7.1"
+          - jq --version
+
+      # Example 3: SemVer constraints
+      # Allow compatible versions within a range
+      - name: constrained
+        description: Use SemVer version constraints
+        dependencies:
+          tools:
+            jq: "^1.7.0"
+            yq: "~> 4.40.0"
+        steps:
+          - "echo 'jq (^1.7.0):' && jq --version"
+          - "echo 'yq (~> 4.40.0):' && yq --version"
+
+      # Example 4: Multi-tool pipeline
+      # Use multiple tools together
+      - name: convert
+        description: Convert YAML to JSON using yq and jq together
+        steps:
+          - echo "Converting YAML to formatted JSON"
+          - "echo 'name: atmos' | yq -o json | jq ."

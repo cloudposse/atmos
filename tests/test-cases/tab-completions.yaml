@@ -26,9 +26,66 @@ tests:
       - "terraform"
       - "plan"
       - "myapp"
-      - "--stack"
+      - "--stack="
     expect:
       diff: []
       stdout:
         - "dev"
+      exit_code: 0
+  - name: completion for stacks should be filtered by component
+    enabled: true
+    snapshot: true
+    description: "Test that stack completion is filtered when component is specified"
+    workdir: "fixtures/scenarios/completions"
+    command: "atmos"
+    args:
+      - "__completeNoDesc"
+      - "terraform"
+      - "plan"
+      - "vpc"
+      - "--stack="
+    expect:
+      diff: []
+      stdout:
+        - "dev"
+        - "prod"
+      exit_code: 0
+
+  # Path-based completion tests
+  - name: completion for path should enable directory suggestions
+    enabled: true
+    snapshot: true
+    description: "Test that directory completion is enabled for path input"
+    workdir: "fixtures/scenarios/completions"
+    command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    args:
+      - "__completeNoDesc"
+      - "terraform"
+      - "plan"
+      - "./"
+    expect:
+      diff: []
+      stdout:
+        - ":4"  # ShellCompDirectiveNoFileComp = 4 (returns component names, disables file completion)
+      exit_code: 0
+
+  - name: completion for current directory path
+    enabled: true
+    snapshot: true
+    description: "Test directory completion for current directory"
+    workdir: "fixtures/scenarios/completions"
+    command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    args:
+      - "__completeNoDesc"
+      - "terraform"
+      - "plan"
+      - "."
+    expect:
+      diff: []
+      stdout:
+        - ":4"  # ShellCompDirectiveNoFileComp = 4 (returns component names, disables file completion)
       exit_code: 0

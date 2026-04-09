@@ -4,17 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 func TestAuthConsoleCommand_Registration(t *testing.T) {
@@ -163,7 +167,7 @@ func TestHandleBrowserOpen(t *testing.T) {
 
 			// This function doesn't return an error, just verify it doesn't panic.
 			assert.NotPanics(t, func() {
-				handleBrowserOpen(tt.consoleURL)
+				handleBrowserOpen(tt.consoleURL, nil)
 			})
 		})
 	}
@@ -462,11 +466,10 @@ func TestGetConsoleProvider(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name:         "Azure OIDC returns not implemented error",
+			name:         "Azure OIDC returns console provider successfully",
 			providerKind: types.ProviderKindAzureOIDC,
 			identityName: "test-identity",
-			wantErr:      true,
-			errContains:  "Azure console access not yet implemented",
+			wantErr:      false,
 		},
 		{
 			name:         "GCP OIDC returns not implemented error",
@@ -549,6 +552,10 @@ func TestResolveIdentityName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = NewTestKit(t)
 
+			// Ensure Viper doesn't have stale identity value from previous tests.
+			// resolveIdentityName() reads from Viper when flag is not changed.
+			viper.GetViper().Set("identity", "")
+
 			// Create a mock command.
 			cmd := &cobra.Command{}
 			cmd.Flags().String("identity", "", "identity name")
@@ -576,7 +583,130 @@ func TestResolveIdentityName(t *testing.T) {
 	}
 }
 
+// TestResolveIdentityName_PersistentFlag_WithNoOptDefVal tests that GetIdentityFromFlags
+// correctly handles the --identity flag when it has NoOptDefVal set.
+// This reproduces GitHub issue #1915 where `atmos auth console --identity {identity}`
+// ignores the flag and prompts for interactive selection.
+//
+// The bug occurs because Cobra's NoOptDefVal causes `--identity value` (space-separated)
+// to be interpreted as `--identity` (with NoOptDefVal) plus `value` as a positional arg.
+// Only `--identity=value` works correctly with NoOptDefVal.
+//
+// The fix is to use GetIdentityFromFlags which parses os.Args directly to work around
+// this Cobra quirk.
+func TestResolveIdentityName_PersistentFlag_WithNoOptDefVal(t *testing.T) {
+	tests := []struct {
+		name            string
+		osArgs          []string // Simulated os.Args
+		defaultIdentity string
+		wantIdentity    string
+		wantErr         bool
+		errContains     string
+	}{
+		{
+			// This is the bug from issue #1915!
+			// With NoOptDefVal, "--identity prod-admin" is misinterpreted as:
+			// - --identity -> gets NoOptDefVal ("__SELECT__")
+			// - prod-admin -> becomes positional arg
+			// GetIdentityFromFlags works around this by parsing os.Args directly.
+			name:            "reads persistent flag with space-separated value (issue #1915)",
+			osArgs:          []string{"atmos", "auth", "console", "--identity", "prod-admin"},
+			defaultIdentity: "dev-user",
+			wantIdentity:    "prod-admin",
+			wantErr:         false,
+		},
+		{
+			name:            "reads persistent flag with equals syntax",
+			osArgs:          []string{"atmos", "auth", "console", "--identity=staging-admin"},
+			defaultIdentity: "dev-user",
+			wantIdentity:    "staging-admin",
+			wantErr:         false,
+		},
+		{
+			// Same bug as above but with short flag
+			name:            "reads persistent short flag with space-separated value",
+			osArgs:          []string{"atmos", "auth", "console", "-i", "test-identity"},
+			defaultIdentity: "dev-user",
+			wantIdentity:    "test-identity",
+			wantErr:         false,
+		},
+		{
+			name:            "falls back to default when flag not provided",
+			osArgs:          []string{"atmos", "auth", "console"},
+			defaultIdentity: "dev-user",
+			wantIdentity:    "dev-user",
+			wantErr:         false,
+		},
+		{
+			// When --identity is used without value, it should trigger interactive selection
+			name:            "triggers interactive selection when flag used without value",
+			osArgs:          []string{"atmos", "auth", "console", "--identity"},
+			defaultIdentity: "dev-user",
+			wantIdentity:    "dev-user", // GetDefaultIdentity is called with forceSelect=true
+			wantErr:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			// Ensure Viper doesn't have stale identity value from previous tests.
+			viper.GetViper().Set("identity", "")
+
+			// Create a command with the identity flag and NoOptDefVal (simulates authCmd setup).
+			cmd := &cobra.Command{Use: "console"}
+			cmd.Flags().StringP("identity", "i", "", "identity name")
+
+			// Set NoOptDefVal like the real authCmd does.
+			identityFlag := cmd.Flags().Lookup("identity")
+			if identityFlag != nil {
+				identityFlag.NoOptDefVal = IdentityFlagSelectValue
+			}
+
+			// Parse the command args (this will exhibit the NoOptDefVal bug for space-separated values).
+			_ = cmd.ParseFlags(tt.osArgs[3:]) // Skip "atmos", "auth", "console"
+
+			// Test GetIdentityFromFlags directly - this is what resolveIdentityName now uses.
+			identityName := GetIdentityFromFlags(cmd, tt.osArgs)
+
+			// Check if user wants to interactively select identity.
+			forceSelect := identityName == IdentityFlagSelectValue
+
+			// Create a mock auth manager.
+			mockManager := &mockAuthManagerForIdentity{
+				defaultIdentity: tt.defaultIdentity,
+			}
+
+			// Apply the same logic as resolveIdentityName.
+			var identity string
+			var err error
+			if identityName != "" && !forceSelect {
+				identity = identityName
+			} else {
+				identity, err = mockManager.GetDefaultIdentity(forceSelect)
+				if err != nil {
+					err = fmt.Errorf("failed to get default identity: %w", err)
+				} else if identity == "" {
+					err = fmt.Errorf("no default identity configured")
+				}
+			}
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+				assert.Empty(t, identity)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantIdentity, identity)
+			}
+		})
+	}
+}
+
 // mockAuthManagerForProvider implements minimal AuthManager for testing getConsoleProvider.
+// Only GetProviderKindForIdentity is implemented - other methods return ErrNotImplemented
+// because they are not needed by TestGetConsoleProvider.
 type mockAuthManagerForProvider struct {
 	providerKind string
 }
@@ -586,27 +716,27 @@ func (m *mockAuthManagerForProvider) GetProviderKindForIdentity(identityName str
 }
 
 func (m *mockAuthManagerForProvider) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetDefaultIdentity(_ bool) (string, error) {
-	return "", errors.New("not implemented")
+	return "", errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) ListIdentities() []string {
 	return nil
 }
 
-func (m *mockAuthManagerForProvider) Logout(ctx context.Context, identityName string) error {
-	return errors.New("not implemented")
+func (m *mockAuthManagerForProvider) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetIdentity(identityName string) (types.Identity, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetFilesDisplayPath(providerName string) string {
@@ -622,11 +752,11 @@ func (m *mockAuthManagerForProvider) GetIdentities() map[string]schema.Identity 
 }
 
 func (m *mockAuthManagerForProvider) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) Validate() error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetProviderForIdentity(identityName string) string {
@@ -645,38 +775,68 @@ func (m *mockAuthManagerForProvider) GetProviders() map[string]schema.Provider {
 	return nil
 }
 
-func (m *mockAuthManagerForProvider) LogoutProvider(ctx context.Context, providerName string) error {
-	return errors.New("not implemented")
+func (m *mockAuthManagerForProvider) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
+	return errUtils.ErrNotImplemented
 }
 
-func (m *mockAuthManagerForProvider) LogoutAll(ctx context.Context) error {
-	return errors.New("not implemented")
+func (m *mockAuthManagerForProvider) LogoutAll(ctx context.Context, deleteKeychain bool) error {
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetEnvironmentVariables(identityName string) (map[string]string, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForProvider) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
+	return nil, errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForProvider) ExecuteIntegration(ctx context.Context, integrationName string) error {
+	return errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForProvider) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	return errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForProvider) GetIntegration(integrationName string) (*schema.Integration, error) {
+	return nil, errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForProvider) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManagerForProvider) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManagerForProvider) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
 }
 
 // mockAuthManagerForIdentity implements minimal AuthManager for testing resolveIdentityName.
+// Only GetDefaultIdentity is implemented - other methods return ErrNotImplemented
+// because they are not needed by TestResolveIdentityName.
 type mockAuthManagerForIdentity struct {
 	defaultIdentity string
 	defaultErr      error
 }
 
 func (m *mockAuthManagerForIdentity) GetProviderKindForIdentity(identityName string) (string, error) {
-	return "", errors.New("not implemented")
+	return "", errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetDefaultIdentity(_ bool) (string, error) {
@@ -690,12 +850,12 @@ func (m *mockAuthManagerForIdentity) ListIdentities() []string {
 	return nil
 }
 
-func (m *mockAuthManagerForIdentity) Logout(ctx context.Context, identityName string) error {
-	return errors.New("not implemented")
+func (m *mockAuthManagerForIdentity) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetIdentity(identityName string) (types.Identity, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetFilesDisplayPath(providerName string) string {
@@ -711,11 +871,11 @@ func (m *mockAuthManagerForIdentity) GetIdentities() map[string]schema.Identity 
 }
 
 func (m *mockAuthManagerForIdentity) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) Validate() error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetProviderForIdentity(identityName string) string {
@@ -734,20 +894,225 @@ func (m *mockAuthManagerForIdentity) GetProviders() map[string]schema.Provider {
 	return nil
 }
 
-func (m *mockAuthManagerForIdentity) LogoutProvider(ctx context.Context, providerName string) error {
-	return errors.New("not implemented")
+func (m *mockAuthManagerForIdentity) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
+	return errUtils.ErrNotImplemented
 }
 
-func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context) error {
-	return errors.New("not implemented")
+func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context, deleteKeychain bool) error {
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetEnvironmentVariables(identityName string) (map[string]string, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForIdentity) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
+	return nil, errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForIdentity) ExecuteIntegration(ctx context.Context, integrationName string) error {
+	return errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForIdentity) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	return errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForIdentity) GetIntegration(integrationName string) (*schema.Integration, error) {
+	return nil, errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForIdentity) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManagerForIdentity) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManagerForIdentity) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
+}
+
+func TestResolveConsoleIsolated(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		name     string
+		flagSet  bool
+		flagVal  bool
+		config   *schema.AuthConsoleConfig
+		expected bool
+	}{
+		{
+			name:     "flag set to true takes precedence",
+			flagSet:  true,
+			flagVal:  true,
+			config:   &schema.AuthConsoleConfig{Isolated: &falseVal},
+			expected: true,
+		},
+		{
+			name:     "flag set to false takes precedence",
+			flagSet:  true,
+			flagVal:  false,
+			config:   &schema.AuthConsoleConfig{Isolated: &trueVal},
+			expected: false,
+		},
+		{
+			name:     "config isolated true when flag not set",
+			flagSet:  false,
+			config:   &schema.AuthConsoleConfig{Isolated: &trueVal},
+			expected: true,
+		},
+		{
+			name:     "config isolated false when flag not set",
+			flagSet:  false,
+			config:   &schema.AuthConsoleConfig{Isolated: &falseVal},
+			expected: false,
+		},
+		{
+			name:     "config console nil defaults to false",
+			flagSet:  false,
+			config:   nil,
+			expected: false,
+		},
+		{
+			name:     "config isolated nil defaults to false",
+			flagSet:  false,
+			config:   &schema.AuthConsoleConfig{},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().BoolVar(&consoleIsolated, "isolated", false, "isolated flag")
+
+			// Save and restore package-level state.
+			origIsolated := consoleIsolated
+			t.Cleanup(func() { consoleIsolated = origIsolated })
+
+			if tt.flagSet {
+				consoleIsolated = tt.flagVal
+				require.NoError(t, cmd.Flags().Set("isolated", fmt.Sprintf("%t", tt.flagVal)))
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Console: tt.config,
+				},
+			}
+
+			result := resolveConsoleIsolated(cmd, atmosConfig)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestConsoleSessionDir(t *testing.T) {
+	t.Run("returns non-empty path", func(t *testing.T) {
+		dir, err := consoleSessionDir("test-realm", "test-identity")
+		require.NoError(t, err)
+		assert.NotEmpty(t, dir)
+		assert.Contains(t, dir, "console")
+		assert.Contains(t, dir, "sessions")
+	})
+
+	t.Run("deterministic for same inputs", func(t *testing.T) {
+		dir1, err1 := consoleSessionDir("realm-a", "identity-1")
+		require.NoError(t, err1)
+		dir2, err2 := consoleSessionDir("realm-a", "identity-1")
+		require.NoError(t, err2)
+		assert.Equal(t, dir1, dir2)
+	})
+
+	t.Run("different realm produces different dir", func(t *testing.T) {
+		dir1, err1 := consoleSessionDir("realm-a", "identity-1")
+		require.NoError(t, err1)
+		dir2, err2 := consoleSessionDir("realm-b", "identity-1")
+		require.NoError(t, err2)
+		assert.NotEqual(t, dir1, dir2)
+	})
+
+	t.Run("different identity produces different dir", func(t *testing.T) {
+		dir1, err1 := consoleSessionDir("realm-a", "identity-1")
+		require.NoError(t, err1)
+		dir2, err2 := consoleSessionDir("realm-a", "identity-2")
+		require.NoError(t, err2)
+		assert.NotEqual(t, dir1, dir2)
+	})
+}
+
+func TestHandleBrowserOpen_WithOpener(t *testing.T) {
+	t.Run("success path with working opener", func(t *testing.T) {
+		// Save and restore package-level state.
+		origSkipOpen := consoleSkipOpen
+		t.Cleanup(func() { consoleSkipOpen = origSkipOpen })
+		consoleSkipOpen = false
+
+		// Ensure we are not detected as CI by removing all CI env vars.
+		preserved := telemetry.PreserveCIEnvVars()
+		t.Cleanup(func() {
+			for k, v := range preserved {
+				os.Setenv(k, v)
+			}
+		})
+
+		opener := &mockBrowserOpener{err: nil}
+		assert.NotPanics(t, func() {
+			handleBrowserOpen("https://console.aws.amazon.com", opener)
+		})
+		assert.True(t, opener.called, "opener.Open should have been called")
+		assert.Equal(t, "https://console.aws.amazon.com", opener.url)
+	})
+
+	t.Run("error path with failing opener shows fallback URL", func(t *testing.T) {
+		origSkipOpen := consoleSkipOpen
+		t.Cleanup(func() { consoleSkipOpen = origSkipOpen })
+		consoleSkipOpen = false
+
+		preserved := telemetry.PreserveCIEnvVars()
+		t.Cleanup(func() {
+			for k, v := range preserved {
+				os.Setenv(k, v)
+			}
+		})
+
+		opener := &mockBrowserOpener{err: fmt.Errorf("browser not found")}
+		assert.NotPanics(t, func() {
+			handleBrowserOpen("https://console.aws.amazon.com", opener)
+		})
+		assert.True(t, opener.called, "opener.Open should have been called even on error")
+	})
+
+	t.Run("nil opener with skip-open shows URL", func(t *testing.T) {
+		origSkipOpen := consoleSkipOpen
+		t.Cleanup(func() { consoleSkipOpen = origSkipOpen })
+		consoleSkipOpen = true
+
+		assert.NotPanics(t, func() {
+			handleBrowserOpen("https://console.aws.amazon.com", nil)
+		})
+	})
+}
+
+// mockBrowserOpener is a simple mock for browser.Opener.
+type mockBrowserOpener struct {
+	called bool
+	url    string
+	err    error
+}
+
+func (m *mockBrowserOpener) Open(url string) error {
+	m.called = true
+	m.url = url
+	return m.err
 }
 
 func TestResolveConsoleDuration(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -279,7 +280,7 @@ func TestDisplayVersionInFormat(t *testing.T) {
 		{
 			name:          "Invalid format",
 			format:        "xml",
-			expectedError: ErrInvalidFormat,
+			expectedError: errUtils.ErrVersionFormatInvalid,
 		},
 	}
 
@@ -308,7 +309,7 @@ func TestDisplayVersionInFormat(t *testing.T) {
 
 			err = v.displayVersionInFormat(false, tt.format)
 			if tt.expectedError != nil {
-				assert.Equal(t, tt.expectedError, err, "Expected error mismatch")
+				assert.ErrorIs(t, err, tt.expectedError, "Expected error mismatch")
 			} else {
 				assert.NoError(t, err, "Expected no error")
 			}

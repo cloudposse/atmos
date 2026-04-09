@@ -19,7 +19,7 @@ import Note from '@site/src/components/Note'
 The `atmos.yaml` configuration file controls the behavior of the `atmos` CLI and how Atmos will work with your project.
 </Intro>
 
-Therefore, this file should exist in the project repository alongside your Terraform components and Atmos stacks. It's also where you can [configure integrations](/integrations), like with our [GitHub Actions](/integrations/github-actions).
+Therefore, this file should exist in the project repository alongside your Terraform components and Atmos stacks. It's also where you can [configure integrations](/cli/configuration/integrations), like with our [GitHub Actions](/integrations/github-actions).
 
 <KeyPoints>
 - How install `atmos` and make sure you're on a current version
@@ -46,8 +46,8 @@ You should see something like this...
 To configure Atmos to work with your project, we'll create a file called `atmos.yaml` to tell Atmos where to find the
 Terraform components and Atmos stacks. Almost everything in Atmos is configurable via this file.
 
-Below is the minimum recommended configuration for Atmos to work with Terraform and to configure [Atmos components](/core-concepts/components)
-and [Atmos stacks](/core-concepts/stacks). Copy this YAML config below into your `atmos.yaml` file.
+Below is the minimum recommended configuration for Atmos to work with Terraform and to configure [Atmos components](/components)
+and [Atmos stacks](/learn/stacks). Copy this YAML config below into your `atmos.yaml` file.
 
 <EmbedFile filePath="examples/demo-stacks/atmos.yaml" />
 
@@ -103,7 +103,7 @@ Well-known paths are how Atmos finds all your stack configurations, components, 
   <dd>List of file paths to the top-level stacks in the `stacks` directory to exclude from search when Atmos searches for the stack where the component is defined when executing `atmos` commands</dd>
 
   <dt>`workflows.base_path`</dt>
-  <dd>The base path to Atmos [Workflows](/core-concepts/workflows) files</dd>
+  <dd>The base path to Atmos [Workflows](/workflows) files</dd>
 </dl>
 
 
@@ -124,13 +124,13 @@ Well-known paths are how Atmos finds all your stack configurations, components, 
   <dd>if set to `true`, Atmos automatically generates the Terraform backend file from the component configuration when executing `terraform plan` and `terraform apply` commands</dd>
 
   <dt>`commands`</dt>
-  <dd>configuration for [Atmos Custom Commands](/core-concepts/custom-commands)</dd>
+  <dd>configuration for [Atmos Custom Commands](/cli/configuration/commands)</dd>
 
   <dt>`schemas`</dt>
   <dd>
   [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for:
-  - [Atmos Manifests Validation](/cli/schemas)
-  - [Atmos Stack Validation](/core-concepts/validate)
+  - [Atmos Manifests Validation](/cli/configuration/schemas)
+  - [Atmos Stack Validation](/validation/validating)
   </dd>
 </dl>
 
@@ -140,12 +140,12 @@ Well-known paths are how Atmos finds all your stack configurations, components, 
 ### Config File Location
 
 While placing `atmos.yaml` at the root of the repository will work for the `atmos` CLI, it will not work
-for [Component Remote State](/core-concepts/share-data/remote-state) because it uses
+for [Component Remote State](/stacks/remote-state) because it uses
 the [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider. Terraform executes the provider from the
 component's folder (e.g. `components/terraform/vpc`), and we don't want to replicate `atmos.yaml` into every component's folder.
 
 Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
-which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
+which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/learn/stacks).
 
 This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
 

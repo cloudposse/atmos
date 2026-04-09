@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -28,6 +29,177 @@ func TestNewAssumeRoleIdentity(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, id)
 	assert.Equal(t, "aws/assume-role", id.Kind())
+}
+
+func TestAssumeRoleIdentity_SetRealm(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{Kind: "aws/assume-role"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
+}
+
+func TestAssumeRoleIdentity_Paths(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{Kind: "aws/assume-role"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Paths should return empty slice for assume-role identities.
+	paths, err := identity.Paths()
+	assert.NoError(t, err)
+	assert.Empty(t, paths)
+}
+
+func TestAssumeRoleIdentity_SetManagerAndProvider(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{Kind: "aws/assume-role"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Initially manager and rootProviderName should be nil/empty.
+	assert.Nil(t, identity.manager)
+	assert.Empty(t, identity.rootProviderName)
+
+	// Set manager and provider.
+	identity.SetManagerAndProvider(nil, "test-provider")
+	assert.Nil(t, identity.manager)
+	assert.Equal(t, "test-provider", identity.rootProviderName)
+}
+
+func TestAssumeRoleIdentity_PrepareEnvironment(t *testing.T) {
+	// Create temp home for test.
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	// Create identity with valid config.
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+			"region":      "us-west-2",
+		},
+		Via: &schema.IdentityVia{Provider: "test-provider"},
+	})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Validate to set up region.
+	err = identity.Validate()
+	require.NoError(t, err)
+
+	// Prepare environment.
+	environ := map[string]string{"EXISTING_VAR": "value"}
+	result, err := identity.PrepareEnvironment(context.Background(), environ)
+	assert.NoError(t, err)
+
+	// Should preserve existing vars.
+	assert.Equal(t, "value", result["EXISTING_VAR"])
+
+	// Should have AWS env vars set.
+	assert.NotEmpty(t, result["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.NotEmpty(t, result["AWS_CONFIG_FILE"])
+	assert.Equal(t, "role", result["AWS_PROFILE"])
+	assert.Equal(t, "us-west-2", result["AWS_REGION"])
+	assert.Equal(t, "us-west-2", result["AWS_DEFAULT_REGION"])
+}
+
+// TestAssumeRoleIdentity_PrepareEnvironment_RealmInCredentialPaths verifies that when a realm is set,
+// PrepareEnvironment() returns credential paths that include the realm subdirectory.
+func TestAssumeRoleIdentity_PrepareEnvironment_RealmInCredentialPaths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+			"region":      "us-west-2",
+		},
+		Via: &schema.IdentityVia{Provider: "test-provider"},
+	})
+	require.NoError(t, err)
+
+	identity := id.(*assumeRoleIdentity)
+	identity.SetRealm("test-realm-xyz")
+	require.NoError(t, identity.Validate())
+
+	environ := map[string]string{}
+	result, err := identity.PrepareEnvironment(context.Background(), environ)
+	require.NoError(t, err)
+
+	// Credential paths must include the realm subdirectory.
+	credFile := filepath.ToSlash(result["AWS_SHARED_CREDENTIALS_FILE"])
+	configFile := filepath.ToSlash(result["AWS_CONFIG_FILE"])
+	assert.Contains(t, credFile, "test-realm-xyz/aws/test-provider/credentials",
+		"PrepareEnvironment() must include realm in credentials path")
+	assert.Contains(t, configFile, "test-realm-xyz/aws/test-provider/config",
+		"PrepareEnvironment() must include realm in config path")
+}
+
+func TestAssumeRoleIdentity_getRootProviderFromVia_CachedValue(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+		// No Via config - this would normally fail.
+	})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Set cached root provider name (as PostAuthenticate would do).
+	identity.rootProviderName = "cached-provider"
+
+	// getRootProviderFromVia should return cached value.
+	provider, err := identity.getRootProviderFromVia()
+	assert.NoError(t, err)
+	assert.Equal(t, "cached-provider", provider)
+}
+
+func TestAssumeRoleIdentity_getRootProviderFromVia_NoConfig(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+		// No Via config.
+	})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Ensure no cached value.
+	identity.rootProviderName = ""
+
+	// getRootProviderFromVia should return error when no config and no cache.
+	_, err = identity.getRootProviderFromVia()
+	assert.Error(t, err)
 }
 
 func TestAssumeRoleIdentity_ValidateAndProviderName(t *testing.T) {
@@ -82,6 +254,98 @@ func TestAssumeRoleIdentity_Environment(t *testing.T) {
 	assert.NotEmpty(t, env["AWS_CONFIG_FILE"])
 	assert.NotEmpty(t, env["AWS_PROFILE"])
 	assert.Equal(t, "role", env["AWS_PROFILE"])
+}
+
+// TestAssumeRoleIdentity_Environment_RealmInCredentialPaths verifies that when a realm is set,
+// Environment() returns credential paths that include the realm subdirectory.
+// This is the regression test for Issue #4 (ECR Docker push 403).
+func TestAssumeRoleIdentity_Environment_RealmInCredentialPaths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tempHome)
+
+	i := &assumeRoleIdentity{
+		name:  "role",
+		realm: "abc123hash",
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+			Via:       &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+	env, err := i.Environment()
+	require.NoError(t, err)
+
+	// Credential paths must include the realm subdirectory.
+	credFile := env["AWS_SHARED_CREDENTIALS_FILE"]
+	configFile := env["AWS_CONFIG_FILE"]
+	assert.Contains(t, filepath.ToSlash(credFile), "abc123hash/aws/test-provider/credentials",
+		"Environment() must include realm in credentials path")
+	assert.Contains(t, filepath.ToSlash(configFile), "abc123hash/aws/test-provider/config",
+		"Environment() must include realm in config path")
+}
+
+// TestAssumeRoleIdentity_Environment_EmptyRealmBackwardCompatible verifies that when realm is empty,
+// credential paths do NOT include a realm subdirectory (backward-compatible behavior).
+func TestAssumeRoleIdentity_Environment_EmptyRealmBackwardCompatible(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tempHome)
+
+	i := &assumeRoleIdentity{
+		name:  "role",
+		realm: "", // Empty realm = backward-compatible.
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+			Via:       &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+	env, err := i.Environment()
+	require.NoError(t, err)
+
+	// Credential paths must NOT have a realm segment between baseDir and "aws".
+	credFile := filepath.ToSlash(env["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.Contains(t, credFile, "atmos/aws/test-provider/credentials",
+		"with empty realm, path should be {baseDir}/aws/{provider}/credentials")
+	assert.NotContains(t, credFile, "//aws/",
+		"with empty realm, path should not have double slashes")
+}
+
+func TestAssumeRoleIdentity_Environment_WithRegion(t *testing.T) {
+	// When region is set on the identity, Environment should include AWS_REGION and AWS_DEFAULT_REGION.
+	i := &assumeRoleIdentity{
+		name:   "role",
+		region: "eu-west-1",
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+			Via:       &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+	env, err := i.Environment()
+	assert.NoError(t, err)
+	// Should include region vars when explicitly configured.
+	assert.Equal(t, "eu-west-1", env["AWS_REGION"])
+	assert.Equal(t, "eu-west-1", env["AWS_DEFAULT_REGION"])
+}
+
+func TestAssumeRoleIdentity_Environment_WithoutRegion(t *testing.T) {
+	// When region is NOT set, Environment should NOT include AWS_REGION (no default fallback).
+	i := &assumeRoleIdentity{
+		name:   "role",
+		region: "", // No region set
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+			Via:       &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+	env, err := i.Environment()
+	assert.NoError(t, err)
+	// Should NOT include region vars when not explicitly configured.
+	_, hasRegion := env["AWS_REGION"]
+	_, hasDefaultRegion := env["AWS_DEFAULT_REGION"]
+	assert.False(t, hasRegion, "AWS_REGION should not be set when region is not explicitly configured")
+	assert.False(t, hasDefaultRegion, "AWS_DEFAULT_REGION should not be set when region is not explicitly configured")
 }
 
 func TestAssumeRoleIdentity_BuildAssumeRoleInput(t *testing.T) {
@@ -282,18 +546,7 @@ func TestAssumeRoleIdentity_Authenticate_ErrorCases(t *testing.T) {
 			},
 			inputCreds:  nil,
 			expectError: true,
-			errorMsg:    "base AWS credentials are required",
-		},
-		{
-			name: "invalid credentials type",
-			identity: &assumeRoleIdentity{
-				name:    "test-role",
-				config:  &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123456789012:role/TestRole"}},
-				roleArn: "arn:aws:iam::123456789012:role/TestRole",
-			},
-			inputCreds:  &types.OIDCCredentials{Token: "test"},
-			expectError: true,
-			errorMsg:    "base AWS credentials are required",
+			errorMsg:    "invalid identity config",
 		},
 	}
 
@@ -324,7 +577,7 @@ func TestAssumeRoleIdentity_Authenticate_ValidationErrors(t *testing.T) {
 				config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{}},
 			},
 			expectError: true,
-			errorMsg:    "assume_role is required in principal",
+			errorMsg:    "invalid identity config",
 		},
 		{
 			name: "nil principal",
@@ -621,6 +874,62 @@ func TestAssumeRoleIdentity_CredentialsExist(t *testing.T) {
 	}
 }
 
+// TestAssumeRoleIdentity_CredentialsExist_WithRealm verifies that CredentialsExist() uses the realm
+// when looking for credential files. This is the regression test for Issue #4.
+func TestAssumeRoleIdentity_CredentialsExist_WithRealm(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+	identity, err := NewAssumeRoleIdentity("test-role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "aws-sso"},
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+	})
+	require.NoError(t, err)
+	identity.(*assumeRoleIdentity).SetRealm("my-realm-hash")
+
+	// Create credentials at the realm-scoped path (where PostAuthenticate writes).
+	credPath := filepath.Join(tmpDir, "atmos", "my-realm-hash", "aws", "aws-sso", "credentials")
+	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o700))
+	require.NoError(t, os.WriteFile(credPath, []byte("[test-role]\naws_access_key_id=AKIA123\n"), 0o600))
+
+	// CredentialsExist must find them at the realm-scoped path.
+	exists, err := identity.CredentialsExist()
+	assert.NoError(t, err)
+	assert.True(t, exists, "CredentialsExist() should find credentials at realm-scoped path")
+}
+
+// TestAssumeRoleIdentity_CredentialsExist_WithRealm_NotAtOldPath verifies that when realm is set,
+// credentials at the old (non-realm) path are NOT found.
+// This reproduces the exact Issue #4 bug where PostAuthenticate wrote to realm-scoped paths
+// but CredentialsExist looked at non-realm paths.
+func TestAssumeRoleIdentity_CredentialsExist_WithRealm_NotAtOldPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+	identity, err := NewAssumeRoleIdentity("test-role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "aws-sso"},
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+	})
+	require.NoError(t, err)
+	identity.(*assumeRoleIdentity).SetRealm("my-realm-hash")
+
+	// Create credentials at the OLD (non-realm) path only.
+	oldCredPath := filepath.Join(tmpDir, "atmos", "aws", "aws-sso", "credentials")
+	require.NoError(t, os.MkdirAll(filepath.Dir(oldCredPath), 0o700))
+	require.NoError(t, os.WriteFile(oldCredPath, []byte("[test-role]\naws_access_key_id=AKIA123\n"), 0o600))
+
+	// CredentialsExist must NOT find them because realm is set and it should look at realm-scoped path.
+	exists, err := identity.CredentialsExist()
+	assert.NoError(t, err)
+	assert.False(t, exists, "CredentialsExist() must not find credentials at non-realm path when realm is set")
+}
+
 func TestAssumeRoleIdentity_LoadCredentials(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -699,4 +1008,736 @@ output = json
 			}
 		})
 	}
+}
+
+// OIDC Web Identity Tests
+
+func TestAssumeRoleIdentity_Authenticate_WithOIDCCredentials(t *testing.T) {
+	// Test that Authenticate detects OIDC credentials and uses AssumeRoleWithWebIdentity.
+	identity := &assumeRoleIdentity{
+		name: "test-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "github-oidc"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	// Validate to populate roleArn and region.
+	require.NoError(t, identity.Validate())
+
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyZXBvOm93bmVyL3JlcG86cmVmOnJlZnMvaGVhZHMvbWFpbiIsImF1ZCI6InN0czphbWF6b25hd3MuY29tIiwiZXhwIjo5OTk5OTk5OTk5fQ.test",
+		Provider: "github",
+		Audience: "sts:amazonaws.com",
+	}
+
+	// We can't actually call AWS without real credentials, but we can verify the flow is triggered.
+	// We'll test the helper methods separately.
+	_, err := identity.Authenticate(context.Background(), oidcCreds)
+	// Expect an error since we don't have real AWS connectivity, but it should be an AWS error, not a type error.
+	assert.Error(t, err)
+	// The error should not be about credentials type.
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+}
+
+func TestAssumeRoleIdentity_buildAssumeRoleWithWebIdentityInput(t *testing.T) {
+	tests := []struct {
+		name           string
+		identityName   string
+		principal      map[string]interface{}
+		oidcToken      string
+		expectDuration bool
+		durationSecs   int32
+	}{
+		{
+			name:         "basic input without duration",
+			identityName: "github-role",
+			principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+			},
+			oidcToken:      "test-token",
+			expectDuration: false,
+		},
+		{
+			name:         "input with duration",
+			identityName: "github-role",
+			principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+				"duration":    "1h",
+			},
+			oidcToken:      "test-token",
+			expectDuration: true,
+			durationSecs:   3600,
+		},
+		{
+			name:         "input with invalid duration (ignored)",
+			identityName: "github-role",
+			principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+				"duration":    "invalid",
+			},
+			oidcToken:      "test-token",
+			expectDuration: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := &assumeRoleIdentity{
+				name: tt.identityName,
+				config: &schema.Identity{
+					Kind:      "aws/assume-role",
+					Principal: tt.principal,
+				},
+			}
+
+			// Validate to populate roleArn.
+			require.NoError(t, identity.Validate())
+
+			oidcCreds := &types.OIDCCredentials{
+				Token: tt.oidcToken,
+			}
+
+			input := identity.buildAssumeRoleWithWebIdentityInput(oidcCreds)
+
+			assert.NotNil(t, input)
+			assert.Equal(t, "arn:aws:iam::123456789012:role/GitHubActionsRole", *input.RoleArn)
+			assert.Equal(t, tt.oidcToken, *input.WebIdentityToken)
+			assert.NotEmpty(t, *input.RoleSessionName)
+			assert.Contains(t, *input.RoleSessionName, "atmos-"+tt.identityName)
+
+			if tt.expectDuration {
+				require.NotNil(t, input.DurationSeconds)
+				assert.Equal(t, tt.durationSecs, *input.DurationSeconds)
+			} else {
+				assert.Nil(t, input.DurationSeconds)
+			}
+		})
+	}
+}
+
+func TestAssumeRoleIdentity_toAWSCredentialsFromWebIdentity(t *testing.T) {
+	identity := &assumeRoleIdentity{
+		name:   "github-role",
+		region: "us-west-2",
+	}
+
+	tests := []struct {
+		name        string
+		input       *sts.AssumeRoleWithWebIdentityOutput
+		expectError bool
+		expectCreds bool
+	}{
+		{
+			name:        "nil result",
+			input:       nil,
+			expectError: true,
+			expectCreds: false,
+		},
+		{
+			name: "nil credentials",
+			input: &sts.AssumeRoleWithWebIdentityOutput{
+				Credentials: nil,
+			},
+			expectError: true,
+			expectCreds: false,
+		},
+		{
+			name: "valid credentials",
+			input: &sts.AssumeRoleWithWebIdentityOutput{
+				Credentials: &ststypes.Credentials{
+					AccessKeyId:     aws.String("AKIAIOSFODNN7EXAMPLE"),
+					SecretAccessKey: aws.String("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+					SessionToken:    aws.String("FwoGZXIvYXdzEBExample"),
+					Expiration:      aws.Time(time.Now().Add(1 * time.Hour)),
+				},
+			},
+			expectError: false,
+			expectCreds: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creds, err := identity.toAWSCredentialsFromWebIdentity(tt.input)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, creds)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, creds)
+
+				if tt.expectCreds {
+					awsCreds, ok := creds.(*types.AWSCredentials)
+					require.True(t, ok)
+					assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+					assert.Equal(t, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", awsCreds.SecretAccessKey)
+					assert.Equal(t, "FwoGZXIvYXdzEBExample", awsCreds.SessionToken)
+					assert.Equal(t, "us-west-2", awsCreds.Region)
+					assert.NotEmpty(t, awsCreds.Expiration)
+				}
+			}
+		})
+	}
+}
+
+func TestAssumeRoleIdentity_toAWSCredentialsFromWebIdentity_DefaultRegion(t *testing.T) {
+	// When region is empty, should default to us-east-1.
+	identity := &assumeRoleIdentity{
+		name:   "github-role",
+		region: "",
+	}
+
+	output := &sts.AssumeRoleWithWebIdentityOutput{
+		Credentials: &ststypes.Credentials{
+			AccessKeyId:     aws.String("AKIAIOSFODNN7EXAMPLE"),
+			SecretAccessKey: aws.String("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+			SessionToken:    aws.String("FwoGZXIvYXdzEBExample"),
+			Expiration:      aws.Time(time.Now().Add(1 * time.Hour)),
+		},
+	}
+
+	creds, err := identity.toAWSCredentialsFromWebIdentity(output)
+	require.NoError(t, err)
+
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "us-east-1", awsCreds.Region)
+}
+
+func TestAssumeRoleIdentity_Authenticate_WithOIDCAndAWSCredentials(t *testing.T) {
+	// Test that both OIDC and AWS credentials work with the same identity.
+	identity := &assumeRoleIdentity{
+		name: "test-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "test-provider"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	// Test with OIDC credentials - should trigger web identity flow.
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "test-oidc-token",
+		Provider: "github",
+		Audience: "sts:amazonaws.com",
+	}
+
+	_, err := identity.Authenticate(context.Background(), oidcCreds)
+	// Expect AWS error (no real connectivity), not type error.
+	assert.Error(t, err)
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+
+	// Test with AWS credentials - should trigger standard assume role flow.
+	awsCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		SessionToken:    "FwoGZXIvYXdzEBExample",
+		Region:          "us-east-1",
+	}
+
+	_, err = identity.Authenticate(context.Background(), awsCreds)
+	// Expect AWS error (no real connectivity), not type error.
+	assert.Error(t, err)
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+}
+
+// mockInvalidCredentials is a mock credentials type that implements ICredentials
+// but is neither AWSCredentials nor OIDCCredentials, for testing error handling.
+type mockInvalidCredentials struct{}
+
+func (m *mockInvalidCredentials) IsExpired() bool                        { return false }
+func (m *mockInvalidCredentials) GetExpiration() (*time.Time, error)     { return nil, nil }
+func (m *mockInvalidCredentials) BuildWhoamiInfo(info *types.WhoamiInfo) {}
+func (m *mockInvalidCredentials) Validate(ctx context.Context) (*types.ValidationInfo, error) {
+	return nil, nil
+}
+
+var _ types.ICredentials = (*mockInvalidCredentials)(nil)
+
+func TestAssumeRoleIdentity_Authenticate_WithInvalidCredentialsType(t *testing.T) {
+	// Test that invalid credentials type returns appropriate error.
+	identity := &assumeRoleIdentity{
+		name: "test-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "test-provider"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	// Create a mock credentials type that's neither AWS nor OIDC.
+	invalidCreds := &mockInvalidCredentials{}
+
+	_, err := identity.Authenticate(context.Background(), invalidCreds)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid identity config")
+}
+
+func TestAssumeRoleIdentity_assumeRoleWithWebIdentity_UsesAnonymousCredentials(t *testing.T) {
+	// This test verifies that anonymous credentials are configured when calling
+	// AssumeRoleWithWebIdentity. This is critical to prevent the SDK from attempting
+	// to resolve credentials from the environment (EC2 IMDS, env vars, etc.) which
+	// would cause hangs or signing errors.
+	//
+	// Background: AWS SDK v2 changed behavior from v1. In v1, AssumeRoleWithWebIdentity
+	// automatically used anonymous credentials. In v2, this must be explicitly configured.
+	//
+	// Without anonymous credentials:
+	// - On EC2/ECS: Would use instance role credentials instead of web identity token
+	// - In CI/CD: Would hang trying to resolve credentials
+	// - With ambient credentials: Would fail with signing errors
+
+	// Set up environment to simulate EC2 with ambient credentials.
+	// The test verifies that these are NOT used for AssumeRoleWithWebIdentity.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_SESSION_TOKEN", "FwoGZXIvYXdzEBExample")
+
+	identity := &assumeRoleIdentity{
+		name: "test-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "github-oidc"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyZXBvOm93bmVyL3JlcG86cmVmOnJlZnMvaGVhZHMvbWFpbiIsImF1ZCI6InN0czphbWF6b25hd3MuY29tIiwiZXhwIjo5OTk5OTk5OTk5fQ.test",
+		Provider: "github",
+		Audience: "sts:amazonaws.com",
+	}
+
+	// Call assumeRoleWithWebIdentity directly to test config setup.
+	// We expect an AWS error (no real STS endpoint), not a credential resolution error.
+	_, err := identity.assumeRoleWithWebIdentity(context.Background(), oidcCreds)
+
+	// Verify the error is from AWS STS, not from credential resolution.
+	assert.Error(t, err)
+
+	// These errors would indicate credential resolution problems (which we've fixed):
+	assert.NotContains(t, err.Error(), "EC2 metadata") // Would happen without anonymous creds on EC2
+	assert.NotContains(t, err.Error(), "i/o timeout")  // Would happen on IMDS timeout
+	assert.NotContains(t, err.Error(), "credential")   // Generic credential errors
+
+	// The error should be from attempting to call STS (network/endpoint error),
+	// which confirms that credential resolution was skipped as intended.
+	// Common error patterns: "connection refused", "no such host", "dial tcp"
+}
+
+func TestAssumeRoleIdentity_assumeRoleWithWebIdentity_IgnoresAmbientCredentials(t *testing.T) {
+	// Test that ambient AWS credentials in the environment are properly ignored
+	// when using web identity authentication. This verifies that LoadIsolatedAWSConfig
+	// combined with anonymous credentials prevents any ambient credential usage.
+
+	// Set multiple sources of ambient credentials.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAACCESSKEY")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "secretkey")
+	t.Setenv("AWS_SESSION_TOKEN", "sessiontoken")
+	t.Setenv("AWS_PROFILE", "test-profile")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "fake-creds"))
+
+	identity := &assumeRoleIdentity{
+		name: "oidc-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "github-oidc"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/OIDCRole",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "test-jwt-token",
+		Provider: "github",
+	}
+
+	// This should not hang or fail due to ambient credentials.
+	// We expect an AWS STS error (no real endpoint), not credential errors.
+	_, err := identity.assumeRoleWithWebIdentity(context.Background(), oidcCreds)
+
+	require.Error(t, err) // Expected: can't reach real AWS
+	assert.NotContains(t, err.Error(), "EC2 metadata")
+	assert.NotContains(t, err.Error(), "credential")
+	assert.NotContains(t, err.Error(), "i/o timeout")
+}
+
+func TestAssumeRoleIdentity_resolveRegion_ManagerNil_CachedRegion(t *testing.T) {
+	// When manager is nil and i.region is set, should return cached region.
+	i := &assumeRoleIdentity{
+		name:   "test-role",
+		region: "eu-west-1",
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "eu-west-1", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_ManagerNil_FromPrincipal(t *testing.T) {
+	// When manager is nil and i.region is empty, should check config.Principal["region"].
+	i := &assumeRoleIdentity{
+		name:   "test-role",
+		region: "", // No cached region.
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Principal: map[string]any{
+				"assume_role": "arn:aws:iam::123:role/x",
+				"region":      "ap-southeast-1",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "ap-southeast-1", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_ManagerNil_NoRegion(t *testing.T) {
+	// When manager is nil and no region configured, should return empty string.
+	i := &assumeRoleIdentity{
+		name:   "test-role",
+		region: "",
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_FromPrincipalSetting(t *testing.T) {
+	// When manager exists and ResolvePrincipalSetting returns region, use it.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-role": {"region": "us-west-2"},
+		},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "us-west-2", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_FromProviderConfig(t *testing.T) {
+	// When manager exists, ResolvePrincipalSetting returns empty, use provider's region.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{},
+		providerConfigs: map[string]*schema.Provider{
+			"test-role": {Region: "ca-central-1"},
+		},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "ca-central-1", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_NeitherHasRegion(t *testing.T) {
+	// When manager exists but neither principal nor provider has region.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{},
+		providerConfigs:   map[string]*schema.Provider{},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_NonStringPrincipalSetting(t *testing.T) {
+	// When ResolvePrincipalSetting returns non-string value, skip it.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-role": {"region": 12345}, // Non-string value.
+		},
+		providerConfigs: map[string]*schema.Provider{
+			"test-role": {Region: "fallback-region"},
+		},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "fallback-region", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_EmptyStringPrincipalSetting(t *testing.T) {
+	// When ResolvePrincipalSetting returns empty string, fall back to provider.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-role": {"region": ""}, // Empty string.
+		},
+		providerConfigs: map[string]*schema.Provider{
+			"test-role": {Region: "fallback-region"},
+		},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "fallback-region", region)
+}
+
+// mockResolveAuthManager implements types.AuthManager for testing resolveRegion.
+type mockResolveAuthManager struct {
+	principalSettings map[string]map[string]interface{}
+	providerConfigs   map[string]*schema.Provider
+}
+
+func (m *mockResolveAuthManager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	if settings, ok := m.principalSettings[identityName]; ok {
+		if val, ok := settings[key]; ok {
+			return val, true
+		}
+	}
+	return nil, false
+}
+
+func (m *mockResolveAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	if provider, ok := m.providerConfigs[identityName]; ok {
+		return provider, true
+	}
+	return nil, false
+}
+
+// Implement other AuthManager methods as no-ops for the mock.
+func (m *mockResolveAuthManager) GetProviderForIdentity(_ string) string { return "" }
+
+func (m *mockResolveAuthManager) GetCachedCredentials(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) Authenticate(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) AuthenticateProvider(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) Whoami(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+func (m *mockResolveAuthManager) Validate() error                                     { return nil }
+func (m *mockResolveAuthManager) GetDefaultIdentity(_ bool) (string, error)           { return "", nil }
+func (m *mockResolveAuthManager) ListIdentities() []string                            { return nil }
+func (m *mockResolveAuthManager) GetFilesDisplayPath(_ string) string                 { return "" }
+func (m *mockResolveAuthManager) GetProviderKindForIdentity(_ string) (string, error) { return "", nil }
+func (m *mockResolveAuthManager) GetChain() []string                                  { return nil }
+func (m *mockResolveAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo           { return nil }
+func (m *mockResolveAuthManager) ListProviders() []string                             { return nil }
+func (m *mockResolveAuthManager) GetIdentities() map[string]schema.Identity           { return nil }
+func (m *mockResolveAuthManager) GetProviders() map[string]schema.Provider            { return nil }
+func (m *mockResolveAuthManager) Logout(_ context.Context, _ string, _ bool) error    { return nil }
+func (m *mockResolveAuthManager) LogoutProvider(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+func (m *mockResolveAuthManager) LogoutAll(_ context.Context, _ bool) error { return nil }
+func (m *mockResolveAuthManager) GetEnvironmentVariables(_ string) (map[string]string, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) PrepareShellEnvironment(_ context.Context, _ string, _ []string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) ExecuteIdentityIntegrations(_ context.Context, _ string) error {
+	return nil
+}
+func (m *mockResolveAuthManager) ExecuteIntegration(_ context.Context, _ string) error { return nil }
+func (m *mockResolveAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
+}
+
+func TestAssumeRoleIdentity_WebIdentityVsStandardAssumeRole_DifferentCredentialHandling(t *testing.T) {
+	// This test documents the difference between standard AssumeRole and AssumeRoleWithWebIdentity
+	// credential handling. Standard AssumeRole REQUIRES base AWS credentials, while web identity
+	// should NOT use them even if present.
+
+	identity := &assumeRoleIdentity{
+		name: "dual-mode-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	// Test 1: Standard AssumeRole with AWS credentials - uses those credentials to sign the request.
+	awsCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		Region:          "us-east-1",
+	}
+
+	_, err := identity.Authenticate(context.Background(), awsCreds)
+	assert.Error(t, err) // Expected: can't reach real AWS
+	// Should not be a credential type error.
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+
+	// Test 2: AssumeRoleWithWebIdentity with OIDC - should use anonymous credentials internally,
+	// ignoring any ambient AWS credentials in the environment.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AMBIENT_KEY")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "AMBIENT_SECRET")
+
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "test-web-identity-token",
+		Provider: "github",
+	}
+
+	_, err = identity.Authenticate(context.Background(), oidcCreds)
+	assert.Error(t, err) // Expected: can't reach real AWS
+	// Should not be a credential type error.
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+	// Should not try to use ambient credentials.
+	assert.NotContains(t, err.Error(), "AMBIENT_KEY")
+}
+
+// TestAssumeRoleIdentity_PostAuthenticate_Environment_PathConsistency is the definitive regression test
+// for Issue #4 (ECR Docker push 403 after upgrading to v1.206.0).
+//
+// The bug: PostAuthenticate() wrote credentials to {baseDir}/{realm}/aws/{provider}/credentials
+// but Environment() returned AWS_SHARED_CREDENTIALS_FILE pointing to {baseDir}/aws/{provider}/credentials
+// (without realm). This caused the AWS SDK to not find the credentials file, falling back to the
+// runner's default IAM role which had limited permissions.
+//
+// This test verifies that the credential paths written by PostAuthenticate match the paths
+// returned by Environment() when a realm is set.
+func TestAssumeRoleIdentity_PostAuthenticate_Environment_PathConsistency(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", filepath.Join(tmpDir, ".config"))
+
+	testRealm := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+	i := &assumeRoleIdentity{
+		name:  "plat-dev/terraform",
+		realm: testRealm,
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Principal: map[string]any{
+				"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+			},
+			Via: &schema.IdentityVia{Provider: "github-oidc"},
+		},
+	}
+
+	// Simulate PostAuthenticate writing credentials.
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		SessionToken:    "FwoGZXIvYXdzEBExample",
+		Region:          "us-west-1",
+	}
+
+	authContext := &schema.AuthContext{}
+	stack := &schema.ConfigAndStacksInfo{}
+	err := i.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "github-oidc",
+		IdentityName: "plat-dev/terraform",
+		Credentials:  creds,
+		Realm:        testRealm,
+	})
+	require.NoError(t, err)
+
+	// Now get the environment variables that would be exported (the read side).
+	env, err := i.Environment()
+	require.NoError(t, err)
+
+	// The credential file written by PostAuthenticate must exist at the path
+	// returned by Environment(). This is the exact bug that caused Issue #4.
+	credFile := env["AWS_SHARED_CREDENTIALS_FILE"]
+	require.NotEmpty(t, credFile, "AWS_SHARED_CREDENTIALS_FILE must be set")
+
+	_, err = os.Stat(credFile)
+	assert.NoError(t, err, "credential file at path returned by Environment() must exist (was written by PostAuthenticate)")
+
+	configFile := env["AWS_CONFIG_FILE"]
+	require.NotEmpty(t, configFile, "AWS_CONFIG_FILE must be set")
+
+	_, err = os.Stat(configFile)
+	assert.NoError(t, err, "config file at path returned by Environment() must exist (was written by PostAuthenticate)")
+
+	// Verify paths include the realm.
+	assert.Contains(t, filepath.ToSlash(credFile), testRealm+"/aws/github-oidc/credentials",
+		"credential path must include realm")
+	assert.Contains(t, filepath.ToSlash(configFile), testRealm+"/aws/github-oidc/config",
+		"config path must include realm")
 }

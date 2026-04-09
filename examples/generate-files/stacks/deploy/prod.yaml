@@ -1,0 +1,18 @@
+# Production environment
+vars:
+  stage: prod
+
+import:
+  - catalog/demo
+
+components:
+  terraform:
+    demo:
+      vars:
+        app_name: "myapp"
+        app_version: "2.0.0"
+        features:
+          - feature1
+          - feature2
+          - monitoring
+          - high-availability

@@ -1,0 +1,165 @@
+---
+title: Using !terraform.output
+sidebar_position: 2
+sidebar_label: "!terraform.output"
+description: Read component outputs by executing terraform output command
+id: terraform-output
+slug: /stacks/sharing-state/terraform-output
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+The `!terraform.output` YAML function reads component outputs by executing the `terraform output` command.
+While it provides the same functionality as `!terraform.state`, it is **significantly slower** because it requires
+initializing Terraform and downloading providers.
+</Intro>
+
+:::tip Consider Using !terraform.state Instead
+For most use cases, [`!terraform.state`](/stacks/sharing-state/terraform-state) is recommended because it's **10-100x faster**.
+It reads directly from state backends without initializing Terraform. The syntax is identical, making migration easy.
+:::
+
+<KeyPoints>
+- Same syntax and results as `!terraform.state`
+- Executes `terraform output` command internally
+- Slower due to Terraform initialization overhead
+- Use when you specifically need `terraform output` behavior
+</KeyPoints>
+
+## When to Use `!terraform.output`
+
+Use `!terraform.output` when you:
+- Need the exact behavior of `terraform output` command
+- Are using a backend not yet supported by `!terraform.state`
+- Have a specific reason to use the Terraform output pipeline
+
+For all other cases, use [`!terraform.state`](/stacks/sharing-state/terraform-state).
+
+## Basic Usage
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+
+    eks:
+      vars:
+        # Read outputs using terraform output command
+        vpc_id: !terraform.output vpc vpc_id
+        subnet_ids: !terraform.output vpc private_subnet_ids
+```
+</File>
+
+## Syntax
+
+```yaml
+# Get output from component in the current stack
+!terraform.output <component> <output>
+
+# Get output from component in a different stack
+!terraform.output <component> <stack> <output>
+
+# Use YQ expressions for complex outputs
+!terraform.output <component> <yq-expression>
+!terraform.output <component> <stack> <yq-expression>
+```
+
+## Execution Flow
+
+When processing `!terraform.output`, Atmos executes these steps:
+
+1. **Resolve context** - Merge all configuration layers for the component
+2. **Generate varfile** - Create variable file for the component
+3. **Generate backend config** - Create backend configuration
+4. **Initialize Terraform** - Run `terraform init` (downloads providers if not cached)
+5. **Select workspace** - Create or select the appropriate workspace
+6. **Execute output** - Run `terraform output` command
+7. **Parse result** - Extract the requested value using YQ
+
+This process is why `!terraform.output` is slower than `!terraform.state`, which skips steps 2-6 by reading directly from the backend.
+
+## Cross-Stack References
+
+Read outputs from components in different stacks:
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # Read from a different stack
+        vpc_id: !terraform.output vpc staging vpc_id
+
+        # Use template expressions for dynamic stack names
+        db_endpoint: !terraform.output rds {{ printf "%s-shared" .vars.environment }} endpoint
+```
+</File>
+
+## Working with Complex Outputs
+
+Use [YQ expressions](https://mikefarah.gitbook.io/yq) to extract values from complex outputs:
+
+```yaml
+# Get first item from a list
+first_subnet: !terraform.output vpc .private_subnet_ids[0]
+
+# Read a key from a map
+db_host: !terraform.output config .database_config.host
+
+# Provide default values
+username: !terraform.output config ".username // ""default-user"""
+```
+
+## Performance Considerations
+
+Because `!terraform.output` runs the full Terraform output pipeline:
+
+- **First call is slow** - Terraform must initialize and download providers
+- **Subsequent calls are cached** - Results are cached in memory per Atmos command execution
+- **Many references impact performance** - Each unique component/stack combination requires initialization
+
+If performance is a concern, migrate to [`!terraform.state`](/stacks/sharing-state/terraform-state):
+
+```yaml
+# Before (slow)
+vpc_id: !terraform.output vpc vpc_id
+
+# After (fast) - identical syntax
+vpc_id: !terraform.state vpc vpc_id
+```
+
+## Caching
+
+Atmos caches results in memory during command execution. Multiple references to the same component output use the cached result:
+
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # First call: executes terraform output
+        vpc_id: !terraform.output vpc vpc_id
+        # Subsequent calls: use cached result
+        vpc_id_again: !terraform.output vpc vpc_id
+        vpc_cidr: !terraform.output vpc cidr_block
+```
+
+## Considerations
+
+- **Secrets exposure**: Outputs containing sensitive data may appear in stdout
+- **Permissions**: You need access to initialize Terraform and read state for all referenced components
+- **Cold starts**: Returns `null` if the source component hasn't been provisioned
+- **Performance**: Each unique component reference requires Terraform initialization
+
+<ActionCard title="Switch to !terraform.state for Better Performance">
+The `!terraform.state` function provides the same results 10-100x faster by reading directly from state backends.
+<PrimaryCTA to="/stacks/sharing-state/terraform-state">Learn More</PrimaryCTA>
+</ActionCard>

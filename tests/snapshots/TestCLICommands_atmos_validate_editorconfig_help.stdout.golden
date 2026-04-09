@@ -1,128 +1,108 @@
 
+👽 test linux/amd64
 
-Validate all files against the project's EditorConfig rules                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+Validate all files against the project's EditorConfig rules
 
-Usage:
+USAGE
 
-  atmos validate editorconfig [flags]
+                                           
+    $ atmos validate editorconfig [flags]  
+                                           
 
+FLAGS
 
-Flags:
+      --disable-end-of-line               Disable end-of-line check
 
-        --disable-end-of-line                 Disable end-of-line check (default
-                                              false)
+      --disable-indent-size               Disable indent size check
 
-        --disable-indent-size                 Disable indent size check (default
-                                              false)
+      --disable-indentation               Disable indentation check
 
-        --disable-indentation                 Disable indentation check (default
-                                              false)
+      --disable-insert-final-newline      Disable final newline check
 
-        --disable-insert-final-newline        Disable final newline check
-                                              (default false)
+      --disable-max-line-length           Disable max line length check
 
-        --disable-max-line-length             Disable max line length check
-                                              (default false)
+      --disable-trim-trailing-whitespace  Disable trailing whitespace check
 
-        --disable-trim-trailing-whitespace    Disable trailing whitespace check
-                                              (default false)
+      --dry-run                           Show which files would be checked
 
-        --dry-run                             Show which files would be checked
-                                              (default false)
+      --exclude string                    Regex to exclude files from checking
 
-        --exclude string                      Regex to exclude files from
-                                              checking
+      --format string                     Specify the output format: default, gcc (default default)
 
-        --format string                       Specify the output format:
-                                              default, gcc (default default)
+  -h, --help                              help for editorconfig
 
-    -h, --help                                help for editorconfig
+      --ignore-defaults                   Ignore default excludes
 
-        --ignore-defaults                     Ignore default excludes (default
-                                              false)
+      --init                              Create an initial configuration
 
-        --init                                Create an initial configuration
-                                              (default false)
-
-        --version                             Print the version number (default
-                                              false)
+      --version                           Print the version number
 
 
-Global Flags:
+GLOBAL FLAGS
 
-        --base-path string           Base path for Atmos project
+      --ai                      Enable AI-powered analysis of command output
 
-    -C, --chdir string               Change working directory before processing
-                                     (run as if Atmos started in this directory)
+      --base-path string        Base path for Atmos project
 
-        --config stringSlice         Paths to configuration files
-                                     (comma-separated or repeated flag) (default
-                                     [])
+  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
+                                directory)
 
-        --config-path stringSlice    Paths to configuration directories
-                                     (comma-separated or repeated flag) (default
-                                     [])
+      --config strings          Paths to configuration files (comma-separated or repeated flag)
 
-        --force-color                Force color output even when not a TTY
-                                     (useful for screenshots) (default false)
+      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
 
-        --force-tty                  Force TTY mode with sane defaults when
-                                     terminal detection fails (useful for
-                                     screenshots) (default false)
+      --force-color             Force color output even when not a TTY (useful for screenshots)
 
-        --heatmap                    Show performance heatmap visualization
-                                     after command execution (includes P95
-                                     latency) (default false)
+      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
+                                screenshots)
 
-        --heatmap-mode string        Heatmap visualization mode: bar, sparkline,
-                                     table (press 1-3 to switch in TUI) (default
-                                     bar)
+      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
 
-        --logs-file string           The file to write Atmos logs to. Logs can
-                                     be written to any file or any standard file
-                                     descriptor, including '/dev/stdout',
-                                     '/dev/stderr' and '/dev/null' (default
-                                     /dev/stderr)
+      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
+                                bar)
 
-        --logs-level string          Logs level. Supported log levels are Trace,
-                                     Debug, Info, Warning, Off. If the log level
-                                     is set to Off, Atmos will not log any
-                                     messages (default Info)
+      --identity string         Identity to use for authentication. Use --identity to select interactively, --
+                                identity=NAME to specify
 
-        --mask                       Enable automatic masking of sensitive data
-                                     in output (use --mask=false to disable)
-                                     (default true)
+      --interactive             Enable interactive prompts for missing required flags, optional value flags using the
+                                sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)
+                                (default true)
 
-        --no-color                   Disable color output (default false)
+      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
+                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
+                                /dev/stderr)
 
-        --pager string               Enable pager for output (--pager or
-                                     --pager=true to enable, --pager=false to
-                                     disable, --pager=less to use specific
-                                     pager)
+      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
+                                level is set to Off, Atmos will not log any messages (default Warning)
 
-        --profile-file string        Write profiling data to file instead of
-                                     starting server
+      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
+                                (default true)
 
-        --profile-type string        Type of profile to collect when using
-                                     --profile-file. Options: cpu, heap, allocs,
-                                     goroutine, block, mutex, threadcreate,
-                                     trace (default cpu)
+      --no-color                Disable color output
 
-        --profiler-enabled           Enable pprof profiling server (default
-                                     false)
+      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
+                                pager=less to use specific pager)
 
-        --profiler-host string       Host for pprof profiling server (default
-                                     localhost)
+      --profile strings         Activate configuration profiles (comma-separated or repeated flag)
 
-        --profiler-port int          Port for pprof profiling server (default
-                                     6060)
+      --profile-file string     Write profiling data to file instead of starting server
 
-        --redirect-stderr string     File descriptor to redirect stderr to.
-                                     Errors can be redirected to any file or any
-                                     standard file descriptor (including
-                                     /dev/null)
+      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
+                                goroutine, block, mutex, threadcreate, trace (default cpu)
 
+      --profiler-enabled        Enable pprof profiling server
 
-Use atmos validate editorconfig --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+      --profiler-host string    Host for pprof profiling server (default localhost)
+
+      --profiler-port int       Port for pprof profiling server (default 6060)
+
+      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
+                                standard file descriptor (including '/dev/null')
+
+      --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
+
+      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
+
+  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
 
 

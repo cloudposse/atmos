@@ -1,0 +1,6 @@
+Stack,Comp,Type
+nonprod,mock/disabled,terraform
+nonprod,mock/drift,terraform
+nonprod,mock/nodrift,terraform
+prod,mock/drift,terraform
+prod,mock/nodrift,terraform

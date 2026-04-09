@@ -7,6 +7,7 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
+    auto_generate_files: false
     command: ""
     shell:
       prompt: ""
@@ -14,16 +15,25 @@ components:
       pass_vars: false
     plan:
       skip_planfile: false
+    plugin_cache: true
   helmfile:
     base_path: ""
     use_eks: true
     kubeconfig_path: ""
     helm_aws_profile_pattern: ""
     cluster_name_pattern: ""
+    cluster_name_template: ""
+    cluster_name: ""
     command: ""
+    auto_generate_files: false
   packer:
     base_path: ""
     command: ""
+    auto_generate_files: false
+  ansible:
+    base_path: ""
+    command: ""
+    auto_generate_files: false
 stacks:
   base_path: stacks
   included_paths:
@@ -39,7 +49,7 @@ settings:
   list_merge_strategy: ""
   terminal:
     max_width: 0
-    pager: "0"
+    pager: "false"
     unicode: false
     syntax_highlighting:
       enabled: false
@@ -50,7 +60,10 @@ settings:
       wrap: false
     color: true
     no_color: false
+  experimental: warn
   inject_github_token: true
+  inject_bitbucket_token: true
+  inject_gitlab_token: true
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
@@ -60,6 +73,7 @@ settings:
     token: phc_TEST_TOKEN_PLACEHOLDER
     logging: false
 initialized: true
+basePathAbsolute: /absolute/path/to/repo/examples/demo-stacks
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks
 includeStackAbsolutePaths:
   - /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
@@ -68,6 +82,7 @@ excludeStackAbsolutePaths:
 terraformDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 packerDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
+ansibleDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false
 cli_config_path: /absolute/path/to/repo/examples/demo-stacks
 import: []
@@ -77,4 +92,8 @@ docs:
   generate:
     readme:
       output: ./README.md
+auth:
+  realm: <hash>
+  providers: {}
+  identities: {}
 

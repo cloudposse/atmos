@@ -8,8 +8,8 @@ description: "Learn what Atmos is and how you can start using it with stacks to 
 ## Introduction
 
 Atmos is part of the SweetOps toolchain and was built to make DevOps and Cloud automation easier across multiple tools. It has direct support for
-automating Terraform, Helm, Helmfile, and Istio. By natively utilizing [stacks](/core-concepts/stacks), `atmos` enables you to effortlessly manage
-your Terraform and Helmfile [components](/core-concepts/components) from your local machine or in your CI/CD pipelines.
+automating Terraform, Helm, Helmfile, and Istio. By natively utilizing [stacks](/learn/stacks), `atmos` enables you to effortlessly manage
+your Terraform and Helmfile [components](/components) from your local machine or in your CI/CD pipelines.
 
 In this tutorial we'll be looking at a simple (albeit contrived) example of automating multiple Terraform components together into a workflow. This
 will give you some understanding of what `atmos` can do while also giving you some experience with using it at the command line.
@@ -25,7 +25,7 @@ and [Docker](https://docs.docker.com/get-docker/) installed on your local machin
 
 ### Understanding
 
-Prior to starting this tutorial, you should be sure you understand [our various concepts and terminology](/core-concepts)) and have gone
+Prior to starting this tutorial, you should be sure you understand [our various concepts and terminology](/learn/why-atmos)) and have gone
 through our [Getting started with Geodesic](https://docs.cloudposse.com/tutorials/geodesic-getting-started/) tutorial because we'll be using Geodesic
 as our means to run `atmos`.
 
@@ -131,7 +131,7 @@ which is great, but we can do a lot better... Let's show you where `atmos` reall
 
 The SweetOps methodology is built on small, composable components because through experience practitioners have found large root modules to become
 cumbersome: They require long `plan` times, create large blast radiuses, and don't foster reuse. However, the tradeoff with smaller root
-modules ([components](/core-concepts/components)) is that you then need to orchestrate them in an order that makes sense for what you're building.
+modules ([components](/components)) is that you then need to orchestrate them in an order that makes sense for what you're building.
 That is where `atmos` workflows come in. Workflows enable you to describe the ordering of how you want to orchestrate your terraform or helmfile
 components so that you can quickly invoke multiple components via one command. Let's look at an example in our `/stacks/example.yaml` file:
 

@@ -231,6 +231,20 @@ func (mr *MockFileSystemMockRecorder) WriteFile(name, data, perm any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteFile", reflect.TypeOf((*MockFileSystem)(nil).WriteFile), name, data, perm)
 }
 
+// WriteFileAtomic mocks base method.
+func (m *MockFileSystem) WriteFileAtomic(name string, data []byte, perm os.FileMode) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteFileAtomic", name, data, perm)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteFileAtomic indicates an expected call of WriteFileAtomic.
+func (mr *MockFileSystemMockRecorder) WriteFileAtomic(name, data, perm any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteFileAtomic", reflect.TypeOf((*MockFileSystem)(nil).WriteFileAtomic), name, data, perm)
+}
+
 // MockGlobMatcher is a mock of GlobMatcher interface.
 type MockGlobMatcher struct {
 	ctrl     *gomock.Controller

@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -23,6 +24,10 @@ func ProcessTagExec(
 	if err != nil {
 		return nil, err
 	}
+
+	// Strip trailing newlines to match shell command substitution behavior.
+	// In shell, $(cmd) strips trailing newlines from the output.
+	res = strings.TrimRight(res, "\n")
 
 	var decoded any
 	if err = json.Unmarshal([]byte(res), &decoded); err != nil {

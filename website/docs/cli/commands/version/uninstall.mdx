@@ -1,0 +1,102 @@
+---
+title: atmos version uninstall
+sidebar_label: uninstall
+sidebar_class_name: command
+id: uninstall
+description: Uninstall a specific version of Atmos
+---
+
+import Intro from '@site/src/components/Intro'
+import CodeBlock from '@theme/CodeBlock'
+import LatestRelease from '@site/src/components/LatestRelease'
+
+<Intro>
+    Uninstall a specific version or all installed versions of Atmos.
+</Intro>
+
+## Usage
+
+Execute the `version uninstall` command like this:
+
+```shell
+atmos version uninstall [version]
+```
+
+This command removes installed versions of Atmos from `~/.atmos/bin/cloudposse/atmos/`.
+
+## Arguments
+
+<dl>
+    <dt>`version` <em>(optional)</em></dt>
+    <dd>The version to uninstall. If not provided, uninstalls all installed versions of Atmos.</dd>
+</dl>
+
+## Examples
+
+Uninstall a specific version:
+
+<CodeBlock language="shell">atmos version uninstall <LatestRelease /></CodeBlock>
+
+Uninstall all installed versions:
+
+```shell
+atmos version uninstall
+```
+
+## How It Works
+
+The `version uninstall` command is a convenience wrapper around the Atmos toolchain uninstaller:
+
+```shell
+# These are equivalent:
+atmos version uninstall 1.160.0
+atmos toolchain uninstall atmos@1.160.0
+```
+
+When uninstalling, the version directory is removed from:
+
+```
+~/.atmos/bin/cloudposse/atmos/<version>/
+```
+
+## Use Cases
+
+### Clean Up Old Versions
+
+Remove versions you no longer need:
+
+```shell
+# Check what's installed
+atmos version installed
+
+# Remove old versions
+atmos version uninstall 1.150.0
+atmos version uninstall 1.155.0
+```
+
+### Fresh Start
+
+Remove all installed versions and start fresh:
+
+```shell
+atmos version uninstall
+```
+
+### Disk Space Recovery
+
+If you have many versions installed and need to free up disk space:
+
+```shell
+# List installed versions
+atmos version installed
+
+# Remove versions you don't need
+atmos version uninstall 1.140.0
+```
+
+## Related Commands
+
+- [`atmos version install`](/cli/commands/version/install) - Install a specific version
+- [`atmos version list --installed`](/cli/commands/version/list) - List locally installed versions
+- [`atmos version list`](/cli/commands/version/list) - List available versions on GitHub
+- [`atmos toolchain uninstall`](/cli/commands/toolchain/uninstall) - Uninstall any tool from the toolchain

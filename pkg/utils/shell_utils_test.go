@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,6 +13,10 @@ import (
 )
 
 func TestShellRunner_ExitCodePreservation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix shell commands")
+	}
+
 	tests := []struct {
 		name           string
 		command        string
@@ -76,6 +81,10 @@ func TestShellRunner_ExitCodePreservation(t *testing.T) {
 }
 
 func TestShellRunner_OutputCapture(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix shell commands")
+	}
+
 	var buf bytes.Buffer
 	err := ShellRunner("echo 'hello world'", "test", ".", []string{}, &buf)
 
@@ -84,6 +93,10 @@ func TestShellRunner_OutputCapture(t *testing.T) {
 }
 
 func TestShellRunner_Environment(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix shell commands")
+	}
+
 	var buf bytes.Buffer
 	env := []string{"TEST_VAR=test_value"}
 	err := ShellRunner("echo $TEST_VAR", "test", ".", env, &buf)
@@ -93,6 +106,10 @@ func TestShellRunner_Environment(t *testing.T) {
 }
 
 func TestShellRunner_WorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix shell commands and paths")
+	}
+
 	var buf bytes.Buffer
 	// Use a simple command that works in any directory
 	err := ShellRunner("pwd", "test", "/tmp", []string{}, &buf)
@@ -104,6 +121,10 @@ func TestShellRunner_WorkingDirectory(t *testing.T) {
 }
 
 func TestShellRunner_ParseError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix shell syntax")
+	}
+
 	var buf bytes.Buffer
 	// Invalid shell syntax
 	err := ShellRunner("if then fi", "test", ".", []string{}, &buf)

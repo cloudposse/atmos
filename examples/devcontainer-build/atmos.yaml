@@ -1,0 +1,63 @@
+# Example atmos.yaml configuration with devcontainer using custom Dockerfile
+#
+# This example demonstrates building a container from a Dockerfile instead of
+# using a pre-built image. This is useful when you need:
+#   - Custom tools pre-installed
+#   - Specific tool versions
+#   - Custom shell configuration
+#   - Project-specific setup
+#
+# Quick start:
+#   atmos devcontainer shell geodesic     # Build & launch shell in custom container
+#   atmos devcontainer shell geodesic --replace  # Force rebuild
+#   atmos devcontainer list               # List available devcontainers
+
+# Base path for components and stacks
+base_path: "."
+
+# Command aliases
+aliases:
+  shell: "devcontainer shell geodesic"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+# Devcontainer configurations with Dockerfile build
+devcontainer:
+  # Geodesic devcontainer using local Dockerfile
+  geodesic:
+    settings:
+      runtime: podman  # Optional: docker, podman, or omit for auto-detect
+    spec:
+      # Include devcontainer.json which has the build configuration
+      - !include devcontainer.json
+
+  # Alternative: Define build configuration inline
+  geodesic-inline:
+    spec:
+      name: "Geodesic with Atmos (Inline)"
+      # Using "build" instead of "image" tells Atmos to build from Dockerfile
+      build:
+        dockerfile: "Dockerfile"
+        context: "."
+        args:
+          GEODESIC_VERSION: "latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+      forwardPorts:
+        - 8080
+        - 3000
+      containerEnv:
+        ATMOS_BASE_PATH: "/workspace"
+        TERM: "${localEnv:TERM}"
+      remoteUser: "root"
+      runArgs:
+        - "--hostname=geodesic-atmos"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"

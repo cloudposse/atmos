@@ -1,23 +1,39 @@
 package exec
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// PackerFlags type represents Packer command-line flags.
+const componentTypePacker = "packer"
+
+// PackerFlags represents Packer command-line flags passed to ExecutePacker and ExecutePackerOutput.
 type PackerFlags struct {
+	// Template specifies the Packer template file or directory path.
+	// If empty, defaults to "." (component working directory), which tells Packer to load all *.pkr.hcl files.
+	// Can be set via --template/-t flag or settings.packer.template in stack manifest.
 	Template string
-	Query    string
+
+	// Query specifies a YQ expression to extract data from the Packer manifest.
+	// Used by ExecutePackerOutput to query the manifest.json file.
+	// Can be set via --query/-q flag.
+	Query string
 }
 
 // ExecutePacker executes Packer commands.
@@ -32,6 +48,11 @@ func ExecutePacker(
 		return err
 	}
 
+	// Validate packer configuration.
+	if err := checkPackerConfig(&atmosConfig); err != nil {
+		return err
+	}
+
 	// Add the `command` from `components.packer.command` from `atmos.yaml`.
 	if info.Command == "" {
 		if atmosConfig.Components.Packer.Command != "" {
@@ -42,18 +63,22 @@ func ExecutePacker(
 	}
 
 	if info.SubCommand == "version" {
+		tenv, err := dependencies.ForComponent(&atmosConfig, componentTypePacker, nil, nil)
+		if err != nil {
+			return err
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
-			info.Command,
+			tenv.Resolve(info.Command),
 			[]string{info.SubCommand},
 			"",
-			nil,
+			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr,
 		)
 	}
 
-	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -68,40 +93,89 @@ func ExecutePacker(
 	}
 
 	// Check if the component exists as a Packer component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "packer", info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypePacker, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
+	// Auto-generate files BEFORE path validation when the following conditions hold.
+	// 1. auto_generate_files is enabled.
+	// 2. Component has a generate section.
+	// 3. Not in dry-run mode (to avoid filesystem modifications).
+	// This allows generating entire components from stack configuration.
+	if atmosConfig.Components.Packer.AutoGenerateFiles && !info.DryRun { //nolint:nestif
+		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
+		if generateSection != nil {
+			// Ensure component directory exists for file generation.
+			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
+				return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
+			}
+
+			// Generate files before path validation.
+			if genErr := GenerateFilesForComponent(&atmosConfig, info, componentPath); genErr != nil {
+				return errors.Join(errUtils.ErrFileOperation, genErr)
+			}
+		}
+	}
+
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
-		return fmt.Errorf("%w: Atmos component `%s` points to the Packer component `%s`, but it does not exist in `%s`",
-			errUtils.ErrInvalidComponent,
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
+		// Check if component has source configured for JIT provisioning.
+		if provSource.HasSource(info.ComponentSection) {
+			// Run JIT source provisioning before path validation.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.PackerComponentType, info.ComponentSection, info.AuthContext); err != nil {
+				return fmt.Errorf("failed to auto-provision component source: %w", err)
+			}
+
+			// Check if source provisioner set a workdir path (source + workdir case).
+			// If so, use that path instead of the component path.
+			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+				componentPath = workdirPath
+				componentPathExists = true
+				err = nil // Clear any previous error since we have a valid workdir path.
+			} else {
+				// Re-check if component path now exists after provisioning (source only case).
+				componentPathExists, err = u.IsDirectory(componentPath)
+			}
+		}
+
+		// If still doesn't exist, return the error.
+		if err != nil || !componentPathExists {
+			// Get the base path for the error message, respecting the user's actual config.
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypePacker)
+			return fmt.Errorf("%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
+				errUtils.ErrInvalidComponent,
+				info.ComponentFromArg,
+				info.FinalComponent,
+				basePath,
+			)
+		}
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
-	if (info.SubCommand == "build") && info.ComponentIsAbstract {
-		return fmt.Errorf("%w: component `%s` is abstract and cannot be provisioned (`metadata.type = abstract`)",
+	// For Packer, only `build` creates external resources (AMIs, images, etc.).
+	// Other commands (init, validate, inspect, fmt, console) are read-only or local operations.
+	if info.ComponentIsAbstract && info.SubCommand == "build" {
+		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
 			errUtils.ErrAbstractComponentCantBeProvisioned,
 			filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
 	// Check if the component is locked (`metadata.locked` is set to true).
-	if info.ComponentIsLocked {
-		// Allow read-only commands, block modification commands.
-		switch info.SubCommand {
-		case "build":
-			return fmt.Errorf("%w: component `%s` is locked and cannot be modified (`metadata.locked = true`)",
-				errUtils.ErrLockedComponentCantBeProvisioned,
-				filepath.Join(info.ComponentFolderPrefix, info.Component))
-		}
+	if info.ComponentIsLocked && info.SubCommand == "build" {
+		return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+			errUtils.ErrLockedComponentCantBeProvisioned,
+			filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
+
+	// Resolve and install component dependencies.
+	tenv, err := dependencies.ForComponent(&atmosConfig, componentTypePacker, info.StackSection, info.ComponentSection)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 
 	// Check if the component 'settings.validation' section is specified and validate the component.
 	valid, err := ValidateComponent(
@@ -137,8 +211,12 @@ func ExecutePacker(
 			template = packerSettingTemplate
 		}
 	}
+	// If no template specified, default to "." (component working directory).
+	// Packer will load all *.pkr.hcl files from the component directory.
+	// This allows users to organize Packer configurations across multiple files.
+	// For example: variables.pkr.hcl, main.pkr.hcl, locals.pkr.hcl.
 	if template == "" {
-		return errUtils.ErrMissingPackerTemplate
+		template = "."
 	}
 
 	// Print component variables.
@@ -148,13 +226,21 @@ func ExecutePacker(
 	varFile := constructPackerComponentVarfileName(info)
 	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, info)
 
-	log.Debug("Writing the variables to file:", "file", varFilePath)
+	log.Debug("Writing the variables to file", "file", varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
 		if err != nil {
 			return err
 		}
+
+		// Defer cleanup of the variable file.
+		// Use a closure to capture varFilePath and ensure cleanup runs even on early errors.
+		defer func() {
+			if removeErr := os.Remove(varFilePath); removeErr != nil && !os.IsNotExist(removeErr) {
+				log.Trace("Failed to remove var file during cleanup", "error", removeErr, "file", varFilePath)
+			}
+		}()
 	}
 
 	var inheritance string
@@ -195,7 +281,7 @@ func ExecutePacker(
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	log.Debug("Using ENV", "variables", envVars)
 
-	err = ExecuteShellCommand(
+	return ExecuteShellCommand(
 		atmosConfig,
 		info.Command,
 		allArgsAndFlags,
@@ -203,16 +289,6 @@ func ExecutePacker(
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		WithEnvironment(info.SanitizedEnv),
 	)
-	if err != nil {
-		return err
-	}
-
-	// Cleanup.
-	err = os.Remove(varFilePath)
-	if err != nil {
-		log.Warn(err.Error())
-	}
-
-	return nil
 }

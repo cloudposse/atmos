@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -72,6 +73,7 @@ type Expectation struct {
 	Timeout                  string                    `yaml:"timeout"`                    // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
 	Valid                    []string                  `yaml:"valid"`                      // Format validations: "yaml", "json"
 	IgnoreTrailingWhitespace bool                      `yaml:"ignore_trailing_whitespace"` // Strip trailing whitespace before snapshot comparison
+	Sanitize                 map[string]string         `yaml:"sanitize"`                   // Custom sanitization rules (regex pattern -> replacement)
 }
 type TestCase struct {
 	Name          string            `yaml:"name"`          // Name of the test
@@ -290,6 +292,35 @@ func collapseExtraSlashes(s string) string {
 	return regexp.MustCompile(`/+`).ReplaceAllString(s, "/")
 }
 
+// sanitizeOption is a functional option for customizing output sanitization.
+type sanitizeOption func(*sanitizeConfig)
+
+// sanitizeConfig holds configuration for sanitization.
+type sanitizeConfig struct {
+	customReplacements map[string]string // pattern -> replacement (applied as regexp.ReplaceAllString)
+}
+
+// WithCustomReplacements adds custom pattern replacements to the sanitization process.
+// The patterns are treated as regular expressions and applied after all standard sanitization steps.
+// This is useful for one-off cases specific to certain tests that don't need global sanitization.
+//
+// Example:
+//
+//	sanitizeOutput(output, WithCustomReplacements(map[string]string{
+//	    `session-[0-9]+`: "session-12345",
+//	    `temp_[a-z]+`:    "temp_xyz",
+//	}))
+func WithCustomReplacements(replacements map[string]string) sanitizeOption {
+	return func(c *sanitizeConfig) {
+		if c.customReplacements == nil {
+			c.customReplacements = make(map[string]string)
+		}
+		for pattern, replacement := range replacements {
+			c.customReplacements[pattern] = replacement
+		}
+	}
+}
+
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
 // with the placeholder "/absolute/path/to/repo". It first normalizes both the repository root
 // and the output to use forward slashes, ensuring that the replacement works reliably.
@@ -300,7 +331,14 @@ func collapseExtraSlashes(s string) string {
 //	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
 //	/home/runner/work/atmos/atmos/examples/demo-stacks/stacks/deploy/**/*
 //	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
-func sanitizeOutput(output string) (string, error) {
+//
+// Custom replacements can be provided via WithCustomReplacements option for test-specific sanitization.
+func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
+	// Apply options to configuration.
+	config := &sanitizeConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
 	// 1. Get the repository root.
 	repoRoot, err := findGitRepoRoot(startingDir)
 	if err != nil {
@@ -311,21 +349,56 @@ func sanitizeOutput(output string) (string, error) {
 		return "", errors.New("failed to determine repository root")
 	}
 
-	// 2. Normalize the repository root:
+	// 2. Pre-process: Join word-wrapped paths that were broken by terminal width wrapping.
+	// Glamour/terminal rendering may wrap long paths at arbitrary positions, breaking paths like:
+	//   "/Users/erik/conductor/atmos/.conductor/da-\nnang/tests/..." (broken mid-word)
+	// This regex finds the repo root path broken across lines and rejoins it.
+	// We need to handle this BEFORE normalizing because the repo root regex won't match split paths.
+	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
+
+	// Build a pattern that matches the repo root potentially split by newlines anywhere.
+	// For path "/a/b/c", create pattern that allows optional \n between characters.
+	// We need to handle escape sequences from QuoteMeta carefully - don't insert [\n]?
+	// between \ and the character it escapes (like \. for literal dot).
+	var wrappedRootPattern strings.Builder
+	runes := []rune(normalizedRepoRoot)
+	for i, r := range runes {
+		if i > 0 {
+			// Insert optional newline between characters (not at start).
+			wrappedRootPattern.WriteString("[\n]?")
+		}
+		// Escape the rune for regex.
+		escaped := regexp.QuoteMeta(string(r))
+		wrappedRootPattern.WriteString(escaped)
+	}
+	wrappedRootRegex, err := regexp.Compile(wrappedRootPattern.String())
+	if err == nil {
+		// Replace any wrapped occurrences with the normalized (unwrapped) version.
+		output = wrappedRootRegex.ReplaceAllString(output, normalizedRepoRoot)
+	}
+
+	// 3. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
 	//    - And explicitly collapse extra slashes.
-	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
 	// Also normalize the output to use forward slashes.
 	// Note: filepath.ToSlash() on Windows converts path separators; on Unix it does nothing.
 	// We also need to handle Windows-style paths that may appear in test output even on Unix (for testing).
 	// Replace backslashes with forward slashes, EXCEPT those that are escape sequences (\n, \t, \r, etc.).
 	// Since actual CLI output has escape sequences already processed (they appear as actual newlines/tabs),
 	// we can safely replace backslashes that are followed by path-like characters.
-	normalizedOutput := filepath.ToSlash(output)
-	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.)
-	// This regex matches backslash followed by path-like characters, not escape sequences.
+	//
+	// First, protect JSON unicode escapes like \u003e from being corrupted by filepath.ToSlash
+	// and the path normalization regex below. On Windows, filepath.ToSlash converts ALL backslashes
+	// to forward slashes, which would turn \u003e into /u003e.
+	jsonUnicodeEscape := regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
+	const unicodePlaceholder = "\x00UNICODE_ESCAPE_"
+	protectedOutput := jsonUnicodeEscape.ReplaceAllString(output, unicodePlaceholder+"$1")
+	normalizedOutput := filepath.ToSlash(protectedOutput)
+	// Replace backslashes that look like path separators (followed by alphanumeric, ., -, _, *, etc.).
 	normalizedOutput = regexp.MustCompile(`\\([a-zA-Z0-9._*\-/])`).ReplaceAllString(normalizedOutput, "/$1")
+	// Restore protected unicode escapes.
+	normalizedOutput = regexp.MustCompile(regexp.QuoteMeta(unicodePlaceholder)+`([0-9a-fA-F]{4})`).ReplaceAllString(normalizedOutput, `\u$1`)
 
 	// 3. Build a regex that matches the repository root even if extra slashes appear.
 	//    First, escape any regex metacharacters in the normalized repository root.
@@ -360,6 +433,21 @@ func sanitizeOutput(output string) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
+	// 5b. Join hint paths that may be split across lines due to terminal width wrapping.
+	// This ensures consistent snapshots across platforms with different terminal widths.
+	// Example:
+	//   Input:  "💡 Path points to the stacks configuration directory, not a component:\n/absolute/path/to/repo/..."
+	//   Output: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/..."
+	hintPathRegex := regexp.MustCompile(`(💡[^:]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
+
+	// Also handle "Stacks directory:" and "Workflows directory:" patterns.
+	// Example:
+	//   Input:  "Stacks directory:\n/absolute/path/to/repo/..."
+	//   Output: "Stacks directory: /absolute/path/to/repo/..."
+	dirPathRegex := regexp.MustCompile(`((?:Stacks|Workflows) directory:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = dirPathRegex.ReplaceAllString(result, "$1 $2")
+
 	// 6. Handle URLs in the output to ensure they are normalized.
 	//    Use a regex to find URLs and collapse extra slashes while preserving the protocol.
 	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
@@ -393,24 +481,74 @@ func sanitizeOutput(output string) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
-	// 11. Normalize "Last Updated" timestamps in auth whoami output.
+	// 11. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// Replace common absolute path prefixes with generic placeholders.
+	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+
+	// 12. Normalize "Last Updated" timestamps in auth whoami output.
 	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
 	// Replace with a fixed timestamp to avoid snapshot mismatches.
 	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
 	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
 
-	// 12. Normalize credential expiration durations in auth list output.
+	// 13. Normalize credential expiration durations in auth list output.
 	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
 	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
 	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
 	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
 	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
 
-	// 13. Normalize credential_store values in error messages.
+	// 14. Normalize credential_store values in error messages.
 	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
 	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
 	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+
+	// 15. Apply custom replacements if provided.
+	// These are test-specific patterns that don't need to be part of the global sanitization.
+	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
+	for pattern, replacement := range config.customReplacements {
+		customRegex, err := regexp.Compile(pattern)
+		if err != nil {
+			return "", fmt.Errorf("failed to compile custom replacement pattern %q: %w", pattern, err)
+		}
+		result = customRegex.ReplaceAllString(result, replacement)
+	}
+
+	// 15a. Normalize temporary directory paths from TEST_GIT_ROOT and other test fixtures.
+	// These appear in trace logs as path=/var/folders/.../mock-git-root or path=/absolute/path/to/repo/mock-git-root.
+	// Replace with a stable placeholder since these are test-specific paths.
+	// Matches both raw paths and already-sanitized repo paths.
+	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|/home/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root|/absolute/path/to/repo/mock-git-root|/absolute/path/to/external/mock-git-root)`)
+	result = tempGitRootRegex.ReplaceAllString(result, "path=/mock-git-root")
+
+	// 15b. Normalize temp home directory paths in trace logs (e.g., path=/var/folders/.../T/TestCLI.../.atmos).
+	// These are used for home directory mocking in tests.
+	// Matches both raw paths and already-sanitized repo paths.
+	tempHomeDirRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/\.atmos|/tmp/[^\s]+/\.atmos|/Users/[^\s]+/\.atmos|/home/[^\s]+/\.atmos|[A-Z]:/[^\s]+/\.atmos|/absolute/path/to/repo/[^\s]+/\.atmos)`)
+	result = tempHomeDirRegex.ReplaceAllString(result, "path=/mock-home/.atmos")
+
+	// 15c. Normalize external absolute paths (additional pattern with forward slashes for Windows).
+	// Note: Windows paths use forward slashes here because filepath.ToSlash normalizes them earlier.
+	// The pattern matches the entire path including subdirectories by not excluding slashes in the final segment.
+	externalPathRegex2 := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:/Users/[^/]+/[^/]+/[^/]+/[^\s":]+)`)
+	result = externalPathRegex2.ReplaceAllString(result, "/absolute/path/to/external")
+
+	// 16. Normalize provisioned_by_user values in component output.
+	// This field shows the current username, which varies by environment (erik, runner, etc.).
+	// Replace with a generic placeholder.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
+	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+
+	// 17. Join hint messages where the sanitized path ended up on the next line.
+	// This must run AFTER path sanitization because it matches the sanitized path pattern.
+	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// Also handles plain labels like "Stacks directory:\n/path"
+	hintPathRegex2 := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
+	result = hintPathRegex2.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }
@@ -551,6 +689,15 @@ func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
 	flag.Parse()
 
+	// CRITICAL: Unset ATMOS_CHDIR to prevent tests from accessing non-test directories.
+	// This prevents tests from inadvertently reading real infrastructure configs (e.g., infra-live).
+	// Tests should only use their fixture directories, not the user's working environment.
+	os.Unsetenv("ATMOS_CHDIR")
+
+	// Disable CI auto-detection so deploy/apply hooks don't try to
+	// download planfiles from GitHub Artifacts during tests.
+	os.Unsetenv("GITHUB_ACTIONS")
+
 	// Configure logger verbosity based on test flags
 	switch {
 	case os.Getenv("ATMOS_TEST_DEBUG") != "":
@@ -608,7 +755,11 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token": RequireOCIAuthentication,
+		"github_token":    RequireOCIAuthentication,
+		"aws_credentials": RequireAWSCredentials,
+		"terraform":       RequireTerraform,
+		"packer":          RequirePacker,
+		"helmfile":        RequireHelmfile,
 	}
 
 	// Check each precondition
@@ -648,7 +799,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
 	}
 
-	// Create a context with timeout if specified
+	// Create a context with timeout if specified, defaulting to 10 minutes
+	// to prevent any single test from consuming the entire test budget.
+	const defaultTestTimeout = 10 * time.Minute
+
 	var ctx context.Context
 	var cancel context.CancelFunc
 
@@ -661,10 +815,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if timeout > 0 {
 			ctx, cancel = context.WithTimeout(context.Background(), timeout)
 		} else {
-			ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+			ctx, cancel = context.WithTimeout(context.Background(), defaultTestTimeout)
 		}
 	} else {
-		ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+		ctx, cancel = context.WithTimeout(context.Background(), defaultTestTimeout)
 	}
 	defer cancel()
 
@@ -680,6 +834,48 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	t.Setenv("XDG_CACHE_HOME", xdgCacheHome)
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
+
+	// Clear github_username environment variables for consistent snapshots.
+	// These are automatically bound to settings.github_username but cause
+	// environment-dependent output. Skip clearing only for vendor tests that need GitHub auth.
+	if !strings.Contains(tc.Name, "vendor") {
+		t.Setenv("ATMOS_GITHUB_USERNAME", "")
+		t.Setenv("GITHUB_ACTOR", "")
+		t.Setenv("GITHUB_USERNAME", "")
+	}
+
+	// Prevent git from hanging waiting for credentials or interactive input.
+	// On macOS CI, the actions/checkout step configures git credentials as local config
+	// in the repo's .git/config, but vendor tests clone from different directories
+	// where this local config is not available, causing git to hang.
+	if _, exists := tc.Env["GIT_TERMINAL_PROMPT"]; !exists {
+		tc.Env["GIT_TERMINAL_PROMPT"] = "0"
+	}
+
+	// Configure git for non-interactive use via GIT_CONFIG_* env vars (Git 2.31+).
+	// macOS ships with credential.helper=osxkeychain in the system-level git config
+	// (/Library/Developer/CommandLineTools/.../gitconfig). This is NOT in ~/.gitconfig,
+	// so it persists even when HOME is overridden to a temp directory. When git clone
+	// runs, the osxkeychain helper tries to store/retrieve credentials:
+	//   - On CI (headless): hangs forever because there's no UI for Keychain
+	//   - Locally on macOS: shows a Keychain popup asking permission
+	// We fix this by disabling credential.helper and injecting GITHUB_TOKEN directly.
+	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
+		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+			// Disable credential helper (prevents osxkeychain hangs/popups) and inject token.
+			basicAuth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + githubToken))
+			tc.Env["GIT_CONFIG_COUNT"] = "2"
+			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
+			tc.Env["GIT_CONFIG_VALUE_0"] = ""
+			tc.Env["GIT_CONFIG_KEY_1"] = "http.https://github.com/.extraheader"
+			tc.Env["GIT_CONFIG_VALUE_1"] = "AUTHORIZATION: basic " + basicAuth
+		} else {
+			// No token available — just disable the credential helper to prevent hangs/popups.
+			tc.Env["GIT_CONFIG_COUNT"] = "1"
+			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
+			tc.Env["GIT_CONFIG_VALUE_0"] = ""
+		}
+	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
@@ -699,7 +895,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
 				// t.Logf("Copying %s to %s\n", src, dest)
-				if err := copy.Copy(src, dest); err != nil {
+				// Skip socket files (e.g., SSH agent sockets) that cannot be copied.
+				copyOpts := copy.Options{
+					Skip: func(info os.FileInfo, src, dest string) (bool, error) {
+						return info.Mode()&os.ModeSocket != 0, nil
+					},
+				}
+				if err := copy.Copy(src, dest, copyOpts); err != nil {
 					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
 				}
 			}
@@ -759,13 +961,26 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Set ATMOS_CLI_CONFIG_PATH to ensure test isolation.
 		// This forces Atmos to use the workdir's atmos.yaml instead of searching
 		// up the directory tree or using ~/.config/atmos/atmos.yaml.
-		atmosConfigPath := filepath.Join(absoluteWorkdir, "atmos.yaml")
-		if _, err := os.Stat(atmosConfigPath); err == nil {
-			if tc.Env == nil {
-				tc.Env = make(map[string]string)
+		// BUT: Skip this for tests that use --chdir/-C, since they need to test
+		// config loading in the target directory.
+		usesChdirFlag := false
+		for _, arg := range tc.Args {
+			if arg == "--chdir" || arg == "-C" || strings.HasPrefix(arg, "--chdir=") {
+				usesChdirFlag = true
+				break
 			}
-			tc.Env["ATMOS_CLI_CONFIG_PATH"] = absoluteWorkdir
-			logger.Debug("Setting ATMOS_CLI_CONFIG_PATH for test isolation", "path", absoluteWorkdir)
+		}
+		if !usesChdirFlag {
+			atmosConfigPath := filepath.Join(absoluteWorkdir, "atmos.yaml")
+			if _, err := os.Stat(atmosConfigPath); err == nil {
+				if tc.Env == nil {
+					tc.Env = make(map[string]string)
+				}
+				tc.Env["ATMOS_CLI_CONFIG_PATH"] = absoluteWorkdir
+				logger.Debug("Setting ATMOS_CLI_CONFIG_PATH for test isolation", "path", absoluteWorkdir)
+			}
+		} else {
+			logger.Debug("Skipping ATMOS_CLI_CONFIG_PATH for --chdir test")
 		}
 	}
 
@@ -784,6 +999,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Also set an environment variable to exclude the repository's .atmos.d
 	// This is needed for tests that change to parent directories
 	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
+
+	// Disable git root base path discovery in tests.
+	// Tests expect BasePath to be "." by default, not the repository root.
+	tc.Env["ATMOS_GIT_ROOT_BASEPATH"] = "false"
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
@@ -1268,6 +1487,43 @@ func max(a, b int) int {
 	return b
 }
 
+// validateYAMLFormatSilent checks YAML validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateYAMLFormatSilent(output string) bool {
+	var data interface{}
+	err := yaml.Unmarshal([]byte(output), &data)
+	return err == nil
+}
+
+// validateJSONFormatSilent checks JSON validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateJSONFormatSilent(output string) bool {
+	var data interface{}
+	err := json.Unmarshal([]byte(output), &data)
+	return err == nil
+}
+
+// validateFormatValidationSilent checks if output is valid in any of the specified formats.
+// Used in tests that expect validation to fail.
+func validateFormatValidationSilent(output string, formats []string) bool {
+	for _, format := range formats {
+		switch format {
+		case "json":
+			if !validateJSONFormatSilent(output) {
+				return false
+			}
+		case "yaml":
+			if !validateYAMLFormatSilent(output) {
+				return false
+			}
+		default:
+			// Unknown format - return false without logging.
+			return false
+		}
+	}
+	return true
+}
+
 func updateSnapshot(fullPath, output string) {
 	err := os.MkdirAll(filepath.Dir(fullPath), 0o755) // Ensure parent directories exist
 	if err != nil {
@@ -1451,11 +1707,16 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Sanitize outputs and fail the test if sanitization fails.
 	var err error
-	stdoutOutput, err = sanitizeOutput(stdoutOutput)
+	var sanitizeOpts []sanitizeOption
+	if len(tc.Expect.Sanitize) > 0 {
+		sanitizeOpts = append(sanitizeOpts, WithCustomReplacements(tc.Expect.Sanitize))
+	}
+
+	stdoutOutput, err = sanitizeOutput(stdoutOutput, sanitizeOpts...)
 	if err != nil {
 		t.Fatalf("failed to sanitize stdout output: %v", err)
 	}
-	stderrOutput, err = sanitizeOutput(stderrOutput)
+	stderrOutput, err = sanitizeOutput(stderrOutput, sanitizeOpts...)
 	if err != nil {
 		t.Fatalf("failed to sanitize stderr output: %v", err)
 	}
@@ -1541,7 +1802,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 			// Generate a colorized diff for better readability
 			diff = colorizeDiffWithThreshold(filteredStderrActual, filteredStderrExpected, 10)
 		}
-		t.Errorf("Stderr diff mismatch for %q:\n%s", stdoutPath, diff)
+		t.Errorf("Stderr diff mismatch for %q:\n%s", stderrPath, diff)
 	}
 
 	return true
@@ -1573,11 +1834,14 @@ func cleanDirectory(t *testing.T, workdir string) error {
 		return fmt.Errorf("failed to get git status: %w", err)
 	}
 
-	// Clean only files in the provided working directory
+	// Clean only files in the provided working directory.
+	// Use workdir + separator to avoid matching directories with a shared prefix
+	// (e.g., "native-ci" should not match "native-ci-gha-plan").
+	workdirPrefix := workdir + string(filepath.Separator)
 	for file, statusEntry := range status {
 		if statusEntry.Worktree == git.Untracked {
 			fullPath := filepath.Join(repoRoot, file)
-			if strings.HasPrefix(fullPath, workdir) {
+			if strings.HasPrefix(fullPath, workdirPrefix) || fullPath == workdir {
 				t.Logf("Removing untracked file: %q", fullPath)
 				if err := os.RemoveAll(fullPath); err != nil {
 					return fmt.Errorf("failed to remove %q: %w", fullPath, err)

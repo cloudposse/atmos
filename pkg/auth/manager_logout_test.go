@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -43,7 +46,7 @@ func TestManager_Logout(t *testing.T) {
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
 				// Expect keyring deletion for identity only (provider is preserved).
-				store.EXPECT().Delete("test-identity").Return(nil)
+				store.EXPECT().Delete("test-identity", gomock.Any()).Return(nil)
 
 				// Expect identity logout (provider logout not called for identity logout).
 				identity.EXPECT().Logout(gomock.Any()).Return(nil)
@@ -85,7 +88,7 @@ func TestManager_Logout(t *testing.T) {
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
 				// Keyring deletion fails for identity.
-				store.EXPECT().Delete("test-identity").Return(errors.New("keyring error"))
+				store.EXPECT().Delete("test-identity", gomock.Any()).Return(errors.New("keyring error"))
 
 				// Identity logout still called (provider logout NOT called for identity logout).
 				identity.EXPECT().Logout(gomock.Any()).Return(nil)
@@ -113,7 +116,7 @@ func TestManager_Logout(t *testing.T) {
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
 				// Keyring deletion succeeds.
-				store.EXPECT().Delete("test-identity").Return(nil)
+				store.EXPECT().Delete("test-identity", gomock.Any()).Return(nil)
 
 				// Identity logout fails (provider logout NOT called for identity logout).
 				identity.EXPECT().Logout(gomock.Any()).Return(errors.New("identity cleanup failed"))
@@ -141,7 +144,7 @@ func TestManager_Logout(t *testing.T) {
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
 				// Keyring deletion fails.
-				store.EXPECT().Delete("test-identity").Return(errors.New("keyring error"))
+				store.EXPECT().Delete("test-identity", gomock.Any()).Return(errors.New("keyring error"))
 
 				// Identity logout also fails (provider logout NOT called for identity logout).
 				identity.EXPECT().Logout(gomock.Any()).Return(errors.New("identity error"))
@@ -182,9 +185,9 @@ func TestManager_Logout(t *testing.T) {
 				m.identities["test-identity"] = mockIdentity
 			}
 
-			// Execute logout.
+			// Execute logout (with deleteKeychain=true to match test expectations).
 			ctx := context.Background()
-			err := m.Logout(ctx, tt.identityName)
+			err := m.Logout(ctx, tt.identityName, true)
 
 			// Check error expectation.
 			if (err != nil) != tt.wantErr {
@@ -237,11 +240,11 @@ func TestManager_LogoutProvider(t *testing.T) {
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
 				// Expect keyring deletions for identities (identity logout only deletes identity keyring).
-				store.EXPECT().Delete("identity1").Return(nil)
-				store.EXPECT().Delete("identity2").Return(nil)
+				store.EXPECT().Delete("identity1", gomock.Any()).Return(nil)
+				store.EXPECT().Delete("identity2", gomock.Any()).Return(nil)
 
 				// LogoutProvider deletes provider keyring once.
-				store.EXPECT().Delete("test-provider").Return(nil)
+				store.EXPECT().Delete("test-provider", gomock.Any()).Return(nil)
 
 				// Expect provider logout called once by LogoutProvider.
 				provider.EXPECT().Logout(gomock.Any()).Return(nil)
@@ -277,7 +280,7 @@ func TestManager_LogoutProvider(t *testing.T) {
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
 				// Only provider cleanup expected.
-				store.EXPECT().Delete("test-provider").Return(nil)
+				store.EXPECT().Delete("test-provider", gomock.Any()).Return(nil)
 				provider.EXPECT().Logout(gomock.Any()).Return(nil)
 			},
 			wantErr: false,
@@ -317,9 +320,9 @@ func TestManager_LogoutProvider(t *testing.T) {
 				m.identities[identityName] = mockIdentity
 			}
 
-			// Execute logout.
+			// Execute logout (with deleteKeychain=true to match test expectations).
 			ctx := context.Background()
-			err := m.LogoutProvider(ctx, tt.providerName)
+			err := m.LogoutProvider(ctx, tt.providerName, true)
 
 			// Check error expectation.
 			if (err != nil) != tt.wantErr {
@@ -369,7 +372,7 @@ func TestManager_LogoutAll(t *testing.T) {
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
 				// Expect keyring deletions for all identities and providers.
-				store.EXPECT().Delete(gomock.Any()).Return(nil).AnyTimes()
+				store.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 				// Expect provider and identity logout.
 				provider.EXPECT().Logout(gomock.Any()).Return(nil).AnyTimes()
@@ -407,7 +410,7 @@ func TestManager_LogoutAll(t *testing.T) {
 			},
 			setupMocks: func(store *types.MockCredentialStore, provider *types.MockProvider, identity *types.MockIdentity) {
 				// Some deletions fail.
-				store.EXPECT().Delete(gomock.Any()).Return(errors.New("keyring error")).AnyTimes()
+				store.EXPECT().Delete(gomock.Any(), gomock.Any()).Return(errors.New("keyring error")).AnyTimes()
 
 				// Provider and identity logout continue despite failures.
 				provider.EXPECT().Logout(gomock.Any()).Return(nil).AnyTimes()
@@ -448,9 +451,9 @@ func TestManager_LogoutAll(t *testing.T) {
 				m.identities[identityName] = mockIdentity
 			}
 
-			// Execute logout.
+			// Execute logout (with deleteKeychain=true to match test expectations).
 			ctx := context.Background()
-			err := m.LogoutAll(ctx)
+			err := m.LogoutAll(ctx, true)
 
 			// Check error expectation.
 			if (err != nil) != tt.wantErr {
@@ -534,6 +537,21 @@ func TestManager_resolveProviderForIdentity(t *testing.T) {
 			},
 			want: "",
 		},
+		{
+			name:         "via with empty provider and empty identity",
+			identityName: "identity1",
+			config: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"identity1": {
+						Via: &schema.IdentityVia{
+							Provider: "",
+							Identity: "",
+						},
+					},
+				},
+			},
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -584,10 +602,10 @@ func TestManager_LogoutProvider_TransitiveChain(t *testing.T) {
 	//   identity3: identity3 (1)
 	//   LogoutProvider: provider1 (1)
 	//   Total: 4 Delete calls
-	mockStore.EXPECT().Delete("identity1").Return(nil)
-	mockStore.EXPECT().Delete("identity2").Return(nil)
-	mockStore.EXPECT().Delete("identity3").Return(nil)
-	mockStore.EXPECT().Delete("provider1").Return(nil)
+	mockStore.EXPECT().Delete("identity1", gomock.Any()).Return(nil)
+	mockStore.EXPECT().Delete("identity2", gomock.Any()).Return(nil)
+	mockStore.EXPECT().Delete("identity3", gomock.Any()).Return(nil)
+	mockStore.EXPECT().Delete("provider1", gomock.Any()).Return(nil)
 	// - provider.Logout should be called ONCE by LogoutProvider.
 	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
 	// - identity.Logout should be called 3 times (once per identity).
@@ -598,9 +616,9 @@ func TestManager_LogoutProvider_TransitiveChain(t *testing.T) {
 		m.identities[identityName] = mockIdentity
 	}
 
-	// Execute LogoutProvider - should find all three identities transitively.
+	// Execute LogoutProvider - should find all three identities transitively (deleteKeychain=true).
 	ctx := context.Background()
-	err := m.LogoutProvider(ctx, "provider1")
+	err := m.LogoutProvider(ctx, "provider1", true)
 	if err != nil {
 		t.Errorf("LogoutProvider() unexpected error = %v", err)
 	}
@@ -631,11 +649,11 @@ func TestManager_Logout_NotSupported(t *testing.T) {
 	}
 
 	// Mock expectations: Delete keyring for identity only, identity returns ErrLogoutNotSupported (treated as success).
-	mockStore.EXPECT().Delete("github-identity").Return(nil)
+	mockStore.EXPECT().Delete("github-identity", gomock.Any()).Return(nil)
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
 
 	ctx := context.Background()
-	err := m.Logout(ctx, "github-identity")
+	err := m.Logout(ctx, "github-identity", true)
 	// Should succeed (exit 0) even though identity returned ErrLogoutNotSupported.
 	if err != nil {
 		t.Errorf("Logout() should succeed with ErrLogoutNotSupported, got error = %v", err)
@@ -669,13 +687,13 @@ func TestManager_LogoutProvider_WithFailures(t *testing.T) {
 	// Mock expectations: Identity logout fails, provider logout fails.
 	// Logout identity1: deletes identity1 only.
 	// LogoutProvider: deletes test-provider.
-	mockStore.EXPECT().Delete("identity1").Return(nil)
-	mockStore.EXPECT().Delete("test-provider").Return(nil)
+	mockStore.EXPECT().Delete("identity1", gomock.Any()).Return(nil)
+	mockStore.EXPECT().Delete("test-provider", gomock.Any()).Return(nil)
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errors.New("identity logout failed"))
 	mockProvider.EXPECT().Logout(gomock.Any()).Return(errors.New("provider logout failed"))
 
 	ctx := context.Background()
-	err := m.LogoutProvider(ctx, "test-provider")
+	err := m.LogoutProvider(ctx, "test-provider", true)
 
 	// Should return error with both identity and provider failures.
 	if err == nil {
@@ -717,11 +735,11 @@ func TestManager_Logout_IdentityInChain(t *testing.T) {
 	}
 
 	// Mock expectations.
-	mockStore.EXPECT().Delete("standalone-identity").Return(nil)
+	mockStore.EXPECT().Delete("standalone-identity", gomock.Any()).Return(nil)
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	ctx := context.Background()
-	err := m.Logout(ctx, "standalone-identity")
+	err := m.Logout(ctx, "standalone-identity", true)
 	if err != nil {
 		t.Errorf("Logout() failed: %v", err)
 	}
@@ -754,11 +772,11 @@ func TestManager_Logout_IdentityLogoutNotSupported(t *testing.T) {
 	}
 
 	// Mock expectations - identity returns ErrLogoutNotSupported.
-	mockStore.EXPECT().Delete("test-identity").Return(nil)
+	mockStore.EXPECT().Delete("test-identity", gomock.Any()).Return(nil)
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
 
 	ctx := context.Background()
-	err := m.Logout(ctx, "test-identity")
+	err := m.Logout(ctx, "test-identity", true)
 	// Should succeed (ErrLogoutNotSupported is treated as success).
 	if err != nil {
 		t.Errorf("Logout() should succeed when identity.Logout returns ErrLogoutNotSupported, got: %v", err)
@@ -792,11 +810,11 @@ func TestManager_Logout_IdentityInChainLogoutFails(t *testing.T) {
 	}
 
 	// Mock expectations - identity logout fails.
-	mockStore.EXPECT().Delete("standalone-identity").Return(nil)
+	mockStore.EXPECT().Delete("standalone-identity", gomock.Any()).Return(nil)
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errors.New("identity cleanup failed"))
 
 	ctx := context.Background()
-	err := m.Logout(ctx, "standalone-identity")
+	err := m.Logout(ctx, "standalone-identity", true)
 
 	// Should return partial logout (1 keyring deleted, but identity cleanup failed).
 	if err == nil {
@@ -845,19 +863,19 @@ func TestManager_LogoutAll_WithErrors(t *testing.T) {
 	}
 
 	// Mock expectations for identity1 (Logout only deletes identity keyring).
-	mockStore.EXPECT().Delete("identity1").Return(nil)
+	mockStore.EXPECT().Delete("identity1", gomock.Any()).Return(nil)
 	mockIdentity1.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	// Mock expectations for identity2 - keyring deletion fails.
-	mockStore.EXPECT().Delete("identity2").Return(errors.New("keyring error"))
+	mockStore.EXPECT().Delete("identity2", gomock.Any()).Return(errors.New("keyring error"))
 	mockIdentity2.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	// Mock expectations for provider logout (LogoutAll now logs out providers too).
-	mockStore.EXPECT().Delete("provider1").Return(nil)
+	mockStore.EXPECT().Delete("provider1", gomock.Any()).Return(nil)
 	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	ctx := context.Background()
-	err := m.LogoutAll(ctx)
+	err := m.LogoutAll(ctx, true)
 
 	// Should return error when some deletions fail.
 	// Since identity2 has 0 removed and 1 error, it returns ErrLogoutFailed.
@@ -913,24 +931,394 @@ func TestManager_LogoutAll_LogsOutProviders(t *testing.T) {
 	}
 
 	// Expect identity logout calls.
-	mockStore.EXPECT().Delete("identity1").Return(nil)
+	mockStore.EXPECT().Delete("identity1", gomock.Any()).Return(nil)
 	mockIdentity1.EXPECT().Logout(gomock.Any()).Return(nil)
-	mockStore.EXPECT().Delete("identity2").Return(nil)
+	mockStore.EXPECT().Delete("identity2", gomock.Any()).Return(nil)
 	mockIdentity2.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	// CRITICAL: Expect provider logout calls (this is what the bug fix added).
 	// Both provider keyring entries should be deleted.
-	mockStore.EXPECT().Delete("provider1").Return(nil)
+	mockStore.EXPECT().Delete("provider1", gomock.Any()).Return(nil)
 	mockProvider1.EXPECT().Logout(gomock.Any()).Return(nil)
-	mockStore.EXPECT().Delete("provider2").Return(nil)
+	mockStore.EXPECT().Delete("provider2", gomock.Any()).Return(nil)
 	mockProvider2.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	ctx := context.Background()
-	err := m.LogoutAll(ctx)
+	err := m.LogoutAll(ctx, true)
 	if err != nil {
 		t.Errorf("LogoutAll() should succeed when all operations succeed, got: %v", err)
 	}
 
 	// Verify the test would fail if provider logout wasn't called.
 	// The gomock controller will automatically fail if expected calls aren't made.
+}
+
+func TestManager_Logout_WithoutDeleteKeychain(t *testing.T) {
+	// Test that Logout preserves keychain when deleteKeychain=false.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"test-identity": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "test-provider"},
+			},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{},
+		identities: map[string]types.Identity{
+			"test-identity": mockIdentity,
+		},
+	}
+
+	// When deleteKeychain=false, NO keyring deletion should occur.
+	// Only identity.Logout should be called.
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	ctx := context.Background()
+	err := m.Logout(ctx, "test-identity", false)
+	if err != nil {
+		t.Errorf("Logout() should succeed, got: %v", err)
+	}
+}
+
+func TestManager_LogoutProvider_WithoutDeleteKeychain(t *testing.T) {
+	// Test that LogoutProvider preserves keychain when deleteKeychain=false.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "test-provider"},
+			},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{"test-provider": mockProvider},
+		identities:      map[string]types.Identity{"identity1": mockIdentity},
+	}
+
+	// When deleteKeychain=false, NO keyring deletions should occur.
+	// Only identity.Logout and provider.Logout should be called.
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	ctx := context.Background()
+	err := m.LogoutProvider(ctx, "test-provider", false)
+	if err != nil {
+		t.Errorf("LogoutProvider() should succeed, got: %v", err)
+	}
+}
+
+func TestManager_LogoutAll_WithoutDeleteKeychain(t *testing.T) {
+	// Test that LogoutAll preserves keychain when deleteKeychain=false.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"provider1": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/permission-set",
+				Via:  &schema.IdentityVia{Provider: "provider1"},
+			},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{"provider1": mockProvider},
+		identities:      map[string]types.Identity{"identity1": mockIdentity},
+	}
+
+	// When deleteKeychain=false, NO keyring deletions should occur.
+	// Only identity.Logout and provider.Logout should be called.
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	ctx := context.Background()
+	err := m.LogoutAll(ctx, false)
+	if err != nil {
+		t.Errorf("LogoutAll() should succeed, got: %v", err)
+	}
+}
+
+func TestManager_LogoutProvider_NotSupported(t *testing.T) {
+	// Test that LogoutProvider succeeds when provider returns ErrLogoutNotSupported.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"github-oidc": {Kind: "github/oidc"},
+		},
+		Identities: map[string]schema.Identity{
+			"github-identity": {Via: &schema.IdentityVia{Provider: "github-oidc"}},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{"github-oidc": mockProvider},
+		identities:      map[string]types.Identity{"github-identity": mockIdentity},
+	}
+
+	// Mock expectations: Identity and provider both return ErrLogoutNotSupported (treated as success).
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
+
+	ctx := context.Background()
+	err := m.LogoutProvider(ctx, "github-oidc", false)
+	// Should succeed (exit 0) even though both returned ErrLogoutNotSupported.
+	if err != nil {
+		t.Errorf("LogoutProvider() should succeed with ErrLogoutNotSupported, got error = %v", err)
+	}
+}
+
+func TestManager_LogoutAll_NotSupported(t *testing.T) {
+	// Test that LogoutAll succeeds when providers/identities return ErrLogoutNotSupported.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"github-oidc": {Kind: "github/oidc"},
+		},
+		Identities: map[string]schema.Identity{
+			"github-identity": {Via: &schema.IdentityVia{Provider: "github-oidc"}},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{"github-oidc": mockProvider},
+		identities:      map[string]types.Identity{"github-identity": mockIdentity},
+	}
+
+	// Mock expectations: Identity and provider both return ErrLogoutNotSupported (treated as success).
+	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
+
+	ctx := context.Background()
+	err := m.LogoutAll(ctx, false)
+	// Should succeed (exit 0) even though both returned ErrLogoutNotSupported.
+	if err != nil {
+		t.Errorf("LogoutAll() should succeed with ErrLogoutNotSupported, got error = %v", err)
+	}
+}
+
+func TestManager_LogoutProvider_RemovesProvisionedIdentitiesCache(t *testing.T) {
+	// Test that LogoutProvider attempts to remove the auto-provisioned identities cache file.
+	// This is an integration test that verifies the cache cleanup is called.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind: "aws/iam-identity-center",
+			},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"test-provider": mockProvider,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete("test-provider", gomock.Any()).Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutProvider - it should attempt to remove the cache file.
+	// The cache cleanup is non-fatal, so even if the file doesn't exist, logout should succeed.
+	ctx := context.Background()
+	err := m.LogoutProvider(ctx, "test-provider", true)
+	if err != nil {
+		t.Errorf("LogoutProvider() should succeed even if cache file doesn't exist, got: %v", err)
+	}
+}
+
+func TestManager_LogoutProvider_CacheRemovalWithExistingFile(t *testing.T) {
+	// Test that LogoutProvider successfully removes an existing provisioned identities cache file.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-sso": {
+				Kind: "aws/iam-identity-center",
+			},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"test-sso": mockProvider,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Create a provisioned identities cache file.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	result := &types.ProvisioningResult{
+		Provider:      "test-sso",
+		ProvisionedAt: time.Now(),
+		Identities: map[string]*schema.Identity{
+			"account1/role1": {
+				Provider: "test-sso",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "aws-sso",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	filePath, err := writer.Write(result)
+	require.NoError(t, err)
+	assert.FileExists(t, filePath)
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete("test-sso", gomock.Any()).Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutProvider - it should remove the cache file.
+	ctx := context.Background()
+	err = m.LogoutProvider(ctx, "test-sso", true)
+	require.NoError(t, err)
+
+	// Verify the cache file was removed.
+	assert.NoFileExists(t, filePath)
+}
+
+func TestManager_LogoutAll_RemovesProvisionedIdentitiesCache(t *testing.T) {
+	// Test that LogoutAll removes provisioned identities cache files for all providers.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-sso": {
+				Kind: "aws/iam-identity-center",
+			},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"test-sso": mockProvider,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Create a provisioned identities cache file.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	result := &types.ProvisioningResult{
+		Provider:      "test-sso",
+		ProvisionedAt: time.Now(),
+		Identities: map[string]*schema.Identity{
+			"account1/role1": {
+				Provider: "test-sso",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "aws-sso",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	filePath, err := writer.Write(result)
+	require.NoError(t, err)
+	assert.FileExists(t, filePath)
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete("test-sso", gomock.Any()).Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutAll - it should remove all cache files.
+	ctx := context.Background()
+	err = m.LogoutAll(ctx, true)
+	require.NoError(t, err)
+
+	// Verify the cache file was removed.
+	assert.NoFileExists(t, filePath)
 }

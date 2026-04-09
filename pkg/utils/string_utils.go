@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -231,4 +232,16 @@ func ClearInternPool() {
 		return true
 	})
 	ResetInternStats()
+}
+
+// FormatList formats a list of strings into a markdown bullet list.
+// Each item is formatted as a backtick-quoted bullet point.
+func FormatList(items []string) string {
+	defer perf.Track(nil, "utils.FormatList")()
+
+	var result strings.Builder
+	for _, item := range items {
+		result.WriteString(fmt.Sprintf("- `%s`\n", item))
+	}
+	return result.String()
 }

@@ -7,15 +7,24 @@ description: Use this command to get the Atmos CLI version
 
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList';
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
     Use this command to get the Atmos CLI version
 </Intro>
 
-<Screengrab title="atmos version" slug="atmos-version"/>
+<ActionCard title="Configure Version Checking">
+    Learn how to configure automatic version checking and update notifications in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/version">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Usage
+
+<Screengrab title="atmos version" slug="atmos-version"/>
 
 Execute the `atmos version` command like this:
 

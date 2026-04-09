@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	charm "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,7 +19,8 @@ type stubAuthManager struct {
 	defaultIdentity string
 	defaultErr      error
 	whoami          *types.WhoamiInfo
-	envVars         map[string]string // Environment variables to return from GetEnvironmentVariables
+	envVars         map[string]string          // Environment variables to return from GetEnvironmentVariables.
+	identities      map[string]schema.Identity // Identities to return from GetIdentities.
 }
 
 func (s *stubAuthManager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
@@ -32,6 +33,10 @@ func (s *stubAuthManager) Whoami(ctx context.Context, identityName string) (*typ
 
 func (s *stubAuthManager) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	return s.whoami, nil
+}
+
+func (s *stubAuthManager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
+	return nil, nil
 }
 
 func (s *stubAuthManager) Validate() error { return nil }
@@ -50,6 +55,9 @@ func (s *stubAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo {
 }
 func (s *stubAuthManager) ListProviders() []string { return []string{"prov"} }
 func (s *stubAuthManager) GetIdentities() map[string]schema.Identity {
+	if s.identities != nil {
+		return s.identities
+	}
 	return map[string]schema.Identity{}
 }
 
@@ -57,15 +65,15 @@ func (s *stubAuthManager) GetProviders() map[string]schema.Provider {
 	return map[string]schema.Provider{}
 }
 
-func (s *stubAuthManager) Logout(ctx context.Context, identityName string) error {
+func (s *stubAuthManager) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	return nil
 }
 
-func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName string) error {
+func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	return nil
 }
 
-func (s *stubAuthManager) LogoutAll(ctx context.Context) error {
+func (s *stubAuthManager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	return nil
 }
 
@@ -104,24 +112,48 @@ func (s *stubAuthManager) PrepareShellEnvironment(ctx context.Context, identityN
 	return result, nil
 }
 
+func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+	return nil
+}
+
+func (s *stubAuthManager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	return nil
+}
+
+func (s *stubAuthManager) GetIntegration(integrationName string) (*schema.Integration, error) {
+	return nil, nil
+}
+
+func (s *stubAuthManager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	return nil, false
+}
+
+func (s *stubAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	return nil, false
+}
+
+func (s *stubAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
+}
+
 func TestGetConfigLogLevels(t *testing.T) {
 	tests := []struct {
 		name             string
 		atmosLogLevel    string
 		authLogLevel     string
-		setupGlobalLevel charm.Level // Set global log level before calling getConfigLogLevels
+		setupGlobalLevel log.Level // Set global log level before calling getConfigLogLevels.
 		expectedAtmosStr string
 		expectedAuthStr  string
 	}{
 		{
 			name:             "nil config falls back to Info",
-			setupGlobalLevel: charm.InfoLevel,
+			setupGlobalLevel: log.InfoLevel,
 			expectedAtmosStr: "info",
 			expectedAuthStr:  "info",
 		},
 		{
 			name:             "empty config falls back to current global level",
-			setupGlobalLevel: charm.WarnLevel,
+			setupGlobalLevel: log.WarnLevel,
 			atmosLogLevel:    "",
 			authLogLevel:     "",
 			expectedAtmosStr: "warn",
@@ -129,7 +161,7 @@ func TestGetConfigLogLevels(t *testing.T) {
 		},
 		{
 			name:             "exact case Debug",
-			setupGlobalLevel: charm.DebugLevel,
+			setupGlobalLevel: log.DebugLevel,
 			atmosLogLevel:    "Debug",
 			authLogLevel:     "",
 			expectedAtmosStr: "debug",
@@ -137,7 +169,7 @@ func TestGetConfigLogLevels(t *testing.T) {
 		},
 		{
 			name:             "lowercase warning",
-			setupGlobalLevel: charm.WarnLevel,
+			setupGlobalLevel: log.WarnLevel,
 			atmosLogLevel:    "Warning",
 			authLogLevel:     "warning",
 			expectedAtmosStr: "warn",
@@ -145,7 +177,7 @@ func TestGetConfigLogLevels(t *testing.T) {
 		},
 		{
 			name:             "uppercase WARN",
-			setupGlobalLevel: charm.WarnLevel,
+			setupGlobalLevel: log.WarnLevel,
 			atmosLogLevel:    "Warning",
 			authLogLevel:     "WARN",
 			expectedAtmosStr: "warn",
@@ -153,7 +185,7 @@ func TestGetConfigLogLevels(t *testing.T) {
 		},
 		{
 			name:             "mixed case WaRnInG",
-			setupGlobalLevel: charm.WarnLevel,
+			setupGlobalLevel: log.WarnLevel,
 			atmosLogLevel:    "Warning",
 			authLogLevel:     "WaRnInG",
 			expectedAtmosStr: "warn",
@@ -161,7 +193,7 @@ func TestGetConfigLogLevels(t *testing.T) {
 		},
 		{
 			name:             "warn alias",
-			setupGlobalLevel: charm.WarnLevel,
+			setupGlobalLevel: log.WarnLevel,
 			atmosLogLevel:    "Warning",
 			authLogLevel:     "warn",
 			expectedAtmosStr: "warn",
@@ -169,7 +201,7 @@ func TestGetConfigLogLevels(t *testing.T) {
 		},
 		{
 			name:             "auth overrides atmos level",
-			setupGlobalLevel: charm.DebugLevel,
+			setupGlobalLevel: log.DebugLevel,
 			atmosLogLevel:    "Debug",
 			authLogLevel:     "Error",
 			expectedAtmosStr: "debug",
@@ -185,7 +217,7 @@ func TestGetConfigLogLevels(t *testing.T) {
 		},
 		{
 			name:             "off level",
-			setupGlobalLevel: charm.FatalLevel,
+			setupGlobalLevel: log.FatalLevel,
 			atmosLogLevel:    "Off",
 			authLogLevel:     "Off",
 			expectedAtmosStr: "fatal",
@@ -193,11 +225,11 @@ func TestGetConfigLogLevels(t *testing.T) {
 		},
 		{
 			name:             "invalid auth level falls back to atmos level",
-			setupGlobalLevel: charm.WarnLevel,
+			setupGlobalLevel: log.WarnLevel,
 			atmosLogLevel:    "Warning",
 			authLogLevel:     "InvalidLevel",
 			expectedAtmosStr: "warn",
-			expectedAuthStr:  "warn", // Falls back to atmos level
+			expectedAuthStr:  "warn", // Falls back to atmos level.
 		},
 	}
 

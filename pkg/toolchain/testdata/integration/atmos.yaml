@@ -1,0 +1,22 @@
+# Minimal atmos.yaml for toolchain integration tests.
+# This config includes inline overrides for tools not in Aqua registry.
+
+toolchain:
+  registries:
+    # Inline overrides for tools not in Aqua registry or needing custom patterns.
+    - name: inline-overrides
+      type: atmos
+      priority: 100
+      tools:
+        # Replicated is not in Aqua registry - uses darwin_all for macOS universal binary.
+        replicatedhq/replicated:
+          type: github_release
+          asset: 'replicated_{{trimV .Version}}_{{if eq .OS "darwin"}}darwin_all{{else}}{{.OS}}_{{.Arch}}{{end}}.tar.gz'
+          format: tar.gz
+          files:
+            - name: replicated
+              src: replicated
+    # Default Aqua registry.
+    - name: aqua
+      type: aqua
+      priority: 10

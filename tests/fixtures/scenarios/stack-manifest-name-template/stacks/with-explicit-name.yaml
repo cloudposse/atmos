@@ -1,0 +1,15 @@
+# This stack has an explicit name that overrides name_template.
+name: "my-explicit-stack"
+
+import:
+  - catalog/base
+
+vars:
+  environment: prod
+  stage: ue1
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"

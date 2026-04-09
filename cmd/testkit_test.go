@@ -175,3 +175,8 @@ func TestTestKit_OsArgsRestoration(t *testing.T) {
 	// Verify os.Args was restored after subtest.
 	assert.Equal(t, initialArgs, os.Args, "os.Args should be restored after subtest")
 }
+
+// Note: Viper restoration tests were removed because viper.Set(key, nil) breaks BindPFlag connections.
+// Viper state isolation between tests requires a different approach (e.g., temporary viper instances)
+// which is out of scope for the current TestKit implementation. Tests that need viper isolation
+// should use explicit cleanup as demonstrated in auth_login_test.go.

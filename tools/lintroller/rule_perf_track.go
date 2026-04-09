@@ -55,23 +55,31 @@ var excludedPackages = []string{
 	"/mock",          // Mock/test utilities.
 	"/pkg/spacelift", // Spacelift generation is one-shot per command.
 	"/pkg/validator", // Validation runs once per command.
+	"/internal/gcp",  // GCP utilities would create import cycle with pkg/perf (used by pkg/perf).
+	"/pkg/ai",        // AI operations are external API calls, not in hot path.
+	"/pkg/mcp",       // MCP protocol implementation, AI infrastructure, not in hot path.
+	"/pkg/lsp",       // LSP protocol implementation, performance-critical JSON-RPC communication.
 	"/internal/gcp",  // GCP utilities would create import cycle with pkg/perf (used by pkg/store).
 }
 
 // Receiver types to exclude from perf.Track() checks.
 var excludedReceivers = []string{
-	"noopLogger",                // Noop logger implementations.
-	"AtmosLogger",               // Logger methods would cause infinite recursion.
-	"mockPerf",                  // Test mocks.
-	"Mock",                      // General mocks.
-	"modelSpinner",              // TUI spinner models.
-	"modelVendor",               // TUI vendor models.
-	"defaultTemplateRenderer",   // Simple template renderer.
-	"realTerraformDocsRunner",   // Simple terraform docs runner.
-	"ErrInvalidPattern",         // Error types.
-	"DescribeConfigFormatError", // Error types.
-	"DefaultStacksProcessor",    // Processor implementations.
-	"AtmosFuncs",                // Template function wrappers (high-frequency).
+	"noopLogger",                       // Noop logger implementations.
+	"AtmosLogger",                      // Logger methods would cause infinite recursion.
+	"mockPerf",                         // Test mocks.
+	"Mock",                             // General mocks.
+	"modelSpinner",                     // TUI spinner models.
+	"modelVendor",                      // TUI vendor models.
+	"devcontainerSpinnerModel",         // Devcontainer spinner model (bubbletea high-frequency render loop).
+	"defaultTemplateRenderer",          // Simple template renderer.
+	"realTerraformDocsRunner",          // Simple terraform docs runner.
+	"ErrInvalidPattern",                // Error types.
+	"DescribeConfigFormatError",        // Error types.
+	"DefaultStacksProcessor",           // Processor implementations.
+	"AtmosFuncs",                       // Template function wrappers (high-frequency).
+	"azureBlobDownloadResponseWrapper", // Azure SDK response wrapper - simple getter.
+	"ExecutionContext",                 // Trivial With* mutators in pkg/function.
+	"Phase",                            // Trivial String() method in pkg/function.
 }
 
 // Functions to exclude from perf.Track() checks (by name).
@@ -82,6 +90,9 @@ var excludedFunctions = map[string]string{
 	"ClearBaseComponentConfigCache": "Test cleanup function.",
 	"ClearJsonSchemaCache":          "Test cleanup function.",
 	"ClearFileContentCache":         "Test cleanup function.",
+	"GetClientOptions":              "Lightweight utility, would create import cycle (gcp→perf→schema→store→gcp).",
+	"GetCredentialsFromBackend":     "Simple map lookup, would create import cycle (gcp→perf→schema→store→gcp).",
+	"GetCredentialsFromStore":       "Simple pointer dereference, would create import cycle (gcp→perf→schema→store→gcp).",
 }
 
 func (r *PerfTrackRule) Name() string {
@@ -112,6 +123,9 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 	}
 
 	// Check if package is in exclusion list.
+	if pass.Pkg == nil {
+		return nil
+	}
 	pkgPath := pass.Pkg.Path()
 	for _, excluded := range excludedPackages {
 		// Match only complete path segments to avoid false positives.

@@ -1,0 +1,9 @@
+{
+  "label": "CLI Configuration",
+  "position": 1,
+  "collapsed": false,
+  "link": {
+    "type": "doc",
+    "id": "configuration"
+  }
+}

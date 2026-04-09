@@ -1,0 +1,157 @@
+.install-widget {
+  margin: 2rem 0;
+}
+
+.install-widget__content {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  max-width: 100%;
+  background: #1a1d23;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+}
+
+html[data-theme='light'] .install-widget__content {
+  background: #2d3748;
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.install-widget__select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 1.25rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
+html[data-theme='light'] .install-widget__select-wrapper {
+  border-right-color: rgba(0, 0, 0, 0.15);
+}
+
+.install-widget__label {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+  pointer-events: none;
+}
+
+html[data-theme='light'] .install-widget__label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.install-widget__select {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: transparent;
+  cursor: pointer;
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+}
+
+.install-widget__chevron {
+  color: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+
+html[data-theme='light'] .install-widget__chevron {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.install-widget__select-wrapper:hover .install-widget__chevron {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.install-widget__command {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 1.1rem 1.5rem;
+}
+
+.install-widget__code {
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: #fff;
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+/* Syntax highlighting */
+.install-widget__command-curl {
+  color: #35e5ba;
+}
+
+.install-widget__command-url {
+  color: #ffffff;
+}
+
+.install-widget__command-bash {
+  color: #3578e5;
+}
+
+.install-widget__copy {
+  background: transparent;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 0.9rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+html[data-theme='light'] .install-widget__copy {
+  border-left-color: rgba(0, 0, 0, 0.15);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.install-widget__copy:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+@media screen and (max-width: 768px) {
+  .install-widget__content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .install-widget__select-wrapper {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  html[data-theme='light'] .install-widget__select-wrapper {
+    border-bottom-color: rgba(0, 0, 0, 0.15);
+  }
+
+  .install-widget__command {
+    width: 100%;
+  }
+
+  .install-widget__code {
+    font-size: 0.85rem;
+  }
+}

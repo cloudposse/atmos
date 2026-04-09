@@ -1,0 +1,187 @@
+---
+slug: path-based-component-resolution
+title: "Path-Based Component Resolution for Terraform, Helmfile, Packer, Describe, and Validate Commands"
+authors: [osterman]
+tags: [feature, dx]
+date: 2025-11-28
+---
+
+Atmos now supports using filesystem paths instead of component names for all component commands. Use `.` for the current directory, relative paths like `./vpc` or `../eks`, or absolute paths. This might feel more natural for users accustomed to running commands on folders rather than remembering specific component names.
+
+<!--truncate-->
+
+## What's New
+
+You can now use filesystem paths with all component-related commands:
+
+```bash
+# Navigate to component directory
+cd components/terraform/vpc
+
+# Use . to reference current directory
+atmos terraform plan . --stack dev
+atmos describe component . --stack dev
+atmos validate component . --stack dev
+```
+
+This works with all Terraform, Helmfile, and Packer commands that accept a component argument.
+
+## Supported Path Formats
+
+Atmos supports all standard ways of specifying paths to components, including:
+
+- **`.`** - Current directory
+- **`./component`** - Relative path from current directory
+- **`../other-component`** - Relative path to sibling directory
+- **`/absolute/path/to/component`** - Absolute path
+
+## Features
+
+- **Auto-detection** - Atmos automatically detects component type (terraform/helmfile/packer) from the filesystem path
+- **Stack validation** - Validates the component exists in the specified stack configuration
+- **Interactive selection** - When multiple components reference the same path, choose from an interactive menu (in terminals)
+- **Tab completion** - Shell completion works with both paths and component names
+- **Error handling** - Clear error messages when paths can't be resolved
+- **CI/CD friendly** - Gracefully handles non-interactive environments with appropriate errors
+
+## Examples
+
+### Terraform Commands
+
+```bash
+# Current directory
+cd components/terraform/vpc
+atmos terraform plan . --stack dev
+
+# Relative path from repo root
+atmos terraform apply ./components/terraform/vpc --stack prod
+
+# Relative path to sibling component
+cd components/terraform/vpc
+atmos terraform output ../eks --stack staging
+```
+
+### Describe Component
+
+```bash
+# Current directory with options
+cd components/terraform/infra/vpc
+atmos describe component . --stack dev --format json
+
+# Relative path
+atmos describe component ./components/terraform/rds --stack dev --provenance
+
+# Absolute path
+atmos describe component /Users/dev/myproject/components/terraform/vpc --stack prod
+```
+
+### Validate Component
+
+```bash
+# Current directory
+cd components/terraform/vpc
+atmos validate component . --stack dev
+
+# Relative path with schema validation
+atmos validate component ./components/terraform/eks --stack dev --schema-path eks-schema.json --schema-type jsonschema
+```
+
+### Helmfile Commands
+
+```bash
+# Current directory
+cd components/helmfile/my-app
+atmos helmfile diff . --stack dev
+
+# Relative path to another helmfile component
+atmos helmfile apply ../nginx-ingress --stack prod
+```
+
+## Handling Multiple Component Instances
+
+When multiple components in a stack reference the same filesystem path, Atmos provides an interactive selection menu in terminal environments.
+
+**Example scenario with multiple instances:**
+
+```yaml
+# stacks/deploy/dev.yaml
+components:
+  terraform:
+    station/1:
+      metadata:
+        component: weather  # Points to components/terraform/weather
+      vars:
+        name: station-1
+
+    station/2:
+      metadata:
+        component: weather  # Also points to components/terraform/weather
+      vars:
+        name: station-2
+```
+
+### Interactive Selection (Terminal)
+
+When you're in an interactive terminal (like your local command line), Atmos presents a selection menu:
+
+```bash
+cd components/terraform/weather
+atmos terraform plan . --stack dev
+
+Component path 'weather' matches multiple instances in stack 'dev'
+Select which component instance to use (ctrl+c to cancel)
+
+❯ station/1
+  station/2
+```
+
+Use arrow keys to select the component instance you want, press Enter to confirm, or Ctrl+C/Esc to cancel.
+
+### Non-Interactive Environments (CI/CD)
+
+In non-interactive environments like CI/CD pipelines or when output is piped, Atmos returns an error with all matching component names:
+
+```bash
+cd components/terraform/weather
+atmos terraform plan . --stack dev | tee log.txt
+
+Error: ambiguous component path
+  Path resolves to 'weather' which is referenced by multiple components in stack 'dev'
+  Matching components: station/1, station/2
+
+  Hint: Use the exact component name instead of a path
+  Example: atmos terraform plan station/1 --stack dev
+```
+
+You can always use the explicit component name in any environment:
+
+```bash
+atmos terraform plan station/1 --stack dev  # ✓ Explicit and unambiguous
+atmos terraform plan station/2 --stack dev  # ✓ Explicit and unambiguous
+```
+
+## Backward Compatibility
+
+All existing component name syntax continues to work unchanged:
+
+```bash
+# Traditional component names still work
+atmos terraform plan vpc --stack dev
+atmos terraform plan infra/vpc --stack dev
+```
+
+## Requirements
+
+- Must be inside a component directory under the configured base path
+- Must specify `--stack` flag when using paths
+- Component must exist in the specified stack configuration
+- **Multiple component instances**: If multiple components reference the same path, Atmos will:
+  - In interactive terminals: Show a selection menu to choose which instance
+  - In CI/CD or piped output: Return an error requiring an explicit component name
+
+## Documentation
+
+For more details, see:
+- [Terraform Commands](/cli/commands/terraform/usage)
+- [Describe Component](/cli/commands/describe/component)
+- [Validate Component](/cli/commands/validate/component)

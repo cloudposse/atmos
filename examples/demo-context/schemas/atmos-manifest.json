@@ -28,6 +28,9 @@
     "settings": {
       "$ref": "#/definitions/settings"
     },
+    "locals": {
+      "$ref": "#/definitions/locals"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
@@ -164,7 +167,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "terraform": {
               "$ref": "#/definitions/terraform_components"
@@ -203,6 +206,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -276,6 +282,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -322,6 +331,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -380,6 +392,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             }
@@ -408,6 +423,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -465,6 +483,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -674,6 +695,20 @@
     "env": {
       "title": "env",
       "description": "Env section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "locals": {
+      "title": "locals",
+      "description": "File-scoped local variables for use within templates. Locals are resolved before other sections and can reference each other within the same file. Unlike vars and settings, locals do NOT inherit across file boundaries.",
       "oneOf": [
         {
           "type": "string",
@@ -916,9 +951,6 @@
         {
           "type": "object",
           "properties": {
-            "stack": {
-              "type": "string"
-            },
             "namespace": {
               "type": "string"
             },
@@ -1128,6 +1160,75 @@
                       },
                       "type": {
                         "type": "string"
+                      },
+                      "retry": {
+                        "title": "retry",
+                        "description": "Retry configuration for workflow step execution",
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^!include"
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "max_attempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Maximum number of retry attempts"
+                              },
+                              "initial_delay": {
+                                "type": "string",
+                                "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                              },
+                              "max_delay": {
+                                "type": "string",
+                                "description": "Maximum delay between retries (e.g., '30s', '1m')"
+                              },
+                              "backoff_strategy": {
+                                "type": "string",
+                                "enum": [
+                                  "constant",
+                                  "linear",
+                                  "exponential"
+                                ],
+                                "description": "Strategy for increasing delay between retries"
+                              },
+                              "multiplier": {
+                                "type": "number",
+                                "minimum": 1,
+                                "description": "Multiplier for exponential/linear backoff"
+                              },
+                              "random_jitter": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "description": "Random jitter factor (0-1) to add to delays"
+                              },
+                              "max_elapsed_time": {
+                                "type": "string",
+                                "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+                              }
+                            },
+                            "required": []
+                          }
+                        ]
+                      },
+                      "working_directory": {
+                        "type": "string",
+                        "description": "Working directory for the workflow step"
+                      },
+                      "identity": {
+                        "type": "string",
+                        "description": "Identity to use for the workflow step"
+                      },
+                      "env": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Environment variables for the workflow step"
                       }
                     },
                     "required": [

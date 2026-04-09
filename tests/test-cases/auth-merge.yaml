@@ -14,10 +14,15 @@ tests:
       - "mycomponent"
       - "-s"
       - "component-auth"
+      - "--identity"
+      - "off"
       - "-q"
       - ".auth"
     expect:
       diff: [ ]
+      sanitize:
+        # Normalize realm hash which varies by environment (derived from config path)
+        "realm: [a-f0-9]+": "realm: <hash>"
       stdout:
         - "provider-oidc:"
         - "kind: github/oidc"

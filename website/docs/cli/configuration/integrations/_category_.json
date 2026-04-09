@@ -1,0 +1,9 @@
+{
+  "label": "integrations",
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "integrations"
+  },
+  "className": "command"
+}

@@ -4,7 +4,25 @@
 
 <span style="font-weight:bold;">Initializing the backend...</span>
 <span style="font-weight:bold;">Initializing provider plugins...</span>
+- Using hashicorp/local v2.6.2 from the shared cache directory
+- Using hashicorp/http v3.5.0 from the shared cache directory
 
+<span style="color:olive;">╷</span>
+<span style="color:olive;">│</span> <span style="font-weight:bold;"></span><span style="font-weight:bold;color:olive;">Warning: </span><span style="font-weight:bold;">Incomplete lock file information for providers</span>
+<span style="color:olive;">│</span> 
+<span style="color:olive;">│</span> Due to your customized provider installation methods, Terraform was forced
+<span style="color:olive;">│</span> to calculate lock file checksums locally for the following providers:
+<span style="color:olive;">│</span>   - hashicorp/http
+<span style="color:olive;">│</span>   - hashicorp/local
+<span style="color:olive;">│</span> 
+<span style="color:olive;">│</span> The current .terraform.lock.hcl file only includes checksums for
+<span style="color:olive;">│</span> darwin_arm64, so Terraform running on another platform will fail to install
+<span style="color:olive;">│</span> these providers.
+<span style="color:olive;">│</span> 
+<span style="color:olive;">│</span> To calculate additional checksums for another platform, run:
+<span style="color:olive;">│</span>   terraform providers lock -platform=linux_amd64
+<span style="color:olive;">│</span> (where linux_amd64 is the platform to generate)
+<span style="color:olive;">╵</span>
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">Terraform has been successfully initialized!</span><span style="color:green;"></span>
 <span style="color:red;">
 
@@ -14,10 +32,11 @@ You're now on a new, empty workspace. Workspaces isolate their state,
 so if you run &quot;terraform plan&quot; Terraform will not see any existing state
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
-<span style="font-weight:bold;">data.http.weather: Read complete after 1s 
+<span style="font-weight:bold;">data.http.weather: Read complete after 6s 
     [id=https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m]</span>
 
-Terraform used the selected providers to generate the following execution plan. 
+Terraform used the selected providers to generate the following execution
+plan. 
   <span style="color:green;">+</span> create
 
 Terraform will perform the following actions:
@@ -28,9 +47,9 @@ Terraform will perform the following actions:
 
             Weather report: Los+Angeles
             
-              <span style="color:#ffff00;">    \   /    </span> Sunny
-              <span style="color:#ffff00;">     .-.     </span> <span style="color:#ffaf00;">+28</span>(<span style="color:#ffd700;">26</span>) °C     
-              <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↑</span> <span style="color:#87ff00;">5</span> km/h       
+              <span style="color:#ffff00;">    \   /    </span> Clear
+              <span style="color:#ffff00;">     .-.     </span> <span style="color:#87ff00;">15</span> °C          
+              <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↓</span> <span style="color:#87ff00;">6</span> km/h       
               <span style="color:#ffff00;">     `-’     </span> 16 km          
               <span style="color:#ffff00;">    /   \    </span> 0.0 mm
 
@@ -59,9 +78,9 @@ Changes to Outputs:
 
         Weather report: Los+Angeles
         
-          <span style="color:#ffff00;">    \   /    </span> Sunny
-          <span style="color:#ffff00;">     .-.     </span> <span style="color:#ffaf00;">+28</span>(<span style="color:#ffd700;">26</span>) °C     
-          <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↑</span> <span style="color:#87ff00;">5</span> km/h       
+          <span style="color:#ffff00;">    \   /    </span> Clear
+          <span style="color:#ffff00;">     .-.     </span> <span style="color:#87ff00;">15</span> °C          
+          <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↓</span> <span style="color:#87ff00;">6</span> km/h       
           <span style="color:#ffff00;">     `-’     </span> 16 km          
           <span style="color:#ffff00;">    /   \    </span> 0.0 mm
 
@@ -82,12 +101,11 @@ weather =
 
 Weather report: Los+Angeles
 
-  <span style="color:#ffff00;">    \   /    </span> Sunny
-  <span style="color:#ffff00;">     .-.     </span> <span style="color:#ffaf00;">+28</span>(<span style="color:#ffd700;">26</span>) °C     
-  <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↑</span> <span style="color:#87ff00;">5</span> km/h       
+  <span style="color:#ffff00;">    \   /    </span> Clear
+  <span style="color:#ffff00;">     .-.     </span> <span style="color:#87ff00;">15</span> °C          
+  <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↓</span> <span style="color:#87ff00;">6</span> km/h       
   <span style="color:#ffff00;">     `-’     </span> 16 km          
   <span style="color:#ffff00;">    /   \    </span> 0.0 mm         
-
 
 
 
