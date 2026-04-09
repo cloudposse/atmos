@@ -75,11 +75,27 @@ func AuthConfigToMap(authConfig *schema.AuthConfig) (map[string]any, error) {
 
 // MergeComponentAuthConfig merges component-level auth config with global auth config.
 // Returns the merged AuthConfig with component overrides applied.
+//
+// When the component auth section declares any identity with `default: true`,
+// all existing `default: true` flags in the global auth config are cleared
+// before merging. This ensures the component-level default wins over the
+// global default (matching Atmos inheritance semantics: more specific config
+// overrides more general). Without this step, a global default and a
+// component-level default would both survive the deep merge, causing
+// "multiple default identities" prompts or errors.
 func MergeComponentAuthConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	globalAuthConfig *schema.AuthConfig,
 	componentAuthSection map[string]any,
 ) (*schema.AuthConfig, error) {
+	// If the component declares its own default identity, clear any existing
+	// defaults from the global config so the component-level default wins.
+	// This matches the precedence pattern used by MergeStackAuthDefaults in
+	// pkg/config/stack_auth_loader.go.
+	if componentAuthHasDefault(componentAuthSection) {
+		clearExistingIdentityDefaults(globalAuthConfig)
+	}
+
 	// Convert global auth config to map for deep merging.
 	globalAuthMap, err := AuthConfigToMap(globalAuthConfig)
 	if err != nil {
@@ -159,4 +175,41 @@ func MergeComponentAuthFromConfig(
 
 	// Merge component auth with global auth.
 	return MergeComponentAuthConfig(atmosConfig, mergedAuthConfig, componentAuthSection)
+}
+
+// componentAuthHasDefault checks whether a component-level auth section
+// (as a raw map from the stack processor) contains any identity with
+// `default: true`. This is used to decide whether to clear global defaults
+// before merging.
+func componentAuthHasDefault(componentAuth map[string]any) bool {
+	identities, ok := componentAuth["identities"].(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, identity := range identities {
+		identityMap, ok := identity.(map[string]any)
+		if !ok {
+			continue
+		}
+		if d, ok := identityMap["default"]; ok && d == true {
+			return true
+		}
+	}
+	return false
+}
+
+// clearExistingIdentityDefaults removes the `Default` flag from all
+// identities in an AuthConfig struct. Called before merging when the
+// component-level auth declares its own default, so the component-level
+// default wins cleanly without producing "multiple defaults" conflicts.
+func clearExistingIdentityDefaults(authConfig *schema.AuthConfig) {
+	if authConfig == nil {
+		return
+	}
+	for name, identity := range authConfig.Identities {
+		if identity.Default {
+			identity.Default = false
+			authConfig.Identities[name] = identity
+		}
+	}
 }

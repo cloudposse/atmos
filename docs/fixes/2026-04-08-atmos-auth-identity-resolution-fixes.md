@@ -5,12 +5,15 @@
 **Issues:**
 - [#2293](https://github.com/cloudposse/atmos/issues/2293) — `auth.identities.<name>.default: true` in imported stack files not recognized during identity resolution
 - [Discussion #122](https://github.com/orgs/cloudposse/discussions/122) — Auth inheritance not scoping to stack (a default identity declared in one stack manifest leaks to every other stack across all OUs)
+- Component-level identity override — when a component declares its own `auth.identities.<name>.default: true`, the global default from `atmos.yaml` should be overridden for that component; instead both defaults survive the merge and the user is prompted to choose
 
 ## Status
 
-**Two related bugs fixed without breaking any existing auth functionality.**
-Both originate from the same global raw-YAML pre-scanner in
-`pkg/config/stack_auth_loader.go`. The chosen fix is a **two-part change**:
+**Three related bugs fixed without breaking any existing auth functionality.**
+Issues 1 and 2 originate from the global raw-YAML pre-scanner in
+`pkg/config/stack_auth_loader.go`. Issue 3 is in the exec-layer
+component auth merge in `pkg/auth/config_helpers.go`. The fix is a
+**three-part change**:
 
 1. **Split the auth manager entry points** into a "scan" variant (for
    multi-stack commands that legitimately have no target stack) and a
@@ -24,6 +27,12 @@ Both originate from the same global raw-YAML pre-scanner in
    commands (`describe stacks`, `describe affected`, `list affected`,
    workflows, `aws security`, `aws compliance`). This closes Issue #2293
    across *all* command categories.
+3. **Clear global defaults when a component declares its own** in
+   `MergeComponentAuthConfig`. When the component-level auth section has
+   any identity with `default: true`, all existing global defaults are
+   cleared before the deep merge, so the component-level default wins
+   cleanly. This matches the precedence pattern already used by
+   `MergeStackAuthDefaults`.
 
 The multi-stack "Approach 2" code path (documented in
 `stack-level-default-auth-identity.md`) is preserved. No existing auth
@@ -238,6 +247,95 @@ behavior reproduces on all three.
 `default: true` under `auth.identities.<name>` should only apply to the
 stack(s) that actually import or declare that `auth:` block. Unrelated
 stacks in other OUs, tenants, or environments should be unaffected.
+
+---
+
+## Issue 3 — Component-level identity override does not clear global default
+
+### Problem
+
+When `atmos.yaml` declares a global default identity (e.g. for Terraform
+state access) and a component overrides it with a different identity via
+`auth.identities.<name>.default: true` in the stack config, **both**
+defaults survive the exec-layer merge. The user is then prompted to choose
+between multiple defaults (interactive mode) or gets an error (CI/non-
+interactive mode).
+
+### Reproduction
+
+Global auth config (`atmos.yaml`):
+
+```yaml
+auth:
+  identities:
+    tf-state-role:
+      default: true
+      kind: aws/permission-set
+      via.provider: company-sso
+      principal:
+        name: role-for-tf-state
+        account.id: "11111111111"
+
+    deploy-role:
+      kind: aws/permission-set
+      via.provider: company-sso
+      principal:
+        name: role-for-deploy
+        account.id: "22222222222"
+```
+
+Stack manifest with component-level override:
+
+```yaml
+components:
+  terraform:
+    my-component:
+      auth:
+        identities:
+          deploy-role:
+            default: true
+```
+
+Running `atmos terraform apply my-component -s dev` prompts:
+
+```text
+┃ Multiple default identities found. Please choose:
+┃ > tf-state-role
+┃   deploy-role
+```
+
+### Expected behavior
+
+The component-level `default: true` should override the global default for
+that component. The user should not be prompted — `deploy-role` should be
+used automatically.
+
+### Root cause
+
+`pkg/auth/config_helpers.go:MergeComponentAuthConfig` does a raw deep merge
+via `merge.Merge(atmosConfig, []map[string]any{globalAuthMap, componentAuth})`.
+The component's `deploy-role.default: true` is added to the merged map, but
+the global `tf-state-role.default: true` is **not cleared**. The result has
+two identities with `default: true`.
+
+Compare with `MergeStackAuthDefaults` in `pkg/config/stack_auth_loader.go`
+which **does** clear existing defaults before applying stack-level ones:
+
+```go
+if hasAnyDefault(stackDefaults) {
+    clearExistingDefaults(authConfig)
+}
+```
+
+`MergeComponentAuthConfig` was missing this equivalent logic.
+
+### Fix
+
+Added `componentAuthHasDefault` check and `clearExistingIdentityDefaults`
+call before the deep merge in `MergeComponentAuthConfig`. When the component
+auth section has any identity with `default: true`, all existing `Default`
+flags in the global auth config are cleared first, so the component-level
+default wins cleanly.
 
 ---
 
