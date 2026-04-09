@@ -17,7 +17,7 @@ var proCommitCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		checkAtmosConfig()
+		checkAtmosConfig(WithStackValidation(false))
 
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
