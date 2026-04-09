@@ -69,6 +69,7 @@ jobs:
 
       - name: Commit fixes via Atmos Pro
         env:
+          ATMOS_LOGS_LEVEL: debug
           CGO_ENABLED: "0"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: go run . pro commit -m "[autocommit] formatting fixes" --all
