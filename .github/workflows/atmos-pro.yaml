@@ -31,6 +31,8 @@ jobs:
       - run: go mod tidy
 
       - name: Install toolchain dependencies
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos --use-version=2298 toolchain install
           atmos --use-version=2298 toolchain env --format=github
@@ -66,4 +68,6 @@ jobs:
         run: ./scripts/generate-notice.sh
 
       - name: Commit fixes via Atmos Pro
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: atmos --use-version=2298 pro commit -m "[autocommit] formatting fixes" --all
