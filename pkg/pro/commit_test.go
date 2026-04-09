@@ -2,6 +2,10 @@ package pro
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -518,5 +522,143 @@ func TestBuildChanges(t *testing.T) {
 			require.Len(t, changes.Deletions, 1)
 			assert.Equal(t, "old.tf", changes.Deletions[0].Path)
 		})
+	})
+}
+
+// --- Tier 4: submitCommit and ExecuteCommit integration tests ---
+
+// newCommitTestServer returns an httptest server that accepts commit requests
+// and records the last request body for assertions.
+func newCommitTestServer(t *testing.T) (*httptest.Server, *dtos.CommitRequest) {
+	t.Helper()
+
+	var lastReq dtos.CommitRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		_ = json.Unmarshal(body, &lastReq)
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"success": true, "status": 200, "data": {"sha": "test-sha-123"}}`))
+	}))
+
+	return server, &lastReq
+}
+
+func TestSubmitCommit_Success(t *testing.T) {
+	server, lastReq := newCommitTestServer(t)
+	defer server.Close()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Settings.Pro.Token = "test-token"
+	atmosConfig.Settings.Pro.BaseURL = server.URL
+	atmosConfig.Settings.Pro.Endpoint = "api"
+
+	changes := &dtos.CommitChanges{
+		Additions: []dtos.CommitFileAddition{
+			{Path: "main.tf", Contents: "dGVzdA=="},
+		},
+	}
+
+	err := submitCommit(atmosConfig, "feature/test", "test commit", "nice", changes)
+	require.NoError(t, err)
+	assert.Equal(t, "feature/test", lastReq.Branch)
+	assert.Equal(t, "test commit", lastReq.CommitMessage)
+	assert.Equal(t, "nice", lastReq.Comment)
+	require.Len(t, lastReq.Changes.Additions, 1)
+	assert.Equal(t, "main.tf", lastReq.Changes.Additions[0].Path)
+}
+
+func TestSubmitCommit_APIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"success": false, "errorMessage": "bad request"}`))
+	}))
+	defer server.Close()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Settings.Pro.Token = "test-token"
+	atmosConfig.Settings.Pro.BaseURL = server.URL
+	atmosConfig.Settings.Pro.Endpoint = "api"
+
+	changes := &dtos.CommitChanges{
+		Additions: []dtos.CommitFileAddition{
+			{Path: "main.tf", Contents: "dGVzdA=="},
+		},
+	}
+
+	err := submitCommit(atmosConfig, "feature/test", "test commit", "", changes)
+	require.Error(t, err)
+}
+
+func TestExecuteCommit_HappyPath(t *testing.T) {
+	server, _ := newCommitTestServer(t)
+	defer server.Close()
+
+	withTempGitRepo(t, func(dir string) {
+		writeFile(t, dir, "main.tf", "resource {}")
+		runGit(t, dir, "add", "main.tf")
+
+		atmosConfig := &schema.AtmosConfiguration{}
+		atmosConfig.Settings.Pro.Token = "test-token"
+		atmosConfig.Settings.Pro.BaseURL = server.URL
+		atmosConfig.Settings.Pro.Endpoint = "api"
+		atmosConfig.Settings.Pro.GitHubHeadRef = "feature/test"
+
+		err := ExecuteCommit(atmosConfig, "test commit", "", "", false)
+		require.NoError(t, err)
+	})
+}
+
+func TestExecuteCommit_ValidationErrors(t *testing.T) {
+	testCases := []struct {
+		name    string
+		message string
+		branch  string
+		wantErr error
+	}{
+		{
+			name:    "empty message",
+			message: "",
+			branch:  "feature/test",
+			wantErr: errUtils.ErrCommitMessageRequired,
+		},
+		{
+			name:    "empty branch",
+			message: "fix",
+			branch:  "",
+			wantErr: errUtils.ErrBranchRequired,
+		},
+		{
+			name:    "invalid branch",
+			message: "fix",
+			branch:  "feature branch with spaces",
+			wantErr: errUtils.ErrBranchInvalid,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			atmosConfig.Settings.Pro.GitHubHeadRef = tc.branch
+
+			err := ExecuteCommit(atmosConfig, tc.message, "", "", false)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestExecuteCommit_NoChanges(t *testing.T) {
+	withTempGitRepo(t, func(_ string) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		atmosConfig.Settings.Pro.GitHubHeadRef = "feature/test"
+
+		err := ExecuteCommit(atmosConfig, "test commit", "", "", false)
+		require.NoError(t, err)
 	})
 }

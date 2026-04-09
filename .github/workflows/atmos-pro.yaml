@@ -34,8 +34,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos --use-version=2298 toolchain install
-          atmos --use-version=2298 toolchain env --format=github
+          atmos toolchain install
+          atmos toolchain env --format=github
 
       # gofumpt
       - name: Get changed Go files
@@ -70,4 +70,4 @@ jobs:
       - name: Commit fixes via Atmos Pro
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: atmos --use-version=2298 pro commit -m "[autocommit] formatting fixes" --all
+        run: go run . pro commit -m "[autocommit] formatting fixes" --all

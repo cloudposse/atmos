@@ -155,3 +155,74 @@ func TestCreateCommit_NetworkError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateCommit)
 }
+
+func TestSendCommitRequest_NilHTTPClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"success": true, "data": {"sha": "nil-client-test"}}`))
+	}))
+	defer server.Close()
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      nil, // Nil client should trigger fallback.
+	}
+
+	var resp dtos.CommitResponse
+	err := client.sendCommitRequest(server.URL+"/api/git/commit", []byte(`{}`), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "nil-client-test", resp.Data.SHA)
+}
+
+func TestSendCommitRequest_MalformedJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`not valid json`))
+	}))
+	defer server.Close()
+
+	client := &AtmosProAPIClient{
+		BaseURL:         server.URL,
+		BaseAPIEndpoint: "api",
+		APIToken:        "test-token",
+		HTTPClient:      http.DefaultClient,
+	}
+
+	var resp dtos.CommitResponse
+	err := client.sendCommitRequest(server.URL+"/api/git/commit", []byte(`{}`), &resp)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToUnmarshalAPIResponse)
+}
+
+func TestBuildCommitAPIError_UnparsableBody(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Status:     "400 Bad Request",
+	}
+
+	err := buildCommitAPIError(resp, []byte(`not json`))
+	require.Error(t, err)
+
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+	assert.Equal(t, operationCreateCommit, apiErr.Operation)
+}
+
+func TestBuildCommitAPIError_ParseableBody(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusForbidden,
+		Status:     "403 Forbidden",
+	}
+
+	body := []byte(`{"success": false, "errorMessage": "missing permission"}`)
+	err := buildCommitAPIError(resp, body)
+	require.Error(t, err)
+
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, http.StatusForbidden, apiErr.StatusCode)
+	assert.Equal(t, operationCreateCommit, apiErr.Operation)
+}
