@@ -502,17 +502,17 @@ reinforces Category A, which was already fixed via the exec-layer merge).
 
 ## Coverage matrix
 
-| Scenario | Pre-fix main | Option (a) | Option (b) | **Option (d+)** |
-|---|---|---|---|---|
-| **#2293** imported default, `terraform plan -s acme-dev` (Category A) | ❌ broken | ✅ exec-layer merge | ✅ exec-layer merge | ✅ exec-layer merge |
-| **#2293** imported default, `describe stacks` / `describe affected` (Category B) | ❌ broken | ❌ broken | ❌ broken | ✅ **scanner follows imports** |
-| **#2293** imported default, `list affected` / workflows / `aws security` (Category B) | ❌ broken | ❌ broken | ❌ broken | ✅ **scanner follows imports** |
-| **#122** single-stack default leaks to `terraform plan -s other` (Category A) | ❌ leak | ✅ scanner removed | ❌ leak still (gating fails) | ✅ Category A never runs scanner |
-| **#122** repo-wide consistent default, `describe stacks` (Category B) | ✅ works (scanner picks it up) | ❌ regression | ✅ works | ✅ works (scanner still runs) |
-| Existing `describe stacks` / `describe affected` / `list affected` multi-stack identity resolution | ✅ works | ❌ **regression** | ❌ **regression** | ✅ preserved bit-for-bit |
-| 2026-03-25 describe-affected AuthManager threading (Bugs 1-4) | ✅ works | ❌ regression | ❌ regression | ✅ preserved |
-| Issue #2072 conflicting-defaults discard across stacks | ✅ works | N/A (scanner gone) | ✅ works | ✅ preserved (same `allAgree` logic) |
-| Workflow execution stack-level default loading | ✅ works | ❌ regression | ❌ regression | ✅ restored |
+| Scenario                                                                                           | Pre-fix main                  | Option (a)         | Option (b)                  | **Option (d+)**                     |
+|----------------------------------------------------------------------------------------------------|-------------------------------|--------------------|-----------------------------|-------------------------------------|
+| **#2293** imported default, `terraform plan -s acme-dev` (Category A)                              | ❌ broken                      | ✅ exec-layer merge | ✅ exec-layer merge          | ✅ exec-layer merge                  |
+| **#2293** imported default, `describe stacks` / `describe affected` (Category B)                   | ❌ broken                      | ❌ broken           | ❌ broken                    | ✅ **scanner follows imports**       |
+| **#2293** imported default, `list affected` / workflows / `aws security` (Category B)              | ❌ broken                      | ❌ broken           | ❌ broken                    | ✅ **scanner follows imports**       |
+| **#122** single-stack default leaks to `terraform plan -s other` (Category A)                      | ❌ leak                        | ✅ scanner removed  | ❌ leak still (gating fails) | ✅ Category A never runs scanner     |
+| **#122** repo-wide consistent default, `describe stacks` (Category B)                              | ✅ works (scanner picks it up) | ❌ regression       | ✅ works                     | ✅ works (scanner still runs)        |
+| Existing `describe stacks` / `describe affected` / `list affected` multi-stack identity resolution | ✅ works                       | ❌ **regression**   | ❌ **regression**            | ✅ preserved bit-for-bit             |
+| 2026-03-25 describe-affected AuthManager threading (Bugs 1-4)                                      | ✅ works                       | ❌ regression       | ❌ regression                | ✅ preserved                         |
+| Issue #2072 conflicting-defaults discard across stacks                                             | ✅ works                       | N/A (scanner gone) | ✅ works                     | ✅ preserved (same `allAgree` logic) |
+| Workflow execution stack-level default loading                                                     | ✅ works                       | ❌ regression       | ❌ regression                | ✅ restored                          |
 
 ---
 
