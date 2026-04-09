@@ -163,6 +163,11 @@ func TestExtractImportPathString(t *testing.T) {
 }
 
 func TestLoadAuthWithImports_EdgeCases(t *testing.T) {
+	tmpDir := t.TempDir()
+	readmePath := filepath.Join(tmpDir, "readme.md")
+	require.NoError(t, os.WriteFile(readmePath, []byte(""), 0o644))
+	missingYAMLPath := filepath.Join(tmpDir, "nonexistent", "file.yaml")
+
 	tests := []struct {
 		name     string
 		filePath string
@@ -171,14 +176,14 @@ func TestLoadAuthWithImports_EdgeCases(t *testing.T) {
 	}{
 		{
 			name:     "non-YAML extension",
-			filePath: "/tmp/readme.md",
-			basePath: "/tmp",
+			filePath: readmePath,
+			basePath: tmpDir,
 			wantNil:  true,
 		},
 		{
 			name:     "nonexistent file",
-			filePath: "/nonexistent/path/file.yaml",
-			basePath: "/tmp",
+			filePath: missingYAMLPath,
+			basePath: tmpDir,
 			wantNil:  true,
 		},
 	}

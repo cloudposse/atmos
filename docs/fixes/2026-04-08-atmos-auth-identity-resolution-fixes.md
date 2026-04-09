@@ -697,7 +697,26 @@ single-word change at each call site.
   caller), and now gets the import-following benefit for free since
   `LoadStackAuthDefaults` was rewritten to follow imports.
 
-### 4. Fixed flows
+### 4. Clear global defaults during component auth merge (Issue #3)
+
+**`pkg/auth/config_helpers.go`**
+
+- `MergeComponentAuthConfig` now copies `globalAuthConfig` internally via
+  `CopyGlobalAuthConfig` before any mutation, making it safe for direct
+  callers (not just those that go through the `MergeComponentAuthFromConfig`
+  wrapper).
+- Added `componentAuthHasDefault` — checks whether the component-level
+  auth section (raw `map[string]any` from the stack processor) contains any
+  identity with `default: true`.
+- Added `clearExistingIdentityDefaults` — clears all `Default` flags from
+  an `AuthConfig` struct's identities.
+- When `componentAuthHasDefault` returns true, `clearExistingIdentityDefaults`
+  runs on the working copy before the deep merge. The component-level
+  default then wins cleanly, producing exactly one default in the merged
+  result. This matches the precedence pattern already used by
+  `MergeStackAuthDefaults` in `pkg/config/stack_auth_loader.go`.
+
+### 5. Fixed flows
 
 **Category A — `atmos terraform plan my-component -s acme-dev` with imported `_defaults.yaml`:**
 
@@ -748,6 +767,21 @@ single-word change at each call site.
 2. allAgree → false → defaults map returned empty.
 3. Approach 2 falls back to `atmos.yaml`-level default only.
 4. Issue #2072 behavior preserved exactly.
+```
+
+**Issue #3 — `atmos terraform apply my-component -s dev` where component overrides global default:**
+
+```text
+1. getMergedAuthConfigWithFetcher → ExecuteDescribeComponent for my-component.
+2. Component's stack config has auth.identities.deploy-role.default: true.
+3. MergeComponentAuthFromConfig → CopyGlobalAuthConfig → MergeComponentAuthConfig:
+   → componentAuthHasDefault returns true (deploy-role has default: true).
+   → clearExistingIdentityDefaults clears tf-state-role.default on the copy.
+   → merge.Merge deep-merges: deploy-role.default: true survives, tf-state-role
+     exists but with default: false.
+4. CreateAndAuthenticateManagerWithAtmosConfig (NO-SCAN) resolves the single
+   default (deploy-role) without prompting.
+5. Auth manager authenticates as deploy-role. No "multiple defaults" prompt.
 ```
 
 ---
