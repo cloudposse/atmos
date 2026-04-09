@@ -17,9 +17,16 @@ import (
 // They are variables (not constants) only so tests can substitute fakes
 // without needing real atmos config fixtures or simulating os.Setenv
 // failures. Production code always uses the real defaults.
+//
+// Category B: the env-override entry point is used by the MCP server's scoped
+// auth flow, which has no specific (component, stack) target. We route it
+// through the SCAN variant so stack-level default identities (including those
+// declared in imported _defaults.yaml files) are discovered after the env
+// overrides trigger a fresh cfg.InitCliConfig. See
+// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
 var (
 	initCliConfigFn     = cfg.InitCliConfig
-	createAuthManager   = CreateAndAuthenticateManagerWithAtmosConfig
+	createAuthManager   = CreateAndAuthenticateManagerWithStackScan
 	setEnvWithRestoreFn = env.SetWithRestore
 )
 
