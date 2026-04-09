@@ -54,6 +54,10 @@ func ExecuteCommit(atmosConfig *schema.AtmosConfiguration, message, comment, add
 		return err
 	}
 
+	if err := validateAuth(atmosConfig); err != nil {
+		return err
+	}
+
 	if err := stageFiles(addPattern, stageAll); err != nil {
 		return err
 	}
@@ -93,6 +97,34 @@ func resolveBranch(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	}
 
 	return branch, nil
+}
+
+// validateAuth checks that the Atmos Pro authentication prerequisites are met
+// before attempting any API calls. This provides fast, actionable errors instead
+// of letting the request fail deep in the OIDC exchange.
+func validateAuth(atmosConfig *schema.AtmosConfiguration) error {
+	// Static token is sufficient.
+	if atmosConfig.Settings.Pro.Token != "" {
+		return nil
+	}
+
+	// OIDC path: need both OIDC env vars + workspace ID.
+	oidc := atmosConfig.Settings.Pro.GithubOIDC
+	if oidc.RequestURL == "" || oidc.RequestToken == "" {
+		return errUtils.Build(errUtils.ErrNotInGitHubActions).
+			WithHint("Set ATMOS_PRO_TOKEN for local/CI usage, or run in a GitHub Actions workflow with `id-token: write` permission for OIDC authentication.").
+			WithHint("See https://atmos-pro.com/docs/configure/github-workflows for setup instructions.").
+			Err()
+	}
+
+	if atmosConfig.Settings.Pro.WorkspaceID == "" {
+		return errUtils.Build(errUtils.ErrOIDCWorkspaceIDRequired).
+			WithHint("Set ATMOS_PRO_WORKSPACE_ID to your Atmos Pro workspace ID.").
+			WithHint("Find your workspace ID in the Atmos Pro dashboard: https://app.atmos-pro.com").
+			Err()
+	}
+
+	return nil
 }
 
 // buildChanges detects staged changes, validates paths, and collects file contents.

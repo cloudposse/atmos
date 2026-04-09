@@ -664,6 +664,7 @@ func TestExecuteCommit_ValidationErrors(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{}
+			atmosConfig.Settings.Pro.Token = "test-token"
 			atmosConfig.Settings.Pro.GitHubHeadRef = tc.branch
 
 			err := ExecuteCommit(atmosConfig, tc.message, "", "", false)
@@ -678,9 +679,42 @@ func TestExecuteCommit_NoChanges(t *testing.T) {
 
 	withTempGitRepo(t, func(_ string) {
 		atmosConfig := &schema.AtmosConfiguration{}
+		atmosConfig.Settings.Pro.Token = "test-token"
 		atmosConfig.Settings.Pro.GitHubHeadRef = "feature/test"
 
 		err := ExecuteCommit(atmosConfig, "test commit", "", "", false)
 		require.NoError(t, err)
+	})
+}
+
+func TestValidateAuth(t *testing.T) {
+	t.Run("static token is sufficient", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Settings.Pro.Token = "test-token"
+		require.NoError(t, validateAuth(cfg))
+	})
+
+	t.Run("valid OIDC config", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Settings.Pro.GithubOIDC.RequestURL = "https://token.actions.githubusercontent.com"
+		cfg.Settings.Pro.GithubOIDC.RequestToken = "gha-token"
+		cfg.Settings.Pro.WorkspaceID = "ws-123"
+		require.NoError(t, validateAuth(cfg))
+	})
+
+	t.Run("no token and no OIDC", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		err := validateAuth(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNotInGitHubActions)
+	})
+
+	t.Run("OIDC without workspace ID", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Settings.Pro.GithubOIDC.RequestURL = "https://token.actions.githubusercontent.com"
+		cfg.Settings.Pro.GithubOIDC.RequestToken = "gha-token"
+		err := validateAuth(cfg)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrOIDCWorkspaceIDRequired)
 	})
 }
