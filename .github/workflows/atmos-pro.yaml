@@ -13,6 +13,8 @@ jobs:
       - tag=atmos
       - extras=s3-cache
       - private=false
+    container:
+      image: ghcr.io/cloudposse/atmos:latest
     permissions:
       contents: read
       id-token: write
@@ -51,7 +53,7 @@ jobs:
       # Run pre-commit hooks for whitespace fixes
       - name: Install pre-commit
         run: |
-          pip install pre-commit
+          apt-get update && apt-get install -y --no-install-recommends pre-commit
 
       - name: Run pre-commit whitespace fixes
         run: |
