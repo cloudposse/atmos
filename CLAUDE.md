@@ -235,6 +235,18 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Commands**: `make test-short` (quick), `make testacc` (all), `make testacc-cover` (coverage)
 
+**Parallel Execution**: Acceptance tests run in parallel by default via `t.Parallel()`.  Each test case gets its own `t.TempDir()` for HOME/XDG isolation — no shared state.  Tests that modify shared directories (e.g., named sandboxes running terraform apply) must set `parallel: false` in their YAML.
+
+**Parallel Rules for TestCLI:**
+- `t.Setenv()` and `t.Chdir()` are **incompatible** with `t.Parallel()` in Go 1.24+.  Use direct `cmd.Env` manipulation and `cmd.Dir` instead.
+- CI vars are filtered from the **inherited** process env before `tc.Env` is merged, so tests can explicitly re-add CI vars (e.g. `CI: "true"`) without them being filtered out.
+- `atmosRunner` is initialized once in `TestMain`, not lazily per-test, to avoid data races.
+- `cmd.Dir` sets the **subprocess** working directory; `os.Stat`/`os.ReadFile` in the test process use the test binary's starting dir. Relative paths in `FileExists`/`FileNotExists`/`FileContains` are resolved against `absoluteWorkdir` via `resolveFilePaths`/`resolveFilePathsMap` helpers.
+- Named sandboxes with terraform state (write operations) AND ordering dependencies between tests **must** use `parallel: false` on ALL related tests. Tests 3 and 4 of `atmos-functions.yaml` are an example: test 4 reads terraform state written by test 3.
+- **GOCOVERDIR isolation**: Each parallel test subprocess gets its own per-test GOCOVERDIR under `t.TempDir()`. Go coverage binaries write a `covmeta.<hash>` file on exit; with a shared GOCOVERDIR all parallel processes race to write the same filename (hash is deterministic from the binary), causing rename failures that corrupt stderr. The `mergeIntoCoverDir` helper in `cli_test.go` copies per-test coverage data back into the shared dir after each subprocess exits.
+- **Terraform state lock isolation**: When multiple parallel tests run `terraform plan/apply` on the same component source directory, they race for the same state lock. Fix: add `sandbox: true` to each test. The sandbox copies the component tree to a temp dir and sets `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH` to the copy, so every test gets its own state file. Do NOT use `parallel: false` — this defeats the purpose and doesn't scale.
+- **Output file isolation**: When parallel tests write to the same relative file path (e.g., `GITHUB_OUTPUT: "github-output.txt"`), they corrupt each other's content. Fix: use unique filenames per test (e.g., `github-output-no-changes.txt`, `github-output-changes.txt`, `github-output-failure.txt`). Update both `env:` and `file_contains:` keys. Add the patterns to `.gitignore` so generated files are never accidentally committed.
+
 **Fixtures**: `tests/test-cases/` for integration tests
 
 **Golden Snapshots (MANDATORY):**

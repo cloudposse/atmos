@@ -3,6 +3,7 @@
 tests:
   - name: "atmos terraform planfile list"
     enabled: true
+    sandbox: true
     snapshot: false
     description: "Verify 'atmos terraform planfile list' command exists and returns exit code 0."
     workdir: "fixtures/scenarios/native-ci"
@@ -16,6 +17,7 @@ tests:
 
   - name: "atmos terraform plan with ci"
     enabled: true
+    sandbox: true
     snapshot: false
     description: "Runs 'atmos terraform plan mycomponent -s prod --ci' and checks for summary output and two checks."
     workdir: "fixtures/scenarios/native-ci"
@@ -42,8 +44,9 @@ tests:
 
   - name: "atmos terraform plan without ci"
     enabled: true
+    sandbox: true
     snapshot: false
-    description: "Runs 'atmos terraform plan mycomponent -s prod --ci' and checks for summary output and two checks."
+    description: "Runs 'atmos terraform plan mycomponent -s prod' (no --ci) and checks for absence of CI output."
     workdir: "fixtures/scenarios/native-ci"
     command: "atmos"
     args:
@@ -67,6 +70,7 @@ tests:
 
   - name: "atmos terraform plan with ci failure"
     enabled: true
+    sandbox: true
     snapshot: false
     description: "Runs 'atmos terraform plan mycomponent/failure -s prod --ci' and checks for summary output and two checks."
     workdir: "fixtures/scenarios/native-ci"
@@ -97,6 +101,7 @@ tests:
 
   - name: "atmos terraform plan with ci no changes"
     enabled: true
+    sandbox: true
     snapshot: false
     description: "Runs 'atmos terraform plan mycomponent/no-changes -s prod --ci' and checks summary renders the no-changes template."
     workdir: "fixtures/scenarios/native-ci"
@@ -124,16 +129,21 @@ tests:
   - name: "atmos terraform plan with github actions env"
     enabled: true
     sandbox: true
+    # NOTE: clean:true runs git-clean on the original fixture dir (absoluteWorkdir),
+    # not the sandbox tempdir. Terraform state lives in the sandbox, so clean:true
+    # here only removes any stale generated files from the fixture — it does NOT
+    # reset terraform state. See exec-command.yaml for a detailed explanation.
     clean: true
     snapshot: false
     description: "Runs 'atmos terraform plan mycomponent -s prod' without --ci flag but with GITHUB_ACTIONS=true to verify automatic GitHub provider detection."
     workdir: "fixtures/scenarios/native-ci"
     command: "atmos"
     env:
+      CI: "true"
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
-      GITHUB_OUTPUT: "github-output.txt"
-      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_OUTPUT: "github-output-gha-env.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary-gha-env.txt"
       GITHUB_REPOSITORY: "test-owner/test-repo"
       GITHUB_SHA: "abc123def456789"
       GITHUB_RUN_ID: "12345"
@@ -149,12 +159,12 @@ tests:
       stderr:
         - "CI hook"
       file_contains:
-        "github-output.txt":
+        "github-output-gha-env.txt":
           - "has_changes=false"
           - "has_errors=false"
           - "exit_code=0"
           - "summary<<EOF"
-        "github-step-summary.txt":
+        "github-step-summary-gha-env.txt":
           - "No Changes for"
           - "mycomponent"
           - "prod"

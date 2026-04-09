@@ -4,6 +4,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
@@ -132,12 +133,81 @@ func PreserveCIEnvVars() map[string]string {
 //
 // Parameters:
 //   - envVars: A map of environment variable names to their original values, typically
-//     returned from a previous call to PreserveCIEnvVars
+// RestoreCIEnvVars restores environment variables previously preserved by PreserveCIEnvVars.
+// It sets each key in envVars back into the process environment with its saved value.
+// If envVars is nil or empty, RestoreCIEnvVars does nothing.
 func RestoreCIEnvVars(envVars map[string]string) {
 	// Restore each environment variable to its original value
 	for key, value := range envVars {
 		os.Setenv(key, value)
 	}
+}
+
+// FilterCIEnvVars removes CI-related environment variables from an env slice.
+// Unlike PreserveCIEnvVars, this is a pure function that does not modify process
+// environment, making it safe to call from parallel tests.
+//
+// Parameters:
+//   - env: A slice of "KEY=VALUE" strings (e.g. from os.Environ() or cmd.Env).
+//
+// FilterCIEnvVars returns a copy of the provided environment slice with all known CI-related
+// environment variables removed.
+// It accepts entries in the form "KEY=VALUE" or "KEY" and excludes any entry whose key matches
+// a CI variable name from the configured provider sets or the general "CI" variable. The input
+// slice is not modified.
+func FilterCIEnvVars(env []string) []string {
+	ciVars := getCIEnvVarSet()
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		key := e
+		if idx := strings.IndexByte(e, '='); idx >= 0 {
+			key = e[:idx]
+		}
+		if _, isCIVar := ciVars[key]; !isCIVar {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
+}
+
+// ciEnvVarSetOnce guards one-time initialisation of ciEnvVarSetCache.
+var ciEnvVarSetOnce sync.Once
+
+// ciEnvVarSetCache holds the lazily-initialised set of CI env-var names.
+var ciEnvVarSetCache map[string]struct{}
+
+// getCIEnvVarSet returns the cached set of all known CI environment variable names.
+// The set is built exactly once and reused across all FilterCIEnvVars calls.
+// getCIEnvVarSet returns a cached set of all known CI-related environment variable names.
+// The set is initialized once on first call and is safe for concurrent use.
+// The returned map must be treated as read-only and must not be modified by callers.
+func getCIEnvVarSet() map[string]struct{} {
+	ciEnvVarSetOnce.Do(func() {
+		ciEnvVarSetCache = buildCIEnvVarSet()
+	})
+	return ciEnvVarSetCache
+}
+
+// buildCIEnvVarSet constructs a set of all environment variable names used to detect CI providers.
+// The returned map's keys are the variable names (values are empty structs); it includes provider-specific
+// keys and the general "CI" variable.
+func buildCIEnvVarSet() map[string]struct{} {
+	ciVars := make(map[string]struct{})
+	for _, envVar := range ciProvidersEnvVarsExists {
+		ciVars[envVar] = struct{}{}
+	}
+	for _, values := range ciProvidersEnvVarsEquals {
+		for valueKey := range values {
+			ciVars[valueKey] = struct{}{}
+		}
+	}
+	for _, vars := range ciProvidersEnvVarsAllExist {
+		for _, v := range vars {
+			ciVars[v] = struct{}{}
+		}
+	}
+	ciVars[ciEnvVar] = struct{}{}
+	return ciVars
 }
 
 // applyAlphabeticalOrder is a generic function that processes a map in alphabetical order.

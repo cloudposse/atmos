@@ -214,6 +214,11 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          # Cap parallelism to 4 on shared CI runners (GitHub's 2-core Linux/macOS runners
+          # report nproc=2, but Windows runners can report higher values from the host).
+          # Keeping this low avoids over-subscribing disk I/O from concurrent Terraform
+          # subprocesses and keeps test runtime predictable across platforms.
+          PARALLEL: "4"
         run: make testacc-cover
 
       - name: Upload coverage report to Codecov

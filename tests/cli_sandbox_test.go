@@ -1,0 +1,119 @@
+package tests
+
+import (
+	"context"
+	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/cloudposse/atmos/tests/testhelpers"
+)
+
+// GetOrCreateNamedSandbox returns an existing named sandbox or creates a new one.
+// Named sandboxes are shared across tests and cleaned up by TestMain.
+// Workdir must be an absolute path.
+func getOrCreateNamedSandbox(t *testing.T, name string, workdir string) *testhelpers.SandboxEnvironment {
+	sandboxMutex.Lock()
+	defer sandboxMutex.Unlock()
+
+	if env, exists := sandboxRegistry[name]; exists {
+		t.Logf("Reusing existing sandbox %q", name)
+		return env
+	}
+
+	t.Logf("Creating new sandbox %q", name)
+	env, err := testhelpers.SetupSandbox(t, workdir)
+	if err != nil {
+		t.Fatalf("Failed to setup sandbox %q: %v", name, err)
+	}
+	sandboxRegistry[name] = env
+	return env
+}
+
+// CreateIsolatedSandbox creates a new isolated sandbox for a single test.
+// Not added to registry, caller must clean up.
+// Workdir must be an absolute path.
+func createIsolatedSandbox(t *testing.T, workdir string) *testhelpers.SandboxEnvironment {
+	t.Logf("Creating isolated sandbox")
+	env, err := testhelpers.SetupSandbox(t, workdir)
+	if err != nil {
+		t.Fatalf("Failed to setup isolated sandbox: %v", err)
+	}
+	return env
+}
+
+// cleanupSandboxes cleans up all registered sandboxes.
+// Each sandbox's Cleanup() is guarded with a recover() so that a panic in one
+// entry does not prevent the remaining sandboxes from being cleaned up.
+func cleanupSandboxes() {
+	sandboxMutex.Lock()
+	defer sandboxMutex.Unlock()
+
+	for name, env := range sandboxRegistry {
+		name, env := name, env // capture for closure
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Error("panic during sandbox cleanup", "name", name, "panic", r)
+				}
+			}()
+			env.Cleanup()
+		}()
+		delete(sandboxRegistry, name)
+	}
+}
+
+// Clean up untracked files in the working directory.
+//
+// Uses `git clean -fd` scoped to the workdir subtree, which is significantly faster than
+// calling go-git's Worktree.Status() which scans the entire repository.
+func cleanDirectory(t *testing.T, workdir string) error {
+	// Find the root of the Git repository so we can compute a relative path.
+	repoRoot, err := findGitRepoRoot(workdir)
+	if err != nil {
+		return fmt.Errorf("failed to locate git repository from %q: %w", workdir, err)
+	}
+
+	// Compute the path relative to the repo root so git clean only touches
+	// files within the workdir subtree (not the entire repository).
+	relWorkdir, err := filepath.Rel(repoRoot, workdir)
+	if err != nil {
+		return fmt.Errorf("failed to compute relative path from %q to %q: %w", repoRoot, workdir, err)
+	}
+
+	// -f: force, -d: recurse into untracked directories.
+	// The pathspec `-- <relWorkdir>` limits the clean to the specified subtree only.
+	// Note: the '-x' flag is deliberately omitted so .gitignore-matched files are preserved.
+	// A 30-second timeout guards against hung git processes (e.g. network filesystem stalls).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", repoRoot, "clean", "-fd", "--", relWorkdir) //nolint:gosec
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git clean failed (repoRoot=%q relWorkdir=%q): %w\n%s", repoRoot, relWorkdir, err, out)
+	}
+
+	t.Logf("Cleaned untracked files in %q", workdir)
+	return nil
+}
+
+// findGitRepoRoot finds the root of the Git repository containing path,
+// by shelling out to `git rev-parse --show-toplevel`.
+// This is consistent with cleanDirectory which also shells out to git.
+func findGitRepoRoot(path string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "--show-toplevel") //nolint:gosec
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to find git repository from %q: %w\n%s", path, err, out)
+	}
+	root := strings.TrimSpace(string(out))
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path of repository root %q: %w", root, err)
+	}
+	return absRoot, nil
+}

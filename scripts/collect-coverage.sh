@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 set -e
+set -o pipefail
+set -u
 
 # Directory for subprocess coverage data
 COVERAGE_DIR="${COVERAGE_DIR:-coverage}"
 TEST="${1:-./...}"
 TESTARGS="${2:-}"
+# Number of parallel tests.  Honour the PARALLEL env var passed from the Makefile.
+PARALLEL="${PARALLEL:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 
-echo "Running tests with subprocess coverage collection"
+echo "Running tests with subprocess coverage collection (parallel=${PARALLEL})"
+go version
+echo "PARALLEL=${PARALLEL}"
 
 # Clean up and create directories
 rm -rf "$COVERAGE_DIR"
@@ -15,6 +21,7 @@ mkdir -p "$COVERAGE_DIR/integration"
 # Run tests with coverage enabled - subprocesses will write to GOCOVERDIR
 GOCOVERDIR="$(pwd)/$COVERAGE_DIR/integration" go test $TEST \
     -cover -coverpkg=./... $TESTARGS -timeout 40m \
+    -parallel "$PARALLEL" \
     -coverprofile="$COVERAGE_DIR/unit.txt"
 
 # Convert subprocess binary coverage to text format if it exists

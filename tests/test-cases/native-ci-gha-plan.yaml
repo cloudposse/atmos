@@ -3,15 +3,17 @@
 tests:
   - name: "atmos terraform plan ci summary no changes"
     enabled: true
+    sandbox: true
     snapshot: false
     description: "Runs 'atmos terraform plan foobar -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the no-changes golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
     command: "atmos"
     env:
+      CI: "true"
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
-      GITHUB_OUTPUT: "github-output.txt"
-      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_OUTPUT: "github-output-no-changes.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary-no-changes.txt"
       GITHUB_REPOSITORY: "test-owner/test-repo"
       GITHUB_SHA: "abc123def456789"
       GITHUB_RUN_ID: "12345"
@@ -27,29 +29,31 @@ tests:
       stderr:
         - "CI check run"
       file_contains:
-        "github-step-summary.txt":
+        "github-step-summary-no-changes.txt":
           - '## No Changes for `foobar` in `plat-ue2-sandbox`'
           - 'cloudposse.com/logo-300x69.svg'
           - 'NO_CHANGE-inactive'
           - '<a id="result-plat-ue2-sandbox-foobar" />'
           - 'No changes. Your infrastructure matches the configuration.'
           - 'atmos terraform plan foobar -s plat-ue2-sandbox'
-        "github-output.txt":
+        "github-output-no-changes.txt":
           - "has_changes=false"
           - "has_errors=false"
           - "exit_code=0"
 
   - name: "atmos terraform plan ci summary with changes"
     enabled: true
+    sandbox: true
     snapshot: false
     description: "Runs 'atmos terraform plan foobar/changes -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the changes golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
     command: "atmos"
     env:
+      CI: "true"
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
-      GITHUB_OUTPUT: "github-output.txt"
-      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_OUTPUT: "github-output-changes.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary-changes.txt"
       GITHUB_REPOSITORY: "test-owner/test-repo"
       GITHUB_SHA: "abc123def456789"
       GITHUB_RUN_ID: "12345"
@@ -65,7 +69,7 @@ tests:
       stderr:
         - "CI check run"
       file_contains:
-        "github-step-summary.txt":
+        "github-step-summary-changes.txt":
           - '## Changes Found for `foobar/changes` in `plat-ue2-sandbox`'
           - 'cloudposse.com/logo-300x69.svg'
           - 'PLAN-CREATE-success'
@@ -77,22 +81,24 @@ tests:
           - 'Terraform <strong>Plan</strong> Summary'
           - 'Test warning summary'
           - 'Test warning details'
-        "github-output.txt":
+        "github-output-changes.txt":
           - "has_changes=true"
           - "has_errors=false"
           - "exit_code=0"
 
   - name: "atmos terraform plan ci summary with failure"
     enabled: true
+    sandbox: true
     snapshot: false
     description: "Runs 'atmos terraform plan foobar-fail -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the failure golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
     command: "atmos"
     env:
+      CI: "true"
       GITHUB_ACTIONS: "true"
       GITHUB_TOKEN: "test-token-for-ci"
-      GITHUB_OUTPUT: "github-output.txt"
-      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_OUTPUT: "github-output-failure.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary-failure.txt"
       GITHUB_REPOSITORY: "test-owner/test-repo"
       GITHUB_SHA: "abc123def456789"
       GITHUB_RUN_ID: "12345"
@@ -108,7 +114,7 @@ tests:
       stderr:
         - "CI check run"
       file_contains:
-        "github-step-summary.txt":
+        "github-step-summary-failure.txt":
           - '## Plan Failed for `foobar-fail` in `plat-ue2-sandbox`'
           - 'cloudposse.com/logo-300x69.svg'
           - 'PLAN-FAILED-ff0000'
@@ -117,7 +123,9 @@ tests:
           - 'atmos terraform plan foobar-fail -s plat-ue2-sandbox'
           - 'Invalid function argument'
           - 'Failed because failure mode is enabled'
-        "github-output.txt":
-          - "has_changes=false"
+        "github-output-failure.txt":
+          # has_changes=true because foobar-fail has count=1 (enabled:true) so
+          # terraform detects 1 resource to add before failing on the file() call in locals.
+          - "has_changes=true"
           - "has_errors=true"
           - "exit_code=1"
