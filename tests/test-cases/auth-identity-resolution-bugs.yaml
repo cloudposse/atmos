@@ -50,43 +50,14 @@ tests:
   # `TestLoadStackAuthDefaults_ExcludedDefaultsFile_BugIssue2293` in
   # pkg/config/stack_auth_loader_test.go.
 
-  - name: atmos describe stacks — Category B scan variant surfaces the imported default identity (Issue #2293)
-    enabled: true
-    snapshot: false
-    description: >
-      Category B coverage for Issue #2293. `atmos describe stacks` uses the
-      scan variant (cmd/identity_flag.go:CreateAuthManagerFromIdentityWithStackScan)
-      which invokes pkg/config/stack_auth_loader.go:LoadStackAuthDefaults. With
-      the import-following scanner introduced in this fix, defaults declared
-      inside imported `_defaults.yaml` files are now visible even when those
-      files are listed in `stacks.excluded_paths`. Before the fix this test
-      would fail with "No default identities found in stack configs".
-
-      The assertion queries the merged stack output for the `dev-identity`
-      default flag — which is what the scan variant populates into the merged
-      config before resolving the identity name.
-    workdir: "fixtures/scenarios/auth-imported-defaults/"
-    command: "atmos"
-    env:
-      ATMOS_KEYRING_TYPE: "memory"
-      ATMOS_AUTH_REALM: "test-realm"
-    args:
-      - "describe"
-      - "stacks"
-      - "--stack"
-      - "acme-dev"
-      - "--identity"
-      - "off"
-      - "--process-functions=false"
-      - "--sections"
-      - "vars"
-    expect:
-      diff: []
-      stdout:
-        - "acme-dev"
-        - "tenant: acme"
-        - "stage: dev"
-      exit_code: 0
+  # Note: The Category B scan variant (CreateAndAuthenticateManagerWithStackScan) is
+  # tested at the Go unit level in pkg/auth/manager_helpers_test.go
+  # (TestCreateAndAuthenticateManagerWithStackScan_FollowsImportedDefaultFromExcludedPath)
+  # and pkg/config/stack_auth_loader_test.go
+  # (TestLoadStackAuthDefaults_FollowsImportsFromExcludedPath). A CLI-level
+  # test for the scan path would require real authentication (or a mock that
+  # exercises the full auth chain), which is out of scope for these scenario
+  # fixtures.
 
   # ============================================================================
   # Discussion #122 — a default identity declared in ONE stack file leaks to
@@ -98,10 +69,11 @@ tests:
     enabled: true
     snapshot: false
     description: >
-      CURRENT BEHAVIOR (OK): the stack that actually declares
-      `data-default.default: true` should see it as its default. This is the
-      happy path for discussion #122 — we want to verify it still works after
-      the fix.
+      Happy path for Discussion #122: the stack that actually declares
+      `data-default.default: true` should see it as its default. Auth runs
+      through the full NO-SCAN describe-component path (no --identity off)
+      so we exercise the exec-layer merged auth config end-to-end with mock
+      credentials.
     workdir: "fixtures/scenarios/auth-stack-scoping/"
     command: "atmos"
     env:
@@ -113,8 +85,7 @@ tests:
       - "monitoring"
       - "-s"
       - "data-staging"
-      - "--identity"
-      - "off"
+      - "--process-functions=false"
       - "-q"
       - ".auth.identities.data-default.default"
     expect:
@@ -123,15 +94,18 @@ tests:
         - "true"
       exit_code: 0
 
-  - name: atmos describe component — plat-staging has NO default in the merged config
+  - name: atmos describe component — plat-staging does NOT inherit data-staging default
     enabled: true
     snapshot: false
     description: >
-      CURRENT BEHAVIOR (OK at the exec-layer): when the stack processor merges
-      plat-staging's config, it does NOT see the data-staging stack's auth
-      block (correctly scoped). The LEAK happens elsewhere — in the auth
-      manager's global pre-scanner. This assertion guards the correct
-      exec-layer scoping.
+      Discussion #122 regression guard — the core non-leak assertion. Auth
+      runs through the full NO-SCAN describe-component path (no --identity
+      off) so we exercise the actual auth-manager identity resolution. Before
+      the fix, the global pre-scanner would pick up data-staging's default
+      and inject it here. After the fix, the NO-SCAN variant never consults
+      stack files on disk; it trusts the exec-layer merged config, which
+      correctly shows no default for plat-staging. The `.default` field must
+      be `null` (absent), not `true`.
     workdir: "fixtures/scenarios/auth-stack-scoping/"
     command: "atmos"
     env:
@@ -143,21 +117,14 @@ tests:
       - "eks"
       - "-s"
       - "plat-staging"
-      - "--identity"
-      - "off"
+      - "--process-functions=false"
       - "-q"
-      - ".auth.identities"
+      - ".auth.identities.data-default.default"
     expect:
       diff: []
-      # Both identities from atmos.yaml are present. Crucially, NEITHER has
-      # `default: true` in the exec-layer merged output for this stack.
+      # data-default.default must be null (not true) — proving the leak
+      # from data-staging's stack file does NOT reach plat-staging.
       stdout:
-        - "data-default"
-        - "plat-default"
-      # The leak happened at a different layer (the global pre-scanner,
-      # which was exercised at auth time, not describe time). The Go unit
-      # test `TestLoadStackAuthDefaults_SingleDefaultIsReturnedGlobally`
-      # in pkg/config/auth_defaults_test.go characterizes the loader's
-      # standalone behavior; the auth flow no longer consumes it.
+        - "null"
       exit_code: 0
 

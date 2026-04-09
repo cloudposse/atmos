@@ -28,11 +28,20 @@ type stackAuthSection struct {
 // stackAuthFileWithImports parses the top of a stack file to extract both the
 // `import:` list and the `auth:` block. Used by the recursive scanner that
 // follows import chains when looking for default identities.
+//
+// `Default` is a *bool to distinguish three states:
+//   - nil:   identity listed without a `default` field → do not touch result.
+//   - true:  explicitly `default: true` → mark as default.
+//   - false: explicitly `default: false` → revoke any imported default.
+//
+// This matters because an importing file may override an imported default with
+// `default: false`. Without a pointer, that override would be indistinguishable
+// from "not mentioned" and the imported `true` would leak through.
 type stackAuthFileWithImports struct {
 	Import []any `yaml:"import"`
 	Auth   struct {
 		Identities map[string]struct {
-			Default bool `yaml:"default"`
+			Default *bool `yaml:"default"`
 		} `yaml:"identities"`
 	} `yaml:"auth"`
 }
@@ -314,11 +323,22 @@ func mergeImportedAuthDefaults(
 // current file's `auth.identities` section to `result`. These override any
 // imported defaults by virtue of being processed after
 // mergeImportedAuthDefaults.
+//
+// Three-state logic via *bool:
+//   - nil:   identity listed without `default` field → leave result unchanged.
+//   - true:  `default: true` → mark as default.
+//   - false: `default: false` → revoke any imported default (delete from result).
 func applyCurrentFileAuthDefaults(parsed stackAuthFileWithImports, result map[string]bool) {
 	for name, identity := range parsed.Auth.Identities {
-		if identity.Default {
-			result[name] = true
+		if identity.Default == nil {
+			continue
 		}
+		if *identity.Default {
+			result[name] = true
+			continue
+		}
+		// Explicit `default: false` revokes any default inherited from imports.
+		delete(result, name)
 	}
 }
 

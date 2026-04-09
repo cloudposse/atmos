@@ -1333,14 +1333,15 @@ func TestCreateAndAuthenticateManagerWithStackScan_FollowsImportedDefaultFromExc
 }
 
 func TestCreateAndAuthenticateManagerWithStackScan_ExplicitIdentitySkipsScan(t *testing.T) {
-	// When the caller passes a non-empty identityName, the scan variant must
-	// skip the scanner entirely — no need to hit disk when the user has already
-	// told us which identity to use.
+	// When the caller passes a real non-empty identityName (not __DISABLED__),
+	// the scan guard `identityName == ""` is false, so the pre-scanner never
+	// runs. We verify this by checking that a stack file on disk declaring a
+	// different default does NOT mutate the caller's authConfig.
 	tmpDir := t.TempDir()
 
-	// Create a stack file that would normally trigger a scan hit. Since we're
-	// passing an explicit identityName, the scanner should never run, and
-	// `scan-me-identity` should never be examined.
+	// Create a stack file that would normally trigger a scan hit if the scanner
+	// ran. Since we're passing an explicit identityName, the scanner must be
+	// skipped entirely.
 	writeTestStackFile(t, tmpDir, "foreign-stack.yaml", `auth:
   identities:
     scan-me-identity:
@@ -1359,10 +1360,12 @@ func TestCreateAndAuthenticateManagerWithStackScan_ExplicitIdentitySkipsScan(t *
 		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "*.yaml")},
 	}
 
-	// Verify the scan short-circuits when identityName is explicit. We can't
-	// assert "scanner didn't run" directly, but we CAN assert the original
-	// authConfig is unchanged (no Default flags flipped by a stray scan).
-	_, _ = CreateAndAuthenticateManagerWithStackScan("__DISABLED__", authConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+	// Pass "explicit-identity" — a real identity name, not __DISABLED__. This
+	// exercises the `identityName == ""` guard in the scan variant (which should
+	// be false → skip scan → delegate to no-scan variant). The downstream
+	// authentication will fail (no real provider), but we only care that the
+	// scan was skipped and the caller's authConfig remained untouched.
+	_, _ = CreateAndAuthenticateManagerWithStackScan("explicit-identity", authConfig, cfg.IdentityFlagSelectValue, atmosConfig)
 	assert.False(t, authConfig.Identities["scan-me-identity"].Default,
 		"scan must short-circuit when identityName is non-empty; original authConfig must remain untouched")
 }

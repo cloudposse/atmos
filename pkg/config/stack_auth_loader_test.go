@@ -731,6 +731,87 @@ auth:
 	assert.Empty(t, defaults, "when the merged view of a single file shows two competing defaults, allAgree discards them per Issue #2072")
 }
 
+func TestLoadStackAuthDefaults_ExplicitFalseRevokesImportedDefault(t *testing.T) {
+	// An imported _defaults.yaml sets `foo.default: true`. The importing file
+	// overrides it with `foo.default: false`. The scanner must honor the
+	// explicit `false` and NOT report `foo` as a default.
+	//
+	// Before the *bool fix, `default: false` was indistinguishable from "not
+	// mentioned" (both decoded as Go's zero value `false`), so the imported
+	// `true` leaked through — the wrong identity was selected for the stack.
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    imported-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(defaultsContent), 0o644))
+
+	// The importing file explicitly revokes the imported default.
+	manifestContent := `
+import:
+  - _defaults
+auth:
+  identities:
+    imported-identity:
+      default: false
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.Empty(t, defaults, "explicit default: false in the importing file must revoke the imported default: true")
+}
+
+func TestLoadStackAuthDefaults_IdentityWithoutDefaultFieldLeavesImportedDefault(t *testing.T) {
+	// An imported _defaults.yaml sets `foo.default: true`. The importing file
+	// mentions `foo` but without a `default` field at all. The scanner must
+	// treat the nil `default` as "not mentioned" and preserve the imported
+	// default. This is the complementary test to
+	// ExplicitFalseRevokesImportedDefault — it verifies the three-state
+	// distinction between nil (preserve), false (revoke), and true (set).
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+
+	defaultsContent := `
+auth:
+  identities:
+    imported-identity:
+      default: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(defaultsContent), 0o644))
+
+	// The importing file mentions the identity but does NOT set `default` at all.
+	manifestContent := `
+import:
+  - _defaults
+auth:
+  identities:
+    imported-identity:
+      kind: aws/assume-role
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "manifest.yaml"), []byte(manifestContent), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:    stacksDir,
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "manifest.yaml")},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+	require.NoError(t, err)
+	assert.True(t, defaults["imported-identity"], "identity mentioned without default field must preserve the imported default: true")
+}
+
 func TestLoadStackAuthDefaults_ImportedDefaultAgreesAcrossStacks(t *testing.T) {
 	// Two top-level stacks import the SAME _defaults.yaml that declares a
 	// default. Both should report the same identity, allAgree passes, and

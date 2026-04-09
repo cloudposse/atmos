@@ -35,7 +35,7 @@ functionality is removed.
 - [x] Caller audit — categorized every call site of
       `CreateAndAuthenticateManagerWithAtmosConfig` into Category A
       (target-stack context) vs Category B (multi-stack / no target).
-- [x] Identified regression risk: earlier draft (option "c" below) removed
+- [x] Identified regression risk: earlier draft (option "a" below) removed
       the pre-scanner entirely and broke the intentional Approach 2 code
       path for `describe stacks` / `describe affected` / `list affected` /
       workflows / `aws security`.
@@ -67,14 +67,18 @@ functionality is removed.
 - [x] `internal/exec/workflow_utils.go:checkAndMergeDefaultIdentity` —
       unchanged on this branch. Already calls `config.LoadStackAuthDefaults`
       directly, and now gets the import-following benefit for free.
-- [x] Scenario coverage for Issue #2293 via `describe stacks` added to
-      `tests/test-cases/auth-identity-resolution-bugs.yaml`. Uses the
-      `auth-imported-defaults/` fixture and exercises the new scan variant
-      end-to-end.
-- [x] Go unit tests: 12 new scanner tests in
-      `pkg/config/stack_auth_loader_test.go`, 5 new auth-helper regression
-      tests in `pkg/auth/manager_helpers_test.go`, plus isolation tests for
-      `copyAuthConfigForScan`.
+- [x] CLI regression test cases in
+      `tests/test-cases/auth-identity-resolution-bugs.yaml` (3 scenarios:
+      imported default via `describe component`, data-staging happy path,
+      plat-staging non-leak). The Category B scan variant is covered at the
+      Go unit level only — a CLI test for the scan path would require real
+      authentication, which is out of scope for mock/aws fixtures.
+- [x] Go unit tests: 22 new scanner tests in
+      `pkg/config/stack_auth_loader_test.go` and 14 new auth-helper tests in
+      `pkg/auth/manager_helpers_test.go` (regression tests for the no-scan /
+      scan split, isolation tests for `copyAuthConfigForScan`,
+      `scanStackFilesForDefaults` behavior, and Category A non-leak /
+      Category B import-discovery paths).
 - [x] Full regression suite passes: `pkg/auth/`, `pkg/config/`,
       `internal/exec/`, `cmd/`, `pkg/list/`, `cmd/list/`, CLI scenarios
       under `tests/`.
@@ -298,8 +302,8 @@ identity as the default.
 
 ### Why the approach is structurally wrong
 
-The code comment above `CreateAndAuthenticateManagerWithAtmosConfig` framed
-this as a chicken-and-egg problem:
+The code comment above `CreateAndAuthenticateManagerWithAtmosConfig` (before
+this fix) framed this as a chicken-and-egg problem:
 
 > - We need to know the default identity to authenticate
 > - But stack configs are only loaded after authentication is configured
@@ -369,9 +373,9 @@ no single `(component, stack)` pair upfront. They were *intentionally*
 designed to use the pre-scanner as "Approach 2" in
 `docs/fixes/stack-level-default-auth-identity.md`:
 
-- `atmos describe stacks` — `cmd/describe_stacks.go:80`
+- `atmos describe stacks` — `cmd/describe_stacks.go`
   (gated on `ProcessYamlFunctions || identityExplicit`)
-- `atmos describe affected` — `cmd/describe_affected.go:87`
+- `atmos describe affected` — `cmd/describe_affected.go`
   (same gate; plus 2026-03-25 fix threads the AuthManager through the
   entire affected/graph pipeline)
 - `atmos describe dependents` — `cmd/describe_dependents.go`
@@ -512,7 +516,7 @@ reinforces Category A, which was already fixed via the exec-layer merge).
 | Existing `describe stacks` / `describe affected` / `list affected` multi-stack identity resolution | ✅ works                       | ❌ **regression**   | ❌ **regression**            | ✅ preserved bit-for-bit             |
 | 2026-03-25 describe-affected AuthManager threading (Bugs 1-4)                                      | ✅ works                       | ❌ regression       | ❌ regression                | ✅ preserved                         |
 | Issue #2072 conflicting-defaults discard across stacks                                             | ✅ works                       | N/A (scanner gone) | ✅ works                     | ✅ preserved (same `allAgree` logic) |
-| Workflow execution stack-level default loading                                                     | ✅ works                       | ❌ regression       | ❌ regression                | ✅ restored                          |
+| Workflow execution stack-level default loading                                                     | ✅ works                       | ❌ regression       | ❌ regression                | ✅ preserved (unchanged from main)   |
 
 ---
 
@@ -520,8 +524,9 @@ reinforces Category A, which was already fixed via the exec-layer merge).
 
 ### 1. Teach the scanner to follow imports
 
-**`pkg/config/stack_auth_loader.go`** — replace the flat per-file
-`loadFileForAuthDefaults` with a recursive `loadAuthWithImports` that:
+**`pkg/config/stack_auth_loader.go`** — add a new recursive
+`loadAuthWithImports` (used by `LoadStackAuthDefaults` instead of the flat
+`loadFileForAuthDefaults`, which is kept for backward compatibility) that:
 
 - Reads each stack file's top-level `import:` list and `auth:` block via
   a minimal `yaml.Unmarshal` (no template rendering, no full stack
@@ -573,22 +578,26 @@ single-word change at each call site.
 - **Category A** — no change. Already uses
   `CreateAndAuthenticateManagerWithAtmosConfig` (no scan).
 - **Category B** — switch to `CreateAndAuthenticateManagerWithStackScan`
-  (or, for most of them, update the thin wrapper they go through):
-  - `cmd/identity_flag.go:CreateAuthManagerFromIdentityWithAtmosConfig`
-    → switch its inner call to the scan variant. This single change
-    auto-updates `describe stacks`, `describe affected`, and
-    `describe dependents` because they all go through the wrapper.
+  (or, for callers that go through the `cmd/identity_flag.go` wrappers,
+  switch to the new `CreateAuthManagerFromIdentityWithStackScan` wrapper):
+  - `cmd/identity_flag.go` — a **new** wrapper
+    `CreateAuthManagerFromIdentityWithStackScan` was added; the existing
+    `CreateAuthManagerFromIdentityWithAtmosConfig` was **kept as NO-SCAN**.
+    `describe stacks`, `describe affected`, and `describe dependents`
+    were each updated to call the new scan wrapper directly.
   - `cmd/list/utils.go:createAuthManagerForList` → scan variant.
   - `pkg/list/list_affected.go` → scan variant.
   - `cmd/list/instances.go` → scan variant (if it currently calls the
     auth helper).
-  - `cmd/aws/security/security.go` → scan variant.
-  - `cmd/aws/compliance/compliance.go` → scan variant.
+  - `pkg/auth/manager_env_overrides.go` → scan variant (MCP scoped auth).
+  - `cmd/aws/security/security.go` and `cmd/aws/compliance/compliance.go`
+    — **unchanged**. These bail out when `identityName == ""`, so the
+    scan would be a no-op; they remain on the no-scan variant.
 - **`internal/exec/workflow_utils.go:checkAndMergeDefaultIdentity`** —
-  restore the `config.LoadStackAuthDefaults` +
-  `config.MergeStackAuthDefaults` calls that the earlier draft
-  simplified away. This is equivalent to calling the scan variant and
-  matches the pre-fix behavior exactly.
+  unchanged on this branch. Already calls `config.LoadStackAuthDefaults` +
+  `config.MergeStackAuthDefaults` directly (pre-existing Approach 2
+  caller), and now gets the import-following benefit for free since
+  `LoadStackAuthDefaults` was rewritten to follow imports.
 
 ### 4. Fixed flows
 
@@ -621,7 +630,7 @@ single-word change at each call site.
 **Category B — `atmos describe stacks` with imported `_defaults.yaml`:**
 
 ```text
-1. cmd/describe_stacks.go → CreateAuthManagerFromIdentityWithAtmosConfig
+1. cmd/describe_stacks.go → CreateAuthManagerFromIdentityWithStackScan
    → CreateAndAuthenticateManagerWithStackScan(identityName="", …)
 2. Scan variant calls LoadStackAuthDefaults:
    → scanner walks each top-level stack file, recursively following
@@ -684,26 +693,26 @@ Stack names resolve to `data-staging` and `plat-staging` respectively.
 ### CLI regression tests
 
 `tests/test-cases/auth-identity-resolution-bugs.yaml` wires the fixtures
-into assertions that guard both the Category A exec-layer merge path AND
-the Category B scan-variant path:
+into assertions that guard the exec-layer merge path and the non-leak
+guarantee for Category A callers. All three scenarios run through the full
+auth-manager path (no `--identity off`) using mock/aws credentials:
 
-- **`describe component -s acme-dev`** (Category A) asserts the imported
-  `_defaults.yaml` default is present in the merged output.
-- **`describe stacks -s acme-dev --process-functions=true`** (Category B)
-  asserts the scan variant surfaces the imported default — new coverage
-  for #2293 against multi-stack commands.
-- **`describe component -s data-staging`** asserts data-staging sees its
-  own default identity (happy path).
-- **`describe component -s plat-staging`** asserts plat-staging does NOT
-  inherit data-staging's default (the Category A non-leak — Discussion
-  #122).
-- **`describe stacks` across the auth-stack-scoping fixture** asserts the
-  scan variant still behaves correctly under the `allAgree` conflict
-  logic (Issue #2072 preserved).
+- **`describe component mycomponent -s acme-dev`** (Issue #2293) — asserts
+  the imported `_defaults.yaml` default is present in the exec-layer merged
+  output (`auth.identities.dev-identity.default: true`).
+- **`describe component monitoring -s data-staging`** (Discussion #122
+  happy path) — asserts data-staging correctly sees its own default via the
+  full NO-SCAN auth-manager path.
+- **`describe component eks -s plat-staging`** (Discussion #122 non-leak)
+  — asserts `data-default.default` is `null`, not `true`. This is the core
+  regression guard: if the scanner were still running inside the NO-SCAN
+  variant, it would pick up the `data-default.default: true` from the
+  foreign `data-staging` stack file and inject it here. The `null` assertion
+  proves the NO-SCAN variant never consults other stack files.
 
 ### Go unit tests
 
-**`pkg/config/stack_auth_loader_test.go`** (new / updated)
+**`pkg/config/stack_auth_loader_test.go`** (22 new tests, key highlights)
 
 - `TestLoadStackAuthDefaults_FollowsImports` — stack file imports a
   `_defaults.yaml` that declares `default: true`; scanner must see it.
@@ -715,54 +724,78 @@ the Category B scan-variant path:
   import each other; scanner must terminate and return a sensible result.
 - `TestLoadStackAuthDefaults_GlobImports` — `import:` list contains a
   glob; scanner must expand.
-- `TestLoadStackAuthDefaults_TemplatedImportSkipped` — map-form import
-  with a Go-template path; scanner must skip gracefully (same as today).
-- `TestLoadStackAuthDefaults_ConflictingDefaultsDiscarded` — preserves
-  Issue #2072 `allAgree` behavior unchanged.
+- `TestLoadStackAuthDefaults_TemplatedImportSkipped` — Go-template import
+  path; scanner must skip gracefully (same as today).
 - `TestLoadStackAuthDefaults_CurrentFileWinsOverImport` — when both the
   importing file and the imported file declare defaults, the importing
   file's default takes precedence.
+- `TestLoadStackAuthDefaults_ImportedDefaultAgreesAcrossStacks` — two
+  stacks import the same `_defaults.yaml`; `allAgree` passes.
+- `TestLoadStackAuthDefaults_RelativeImports` — `./` imports resolve
+  against the importing file's directory.
+- `TestLoadStackAuthDefaults_ExplicitFalseRevokesImportedDefault` — an
+  imported `default: true` is overridden by `default: false` in the
+  importing file. Uses `*bool` three-state semantics to distinguish
+  "not mentioned" from "explicitly false".
+- `TestLoadStackAuthDefaults_IdentityWithoutDefaultFieldLeavesImportedDefault`
+  — complementary test: mentioning the identity without a `default` field
+  (nil) preserves the imported `true`.
+- Plus 12 additional tests for `resolveAuthImportPaths` (map form, unknown
+  types, empty stacksBasePath, .yml fallback, non-existent candidate, glob
+  no-matches), `extractImportPathString` (`map[any]any`, non-string path,
+  empty string), and `loadAuthWithImports` (non-YAML extension,
+  nonexistent file).
 
 **`pkg/auth/manager_helpers_test.go`** (new regression tests)
 
 Category A (no-scan variant):
 
-- `TestCreateAndAuthenticateManagerWithAtmosConfig_HonorsMergedConfigDefault`
-  — when the merged `authConfig` already carries a default (produced by
-  the exec-layer stack processor for a target stack that imports
-  `_defaults.yaml`), that default is resolved correctly.
-- `TestCreateAndAuthenticateManagerWithAtmosConfig_DoesNotLeakCrossStackDefault`
-  — when the merged `authConfig` has NO default (simulating a target
-  stack like `plat-staging` with no auth block), the no-scan variant
-  never consults unrelated stack files; no leak possible.
-- `TestCreateAndAuthenticateManagerWithAtmosConfig_IgnoresStackFilesWithLeakingDefault`
-  — end-to-end: a real stack file on disk declares `default: true`; the
-  no-scan variant must not pick it up even with a full `atmosConfig`.
-- `TestCreateAndAuthenticateManagerWithAtmosConfig_ExplicitIdentityNotOverriddenByStackFiles`
-  — `--identity` flag passed explicitly wins over any stack file
-  defaults.
+- `TestCreateAndAuthenticateManagerWithAtmosConfig_NoScanVariant_DoesNotLeakCrossStackDefault`
+  — Discussion #122 regression test: a real stack file on disk declares
+  `default: true`; the no-scan variant must not pick it up.
+- `TestCreateAndAuthenticateManagerWithAtmosConfig_NoScanVariant_IgnoresStackFilesEntirely`
+  — even with an empty `authConfig` and stack files on disk, the no-scan
+  variant returns nil (no authentication) rather than auto-discovering
+  identities from unrelated stack files.
 
 Category B (scan variant):
 
-- `TestCreateAndAuthenticateManagerWithStackScan_PicksUpImportedDefault`
-  — scan variant finds an imported `_defaults.yaml` default that the
-  no-scan variant cannot see. Primary Category B #2293 test.
-- `TestCreateAndAuthenticateManagerWithStackScan_HonorsExplicitIdentity`
-  — explicit `identityName` bypasses the scan.
-- `TestCreateAndAuthenticateManagerWithStackScan_DiscardsConflictingDefaults`
+- `TestCreateAndAuthenticateManagerWithStackScan_FollowsImportedDefaultFromExcludedPath`
+  — Issue #2293 regression test: scan variant finds an imported
+  `_defaults.yaml` default (in `excluded_paths`) that the no-scan variant
+  cannot see. Verifies isolation: caller's original `authConfig` remains
+  untouched.
+- `TestCreateAndAuthenticateManagerWithStackScan_ExplicitIdentitySkipsScan`
+  — explicit `identityName` bypasses the scan entirely.
+- `TestCreateAndAuthenticateManagerWithStackScan_DelegatesAfterSuccessfulScan`
+  — end-to-end: scan runs, finds a default, delegates to the no-scan
+  variant with the scanned copy. Verifies the caller's `authConfig` is
+  not mutated.
+- `TestCreateAndAuthenticateManagerWithStackScan_NilAtmosConfig`
+  — nil `atmosConfig` skips the scan; delegates straight to the no-scan
+  variant.
+- `TestCreateAndAuthenticateManagerWithStackScan_UnconfiguredAuthSkipsScan`
+  — when auth is not configured (no identities), scan is skipped.
+- `TestCreateAndAuthenticateManagerWithStackScan_ConflictingDefaultsDiscarded`
   — two stacks declare different defaults; scan returns empty; falls
   back to `atmos.yaml`-level default. Issue #2072 preserved.
-- `TestCreateAndAuthenticateManagerWithStackScan_NoMutationOfInputConfig`
-  — scan variant must operate on a copy of `authConfig`; caller's
-  original must remain untouched.
 
-**`internal/exec/workflow_utils_test.go`** (restored)
+Isolation and copy helpers:
 
-- Restore the stack-loading tests that the earlier draft deleted:
-  `TestCheckAndMergeDefaultIdentity_WithStackLoading`, `_LoadError`,
-  `_LoadErrorNoDefault`, `_StackNoDefaults`, `_EmptyStackDefaults`. The
-  function's pre-fix behavior is restored, so these tests become valid
-  again.
+- `TestScanStackFilesForDefaults_*` — 4 tests covering the private
+  `scanStackFilesForDefaults` helper's behavior for existing defaults,
+  no defaults, stack files on disk, and load errors.
+- `TestCopyAuthConfigForScan_IsolationBothDirections` — verifies deep-copy
+  semantics: mutating the copy does not leak into the original, and vice
+  versa.
+- `TestCopyAuthConfigForScan_Nil` — nil input returns nil.
+
+**`internal/exec/workflow_utils_test.go`** (unchanged)
+
+- Unchanged on this branch. `checkAndMergeDefaultIdentity` and its tests
+  were never modified — the function already calls
+  `config.LoadStackAuthDefaults` directly, and now benefits from the
+  import-following scanner automatically.
 
 ### Regression run (required before merge)
 
