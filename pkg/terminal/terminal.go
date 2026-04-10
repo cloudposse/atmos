@@ -129,6 +129,7 @@ type Config struct {
 	EnvCLIColorForce bool   // CLICOLOR_FORCE
 	EnvTerm          string // TERM
 	EnvColorTerm     string // COLORTERM
+	EnvCI            bool   // CI
 
 	// From atmos.yaml
 	AtmosConfig schema.AtmosConfiguration
@@ -398,6 +399,7 @@ func buildConfig() *Config {
 		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "", //nolint:forbidigo // Standard terminal env var
 		EnvTerm:          os.Getenv("TERM"),                 //nolint:forbidigo // Standard terminal env var
 		EnvColorTerm:     os.Getenv("COLORTERM"),            //nolint:forbidigo // Standard terminal env var
+		EnvCI:            os.Getenv("CI") != "",             //nolint:forbidigo // Standard CI env var
 	}
 
 	// Load atmos.yaml config (if available)
@@ -421,7 +423,8 @@ func buildConfig() *Config {
 // 6. --color flag - enables color (only if TTY)
 // 7. Atmos.yaml terminal.no_color (deprecated) - disables color
 // 8. Atmos.yaml terminal.color - enables color (only if TTY)
-// 9. Default (true for TTY, false for non-TTY).
+// 9. CI=true env var - enables color (CI systems support ANSI color)
+// 10. Default (true for TTY, false for non-TTY).
 //
 //nolint:revive // Cyclomatic complexity acceptable for priority-based configuration logic.
 func (c *Config) ShouldUseColor(isTTY bool) bool {
@@ -463,7 +466,12 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 		return true
 	}
 
-	// 9. Default based on TTY
+	// 9. CI environment enables color by default (most CI systems support ANSI color).
+	if c.EnvCI {
+		return true
+	}
+
+	// 10. Default based on TTY.
 	return isTTY
 }
 
@@ -503,8 +511,8 @@ func (c *Config) DetectColorProfile(isTTY bool) ColorProfile {
 		return Color16
 	}
 
-	// Default to 16 colors if TTY and color enabled
-	if isTTY {
+	// Default to 16 colors if TTY or CI environment.
+	if isTTY || c.EnvCI {
 		return Color16
 	}
 

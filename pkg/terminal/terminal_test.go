@@ -565,6 +565,45 @@ func TestShouldUseColor_RespectsTTY(t *testing.T) {
 			expected: false,
 			reason:   "Should default to disabled when TTY is false",
 		},
+		{
+			name: "CI=true enables color even without TTY",
+			config: Config{
+				EnvCI: true,
+			},
+			isTTY:    false,
+			expected: true,
+			reason:   "CI environment should enable color even without TTY",
+		},
+		{
+			name: "NO_COLOR overrides CI=true",
+			config: Config{
+				EnvNoColor: true,
+				EnvCI:      true,
+			},
+			isTTY:    false,
+			expected: false,
+			reason:   "NO_COLOR should disable color even in CI",
+		},
+		{
+			name: "--no-color overrides CI=true",
+			config: Config{
+				NoColor: true,
+				EnvCI:   true,
+			},
+			isTTY:    false,
+			expected: false,
+			reason:   "--no-color should disable color even in CI",
+		},
+		{
+			name: "CLICOLOR=0 overrides CI=true",
+			config: Config{
+				EnvCLIColor: "0",
+				EnvCI:       true,
+			},
+			isTTY:    false,
+			expected: false,
+			reason:   "CLICOLOR=0 should disable color even in CI",
+		},
 	}
 
 	for _, tt := range tests {
@@ -628,6 +667,14 @@ func TestPipingBehavior(t *testing.T) {
 			},
 			expected: true,
 			reason:   "Piped output should enable color with CLICOLOR_FORCE env var",
+		},
+		{
+			name: "CI environment enables color even when piped",
+			config: Config{
+				EnvCI: true,
+			},
+			expected: true,
+			reason:   "CI environment should enable color for piped output",
 		},
 	}
 
@@ -710,6 +757,35 @@ func TestDetectColorProfile_RespectsTTY(t *testing.T) {
 			isTTY:    true,
 			expected: ColorNone,
 			reason:   "Should return ColorNone when --no-color is set",
+		},
+		{
+			name: "CI environment gets Color16",
+			config: Config{
+				EnvCI: true,
+			},
+			isTTY:    false,
+			expected: Color16,
+			reason:   "CI environment should get basic 16-color support",
+		},
+		{
+			name: "CI with COLORTERM=truecolor gets ColorTrue",
+			config: Config{
+				EnvCI:        true,
+				EnvColorTerm: "truecolor",
+			},
+			isTTY:    false,
+			expected: ColorTrue,
+			reason:   "CI with truecolor COLORTERM should get TrueColor",
+		},
+		{
+			name: "CI with NO_COLOR gets ColorNone",
+			config: Config{
+				EnvCI:      true,
+				EnvNoColor: true,
+			},
+			isTTY:    false,
+			expected: ColorNone,
+			reason:   "NO_COLOR should override CI color",
 		},
 	}
 
@@ -957,6 +1033,16 @@ func TestBuildConfig_ViperIntegration(t *testing.T) {
 	assert.True(t, cfg.ForceColor)
 	assert.False(t, cfg.NoColor)
 	assert.True(t, cfg.Color)
+}
+
+func TestBuildConfig_CI(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	t.Setenv("CI", "true")
+
+	cfg := buildConfig()
+	assert.True(t, cfg.EnvCI, "Config should detect CI=true env var")
 }
 
 func TestWidth_EdgeCases(t *testing.T) {
