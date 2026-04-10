@@ -1,0 +1,165 @@
+name: Verify SHA Pinning
+description: >
+  Verifies that SHA-pinned GitHub Actions in workflow files match
+  the tag claimed in their version comment. Prevents supply chain
+  attacks where tags are force-pushed to malicious commits.
+
+inputs:
+  github-token:
+    description: 'GitHub token for API calls to resolve tags'
+    required: true
+  workflow-dir:
+    description: 'Directory containing workflow files to scan'
+    required: false
+    default: '.github/workflows'
+
+outputs:
+  verified-count:
+    description: 'Number of SHA-pinned actions verified'
+    value: ${{ steps.verify.outputs.verified_count }}
+  failed-count:
+    description: 'Number of mismatches found'
+    value: ${{ steps.verify.outputs.failed_count }}
+  status:
+    description: 'Overall result: pass or fail'
+    value: ${{ steps.verify.outputs.status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Verify SHA pins against upstream tags
+      id: verify
+      uses: actions/github-script@v7
+      env:
+        WORKFLOW_DIR: ${{ inputs.workflow-dir }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+
+          const workflowDir = process.env.WORKFLOW_DIR;
+
+          // Find all workflow files
+          const files = fs.readdirSync(workflowDir)
+            .filter(f => f.endsWith('.yml') || f.endsWith('.yaml'))
+            .map(f => path.join(workflowDir, f));
+
+          if (files.length === 0) {
+            core.info('No workflow files found');
+            core.setOutput('verified_count', 0);
+            core.setOutput('failed_count', 0);
+            core.setOutput('status', 'pass');
+            return;
+          }
+
+          // Match: uses: owner/repo[/sub]@<40-char-sha> # <tag>
+          const pattern = /uses:\s*([^\/\s]+)\/([^@\/\s]+)(?:\/[^@\s]+)?@([a-f0-9]{40})\s*#\s*(v\S+)/g;
+
+          // Collect all pinned references
+          const refs = [];
+          for (const file of files) {
+            const content = fs.readFileSync(file, 'utf8');
+            const lines = content.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+              let match;
+              pattern.lastIndex = 0;
+              while ((match = pattern.exec(lines[i])) !== null) {
+                refs.push({
+                  file: path.basename(file),
+                  line: i + 1,
+                  owner: match[1],
+                  repo: match[2],
+                  pinnedSha: match[3],
+                  tag: match[4],
+                });
+              }
+            }
+          }
+
+          if (refs.length === 0) {
+            core.info('No SHA-pinned actions found');
+            core.setOutput('verified_count', 0);
+            core.setOutput('failed_count', 0);
+            core.setOutput('status', 'pass');
+            return;
+          }
+
+          core.info(`Found ${refs.length} SHA-pinned action(s) to verify\n`);
+
+          // Resolve a tag to its commit SHA, handling annotated tags
+          async function resolveTagSha(owner, repo, tag) {
+            try {
+              const ref = await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `tags/${tag}`,
+              });
+
+              const obj = ref.data.object;
+
+              // Lightweight tag — points directly to a commit
+              if (obj.type === 'commit') {
+                return obj.sha;
+              }
+
+              // Annotated tag — dereference to get the commit
+              if (obj.type === 'tag') {
+                const tagObj = await github.rest.git.getTag({
+                  owner,
+                  repo,
+                  tag_sha: obj.sha,
+                });
+                return tagObj.data.object.sha;
+              }
+
+              throw new Error(`Unexpected ref object type: ${obj.type}`);
+            } catch (err) {
+              if (err.status === 404) {
+                throw new Error(`Tag "${tag}" not found in ${owner}/${repo}`);
+              }
+              throw err;
+            }
+          }
+
+          let verified = 0;
+          let failed = 0;
+          const errors = [];
+
+          for (const ref of refs) {
+            const label = `${ref.owner}/${ref.repo}@${ref.tag}`;
+            try {
+              const resolvedSha = await resolveTagSha(ref.owner, ref.repo, ref.tag);
+
+              if (resolvedSha === ref.pinnedSha) {
+                core.info(`✅ ${label} — SHA verified (${ref.file}:${ref.line})`);
+                verified++;
+              } else {
+                const msg = `❌ ${label} — SHA mismatch (${ref.file}:${ref.line})\n` +
+                  `   Pinned:   ${ref.pinnedSha}\n` +
+                  `   Expected: ${resolvedSha}`;
+                core.error(msg);
+                errors.push(msg);
+                failed++;
+              }
+            } catch (err) {
+              const msg = `❌ ${label} — ${err.message} (${ref.file}:${ref.line})`;
+              core.error(msg);
+              errors.push(msg);
+              failed++;
+            }
+          }
+
+          core.info(`\n${'─'.repeat(60)}`);
+          core.info(`Verified: ${verified}  Failed: ${failed}  Total: ${refs.length}`);
+
+          core.setOutput('verified_count', verified);
+          core.setOutput('failed_count', failed);
+          core.setOutput('status', failed > 0 ? 'fail' : 'pass');
+
+          if (failed > 0) {
+            core.setFailed(
+              `${failed} SHA-pinned action(s) failed verification:\n\n` +
+              errors.join('\n\n')
+            );
+          }
