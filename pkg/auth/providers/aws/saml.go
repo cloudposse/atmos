@@ -835,7 +835,11 @@ func (p *samlProvider) GetFilesDisplayPath() string {
 	// Use realm for credential isolation between different repositories.
 	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
-		return "~/.aws/atmos"
+		homeDir, homeErr := homedir.Dir()
+		if homeErr != nil {
+			return filepath.Join("~", ".aws", "atmos")
+		}
+		return filepath.Join(homeDir, ".aws", "atmos")
 	}
 
 	return fileManager.GetDisplayPath()

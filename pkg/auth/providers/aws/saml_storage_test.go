@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -107,6 +108,9 @@ func TestSAMLProvider_setupBrowserStorageDir(t *testing.T) {
 			t.Setenv("HOME", homeDir)
 			t.Setenv("USERPROFILE", homeDir)
 			t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+
+			// Clear homedir cache so homedir.Dir() reads the fresh env vars.
+			homedir.Reset()
 
 			// Create provider.
 			p := &samlProvider{
@@ -322,6 +326,7 @@ func TestSAMLProvider_setupBrowserAutomation_CallsStorageSetup(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
 
 	p, err := NewSAMLProvider("test", &schema.Provider{
 		Kind:   "aws/saml",
@@ -354,6 +359,7 @@ func TestSAMLProvider_setupBrowserAutomation_HandlesStorageSetupFailureGracefull
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
+	homedir.Reset()
 
 	// Create ~/.aws as a regular file (not directory) to cause mkdir failure.
 	awsPath := filepath.Join(homeDir, ".aws")
@@ -375,4 +381,87 @@ func TestSAMLProvider_setupBrowserAutomation_HandlesStorageSetupFailureGracefull
 
 	// Verify the environment variable was still set (proves function continued).
 	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"))
+}
+
+func TestSAMLProvider_restoreStagedPath(t *testing.T) {
+	t.Run("restores backup when it exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		symlinkPath := filepath.Join(tmpDir, "saml2aws")
+		backupPath := symlinkPath + ".bak"
+
+		// Create a .bak directory to simulate a staged path.
+		require.NoError(t, os.MkdirAll(backupPath, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(backupPath, "state.json"), []byte("{}"), 0o600))
+
+		p := &samlProvider{config: &schema.Provider{}}
+		p.restoreStagedPath(symlinkPath)
+
+		// Backup should be moved back to the original path.
+		_, err := os.Stat(symlinkPath)
+		assert.NoError(t, err, "original path should be restored from backup")
+		_, err = os.Stat(backupPath)
+		assert.True(t, os.IsNotExist(err), ".bak should be gone after restore")
+		// Verify content survived.
+		content, err := os.ReadFile(filepath.Join(symlinkPath, "state.json"))
+		require.NoError(t, err)
+		assert.Equal(t, "{}", string(content))
+	})
+
+	t.Run("no-op when no backup exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		symlinkPath := filepath.Join(tmpDir, "saml2aws")
+
+		p := &samlProvider{config: &schema.Provider{}}
+		// Must not panic or error when no .bak exists.
+		p.restoreStagedPath(symlinkPath)
+
+		_, err := os.Stat(symlinkPath)
+		assert.True(t, os.IsNotExist(err), "nothing should be created when no backup exists")
+	})
+}
+
+func TestSAMLProvider_ensureStorageSymlink_CleansUpBackupOnSuccess(t *testing.T) {
+	// When a directory at symlinkPath is staged to .bak and symlink creation
+	// succeeds, the .bak should be cleaned up.
+	tmpDir := t.TempDir()
+	symlinkPath := filepath.Join(tmpDir, "saml2aws")
+	targetPath := filepath.Join(tmpDir, "target")
+
+	// Create both dirs.
+	require.NoError(t, os.MkdirAll(symlinkPath, 0o700))
+	require.NoError(t, os.MkdirAll(targetPath, 0o700))
+
+	p := &samlProvider{config: &schema.Provider{}}
+	err := p.ensureStorageSymlink(symlinkPath, targetPath)
+	require.NoError(t, err)
+
+	// Symlink should exist and point to target.
+	target, err := os.Readlink(symlinkPath)
+	require.NoError(t, err)
+	assert.Equal(t, targetPath, target)
+
+	// .bak should NOT exist (cleaned up after success).
+	_, err = os.Stat(symlinkPath + ".bak")
+	assert.True(t, os.IsNotExist(err), ".bak should be cleaned up after successful symlink creation")
+}
+
+func TestSAMLProvider_GetFilesDisplayPath_ReturnsPlatformPath(t *testing.T) {
+	// GetFilesDisplayPath should always return a platform-aware path (no
+	// hardcoded ~ or forward-slash separators on Windows).
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	homedir.Reset()
+
+	p := &samlProvider{
+		name:   "test",
+		config: &schema.Provider{},
+	}
+
+	displayPath := p.GetFilesDisplayPath()
+	// The path must not contain literal "~/" — it should be a resolved path.
+	assert.NotContains(t, displayPath, "~/",
+		"display path must not contain literal ~/ — should be a resolved platform path")
+	// It must be a non-empty string.
+	assert.NotEmpty(t, displayPath, "display path must not be empty")
 }
