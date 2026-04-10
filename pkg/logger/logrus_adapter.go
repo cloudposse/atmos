@@ -138,6 +138,9 @@ func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 // ConfigureLogrusForAtmos configures logrus to use Atmos logger instead of stdout.
 // Uses JSONFormatter for structured logging, allowing us to parse and preserve
 // log levels and structured fields from logrus entries.
+// Note: perf.Track is not used here because pkg/perf imports pkg/logger,
+// which would create an import cycle. This is a one-time configuration
+// call during auth setup, not a per-request hot path.
 func ConfigureLogrusForAtmos() {
 	// Set logrus to output to our adapter.
 	logrus.SetOutput(newLogrusAdapter())

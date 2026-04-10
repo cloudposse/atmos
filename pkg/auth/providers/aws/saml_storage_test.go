@@ -3,6 +3,7 @@ package aws
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +13,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// skipIfSymlinksUnsupported skips the test on platforms where os.Symlink
+// requires elevated privileges (e.g. Windows without Developer Mode).
+func skipIfSymlinksUnsupported(t *testing.T) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	target := filepath.Join(tmpDir, "target")
+	require.NoError(t, os.MkdirAll(target, 0o700))
+	link := filepath.Join(tmpDir, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("Skipping: os.Symlink not available on this platform (%v)", err)
+	}
+}
+
 func TestSAMLProvider_setupBrowserStorageDir(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
 	tests := []struct {
 		name          string
 		providerName  string
@@ -134,7 +150,12 @@ func TestSAMLProvider_setupBrowserStorageDir(t *testing.T) {
 				info, err := os.Stat(xdgCacheDir)
 				require.NoError(t, err, "XDG cache directory should exist")
 				assert.True(t, info.IsDir(), "XDG cache path should be a directory")
-				assert.Equal(t, os.FileMode(0o700), info.Mode().Perm(), "XDG directory should have 0700 permissions")
+				// Only check exact permissions on Unix — Windows does not
+				// support Unix-style permission bits, so os.MkdirAll(0700)
+				// may produce 0777 depending on the filesystem and umask.
+				if runtime.GOOS != "windows" {
+					assert.Equal(t, os.FileMode(0o700), info.Mode().Perm(), "XDG directory should have 0700 permissions")
+				}
 			}
 
 			// Verify symlink was created correctly.
@@ -157,6 +178,8 @@ func TestSAMLProvider_setupBrowserStorageDir(t *testing.T) {
 }
 
 func TestSAMLProvider_ensureStorageSymlink(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
 	tests := []struct {
 		name          string
 		setup         func(t *testing.T, symlinkPath, targetPath string)
@@ -253,6 +276,8 @@ func TestSAMLProvider_ensureStorageSymlink(t *testing.T) {
 }
 
 func TestSAMLProvider_isCorrectSymlink(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
 	tests := []struct {
 		name           string
 		setup          func(t *testing.T, symlinkPath, targetPath string)
@@ -322,6 +347,8 @@ func TestSAMLProvider_isCorrectSymlink(t *testing.T) {
 }
 
 func TestSAMLProvider_setupBrowserAutomation_CallsStorageSetup(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
@@ -359,6 +386,7 @@ func TestSAMLProvider_setupBrowserAutomation_HandlesStorageSetupFailureGracefull
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
 	homedir.Reset()
 
 	// Create ~/.aws as a regular file (not directory) to cause mkdir failure.
@@ -375,12 +403,82 @@ func TestSAMLProvider_setupBrowserAutomation_HandlesStorageSetupFailureGracefull
 
 	sp := p.(*samlProvider)
 
-	// This should not panic even though storage setup will fail.
-	// setupBrowserAutomation logs a warning but continues.
-	sp.setupBrowserAutomation()
+	// This should not error even though storage setup will fail internally.
+	// setupBrowserAutomation logs a warning for storage failures but returns nil.
+	err = sp.setupBrowserAutomation()
+	assert.NoError(t, err, "storage dir failure is non-fatal — should return nil")
 
 	// Verify the environment variable was still set (proves function continued).
 	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"))
+}
+
+func TestSAMLProvider_setupBrowserAutomation_FailsOnInvalidExecutable(t *testing.T) {
+	// setupBrowserAutomation should return an error when a custom browser
+	// executable is configured but does not exist. This is the fail-fast path.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
+
+	p := &samlProvider{
+		name: "test",
+		config: &schema.Provider{
+			BrowserExecutablePath: filepath.Join(homeDir, "nonexistent", "browser"),
+		},
+	}
+
+	err := p.setupBrowserAutomation()
+	assert.Error(t, err, "should fail fast when browser executable does not exist")
+}
+
+func TestSAMLProvider_setupBrowserAutomation_UnsetsEnvWhenDownloadDisabled(t *testing.T) {
+	// Verify that SAML2AWS_AUTO_BROWSER_DOWNLOAD is explicitly unset when
+	// shouldDownloadBrowser() returns false, preventing env leak across calls.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
+
+	// Pre-set the env var to simulate a previous auth flow.
+	t.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
+
+	p := &samlProvider{
+		name: "test",
+		config: &schema.Provider{
+			Driver: "GoogleApps", // Non-Browser driver → download disabled.
+		},
+		url: "https://accounts.google.com/saml",
+	}
+
+	err := p.setupBrowserAutomation()
+	assert.NoError(t, err)
+
+	// The env var should be cleared.
+	assert.Empty(t, os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"),
+		"SAML2AWS_AUTO_BROWSER_DOWNLOAD should be unset for non-Browser drivers")
+}
+
+func TestSAMLProvider_setupBrowserAutomation_LogsBrowserType(t *testing.T) {
+	// Covers the BrowserType logging branch.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
+
+	p := &samlProvider{
+		name: "test",
+		config: &schema.Provider{
+			BrowserType: "chromium",
+			Driver:      "GoogleApps", // Non-Browser to keep test fast.
+		},
+		url: "https://accounts.google.com/saml",
+	}
+
+	err := p.setupBrowserAutomation()
+	assert.NoError(t, err)
 }
 
 func TestSAMLProvider_restoreStagedPath(t *testing.T) {
@@ -421,6 +519,8 @@ func TestSAMLProvider_restoreStagedPath(t *testing.T) {
 }
 
 func TestSAMLProvider_ensureStorageSymlink_CleansUpBackupOnSuccess(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
 	// When a directory at symlinkPath is staged to .bak and symlink creation
 	// succeeds, the .bak should be cleaned up.
 	tmpDir := t.TempDir()

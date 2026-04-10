@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -65,6 +66,7 @@ func TestSAMLProvider_GetProviderType(t *testing.T) {
 	t.Setenv("HOME", testHomeDir)
 	t.Setenv("USERPROFILE", testHomeDir)
 	t.Setenv("LOCALAPPDATA", testHomeDir) // Windows cache directory.
+	homedir.Reset()
 
 	// Explicit driver config always wins.
 	p := &samlProvider{config: &schema.Provider{Driver: "Okta"}, url: "https://idp"}
@@ -322,20 +324,22 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 		name                  string
 		downloadBrowserDriver bool
 		explicitDriver        string
+		expectedDownload      bool
 		setup                 func(t *testing.T) string // Returns home directory.
 	}{
 		{
 			name:                  "explicitly enabled",
 			downloadBrowserDriver: true,
+			expectedDownload:      true,
 			setup: func(t *testing.T) string {
 				return t.TempDir()
 			},
 		},
 		{
-			name:                  "auto-enabled when no drivers found and using Browser driver",
+			name:                  "disabled when no drivers and download not requested — falls back to non-Browser driver",
 			downloadBrowserDriver: false,
+			expectedDownload:      false, // No drivers + download not requested → getDriver() falls back to GoogleApps → no download.
 			setup: func(t *testing.T) string {
-				// No drivers installed -> should auto-enable.
 				return t.TempDir()
 			},
 		},
@@ -343,6 +347,7 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 			name:                  "disabled when using GoogleApps driver",
 			downloadBrowserDriver: false,
 			explicitDriver:        "GoogleApps",
+			expectedDownload:      false, // Non-Browser drivers don't need Playwright.
 			setup: func(t *testing.T) string {
 				return t.TempDir()
 			},
@@ -350,13 +355,23 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 		{
 			name:                  "disabled when drivers already installed",
 			downloadBrowserDriver: false,
+			expectedDownload:      false, // Pre-installed drivers → no download needed.
 			setup: func(t *testing.T) string {
 				homeDir := t.TempDir()
-				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				// Create fake Playwright drivers in the platform-appropriate cache path.
+				var playwrightDir string
+				switch runtime.GOOS {
+				case "darwin":
+					playwrightDir = filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				case "windows":
+					playwrightDir = filepath.Join(homeDir, "AppData", "Local", "ms-playwright", "1.47.2")
+				default: // Linux.
+					playwrightDir = filepath.Join(homeDir, ".cache", "ms-playwright", "1.47.2")
+				}
 				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
-				// Create fake browser.
-				browserFile := filepath.Join(playwrightDir, "chromium-1234")
-				require.NoError(t, os.Mkdir(browserFile, 0o755))
+				browserDir := filepath.Join(playwrightDir, "chromium-1234")
+				require.NoError(t, os.MkdirAll(browserDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
 				return homeDir
 			},
 		},
@@ -369,6 +384,7 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 			// Override home directory for cross-platform compatibility.
 			t.Setenv("HOME", homeDir)        // Linux/macOS.
 			t.Setenv("USERPROFILE", homeDir) // Windows.
+			homedir.Reset()
 
 			p, err := NewSAMLProvider("p", &schema.Provider{
 				Kind:                  "aws/saml",
@@ -382,10 +398,9 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 
 			ld := sp.createLoginDetails()
 
-			// Verify DownloadBrowser matches shouldDownloadBrowser().
-			expectedDownload := sp.shouldDownloadBrowser()
-			assert.Equal(t, expectedDownload, ld.DownloadBrowser,
-				"LoginDetails.DownloadBrowser should match shouldDownloadBrowser()")
+			// Assert against the explicit expected value, not the implementation.
+			assert.Equal(t, tt.expectedDownload, ld.DownloadBrowser,
+				"LoginDetails.DownloadBrowser should be %v", tt.expectedDownload)
 		})
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/creds"
 
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -35,6 +36,9 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	testHomeDir := t.TempDir()
 	t.Setenv("HOME", testHomeDir)        // Linux/macOS.
 	t.Setenv("USERPROFILE", testHomeDir) // Windows (for home directory).
+
+	// Clear homedir cache so homedir.Dir() reads the fresh env vars.
+	homedir.Reset()
 
 	// Windows: playwright-go uses os.UserCacheDir() which checks LOCALAPPDATA.
 	// We need to set LOCALAPPDATA to our test directory for Windows.
@@ -226,6 +230,7 @@ func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
 	testHomeDir := t.TempDir()
 	t.Setenv("HOME", testHomeDir)
 	t.Setenv("USERPROFILE", testHomeDir)
+	homedir.Reset()
 
 	// Windows: playwright-go uses os.UserCacheDir() which checks LOCALAPPDATA.
 	if runtime.GOOS == "windows" {
@@ -317,6 +322,12 @@ func TestPlaywrightDriverDownload_ConsistentBehavior(t *testing.T) {
 			testHomeDir := t.TempDir()
 			t.Setenv("HOME", testHomeDir)
 			t.Setenv("USERPROFILE", testHomeDir)
+			homedir.Reset()
+
+			// Windows: playwright-go checks LOCALAPPDATA for cache directory.
+			if runtime.GOOS == "windows" {
+				t.Setenv("LOCALAPPDATA", filepath.Join(testHomeDir, "AppData", "Local"))
+			}
 
 			// Optionally pre-install drivers.
 			if tt.setupDrivers {
@@ -332,8 +343,11 @@ func TestPlaywrightDriverDownload_ConsistentBehavior(t *testing.T) {
 
 				versionDir := filepath.Join(cacheDir, "1.47.2")
 				require.NoError(t, os.MkdirAll(versionDir, 0o755))
-				browserFile := filepath.Join(versionDir, "chromium-1234")
-				require.NoError(t, os.Mkdir(browserFile, 0o755))
+				// Create a realistic browser directory with a nested binary file
+				// so hasValidPlaywrightDrivers treats this as a complete install.
+				browserDir := filepath.Join(versionDir, "chromium-1234")
+				require.NoError(t, os.MkdirAll(browserDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
 			}
 
 			// Create provider.

@@ -66,7 +66,7 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 ```
 
 **Why both IDPAccount and LoginDetails?**
-- `IDPAccount.DownloadBrowser`: Used for environment variable (`SAML2AWS_DOWNLOAD_BROWSER`)
+- `IDPAccount.DownloadBrowser`: Used for environment variable (`SAML2AWS_AUTO_BROWSER_DOWNLOAD`)
 - `LoginDetails.DownloadBrowser`: Used by saml2aws authentication logic
 - Both must be set to ensure downloads work
 
@@ -153,7 +153,7 @@ auth:
 
 **Environment Variable Override**:
 ```bash
-export SAML2AWS_DOWNLOAD_BROWSER=true
+export SAML2AWS_AUTO_BROWSER_DOWNLOAD=true
 atmos auth login --identity my-identity
 ```
 
@@ -251,7 +251,7 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 
 **Test Skipping**:
 - Skip by default (requires ~140 MB download)
-- Run explicitly: `go test -v -run TestPlaywrightDriverDownload_Integration`
+- Run explicitly: `RUN_PLAYWRIGHT_INTEGRATION=1 go test -v ./pkg/auth/providers/aws -run TestPlaywrightDriverDownload_Integration`
 - CI can run on schedule rather than every commit
 
 ### Documentation Guidelines

@@ -133,8 +133,14 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
 	}
 
-	// Set up browser automation if needed.
-	p.setupBrowserAutomation()
+	// Set up browser automation only for the Browser driver.
+	// Other drivers (GoogleApps, Okta, ADFS) use API/HTTP flows and don't need
+	// Playwright, XDG storage directories, or symlinks.
+	if samlDriver == "Browser" {
+		if err := p.setupBrowserAutomation(); err != nil {
+			return nil, err
+		}
+	}
 
 	// Configure logrus to forward to Atmos logger instead of stdout.
 	// saml2aws uses the global logrus logger which outputs messages like "INFO[0037] opening browser".
@@ -623,7 +629,10 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 }
 
 // setupBrowserAutomation sets up browser automation for SAML authentication.
-func (p *samlProvider) setupBrowserAutomation() {
+// Returns an error if a custom browser executable is configured but invalid
+// (does not exist or is not a file), so the user gets a clear failure instead
+// of a confusing Playwright crash later.
+func (p *samlProvider) setupBrowserAutomation() error {
 	// Log browser configuration for diagnostics.
 	if p.config.BrowserType != "" {
 		log.Info("Custom browser type configured", "browser_type", p.config.BrowserType)
@@ -631,16 +640,20 @@ func (p *samlProvider) setupBrowserAutomation() {
 	if p.config.BrowserExecutablePath != "" {
 		log.Info("Custom browser executable path configured", "browser_executable_path", p.config.BrowserExecutablePath)
 
-		// Validate that the executable path exists and is executable.
+		// Fail fast if the configured browser executable is invalid.
 		if err := p.validateBrowserExecutable(); err != nil {
-			log.Warn("Browser executable validation failed", "error", err, "path", p.config.BrowserExecutablePath)
+			return err
 		}
 	}
 
 	// Set environment variables for browser automation.
+	// Clear/set explicitly on every call to avoid leaking state from a
+	// previous auth flow in the same process (e.g. MCP server, workflows).
 	if p.shouldDownloadBrowser() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 		log.Debug("Browser driver auto-download enabled", logFieldDriver, p.getDriver())
+	} else {
+		_ = os.Unsetenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD")
 	}
 
 	// Set up XDG-compliant storage directory for browser state.
@@ -649,6 +662,8 @@ func (p *samlProvider) setupBrowserAutomation() {
 	if err := p.setupBrowserStorageDir(); err != nil {
 		log.Warn("Failed to setup browser storage directory", "error", err)
 	}
+
+	return nil
 }
 
 // validateBrowserExecutable checks if the configured browser executable exists and is executable.
