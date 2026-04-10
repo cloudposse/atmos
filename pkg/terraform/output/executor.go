@@ -338,12 +338,20 @@ func (e *Executor) GetOutputWithOptions(
 	defer stopSpinner()
 
 	// Describe the component to get its configuration.
+	// When SkipInit is set and no authManager is provided, skip YAML function
+	// processing to avoid failures on auth-backed functions (e.g. !terraform.state)
+	// that need credentials which may not be available in post-hook context.
+	processYamlFunctions := true
+	if opts != nil && opts.SkipInit && authManager == nil {
+		processYamlFunctions = false
+	}
+
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
-		ProcessYamlFunctions: true,
+		ProcessYamlFunctions: processYamlFunctions,
 		AuthManager:          authManager,
 	})
 	if err != nil {

@@ -1520,7 +1520,14 @@ func TestExecutor_GetOutputWithOptions_SkipInit(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 	sections := validSections()
 
-	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(sections, nil)
+	// DescribeComponent should be called with ProcessYamlFunctions=false when SkipInit=true and authManager=nil.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.False(t, params.ProcessYamlFunctions,
+				"ProcessYamlFunctions should be false when SkipInit=true and authManager=nil")
+			return sections, nil
+		},
+	)
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	// Init and Workspace calls must NOT happen.
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
