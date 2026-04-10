@@ -75,5 +75,6 @@ jobs:
       - name: Commit fixes via Atmos Pro
         env:
           ATMOS_LOGS_LEVEL: debug
+          ATMOS_PRO_WORKSPACE_ID: ${{ vars.ATMOS_PRO_WORKSPACE_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: /tmp/atmos-dev pro commit -m "[autocommit] formatting fixes" --all
