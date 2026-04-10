@@ -4,10 +4,10 @@
 
 **Issues:**
 
-- SAML browser storage state fails to save on Windows due to mixed path
-  separators (`C:\Users\user/.aws/saml2aws/storageState.json`)
-- Storage strategy should prefer XDG paths directly instead of symlink
-  workarounds that break on Windows
+- SAML browser storage state fails to save on Windows — the directory
+  at `~/.aws/saml2aws/` is missing because the previous symlink-based
+  strategy requires privileges most Windows users don't have
+- Replace symlink strategy with plain directory creation on all platforms
 
 ## Status
 
@@ -128,13 +128,13 @@ help users on current versions.
 
 ---
 
-## Issue 2 — Storage strategy should use XDG paths directly, not symlinks
+## Issue 2 — Replace symlink strategy with plain directory creation
 
 ### Problem
 
-The current `setupBrowserStorageDir` creates an XDG-compliant cache
-directory (`~/.cache/atmos/aws-saml/<provider>`) and then symlinks
-`~/.aws/saml2aws` to it. This is an indirect workaround for `saml2aws's`
+The previous `setupBrowserStorageDir` created an XDG-compliant cache
+directory (`~/.cache/atmos/aws-saml/<provider>`) and then symlinked
+`~/.aws/saml2aws` to it. This was an indirect workaround for saml2aws's
 hardcoded `~/.aws/saml2aws/storageState.json` path.
 
 This symlink strategy is problematic:
@@ -196,20 +196,19 @@ Rewrite `setupBrowserStorageDir` to:
 
 ```go
 func (p *samlProvider) setupBrowserStorageDir() error {
-  homeDir, err := homedir.Dir()
-  if err != nil {
-    return fmt.Errorf("failed to get user home directory: %w", err)
-  }
-}
+    homeDir, err := homedir.Dir()
+    if err != nil {
+        return fmt.Errorf("failed to get user home directory: %w", err)
+    }
 
-// Create ~/.aws/saml2aws/ as a real directory.
-// saml2aws hardcodes this path in pkg/provider/browser/browser.go:118.
-  saml2awsDir := filepath.Join(homeDir, ".aws", "saml2aws")
-  if err := os.MkdirAll(saml2awsDir, 0o700); err != nil {
-      return fmt.Errorf("failed to create saml2aws storage directory: %w", err)
-  }
+    // Create ~/.aws/saml2aws/ as a real directory.
+    // saml2aws hardcodes this path in pkg/provider/browser/browser.go:118.
+    saml2awsDir := filepath.Join(homeDir, ".aws", "saml2aws")
+    if err := os.MkdirAll(saml2awsDir, 0o700); err != nil {
+        return fmt.Errorf("failed to create saml2aws storage directory: %w", err)
+    }
 
-  return nil
+    return nil
 }
 ```
 

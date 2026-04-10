@@ -734,15 +734,10 @@ func (p *samlProvider) setupBrowserStorageDir() error {
 	// saml2aws hardcodes this path in pkg/provider/browser/browser.go:118.
 	saml2awsDir := filepath.Join(homeDir, awsDir, saml2awsSubdir)
 
-	// Remove legacy symlink left by previous Atmos versions. os.MkdirAll
+	// Migrate legacy symlink left by previous Atmos versions. os.MkdirAll
 	// would leave a stale symlink in place, so upgraded users would never
 	// receive the plain-directory migration.
-	if info, lstatErr := os.Lstat(saml2awsDir); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
-		log.Debug("Removing legacy saml2aws symlink", "path", saml2awsDir)
-		if removeErr := os.Remove(saml2awsDir); removeErr != nil {
-			return fmt.Errorf("%w: remove legacy saml2aws symlink: %w", errUtils.ErrCreateDirectory, removeErr)
-		}
-	}
+	p.migrateLegacySymlink(saml2awsDir)
 
 	if err := os.MkdirAll(saml2awsDir, samlStorageDirPerms); err != nil {
 		return fmt.Errorf("%w: %s: %w", errUtils.ErrCreateDirectory, saml2awsDir, err)
@@ -750,6 +745,59 @@ func (p *samlProvider) setupBrowserStorageDir() error {
 
 	log.Debug("Browser storage directory ready", "path", saml2awsDir)
 	return nil
+}
+
+// migrateLegacySymlink removes a legacy symlink at path and preserves any
+// existing storageState.json from the symlink target. This handles upgrades
+// from Atmos versions that used a symlink-based storage strategy.
+func (p *samlProvider) migrateLegacySymlink(path string) {
+	const (
+		storageStateFile   = "storageState.json"
+		migrationDirPerms  = 0o700
+		migrationFilePerms = 0o600
+	)
+
+	info, lstatErr := os.Lstat(path)
+	if lstatErr != nil || info.Mode()&os.ModeSymlink == 0 {
+		return // Not a symlink — nothing to migrate.
+	}
+
+	// Read the symlink target to check for existing state before removing.
+	target, readErr := os.Readlink(path)
+	if readErr != nil {
+		log.Debug("Cannot read legacy symlink target, removing anyway", "path", path, "error", readErr)
+	}
+
+	// Check for existing storageState.json in the symlink target.
+	var stateData []byte
+	if target != "" {
+		statePath := filepath.Join(target, storageStateFile)
+		if data, readFileErr := os.ReadFile(statePath); readFileErr == nil {
+			stateData = data
+			log.Debug("Preserving browser state from legacy symlink target", "source", statePath)
+		}
+	}
+
+	// Remove the symlink.
+	log.Debug("Removing legacy saml2aws symlink", "path", path)
+	if removeErr := os.Remove(path); removeErr != nil {
+		log.Warn("Failed to remove legacy saml2aws symlink", "path", path, "error", removeErr)
+		return
+	}
+
+	// Restore storageState.json into the new real directory.
+	if len(stateData) > 0 {
+		if mkdirErr := os.MkdirAll(path, migrationDirPerms); mkdirErr != nil {
+			log.Warn("Failed to create directory for state migration", "path", path, "error", mkdirErr)
+			return
+		}
+		destPath := filepath.Join(path, storageStateFile)
+		if writeErr := os.WriteFile(destPath, stateData, migrationFilePerms); writeErr != nil {
+			log.Warn("Failed to migrate storageState.json", "dest", destPath, "error", writeErr)
+		} else {
+			log.Debug("Migrated storageState.json from legacy symlink", "dest", destPath)
+		}
+	}
 }
 
 // Logout removes provider-specific credential storage.
