@@ -619,14 +619,14 @@ func TestSAMLProvider_createSAMLConfig_BrowserConfiguration(t *testing.T) {
 		Username:              "testuser",
 		Driver:                "Browser",
 		BrowserType:           "msedge",
-		BrowserExecutablePath: "/usr/bin/microsoft-edge",
+		BrowserExecutablePath: filepath.Join("opt", "browsers", "msedge"),
 	})
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
 	cfg := sp.createSAMLConfig()
 	assert.Equal(t, "msedge", cfg.BrowserType)
-	assert.Equal(t, "/usr/bin/microsoft-edge", cfg.BrowserExecutablePath)
+	assert.Equal(t, filepath.Join("opt", "browsers", "msedge"), cfg.BrowserExecutablePath)
 	assert.Equal(t, "Browser", cfg.Provider)
 }
 
@@ -802,7 +802,7 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 		{
 			name: "custom browser_executable_path specified, skips auto-download",
 			config: &schema.Provider{
-				BrowserExecutablePath: "/usr/bin/google-chrome",
+				BrowserExecutablePath: filepath.Join("opt", "browsers", "chrome"),
 			},
 			driverValue:         "Browser",
 			playwrightInstalled: false,
@@ -812,7 +812,7 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 			name: "both custom browser fields specified, skips auto-download",
 			config: &schema.Provider{
 				BrowserType:           "chrome",
-				BrowserExecutablePath: "/usr/bin/google-chrome",
+				BrowserExecutablePath: filepath.Join("opt", "browsers", "chrome"),
 			},
 			driverValue:         "Browser",
 			playwrightInstalled: false,
