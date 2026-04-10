@@ -619,14 +619,14 @@ func TestSAMLProvider_createSAMLConfig_BrowserConfiguration(t *testing.T) {
 		Username:              "testuser",
 		Driver:                "Browser",
 		BrowserType:           "msedge",
-		BrowserExecutablePath: "/usr/bin/microsoft-edge",
+		BrowserExecutablePath: filepath.Join("opt", "browsers", "msedge"),
 	})
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
 	cfg := sp.createSAMLConfig()
 	assert.Equal(t, "msedge", cfg.BrowserType)
-	assert.Equal(t, "/usr/bin/microsoft-edge", cfg.BrowserExecutablePath)
+	assert.Equal(t, filepath.Join("opt", "browsers", "msedge"), cfg.BrowserExecutablePath)
 	assert.Equal(t, "Browser", cfg.Provider)
 }
 
@@ -802,7 +802,7 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 		{
 			name: "custom browser_executable_path specified, skips auto-download",
 			config: &schema.Provider{
-				BrowserExecutablePath: "/usr/bin/google-chrome",
+				BrowserExecutablePath: filepath.Join("opt", "browsers", "chrome"),
 			},
 			driverValue:         "Browser",
 			playwrightInstalled: false,
@@ -812,7 +812,7 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 			name: "both custom browser fields specified, skips auto-download",
 			config: &schema.Provider{
 				BrowserType:           "chrome",
-				BrowserExecutablePath: "/usr/bin/google-chrome",
+				BrowserExecutablePath: filepath.Join("opt", "browsers", "chrome"),
 			},
 			driverValue:         "Browser",
 			playwrightInstalled: false,
@@ -837,25 +837,36 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				homeDir := tmpDir
 				t.Setenv("HOME", homeDir)
 				t.Setenv("USERPROFILE", homeDir)
+				t.Setenv("LOCALAPPDATA", homeDir) // Windows: playwright checks LOCALAPPDATA.
 
 				// Clear homedir cache to ensure environment variables take effect.
 				t.Cleanup(homedir.Reset)
 				homedir.Reset()
 
-				// Create a mock playwright driver directory with a file inside to pass validation.
-				playwrightPath := filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
-				err := os.MkdirAll(playwrightPath, 0o755)
-				require.NoError(t, err)
+				// Create mock playwright drivers in the platform-appropriate cache path.
+				var playwrightPath string
+				switch runtime.GOOS {
+				case "darwin":
+					playwrightPath = filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "chromium-1084")
+				case "windows":
+					playwrightPath = filepath.Join(homeDir, "ms-playwright", "chromium-1084")
+				default: // Linux.
+					playwrightPath = filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
+				}
+				require.NoError(t, os.MkdirAll(playwrightPath, 0o755))
 
 				// hasValidPlaywrightDrivers checks for files inside version directory.
 				dummyBinary := filepath.Join(playwrightPath, "chrome")
-				err = os.WriteFile(dummyBinary, []byte("dummy"), 0o755)
-				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(dummyBinary, []byte("dummy"), 0o755))
 			} else {
 				// Use empty temp directory (no drivers).
 				tmpDir := t.TempDir()
 				t.Setenv("HOME", tmpDir)
 				t.Setenv("USERPROFILE", tmpDir)
+				// Windows: playwrightDriversInstalled checks LOCALAPPDATA via viper.
+				// Without overriding it, the real LOCALAPPDATA may contain actual
+				// Playwright drivers from the CI runner, causing false detection.
+				t.Setenv("LOCALAPPDATA", tmpDir)
 
 				// Clear homedir cache to ensure environment variables take effect.
 				t.Cleanup(homedir.Reset)
