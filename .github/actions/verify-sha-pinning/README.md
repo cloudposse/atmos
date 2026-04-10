@@ -11,20 +11,29 @@ This action catches:
 - **Stale pins** — tag was moved upstream (force-push) after initial pinning
 - **Typosquatting** — tag not found because the owner/repo is wrong
 
+On mismatch, the action investigates whether the pinned SHA exists in the claimed repo and what tags (if any) it corresponds to — helping distinguish stale pins from supply chain attacks.
+
 ## Usage
 
 ```yaml
-- uses: actions/checkout@v6
-- uses: ./.github/actions/verify-sha-pinning
-  with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
+permissions:
+  contents: read
+  pull-requests: write
+
+steps:
+  - uses: actions/checkout@v6
+  - uses: ./.github/actions/verify-sha-pinning
+    with:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+**Note:** `pull-requests: write` is required for posting sticky PR comments.
 
 ## Inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `github-token` | Yes | — | GitHub token for API calls |
+| `github-token` | Yes | — | GitHub token for API calls and PR comments |
 | `workflow-dir` | No | `.github/workflows` | Directory to scan |
 
 ## Outputs
@@ -35,6 +44,14 @@ This action catches:
 | `failed-count` | Number of mismatches found |
 | `status` | `pass` or `fail` |
 
+## PR Comments
+
+On pull requests, the action posts a sticky comment (updated in place):
+- **Failure**: Warning table with each action's status and forensic details
+- **Resolved**: Updated to show all pins verified
+
+No comment is posted on clean PRs that have never had a violation.
+
 ## What it scans
 
 Any line in `*.yml` / `*.yaml` matching:
@@ -44,3 +61,9 @@ uses: owner/repo@<40-char-sha> # v<tag>
 ```
 
 Handles sub-actions (`owner/repo/sub@sha # tag`) and both annotated and lightweight git tags.
+
+## Local testing
+
+```bash
+GITHUB_TOKEN=$(gh auth token) node .github/actions/verify-sha-pinning/test.mjs
+```
