@@ -426,6 +426,17 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
+	ciCommentsEnabled := os.Getenv("ATMOS_CI_COMMENTS_ENABLED")
+	if len(ciCommentsEnabled) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
+		enabled, err := strconv.ParseBool(ciCommentsEnabled)
+		if err != nil {
+			log.Warn("Invalid boolean value for ENV variable; using default.", "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
+		} else {
+			atmosConfig.CI.Comments.Enabled = enabled
+		}
+	}
+
 	return nil
 }
 
