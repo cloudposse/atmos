@@ -3,10 +3,60 @@ package logger
 import (
 	"encoding/json"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 )
+
+// sensitiveLogValuePatterns matches common secret key=value or key:value pairs
+// that third-party libraries (e.g. saml2aws) may include in log messages.
+// Matched values are redacted before forwarding to the Atmos logger.
+var sensitiveLogValuePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\b(password|passwd|pwd|token|secret|api[_-]?key|session[_-]?id|credential)\s*[:=]\s*([^\s,;}"]+)`),
+}
+
+// sanitizeLogMessage redacts common sensitive key=value patterns before logging.
+func sanitizeLogMessage(msg string) string {
+	for _, pattern := range sensitiveLogValuePatterns {
+		msg = pattern.ReplaceAllString(msg, `$1=[REDACTED]`)
+	}
+	return msg
+}
+
+// sanitizeFieldValue redacts the value if the field key looks like a secret.
+// For non-sensitive keys with string values, it also applies sanitizeLogMessage
+// to catch embedded sensitive patterns (e.g. a "details" field containing
+// "password=s3cret").
+func sanitizeFieldValue(key string, value interface{}) interface{} {
+	if isSensitiveLogKey(key) {
+		return "[REDACTED]"
+	}
+	// Also sanitize string values that may contain embedded sensitive data.
+	if strVal, ok := value.(string); ok {
+		return sanitizeLogMessage(strVal)
+	}
+	return value
+}
+
+// sensitiveKeySubstrings lists substrings that identify sensitive log field keys.
+// Any key containing one of these (case-insensitive) has its value redacted.
+var sensitiveKeySubstrings = []string{
+	"password", "passwd", "pwd", "secret", "token",
+	"apikey", "api_key", "authorization", "cookie",
+	"session", "private_key", "client_secret", "credential",
+}
+
+// isSensitiveLogKey identifies keys that commonly hold secrets.
+func isSensitiveLogKey(key string) bool {
+	k := strings.ToLower(strings.TrimSpace(key))
+	for _, substr := range sensitiveKeySubstrings {
+		if strings.Contains(k, substr) {
+			return true
+		}
+	}
+	return false
+}
 
 // levelLogger abstracts the level-dispatched logging calls that Write() uses.
 // Production code uses the global Atmos logger via defaultLevelLogger; tests
@@ -53,13 +103,15 @@ func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 		// Successfully parsed JSON - extract level and fields.
 		level, _ := entry["level"].(string)
 		msg, _ := entry["msg"].(string)
+		msg = sanitizeLogMessage(msg)
 
 		// Build structured fields for Atmos logger.
 		// Exclude standard fields (level, msg, time) and pass the rest as key-value pairs.
+		// Redact values for keys that look like secrets.
 		var fields []interface{}
 		for k, v := range entry {
 			if k != "level" && k != "msg" && k != "time" {
-				fields = append(fields, k, v)
+				fields = append(fields, k, sanitizeFieldValue(k, v))
 			}
 		}
 
@@ -76,8 +128,8 @@ func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 		}
 	} else {
 		// Fallback: Not JSON (shouldn't happen with JSONFormatter, but handle gracefully).
-		// Log the raw message at Info level.
-		a.logger.Info(message)
+		// Log the sanitized raw message at Info level.
+		a.logger.Info(sanitizeLogMessage(message))
 	}
 
 	return len(p), nil

@@ -244,3 +244,99 @@ func TestAtmosLevelToLogrus(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeLogMessage(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "password in key=value",
+			input: "login failed password=s3cret123",
+			want:  "login failed password=[REDACTED]",
+		},
+		{
+			name:  "token with colon separator",
+			input: "auth token: abc123def",
+			want:  "auth token=[REDACTED]",
+		},
+		{
+			name:  "api_key with equals",
+			input: "using api_key=AKIAIOSFODNN7EXAMPLE",
+			want:  "using api_key=[REDACTED]",
+		},
+		{
+			name:  "case insensitive",
+			input: "PASSWORD=hunter2 TOKEN=xyz",
+			want:  "PASSWORD=[REDACTED] TOKEN=[REDACTED]",
+		},
+		{
+			name:  "no sensitive data",
+			input: "opening browser for authentication",
+			want:  "opening browser for authentication",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeLogMessage(tt.input))
+		})
+	}
+}
+
+func TestSanitizeFieldValue(t *testing.T) {
+	// Sensitive field keys should have their values redacted.
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("password", "hunter2"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("Password", "secret"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("token", "abc123"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("api_key", "AKIAEXAMPLE"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("secret", "s3cret"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("credential", "cred123"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("session_id", "sess123"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("authorization", "Bearer xyz"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("cookie", "session=abc"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("private_key", "-----BEGIN RSA"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("client_secret", "cs_live_xxx"))
+
+	// Substring matching: composite key names are also caught.
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("x_auth_token", "tok123"))
+	assert.Equal(t, "[REDACTED]", sanitizeFieldValue("saml_session_cookie", "sess"))
+
+	// Non-sensitive keys should pass through unchanged.
+	assert.Equal(t, "browser", sanitizeFieldValue("provider", "browser"))
+	assert.Equal(t, "https://idp.example.com", sanitizeFieldValue("url", "https://idp.example.com"))
+	assert.Equal(t, 42, sanitizeFieldValue("attempts", 42))
+
+	// Non-sensitive key with embedded sensitive data in the string value.
+	result := sanitizeFieldValue("details", "login failed password=s3cret123")
+	assert.NotContains(t, result, "s3cret123", "embedded password in non-sensitive key's value must be redacted")
+	assert.Contains(t, result, "[REDACTED]")
+}
+
+func TestLogrusAdapter_Write_RedactsSensitiveData(t *testing.T) {
+	// Verify that sensitive data in JSON messages is redacted before logging.
+	rec := &recordingLogger{}
+	adapter := &logrusAdapter{logger: rec}
+
+	// JSON message with password in msg field.
+	msg := `{"level":"error","msg":"login failed password=s3cret123","provider":"browser"}` + "\n"
+	_, err := adapter.Write([]byte(msg))
+	assert.NoError(t, err)
+	assert.Equal(t, "error", rec.level)
+	assert.NotContains(t, rec.msg, "s3cret123", "password value must be redacted from msg")
+	assert.Contains(t, rec.msg, "[REDACTED]")
+
+	// Non-JSON fallback with sensitive data.
+	rec2 := &recordingLogger{}
+	adapter2 := &logrusAdapter{logger: rec2}
+	_, err = adapter2.Write([]byte("auth token=abc123def456\n"))
+	assert.NoError(t, err)
+	assert.NotContains(t, rec2.msg, "abc123def456", "token must be redacted in fallback path")
+	assert.Contains(t, rec2.msg, "[REDACTED]")
+}
