@@ -1045,7 +1045,7 @@ func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
 
 	_, _, err := exec.GetOutput(atmosConfig, "exec-err-stack", "exec-err-component", "output", true, nil, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to execute terraform output")
+	assert.True(t, errors.Is(err, errUtils.ErrTerraformOutputFailed), "expected ErrTerraformOutputFailed")
 }
 
 // TestHighlightValue_NilConfig tests the highlightValue function with nil config.
