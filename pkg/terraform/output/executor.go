@@ -283,7 +283,10 @@ func (e *Executor) GetOutput(
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil)
 	if err != nil {
 		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
-		return nil, false, fmt.Errorf("failed to execute terraform output for component %s in stack %s: %w", component, stack, err)
+		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
+			Err()
 	}
 
 	// Cache the result.
@@ -380,7 +383,10 @@ func (e *Executor) GetOutputWithOptions(
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts)
 	if err != nil {
 		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
-		return nil, false, fmt.Errorf("failed to execute terraform output for component %s in stack %s: %w", component, stack, err)
+		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
+			Err()
 	}
 
 	// Cache the result.
