@@ -705,118 +705,40 @@ func (p *samlProvider) validateBrowserExecutable() error {
 	return nil
 }
 
-// setupBrowserStorageDir creates an XDG-compliant directory for SAML browser storage state.
-// Saml2aws hardcodes ~/.aws/saml2aws/storageState.json, so we create ~/.aws/saml2aws
-// as a symlink to ~/.cache/atmos/aws-saml/<provider-name> to respect XDG conventions.
+// setupBrowserStorageDir ensures the directory that saml2aws uses for browser
+// storage state exists. The path is hardcoded upstream as
+// `~/.aws/saml2aws/storageState.json` (using fmt.Sprintf with forward slashes,
+// which produces mixed-separator paths on Windows). We cannot redirect this
+// path to an XDG location because saml2aws does not expose a configurable
+// storage path.
+//
+// The fix: create `~/.aws/saml2aws/` as a plain directory using filepath.Join
+// (correct separators on all platforms) and os.MkdirAll (no privilege
+// requirements). This replaces the previous symlink strategy which broke on
+// Windows due to symlink privilege requirements and mixed path separators.
+//
+// See docs/fixes/2026-04-10-auth-windows-path-issues.md for the full analysis.
 func (p *samlProvider) setupBrowserStorageDir() error {
 	const (
-		samlStorageSubdir   = "aws-saml"
 		samlStorageDirPerms = 0o700
 		awsDir              = ".aws"
 		saml2awsSubdir      = "saml2aws"
 	)
 
-	// Get XDG cache directory for SAML storage.
-	xdgCacheDir, err := xdg.GetXDGCacheDir(samlStorageSubdir, samlStorageDirPerms)
-	if err != nil {
-		return fmt.Errorf("failed to get XDG cache directory: %w", err)
-	}
-
-	// Create provider-specific subdirectory.
-	providerStorageDir := filepath.Join(xdgCacheDir, p.name)
-	if err := os.MkdirAll(providerStorageDir, samlStorageDirPerms); err != nil {
-		return fmt.Errorf("failed to create provider storage directory: %w", err)
-	}
-
-	// Get user home directory for ~/.aws symlink.
 	homeDir, err := homedir.Dir()
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	// Create ~/.aws directory if it doesn't exist.
-	awsDirPath := filepath.Join(homeDir, awsDir)
-	if err := os.MkdirAll(awsDirPath, samlStorageDirPerms); err != nil {
-		return fmt.Errorf("failed to create .aws directory: %w", err)
+	// Create ~/.aws/saml2aws/ as a real directory (not a symlink).
+	// saml2aws hardcodes this path in pkg/provider/browser/browser.go:118.
+	saml2awsDir := filepath.Join(homeDir, awsDir, saml2awsSubdir)
+	if err := os.MkdirAll(saml2awsDir, samlStorageDirPerms); err != nil {
+		return fmt.Errorf("failed to create saml2aws storage directory: %w", err)
 	}
 
-	// Create ~/.aws/saml2aws as symlink to provider-specific XDG cache directory.
-	saml2awsPath := filepath.Join(awsDirPath, saml2awsSubdir)
-	return p.ensureStorageSymlink(saml2awsPath, providerStorageDir)
-}
-
-// ensureStorageSymlink ensures ~/.aws/saml2aws symlink points to the correct target.
-func (p *samlProvider) ensureStorageSymlink(symlinkPath, targetPath string) error {
-	// Check if symlink already exists and points to correct target.
-	if p.isCorrectSymlink(symlinkPath, targetPath) {
-		log.Debug("Browser storage symlink already exists", "path", symlinkPath, "target", targetPath)
-		return nil
-	}
-
-	// Stage the existing path so we can restore it if symlink creation fails.
-	// This is critical on Windows where os.Symlink requires developer mode or
-	// elevated privileges — without staging, a failed symlink leaves the user
-	// with no ~/.aws/saml2aws at all, breaking subsequent browser runs.
-	if err := p.stageExistingPath(symlinkPath); err != nil {
-		return err
-	}
-
-	// Create symlink. If this fails (e.g. Windows without developer mode),
-	// restore the staged directory so the user is no worse off than before.
-	if err := os.Symlink(targetPath, symlinkPath); err != nil {
-		p.restoreStagedPath(symlinkPath)
-		return fmt.Errorf("failed to create symlink: %w", err)
-	}
-
-	// Clean up staged backup on success.
-	_ = os.RemoveAll(symlinkPath + ".bak")
-
-	log.Debug("Created browser storage symlink", "path", symlinkPath, "target", targetPath)
+	log.Debug("Browser storage directory ready", "path", saml2awsDir)
 	return nil
-}
-
-// isCorrectSymlink checks if path is a symlink pointing to expectedTarget.
-func (p *samlProvider) isCorrectSymlink(symlinkPath, expectedTarget string) bool {
-	info, err := os.Lstat(symlinkPath)
-	if err != nil {
-		return false
-	}
-
-	if info.Mode()&os.ModeSymlink == 0 {
-		return false
-	}
-
-	target, err := os.Readlink(symlinkPath)
-	return err == nil && target == expectedTarget
-}
-
-// stageExistingPath handles the existing path at symlinkPath before symlink
-// creation. If it's a stale symlink, removes it directly. If it's a directory
-// or file, renames it to .bak so it can be restored on failure.
-func (p *samlProvider) stageExistingPath(symlinkPath string) error {
-	info, lstatErr := os.Lstat(symlinkPath)
-	if lstatErr != nil {
-		return nil //nolint:nilerr // Path does not exist — nothing to stage; this is not an error condition.
-	}
-
-	if info.Mode()&os.ModeSymlink != 0 {
-		log.Debug("Removing stale symlink", "path", symlinkPath)
-		return os.Remove(symlinkPath)
-	}
-
-	backupPath := symlinkPath + ".bak"
-	log.Debug("Staging existing storage path", "path", symlinkPath, "backup", backupPath)
-	return os.Rename(symlinkPath, backupPath)
-}
-
-// restoreStagedPath restores a staged .bak path after a failed symlink
-// creation, so the user is no worse off than before.
-func (p *samlProvider) restoreStagedPath(symlinkPath string) {
-	backupPath := symlinkPath + ".bak"
-	if _, err := os.Stat(backupPath); err == nil {
-		_ = os.Rename(backupPath, symlinkPath)
-		log.Warn("Symlink creation failed, restored original storage path")
-	}
 }
 
 // Logout removes provider-specific credential storage.
