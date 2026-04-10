@@ -468,74 +468,14 @@ func TestFillRepoFromEnv(t *testing.T) {
 	}
 }
 
-func TestGetGitHubToken(t *testing.T) {
-	tests := []struct {
-		name        string
-		ciToken     string
-		githubToken string
-		ghToken     string
-		expected    string
-	}{
-		{
-			name:        "ATMOS_CI_GITHUB_TOKEN takes highest precedence",
-			ciToken:     "ci-token-value",
-			githubToken: "github-token-value",
-			ghToken:     "gh-token-value",
-			expected:    "ci-token-value",
-		},
-		{
-			name:        "ATMOS_CI_GITHUB_TOKEN alone",
-			ciToken:     "ci-token-value",
-			githubToken: "",
-			ghToken:     "",
-			expected:    "ci-token-value",
-		},
-		{
-			name:        "GITHUB_TOKEN fallback",
-			ciToken:     "",
-			githubToken: "github-token-value",
-			ghToken:     "",
-			expected:    "github-token-value",
-		},
-		{
-			name:        "GH_TOKEN fallback",
-			ciToken:     "",
-			githubToken: "",
-			ghToken:     "gh-token-value",
-			expected:    "gh-token-value",
-		},
-		{
-			name:        "GITHUB_TOKEN takes precedence over GH_TOKEN",
-			ciToken:     "",
-			githubToken: "github-token-value",
-			ghToken:     "gh-token-value",
-			expected:    "github-token-value",
-		},
-		{
-			name:        "no token",
-			ciToken:     "",
-			githubToken: "",
-			ghToken:     "",
-			expected:    "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("ATMOS_CI_GITHUB_TOKEN", tt.ciToken)
-			t.Setenv("GITHUB_TOKEN", tt.githubToken)
-			t.Setenv("GH_TOKEN", tt.ghToken)
-
-			result := getGitHubToken()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestNewStore(t *testing.T) {
 	t.Run("missing token", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "")
+		// Override PATH to prevent gh CLI fallback from finding a token.
+		t.Setenv("PATH", t.TempDir())
 
 		_, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{

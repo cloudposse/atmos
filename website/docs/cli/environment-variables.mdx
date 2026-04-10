@@ -414,6 +414,68 @@ These environment variables configure Atmos behavior and can override settings i
   </dd>
 </dl>
 
+## CI / CD
+
+<dl>
+  <dt>`ATMOS_CI`</dt>
+  <dd>
+    Explicitly enable or disable CI mode. When `true`, activates CI features such as commit statuses,
+    job summaries, and planfile storage. Auto-detected when `CI=true` or `GITHUB_ACTIONS=true` is set.
+  </dd>
+
+  <dt>`ATMOS_CI_GITHUB_TOKEN`</dt>
+  <dd>
+    Dedicated GitHub token for CI operations (commit statuses, artifact storage).
+    When set, CI operations use this token instead of `GITHUB_TOKEN`, allowing Terraform
+    to use a GitHub App token with elevated permissions while CI uses a standard token
+    with `statuses:write` scope.
+
+    **Precedence:** `ATMOS_CI_GITHUB_TOKEN` > `ATMOS_GITHUB_TOKEN` > `GITHUB_TOKEN` > `gh auth token`
+  </dd>
+
+  <dt>`ATMOS_CI_SHA`</dt>
+  <dd>
+    Override the commit SHA used for planfile resolution and CI context.
+    Falls back to `GIT_COMMIT`, `CI_COMMIT_SHA`, `COMMIT_SHA`, then git HEAD.
+  </dd>
+
+  <dt>`ATMOS_CI_BRANCH`</dt>
+  <dd>
+    Override the branch name used for CI context.
+    Falls back to `GIT_BRANCH`, `CI_COMMIT_REF_NAME`, `BRANCH_NAME`, then git detection.
+  </dd>
+
+  <dt>`ATMOS_CI_REPOSITORY`</dt>
+  <dd>
+    Override the repository name (`owner/repo`) used for CI context.
+    Falls back to `CI_PROJECT_PATH`.
+  </dd>
+
+  <dt>`ATMOS_CI_ACTOR`</dt>
+  <dd>
+    Override the CI actor/username.
+    Falls back to `CI_COMMIT_AUTHOR`, then `USER`.
+  </dd>
+
+  <dt>`ATMOS_CI_BASE_REF`</dt>
+  <dd>
+    Override the base ref for diff and affected-component detection.
+    Accepts a branch name or full commit SHA.
+  </dd>
+
+  <dt>`ATMOS_CI_OUTPUT`</dt>
+  <dd>
+    File path for CI output variables (key=value pairs).
+    On GitHub Actions, defaults to `GITHUB_OUTPUT`.
+  </dd>
+
+  <dt>`ATMOS_CI_SUMMARY`</dt>
+  <dd>
+    File path for CI job summaries (Markdown).
+    On GitHub Actions, defaults to `GITHUB_STEP_SUMMARY`.
+  </dd>
+</dl>
+
 ## AI Integration
 
 <dl>

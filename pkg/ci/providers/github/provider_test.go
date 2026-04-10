@@ -170,8 +170,11 @@ func TestProvider_EnsureClient(t *testing.T) {
 
 	t.Run("fails when no token is available", func(t *testing.T) {
 		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "")
+		// Override PATH to prevent gh CLI fallback from finding a token.
+		t.Setenv("PATH", t.TempDir())
 		p := NewProvider()
 		err := p.ensureClient()
 		require.Error(t, err)
@@ -207,8 +210,12 @@ func TestProvider_EnsureClient(t *testing.T) {
 func TestProvider_DetectIndependentOfToken(t *testing.T) {
 	// This is the key test: detection works without GITHUB_TOKEN.
 	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
 	t.Setenv("GITHUB_TOKEN", "")
 	t.Setenv("GH_TOKEN", "")
+	// Override PATH to prevent gh CLI fallback from finding a token.
+	t.Setenv("PATH", t.TempDir())
 
 	p := NewProvider()
 	assert.True(t, p.Detect(), "detection should succeed without token")
@@ -229,6 +236,8 @@ func TestProvider_DetectIndependentOfToken(t *testing.T) {
 
 func TestProvider_OutputWriter_IndependentOfToken(t *testing.T) {
 	// OutputWriter should work without a GitHub API client.
+	t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
 	t.Setenv("GITHUB_TOKEN", "")
 	t.Setenv("GH_TOKEN", "")
 	t.Setenv("GITHUB_OUTPUT", os.DevNull)
