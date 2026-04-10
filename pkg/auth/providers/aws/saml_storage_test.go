@@ -1,0 +1,567 @@
+package aws
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// skipIfSymlinksUnsupported skips the test on platforms where os.Symlink
+// requires elevated privileges (e.g. Windows without Developer Mode).
+func skipIfSymlinksUnsupported(t *testing.T) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	target := filepath.Join(tmpDir, "target")
+	require.NoError(t, os.MkdirAll(target, 0o700))
+	link := filepath.Join(tmpDir, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("Skipping: os.Symlink not available on this platform (%v)", err)
+	}
+}
+
+func TestSAMLProvider_setupBrowserStorageDir(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
+	tests := []struct {
+		name          string
+		providerName  string
+		setup         func(t *testing.T) string // Returns home directory.
+		expectedError bool
+		verifySymlink bool
+		verifyXDGDir  bool
+	}{
+		{
+			name:          "creates directory and symlink successfully",
+			providerName:  "test-saml",
+			expectedError: false,
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			verifySymlink: true,
+			verifyXDGDir:  true,
+		},
+		{
+			name:          "handles existing correct symlink",
+			providerName:  "existing-saml",
+			expectedError: false,
+			setup: func(t *testing.T) string {
+				homeDir := t.TempDir()
+
+				// Create XDG directory structure.
+				xdgCacheDir := filepath.Join(homeDir, ".cache", "atmos", "aws-saml", "existing-saml")
+				require.NoError(t, os.MkdirAll(xdgCacheDir, 0o700))
+
+				// Create ~/.aws directory.
+				awsDir := filepath.Join(homeDir, ".aws")
+				require.NoError(t, os.MkdirAll(awsDir, 0o700))
+
+				// Create correct symlink.
+				saml2awsPath := filepath.Join(awsDir, "saml2aws")
+				require.NoError(t, os.Symlink(xdgCacheDir, saml2awsPath))
+
+				return homeDir
+			},
+			verifySymlink: true,
+			verifyXDGDir:  true,
+		},
+		{
+			name:          "replaces incorrect symlink",
+			providerName:  "replace-saml",
+			expectedError: false,
+			setup: func(t *testing.T) string {
+				homeDir := t.TempDir()
+
+				// Create ~/.aws directory with wrong symlink.
+				awsDir := filepath.Join(homeDir, ".aws")
+				require.NoError(t, os.MkdirAll(awsDir, 0o700))
+
+				saml2awsPath := filepath.Join(awsDir, "saml2aws")
+				wrongTarget := filepath.Join(homeDir, "wrong-target")
+				require.NoError(t, os.MkdirAll(wrongTarget, 0o700))
+				require.NoError(t, os.Symlink(wrongTarget, saml2awsPath))
+
+				return homeDir
+			},
+			verifySymlink: true,
+			verifyXDGDir:  true,
+		},
+		{
+			name:          "replaces existing directory with symlink",
+			providerName:  "dir-replace-saml",
+			expectedError: false,
+			setup: func(t *testing.T) string {
+				homeDir := t.TempDir()
+
+				// Create ~/.aws/saml2aws as regular directory.
+				awsDir := filepath.Join(homeDir, ".aws")
+				saml2awsPath := filepath.Join(awsDir, "saml2aws")
+				require.NoError(t, os.MkdirAll(saml2awsPath, 0o700))
+
+				// Create a file inside to verify removal works.
+				testFile := filepath.Join(saml2awsPath, "test.txt")
+				require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o600))
+
+				return homeDir
+			},
+			verifySymlink: true,
+			verifyXDGDir:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			homeDir := tc.setup(t)
+
+			// Override environment variables for cross-platform compatibility.
+			t.Setenv("HOME", homeDir)
+			t.Setenv("USERPROFILE", homeDir)
+			t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+
+			// Clear homedir cache so homedir.Dir() reads the fresh env vars.
+			homedir.Reset()
+
+			// Create provider.
+			p := &samlProvider{
+				name:   tc.providerName,
+				config: &schema.Provider{},
+			}
+
+			// Execute setup.
+			err := p.setupBrowserStorageDir()
+
+			// Verify error expectation.
+			if tc.expectedError {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify XDG directory was created.
+			if tc.verifyXDGDir {
+				xdgCacheDir := filepath.Join(homeDir, ".cache", "atmos", "aws-saml", tc.providerName)
+				info, err := os.Stat(xdgCacheDir)
+				require.NoError(t, err, "XDG cache directory should exist")
+				assert.True(t, info.IsDir(), "XDG cache path should be a directory")
+				// Only check exact permissions on Unix — Windows does not
+				// support Unix-style permission bits, so os.MkdirAll(0700)
+				// may produce 0777 depending on the filesystem and umask.
+				if runtime.GOOS != "windows" {
+					assert.Equal(t, os.FileMode(0o700), info.Mode().Perm(), "XDG directory should have 0700 permissions")
+				}
+			}
+
+			// Verify symlink was created correctly.
+			if tc.verifySymlink {
+				awsDir := filepath.Join(homeDir, ".aws")
+				saml2awsPath := filepath.Join(awsDir, "saml2aws")
+
+				info, err := os.Lstat(saml2awsPath)
+				require.NoError(t, err, "Symlink should exist")
+				assert.True(t, info.Mode()&os.ModeSymlink != 0, "Path should be a symlink")
+
+				target, err := os.Readlink(saml2awsPath)
+				require.NoError(t, err, "Should be able to read symlink target")
+
+				expectedTarget := filepath.Join(homeDir, ".cache", "atmos", "aws-saml", tc.providerName)
+				assert.Equal(t, expectedTarget, target, "Symlink should point to correct XDG directory")
+			}
+		})
+	}
+}
+
+func TestSAMLProvider_ensureStorageSymlink(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T, symlinkPath, targetPath string)
+		expectedError bool
+	}{
+		{
+			name: "creates new symlink",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				// Ensure parent directory exists.
+				require.NoError(t, os.MkdirAll(filepath.Dir(symlinkPath), 0o700))
+				// Target directory exists.
+				require.NoError(t, os.MkdirAll(targetPath, 0o700))
+			},
+			expectedError: false,
+		},
+		{
+			name: "idempotent when correct symlink exists",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				require.NoError(t, os.MkdirAll(filepath.Dir(symlinkPath), 0o700))
+				require.NoError(t, os.MkdirAll(targetPath, 0o700))
+				// Create correct symlink.
+				require.NoError(t, os.Symlink(targetPath, symlinkPath))
+			},
+			expectedError: false,
+		},
+		{
+			name: "replaces wrong symlink",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				require.NoError(t, os.MkdirAll(filepath.Dir(symlinkPath), 0o700))
+				require.NoError(t, os.MkdirAll(targetPath, 0o700))
+				// Create wrong symlink.
+				wrongTarget := filepath.Join(filepath.Dir(targetPath), "wrong")
+				require.NoError(t, os.MkdirAll(wrongTarget, 0o700))
+				require.NoError(t, os.Symlink(wrongTarget, symlinkPath))
+			},
+			expectedError: false,
+		},
+		{
+			name: "replaces regular directory",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				require.NoError(t, os.MkdirAll(targetPath, 0o700))
+				// Create regular directory at symlink path.
+				require.NoError(t, os.MkdirAll(symlinkPath, 0o700))
+				// Add file inside to verify removal.
+				testFile := filepath.Join(symlinkPath, "test.txt")
+				require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o600))
+			},
+			expectedError: false,
+		},
+		{
+			name: "replaces regular file",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				require.NoError(t, os.MkdirAll(filepath.Dir(symlinkPath), 0o700))
+				require.NoError(t, os.MkdirAll(targetPath, 0o700))
+				// Create regular file at symlink path.
+				require.NoError(t, os.WriteFile(symlinkPath, []byte("test"), 0o600))
+			},
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			symlinkPath := filepath.Join(homeDir, "aws", "saml2aws")
+			targetPath := filepath.Join(homeDir, "cache", "saml-target")
+
+			tc.setup(t, symlinkPath, targetPath)
+
+			p := &samlProvider{
+				name:   "test",
+				config: &schema.Provider{},
+			}
+
+			err := p.ensureStorageSymlink(symlinkPath, targetPath)
+
+			if tc.expectedError {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify symlink was created correctly.
+			info, err := os.Lstat(symlinkPath)
+			require.NoError(t, err, "Symlink should exist")
+			assert.True(t, info.Mode()&os.ModeSymlink != 0, "Path should be a symlink")
+
+			target, err := os.Readlink(symlinkPath)
+			require.NoError(t, err, "Should be able to read symlink")
+			assert.Equal(t, targetPath, target, "Symlink should point to correct target")
+		})
+	}
+}
+
+func TestSAMLProvider_isCorrectSymlink(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
+	tests := []struct {
+		name           string
+		setup          func(t *testing.T, symlinkPath, targetPath string)
+		expectedResult bool
+	}{
+		{
+			name: "returns true for correct symlink",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				require.NoError(t, os.MkdirAll(filepath.Dir(symlinkPath), 0o700))
+				require.NoError(t, os.MkdirAll(targetPath, 0o700))
+				require.NoError(t, os.Symlink(targetPath, symlinkPath))
+			},
+			expectedResult: true,
+		},
+		{
+			name: "returns false for wrong symlink target",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				require.NoError(t, os.MkdirAll(filepath.Dir(symlinkPath), 0o700))
+				wrongTarget := filepath.Join(filepath.Dir(targetPath), "wrong")
+				require.NoError(t, os.MkdirAll(wrongTarget, 0o700))
+				require.NoError(t, os.Symlink(wrongTarget, symlinkPath))
+			},
+			expectedResult: false,
+		},
+		{
+			name: "returns false for regular directory",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				require.NoError(t, os.MkdirAll(symlinkPath, 0o700))
+			},
+			expectedResult: false,
+		},
+		{
+			name: "returns false for regular file",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				require.NoError(t, os.MkdirAll(filepath.Dir(symlinkPath), 0o700))
+				require.NoError(t, os.WriteFile(symlinkPath, []byte("test"), 0o600))
+			},
+			expectedResult: false,
+		},
+		{
+			name: "returns false when path does not exist",
+			setup: func(t *testing.T, symlinkPath, targetPath string) {
+				// No setup - path doesn't exist.
+			},
+			expectedResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			symlinkPath := filepath.Join(homeDir, "aws", "saml2aws")
+			targetPath := filepath.Join(homeDir, "cache", "saml-target")
+
+			tc.setup(t, symlinkPath, targetPath)
+
+			p := &samlProvider{
+				name:   "test",
+				config: &schema.Provider{},
+			}
+
+			result := p.isCorrectSymlink(symlinkPath, targetPath)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+func TestSAMLProvider_setupBrowserAutomation_CallsStorageSetup(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
+
+	p, err := NewSAMLProvider("test", &schema.Provider{
+		Kind:   "aws/saml",
+		URL:    "https://idp.example.com/saml",
+		Region: "us-east-1",
+	})
+	require.NoError(t, err)
+
+	sp := p.(*samlProvider)
+	sp.setupBrowserAutomation()
+
+	// Verify that setupBrowserStorageDir was called by checking if directories exist.
+	xdgCacheDir := filepath.Join(homeDir, ".cache", "atmos", "aws-saml", "test")
+	info, err := os.Stat(xdgCacheDir)
+	require.NoError(t, err, "XDG cache directory should be created")
+	assert.True(t, info.IsDir())
+
+	// Verify symlink was created.
+	saml2awsPath := filepath.Join(homeDir, ".aws", "saml2aws")
+	info, err = os.Lstat(saml2awsPath)
+	require.NoError(t, err, "Symlink should be created")
+	assert.True(t, info.Mode()&os.ModeSymlink != 0)
+}
+
+func TestSAMLProvider_setupBrowserAutomation_HandlesStorageSetupFailureGracefully(t *testing.T) {
+	// Test that setupBrowserAutomation continues even if storage setup fails.
+	// This tests the error handling path in setupBrowserAutomation.
+
+	// Create an environment where setupBrowserStorageDir will fail.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
+
+	// Create ~/.aws as a regular file (not directory) to cause mkdir failure.
+	awsPath := filepath.Join(homeDir, ".aws")
+	require.NoError(t, os.WriteFile(awsPath, []byte("not a directory"), 0o600))
+
+	p, err := NewSAMLProvider("test", &schema.Provider{
+		Kind:                  "aws/saml",
+		URL:                   "https://idp.example.com/saml",
+		Region:                "us-east-1",
+		DownloadBrowserDriver: true,
+	})
+	require.NoError(t, err)
+
+	sp := p.(*samlProvider)
+
+	// This should not error even though storage setup will fail internally.
+	// setupBrowserAutomation logs a warning for storage failures but returns nil.
+	err = sp.setupBrowserAutomation()
+	assert.NoError(t, err, "storage dir failure is non-fatal — should return nil")
+
+	// Verify the environment variable was still set (proves function continued).
+	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"))
+}
+
+func TestSAMLProvider_setupBrowserAutomation_FailsOnInvalidExecutable(t *testing.T) {
+	// setupBrowserAutomation should return an error when a custom browser
+	// executable is configured but does not exist. This is the fail-fast path.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
+
+	p := &samlProvider{
+		name: "test",
+		config: &schema.Provider{
+			BrowserExecutablePath: filepath.Join(homeDir, "nonexistent", "browser"),
+		},
+	}
+
+	err := p.setupBrowserAutomation()
+	assert.Error(t, err, "should fail fast when browser executable does not exist")
+}
+
+func TestSAMLProvider_setupBrowserAutomation_UnsetsEnvWhenDownloadDisabled(t *testing.T) {
+	// Verify that SAML2AWS_AUTO_BROWSER_DOWNLOAD is explicitly unset when
+	// shouldDownloadBrowser() returns false, preventing env leak across calls.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
+
+	// Pre-set the env var to simulate a previous auth flow.
+	t.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
+
+	p := &samlProvider{
+		name: "test",
+		config: &schema.Provider{
+			Driver: "GoogleApps", // Non-Browser driver → download disabled.
+		},
+		url: "https://accounts.google.com/saml",
+	}
+
+	err := p.setupBrowserAutomation()
+	assert.NoError(t, err)
+
+	// The env var should be cleared.
+	assert.Empty(t, os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"),
+		"SAML2AWS_AUTO_BROWSER_DOWNLOAD should be unset for non-Browser drivers")
+}
+
+func TestSAMLProvider_setupBrowserAutomation_LogsBrowserType(t *testing.T) {
+	// Covers the BrowserType logging branch.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	homedir.Reset()
+
+	p := &samlProvider{
+		name: "test",
+		config: &schema.Provider{
+			BrowserType: "chromium",
+			Driver:      "GoogleApps", // Non-Browser to keep test fast.
+		},
+		url: "https://accounts.google.com/saml",
+	}
+
+	err := p.setupBrowserAutomation()
+	assert.NoError(t, err)
+}
+
+func TestSAMLProvider_restoreStagedPath(t *testing.T) {
+	t.Run("restores backup when it exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		symlinkPath := filepath.Join(tmpDir, "saml2aws")
+		backupPath := symlinkPath + ".bak"
+
+		// Create a .bak directory to simulate a staged path.
+		require.NoError(t, os.MkdirAll(backupPath, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(backupPath, "state.json"), []byte("{}"), 0o600))
+
+		p := &samlProvider{config: &schema.Provider{}}
+		p.restoreStagedPath(symlinkPath)
+
+		// Backup should be moved back to the original path.
+		_, err := os.Stat(symlinkPath)
+		assert.NoError(t, err, "original path should be restored from backup")
+		_, err = os.Stat(backupPath)
+		assert.True(t, os.IsNotExist(err), ".bak should be gone after restore")
+		// Verify content survived.
+		content, err := os.ReadFile(filepath.Join(symlinkPath, "state.json"))
+		require.NoError(t, err)
+		assert.Equal(t, "{}", string(content))
+	})
+
+	t.Run("no-op when no backup exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		symlinkPath := filepath.Join(tmpDir, "saml2aws")
+
+		p := &samlProvider{config: &schema.Provider{}}
+		// Must not panic or error when no .bak exists.
+		p.restoreStagedPath(symlinkPath)
+
+		_, err := os.Stat(symlinkPath)
+		assert.True(t, os.IsNotExist(err), "nothing should be created when no backup exists")
+	})
+}
+
+func TestSAMLProvider_ensureStorageSymlink_CleansUpBackupOnSuccess(t *testing.T) {
+	skipIfSymlinksUnsupported(t)
+
+	// When a directory at symlinkPath is staged to .bak and symlink creation
+	// succeeds, the .bak should be cleaned up.
+	tmpDir := t.TempDir()
+	symlinkPath := filepath.Join(tmpDir, "saml2aws")
+	targetPath := filepath.Join(tmpDir, "target")
+
+	// Create both dirs.
+	require.NoError(t, os.MkdirAll(symlinkPath, 0o700))
+	require.NoError(t, os.MkdirAll(targetPath, 0o700))
+
+	p := &samlProvider{config: &schema.Provider{}}
+	err := p.ensureStorageSymlink(symlinkPath, targetPath)
+	require.NoError(t, err)
+
+	// Symlink should exist and point to target.
+	target, err := os.Readlink(symlinkPath)
+	require.NoError(t, err)
+	assert.Equal(t, targetPath, target)
+
+	// .bak should NOT exist (cleaned up after success).
+	_, err = os.Stat(symlinkPath + ".bak")
+	assert.True(t, os.IsNotExist(err), ".bak should be cleaned up after successful symlink creation")
+}
+
+func TestSAMLProvider_GetFilesDisplayPath_ReturnsPlatformPath(t *testing.T) {
+	// GetFilesDisplayPath should always return a platform-aware path (no
+	// hardcoded ~ or forward-slash separators on Windows).
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	homedir.Reset()
+
+	p := &samlProvider{
+		name:   "test",
+		config: &schema.Provider{},
+	}
+
+	displayPath := p.GetFilesDisplayPath()
+	// The path must not contain literal "~/" — it should be a resolved path.
+	assert.NotContains(t, displayPath, "~/",
+		"display path must not contain literal ~/ — should be a resolved platform path")
+	// It must be a non-empty string.
+	assert.NotEmpty(t, displayPath, "display path must not be empty")
+}
