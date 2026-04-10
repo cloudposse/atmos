@@ -29,8 +29,9 @@ func (h Hook) MatchesEvent(event HookEvent) bool {
 	if len(h.Events) == 0 {
 		return true
 	}
+	normalizedEvent := event.Normalize()
 	for _, e := range h.Events {
-		if HookEvent(strings.ReplaceAll(e, "-", ".")) == event {
+		if HookEvent(strings.ReplaceAll(e, "-", ".")).Normalize() == normalizedEvent {
 			return true
 		}
 	}
