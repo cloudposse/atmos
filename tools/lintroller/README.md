@@ -103,6 +103,57 @@ func BenchmarkExample(b *testing.B) {
 }
 ```
 
+### 4. `log-level-checks`
+
+**Prevents log level comparisons and accesses outside the logger package.**
+
+Log levels are internal implementation details and should not be used to control UI behavior or program logic. UI elements (spinners, progress indicators) should be controlled by explicit configuration or flags, not by checking log levels.
+
+**Exceptions:**
+- Access to `atmosConfig.Logs.Level` IS allowed inside the `pkg/logger/` package
+- Access to `atmosConfig.Logs.Level` IS allowed in test files (`*_test.go`)
+
+**Bad:**
+```go
+package main
+
+import u "github.com/cloudposse/atmos/pkg/utils"
+
+func processData(atmosConfig *Config) {
+    // ❌ Don't use log levels to control UI
+    if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
+        // Initialize spinner
+        p := NewSpinner(message)
+        spinnerDone := make(chan struct{})
+        RunSpinner(p, spinnerDone, message)
+        defer StopSpinner(p, spinnerDone)
+    }
+}
+```
+
+**Good:**
+```go
+package main
+
+func processData(atmosConfig *Config, showSpinner bool) {
+    // ✅ Use explicit configuration for UI behavior
+    if showSpinner {
+        p := NewSpinner(message)
+        spinnerDone := make(chan struct{})
+        RunSpinner(p, spinnerDone, message)
+        defer StopSpinner(p, spinnerDone)
+    }
+}
+
+// OR use a separate config flag
+func processData(atmosConfig *Config) {
+    // ✅ Check UI-specific configuration
+    if atmosConfig.UI.ShowProgress {
+        // Show spinner
+    }
+}
+```
+
 ## Usage
 
 ### Standalone Binary
@@ -207,6 +258,7 @@ linters:
           tsetenv-in-defer: true       # Enable/disable tsetenv-in-defer rule
           os-setenv-in-test: true      # Enable/disable os-setenv-in-test rule
           os-mkdirtemp-in-test: true   # Enable/disable os-mkdirtemp-in-test rule
+          log-level-checks: true       # Enable/disable log-level-checks rule
 ```
 
 All rules are enabled by default.
@@ -287,7 +339,8 @@ type Rule interface {
 Each rule is implemented in its own file:
 - `rule_tsetenv_in_defer.go` - t.Setenv in defer/cleanup detection
 - `rule_os_setenv.go` - os.Setenv in test files detection
-- `rule_os_mkdirtemp.go` - os.MkdirTemp in test files detection.
+- `rule_os_mkdirtemp.go` - os.MkdirTemp in test files detection
+- `rule_log_level_checks.go` - Log level comparisons outside logger package detection
 
 ### Dual-Mode Support
 
@@ -361,6 +414,7 @@ Add to Settings struct and plugin run method for golangci-lint mode.
 - `rule_tsetenv_in_defer.go` - t.Setenv in defer rule
 - `rule_os_setenv.go` - os.Setenv in test files rule
 - `rule_os_mkdirtemp.go` - os.MkdirTemp in test files rule
+- `rule_log_level_checks.go` - Log level checks outside logger package rule
 - `cmd/lintroller/main.go` - Standalone CLI entry point
 - `lintroller_test.go` - Test suite
 - `testdata/` - Test fixtures
