@@ -363,6 +363,21 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, getStore(h).GetData(), "store must not be called for non-matching event")
 	})
+
+	// Cross-fire: apply and deploy are aliases — hooks configured for either fire on both.
+	t.Run("after-terraform-apply hook fires when deploy command runs", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(AfterTerraformDeploy, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.NotEmpty(t, getStore(h).GetData(), "apply hook must fire on deploy event")
+	})
+
+	t.Run("after-terraform-deploy hook fires when apply command runs", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-deploy"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.NotEmpty(t, getStore(h).GetData(), "deploy hook must fire on apply event")
+	})
 }
 
 // TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml
