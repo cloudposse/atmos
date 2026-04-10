@@ -72,7 +72,7 @@ func TestStoreCommand_GetOutputValue(t *testing.T) {
 				},
 			}
 
-			key, value, err := cmd.getOutputValue(tt.value)
+			key, value, err := cmd.getOutputValue("test-hook", AfterTerraformApply, tt.value)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedKey, key)
@@ -145,7 +145,7 @@ func TestStoreCommand_GetOutputValue_WithMockTerraform(t *testing.T) {
 				outputGetter: mockGetter,
 			}
 
-			key, value, err := cmd.getOutputValue(tt.value)
+			key, value, err := cmd.getOutputValue("test-hook", AfterTerraformApply, tt.value)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedKey, key)
@@ -337,7 +337,7 @@ func TestStoreCommand_ProcessStoreCommand(t *testing.T) {
 				},
 			}
 
-			err := cmd.processStoreCommand(tt.hook)
+			err := cmd.processStoreCommand(tt.hook, AfterTerraformApply)
 
 			if tt.wantErr {
 				require.Error(t, err)
