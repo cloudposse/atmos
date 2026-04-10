@@ -463,11 +463,25 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 // prepareInitExecution performs the pre-init housekeeping:
-//  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection.
+//  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection
+//     (skipped for workdir-enabled components — see note below).
 //  2. Executes all provisioners registered for the before.terraform.init hook event.
 //  3. Returns the effective component path (which may be overridden by a workdir provisioner).
+//
+// NOTE on cleanTerraformWorkspace and workdir components:
+// cleanTerraformWorkspace was designed to prevent workspace-selection prompts when different
+// backends are used for the same component across runs.  For workdir-enabled components the
+// backend configuration is always consistent (generated fresh from the same stack config),
+// so deleting .terraform/environment is not only unnecessary — it is actively harmful:
+// when -reconfigure or init_run_reconfigure is also used, OpenTofu sees workspace state
+// directories (terraform.tfstate.d/) but no .terraform/environment file and interprets the
+// situation as a backend migration, producing the "Do you want to migrate all workspaces?"
+// prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
-	cleanTerraformWorkspace(*atmosConfig, componentPath)
+	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if !isWorkdir {
+		cleanTerraformWorkspace(*atmosConfig, componentPath)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()

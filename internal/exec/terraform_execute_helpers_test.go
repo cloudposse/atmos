@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"testing"
@@ -360,6 +361,58 @@ func TestBuildInitArgs_NoReconfigureWithoutWorkdir(t *testing.T) {
 	}
 	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
 	assert.Equal(t, []string{"init"}, args)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// prepareInitExecution — workspace file cleanup behaviour
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir verifies that
+// .terraform/environment is NOT deleted for workdir-enabled components.
+// Deleting the file before init -reconfigure causes OpenTofu to prompt
+// "Do you want to migrate all workspaces?" because it sees workspace state
+// directories (terraform.tfstate.d/) but no active workspace recorded.
+// For workdir components the backend is always consistent so cleanup is wrong.
+func TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir(t *testing.T) {
+	tmpDir := t.TempDir()
+	tfDir := filepath.Join(tmpDir, ".terraform")
+	require.NoError(t, os.MkdirAll(tfDir, 0o755))
+	envFile := filepath.Join(tfDir, "environment")
+	require.NoError(t, os.WriteFile(envFile, []byte("myworkspace"), 0o644))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: tmpDir,
+		},
+	}
+
+	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(envFile)
+	assert.NoError(t, statErr, ".terraform/environment must not be deleted for workdir components")
+}
+
+// TestPrepareInitExecution_CleansWorkspaceForNonWorkdir verifies that the standard
+// .terraform/environment cleanup still runs for non-workdir components.
+func TestPrepareInitExecution_CleansWorkspaceForNonWorkdir(t *testing.T) {
+	tmpDir := t.TempDir()
+	tfDir := filepath.Join(tmpDir, ".terraform")
+	require.NoError(t, os.MkdirAll(tfDir, 0o755))
+	envFile := filepath.Join(tfDir, "environment")
+	require.NoError(t, os.WriteFile(envFile, []byte("myworkspace"), 0o644))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{}, // no WorkdirPathKey
+	}
+
+	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(envFile)
+	assert.True(t, os.IsNotExist(statErr), ".terraform/environment must be deleted for non-workdir components")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
