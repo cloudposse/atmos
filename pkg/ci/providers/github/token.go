@@ -14,7 +14,7 @@ import (
 //
 // Detection order:
 //  1. ATMOS_CI_GITHUB_TOKEN environment variable (CI-specific override)
-//  2. Standard GetGitHubToken chain (--github-token flag, ATMOS_GITHUB_TOKEN, GITHUB_TOKEN, gh auth token)
+//  2. Standard GetGitHubToken chain (--github-token flag, ATMOS_GITHUB_TOKEN, GITHUB_TOKEN, GH_TOKEN, gh auth token)
 //
 // Returns the token if found, or an empty string if no token is available.
 func GetCIGitHubToken() string {
