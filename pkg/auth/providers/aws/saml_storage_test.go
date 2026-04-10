@@ -14,6 +14,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time sentinel: if any of these schema.Provider fields are renamed,
+// the build fails immediately instead of producing subtle test breakage.
+var _ = schema.Provider{
+	Kind:                  "",
+	URL:                   "",
+	Region:                "",
+	Driver:                "",
+	BrowserType:           "",
+	BrowserExecutablePath: "",
+	DownloadBrowserDriver: false,
+}
+
 func TestSAMLProvider_setupBrowserStorageDir(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -187,6 +199,54 @@ func TestSAMLProvider_setupBrowserStorageDir_MigratesEmptyLegacySymlink(t *testi
 	// No storageState.json should exist (nothing to migrate).
 	_, statErr := os.Stat(filepath.Join(saml2awsPath, "storageState.json"))
 	assert.True(t, os.IsNotExist(statErr))
+}
+
+func TestSAMLProvider_migrateLegacySymlink_NotASymlink(t *testing.T) {
+	// When the path is a regular directory (not a symlink), migration is a no-op.
+	tmpDir := t.TempDir()
+	dirPath := filepath.Join(tmpDir, "saml2aws")
+	require.NoError(t, os.MkdirAll(dirPath, 0o700))
+	// Write a file inside to verify nothing is deleted.
+	testFile := filepath.Join(dirPath, "keep.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("keep"), 0o600))
+
+	p := &samlProvider{config: &schema.Provider{}}
+	p.migrateLegacySymlink(dirPath)
+
+	// Directory and its contents must remain untouched.
+	content, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(content))
+}
+
+func TestSAMLProvider_migrateLegacySymlink_NonexistentPath(t *testing.T) {
+	// When the path does not exist at all, migration is a no-op.
+	p := &samlProvider{config: &schema.Provider{}}
+	// Must not panic.
+	p.migrateLegacySymlink(filepath.Join(t.TempDir(), "nonexistent"))
+}
+
+func TestSAMLProvider_migrateLegacySymlink_DanglingSymlink(t *testing.T) {
+	// A dangling symlink (target deleted) should still be removed and
+	// replaced with a directory. No state to migrate.
+	tmpDir := t.TempDir()
+	saml2awsPath := filepath.Join(tmpDir, "saml2aws")
+	deletedTarget := filepath.Join(tmpDir, "deleted-target")
+
+	// Create target, symlink, then delete target → dangling symlink.
+	require.NoError(t, os.MkdirAll(deletedTarget, 0o700))
+	if err := os.Symlink(deletedTarget, saml2awsPath); err != nil {
+		t.Skipf("Skipping: os.Symlink not available on this platform (%v)", err)
+	}
+	require.NoError(t, os.RemoveAll(deletedTarget))
+
+	p := &samlProvider{config: &schema.Provider{}}
+	p.migrateLegacySymlink(saml2awsPath)
+
+	// Symlink should be removed (path no longer exists — MkdirAll in
+	// setupBrowserStorageDir will create the directory).
+	_, err := os.Lstat(saml2awsPath)
+	assert.True(t, os.IsNotExist(err), "dangling symlink should be removed")
 }
 
 func TestSAMLProvider_setupBrowserStorageDir_PreservesExistingState(t *testing.T) {
@@ -397,6 +457,55 @@ func TestSAMLProvider_BrowserSetupGatedOnDriverType(t *testing.T) {
 				"getDriver() should return %q for driver=%q", tt.driver, tt.driver)
 		})
 	}
+}
+
+func TestSAMLProvider_Authenticate_BrowserGateCreatesDir(t *testing.T) {
+	// Verify the browser gate in Authenticate: when driver is "Browser",
+	// the storage directory is created. Uses a non-download config so
+	// saml2aws.NewSAMLClient is fast (no Playwright initialization).
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	homedir.Reset()
+
+	p := &samlProvider{
+		name:                      "test",
+		config:                    &schema.Provider{Driver: "Browser"},
+		url:                       "https://idp.example.com/saml",
+		region:                    "us-east-1",
+		RoleToAssumeFromAssertion: "arn:aws:iam::123456789012:role/test",
+	}
+
+	// Authenticate fails downstream (no real IDP), but the browser gate
+	// runs first and creates the storage directory.
+	_, _ = p.Authenticate(context.TODO())
+
+	saml2awsDir := filepath.Join(homeDir, ".aws", "saml2aws")
+	info, err := os.Stat(saml2awsDir)
+	require.NoError(t, err, "browser gate should create storage directory")
+	assert.True(t, info.IsDir())
+}
+
+func TestSAMLProvider_Authenticate_NonBrowserSkipsDir(t *testing.T) {
+	// When driver is NOT "Browser", the storage directory should NOT be created.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	homedir.Reset()
+
+	p := &samlProvider{
+		name:                      "test",
+		config:                    &schema.Provider{Driver: "GoogleApps"},
+		url:                       "https://accounts.google.com/saml",
+		region:                    "us-east-1",
+		RoleToAssumeFromAssertion: "arn:aws:iam::123456789012:role/test",
+	}
+
+	_, _ = p.Authenticate(context.TODO())
+
+	saml2awsDir := filepath.Join(homeDir, ".aws", "saml2aws")
+	_, err := os.Stat(saml2awsDir)
+	assert.True(t, os.IsNotExist(err), "non-Browser driver should not create storage directory")
 }
 
 func TestSAMLProvider_setupBrowserAutomation_CreatesStorageDir(t *testing.T) {

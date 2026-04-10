@@ -656,9 +656,8 @@ func (p *samlProvider) setupBrowserAutomation() error {
 		_ = os.Unsetenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD")
 	}
 
-	// Set up XDG-compliant storage directory for browser state.
-	// saml2aws hardcodes ~/.aws/saml2aws/storageState.json, so we create this directory
-	// in an XDG-compliant location and symlink it.
+	// Ensure the storage directory that saml2aws expects exists.
+	// saml2aws hardcodes ~/.aws/saml2aws/storageState.json for browser state.
 	if err := p.setupBrowserStorageDir(); err != nil {
 		log.Warn("Failed to setup browser storage directory", "error", err)
 	}

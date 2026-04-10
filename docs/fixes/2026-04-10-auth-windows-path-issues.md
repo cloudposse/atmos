@@ -24,9 +24,12 @@ expects.
 - [x] Rewrite `setupBrowserStorageDir` to use `os.MkdirAll`.
 - [x] Remove dead symlink code: `ensureStorageSymlink`,
   `isCorrectSymlink`, `stageExistingPath`, `restoreStagedPath`.
-- [x] Update tests — removed all symlink-dependent tests, added
+- [x] Update tests — removed symlink-strategy tests (ensureStorageSymlink,
+  isCorrectSymlink, stageExistingPath, restoreStagedPath). Added
   cross-platform directory-creation tests (idempotent, preserves
   existing state, handles `.aws` as file, verifies not-a-symlink).
+  Retained legacy-symlink migration tests (with and without existing
+  storageState.json) to cover the upgrade path.
   `setupBrowserStorageDir` at 88.9% (only `homedir.Dir()` error
   path uncovered). `setupBrowserAutomation` at 100%.
 - [ ] Full regression suite passes.
@@ -198,14 +201,17 @@ Rewrite `setupBrowserStorageDir` to:
 func (p *samlProvider) setupBrowserStorageDir() error {
     homeDir, err := homedir.Dir()
     if err != nil {
-        return fmt.Errorf("failed to get user home directory: %w", err)
+        return fmt.Errorf("%w: user home directory: %w", errUtils.ErrCreateDirectory, err)
     }
 
-    // Create ~/.aws/saml2aws/ as a real directory.
-    // saml2aws hardcodes this path in pkg/provider/browser/browser.go:118.
     saml2awsDir := filepath.Join(homeDir, ".aws", "saml2aws")
+
+    // Migrate legacy symlink left by previous Atmos versions.
+    // os.MkdirAll would leave a stale symlink in place.
+    p.migrateLegacySymlink(saml2awsDir)
+
     if err := os.MkdirAll(saml2awsDir, 0o700); err != nil {
-        return fmt.Errorf("failed to create saml2aws storage directory: %w", err)
+        return fmt.Errorf("%w: %s: %w", errUtils.ErrCreateDirectory, saml2awsDir, err)
     }
 
     return nil
