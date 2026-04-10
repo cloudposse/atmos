@@ -11,8 +11,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
-	"github.com/cloudposse/atmos/pkg/auth"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
@@ -282,19 +280,15 @@ func resolveToolchain(atmosConfig *schema.AtmosConfiguration) mcpclient.Toolchai
 	return nil
 }
 
-// resolveAuthProvider creates an auth provider if any MCP server needs credentials.
+// resolveAuthProvider creates an auth provider if any MCP server needs
+// credentials. It delegates to mcpclient.NewScopedAuthProvider, which rebuilds
+// the auth manager per-server so each server's `env:` block (specifically
+// ATMOS_* variables) influences atmos config loading and identity resolution.
 func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthEnvProvider {
 	if !serversNeedAuth(atmosConfig.MCP.Servers) {
 		return nil
 	}
-	mgr, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-		"", &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
-	)
-	if err != nil {
-		ui.Error(fmt.Sprintf("Failed to create auth manager for MCP servers: %v", err))
-		return nil
-	}
-	return mgr
+	return mcpclient.NewScopedAuthProvider(atmosConfig)
 }
 
 // cliProviders lists providers that invoke a local CLI binary as a subprocess.

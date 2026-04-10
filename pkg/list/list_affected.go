@@ -87,12 +87,22 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 		return fmt.Errorf("failed to initialize config: %w", err)
 	}
 
-	// Create AuthManager from identity flag if provided.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-		opts.IdentityName, &atmosConfig.Auth, cfg.IdentityFlagSelectValue, &atmosConfig,
-	)
-	if err != nil {
-		return err
+	// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
+	// When functions are disabled (--process-functions=false), there are no YAML functions
+	// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
+	// This matches the gating pattern used by describe stacks/affected/dependents.
+	var authManager auth.AuthManager
+	if opts.ProcessFunctions || opts.IdentityName != "" {
+		// Category B: list affected operates on multiple affected components across stacks without a
+		// single target (component, stack) pair. Use the SCAN variant so stack-level defaults
+		// (including defaults declared in imported _defaults.yaml) are discovered. See
+		// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+		authManager, err = auth.CreateAndAuthenticateManagerWithStackScan(
+			opts.IdentityName, &atmosConfig.Auth, cfg.IdentityFlagSelectValue, &atmosConfig,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Get format flag.
