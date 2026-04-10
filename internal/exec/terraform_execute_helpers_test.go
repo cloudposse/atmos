@@ -300,36 +300,54 @@ func TestBuildInitArgs_PassVarsWithWorkspaceAndReconfigure(t *testing.T) {
 	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
 }
 
-// TestBuildInitArgs_ReconfigureWhenWorkdirSet verifies that -reconfigure is
-// automatically added when a JIT workdir is active (WorkdirPathKey set by a provisioner).
-// This prevents the "Do you want to migrate all workspaces?" prompt that terraform/tofu
-// shows when .terraform/terraform.tfstate records a different backend config than the
-// newly generated backend.tf.json.
-func TestBuildInitArgs_ReconfigureWhenWorkdirSet(t *testing.T) {
+// TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned verifies that -reconfigure is
+// added when the workdir was actually wiped and re-provisioned this invocation
+// (WorkdirReprovisionedKey set by the source/workdir provisioner).
+// This prevents "Do you want to migrate all workspaces?" on fresh workdirs.
+func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand: "apply",
 		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirPathKey:        "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirReprovisionedKey: struct{}{},
 		},
 	}
 	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
 	assert.Equal(t, []string{"init", "-reconfigure"}, args)
 }
 
-// TestBuildInitArgs_ReconfigureWhenWorkdirSet_WithPassVars verifies that both
-// -reconfigure and -var-file are added when workdir is active and PassVars is enabled.
-func TestBuildInitArgs_ReconfigureWhenWorkdirSet_WithPassVars(t *testing.T) {
+// TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars verifies that both
+// -reconfigure and -var-file are added when workdir was re-provisioned and PassVars is enabled.
+func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.Init.PassVars = true
 	info := schema.ConfigAndStacksInfo{
 		SubCommand: "apply",
 		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirPathKey:        "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirReprovisionedKey: struct{}{},
 		},
 	}
 	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
 	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved verifies that -reconfigure is NOT
+// added when the workdir exists but was not re-provisioned (TTL not expired).
+// Adding -reconfigure in this case causes a spurious "migrate all workspaces?" prompt
+// because .terraform/environment was deleted but workspace state dirs still exist.
+func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+			// WorkdirReprovisionedKey intentionally absent — TTL not expired
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
 }
 
 // TestBuildInitArgs_NoReconfigureWithoutWorkdir verifies that -reconfigure is NOT
@@ -338,7 +356,7 @@ func TestBuildInitArgs_NoReconfigureWithoutWorkdir(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
 		SubCommand:       "apply",
-		ComponentSection: map[string]any{}, // no WorkdirPathKey
+		ComponentSection: map[string]any{},
 	}
 	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
 	assert.Equal(t, []string{"init"}, args)

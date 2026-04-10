@@ -164,7 +164,12 @@ func (s *Service) Provision(
 	// 4. Store workdir path for terraform execution.
 	componentConfig[WorkdirPathKey] = workdirPath
 
+	// Signal that the workdir was actively provisioned (files synced) this invocation.
+	// This tells buildInitArgs to add -reconfigure to terraform init.
+	// When changed==false the sync was a no-op (checksums matched), so .terraform/
+	// is still intact and -reconfigure is not needed.
 	if changed {
+		componentConfig[WorkdirReprovisionedKey] = struct{}{}
 		ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
 	} else {
 		ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))

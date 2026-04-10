@@ -141,6 +141,12 @@ func AutoProvisionSource(
 			ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
 		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
+		// Signal that the workdir was wiped and re-provisioned this invocation.
+		// buildInitArgs checks this to decide whether -reconfigure is needed:
+		// a re-provisioned workdir has no .terraform/ cache so -reconfigure is safe;
+		// a preserved workdir (TTL not expired) has a valid cache and -reconfigure
+		// causes a spurious "migrate all workspaces?" prompt from tofu.
+		componentConfig[workdir.WorkdirReprovisionedKey] = struct{}{}
 	}
 	return nil
 }

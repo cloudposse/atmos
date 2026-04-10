@@ -95,11 +95,10 @@ func buildInitSubcommandArgs(
 	}
 	*componentPath = newPath
 
-	// JIT workdir requires -reconfigure for the same reason as buildInitArgs: the
-	// working directory is provisioned fresh each invocation, so the cached backend
-	// state in .terraform/terraform.tfstate may not match the current config.
-	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
-	if atmosConfig.Components.Terraform.InitRunReconfigure || hasWorkdir {
+	// Add -reconfigure only when the workdir was actually wiped and re-provisioned
+	// this invocation. See buildInitArgs for the full rationale.
+	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
+	if atmosConfig.Components.Terraform.InitRunReconfigure || wasReprovisioned {
 		allArgsAndFlags = append(allArgsAndFlags, "-reconfigure")
 	}
 	if atmosConfig.Components.Terraform.Init.PassVars {
