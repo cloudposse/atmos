@@ -23,7 +23,12 @@ type Hook struct {
 // It normalises the yaml event format (hyphens, e.g. "after-terraform-apply")
 // to the canonical Go format (dots, e.g. "after.terraform.apply") before
 // comparing, so both styles are accepted in stack configuration.
+//
+// If the hook has no events configured, it matches all events to preserve
 func (h Hook) MatchesEvent(event HookEvent) bool {
+	if len(h.Events) == 0 {
+		return true
+	}
 	for _, e := range h.Events {
 		if HookEvent(strings.ReplaceAll(e, "-", ".")) == event {
 			return true

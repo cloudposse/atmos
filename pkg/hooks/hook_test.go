@@ -32,16 +32,16 @@ func TestHook_MatchesEvent(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "does not match when events list is empty",
+			name:     "matches all events when events list is empty (backward compat)",
 			hook:     Hook{Events: []string{}},
 			event:    AfterTerraformApply,
-			expected: false,
+			expected: true,
 		},
 		{
-			name:     "does not match when events list is nil",
+			name:     "matches all events when events list is nil (backward compat)",
 			hook:     Hook{Events: nil},
 			event:    AfterTerraformApply,
-			expected: false,
+			expected: true,
 		},
 		{
 			name:     "matches one of multiple events",
