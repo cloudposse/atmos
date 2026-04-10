@@ -445,6 +445,58 @@ func TestExtractRequiredFields(t *testing.T) {
 	assert.Contains(t, filepath.ToSlash(config.ComponentPath), filepath.ToSlash(expectedSuffix))
 }
 
+func TestIsWorkdirEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		sections map[string]any
+		want     bool
+	}{
+		{
+			name:     "no provision section",
+			sections: map[string]any{},
+			want:     false,
+		},
+		{
+			name: "provision section without workdir",
+			sections: map[string]any{
+				"provision": map[string]any{},
+			},
+			want: false,
+		},
+		{
+			name: "workdir.enabled: false",
+			sections: map[string]any{
+				"provision": map[string]any{
+					"workdir": map[string]any{"enabled": false},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "workdir.enabled: true",
+			sections: map[string]any{
+				"provision": map[string]any{
+					"workdir": map[string]any{"enabled": true},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "provision section has wrong type",
+			sections: map[string]any{
+				"provision": "not-a-map",
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isWorkdirEnabled(tt.sections))
+		})
+	}
+}
+
 func TestExtractComponentPath(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -466,6 +518,35 @@ func TestExtractComponentPath(t *testing.T) {
 				},
 			},
 			expectedSuffix: filepath.Join("components", "terraform", "vpc"),
+		},
+		{
+			name:     "workdir enabled returns workdir path instead of base component dir",
+			basePath: tempDir,
+			sections: map[string]any{
+				cfg.ComponentSectionName: "null-label",
+				"component_info": map[string]any{
+					"component_type": "terraform",
+				},
+				"provision": map[string]any{
+					"workdir": map[string]any{"enabled": true},
+				},
+			},
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-null-label"),
+		},
+		{
+			name:     "workdir enabled with atmos_component uses instance name in path",
+			basePath: tempDir,
+			sections: map[string]any{
+				cfg.ComponentSectionName: "vpc",
+				"atmos_component":        "my-vpc",
+				"component_info": map[string]any{
+					"component_type": "terraform",
+				},
+				"provision": map[string]any{
+					"workdir": map[string]any{"enabled": true},
+				},
+			},
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-my-vpc"),
 		},
 		{
 			name:     "component with folder prefix",

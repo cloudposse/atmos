@@ -2,10 +2,12 @@ package output
 
 import (
 	"fmt"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -157,7 +159,40 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 			Err()
 	}
 
+	// When workdir provisioning is active, all terraform operations must target the
+	// workdir, not the base component directory. The workdir path is deterministic
+	// (built from basePath + componentType + stack + instance name) so we can
+	// reconstruct it here even when _workdir_path is absent from freshly-described
+	// sections (e.g. during hook execution where DescribeComponent is called fresh).
+	if isWorkdirEnabled(sections) {
+		basePath := atmosConfig.BasePath
+		if basePath == "" {
+			basePath = "."
+		}
+		workdirPath := provWorkdir.BuildPath(basePath, componentType, baseComponent, stack, sections)
+		if !filepath.IsAbs(workdirPath) {
+			if abs, absErr := filepath.Abs(workdirPath); absErr == nil {
+				workdirPath = abs
+			}
+		}
+		return workdirPath, nil
+	}
+
 	return componentPath, nil
+}
+
+// isWorkdirEnabled reports whether provision.workdir.enabled is set to true in sections.
+func isWorkdirEnabled(sections map[string]any) bool {
+	provisionConfig, ok := sections["provision"].(map[string]any)
+	if !ok {
+		return false
+	}
+	workdirConfig, ok := provisionConfig["workdir"].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, ok := workdirConfig["enabled"].(bool)
+	return ok && enabled
 }
 
 // extractOptionalFields extracts optional fields from sections into config.
