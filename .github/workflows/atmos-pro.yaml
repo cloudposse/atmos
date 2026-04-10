@@ -67,9 +67,13 @@ jobs:
       - name: Generate NOTICE file
         run: ./scripts/generate-notice.sh
 
+      - name: Build atmos from source
+        env:
+          CGO_ENABLED: "0"
+        run: go build -o /tmp/atmos-dev .
+
       - name: Commit fixes via Atmos Pro
         env:
           ATMOS_LOGS_LEVEL: debug
-          CGO_ENABLED: "0"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go run . pro commit -m "[autocommit] formatting fixes" --all
+        run: /tmp/atmos-dev pro commit -m "[autocommit] formatting fixes" --all
