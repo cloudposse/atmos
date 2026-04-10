@@ -310,7 +310,7 @@ func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{
 		SubCommand: "apply",
 		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey:        "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirPathKey:          "/tmp/.workdir/terraform/demo-consumer",
 			provWorkdir.WorkdirReprovisionedKey: struct{}{},
 		},
 	}
@@ -326,7 +326,7 @@ func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars(t *testi
 	info := schema.ConfigAndStacksInfo{
 		SubCommand: "apply",
 		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey:        "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirPathKey:          "/tmp/.workdir/terraform/demo-consumer",
 			provWorkdir.WorkdirReprovisionedKey: struct{}{},
 		},
 	}
