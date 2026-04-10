@@ -73,6 +73,10 @@ jobs:
           GOFLAGS: -buildvcs=false
         run: go build -o /tmp/atmos-dev .
 
+      # Regenerate README.md from README.yaml
+      - name: Regenerate README
+        run: /tmp/atmos-dev docs generate readme
+
       - name: Commit fixes via Atmos Pro
         env:
           ATMOS_LOGS_LEVEL: debug
