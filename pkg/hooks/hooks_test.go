@@ -309,6 +309,62 @@ func TestRunAll(t *testing.T) {
 	}
 }
 
+// TestRunAll_EventFiltering verifies that RunAll only executes hooks whose Events list
+// includes the current event. This is the guard that prevents after-terraform-apply hooks
+// from firing during before-terraform-apply (and vice-versa).
+func TestRunAll_EventFiltering(t *testing.T) {
+	makeHooks := func(events []string) Hooks {
+		mockStore := NewMockStore()
+		cfg := &schema.AtmosConfiguration{Stores: make(store.StoreRegistry)}
+		cfg.Stores["test-store"] = mockStore
+		return Hooks{
+			config: cfg,
+			info:   &schema.ConfigAndStacksInfo{ComponentFromArg: "comp", Stack: "stack"},
+			items: map[string]Hook{
+				"hook": {
+					Events:  events,
+					Command: "store",
+					Name:    "test-store",
+					// Literal value (no dot prefix) — no terraform output call needed.
+					Outputs: map[string]string{"label_id": "literal-value"},
+				},
+			},
+		}
+	}
+
+	getStore := func(h Hooks) *MockStore {
+		return h.config.Stores["test-store"].(*MockStore)
+	}
+
+	t.Run("after-apply hook does not run on before-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "store must not be called when event does not match")
+	})
+
+	t.Run("after-apply hook runs on after-apply event", func(t *testing.T) {
+		h := makeHooks([]string{"after-terraform-apply"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.NotEmpty(t, getStore(h).GetData(), "store must be called when event matches")
+	})
+
+	t.Run("hook with dot-format event matches correctly", func(t *testing.T) {
+		h := makeHooks([]string{"after.terraform.apply"})
+		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.NotEmpty(t, getStore(h).GetData(), "dot-format event must also match")
+	})
+
+	t.Run("hook with multiple events only runs on matching event", func(t *testing.T) {
+		h := makeHooks([]string{"before-terraform-plan", "after-terraform-apply"})
+		err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+		require.NoError(t, err)
+		assert.Empty(t, getStore(h).GetData(), "store must not be called for non-matching event")
+	})
+}
+
 // TestRunCIHooks_CIEnabledIsHardKillSwitch verifies that ci.enabled in atmos.yaml
 // is the authority for CI hooks. When ci.enabled is false (or not set, which defaults
 // to false), CI hooks must not run even when --ci flag is passed (forceCIMode=true).

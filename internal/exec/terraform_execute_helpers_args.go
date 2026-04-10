@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -94,7 +95,11 @@ func buildInitSubcommandArgs(
 	}
 	*componentPath = newPath
 
-	if atmosConfig.Components.Terraform.InitRunReconfigure {
+	// JIT workdir requires -reconfigure for the same reason as buildInitArgs: the
+	// working directory is provisioned fresh each invocation, so the cached backend
+	// state in .terraform/terraform.tfstate may not match the current config.
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if atmosConfig.Components.Terraform.InitRunReconfigure || hasWorkdir {
 		allArgsAndFlags = append(allArgsAndFlags, "-reconfigure")
 	}
 	if atmosConfig.Components.Terraform.Init.PassVars {

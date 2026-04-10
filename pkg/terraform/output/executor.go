@@ -299,6 +299,95 @@ func (e *Executor) GetOutput(
 	return value, exists, nil
 }
 
+// GetOutputWithOptions retrieves a specific terraform output with explicit execution options.
+// Unlike GetOutput, this method accepts OutputOptions so callers can pass SkipInit: true
+// when the workdir is already initialised (e.g. after-terraform-apply hooks).
+//
+//nolint:revive // argument-limit: matches GetOutput signature plus opts.
+func (e *Executor) GetOutputWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+	component string,
+	output string,
+	skipCache bool,
+	authContext *schema.AuthContext,
+	authManager any,
+	opts *OutputOptions,
+) (any, bool, error) {
+	defer perf.Track(atmosConfig, "output.Executor.GetOutputWithOptions")()
+
+	// Validate authManager type if provided.
+	if authManager != nil {
+		if _, ok := authManager.(auth.AuthManager); !ok {
+			return nil, false, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
+		}
+	}
+
+	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+
+	// Check cache first.
+	if !skipCache {
+		if cachedOutputs, found := terraformOutputsCache.Load(stackSlug); found && cachedOutputs != nil {
+			log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
+			return getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+		}
+	}
+
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
+	defer stopSpinner()
+
+	// Describe the component to get its configuration.
+	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		AuthManager:          authManager,
+	})
+	if err != nil {
+		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		return nil, false, wrapDescribeError(component, stack, err)
+	}
+
+	// Check for static remote state backend.
+	if e.staticRemoteStateGetter != nil {
+		if staticOutputs := e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(&sections); staticOutputs != nil {
+			terraformOutputsCache.Store(stackSlug, staticOutputs)
+			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
+			if resultErr != nil {
+				u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+				return nil, false, resultErr
+			}
+			u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+			return value, exists, nil
+		}
+	}
+
+	// Execute terraform output with caller-supplied options.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts)
+	if err != nil {
+		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		return nil, false, fmt.Errorf("failed to execute terraform output for component %s in stack %s: %w", component, stack, err)
+	}
+
+	// Cache the result.
+	terraformOutputsCache.Store(stackSlug, outputs)
+
+	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
+	if resultErr != nil {
+		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		return nil, false, resultErr
+	}
+
+	u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+	return value, exists, nil
+}
+
 // ExecuteWithSections retrieves terraform outputs using pre-loaded sections.
 // This is used when the caller already has sections from ExecuteDescribeComponent.
 func (e *Executor) ExecuteWithSections(

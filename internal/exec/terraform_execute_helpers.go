@@ -435,10 +435,20 @@ func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema
 }
 
 // buildInitArgs constructs the argument list for `terraform init`.
-// It adds -reconfigure when the component uses the workspace subcommand or when
-// InitRunReconfigure is enabled, and appends the varfile flag when PassVars is set.
+// It adds -reconfigure when the component uses the workspace subcommand, when
+// InitRunReconfigure is enabled, or when a JIT workdir is active.
+//
+// JIT workdir requires -reconfigure because the working directory is provisioned fresh
+// on each invocation. When the source provisioner wipes and re-downloads the workdir
+// (TTL=0s) or the workdir provisioner syncs local files, the backend configuration
+// written to backend.tf.json may differ from what terraform cached in
+// .terraform/terraform.tfstate on the previous run. Without -reconfigure, terraform
+// prompts "Do you want to migrate all workspaces?" even when both old and new backends
+// are the same type (e.g., local→local). Using -reconfigure tells terraform to
+// ignore the cached backend state and reconfigure from the current files.
 func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, varFile string) []string {
-	if info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure {
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure || hasWorkdir {
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			return []string{subcommandInit, "-reconfigure", varFileFlag, varFile}
 		}

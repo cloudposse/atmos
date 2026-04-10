@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -297,6 +298,50 @@ func TestBuildInitArgs_PassVarsWithWorkspaceAndReconfigure(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{SubCommand: "workspace"}
 	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
 	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
+}
+
+// TestBuildInitArgs_ReconfigureWhenWorkdirSet verifies that -reconfigure is
+// automatically added when a JIT workdir is active (WorkdirPathKey set by a provisioner).
+// This prevents the "Do you want to migrate all workspaces?" prompt that terraform/tofu
+// shows when .terraform/terraform.tfstate records a different backend config than the
+// newly generated backend.tf.json.
+func TestBuildInitArgs_ReconfigureWhenWorkdirSet(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure"}, args)
+}
+
+// TestBuildInitArgs_ReconfigureWhenWorkdirSet_WithPassVars verifies that both
+// -reconfigure and -var-file are added when workdir is active and PassVars is enabled.
+func TestBuildInitArgs_ReconfigureWhenWorkdirSet_WithPassVars(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.PassVars = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWithoutWorkdir verifies that -reconfigure is NOT
+// added for regular (non-workdir) components unless explicitly configured.
+func TestBuildInitArgs_NoReconfigureWithoutWorkdir(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{}, // no WorkdirPathKey
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

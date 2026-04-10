@@ -1496,3 +1496,48 @@ func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) 
 	assert.Equal(t, fakeBinary, capturedExecutable,
 		"expected executable to be resolved to the toolchain binary path")
 }
+
+// TestExecutor_GetOutputWithOptions_SkipInit verifies that GetOutputWithOptions with
+// SkipInit: true does not call terraform init or workspace operations. This is the
+// contract relied on by after-terraform-apply hooks which run in an already-initialized
+// workdir — calling init again causes state migration errors with stdin disabled.
+func TestExecutor_GetOutputWithOptions_SkipInit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	stackSlug := "skip-init-stack-skip-init-component"
+	terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(sections, nil)
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	// Init and Workspace calls must NOT happen.
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"id": {Value: []byte(`"eg-test-override"`)},
+	}, nil)
+
+	value, exists, err := exec.GetOutputWithOptions(
+		atmosConfig,
+		"skip-init-stack",
+		"skip-init-component",
+		"id",
+		true,
+		nil,
+		nil,
+		&OutputOptions{SkipInit: true},
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "eg-test-override", value)
+}

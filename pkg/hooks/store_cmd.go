@@ -40,10 +40,13 @@ type StoreCommand struct {
 
 func NewStoreCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*StoreCommand, error) {
 	return &StoreCommand{
-		Name:         "store",
-		atmosConfig:  atmosConfig,
-		info:         info,
-		outputGetter: tfoutput.GetOutput,
+		Name:        "store",
+		atmosConfig: atmosConfig,
+		info:        info,
+		// Use GetOutputSkipInit so that hooks running after terraform apply do not
+		// re-run terraform init. The workdir is already initialised by the apply;
+		// re-initialising with a closed stdin causes state-migration prompts to fail.
+		outputGetter: tfoutput.GetOutputSkipInit,
 	}, nil
 }
 
@@ -57,7 +60,7 @@ func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 		return nil
 	}
 
-	log.Debug("Executing 'after-terraform-apply' hook", "hook", hook.Name, "command", hook.Command)
+	log.Debug("Executing store hook", "hook", hook.Name, "command", hook.Command)
 	for key, value := range hook.Outputs {
 		outputKey, outputValue, err := c.getOutputValue(value)
 		if err != nil {
