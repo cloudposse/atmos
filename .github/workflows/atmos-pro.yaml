@@ -70,6 +70,7 @@ jobs:
       - name: Build atmos from source
         env:
           CGO_ENABLED: "0"
+          GOFLAGS: -buildvcs=false
         run: go build -o /tmp/atmos-dev .
 
       - name: Commit fixes via Atmos Pro
