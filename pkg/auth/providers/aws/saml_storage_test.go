@@ -111,6 +111,42 @@ func TestSAMLProvider_setupBrowserStorageDir(t *testing.T) {
 	}
 }
 
+func TestSAMLProvider_setupBrowserStorageDir_MigratesLegacySymlink(t *testing.T) {
+	// Previous Atmos versions created ~/.aws/saml2aws as a symlink to an
+	// XDG cache directory. On upgrade, setupBrowserStorageDir should remove
+	// the stale symlink and create a real directory in its place.
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	homedir.Reset()
+
+	// Create a legacy symlink (simulates pre-upgrade state).
+	awsDir := filepath.Join(homeDir, ".aws")
+	require.NoError(t, os.MkdirAll(awsDir, 0o700))
+	legacyTarget := filepath.Join(homeDir, ".cache", "atmos", "aws-saml", "old-provider")
+	require.NoError(t, os.MkdirAll(legacyTarget, 0o700))
+
+	saml2awsPath := filepath.Join(awsDir, "saml2aws")
+	if err := os.Symlink(legacyTarget, saml2awsPath); err != nil {
+		t.Skipf("Skipping: os.Symlink not available on this platform (%v)", err)
+	}
+
+	// Verify it's a symlink before the fix.
+	info, err := os.Lstat(saml2awsPath)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink, "precondition: should be a symlink")
+
+	p := &samlProvider{name: "test", config: &schema.Provider{}}
+	err = p.setupBrowserStorageDir()
+	require.NoError(t, err)
+
+	// After the fix: should be a real directory, not a symlink.
+	info, err = os.Lstat(saml2awsPath)
+	require.NoError(t, err)
+	assert.Zero(t, info.Mode()&os.ModeSymlink, "legacy symlink should be replaced with a real directory")
+	assert.True(t, info.IsDir())
+}
+
 func TestSAMLProvider_setupBrowserStorageDir_PreservesExistingState(t *testing.T) {
 	// Verify that an existing storageState.json file is preserved after
 	// setupBrowserStorageDir runs (os.MkdirAll is a no-op for existing dirs).
@@ -279,16 +315,17 @@ func TestSAMLProvider_Authenticate_GatesBrowserSetupOnDriver(t *testing.T) {
 	homedir.Reset()
 
 	p := &samlProvider{
-		name:   "test",
-		config: &schema.Provider{Driver: "GoogleApps"},
-		url:    "https://accounts.google.com/saml",
-		region: "us-east-1",
-		// No RoleToAssumeFromAssertion → Authenticate will fail early,
-		// but AFTER the browser setup gate check.
+		name:                      "test",
+		config:                    &schema.Provider{Driver: "GoogleApps"},
+		url:                       "https://accounts.google.com/saml",
+		region:                    "us-east-1",
+		RoleToAssumeFromAssertion: "arn:aws:iam::123456789012:role/test",
 	}
 
+	// Authenticate will fail downstream (no real SAML client), but the
+	// browser setup gate at line 139 is evaluated before that point.
 	_, err := p.Authenticate(context.TODO())
-	require.Error(t, err, "should fail due to missing RoleToAssumeFromAssertion")
+	require.Error(t, err)
 
 	// The saml2aws directory should NOT have been created because the
 	// driver is GoogleApps (not Browser).
@@ -298,32 +335,30 @@ func TestSAMLProvider_Authenticate_GatesBrowserSetupOnDriver(t *testing.T) {
 		"saml2aws directory should not be created for non-Browser drivers")
 }
 
-func TestSAMLProvider_Authenticate_RunsBrowserSetupForBrowserDriver(t *testing.T) {
-	// When the driver IS "Browser", setupBrowserAutomation should run and
-	// create the storage directory. We set RoleToAssumeFromAssertion so the
-	// code passes the early guard and reaches the browser setup gate.
+func TestSAMLProvider_setupBrowserAutomation_CreatesStorageDir(t *testing.T) {
+	// Verify setupBrowserAutomation creates ~/.aws/saml2aws/ as a real
+	// directory. This tests the storage setup path directly without going
+	// through the full Authenticate flow (which would trigger saml2aws
+	// client creation and network calls).
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
 	homedir.Reset()
 
 	p := &samlProvider{
-		name:                      "test",
-		config:                    &schema.Provider{Driver: "Browser"},
-		url:                       "https://idp.example.com/saml",
-		region:                    "us-east-1",
-		RoleToAssumeFromAssertion: "arn:aws:iam::123456789012:role/test",
+		name:   "test",
+		config: &schema.Provider{Driver: "Browser"},
+		url:    "https://idp.example.com/saml",
+		region: "us-east-1",
 	}
 
-	// Authenticate will fail downstream (no real SAML client), but browser
-	// setup runs before that point.
-	_, err := p.Authenticate(context.TODO())
-	require.Error(t, err)
+	err := p.setupBrowserAutomation()
+	require.NoError(t, err)
 
 	// The saml2aws directory SHOULD have been created.
 	saml2awsDir := filepath.Join(homeDir, ".aws", "saml2aws")
 	info, statErr := os.Stat(saml2awsDir)
-	require.NoError(t, statErr, "saml2aws directory should be created for Browser driver")
+	require.NoError(t, statErr, "saml2aws directory should be created by setupBrowserAutomation")
 	assert.True(t, info.IsDir())
 }
 

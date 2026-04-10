@@ -65,8 +65,10 @@ storageStatePath := fmt.Sprintf("%s/.aws/saml2aws/storageState.json", userHomeDi
 On Windows, `os.UserHomeDir()` returns a path with backslashes
 (`C:\Users\user`), and the format string appends `/.aws/saml2aws/...`
 with forward slashes. The resulting mixed-separator path
-`C:\Users\user/.aws/saml2aws/storageState.json` cannot be resolved by
-the Windows filesystem.
+`C:\Users\user/.aws/saml2aws/storageState.json` fails when the
+intermediate directories do not exist — Go's `os` package normalizes
+the separators internally, but `os.Create` cannot create parent
+directories that are missing.
 
 ### Why the current symlink workaround doesn't help
 
@@ -76,10 +78,10 @@ directory via `setupBrowserStorageDir()`. This symlink is created using
 
 1. On Windows, `os.Symlink` requires Developer Mode or admin privileges.
    Without these, the symlink creation fails silently (our staging code
-   restores the original directory).
-2. Even if the symlink is created, `saml2aws's` mixed-separator path
-   construction means the OS receives a path it cannot parse — the
-   symlink is never reached.
+   restores the original directory — but if there was no original
+   directory, the path is simply absent).
+2. The directory does not exist at the path saml2aws expects, so the
+   file write fails with "The system cannot find the path specified."
 
 ### Fix options
 
@@ -88,18 +90,15 @@ directory via `setupBrowserStorageDir()`. This symlink is created using
 On Windows, skip the symlink strategy entirely and create
 `%USERPROFILE%\.aws\saml2aws` as a regular directory. This ensures:
 
-- The directory exists at the path `saml2aws` will look for.
+- The directory exists at the path saml2aws will look for.
 - No symlink privilege requirements.
-- `saml2aws's` forward-slash path still works because Windows `os.Stat`
-  and file operations DO accept forward slashes in some contexts — the
-  issue is specifically with the mixed-separator path through a parent
-  directory that uses backslashes.
 
-Actually, the real question is: does `os.OpenFile` on Windows accept
-`C:\Users\user/.aws/saml2aws/storageState.json`? Testing shows that Go's
-`os` package normalizes forward slashes on Windows for basic file
-operations. The issue may be specifically with Playwright's `StorageState`
-method which may use native Windows APIs that don't normalize.
+The user's error log confirms the root cause is a missing directory, not
+a path separator issue: `"The system cannot find the path specified."`
+The symlink creation failed (no Developer Mode), so the directory didn't
+exist at all. Go's `os` package normalizes forward slashes to backslashes
+on Windows internally (via `syscall.UTF16PtrFromString`), so once the
+directory exists, the mixed-separator path resolves correctly.
 
 **Option B — Ensure the directory exists at both path variants.**
 
@@ -117,14 +116,15 @@ help users on current versions.
 
 ### Recommended approach
 
-**Option B for immediate fix + Option C for upstream.** On Windows:
+**Option A on all platforms + Option C for upstream.**
 
-- Skip the symlink strategy in `setupBrowserStorageDir`.
-- Create `%USERPROFILE%\.aws\saml2aws\` as a regular directory using
+- Drop the symlink strategy on ALL platforms (not just Windows). The
+  symlink added complexity for no user-visible benefit since saml2aws
+  ignores the XDG path regardless.
+- Create `~/.aws/saml2aws/` as a regular directory using
   `os.MkdirAll(filepath.Join(homeDir, ".aws", "saml2aws"), 0o700)`.
-- The XDG-compliant cache location is still used on Linux/macOS where
-  symlinks work reliably.
-- File an upstream PR against `saml2aws` for the `filepath.Join` fix.
+- File an upstream PR against saml2aws for the `filepath.Join` fix and
+  configurable storage path.
 
 ---
 
@@ -250,8 +250,9 @@ saml2aws browser provider (after authentication completes):
   → context.StorageState(storageStatePath)
     → storageStatePath = fmt.Sprintf("%s/.aws/saml2aws/storageState.json", userHomeDir)
     → on Windows: "C:\Users\user/.aws/saml2aws/storageState.json" (mixed separators)
-    → Windows cannot resolve this path → save fails
-    → error logged: "Error saving storage state"
+    → Go normalizes the separators internally, but the directory must exist
+    → if ~/.aws/saml2aws/ is missing (symlink creation failed) → save fails
+    → error logged: "Error saving storage state... The system cannot find the path specified."
 ```
 
 `storageState.json` contains Playwright browser session data (cookies,
@@ -291,10 +292,13 @@ When a user runs `atmos terraform plan -s my-stack`:
 
 The `setupBrowserStorageDir` fix (creating `~/.aws/saml2aws/` as a real
 directory via `os.MkdirAll`) ensures the directory exists at the path
-`saml2aws` expects. Go's `os.MkdirAll` normalizes forward slashes on
-Windows, so the directory creation succeeds. When `saml2aws` later writes
-`storageState.json` using its mixed-separator path, Go's `os` package
-handles the normalization internally — so the file write also succeeds.
+saml2aws expects. The user's error log confirmed the failure was "The
+system cannot find the path specified" — meaning the directory was missing
+(symlink creation had failed silently), not that Go couldn't parse the
+mixed separators. Go's `os` package normalizes forward slashes on Windows
+internally (via `syscall.UTF16PtrFromString`), so once the directory
+exists, saml2aws's mixed-separator path resolves correctly for both
+reading and writing `storageState.json`.
 
 The credential storage pipeline (`PostAuthenticate` → INI files →
 `TerraformPreHook`) uses `filepath.Join` throughout and is unaffected

@@ -727,14 +727,25 @@ func (p *samlProvider) setupBrowserStorageDir() error {
 
 	homeDir, err := homedir.Dir()
 	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
+		return fmt.Errorf("%w: user home directory: %w", errUtils.ErrCreateDirectory, err)
 	}
 
 	// Create ~/.aws/saml2aws/ as a real directory (not a symlink).
 	// saml2aws hardcodes this path in pkg/provider/browser/browser.go:118.
 	saml2awsDir := filepath.Join(homeDir, awsDir, saml2awsSubdir)
+
+	// Remove legacy symlink left by previous Atmos versions. os.MkdirAll
+	// would leave a stale symlink in place, so upgraded users would never
+	// receive the plain-directory migration.
+	if info, lstatErr := os.Lstat(saml2awsDir); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		log.Debug("Removing legacy saml2aws symlink", "path", saml2awsDir)
+		if removeErr := os.Remove(saml2awsDir); removeErr != nil {
+			return fmt.Errorf("%w: remove legacy saml2aws symlink: %w", errUtils.ErrCreateDirectory, removeErr)
+		}
+	}
+
 	if err := os.MkdirAll(saml2awsDir, samlStorageDirPerms); err != nil {
-		return fmt.Errorf("failed to create saml2aws storage directory: %w", err)
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrCreateDirectory, saml2awsDir, err)
 	}
 
 	log.Debug("Browser storage directory ready", "path", saml2awsDir)
