@@ -435,22 +435,34 @@ func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema
 }
 
 // buildInitArgs constructs the argument list for `terraform init`.
-// It adds -reconfigure when:
-//   - the component uses the workspace subcommand (backend may have changed), or
-//   - InitRunReconfigure is explicitly enabled in atmos.yaml, or
-//   - the workdir was actually wiped and re-provisioned this invocation
-//     (WorkdirReprovisionedKey is set by the source/workdir provisioner only when
-//     vendorToTarget or SyncDir ran and made changes).
 //
-// Importantly: -reconfigure is NOT added simply because WorkdirPathKey is set.
-// When the TTL has not expired, the workdir is preserved (not wiped), so
-// .terraform/ and its cached backend state are still valid. Adding -reconfigure
-// in that case causes tofu to prompt "Do you want to migrate all workspaces?"
-// because it sees workspace state dirs but no .terraform/environment file
-// (which cleanTerraformWorkspace deletes before init).
+// For non-workdir components, -reconfigure is added when:
+//   - the component uses the workspace subcommand, or
+//   - InitRunReconfigure is explicitly enabled in atmos.yaml.
+//
+// For workdir components, InitRunReconfigure is intentionally ignored when the workdir
+// was not re-provisioned this invocation. The backend configuration for workdir
+// components is always generated deterministically from the same stack config, so it
+// never changes between runs of a preserved workdir. When -reconfigure is combined
+// with existing workspace state directories (terraform.tfstate.d/), OpenTofu treats
+// init as a fresh backend initialization and prompts "Do you want to migrate all
+// workspaces?" — even when the backend is unchanged. The correct signal to add
+// -reconfigure for workdir components is WorkdirReprovisionedKey, which is set only
+// when the workdir was actually wiped and re-downloaded (TTL expired or TTL=0s).
 func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, varFile string) []string {
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
-	if info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure || wasReprovisioned {
+
+	var useReconfigure bool
+	if hasWorkdir {
+		// Workdir component: only reconfigure when the workdir was actually wiped.
+		useReconfigure = wasReprovisioned || info.SubCommand == subcommandWorkspace
+	} else {
+		// Non-workdir component: honour global InitRunReconfigure setting.
+		useReconfigure = info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure
+	}
+
+	if useReconfigure {
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			return []string{subcommandInit, "-reconfigure", varFileFlag, varFile}
 		}

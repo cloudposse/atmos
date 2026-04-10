@@ -336,8 +336,8 @@ func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars(t *testi
 
 // TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved verifies that -reconfigure is NOT
 // added when the workdir exists but was not re-provisioned (TTL not expired).
-// Adding -reconfigure in this case causes a spurious "migrate all workspaces?" prompt
-// because .terraform/environment was deleted but workspace state dirs still exist.
+// Adding -reconfigure causes OpenTofu to treat init as fresh and prompt
+// "Do you want to migrate all workspaces?" even when the backend is unchanged.
 func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{
@@ -349,6 +349,37 @@ func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved(t *testing.T) {
 	}
 	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
 	assert.Equal(t, []string{"init"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved_InitRunReconfigureIgnored verifies
+// that InitRunReconfigure: true is ignored for workdir components with a preserved workdir.
+// -reconfigure + workspace state dirs causes the "migrate all workspaces?" prompt even
+// when the backend is unchanged; the global flag must not override this protection.
+func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved_InitRunReconfigureIgnored(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.InitRunReconfigure = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+			// WorkdirReprovisionedKey intentionally absent — workdir was NOT wiped
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
+}
+
+// TestBuildInitArgs_ReconfigureForNonWorkdir_InitRunReconfigure verifies that
+// InitRunReconfigure: true still works as expected for non-workdir components.
+func TestBuildInitArgs_ReconfigureForNonWorkdir_InitRunReconfigure(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.InitRunReconfigure = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{}, // no WorkdirPathKey
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure"}, args)
 }
 
 // TestBuildInitArgs_NoReconfigureWithoutWorkdir verifies that -reconfigure is NOT

@@ -95,10 +95,15 @@ func buildInitSubcommandArgs(
 	}
 	*componentPath = newPath
 
-	// Add -reconfigure only when the workdir was actually wiped and re-provisioned
-	// this invocation. See buildInitArgs for the full rationale.
+	// For workdir components, ignore InitRunReconfigure when the workdir was not
+	// re-provisioned — see buildInitArgs for the full rationale.
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
-	if atmosConfig.Components.Terraform.InitRunReconfigure || wasReprovisioned {
+	useReconfigure := wasReprovisioned
+	if !hasWorkdir {
+		useReconfigure = useReconfigure || atmosConfig.Components.Terraform.InitRunReconfigure
+	}
+	if useReconfigure {
 		allArgsAndFlags = append(allArgsAndFlags, "-reconfigure")
 	}
 	if atmosConfig.Components.Terraform.Init.PassVars {
