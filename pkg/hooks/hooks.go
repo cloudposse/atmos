@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
+	_ "github.com/cloudposse/atmos/pkg/ci/executor"          // Register executor with ci.Execute.
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform" // Register terraform CI plugin.
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic" // Register generic CI provider.
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"  // Register GitHub Actions CI provider.
@@ -143,7 +144,7 @@ func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *s
 	}
 
 	// Execute CI actions based on provider bindings.
-	return ci.Execute(ci.ExecuteOptions{
+	return ci.Execute(&ci.ExecuteOptions{
 		Event:        string(event),
 		AtmosConfig:  atmosConfig,
 		Info:         info,
