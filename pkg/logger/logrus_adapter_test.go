@@ -106,10 +106,10 @@ func TestLogrusAdapter_Write_RoutesToCorrectLevel(t *testing.T) {
 			wantMsg:   "mixed case error",
 		},
 		{
-			name:      "non-JSON fallback routes to info",
+			name:      "non-JSON fallback routes to info with content omitted",
 			message:   "plain text log message\n",
 			wantLevel: "info",
-			wantMsg:   "plain text log message",
+			wantMsg:   "Received non-JSON logrus message (content omitted)",
 		},
 	}
 
@@ -332,11 +332,12 @@ func TestLogrusAdapter_Write_RedactsSensitiveData(t *testing.T) {
 	assert.NotContains(t, rec.msg, "s3cret123", "password value must be redacted from msg")
 	assert.Contains(t, rec.msg, "[REDACTED]")
 
-	// Non-JSON fallback with sensitive data.
+	// Non-JSON fallback — content is fully omitted (not just redacted)
+	// because regex sanitization cannot catch every sensitive format.
 	rec2 := &recordingLogger{}
 	adapter2 := &logrusAdapter{logger: rec2}
 	_, err = adapter2.Write([]byte("auth token=abc123def456\n"))
 	assert.NoError(t, err)
-	assert.NotContains(t, rec2.msg, "abc123def456", "token must be redacted in fallback path")
-	assert.Contains(t, rec2.msg, "[REDACTED]")
+	assert.NotContains(t, rec2.msg, "abc123def456", "raw content must not appear in fallback path")
+	assert.Contains(t, rec2.msg, "content omitted")
 }

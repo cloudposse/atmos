@@ -128,8 +128,9 @@ func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 		}
 	} else {
 		// Fallback: Not JSON (shouldn't happen with JSONFormatter, but handle gracefully).
-		// Log the sanitized raw message at Info level.
-		a.logger.Info(sanitizeLogMessage(message))
+		// Do not log raw content to avoid leaking sensitive data from unstructured
+		// messages — regex-based sanitization cannot catch every format.
+		a.logger.Info("Received non-JSON logrus message (content omitted)", "length", len(message))
 	}
 
 	return len(p), nil
