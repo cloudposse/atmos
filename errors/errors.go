@@ -676,6 +676,7 @@ var (
 	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
 	ErrInvalidProviderKind          = errors.New("invalid provider kind")
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
+	ErrInvalidBrowserExecutable     = errors.New("invalid browser executable")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
 	ErrInvalidADCContent            = errors.New("invalid ADC content")
 	ErrWriteADCFile                 = errors.New("failed to write ADC file")
