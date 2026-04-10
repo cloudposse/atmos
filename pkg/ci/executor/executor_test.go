@@ -279,7 +279,7 @@ type stubPlugin struct {
 func (s *stubPlugin) GetType() string                       { return s.componentType }
 func (s *stubPlugin) GetHookBindings() []plugin.HookBinding { return s.bindings }
 
-// Ensure test cleanup sets PATH back (for token tests that might run in the same binary).
+// TestMain runs the test suite.
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }

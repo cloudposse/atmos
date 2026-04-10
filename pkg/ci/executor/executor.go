@@ -150,15 +150,15 @@ func buildHookContext(opts *ci.ExecuteOptions, platform provider.Provider) *plug
 func createPlanfileStore(opts *ci.ExecuteOptions) (planfile.Store, error) {
 	defer perf.Track(opts.AtmosConfig, "ci.createPlanfileStore")()
 
-	// Try config-based store first.
-	if storeOpts := resolveConfigStore(opts.AtmosConfig); storeOpts != nil {
-		return newPlanfileBackend(*storeOpts)
-	}
-
-	// Fall back to environment-based detection.
+	// Environment variables override config (flags > env > config > defaults).
 	if envOpts := detectStoreFromEnv(); envOpts != nil {
 		envOpts.AtmosConfig = opts.AtmosConfig
 		return newPlanfileBackend(*envOpts)
+	}
+
+	// Fall back to config-based store.
+	if storeOpts := resolveConfigStore(opts.AtmosConfig); storeOpts != nil {
+		return newPlanfileBackend(*storeOpts)
 	}
 
 	// Default to local storage.

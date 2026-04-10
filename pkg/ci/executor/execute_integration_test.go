@@ -305,14 +305,13 @@ func TestExecute_CIEnabledInConfig_NoForceFlag_NoActions(t *testing.T) {
 func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 	events := []string{"before.terraform.plan", "after.terraform.plan"}
 
+	handlerCalled := false
 	createAllBindings := func() []plugin.HookBinding {
-		handlerCalled := false
 		return []plugin.HookBinding{
 			{
 				Event: "before.terraform.plan",
 				Handler: func(_ *plugin.HookContext) error {
 					handlerCalled = true
-					_ = handlerCalled
 					return nil
 				},
 			},
@@ -320,7 +319,6 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 				Event: "after.terraform.plan",
 				Handler: func(_ *plugin.HookContext) error {
 					handlerCalled = true
-					_ = handlerCalled
 					return nil
 				},
 			},
@@ -329,6 +327,7 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 
 	t.Run("no CI flag, no CI config — no actions executed", func(t *testing.T) {
 		resetRegistries(t)
+		handlerCalled = false
 
 		cp := newFullCapturingProvider()
 		ci.Register(cp)
@@ -351,10 +350,12 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 
 		assert.Zero(t, cp.totalCICalls(),
 			"No CI actions should execute on local dev without --ci flag")
+		assert.False(t, handlerCalled, "Hook handler should not run without CI mode")
 	})
 
 	t.Run("no CI flag, CI.Enabled explicitly false — no actions executed", func(t *testing.T) {
 		resetRegistries(t)
+		handlerCalled = false
 
 		cp := newFullCapturingProvider()
 		ci.Register(cp)
@@ -379,10 +380,12 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 
 		assert.Zero(t, cp.totalCICalls(),
 			"No CI actions should execute when CI is explicitly disabled")
+		assert.False(t, handlerCalled, "Hook handler should not run when CI is explicitly disabled")
 	})
 
 	t.Run("no CI flag, nil AtmosConfig — no actions executed", func(t *testing.T) {
 		resetRegistries(t)
+		handlerCalled = false
 
 		cp := newFullCapturingProvider()
 		ci.Register(cp)
@@ -405,10 +408,12 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 
 		assert.Zero(t, cp.totalCICalls(),
 			"No CI actions should execute when AtmosConfig is nil")
+		assert.False(t, handlerCalled, "Hook handler should not run when AtmosConfig is nil")
 	})
 
 	t.Run("no CI flag, checks enabled but CI.Enabled false — no actions executed", func(t *testing.T) {
 		resetRegistries(t)
+		handlerCalled = false
 
 		cp := newFullCapturingProvider()
 		ci.Register(cp)
@@ -438,6 +443,7 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 
 		assert.Zero(t, cp.totalCICalls(),
 			"No CI actions should execute when CI.Enabled is false, even if individual actions are enabled")
+		assert.False(t, handlerCalled, "Hook handler should not run when CI.Enabled is false")
 	})
 }
 
