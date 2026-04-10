@@ -81,19 +81,8 @@ func TestDefaultWorkspaceManager_EnsureWorkspace(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("creates new workspace successfully", func(t *testing.T) {
+	t.Run("selects existing workspace successfully", func(t *testing.T) {
 		mockRunner := NewMockTerraformRunner(ctrl)
-		mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
-
-		mgr := &defaultWorkspaceManager{}
-
-		err := mgr.EnsureWorkspace(context.Background(), mockRunner, "test-workspace", "s3", "component", "stack", nil)
-		assert.NoError(t, err)
-	})
-
-	t.Run("selects existing workspace", func(t *testing.T) {
-		mockRunner := NewMockTerraformRunner(ctrl)
-		mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "existing-workspace").Return(errors.New("workspace already exists"))
 		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "existing-workspace").Return(nil)
 
 		mgr := &defaultWorkspaceManager{}
@@ -102,20 +91,21 @@ func TestDefaultWorkspaceManager_EnsureWorkspace(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("fails on unexpected workspace creation error", func(t *testing.T) {
+	t.Run("creates new workspace when select fails", func(t *testing.T) {
 		mockRunner := NewMockTerraformRunner(ctrl)
-		mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("permission denied"))
+		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New("workspace not found"))
+		mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
 
 		mgr := &defaultWorkspaceManager{}
 
 		err := mgr.EnsureWorkspace(context.Background(), mockRunner, "test-workspace", "s3", "component", "stack", nil)
-		assert.Error(t, err)
+		assert.NoError(t, err)
 	})
 
-	t.Run("fails on workspace select error", func(t *testing.T) {
+	t.Run("fails when both select and new fail", func(t *testing.T) {
 		mockRunner := NewMockTerraformRunner(ctrl)
-		mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "workspace").Return(errors.New("already exists"))
 		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "workspace").Return(errors.New("select failed"))
+		mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "workspace").Return(errors.New("create failed"))
 
 		mgr := &defaultWorkspaceManager{}
 

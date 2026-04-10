@@ -11,10 +11,14 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
+	// Clear caches to ensure isolation from other tests that may have run first.
+	tfoutput.ResetOutputsCache()
+
 	if _, err := exec.LookPath("tofu"); err != nil {
 		if _, err2 := exec.LookPath("terraform"); err2 != nil {
 			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.output integration test)")

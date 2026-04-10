@@ -58,23 +58,24 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 		return nil
 	}
 
-	log.Debug("Creating terraform workspace", "workspace", workspace, "component", component, "stack", stack)
+	log.Debug("Selecting terraform workspace", "workspace", workspace, "component", component, "stack", stack)
 
-	// Try to create new workspace.
-	err := runner.WorkspaceNew(ctx, workspace)
+	// Try to select existing workspace first (most common case: workspace already exists).
+	// This order is more correct for the output-reading use case and avoids a Windows race
+	// condition where WorkspaceNew succeeds (creating a NEW empty workspace) instead of
+	// failing with "already exists" due to filesystem latency after init -reconfigure.
+	err := runner.WorkspaceSelect(ctx, workspace)
 	if err == nil {
-		log.Debug("Successfully created terraform workspace", "workspace", workspace, "component", component, "stack", stack)
+		log.Debug("Successfully selected terraform workspace", "workspace", workspace, "component", component, "stack", stack)
 		// Add delay on Windows after workspace operations.
 		windowsFileDelay()
 		return nil
 	}
 
-	// Check if this is a "workspace already exists" error.
-	// terraform-exec doesn't provide typed errors, so we check the error message.
-	// Terraform CLI outputs "Workspace X already exists" when trying to create an existing workspace.
-	if !isWorkspaceExistsError(err) {
-		// This is an unexpected error (network, permission, etc.) - fail fast.
-		log.Debug("Workspace creation failed with unexpected error", "workspace", workspace, "error", err)
+	// Select failed — workspace doesn't exist yet, create it.
+	log.Debug("Workspace does not exist, creating it", "workspace", workspace, "component", component, "stack", stack)
+
+	if err := runner.WorkspaceNew(ctx, workspace); err != nil {
 		return wrapErrorWithStderr(
 			errUtils.Build(errUtils.ErrTerraformWorkspaceOp).
 				WithCause(err).
@@ -84,20 +85,7 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 		)
 	}
 
-	// Workspace already exists, select it.
-	log.Debug("Workspace already exists, selecting it", "workspace", workspace, "component", component, "stack", stack)
-
-	if err := runner.WorkspaceSelect(ctx, workspace); err != nil {
-		return wrapErrorWithStderr(
-			errUtils.Build(errUtils.ErrTerraformWorkspaceOp).
-				WithCause(err).
-				WithExplanationf("Failed to select workspace '%s' for %s.", workspace, GetComponentInfo(component, stack)).
-				Err(),
-			stderrCapture,
-		)
-	}
-
-	log.Debug("Successfully selected terraform workspace", "workspace", workspace, "component", component, "stack", stack)
+	log.Debug("Successfully created terraform workspace", "workspace", workspace, "component", component, "stack", stack)
 	// Add delay on Windows after workspace operations.
 	windowsFileDelay()
 	return nil
