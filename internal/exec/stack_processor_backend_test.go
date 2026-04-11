@@ -9,6 +9,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time sentinel: if WorkspaceConfig.PrefixSeparator is renamed,
+// the build fails immediately instead of producing subtle test breakage.
+var _ = schema.WorkspaceConfig{PrefixSeparator: "-"}
+
 func TestProcessTerraformBackend(t *testing.T) {
 	tests := []struct {
 		name                        string

@@ -12,12 +12,13 @@ You can now preserve `/` in component names when Atmos auto-generates backend ke
 
 ## What Changed
 
-A new `terraform.workspace.prefix_separator` setting in `atmos.yaml` controls how Atmos handles `/` characters in component names when auto-generating backend key prefixes (`workspace_key_prefix` for S3, `prefix` for GCS, `key` for Azure).
+A new `components.terraform.workspace.prefix_separator` setting in `atmos.yaml` controls how Atmos handles `/` characters in component names when auto-generating backend key prefixes (`workspace_key_prefix` for S3, `prefix` for GCS, `key` for Azure).
 
 ```yaml
-terraform:
-  workspace:
-    prefix_separator: "/"   # Preserve directory hierarchy
+components:
+  terraform:
+    workspace:
+      prefix_separator: "/"   # Preserve directory hierarchy
 ```
 
 Previously, Atmos always replaced `/` with `-`, flattening hierarchical component names:
@@ -40,9 +41,10 @@ With `prefix_separator: "/"`, the state bucket mirrors the component directory s
 Add the setting to your `atmos.yaml`:
 
 ```yaml
-terraform:
-  workspace:
-    prefix_separator: "/"
+components:
+  terraform:
+    workspace:
+      prefix_separator: "/"
 ```
 
 The setting applies to all three supported backends:

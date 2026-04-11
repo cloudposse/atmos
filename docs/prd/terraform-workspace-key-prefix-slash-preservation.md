@@ -75,12 +75,13 @@ Flat `-` separated prefixes make it difficult to navigate the bucket.
 
 ### New Configuration Setting
 
-Add a `terraform.workspace.prefix_separator` setting in `atmos.yaml`:
+Add a `components.terraform.workspace.prefix_separator` setting in `atmos.yaml`:
 
 ```yaml
-terraform:
-  workspace:
-    prefix_separator: "/"   # Preserve slashes in auto-generated key prefixes
+components:
+  terraform:
+    workspace:
+      prefix_separator: "/"   # Preserve slashes in auto-generated key prefixes
 ```
 
 | Value | Behavior                                      | Default?                      |
@@ -110,52 +111,44 @@ rejected in favor of `prefix_separator` because:
 
 **`internal/exec/stack_processor_backend.go`**
 
-Modify the three `strings.ReplaceAll` calls to use the configured separator
-instead of the hard-coded `"-"`:
+The separator is extracted once in `processTerraformBackend` and passed as a
+`string` parameter to the three setter functions:
 
 ```go
-// Before:
-backend["workspace_key_prefix"] = strings.ReplaceAll(workspaceKeyPrefix, "/", "-")
+// In processTerraformBackend:
+separator := getWorkspacePrefixSeparator(cfg.atmosConfig)
+// ... passed to setS3BackendDefaults, setGCSBackendDefaults, setAzureBackendKey
 
-// After:
-separator := getWorkspacePrefixSeparator(&atmosConfig)
-if separator != "/" {
-    backend["workspace_key_prefix"] = strings.ReplaceAll(workspaceKeyPrefix, "/", separator)
-} else {
-    backend["workspace_key_prefix"] = workspaceKeyPrefix
-}
-```
-
-Apply the same change to `setGCSBackendDefaults` (prefix) and
-`setAzureBackendKey` (key component).
-
-The helper function uses a pointer receiver to avoid copying the large
-`AtmosConfiguration` struct (~6 KB):
-
-```go
-// getWorkspacePrefixSeparator returns the configured separator for auto-generated
-// backend key prefixes. Defaults to "-" for backward compatibility.
+// Helper reads the setting from the AtmosConfiguration (passed by pointer):
 func getWorkspacePrefixSeparator(atmosConfig *schema.AtmosConfiguration) string {
-    if atmosConfig != nil && atmosConfig.Terraform.Workspace.PrefixSeparator != "" {
-        return atmosConfig.Terraform.Workspace.PrefixSeparator
+    if atmosConfig != nil && atmosConfig.Components.Terraform.Workspace.PrefixSeparator != "" {
+        return atmosConfig.Components.Terraform.Workspace.PrefixSeparator
     }
     return "-"
 }
+
+// applyPrefixSeparator transforms the component name:
+func applyPrefixSeparator(name, separator string) string {
+    if separator == "/" {
+        return name
+    }
+    return strings.ReplaceAll(name, "/", separator)
+}
 ```
 
-The three setter functions (`setS3BackendDefaults`, `setGCSBackendDefaults`,
-`setAzureBackendKey`) must be updated to accept `*schema.AtmosConfiguration`
-as an additional parameter (passed by pointer per coding guidelines for large
-data structures).
+Each setter calls `applyPrefixSeparator` instead of `strings.ReplaceAll`
+directly. The setter functions accept `separator string` as an additional
+parameter (not the full `*schema.AtmosConfiguration` — only
+`processTerraformBackend` needs the config pointer).
 
 **`pkg/schema/schema.go`**
 
-Add the workspace configuration to the Terraform section:
+Add the workspace configuration to the `Terraform` struct (under `Components`):
 
 ```go
-type TerraformConfiguration struct {
-// ... existing fields ...
-Workspace WorkspaceConfig `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+type Terraform struct {
+    // ... existing fields ...
+    Workspace WorkspaceConfig `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
 }
 
 type WorkspaceConfig struct {
@@ -168,17 +161,20 @@ compatibility).
 
 ### Affected Functions
 
-| Function                | File                         | Change                   |
-|-------------------------|------------------------------|--------------------------|
-| `setS3BackendDefaults`  | `stack_processor_backend.go` | Use configured separator |
-| `setGCSBackendDefaults` | `stack_processor_backend.go` | Use configured separator |
-| `setAzureBackendKey`    | `stack_processor_backend.go` | Use configured separator |
+| Function                       | File                         | Change                                                  |
+|--------------------------------|------------------------------|----------------------------------------------------------|
+| `processTerraformBackend`      | `stack_processor_backend.go` | Extracts separator from `cfg.atmosConfig`, passes to setters |
+| `setS3BackendDefaults`         | `stack_processor_backend.go` | Accepts `separator string`, uses `applyPrefixSeparator`  |
+| `setGCSBackendDefaults`        | `stack_processor_backend.go` | Accepts `separator string`, uses `applyPrefixSeparator`  |
+| `setAzureBackendKey`           | `stack_processor_backend.go` | Accepts `separator string`, uses `applyPrefixSeparator`  |
+| `getWorkspacePrefixSeparator`  | `stack_processor_backend.go` | New helper: reads separator from `*AtmosConfiguration`   |
+| `applyPrefixSeparator`         | `stack_processor_backend.go` | New helper: applies separator to component name          |
 
 ### Migration
 
 **No migration required.** The default value `"-"` preserves the existing
 behavior. Users opt in to slash preservation by setting
-`terraform.workspace.prefix_separator: "/"` in `atmos.yaml`.
+`components.terraform.workspace.prefix_separator: "/"` in `atmos.yaml`.
 
 **Warning:** Changing the separator on an existing project will change the
 backend key paths, which means Terraform will not find existing state files at
@@ -215,26 +211,28 @@ include a clear warning about this.
 
 ### `atmos.yaml` Reference
 
-Add `terraform.workspace.prefix_separator` to the configuration reference:
+Add `components.terraform.workspace.prefix_separator` to the configuration
+reference:
 
 ```yaml
-terraform:
-  workspace:
-    # Controls how '/' in component names is handled when auto-generating
-    # backend key prefixes (workspace_key_prefix for S3, prefix for GCS,
-    # key for Azure).
-    #
-    # "-" (default): Replace '/' with '-' → services/consul becomes services-consul
-    # "/": Preserve '/' as-is → services/consul stays services/consul
-    #
-    # WARNING: Changing this setting on an existing project will change state
-    # file paths. Existing state must be migrated manually.
-    prefix_separator: "-"
+components:
+  terraform:
+    workspace:
+      # Controls how '/' in component names is handled when auto-generating
+      # backend key prefixes (workspace_key_prefix for S3, prefix for GCS,
+      # key for Azure).
+      #
+      # "-" (default): Replace '/' with '-' → services/consul becomes services-consul
+      # "/": Preserve '/' as-is → services/consul stays services/consul
+      #
+      # WARNING: Changing this setting on an existing project will change state
+      # file paths. Existing state must be migrated manually.
+      prefix_separator: "-"
 ```
 
 ### Website Documentation Updates
 
-The following docs must be updated to document `terraform.workspace.prefix_separator`:
+The following docs must be updated to document `components.terraform.workspace.prefix_separator`:
 
 | File                                                      | What to add                                                                                                                                                      |
 |-----------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
