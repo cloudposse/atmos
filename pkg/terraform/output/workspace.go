@@ -128,6 +128,7 @@ func isWorkspaceMissingError(err error) bool {
 		return false
 	}
 	errMsg := strings.ToLower(err.Error())
-	return strings.Contains(errMsg, "doesn't exist") ||
-		strings.Contains(errMsg, "does not exist")
+	return strings.Contains(errMsg, "workspace") &&
+		(strings.Contains(errMsg, "doesn't exist") ||
+			strings.Contains(errMsg, "does not exist"))
 }

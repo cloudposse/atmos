@@ -256,7 +256,7 @@ func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewFails(t *testing.T
 	// Setup expectations - select fails, then new also fails.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New("workspace not found"))
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New(`Workspace "test-workspace" doesn't exist.`))
 	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("create failed"))
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
@@ -282,7 +282,7 @@ func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewSucceeds(t *testin
 	// Setup expectations - select fails (workspace doesn't exist), new succeeds.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New("workspace not found"))
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New(`Workspace "test-workspace" doesn't exist.`))
 	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
 

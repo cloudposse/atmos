@@ -212,6 +212,16 @@ func TestIsWorkspaceMissingError(t *testing.T) {
 			err:      errors.New("dial tcp: connection refused"),
 			expected: false,
 		},
+		{
+			name:     "bucket does not exist — not a workspace missing error",
+			err:      errors.New("Error loading state: bucket does not exist"),
+			expected: false,
+		},
+		{
+			name:     "resource does not exist — not a workspace missing error",
+			err:      errors.New("the resource does not exist"),
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
