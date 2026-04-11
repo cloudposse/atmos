@@ -211,7 +211,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/cloudposse/atmos
     License: Apache-2.0
-    URL: https://github.com/cloudposse/atmos/blob/HEAD/LICENSE
+    URL: https://github.com/cloudposse/atmos/blob/HEAD/README.md
 
   - github.com/cncf/xds/go
     License: Apache-2.0
