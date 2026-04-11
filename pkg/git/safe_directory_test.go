@@ -2,6 +2,7 @@ package git
 
 import (
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,15 +24,17 @@ func TestEnsureGitSafeDirectory(t *testing.T) {
 	})
 
 	t.Run("adds safe directory in GitHub Actions", func(t *testing.T) {
+		workspace := filepath.Join(t.TempDir(), "test-workspace")
 		t.Setenv("GITHUB_ACTIONS", "true")
-		t.Setenv("GITHUB_WORKSPACE", "/tmp/test-workspace")
+		t.Setenv("GITHUB_WORKSPACE", workspace)
 
 		err := EnsureGitSafeDirectory()
 		require.NoError(t, err)
 
 		// Verify git config was set.
+		// filepath.Clean normalizes the path per-OS, so match against that.
 		out, err := exec.Command("git", "config", "--global", "--get-all", "safe.directory").Output()
 		require.NoError(t, err)
-		assert.Contains(t, string(out), "/tmp/test-workspace")
+		assert.Contains(t, string(out), filepath.Clean(workspace))
 	})
 }
