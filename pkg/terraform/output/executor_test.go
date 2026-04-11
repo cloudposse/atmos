@@ -238,7 +238,7 @@ func TestExecutor_ExecuteWithSections_InitError(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformInit), "expected ErrTerraformInit")
 }
 
-func TestExecutor_ExecuteWithSections_WorkspaceNewError_AlreadyExists(t *testing.T) {
+func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -253,18 +253,18 @@ func TestExecutor_ExecuteWithSections_WorkspaceNewError_AlreadyExists(t *testing
 	atmosConfig := validAtmosConfig()
 	sections := validSections()
 
-	// Setup expectations - workspace already exists, so it falls back to select.
+	// Setup expectations - select fails, then new also fails.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("Workspace test-workspace already exists"))
-	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New("select failed"))
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New(`Workspace "test-workspace" doesn't exist.`))
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("create failed"))
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformWorkspaceOp), "expected ErrTerraformWorkspaceOp")
 }
 
-func TestExecutor_ExecuteWithSections_WorkspaceNewError_Unexpected(t *testing.T) {
+func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewSucceeds(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -279,16 +279,15 @@ func TestExecutor_ExecuteWithSections_WorkspaceNewError_Unexpected(t *testing.T)
 	atmosConfig := validAtmosConfig()
 	sections := validSections()
 
-	// Setup expectations - unexpected error (network, permission, etc.) should fail fast.
+	// Setup expectations - select fails (workspace doesn't exist), new succeeds.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("network timeout"))
-	// WorkspaceSelect should NOT be called for unexpected errors.
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New(`Workspace "test-workspace" doesn't exist.`))
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrTerraformWorkspaceOp), "expected ErrTerraformWorkspaceOp")
-	assert.Contains(t, err.Error(), "network timeout")
+	require.NoError(t, err)
 }
 
 func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
@@ -309,7 +308,7 @@ func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
 	// Setup expectations.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	// Use AnyTimes() because retryOnWindows may call Output multiple times on Windows.
 	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, errors.New("output failed")).AnyTimes()
 
@@ -336,7 +335,7 @@ func TestExecutor_ExecuteWithSections_Success(t *testing.T) {
 	// Setup expectations.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id": {
 			Value: []byte(`"vpc-123456"`),
@@ -617,7 +616,7 @@ func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {
 	mockRunner.EXPECT().SetStderr(gomock.Any()).Times(1)
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"result": {
 			Value: []byte(`"quiet_success"`),
@@ -785,7 +784,7 @@ func TestExecutor_GetOutput_FullExecutionPath(t *testing.T) {
 	// Setup expectations for terraform operations.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id": {
 			Value: []byte(`"vpc-full-exec"`),
@@ -852,7 +851,7 @@ func TestExecutor_GetAllOutputs_Success(t *testing.T) {
 	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id":  {Value: []byte(`"vpc-all"`)},
 		"enabled": {Value: []byte(`true`)},
@@ -1007,7 +1006,7 @@ func TestExecutor_ExecuteWithSections_InitWithReconfigure(t *testing.T) {
 	// Setup expectations - init should be called with reconfigure option.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"result": {Value: []byte(`"reconfigure_success"`)},
 	}, nil)
@@ -1183,7 +1182,7 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 			// Setup expectations.
 			mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 			mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-			mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+			mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 			mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 				"vpc_id": {
 					Value: []byte(`"vpc-123456"`),
@@ -1299,7 +1298,7 @@ func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T
 
 	// Init and workspace operations SHOULD be called.
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id": {Value: []byte(`"vpc-noskip"`)},
 	}, nil)
@@ -1480,7 +1479,7 @@ func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) 
 	// Setup mock expectations for the full execution path.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id": {Value: []byte(`"vpc-123"`)},
 	}, nil)
