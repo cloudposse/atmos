@@ -54,7 +54,7 @@ func Execute(opts *ExecuteOptions) error {
 		return errUtils.ErrCIOptionsRequired
 	}
 	if executeFunc == nil {
-		return nil
+		return errUtils.ErrCIExecutorNotWired
 	}
 	return executeFunc(opts)
 }

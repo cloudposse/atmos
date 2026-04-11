@@ -913,6 +913,7 @@ var (
 	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
 	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrCIExecutorNotWired      = errors.New("no CI executor wired: ensure pkg/ci/executor is imported")
 	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
 
 	// Planfile storage errors.
