@@ -50,7 +50,7 @@ jobs:
   format:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/cloudposse/atmos:latest
+      image: ghcr.io/cloudposse/atmos:1.214.0
     steps:
       - uses: actions/checkout@v4
       - run: atmos toolchain exec -- tofu fmt -recursive components/terraform/
