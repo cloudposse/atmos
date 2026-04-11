@@ -118,7 +118,7 @@ instead of the hard-coded `"-"`:
 backend["workspace_key_prefix"] = strings.ReplaceAll(workspaceKeyPrefix, "/", "-")
 
 // After:
-separator := getWorkspacePrefixSeparator(atmosConfig)
+separator := getWorkspacePrefixSeparator(&atmosConfig)
 if separator != "/" {
     backend["workspace_key_prefix"] = strings.ReplaceAll(workspaceKeyPrefix, "/", separator)
 } else {
@@ -128,6 +128,25 @@ if separator != "/" {
 
 Apply the same change to `setGCSBackendDefaults` (prefix) and
 `setAzureBackendKey` (key component).
+
+The helper function uses a pointer receiver to avoid copying the large
+`AtmosConfiguration` struct (~6 KB):
+
+```go
+// getWorkspacePrefixSeparator returns the configured separator for auto-generated
+// backend key prefixes. Defaults to "-" for backward compatibility.
+func getWorkspacePrefixSeparator(atmosConfig *schema.AtmosConfiguration) string {
+    if atmosConfig != nil && atmosConfig.Terraform.Workspace.PrefixSeparator != "" {
+        return atmosConfig.Terraform.Workspace.PrefixSeparator
+    }
+    return "-"
+}
+```
+
+The three setter functions (`setS3BackendDefaults`, `setGCSBackendDefaults`,
+`setAzureBackendKey`) must be updated to accept `*schema.AtmosConfiguration`
+as an additional parameter (passed by pointer per coding guidelines for large
+data structures).
 
 **`pkg/schema/schema.go`**
 
@@ -213,6 +232,16 @@ terraform:
     prefix_separator: "-"
 ```
 
+### Website Documentation Updates
+
+The following docs must be updated to document `terraform.workspace.prefix_separator`:
+
+| File                                                      | What to add                                                                                                                                                      |
+|-----------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `website/docs/cli/configuration/components/terraform.mdx` | Add `workspace` section with `prefix_separator` to the YAML example and the attribute reference table. This is the primary Terraform configuration reference.    |
+| `website/docs/stacks/components/terraform/backend.mdx`    | Add a note explaining how `prefix_separator` interacts with auto-generated `workspace_key_prefix`. Include the before/after example for hierarchical components. |
+| `website/docs/stacks/backend.mdx`                         | Add a cross-reference to the new setting in the general backend overview.                                                                                        |
+
 ### Migration Guide
 
 Document the state migration process for users switching from `-` to `/`:
@@ -247,3 +276,36 @@ Document the state migration process for users switching from `-` to `/`:
 
 3. **Environment variable override?** Should there be an `ATMOS_TERRAFORM_WORKSPACE_PREFIX_SEPARATOR`
    env var? Follows the existing pattern but may be overkill for this setting.
+
+---
+
+## Release Checklist
+
+### Blog Post
+
+Create a changelog blog post in `website/blog/` (`.mdx` format). For
+reference, see `website/blog/2026-04-03-aws-security-compliance.mdx`.
+
+Requirements:
+- Use `.mdx` extension with YAML front matter.
+- Read `website/blog/tags.yml` — only use tags defined there (likely
+  `feature` or `enhancement`).
+- Read `website/blog/authors.yml` — use an existing author entry.
+- Include `<!--truncate-->` after the intro paragraph.
+- Sections: What Changed, Why This Matters, How to Use It.
+- Include the `atmos.yaml` configuration example and a before/after
+  comparison showing the effect on state bucket paths.
+- Include a warning about state migration for existing projects.
+
+### Roadmap Entry
+
+Add a shipped milestone to the appropriate initiative in
+`website/src/data/roadmap.js`. For instructions, see
+`.claude/agents/roadmap.md`.
+
+Requirements:
+- Find the Terraform or configuration management initiative (or the
+  closest match).
+- Add a milestone with `status: 'shipped'`, the PR number, and link
+  the blog post via `changelog: '<blog-slug>'`.
+- Update the initiative's `progress` percentage.
