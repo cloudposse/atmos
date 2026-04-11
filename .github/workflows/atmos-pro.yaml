@@ -73,9 +73,11 @@ jobs:
           GOFLAGS: -buildvcs=false
         run: go build -o /tmp/atmos-dev .
 
-      # Format HCL files in test fixtures
-      - name: Format test fixture HCL
-        run: atmos toolchain exec -- tofu fmt -recursive tests/fixtures/components/terraform
+      # Format HCL files in test fixtures and examples
+      - name: Format HCL
+        run: |
+          atmos toolchain exec -- tofu fmt -recursive tests/fixtures/components/terraform
+          atmos toolchain exec -- tofu fmt -recursive examples/
 
       # Regenerate README.md from README.yaml
       - name: Regenerate README
