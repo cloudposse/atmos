@@ -173,6 +173,7 @@ func (p *Plugin) getArtifactKey(info *schema.ConfigAndStacksInfo, ciCtx *provide
 var planOutputMarkers = []string{
 	"Terraform will perform the following actions:",
 	"OpenTofu will perform the following actions:",
+	"Changes to Outputs:",
 }
 
 // noChangesMarker identifies output where terraform found no differences.
