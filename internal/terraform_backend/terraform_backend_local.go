@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -42,8 +44,16 @@ func ReadTerraformBackendLocal(
 	}
 
 	// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
+	// On Windows, recently-written files may not be immediately visible due to filesystem latency.
 	if !u.FileExists(tfStateFilePath) {
-		return nil, nil
+		if runtime.GOOS != "windows" {
+			return nil, nil
+		}
+
+		time.Sleep(200 * time.Millisecond)
+		if !u.FileExists(tfStateFilePath) {
+			return nil, nil
+		}
 	}
 
 	content, err := os.ReadFile(tfStateFilePath)

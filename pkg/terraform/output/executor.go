@@ -42,6 +42,17 @@ func wrapDescribeError(component, stack string, err error) error {
 // terraformOutputsCache caches terraform outputs by stack-component slug.
 var terraformOutputsCache = sync.Map{}
 
+// ResetOutputsCache clears the terraform outputs cache.
+// This is exported for use in tests to ensure cache isolation between test functions.
+func ResetOutputsCache() {
+	defer perf.Track(nil, "output.ResetOutputsCache")()
+
+	terraformOutputsCache.Range(func(key, _ any) bool {
+		terraformOutputsCache.Delete(key)
+		return true
+	})
+}
+
 // TerraformRunner abstracts terraform-exec operations for testability.
 type TerraformRunner interface {
 	// Init runs terraform init with the given options.

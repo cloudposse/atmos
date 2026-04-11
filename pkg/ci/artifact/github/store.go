@@ -163,8 +163,12 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 }
 
 // getGitHubToken returns the GitHub token from environment variables.
+// Token precedence: ATMOS_CI_GITHUB_TOKEN > GITHUB_TOKEN > GH_TOKEN.
 func getGitHubToken() string {
-	token := os.Getenv("GITHUB_TOKEN")
+	token := os.Getenv("ATMOS_CI_GITHUB_TOKEN")
+	if token == "" {
+		token = os.Getenv("GITHUB_TOKEN")
+	}
 	if token == "" {
 		token = os.Getenv("GH_TOKEN")
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
@@ -278,7 +279,7 @@ func injectAtmosEnvVars(config *mcpclient.MCPJSONConfig) {
 func collectAtmosEnvVars() map[string]string {
 	result := make(map[string]string)
 	for _, env := range os.Environ() {
-		if strings.HasPrefix(env, "ATMOS_") {
+		if strings.HasPrefix(env, cfg.AtmosEnvVarPrefix) {
 			if idx := strings.IndexByte(env, '='); idx > 0 {
 				result[env[:idx]] = env[idx+1:]
 			}

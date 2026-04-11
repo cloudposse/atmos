@@ -62,7 +62,7 @@ func init() {
 	if err := viper.BindPFlag("auth.validate.verbose", authValidateCmd.Flags().Lookup("verbose")); err != nil {
 		log.Trace("Failed to bind auth.validate.verbose flag", "error", err)
 	}
-	viper.SetEnvPrefix("ATMOS")
+	viper.SetEnvPrefix(cfg.AtmosEnvVarNamespace)
 	if err := viper.BindEnv("auth.validate.verbose"); err != nil {
 		log.Trace("Failed to bind auth.validate.verbose environment variable", "error", err)
 	}
