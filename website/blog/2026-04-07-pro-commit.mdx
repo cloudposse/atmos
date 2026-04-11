@@ -19,8 +19,9 @@ When running in GitHub Actions, commits made with `GITHUB_TOKEN` do not trigger 
 This is a deliberate GitHub limitation to prevent infinite loops, but it blocks common autofix patterns
 like running `terraform fmt` and committing the result.
 
-Previously, teams worked around this with third-party services like [autofix.ci](https://autofix.ci/).
-Now this capability is built directly into Atmos.
+Previously, teams worked around this by minting PATs (insecure and static), creating GitHub App tokens
+(tedious, and secrets need to be saved somewhere), or using dedicated services like
+[autofix.ci](https://autofix.ci/). Now this capability is built directly into Atmos.
 
 ## How It Works
 
@@ -75,7 +76,8 @@ atmos pro commit -m "terraform fmt" --add "*.tf"
 
 - `.github/` paths are rejected to prevent workflow injection
 - File size limit of 2 MiB per file (larger files are skipped with a warning)
-- Maximum 200 changed files per commit
+- Maximum 200 changed files per commit (enforced in [`pkg/pro/commit.go`](https://github.com/cloudposse/atmos/blob/main/pkg/pro/commit.go))
+- Atmos Pro RBAC required for commits and scoped to branches, workflows, and GitHub environments
 - Branch is validated against the OIDC JWT's `head_ref` claim server-side
 
 <ActionCard title="Get Started" href="/cli/commands/pro/commit">
