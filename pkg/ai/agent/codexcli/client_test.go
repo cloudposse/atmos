@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -330,7 +331,7 @@ func TestCollectAtmosEnvVars_NoAtmosVars(t *testing.T) {
 	// Ensure no ATMOS_ vars are set (best effort — can't unset all).
 	result := collectAtmosEnvVars()
 	for k := range result {
-		assert.True(t, strings.HasPrefix(k, "ATMOS_"), "all keys should start with ATMOS_")
+		assert.True(t, strings.HasPrefix(k, cfg.AtmosEnvVarPrefix), "all keys should start with the canonical Atmos env-var prefix")
 	}
 }
 

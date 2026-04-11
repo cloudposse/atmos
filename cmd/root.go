@@ -1656,7 +1656,7 @@ func init() {
 	}
 	// Configure viper for automatic environment variable binding.
 	// This must happen before setupColorProfileFromEnv() uses viper.GetBool("FORCE_COLOR").
-	viper.SetEnvPrefix("ATMOS")
+	viper.SetEnvPrefix(cfg.AtmosEnvVarNamespace)
 	viper.AutomaticEnv()
 
 	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).

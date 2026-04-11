@@ -229,6 +229,11 @@ type StartOption func(ctx context.Context, config *ParsedConfig, env []string) (
 
 // WithAuthManager returns a StartOption that injects auth credentials when
 // the server has identity configured.
+//
+// If authMgr also implements PerServerAuthProvider, ForServer is called first
+// to obtain a server-scoped AuthEnvProvider. This allows the auth manager to
+// be (re)constructed per-server with the server's `env:` block applied — so
+// ATMOS_PROFILE, ATMOS_CLI_CONFIG_PATH, etc. influence identity resolution.
 func WithAuthManager(authMgr AuthEnvProvider) StartOption {
 	return func(ctx context.Context, config *ParsedConfig, env []string) ([]string, error) {
 		if config.Identity == "" {
@@ -237,15 +242,45 @@ func WithAuthManager(authMgr AuthEnvProvider) StartOption {
 		if authMgr == nil {
 			return nil, fmt.Errorf("%w: server `%s`, identity `%s`", errUtils.ErrMCPServerAuthUnavailable, config.Name, config.Identity)
 		}
+
+		provider := authMgr
+		if perServer, ok := authMgr.(PerServerAuthProvider); ok {
+			scoped, err := perServer.ForServer(ctx, config)
+			if err != nil {
+				// ForServer returns errors already wrapped (pkg/auth wraps with
+				// ErrAuthManager). prepareEnv adds "auth setup failed for X" and
+				// Session.Start adds ErrMCPServerStartFailed + the server name,
+				// so further wrapping here would only duplicate context.
+				return nil, err
+			}
+			if scoped == nil {
+				return nil, fmt.Errorf("%w: server `%s`, identity `%s`", errUtils.ErrMCPServerAuthUnavailable, config.Name, config.Identity)
+			}
+			provider = scoped
+		}
+
 		log.Debug("Injecting auth credentials for MCP server",
 			logFieldName, config.Name, "identity", config.Identity)
-		return authMgr.PrepareShellEnvironment(ctx, config.Identity, env)
+		return provider.PrepareShellEnvironment(ctx, config.Identity, env)
 	}
 }
 
 // AuthEnvProvider is the subset of auth.AuthManager needed for MCP credential injection.
 type AuthEnvProvider interface {
 	PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error)
+}
+
+// PerServerAuthProvider is an optional extension of AuthEnvProvider that
+// returns a new AuthEnvProvider scoped to a specific server's configuration.
+//
+// Implementations should apply the server's `env:` block (specifically ATMOS_*
+// variables) before constructing the underlying auth manager so that
+// ATMOS_PROFILE, ATMOS_CLI_CONFIG_PATH, ATMOS_BASE_PATH, etc. influence atmos
+// config loading and identity resolution.
+//
+// See ApplyAtmosEnvOverrides for the recommended env-application helper.
+type PerServerAuthProvider interface {
+	ForServer(ctx context.Context, config *ParsedConfig) (AuthEnvProvider, error)
 }
 
 // ToolchainResolver resolves command binary paths and provides toolchain PATH.

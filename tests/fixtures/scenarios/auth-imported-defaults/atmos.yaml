@@ -1,0 +1,66 @@
+# Test fixture for issue #2293:
+# "auth.identities.<name>.default: true in imported stack files not recognized
+#  during identity resolution"
+#
+# This fixture reproduces the real-world Cloud Posse layout where `_defaults.yaml`
+# files are in the `excluded_paths` list (they are meant to be imported by stack
+# manifests, not processed as standalone stacks). When the default identity is
+# declared inside such an imported defaults file, the current
+# pkg/config/stack_auth_loader.go pre-scanner never sees it because:
+#
+#   1. getAllStackFiles filters out _defaults.yaml per excluded_paths.
+#   2. loadFileForAuthDefaults does a raw yaml.Unmarshal on each surviving file
+#      — it does NOT follow `import:` directives.
+#
+# Expected current (buggy) behavior:
+#   atmos auth whoami -s acme-dev  → "No default identity configured"
+#
+# Expected behavior after the fix:
+#   Same command resolves the default from the merged stack config (which DOES
+#   follow imports) and authenticates as `dev-identity`.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/us-east-1/*"
+  # _defaults.yaml files are excluded from stack processing — they are import
+  # targets, not standalone stacks. This matches the Cloud Posse reference
+  # architecture layout and is the configuration where issue #2293 manifests.
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.tenant }}-{{ .vars.stage }}"
+
+# Global auth config: two mock identities, NEITHER of them marked as default.
+# The default must come from the imported _defaults.yaml in the stack tree.
+auth:
+  providers:
+    mock-provider:
+      kind: mock/aws
+      config:
+        description: "Mock AWS provider for issue #2293 tests"
+
+  identities:
+    dev-identity:
+      kind: mock/aws
+      via:
+        provider: mock-provider
+      principal:
+        account:
+          id: "111111111111"
+
+    prod-identity:
+      kind: mock/aws
+      via:
+        provider: mock-provider
+      principal:
+        account:
+          id: "222222222222"
+
+logs:
+  level: Info
