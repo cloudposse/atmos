@@ -5,9 +5,12 @@
 package executor
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
@@ -32,6 +35,9 @@ func init() {
 // execute runs all CI actions for a hook event.
 // Returns nil if not in CI or if the event is not handled.
 func execute(opts *ci.ExecuteOptions) error {
+	if opts == nil {
+		return errUtils.ErrCIOptionsRequired
+	}
 	defer perf.Track(opts.AtmosConfig, "ci.Execute")()
 
 	// Detect CI platform.
@@ -157,7 +163,11 @@ func createPlanfileStore(opts *ci.ExecuteOptions) (planfile.Store, error) {
 	}
 
 	// Fall back to config-based store.
-	if storeOpts := resolveConfigStore(opts.AtmosConfig); storeOpts != nil {
+	storeOpts, err := resolveConfigStore(opts.AtmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	if storeOpts != nil {
 		return newPlanfileBackend(*storeOpts)
 	}
 
@@ -165,28 +175,29 @@ func createPlanfileStore(opts *ci.ExecuteOptions) (planfile.Store, error) {
 	return newPlanfileBackend(artifact.StoreOptions{
 		AtmosConfig: opts.AtmosConfig,
 		Type:        "local/dir",
-		Options:     map[string]any{"path": ".atmos/planfiles"},
+		Options:     map[string]any{"path": filepath.Join(".atmos", "planfiles")},
 	})
 }
 
 // resolveConfigStore checks AtmosConfig for a configured planfile store.
-func resolveConfigStore(cfg *schema.AtmosConfiguration) *artifact.StoreOptions {
+// Returns an error if planfiles.default is set but references a store name not in planfiles.stores.
+func resolveConfigStore(cfg *schema.AtmosConfiguration) (*artifact.StoreOptions, error) {
 	if cfg == nil {
-		return nil
+		return nil, nil
 	}
 	planfilesConfig := cfg.Components.Terraform.Planfiles
 	if planfilesConfig.Default == "" {
-		return nil
+		return nil, nil
 	}
 	storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("%w: store %q not found in components.terraform.planfiles.stores", errUtils.ErrCIStoreNotFound, planfilesConfig.Default)
 	}
 	return &artifact.StoreOptions{
 		AtmosConfig: cfg,
 		Type:        storeSpec.Type,
 		Options:     storeSpec.Options,
-	}
+	}, nil
 }
 
 // newPlanfileBackend creates a planfile store from artifact options.

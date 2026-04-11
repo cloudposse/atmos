@@ -902,6 +902,8 @@ var (
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
 	// CI-related errors.
+	ErrCIOptionsRequired       = errors.New("CI execute options are required")
+	ErrCIStoreNotFound         = errors.New("configured planfile store not found")
 	ErrCIDisabled              = errors.New("CI server is disabled")
 	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
 	ErrCIProviderNotFound      = errors.New("CI provider not found")

@@ -1,6 +1,7 @@
 package ci
 
 import (
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -49,6 +50,9 @@ func RegisterExecutor(fn func(*ExecuteOptions) error) {
 func Execute(opts *ExecuteOptions) error {
 	defer perf.Track(nil, "ci.Execute")()
 
+	if opts == nil {
+		return errUtils.ErrCIOptionsRequired
+	}
 	if executeFunc == nil {
 		return nil
 	}
