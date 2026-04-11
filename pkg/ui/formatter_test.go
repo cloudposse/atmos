@@ -423,6 +423,10 @@ func (m *mockTerminal) IsTTY(stream terminal.Stream) bool {
 	return m.isTTY
 }
 
+func (m *mockTerminal) IsPiped(stream terminal.Stream) bool {
+	return false
+}
+
 func (m *mockTerminal) ColorProfile() terminal.ColorProfile {
 	return m.profile
 }

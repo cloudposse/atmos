@@ -58,6 +58,9 @@ type Terminal interface {
 	// IsTTY returns whether the given stream is a TTY.
 	IsTTY(stream Stream) bool
 
+	// IsPiped returns whether the given stream is piped to/from another process.
+	IsPiped(stream Stream) bool
+
 	// ColorProfile returns the terminal's color capabilities.
 	ColorProfile() ColorProfile
 
@@ -246,6 +249,22 @@ func (t *terminal) IsTTY(stream Stream) bool {
 	return term.IsTerminal(fd)
 }
 
+func (t *terminal) IsPiped(stream Stream) bool {
+	defer perf.Track(nil, "terminal.IsPiped")()
+
+	file := streamToFile(stream)
+	if file == nil {
+		return false
+	}
+
+	stat, err := file.Stat()
+	if err != nil {
+		return false
+	}
+
+	return stat.Mode()&os.ModeNamedPipe != 0
+}
+
 func (t *terminal) ColorProfile() ColorProfile {
 	defer perf.Track(nil, "terminal.ColorProfile")()
 
@@ -381,6 +400,19 @@ func streamToFd(stream Stream) int {
 		return int(os.Stderr.Fd())
 	default:
 		return -1
+	}
+}
+
+func streamToFile(stream Stream) *os.File {
+	switch stream {
+	case Stdin:
+		return os.Stdin
+	case Stdout:
+		return os.Stdout
+	case Stderr:
+		return os.Stderr
+	default:
+		return nil
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -189,10 +190,15 @@ func submitCommit(atmosConfig *schema.AtmosConfiguration, branch, message, comme
 		return err
 	}
 
-	ui.Success(fmt.Sprintf("Commit created: %s", resp.Data.SHA))
-
-	if err := data.Writeln(resp.Data.SHA); err != nil {
-		log.Debug("Failed to write commit SHA to stdout.", "error", err)
+	// Output raw SHA when piped (e.g., `atmos pro commit | jq`),
+	// otherwise show human-friendly UI message.
+	term := terminal.New()
+	if term.IsPiped(terminal.Stdout) {
+		if err := data.Writeln(resp.Data.SHA); err != nil {
+			log.Debug("Failed to write commit SHA to stdout.", "error", err)
+		}
+	} else {
+		ui.Successf("Commit created: %s", resp.Data.SHA)
 	}
 
 	return nil
