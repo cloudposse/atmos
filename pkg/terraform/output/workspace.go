@@ -72,7 +72,20 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 		return nil
 	}
 
-	// Select failed — workspace doesn't exist yet, create it.
+	// Only fall back to WorkspaceNew if the select error indicates a missing
+	// workspace. Other errors (auth, backend, permission) should fail fast —
+	// creating a new empty workspace would mask the real problem.
+	if !isWorkspaceMissingError(err) {
+		log.Debug("Workspace select failed with non-missing error", "workspace", workspace, "error", err)
+		return wrapErrorWithStderr(
+			errUtils.Build(errUtils.ErrTerraformWorkspaceOp).
+				WithCause(err).
+				WithExplanationf("Failed to select workspace '%s' for %s.", workspace, GetComponentInfo(component, stack)).
+				Err(),
+			stderrCapture,
+		)
+	}
+
 	log.Debug("Workspace does not exist, creating it", "workspace", workspace, "component", component, "stack", stack)
 
 	if err := runner.WorkspaceNew(ctx, workspace); err != nil {
@@ -100,4 +113,21 @@ func isWorkspaceExistsError(err error) bool {
 	}
 	errMsg := strings.ToLower(err.Error())
 	return strings.Contains(errMsg, "already exists")
+}
+
+// isWorkspaceMissingError checks if the error indicates the workspace does not exist.
+// This is used to decide whether a failed WorkspaceSelect should fall back to WorkspaceNew.
+// Only missing-workspace errors should trigger creation; other errors (auth, backend,
+// permission) should fail fast to avoid masking real problems with a new empty workspace.
+//
+// Known error patterns:
+//   - Terraform: `Workspace "foo" doesn't exist.`
+//   - OpenTofu:  `workspace "foo" does not exist`
+func isWorkspaceMissingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "doesn't exist") ||
+		strings.Contains(errMsg, "does not exist")
 }

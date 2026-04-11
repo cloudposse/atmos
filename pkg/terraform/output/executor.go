@@ -47,7 +47,10 @@ var terraformOutputsCache = sync.Map{}
 func ResetOutputsCache() {
 	defer perf.Track(nil, "output.ResetOutputsCache")()
 
-	terraformOutputsCache = sync.Map{}
+	terraformOutputsCache.Range(func(key, _ any) bool {
+		terraformOutputsCache.Delete(key)
+		return true
+	})
 }
 
 // TerraformRunner abstracts terraform-exec operations for testability.

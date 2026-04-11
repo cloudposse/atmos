@@ -91,9 +91,10 @@ func TestDefaultWorkspaceManager_EnsureWorkspace(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("creates new workspace when select fails", func(t *testing.T) {
+	t.Run("creates new workspace when select fails with missing workspace error", func(t *testing.T) {
 		mockRunner := NewMockTerraformRunner(ctrl)
-		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New("workspace not found"))
+		// Use realistic Terraform error message for a missing workspace.
+		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New(`Workspace "test-workspace" doesn't exist.`))
 		mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
 
 		mgr := &defaultWorkspaceManager{}
@@ -102,15 +103,30 @@ func TestDefaultWorkspaceManager_EnsureWorkspace(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("fails when both select and new fail", func(t *testing.T) {
+	t.Run("fails when missing workspace select fails and create also fails", func(t *testing.T) {
 		mockRunner := NewMockTerraformRunner(ctrl)
-		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "workspace").Return(errors.New("select failed"))
+		// Select fails with missing workspace → falls back to WorkspaceNew → which also fails.
+		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "workspace").Return(errors.New(`workspace "workspace" does not exist`))
 		mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "workspace").Return(errors.New("create failed"))
 
 		mgr := &defaultWorkspaceManager{}
 
 		err := mgr.EnsureWorkspace(context.Background(), mockRunner, "workspace", "s3", "component", "stack", nil)
 		assert.Error(t, err)
+	})
+
+	t.Run("fails fast on non-missing select error without trying create", func(t *testing.T) {
+		mockRunner := NewMockTerraformRunner(ctrl)
+		// Select fails with a permission error — NOT a missing workspace.
+		// WorkspaceNew should NOT be called.
+		mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "workspace").Return(errors.New("permission denied"))
+		// No WorkspaceNew expectation — gomock will fail if it's called.
+
+		mgr := &defaultWorkspaceManager{}
+
+		err := mgr.EnsureWorkspace(context.Background(), mockRunner, "workspace", "s3", "component", "stack", nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "permission denied")
 	})
 }
 
@@ -155,6 +171,52 @@ func TestIsWorkspaceExistsError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isWorkspaceExistsError(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsWorkspaceMissingError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "terraform missing workspace",
+			err:      errors.New(`Workspace "dev" doesn't exist.`),
+			expected: true,
+		},
+		{
+			name:     "opentofu missing workspace",
+			err:      errors.New(`workspace "dev" does not exist`),
+			expected: true,
+		},
+		{
+			name:     "permission denied — not a missing error",
+			err:      errors.New("permission denied"),
+			expected: false,
+		},
+		{
+			name:     "backend error — not a missing error",
+			err:      errors.New("Error loading state: AccessDenied"),
+			expected: false,
+		},
+		{
+			name:     "network error — not a missing error",
+			err:      errors.New("dial tcp: connection refused"),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isWorkspaceMissingError(tt.err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

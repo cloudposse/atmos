@@ -18,6 +18,9 @@ import (
 func TestYamlFuncTerraformOutput(t *testing.T) {
 	// Clear caches to ensure isolation from other tests that may have run first.
 	tfoutput.ResetOutputsCache()
+	t.Cleanup(func() {
+		tfoutput.ResetOutputsCache()
+	})
 
 	if _, err := exec.LookPath("tofu"); err != nil {
 		if _, err2 := exec.LookPath("terraform"); err2 != nil {

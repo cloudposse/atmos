@@ -21,7 +21,10 @@ var terraformStateCache = sync.Map{}
 func ResetStateCache() {
 	defer perf.Track(nil, "exec.ResetStateCache")()
 
-	terraformStateCache = sync.Map{}
+	terraformStateCache.Range(func(key, _ any) bool {
+		terraformStateCache.Delete(key)
+		return true
+	})
 }
 
 // GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.

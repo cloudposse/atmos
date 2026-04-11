@@ -19,6 +19,10 @@ func TestYamlFuncTerraformState(t *testing.T) {
 	// Clear caches to ensure isolation from other tests that may have run first.
 	ResetStateCache()
 	tfoutput.ResetOutputsCache()
+	t.Cleanup(func() {
+		ResetStateCache()
+		tfoutput.ResetOutputsCache()
+	})
 
 	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
 		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
