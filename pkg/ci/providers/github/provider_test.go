@@ -1,6 +1,10 @@
 package github
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 
@@ -107,7 +111,45 @@ func TestResolveGitSHA(t *testing.T) {
 }
 
 func TestProvider_EnsureClient(t *testing.T) {
+	t.Run("succeeds when ATMOS_CI_GITHUB_TOKEN is set", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("GH_TOKEN", "")
+		p := NewProvider()
+		err := p.ensureClient()
+		require.NoError(t, err)
+		assert.NotNil(t, p.client)
+	})
+
+	t.Run("ATMOS_CI_GITHUB_TOKEN takes precedence over GITHUB_TOKEN", func(t *testing.T) {
+		// Verify the CI token is actually used by checking the Authorization header.
+		var capturedAuth string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"login":"test"}`))
+		}))
+		defer server.Close()
+
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
+		t.Setenv("GITHUB_TOKEN", "github-token")
+		t.Setenv("GH_TOKEN", "gh-token")
+		p := NewProvider()
+		err := p.ensureClient()
+		require.NoError(t, err)
+
+		// Point the client at our test server and make a request.
+		serverURL, err := url.Parse(server.URL + "/")
+		require.NoError(t, err)
+		p.client.GitHub().BaseURL = serverURL
+		_, _, _ = p.client.GitHub().Users.Get(context.Background(), "")
+
+		assert.Equal(t, "Bearer ci-token", capturedAuth, "should use ATMOS_CI_GITHUB_TOKEN, not GITHUB_TOKEN")
+	})
+
 	t.Run("succeeds when GITHUB_TOKEN is set", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "test-token")
 		p := NewProvider()
 		err := p.ensureClient()
@@ -116,7 +158,8 @@ func TestProvider_EnsureClient(t *testing.T) {
 	})
 
 	t.Run("succeeds when GH_TOKEN is set", func(t *testing.T) {
-		// Clear GITHUB_TOKEN to ensure GH_TOKEN fallback works.
+		// Clear higher-priority tokens to ensure GH_TOKEN fallback works.
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "test-token")
 		p := NewProvider()
@@ -126,6 +169,7 @@ func TestProvider_EnsureClient(t *testing.T) {
 	})
 
 	t.Run("fails when no token is available", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "")
 		p := NewProvider()

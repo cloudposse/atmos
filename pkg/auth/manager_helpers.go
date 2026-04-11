@@ -193,25 +193,33 @@ func CreateAndAuthenticateManager(
 	return CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, selectValue, nil)
 }
 
-// CreateAndAuthenticateManagerWithAtmosConfig creates and authenticates an AuthManager from an identity name.
-// This is the full implementation that supports loading stack configs for default identities.
+// CreateAndAuthenticateManagerWithAtmosConfig creates and authenticates an AuthManager from an identity
+// name using a pre-merged auth config.
 //
-// When atmosConfig is provided and identityName is empty:
-//   - Loads stack configuration files for auth identity defaults
-//   - Merges stack-level defaults with atmos.yaml defaults
-//   - Stack defaults take precedence over atmos.yaml defaults
+// **This is the NO-SCAN variant.** It trusts the incoming `authConfig` to already be correct for the
+// target scope and never runs the global stack-file pre-scanner. Use this for Category A callers that
+// have a specific (component, stack) pair and have already merged the target stack's auth section via
+// `ExecuteDescribeComponent` / `getMergedAuthConfigWithFetcher` (e.g. all `atmos terraform *` flows,
+// `atmos helmfile *`, `atmos describe component`, nested component auth).
 //
-// This solves the chicken-and-egg problem where:
-//   - We need to know the default identity to authenticate
-//   - But stack configs are only loaded after authentication is configured
-//   - Stack-level defaults (auth.identities.*.default: true) would otherwise be ignored
+// Running the global pre-scanner on top of a stack-scoped merged config would reintroduce the
+// Discussion #122 leak (a default identity declared in one stack manifest silently propagating to
+// terraform commands targeting completely unrelated stacks). Category A callers must stay on this
+// no-scan path.
+//
+// For Category B callers (`describe stacks`, `describe affected`, `list affected`, `list instances`,
+// `aws security`, `aws compliance`, workflows, etc.) that legitimately have no target stack and need
+// the Approach 2 stack-file pre-scan, use `CreateAndAuthenticateManagerWithStackScan` instead.
+//
+// See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for the full design rationale
+// (option d+).
 //
 // Parameters:
 //   - identityName: The identity to authenticate (can be "__SELECT__" for interactive selection,
 //     "__DISABLED__" to disable auth, or empty for auto-detection)
-//   - authConfig: The auth configuration from atmos.yaml and stack configs
+//   - authConfig: The auth configuration, already merged against the target stack by the caller
 //   - selectValue: The special value that triggers interactive identity selection (typically "__SELECT__")
-//   - atmosConfig: The full atmos configuration (optional, enables stack auth loading)
+//   - atmosConfig: The full atmos configuration (optional; used only for cliConfigPath and perf tracking)
 //
 // Returns:
 //   - AuthManager with populated AuthContext after successful authentication
@@ -231,12 +239,6 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 	if shouldDisableAuth(identityName) {
 		log.Debug("Authentication explicitly disabled")
 		return nil, nil
-	}
-
-	// If no identity specified and auth is configured, load stack configs for defaults.
-	// This solves the chicken-and-egg problem where stack-level defaults are not yet loaded.
-	if identityName == "" && isAuthConfigured(authConfig) && atmosConfig != nil {
-		loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
 	}
 
 	// Get cliConfigPath from atmosConfig if available, otherwise use empty string.
@@ -276,27 +278,106 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 	return authManager, nil
 }
 
-// loadAndMergeStackAuthDefaults loads stack configs for auth defaults and merges them into authConfig.
-// This is a helper function that handles the stack auth loading logic.
-// Stack defaults take precedence over atmos.yaml defaults (following Atmos inheritance model).
-func loadAndMergeStackAuthDefaults(authConfig *schema.AuthConfig, atmosConfig *schema.AtmosConfiguration) {
-	defer perf.Track(atmosConfig, "auth.loadAndMergeStackAuthDefaults")()
+// CreateAndAuthenticateManagerWithStackScan creates and authenticates an AuthManager, first running
+// the global stack-file pre-scanner (Approach 2) to discover stack-level default identities.
+//
+// **This is the SCAN variant.** It is the correct choice for Category B commands that legitimately
+// have no target (component, stack) pair and therefore cannot rely on the exec-layer merge path. These
+// commands include `atmos describe stacks`, `atmos describe affected`, `atmos describe dependents`,
+// `atmos list affected`, `atmos list instances`, `atmos aws security`, `atmos aws compliance`, and
+// workflow execution.
+//
+// Behavior:
+//   - When `identityName` is empty and `atmosConfig` is provided, loads stack configuration files
+//     via `config.LoadStackAuthDefaults` (which now follows `import:` chains and correctly sees
+//     defaults declared in imported `_defaults.yaml` files, even when those files are in
+//     `excluded_paths` — fixing Issue #2293 for multi-stack commands).
+//   - Merges the discovered defaults into a **copy** of `authConfig` (never mutates the caller's
+//     original config) before delegating to `CreateAndAuthenticateManagerWithAtmosConfig`.
+//   - When the caller passes an explicit `identityName`, the scan is skipped — the explicit flag
+//     always wins.
+//
+// Category A callers (terraform/helmfile/describe component/nested auth) must NOT use this variant.
+// Running the scanner on top of a stack-scoped merged config reintroduces the Discussion #122 leak
+// across stacks. Those callers must use `CreateAndAuthenticateManagerWithAtmosConfig` directly.
+//
+// See docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md for the full design rationale
+// (option d+).
+//
+// Parameters:
+//   - identityName: The identity to authenticate (can be "__SELECT__" for interactive selection,
+//     "__DISABLED__" to disable auth, or empty for auto-detection via stack scan)
+//   - authConfig: The base auth configuration from atmos.yaml + profile (NOT stack-scoped)
+//   - selectValue: The special value that triggers interactive identity selection
+//   - atmosConfig: The full atmos configuration (required for stack loading; nil skips the scan)
+//
+// Returns: same contract as `CreateAndAuthenticateManagerWithAtmosConfig`.
+func CreateAndAuthenticateManagerWithStackScan(
+	identityName string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+) (AuthManager, error) {
+	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithStackScan")()
 
-	// Always load stack configs - stack defaults take precedence over atmos.yaml.
-	// This follows the Atmos inheritance model where more specific config overrides global.
-	log.Debug("Loading stack configs for auth identity defaults")
+	// Only run the scanner when we actually need to auto-detect a default identity.
+	// If the caller passed an explicit identityName, or auth is not configured, or we have
+	// no atmosConfig to scan, skip straight to the no-scan helper.
+	if identityName == "" && isAuthConfigured(authConfig) && atmosConfig != nil {
+		scannedConfig := scanStackFilesForDefaults(authConfig, atmosConfig)
+		if scannedConfig != nil {
+			authConfig = scannedConfig
+		}
+	}
+
+	return CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, selectValue, atmosConfig)
+}
+
+// scanStackFilesForDefaults runs the Approach 2 pre-scanner and returns a COPY of `authConfig` with
+// any discovered stack-level defaults merged in. The caller's original `authConfig` is never mutated,
+// which matters because Category B callers (e.g. `describe stacks`) reuse the same `atmosConfig.Auth`
+// across multiple command invocations.
+//
+// Returns nil if no defaults were found or the scan errored — the caller then uses the original
+// `authConfig` unchanged.
+func scanStackFilesForDefaults(authConfig *schema.AuthConfig, atmosConfig *schema.AtmosConfiguration) *schema.AuthConfig {
+	defer perf.Track(atmosConfig, "auth.scanStackFilesForDefaults")()
+
+	log.Debug("Loading stack configs for auth identity defaults (scan variant)")
 	stackDefaults, err := cfg.LoadStackAuthDefaults(atmosConfig)
 	if err != nil {
 		log.Debug("Failed to load stack auth defaults", "error", err)
-		return
+		return nil
 	}
 
 	if len(stackDefaults) == 0 {
 		log.Debug("No default identities found in stack configs")
-		return
+		return nil
 	}
 
-	// Merge stack defaults into auth config (stack takes precedence over atmos.yaml).
-	cfg.MergeStackAuthDefaults(authConfig, stackDefaults)
+	// Merge into a COPY so we don't mutate the caller's original auth config.
+	copied := copyAuthConfigForScan(authConfig)
+	cfg.MergeStackAuthDefaults(copied, stackDefaults)
 	log.Debug("Merged stack auth defaults", "count", len(stackDefaults))
+
+	return copied
+}
+
+// copyAuthConfigForScan creates a shallow-struct + deep-identities copy of an AuthConfig suitable for
+// mutation by MergeStackAuthDefaults. Only the `Identities` map is deep-copied because that is the
+// only field MergeStackAuthDefaults touches — it toggles the `Default` bool on individual identity
+// entries and nothing else. Other fields (providers, realm, etc.) are shared by pointer/value; the
+// scanner never modifies them.
+func copyAuthConfigForScan(src *schema.AuthConfig) *schema.AuthConfig {
+	if src == nil {
+		return nil
+	}
+	dup := *src // Shallow struct copy.
+	if src.Identities != nil {
+		dup.Identities = make(map[string]schema.Identity, len(src.Identities))
+		for k, v := range src.Identities {
+			dup.Identities[k] = v
+		}
+	}
+	return &dup
 }
