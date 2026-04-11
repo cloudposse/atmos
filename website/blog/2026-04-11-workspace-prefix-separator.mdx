@@ -1,0 +1,69 @@
+---
+slug: workspace-prefix-separator
+title: "Preserve Directory Hierarchy in Terraform State Buckets"
+authors: [aknysh]
+tags: [feature]
+date: 2026-04-11T00:00:00.000Z
+---
+
+You can now preserve `/` in component names when Atmos auto-generates backend key prefixes — keeping your state bucket organized to match your component directory structure.
+
+<!--truncate-->
+
+## What Changed
+
+A new `terraform.workspace.prefix_separator` setting in `atmos.yaml` controls how Atmos handles `/` characters in component names when auto-generating backend key prefixes (`workspace_key_prefix` for S3, `prefix` for GCS, `key` for Azure).
+
+```yaml
+terraform:
+  workspace:
+    prefix_separator: "/"   # Preserve directory hierarchy
+```
+
+Previously, Atmos always replaced `/` with `-`, flattening hierarchical component names:
+
+| Component                 | Before (default)                                      | After (`prefix_separator: "/"`)                       |
+|---------------------------|-------------------------------------------------------|-------------------------------------------------------|
+| `services/consul`         | `services-consul/workspace/terraform.tfstate`         | `services/consul/workspace/terraform.tfstate`         |
+| `platform/eks`            | `platform-eks/workspace/terraform.tfstate`            | `platform/eks/workspace/terraform.tfstate`            |
+| `platform/services/vault` | `platform-services-vault/workspace/terraform.tfstate` | `platform/services/vault/workspace/terraform.tfstate` |
+
+## Why This Matters
+
+Teams with large component libraries (hundreds of components) organize them in directory hierarchies like `services/consul`, `platform/eks`, `data/rds`.
+With the default `-` separator, the state bucket becomes a flat listing of hundreds of dash-separated prefixes — making it difficult to navigate.
+
+With `prefix_separator: "/"`, the state bucket mirrors the component directory structure, giving you the same hierarchy in both your source tree and your state storage.
+
+## How to Use It
+
+Add the setting to your `atmos.yaml`:
+
+```yaml
+terraform:
+  workspace:
+    prefix_separator: "/"
+```
+
+The setting applies to all three supported backends:
+
+- **S3** — `workspace_key_prefix`
+- **GCS** — `prefix`
+- **Azure** — the component portion of `key`
+
+Explicitly configured backend keys (e.g. `workspace_key_prefix` set directly in your stack config) are never modified — the separator only affects auto-generated values.
+
+:::warning State Migration Required
+
+Changing this setting on an existing project changes the backend key paths. Terraform will not find existing state files at the old paths. Before switching:
+
+1. Identify affected components
+2. Rename state paths in your backend storage (S3 bucket, GCS bucket, Azure storage)
+3. Update `atmos.yaml` with the new separator
+4. Run `atmos terraform plan` to verify no unexpected changes
+
+:::
+
+## Get Involved
+
+Found an issue or have a feature request? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

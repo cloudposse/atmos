@@ -509,3 +509,328 @@ func TestProcessTerraformRemoteStateBackend(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Prefix separator tests — terraform.workspace.prefix_separator setting.
+// ============================================================================
+
+func TestGetWorkspacePrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		expected string
+	}{
+		{
+			name:     "nil config returns default dash",
+			config:   nil,
+			expected: "-",
+		},
+		{
+			name:     "empty separator returns default dash",
+			config:   &schema.AtmosConfiguration{},
+			expected: "-",
+		},
+		{
+			name: "dash separator",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Workspace: schema.WorkspaceConfig{PrefixSeparator: "-"},
+					},
+				},
+			},
+			expected: "-",
+		},
+		{
+			name: "slash separator",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						Workspace: schema.WorkspaceConfig{PrefixSeparator: "/"},
+					},
+				},
+			},
+			expected: "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, getWorkspacePrefixSeparator(tt.config))
+		})
+	}
+}
+
+func TestApplyPrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		separator string
+		expected  string
+	}{
+		{
+			name:      "dash separator replaces slashes",
+			input:     "services/consul",
+			separator: "-",
+			expected:  "services-consul",
+		},
+		{
+			name:      "slash separator preserves slashes",
+			input:     "services/consul",
+			separator: "/",
+			expected:  "services/consul",
+		},
+		{
+			name:      "no slashes in input — dash separator",
+			input:     "vpc",
+			separator: "-",
+			expected:  "vpc",
+		},
+		{
+			name:      "no slashes in input — slash separator",
+			input:     "vpc",
+			separator: "/",
+			expected:  "vpc",
+		},
+		{
+			name:      "deeply nested path — dash",
+			input:     "platform/services/consul",
+			separator: "-",
+			expected:  "platform-services-consul",
+		},
+		{
+			name:      "deeply nested path — slash",
+			input:     "platform/services/consul",
+			separator: "/",
+			expected:  "platform/services/consul",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, applyPrefixSeparator(tt.input, tt.separator))
+		})
+	}
+}
+
+func TestSetS3BackendDefaults_PrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name              string
+		component         string
+		baseComponentName string
+		metadata          map[string]any
+		separator         string
+		existingPrefix    string // Pre-set workspace_key_prefix (empty = auto-generate).
+		expected          string
+	}{
+		{
+			name:      "default dash separator flattens slashes",
+			component: "services/consul",
+			separator: "-",
+			expected:  "services-consul",
+		},
+		{
+			name:      "slash separator preserves hierarchy",
+			component: "services/consul",
+			separator: "/",
+			expected:  "services/consul",
+		},
+		{
+			name:              "metadata.name with slash separator",
+			component:         "services/consul",
+			baseComponentName: "",
+			metadata:          map[string]any{"name": "services/consul"},
+			separator:         "/",
+			expected:          "services/consul",
+		},
+		{
+			name:              "metadata.name with dash separator",
+			component:         "services/consul",
+			baseComponentName: "",
+			metadata:          map[string]any{"name": "services/consul"},
+			separator:         "-",
+			expected:          "services-consul",
+		},
+		{
+			name:              "baseComponentName with slash separator",
+			component:         "services/consul/v2",
+			baseComponentName: "services/consul",
+			separator:         "/",
+			expected:          "services/consul",
+		},
+		{
+			name:           "explicit prefix is never modified",
+			component:      "services/consul",
+			separator:      "-",
+			existingPrefix: "custom/prefix",
+			expected:       "custom/prefix",
+		},
+		{
+			name:           "explicit prefix preserved even with slash separator",
+			component:      "services/consul",
+			separator:      "/",
+			existingPrefix: "my-custom-prefix",
+			expected:       "my-custom-prefix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := map[string]any{}
+			if tt.existingPrefix != "" {
+				backend["workspace_key_prefix"] = tt.existingPrefix
+			}
+
+			metadata := tt.metadata
+			if metadata == nil {
+				metadata = map[string]any{}
+			}
+
+			setS3BackendDefaults(backend, tt.component, tt.baseComponentName, metadata, tt.separator)
+
+			result, ok := backend["workspace_key_prefix"].(string)
+			require.True(t, ok, "workspace_key_prefix should be a string")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSetGCSBackendDefaults_PrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name           string
+		component      string
+		separator      string
+		existingPrefix string
+		expected       string
+	}{
+		{
+			name:      "dash separator flattens",
+			component: "services/consul",
+			separator: "-",
+			expected:  "services-consul",
+		},
+		{
+			name:      "slash separator preserves",
+			component: "services/consul",
+			separator: "/",
+			expected:  "services/consul",
+		},
+		{
+			name:           "explicit prefix is never modified",
+			component:      "services/consul",
+			separator:      "-",
+			existingPrefix: "custom/prefix",
+			expected:       "custom/prefix",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := map[string]any{}
+			if tt.existingPrefix != "" {
+				backend["prefix"] = tt.existingPrefix
+			}
+
+			setGCSBackendDefaults(backend, tt.component, "", map[string]any{}, tt.separator)
+
+			result, ok := backend["prefix"].(string)
+			require.True(t, ok, "prefix should be a string")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSetAzureBackendKey_PrefixSeparator(t *testing.T) {
+	tests := []struct {
+		name      string
+		component string
+		separator string
+		expected  string
+	}{
+		{
+			name:      "dash separator flattens component in key",
+			component: "services/consul",
+			separator: "-",
+			expected:  "services-consul.terraform.tfstate",
+		},
+		{
+			name:      "slash separator preserves hierarchy in key",
+			component: "services/consul",
+			separator: "/",
+			expected:  "services/consul.terraform.tfstate",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend := map[string]any{}
+			componentBackend := map[string]any{}
+			globalBackend := map[string]any{}
+
+			err := setAzureBackendKey(backend, tt.component, "", map[string]any{}, componentBackend, globalBackend, tt.separator)
+			require.NoError(t, err)
+
+			result, ok := backend["key"].(string)
+			require.True(t, ok, "key should be a string")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestProcessTerraformBackend_WithPrefixSeparator(t *testing.T) {
+	// End-to-end test: verify the separator flows through processTerraformBackend.
+	t.Run("slash separator produces hierarchical S3 prefix", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					Workspace: schema.WorkspaceConfig{PrefixSeparator: "/"},
+				},
+			},
+		}
+
+		cfg := &terraformBackendConfig{
+			atmosConfig:       atmosConfig,
+			component:         "services/consul",
+			baseComponentName: "",
+			componentMetadata: map[string]any{},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+					"region": "us-east-1",
+				},
+			},
+			baseComponentBackendSection: map[string]any{},
+			componentBackendSection:     map[string]any{},
+		}
+
+		backendType, backendConfig, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "s3", backendType)
+		assert.Equal(t, "services/consul", backendConfig["workspace_key_prefix"])
+	})
+
+	t.Run("default separator produces flattened S3 prefix", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		cfg := &terraformBackendConfig{
+			atmosConfig:       atmosConfig,
+			component:         "services/consul",
+			baseComponentName: "",
+			componentMetadata: map[string]any{},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+				},
+			},
+			baseComponentBackendSection: map[string]any{},
+			componentBackendSection:     map[string]any{},
+		}
+
+		backendType, backendConfig, err := processTerraformBackend(cfg)
+		require.NoError(t, err)
+		assert.Equal(t, "s3", backendType)
+		assert.Equal(t, "services-consul", backendConfig["workspace_key_prefix"])
+	})
+}
