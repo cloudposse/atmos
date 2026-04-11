@@ -52,7 +52,7 @@ jobs:
       image: ghcr.io/cloudposse/atmos:latest
     steps:
       - uses: actions/checkout@v4
-      - run: terraform fmt -recursive
+      - run: atmos toolchain exec -- terraform fmt -recursive
       - run: atmos pro commit -m "[autocommit] terraform fmt" --all
 ```
 
