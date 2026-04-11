@@ -48,6 +48,8 @@ permissions:
 jobs:
   format:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:latest
     steps:
       - uses: actions/checkout@v4
       - run: terraform fmt -recursive
