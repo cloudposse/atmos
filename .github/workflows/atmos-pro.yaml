@@ -75,7 +75,7 @@ jobs:
 
       # Format HCL files in test fixtures
       - name: Format test fixture HCL
-        run: atmos toolchain exec -- terraform fmt -recursive tests/fixtures/components/terraform
+        run: atmos toolchain exec -- tofu fmt -recursive tests/fixtures/components/terraform
 
       # Regenerate README.md from README.yaml
       - name: Regenerate README
