@@ -212,6 +212,7 @@ func TestForceColor_ColorProfile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CI", "")
 			// Set viper flags
 			viper.Set("force-color", tt.forceColor)
 			viper.Set("force-tty", tt.forceTTY)
