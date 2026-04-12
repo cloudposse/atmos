@@ -1,16 +1,16 @@
 output "size" {
-    description = "Size of deployment"
-    value = var.size
+  description = "Size of deployment"
+  value       = var.size
 }
 
 output "tags" {
   description = "Generated Resource Tags"
-  value = data.context_tags.this.tags
+  value       = data.context_tags.this.tags
 }
 
 output "label" {
-    description = "Generated Resource Label"
-    value = data.context_label.this.rendered
+  description = "Generated Resource Label"
+  value       = data.context_label.this.rendered
 }
 
 output "pet_set" {
@@ -18,6 +18,6 @@ output "pet_set" {
 }
 
 output "delimiter" {
-    description = "Delimiter used in the context"
-    value = data.context_config.this.delimiter
+  description = "Delimiter used in the context"
+  value       = data.context_config.this.delimiter
 }

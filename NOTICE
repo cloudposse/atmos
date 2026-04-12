@@ -47,11 +47,11 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/secretmanager
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/secretmanager/v1.17.0/secretmanager/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/secretmanager/v1.18.0/secretmanager/LICENSE
 
   - cloud.google.com/go/storage
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.61.3/storage/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.62.0/storage/LICENSE
 
   - cuelang.org/go
     License: Apache-2.0
