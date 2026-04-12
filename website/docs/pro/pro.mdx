@@ -17,6 +17,8 @@ reproducibly across local and CI, and manage authentication. Atmos Pro is the co
 that, giving you visibility and coordination across all your teams, repositories, and environments.
 </Intro>
 
+<a href="https://atmos-pro.com"><img src="https://atmos-pro.com/api/media-kit/logo/badge/560x112/metallic" alt="Atmos Pro" /></a>
+
 ## Why Atmos Pro?
 
 **Atmos CLI** solves the problems every company encounters: structuring Terraform at scale, running
@@ -97,16 +99,8 @@ workspace. This value is not a secret and is safe to commit to version control.
 settings:
   pro:
     workspace_id: "your-workspace-id"
-    github_oidc:
-      request_url: !env ACTIONS_ID_TOKEN_REQUEST_URL
-      request_token: !env ACTIONS_ID_TOKEN_REQUEST_TOKEN
 ```
 </File>
-
-:::tip
-The `github_oidc` fields are automatically populated in GitHub Actions. You only need to set
-`workspace_id` and ensure your workflow has `id-token: write` permission.
-:::
 
 ## Features
 
