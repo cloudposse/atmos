@@ -537,7 +537,21 @@ var (
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
-	ErrAPIResponseError             = errors.New("API response error")
+
+	// Pro commit errors.
+	ErrCommitMessageRequired = errors.New("commit message is required")
+	ErrCommitMessageTooLong  = errors.New("commit message exceeds 500 characters")
+	ErrCommentTooLong        = errors.New("comment exceeds 2000 characters")
+	ErrBranchRequired        = errors.New("GITHUB_HEAD_REF is required (this command only runs in PR workflows)")
+	ErrBranchInvalid         = errors.New("branch name contains invalid characters")
+	ErrTooManyChanges        = errors.New("too many changed files (max 200)")
+	ErrCommitInvalidFilePath = errors.New("invalid file path for commit")
+	ErrFileTooLarge          = errors.New("file exceeds 2 MiB size limit")
+	ErrFailedToStageChanges  = errors.New("failed to stage changes")
+	ErrFailedToDetectChanges = errors.New("failed to detect git changes")
+	ErrFailedToCreateCommit  = errors.New("failed to create commit via Atmos Pro")
+	ErrStagingFlagConflict   = errors.New("--add and --all are mutually exclusive")
+	ErrAPIResponseError      = errors.New("API response error")
 
 	// Exec package errors.
 	ErrComponentAndStackRequired     = errors.New("component and stack are both required")
