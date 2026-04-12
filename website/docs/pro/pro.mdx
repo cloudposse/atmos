@@ -2,7 +2,7 @@
 title: Atmos Pro
 sidebar_position: 1
 sidebar_label: Atmos Pro
-description: Centralized management, visibility, and automation for teams using Atmos at scale
+description: The control plane for coordinating infrastructure at scale across teams, repos, and organizations
 id: pro
 ---
 import Terminal from '@site/src/components/Terminal'
@@ -12,10 +12,32 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Atmos Pro adds centralized visibility and operational controls for teams running Atmos at scale.
-Upload affected stacks, track component instances, lock stacks during deployments, and detect drift
-across your entire infrastructure — all authenticated via GitHub OIDC with zero static credentials.
+Atmos CLI handles the execution layer — how you architect your cloud infrastructure, run automation
+reproducibly across local and CI, and manage authentication. Atmos Pro is the control plane above
+that, giving you visibility and coordination across all your teams, repositories, and environments.
 </Intro>
+
+## Why Atmos Pro?
+
+**Atmos CLI** solves the problems every company encounters: structuring Terraform at scale, running
+the same automation locally and in CI, handling auth, managing component dependencies, and keeping
+configuration DRY across environments. It owns the execution layer — plan, apply, deploy.
+
+**Atmos Pro** solves what happens when you scale that up. Multiple repositories, multiple GitHub
+organizations, dozens of teams, hundreds of components. You need to know what changed, what's
+drifting, what's failing, who approved what, and what the current state of every deployment is —
+across everything.
+
+Because Atmos CLI already handles execution, Atmos Pro doesn't need elevated access to your cloud
+accounts. It receives what the CLI uploads — affected stacks, component inventories, plan results —
+and gives you the coordination layer on top:
+
+- **Visibility** — See what's affected on every PR, across every repo and organization
+- **Drift detection** — Know which stacks have drifted and trigger remediation automatically
+- **Approvals and change requests** — Coordinate who can apply what, with full audit trails
+- **Failing runs** — Stay on top of failures across all teams without digging through CI logs
+- **Stack locking** — Prevent concurrent modifications during deployments
+- **Inventory** — Understand what's deployed, where, and with what configuration
 
 ## Quick Start
 
@@ -96,7 +118,8 @@ atmos describe affected --upload
 ### Component Instances
 
 Upload a complete inventory of all component instances across all stacks. Atmos Pro uses this
-to track what is deployed, where, and with what settings.
+to track what is deployed, where, and with what settings — across every repository in your
+organization.
 
 <Terminal title="shell">
 ```bash
