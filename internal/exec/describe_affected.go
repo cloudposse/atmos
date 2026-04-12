@@ -422,8 +422,8 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		return errUtils.Build(
 			fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateAPIClient, err),
 		).
-			WithHint("Set the ATMOS_PRO_TOKEN environment variable with your Atmos Pro API token.").
-			WithHint("Or configure GitHub OIDC with ATMOS_PRO_WORKSPACE_ID for CI environments.").
+			WithHint("Ensure your GitHub Actions workflow has `id-token: write` permission for OIDC authentication.").
+			WithHint("Verify that `ATMOS_PRO_WORKSPACE_ID` is set to the correct workspace ID for this repository.").
 			WithHint("See https://atmos.tools/integrations/pro for authentication setup.").
 			Err()
 	}
