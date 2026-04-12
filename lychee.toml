@@ -79,4 +79,6 @@ exclude = [
   "file://.*/ai/skill-marketplace",
   # Example/placeholder URLs in usage documentation
   "github\\.com/user/repo",
+  # regex101.com (intermittent 504 Gateway Timeout in CI)
+  "regex101\\.com",
 ]
