@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
@@ -2054,11 +2055,10 @@ func TestUploadAllowsPullRequestEvent(t *testing.T) {
 		baseRef,
 		[]schema.Affected{},
 	)
-	// Should NOT be an event validation error. It may be nil (API client creation
-	// logs a warning and returns nil) or some other error, but not our sentinel.
-	if err != nil {
-		assert.NotContains(t, err.Error(), "pull_request event")
-	}
+	// Should NOT be an event validation error — it should fail at API client creation instead.
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "pull_request event")
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
 }
 
 // TestUploadNoEventTypeAllowed verifies that --upload works when CIEventType is empty
@@ -2089,10 +2089,10 @@ func TestUploadNoEventTypeAllowed(t *testing.T) {
 		baseRef,
 		[]schema.Affected{},
 	)
-	// Should NOT be an event validation error.
-	if err != nil {
-		assert.NotContains(t, err.Error(), "pull_request event")
-	}
+	// Should NOT be an event validation error — it should fail at API client creation instead.
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "pull_request event")
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
 }
 
 // TestUploadSuppressesOutputButStillUploads verifies that when --upload is set without --verbose,
@@ -2137,8 +2137,9 @@ func TestUploadSuppressesOutputButStillUploads(t *testing.T) {
 	assert.False(t, printCalled, "printOrWriteToFile should not be called when --upload is used without --verbose")
 
 	// The function should proceed past event validation to the API client creation step.
-	// Since no API env vars are set, it logs a warning and returns nil (graceful degradation).
-	assert.NoError(t, err, "upload path should be reached and complete without error")
+	// Since no API env vars are set, it returns an error indicating the API client could not be created.
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
 }
 
 // TestUploadShowsOutputWhenVerbose verifies that when --upload and --verbose are both set,
@@ -2181,8 +2182,9 @@ func TestUploadShowsOutputWhenVerbose(t *testing.T) {
 	// printOrWriteToFile SHOULD have been called — verbose mode shows output.
 	assert.True(t, printCalled, "printOrWriteToFile should be called when --upload and --verbose are both set")
 
-	// Upload path should still complete.
-	assert.NoError(t, err, "upload path should be reached and complete without error")
+	// Upload path should still reach the API client creation step and fail with a clear error.
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
 }
 
 // TestUploadShowsOutputWhenOutputFileRequested verifies that file output still renders JSON
@@ -2261,4 +2263,40 @@ func TestUploadShowsOutputWhenOutputFileRequested(t *testing.T) {
 	assert.Equal(t, "example", uploadReq.RepoOwner)
 	require.Len(t, uploadReq.Stacks, 1)
 	assert.Equal(t, "vpc", uploadReq.Stacks[0].Component)
+}
+
+// TestUploadErrorsWhenNoCredentials verifies that --upload returns an actionable error
+// when neither ATMOS_PRO_TOKEN nor OIDC credentials are configured.
+func TestUploadErrorsWhenNoCredentials(t *testing.T) {
+	// Ensure no credentials are set.
+	t.Setenv("ATMOS_PRO_TOKEN", "")
+	t.Setenv("ATMOS_PRO_WORKSPACE_ID", "")
+
+	d := describeAffectedExec{
+		atmosConfig: &schema.AtmosConfiguration{},
+		printOrWriteToFile: func(atmosConfig *schema.AtmosConfiguration, format, file string, data any) error {
+			return nil
+		},
+		IsTTYSupportForStdout: func() bool { return false },
+		pageCreator:           pager.New(),
+	}
+
+	headRef := plumbing.NewHashReference("refs/heads/feature", plumbing.NewHash("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	baseRef := plumbing.NewHashReference("refs/heads/main", plumbing.NewHash("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+	err := d.uploadableQuery(
+		&DescribeAffectedCmdArgs{
+			Upload:      true,
+			Format:      "json",
+			CIEventType: "pull_request",
+			CLIConfig:   &schema.AtmosConfiguration{},
+		},
+		"https://github.com/example/repo.git",
+		headRef,
+		baseRef,
+		[]schema.Affected{{Component: "vpc", Stack: "dev"}},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
 }

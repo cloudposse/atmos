@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -371,6 +372,9 @@ func TestGetAuthenticatedRequest(t *testing.T) {
 		assert.NotNil(t, req)
 		assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
 		assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
+		assert.Contains(t, req.Header.Get("User-Agent"), "atmos/")
+		assert.Contains(t, req.Header.Get("User-Agent"), runtime.GOOS)
+		assert.Contains(t, req.Header.Get("User-Agent"), runtime.GOARCH)
 	})
 
 	t.Run("Invalid URL", func(t *testing.T) {

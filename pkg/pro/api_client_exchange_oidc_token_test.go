@@ -17,6 +17,7 @@ func TestExchangeOIDCTokenForAtmosToken_Success(t *testing.T) {
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "/api/auth/github-oidc", r.URL.Path)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Contains(t, r.Header.Get("User-Agent"), "atmos/")
 
 		// Verify request body
 		body, err := io.ReadAll(r.Body)
