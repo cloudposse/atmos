@@ -22,6 +22,7 @@ func init() {
 	proCmd.AddCommand(lockCmd)
 	proCmd.AddCommand(unlockCmd)
 	proCmd.AddCommand(installCmd)
+	proCmd.AddCommand(commitCmd)
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
