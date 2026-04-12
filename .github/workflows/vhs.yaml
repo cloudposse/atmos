@@ -17,7 +17,7 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Check for vhs label
         id: labeled
@@ -69,23 +69,23 @@ jobs:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.file }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install atmos
-        uses: jaxxstorm/action-install-gh-release@v1.14.0
+        uses: jaxxstorm/action-install-gh-release@cd6b2b78ad38bdd294341cda064ec0692b06215b # v1.14.0
         with: # Grab the latest version
           repo: cloudposse/atmos
           chmod: 0755
           extension-matching: disable
           rename-to: atmos
 
-      - uses: charmbracelet/vhs-action@v1
+      - uses: charmbracelet/vhs-action@5bc47255c016b6af28ad6b633ee9a07b79468804 # v1.2.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ matrix.file }}
           install-fonts: true
 
-      - uses: stefanzweifel/git-auto-commit-action@v4
+      - uses: stefanzweifel/git-auto-commit-action@3ea6ae190baf489ba007f7c92608f33ce20ef04a # v4.16.0
         id: auto-commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

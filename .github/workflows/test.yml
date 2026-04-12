@@ -41,7 +41,7 @@ jobs:
             target: macos
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@030c186b28504cf0b4cfea1fa9853467795889d2 # v1
         if: matrix.target == 'linux'
 
       - name: Build
@@ -54,11 +54,11 @@ jobs:
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: "go.mod"
         id: go
@@ -79,7 +79,7 @@ jobs:
           make version-${{ matrix.target }}
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.target }}
@@ -100,19 +100,19 @@ jobs:
     timeout-minutes: 45
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@030c186b28504cf0b4cfea1fa9853467795889d2 # v1
         if: matrix.flavor.target == 'linux'
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
@@ -135,14 +135,14 @@ jobs:
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
@@ -150,14 +150,14 @@ jobs:
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@main
+        uses: hashicorp/setup-packer@54678572a9eae3130016b4548482317e9f83f9f3 # main
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           version: ${{ env.PACKER_VERSION }}
 
       # https://github.com/helmfile/helmfile-action
       - name: Install Helmfile
-        uses: helmfile/helmfile-action@v2.0.5
+        uses: helmfile/helmfile-action@6f21d94fa797f5dfbc92b9db62c6832ac6639a88 # v2.0.5
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           helm-version: ${{ env.HELM_VERSION }}
@@ -181,7 +181,7 @@ jobs:
           atmos version
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
@@ -195,7 +195,7 @@ jobs:
       # Enable this after merging test-cases
       # Only seems to work with remote schema files
       #- name: Validate YAML Schema for Test Cases
-      #  uses: InoUno/yaml-ls-check@v1.4.0
+      #  uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0
       #  with:
       #    root: "tests/test-cases"
       #    schemaMapping: |
@@ -220,7 +220,7 @@ jobs:
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && (success() || failure())
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
@@ -235,9 +235,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -249,7 +249,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4.32.4
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -291,7 +291,7 @@ jobs:
     steps:
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -300,23 +300,23 @@ jobs:
         run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@main
+        uses: hashicorp/setup-packer@54678572a9eae3130016b4548482317e9f83f9f3 # main
         with:
           version: ${{ env.PACKER_VERSION }}
 
@@ -341,7 +341,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Start Docker Compose
         working-directory: examples/${{ matrix.demo-folder }}
@@ -357,7 +357,7 @@ jobs:
           kubectl get pods --all-namespaces
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -372,7 +372,7 @@ jobs:
         run: sudo apt-get -y install kubectl helmfile
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -427,7 +427,7 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -435,7 +435,7 @@ jobs:
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -454,21 +454,21 @@ jobs:
 
       - name: Install Terraform
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@main
+        uses: hashicorp/setup-packer@54678572a9eae3130016b4548482317e9f83f9f3 # main
         with:
           version: ${{ env.PACKER_VERSION }}
 
@@ -531,28 +531,28 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@main
+        uses: hashicorp/setup-packer@54678572a9eae3130016b4548482317e9f83f9f3 # main
         with:
           version: ${{ env.PACKER_VERSION }}
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
-        uses: reviewdog/action-tflint@v1
+        uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1.25.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
@@ -583,10 +583,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@v1.4.0
+        uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
