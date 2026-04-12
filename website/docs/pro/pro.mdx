@@ -1,0 +1,188 @@
+---
+title: Atmos Pro
+sidebar_position: 1
+sidebar_label: Atmos Pro
+description: Centralized management, visibility, and automation for teams using Atmos at scale
+id: pro
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Atmos Pro adds centralized visibility and operational controls for teams running Atmos at scale.
+Upload affected stacks, track component instances, lock stacks during deployments, and detect drift
+across your entire infrastructure — all authenticated via GitHub OIDC with zero static credentials.
+</Intro>
+
+## Quick Start
+
+### 1. Configure Your Workspace
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    workspace_id: "your-workspace-id"
+```
+</File>
+
+### 2. Add Workflow Permissions
+
+<File title=".github/workflows/atmos.yaml">
+```yaml
+permissions:
+  id-token: write   # Required for OIDC token exchange with Atmos Pro
+  contents: read
+```
+</File>
+
+### 3. Upload Affected Stacks
+
+<Terminal title="shell">
+```bash
+atmos describe affected --upload
+```
+</Terminal>
+
+<ActionCard title="Pro Configuration">
+    Configure workspace ID, authentication, payload chunking, and drift detection in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/settings/pro">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Authentication
+
+Atmos Pro uses **GitHub OIDC token exchange** for authentication. No API keys or static credentials
+are needed. When running in GitHub Actions with `id-token: write` permission, Atmos automatically
+requests an OIDC token and exchanges it for a short-lived Atmos Pro bearer token.
+
+The only configuration required is your `workspace_id`, which identifies your organization's
+workspace. This value is not a secret and is safe to commit to version control.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  pro:
+    workspace_id: "your-workspace-id"
+    github_oidc:
+      request_url: !env ACTIONS_ID_TOKEN_REQUEST_URL
+      request_token: !env ACTIONS_ID_TOKEN_REQUEST_TOKEN
+```
+</File>
+
+:::tip
+The `github_oidc` fields are automatically populated in GitHub Actions. You only need to set
+`workspace_id` and ensure your workflow has `id-token: write` permission.
+:::
+
+## Features
+
+### Affected Stacks
+
+Upload the results of `atmos describe affected` to Atmos Pro for visibility into what changed
+on each pull request. Atmos Pro correlates uploads with GitHub webhooks to show affected
+components directly in your PR workflow.
+
+<Terminal title="shell">
+```bash
+atmos describe affected --upload
+```
+</Terminal>
+
+### Component Instances
+
+Upload a complete inventory of all component instances across all stacks. Atmos Pro uses this
+to track what is deployed, where, and with what settings.
+
+<Terminal title="shell">
+```bash
+atmos list instances --upload
+```
+</Terminal>
+
+### Stack Locking
+
+Prevent concurrent modifications to the same stack. Lock before apply, unlock after — Atmos Pro
+tracks who holds the lock and when it was acquired.
+
+<Terminal title="shell">
+```bash
+atmos pro lock vpc -s prod-use1
+atmos terraform apply vpc -s prod-use1
+atmos pro unlock vpc -s prod-use1
+```
+</Terminal>
+
+### Drift Detection
+
+Track Terraform plan results to detect infrastructure drift. When `--upload-status` is enabled,
+Atmos uploads the plan exit code so Atmos Pro can identify stacks that have drifted from their
+desired state and trigger remediation workflows.
+
+<Terminal title="shell">
+```bash
+atmos terraform plan vpc -s prod-use1 --upload-status
+```
+</Terminal>
+
+## Commands
+
+<dl>
+  <dt>[`atmos describe affected --upload`](/cli/commands/describe/affected)</dt>
+  <dd>Upload affected components and stacks to Atmos Pro for PR correlation.</dd>
+
+  <dt>[`atmos list instances --upload`](/cli/commands/list/list-instances)</dt>
+  <dd>Upload a complete inventory of component instances to Atmos Pro.</dd>
+
+  <dt>[`atmos pro lock`](/cli/commands/pro/lock)</dt>
+  <dd>Lock a stack to prevent concurrent modifications.</dd>
+
+  <dt>[`atmos pro unlock`](/cli/commands/pro/unlock)</dt>
+  <dd>Unlock a previously locked stack.</dd>
+
+  <dt>[`atmos terraform plan --upload-status`](/cli/commands/terraform/plan)</dt>
+  <dd>Upload plan results for drift detection.</dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
+  <dd>Workspace identifier for OIDC authentication. Not a secret. Maps to `settings.pro.workspace_id`.</dd>
+
+  <dt>`ATMOS_PRO_BASE_URL`</dt>
+  <dd>Override the Atmos Pro API base URL. Maps to `settings.pro.base_url`.</dd>
+
+  <dt>`ATMOS_PRO_ENDPOINT`</dt>
+  <dd>Override the API endpoint path. Maps to `settings.pro.endpoint`.</dd>
+
+  <dt>`ATMOS_PRO_TOKEN`</dt>
+  <dd>Bearer token obtained via OIDC token exchange (advanced). Maps to `settings.pro.token`.</dd>
+</dl>
+
+## Troubleshooting
+
+### OIDC Authentication Failures
+
+If `--upload` fails with an authentication error:
+
+1. Verify your workflow has `id-token: write` permission
+2. Confirm `ATMOS_PRO_WORKSPACE_ID` is set to the correct workspace
+3. Check that the Atmos Pro GitHub App is installed on your repository
+
+### Upload Access Denied (403)
+
+If the upload succeeds authentication but returns a 403:
+
+1. Verify the repository has been imported into your Atmos Pro workspace
+2. Check repository permissions in your Atmos Pro workspace settings
+
+## Related
+
+- [Pro Configuration](/cli/configuration/settings/pro) - Full configuration reference for `settings.pro`
+- [Auth](/stacks/auth) - Configure OIDC authentication
+- [Native CI](/ci) - CI/CD integration for GitHub Actions

@@ -424,7 +424,7 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 		).
 			WithHint("Ensure your GitHub Actions workflow has `id-token: write` permission for OIDC authentication.").
 			WithHint("Verify that `ATMOS_PRO_WORKSPACE_ID` is set to the correct workspace ID for this repository.").
-			WithHint("See https://atmos.tools/integrations/pro for authentication setup.").
+			WithHint("See https://atmos.tools/pro for authentication setup.").
 			Err()
 	}
 
