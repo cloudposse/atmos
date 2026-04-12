@@ -62,13 +62,19 @@ permissions:
 ```
 </File>
 
-### 3. Upload Affected Stacks
+### 3. Upload Affected Stacks from Your Workflow
 
-<Terminal title="shell">
-```bash
-atmos describe affected --upload
+<File title=".github/workflows/atmos.yaml">
+```yaml
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload affected stacks
+        run: atmos describe affected --upload
 ```
-</Terminal>
+</File>
 
 <ActionCard title="Pro Configuration">
     Configure workspace ID, authentication, payload chunking, and drift detection in your `atmos.yaml`.
