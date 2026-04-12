@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5/plumbing"
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/pflag"
@@ -2299,4 +2300,11 @@ func TestUploadErrorsWhenNoCredentials(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateAPIClient)
+
+	// Verify actionable hints are present in the error chain.
+	hints := cockroachErrors.GetAllHints(err)
+	allHints := strings.Join(hints, "\n")
+	assert.Contains(t, allHints, "id-token: write")
+	assert.Contains(t, allHints, "ATMOS_PRO_WORKSPACE_ID")
+	assert.Contains(t, allHints, "atmos.tools/pro")
 }

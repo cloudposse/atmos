@@ -185,7 +185,7 @@ atmos terraform plan vpc -s prod-use1 --upload-status
   <dd>Override the API endpoint path. Maps to `settings.pro.endpoint`.</dd>
 
   <dt>`ATMOS_PRO_TOKEN`</dt>
-  <dd>Bearer token obtained via OIDC token exchange (advanced). Maps to `settings.pro.token`.</dd>
+  <dd>Internal runtime token from OIDC exchange (advanced/internal). Do not set this manually; configure `settings.pro.workspace_id` and GitHub Actions `id-token: write` instead.</dd>
 </dl>
 
 ## Troubleshooting

@@ -4,8 +4,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -110,6 +112,35 @@ func TestExchangeOIDCTokenForAtmosToken_RequestCreationError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "", token)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateRequest)
+}
+
+// TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON verifies that an error status with
+// a non-JSON body returns an enriched error with troubleshooting hints.
+func TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(`<html>Bad Gateway</html>`))
+	}))
+	defer server.Close()
+
+	token, err := exchangeOIDCTokenForAtmosToken(server.URL, "api", "oidc-token", "workspace-id")
+	assert.Error(t, err)
+	assert.Equal(t, "", token)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToExchangeOIDCToken)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToDecodeTokenResponse)
+	// The troubleshooting hint is attached to the enriched inner error.
+	// errors.Join doesn't propagate cockroach hints, so unwrap to find them.
+	var innerErrs interface{ Unwrap() []error }
+	if assert.ErrorAs(t, err, &innerErrs) {
+		for _, inner := range innerErrs.Unwrap() {
+			hints := cockroachErrors.GetAllHints(inner)
+			allHints := strings.Join(hints, "\n")
+			if strings.Contains(allHints, "troubleshooting") {
+				return // Found it.
+			}
+		}
+		t.Error("expected troubleshooting hint in inner errors")
+	}
 }
 
 func TestExchangeOIDCTokenForAtmosToken_MarshalError(t *testing.T) {

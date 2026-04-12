@@ -360,6 +360,16 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	})
 }
 
+// TestUserAgent verifies the User-Agent string format.
+func TestUserAgent(t *testing.T) {
+	ua := userAgent()
+	assert.Contains(t, ua, "atmos/")
+	assert.Contains(t, ua, runtime.GOOS)
+	assert.Contains(t, ua, runtime.GOARCH)
+	// Verify format: "atmos/<version> (<os>; <arch>)".
+	assert.Regexp(t, `^atmos/\S+ \(\w+; \w+\)$`, ua)
+}
+
 // TestGetAuthenticatedRequest tests the getAuthenticatedRequest function with error handling.
 func TestGetAuthenticatedRequest(t *testing.T) {
 	client := &AtmosProAPIClient{
