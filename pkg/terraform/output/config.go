@@ -169,7 +169,7 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 		if basePath == "" {
 			basePath = "."
 		}
-		workdirPath := provWorkdir.BuildPath(basePath, componentType, baseComponent, stack, sections)
+		workdirPath := provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
 		if !filepath.IsAbs(workdirPath) {
 			if abs, absErr := filepath.Abs(workdirPath); absErr == nil {
 				workdirPath = abs
