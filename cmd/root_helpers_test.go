@@ -1008,9 +1008,14 @@ func (p *testExperimentalProvider) IsExperimental() bool                { return
 // detection only matches top-level built-in commands, not custom commands that
 // share the same name (issue #2315).
 func TestFindExperimentalParent_RegistryBased(t *testing.T) {
-	// Register a mock experimental provider named "ai".
+	// Save and restore only the provider this test overrides.
+	prevProvider, hadPrev := internal.GetProvider("ai")
 	internal.Register(&testExperimentalProvider{name: "ai"})
-	defer internal.Reset()
+	t.Cleanup(func() {
+		if hadPrev {
+			internal.Register(prevProvider)
+		}
+	})
 
 	t.Run("top-level ai command is experimental", func(t *testing.T) {
 		// Simulate: atmos ai (root -> ai).
