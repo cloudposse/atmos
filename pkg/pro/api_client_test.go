@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -359,6 +360,16 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	})
 }
 
+// TestUserAgent verifies the User-Agent string format.
+func TestUserAgent(t *testing.T) {
+	ua := userAgent()
+	assert.Contains(t, ua, "atmos/")
+	assert.Contains(t, ua, runtime.GOOS)
+	assert.Contains(t, ua, runtime.GOARCH)
+	// Verify format: "atmos/<version> (<os>; <arch>)".
+	assert.Regexp(t, `^atmos/\S+ \(\w+; \w+\)$`, ua)
+}
+
 // TestGetAuthenticatedRequest tests the getAuthenticatedRequest function with error handling.
 func TestGetAuthenticatedRequest(t *testing.T) {
 	client := &AtmosProAPIClient{
@@ -371,6 +382,9 @@ func TestGetAuthenticatedRequest(t *testing.T) {
 		assert.NotNil(t, req)
 		assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
 		assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
+		assert.Contains(t, req.Header.Get("User-Agent"), "atmos/")
+		assert.Contains(t, req.Header.Get("User-Agent"), runtime.GOOS)
+		assert.Contains(t, req.Header.Get("User-Agent"), runtime.GOARCH)
 	})
 
 	t.Run("Invalid URL", func(t *testing.T) {

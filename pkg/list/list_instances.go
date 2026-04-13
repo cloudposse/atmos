@@ -494,9 +494,8 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 			ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
 			return nil
 		}
-		// Upload failures are logged but never cause the list command to fail.
 		if uploadErr := uploadInstances(proInstances); uploadErr != nil {
-			log.Warn("Failed to upload instances to Atmos Pro. The list result is unaffected.", "error", uploadErr)
+			return uploadErr
 		}
 	}
 
