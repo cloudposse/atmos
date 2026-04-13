@@ -15,6 +15,7 @@ const (
 	FormatTSV      Format = "tsv"
 	FormatTemplate Format = "template"
 	FormatTree     Format = "tree"
+	FormatMatrix   Format = "matrix"
 )
 
 // FormatOptions contains options for formatting output.
@@ -78,7 +79,7 @@ func NewFormatter(format Format) (Formatter, error) {
 
 // ValidateFormat checks if the provided format is valid.
 func ValidateFormat(format string) error {
-	validFormats := []Format{FormatTable, FormatJSON, FormatYAML, FormatCSV, FormatTSV, FormatTree}
+	validFormats := []Format{FormatTable, FormatJSON, FormatYAML, FormatCSV, FormatTSV, FormatTree, FormatMatrix}
 	for _, f := range validFormats {
 		if Format(format) == f {
 			return nil
@@ -86,6 +87,6 @@ func ValidateFormat(format string) error {
 	}
 	return &errors.InvalidFormatError{
 		Format: format,
-		Valid:  []string{string(FormatTable), string(FormatJSON), string(FormatYAML), string(FormatCSV), string(FormatTSV), string(FormatTree)},
+		Valid:  []string{string(FormatTable), string(FormatJSON), string(FormatYAML), string(FormatCSV), string(FormatTSV), string(FormatTree), string(FormatMatrix)},
 	}
 }

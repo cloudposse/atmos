@@ -1561,12 +1561,12 @@ func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
 	assert.Equal(t, 1, deletedCount, "with stack filter ue1-staging, should find only 1 deleted component")
 }
 
-// TestConvertAffectedToMatrix tests converting affected components to GitHub Actions matrix format.
+// TestConvertAffectedToMatrix tests converting affected components to matrix entries.
 func TestConvertAffectedToMatrix(t *testing.T) {
 	t.Run("empty affected list", func(t *testing.T) {
-		matrix := convertAffectedToMatrix([]schema.Affected{})
-		assert.NotNil(t, matrix.Include)
-		assert.Empty(t, matrix.Include)
+		entries := convertAffectedToMatrix([]schema.Affected{})
+		assert.NotNil(t, entries)
+		assert.Empty(t, entries)
 	})
 
 	t.Run("single affected", func(t *testing.T) {
@@ -1578,12 +1578,12 @@ func TestConvertAffectedToMatrix(t *testing.T) {
 				ComponentType: "terraform",
 			},
 		}
-		matrix := convertAffectedToMatrix(affected)
-		require.Len(t, matrix.Include, 1)
-		assert.Equal(t, "ue1-dev", matrix.Include[0].Stack)
-		assert.Equal(t, "vpc", matrix.Include[0].Component)
-		assert.Equal(t, filepath.Join("components", "terraform", "vpc"), matrix.Include[0].ComponentPath)
-		assert.Equal(t, "terraform", matrix.Include[0].ComponentType)
+		entries := convertAffectedToMatrix(affected)
+		require.Len(t, entries, 1)
+		assert.Equal(t, "ue1-dev", entries[0].Stack)
+		assert.Equal(t, "vpc", entries[0].Component)
+		assert.Equal(t, filepath.Join("components", "terraform", "vpc"), entries[0].ComponentPath)
+		assert.Equal(t, "terraform", entries[0].ComponentType)
 	})
 
 	t.Run("multiple affected", func(t *testing.T) {
@@ -1601,78 +1601,11 @@ func TestConvertAffectedToMatrix(t *testing.T) {
 				ComponentType: "terraform",
 			},
 		}
-		matrix := convertAffectedToMatrix(affected)
-		require.Len(t, matrix.Include, 2)
-		assert.Equal(t, "ue1-dev", matrix.Include[0].Stack)
-		assert.Equal(t, "eks", matrix.Include[1].Component)
+		entries := convertAffectedToMatrix(affected)
+		require.Len(t, entries, 2)
+		assert.Equal(t, "ue1-dev", entries[0].Stack)
+		assert.Equal(t, "eks", entries[1].Component)
 	})
-}
-
-// TestWriteMatrixOutput_File tests writing matrix output to a file.
-func TestWriteMatrixOutput_File(t *testing.T) {
-	t.Run("writes matrix and count to file", func(t *testing.T) {
-		outputFile := filepath.Join(t.TempDir(), "github_output")
-		affected := []schema.Affected{
-			{
-				Stack:         "ue1-dev",
-				Component:     "vpc",
-				ComponentPath: filepath.Join("components", "terraform", "vpc"),
-				ComponentType: "terraform",
-			},
-		}
-		err := writeMatrixOutput(affected, outputFile)
-		require.NoError(t, err)
-
-		content, err := os.ReadFile(outputFile)
-		require.NoError(t, err)
-
-		lines := strings.Split(strings.TrimSpace(string(content)), "\n")
-		require.Len(t, lines, 2)
-		assert.True(t, strings.HasPrefix(lines[0], "matrix="))
-		assert.Equal(t, "affected_count=1", lines[1])
-
-		// Verify JSON is valid.
-		matrixJSON := strings.TrimPrefix(lines[0], "matrix=")
-		var matrix MatrixOutput
-		err = json.Unmarshal([]byte(matrixJSON), &matrix)
-		require.NoError(t, err)
-		require.Len(t, matrix.Include, 1)
-		assert.Equal(t, "vpc", matrix.Include[0].Component)
-	})
-
-	t.Run("empty affected writes empty include", func(t *testing.T) {
-		outputFile := filepath.Join(t.TempDir(), "github_output")
-		err := writeMatrixOutput([]schema.Affected{}, outputFile)
-		require.NoError(t, err)
-
-		content, err := os.ReadFile(outputFile)
-		require.NoError(t, err)
-		assert.Contains(t, string(content), `"include":[]`)
-		assert.Contains(t, string(content), "affected_count=0")
-	})
-
-	t.Run("file open error", func(t *testing.T) {
-		err := writeMatrixOutput([]schema.Affected{}, filepath.Join(t.TempDir(), "nonexistent", "file"))
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to open output file")
-	})
-}
-
-// TestWriteMatrixOutput_Stdout tests writing matrix output to stdout.
-func TestWriteMatrixOutput_Stdout(t *testing.T) {
-	ioCtx, err := iolib.NewContext()
-	require.NoError(t, err)
-	data.InitWriter(ioCtx)
-
-	err = writeMatrixOutput([]schema.Affected{
-		{
-			Stack:         "ue1-dev",
-			Component:     "vpc",
-			ComponentPath: filepath.Join("components", "terraform", "vpc"),
-			ComponentType: "terraform",
-		},
-	}, "")
-	assert.NoError(t, err)
 }
 
 // TestResolveBaseFromCI tests CI base auto-detection.

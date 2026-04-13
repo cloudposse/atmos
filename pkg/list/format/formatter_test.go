@@ -249,6 +249,16 @@ func TestValidateFormat(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:        "Valid Tree format",
+			format:      string(FormatTree),
+			expectError: false,
+		},
+		{
+			name:        "Valid Matrix format",
+			format:      string(FormatMatrix),
+			expectError: false,
+		},
+		{
 			name:        "Invalid format",
 			format:      "invalid",
 			expectError: true,
