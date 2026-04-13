@@ -419,8 +419,13 @@ func (d *describeAffectedExec) uploadableQuery(args *DescribeAffectedCmdArgs, re
 	log.Debug("Creating API client")
 	apiClient, err := pro.NewAtmosProAPIClientFromEnv(d.atmosConfig)
 	if err != nil {
-		log.Warn("Failed to create Atmos Pro API client for upload. The describe affected result is unaffected.", "error", err)
-		return nil
+		return errUtils.Build(
+			fmt.Errorf("%w: %w", errUtils.ErrFailedToCreateAPIClient, err),
+		).
+			WithHint("Ensure your GitHub Actions workflow has `id-token: write` permission for OIDC authentication.").
+			WithHint("Verify that `ATMOS_PRO_WORKSPACE_ID` is set to the correct workspace ID for this repository.").
+			WithHint("See https://atmos.tools/pro for authentication setup.").
+			Err()
 	}
 
 	// Use the PR head SHA from the CI event payload when available.
