@@ -521,7 +521,7 @@ func TestExtractComponentPath(t *testing.T) {
 			expectedSuffix: filepath.Join("components", "terraform", "vpc"),
 		},
 		{
-			name:     "workdir enabled returns workdir path instead of base component dir",
+			name:     "workdir enabled uses instance component name in path, not base component",
 			basePath: tempDir,
 			sections: map[string]any{
 				cfg.ComponentSectionName: "null-label",
@@ -532,7 +532,9 @@ func TestExtractComponentPath(t *testing.T) {
 					"workdir": map[string]any{"enabled": true},
 				},
 			},
-			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-null-label"),
+			// extractComponentPath is called with component="comp" (the instance name).
+			// BuildPath falls back to the instance name when atmos_component is absent.
+			expectedSuffix: filepath.Join(".workdir", "terraform", "stack-comp"),
 		},
 		{
 			name:     "workdir enabled with atmos_component uses instance name in path",
