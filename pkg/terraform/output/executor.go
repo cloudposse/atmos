@@ -290,11 +290,11 @@ func (e *Executor) GetOutput(
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
 				ui.ClearLine()
-		ui.Error(message)
+				ui.Error(message)
 				return nil, false, resultErr
 			}
 			ui.ClearLine()
-	ui.Success(message)
+			ui.Success(message)
 			return value, exists, nil
 		}
 	}
@@ -396,11 +396,11 @@ func (e *Executor) GetOutputWithOptions(
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
 				ui.ClearLine()
-		ui.Error(message)
+				ui.Error(message)
 				return nil, false, resultErr
 			}
 			ui.ClearLine()
-	ui.Success(message)
+			ui.Success(message)
 			return value, exists, nil
 		}
 	}
