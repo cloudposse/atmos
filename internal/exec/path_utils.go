@@ -19,6 +19,12 @@ func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguratio
 		return filepath.FromSlash(workdirPath)
 	}
 
+	// If workdir provisioning is enabled but provisioners haven't run yet
+	// (e.g., during describe component), compute the path deterministically.
+	if path, ok := provWorkdir.ResolvePath(atmosConfig.BasePath, "terraform", info.FinalComponent, info.ComponentSection); ok {
+		return path
+	}
+
 	// If we have a resolved absolute path, use GetComponentPath.
 	// Otherwise, just construct the path directly (for tests and simple cases).
 	if atmosConfig.TerraformDirAbsolutePath != "" {
@@ -89,6 +95,12 @@ func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration
 		return filepath.FromSlash(workdirPath)
 	}
 
+	// If workdir provisioning is enabled but provisioners haven't run yet
+	// (e.g., during describe component), compute the path deterministically.
+	if path, ok := provWorkdir.ResolvePath(atmosConfig.BasePath, "helmfile", info.FinalComponent, info.ComponentSection); ok {
+		return path
+	}
+
 	// If we have a resolved absolute path, use GetComponentPath.
 	// Otherwise, just construct the path directly (for tests and simple cases).
 	if atmosConfig.HelmfileDirAbsolutePath != "" {
@@ -155,6 +167,12 @@ func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, 
 	// Use filepath.FromSlash to normalize path separators for cross-platform compatibility.
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 		return filepath.FromSlash(workdirPath)
+	}
+
+	// If workdir provisioning is enabled but provisioners haven't run yet
+	// (e.g., during describe component), compute the path deterministically.
+	if path, ok := provWorkdir.ResolvePath(atmosConfig.BasePath, "packer", info.FinalComponent, info.ComponentSection); ok {
+		return path
 	}
 
 	// If we have a resolved absolute path, use GetComponentPath.

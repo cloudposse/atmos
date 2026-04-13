@@ -117,6 +117,88 @@ func TestConstructPackerComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 	assert.Equal(t, filepath.Join("base", "components", "packer", "ami"), got2)
 }
 
+// TestConstructWorkingDir_WorkdirPathKeyPrecedence tests that an explicit _workdir_path
+// takes precedence over the computed workdir path from provision.workdir.enabled.
+func TestConstructWorkingDir_WorkdirPathKeyPrecedence(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: filepath.Join("project", "root"),
+	}
+	info := schema.ConfigAndStacksInfo{
+		FinalComponent: "vpc",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: filepath.Join("explicit", "workdir", "path"),
+			"atmos_stack":              "dev-ue2",
+			"provision": map[string]any{
+				"workdir": map[string]any{
+					"enabled": true,
+				},
+			},
+		},
+	}
+	// When WorkdirPathKey is set, constructTerraformComponentWorkingDir returns it
+	// before reaching ResolvePath.
+	got := constructTerraformComponentWorkingDir(&atmosConfig, &info)
+	assert.Equal(t, filepath.Join("explicit", "workdir", "path"), got)
+}
+
+// TestConstructWorkingDir_WorkdirEnabledNoProvisioner tests that construct*WorkingDir
+// returns the correct workdir path when provision.workdir.enabled is true
+// but no provisioner has set _workdir_path (the describe component scenario).
+func TestConstructWorkingDir_WorkdirEnabledNoProvisioner(t *testing.T) {
+	// Terraform.
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: "myproject",
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: filepath.Join("components", "terraform"),
+			},
+			Helmfile: schema.Helmfile{
+				BasePath: filepath.Join("components", "helmfile"),
+			},
+			Packer: schema.Packer{
+				BasePath: filepath.Join("components", "packer"),
+			},
+		},
+	}
+
+	workdirConfig := map[string]any{
+		"atmos_stack":     "dev-ue2",
+		"atmos_component": "vpc",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	tfInfo := schema.ConfigAndStacksInfo{
+		FinalComponent:   "vpc",
+		ComponentSection: workdirConfig,
+	}
+	assert.Equal(t,
+		filepath.Join("myproject", ".workdir", "terraform", "dev-ue2-vpc"),
+		constructTerraformComponentWorkingDir(&atmosConfig, &tfInfo),
+	)
+
+	hfInfo := schema.ConfigAndStacksInfo{
+		FinalComponent:   "nginx",
+		ComponentSection: workdirConfig,
+	}
+	assert.Equal(t,
+		filepath.Join("myproject", ".workdir", "helmfile", "dev-ue2-vpc"),
+		constructHelmfileComponentWorkingDir(&atmosConfig, &hfInfo),
+	)
+
+	pkInfo := schema.ConfigAndStacksInfo{
+		FinalComponent:   "ami",
+		ComponentSection: workdirConfig,
+	}
+	assert.Equal(t,
+		filepath.Join("myproject", ".workdir", "packer", "dev-ue2-vpc"),
+		constructPackerComponentWorkingDir(&atmosConfig, &pkInfo),
+	)
+}
+
 func TestConstructPackerComponentVarfileName(t *testing.T) {
 	tests := []struct {
 		name string

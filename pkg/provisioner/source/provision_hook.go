@@ -239,23 +239,15 @@ func determineSourceTargetDirectory(
 	componentConfig map[string]any,
 ) (string, bool, error) {
 	// Check if workdir is enabled.
-	if isWorkdirEnabled(componentConfig) {
-		// Get stack name for workdir path.
-		stack, _ := componentConfig["atmos_stack"].(string)
-		if stack == "" {
-			return "", false, errUtils.Build(errUtils.ErrSourceProvision).
-				WithExplanation("Stack name required when workdir is enabled").
-				WithHint("The 'atmos_stack' field is required for workdir provisioning").
-				Err()
+	if workdir.IsWorkdirEnabled(componentConfig) {
+		if workdirPath, ok := workdir.ResolvePath(atmosConfig.BasePath, componentType, component, componentConfig); ok {
+			return workdirPath, true, nil
 		}
-
-		basePath := atmosConfig.BasePath
-		if basePath == "" {
-			basePath = "."
-		}
-
-		workdirPath := workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
-		return workdirPath, true, nil
+		// Workdir is enabled but stack is missing.
+		return "", false, errUtils.Build(errUtils.ErrSourceProvision).
+			WithExplanation("Stack name required when workdir is enabled").
+			WithHint("The 'atmos_stack' field is required for workdir provisioning").
+			Err()
 	}
 
 	// No workdir - use standard component path.
@@ -264,22 +256,6 @@ func determineSourceTargetDirectory(
 		return "", false, err
 	}
 	return targetDir, false, nil
-}
-
-// isWorkdirEnabled checks if provision.workdir.enabled is set to true.
-func isWorkdirEnabled(componentConfig map[string]any) bool {
-	provisionConfig, ok := componentConfig["provision"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	workdirConfig, ok := provisionConfig["workdir"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	enabled, ok := workdirConfig["enabled"].(bool)
-	return ok && enabled
 }
 
 // needsProvisioning checks if the target directory needs provisioning.

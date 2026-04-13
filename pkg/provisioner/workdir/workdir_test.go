@@ -95,8 +95,137 @@ func TestIsWorkdirEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isWorkdirEnabled(tt.config)
+			result := IsWorkdirEnabled(tt.config)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestResolvePath tests deterministic workdir path resolution without running provisioners.
+func TestResolvePath(t *testing.T) {
+	tests := []struct {
+		name         string
+		basePath     string
+		compType     string
+		component    string
+		config       map[string]any
+		expectedPath string
+		expectedOk   bool
+	}{
+		{
+			name:      "workdir enabled with atmos_component",
+			basePath:  filepath.Join("project", "root"),
+			compType:  "terraform",
+			component: "vpc",
+			config: map[string]any{
+				"atmos_stack":     "dev-ue2",
+				"atmos_component": "vpc-primary",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expectedPath: filepath.Join("project", "root", ".workdir", "terraform", "dev-ue2-vpc-primary"),
+			expectedOk:   true,
+		},
+		{
+			name:      "workdir enabled without atmos_component",
+			basePath:  filepath.Join("project", "root"),
+			compType:  "terraform",
+			component: "vpc",
+			config: map[string]any{
+				"atmos_stack": "prod-uw2",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expectedPath: filepath.Join("project", "root", ".workdir", "terraform", "prod-uw2-vpc"),
+			expectedOk:   true,
+		},
+		{
+			name:         "workdir not enabled",
+			basePath:     "base",
+			compType:     "terraform",
+			component:    "vpc",
+			config:       map[string]any{},
+			expectedPath: "",
+			expectedOk:   false,
+		},
+		{
+			name:      "workdir enabled but missing atmos_stack",
+			basePath:  "base",
+			compType:  "terraform",
+			component: "vpc",
+			config: map[string]any{
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expectedPath: "",
+			expectedOk:   false,
+		},
+		{
+			name:      "workdir explicitly disabled",
+			basePath:  "base",
+			compType:  "terraform",
+			component: "vpc",
+			config: map[string]any{
+				"atmos_stack": "dev-ue2",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": false,
+					},
+				},
+			},
+			expectedPath: "",
+			expectedOk:   false,
+		},
+		{
+			name:      "empty basePath defaults to dot",
+			basePath:  "",
+			compType:  "terraform",
+			component: "vpc",
+			config: map[string]any{
+				"atmos_stack": "dev-ue2",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expectedPath: filepath.Join(".", ".workdir", "terraform", "dev-ue2-vpc"),
+			expectedOk:   true,
+		},
+		{
+			name:      "helmfile component type",
+			basePath:  "myproject",
+			compType:  "helmfile",
+			component: "nginx",
+			config: map[string]any{
+				"atmos_stack": "staging-ue1",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expectedPath: filepath.Join("myproject", ".workdir", "helmfile", "staging-ue1-nginx"),
+			expectedOk:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, ok := ResolvePath(tt.basePath, tt.compType, tt.component, tt.config)
+			assert.Equal(t, tt.expectedOk, ok)
+			if ok {
+				assert.Equal(t, tt.expectedPath, path)
+			}
 		})
 	}
 }
