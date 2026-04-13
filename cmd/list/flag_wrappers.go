@@ -40,13 +40,13 @@ func WithFormatFlag(options *[]flags.Option) {
 }
 
 // WithOutputFileFlag adds output file flag for writing results in key=value format (for $GITHUB_OUTPUT).
-// Used by: stacks (with --format=matrix).
+// Used by: instances (with --format=matrix).
 func WithOutputFileFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithOutputFileFlag")()
 
 	*options = append(*options,
 		flags.WithStringFlag("output-file", "o", "", "Write output to file in key=value format (for $GITHUB_OUTPUT)"),
-		flags.WithEnvVars("output-file", "ATMOS_OUTPUT_FILE"),
+		flags.WithEnvVars("output-file", "ATMOS_LIST_OUTPUT_FILE"),
 	)
 }
 

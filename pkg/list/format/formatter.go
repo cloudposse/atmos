@@ -77,9 +77,12 @@ func NewFormatter(format Format) (Formatter, error) {
 	}
 }
 
-// ValidateFormat checks if the provided format is valid.
+// ValidateFormat checks if the provided format is valid for the renderer pipeline.
+// Note: tree and matrix are valid CLI formats but are handled as special cases
+// before reaching the renderer, so they are not included here. Commands that
+// support tree/matrix must check for them before calling ValidateFormat.
 func ValidateFormat(format string) error {
-	validFormats := []Format{FormatTable, FormatJSON, FormatYAML, FormatCSV, FormatTSV, FormatTree, FormatMatrix}
+	validFormats := []Format{FormatTable, FormatJSON, FormatYAML, FormatCSV, FormatTSV}
 	for _, f := range validFormats {
 		if Format(format) == f {
 			return nil
@@ -87,6 +90,6 @@ func ValidateFormat(format string) error {
 	}
 	return &errors.InvalidFormatError{
 		Format: format,
-		Valid:  []string{string(FormatTable), string(FormatJSON), string(FormatYAML), string(FormatCSV), string(FormatTSV), string(FormatTree), string(FormatMatrix)},
+		Valid:  []string{string(FormatTable), string(FormatJSON), string(FormatYAML), string(FormatCSV), string(FormatTSV)},
 	}
 }

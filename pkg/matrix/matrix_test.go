@@ -128,5 +128,5 @@ func TestWriteOutput_Stdout(t *testing.T) {
 func TestMarshal_NilEntries(t *testing.T) {
 	result, err := Marshal(nil)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"include":null}`, string(result))
+	assert.JSONEq(t, `{"include":[]}`, string(result))
 }

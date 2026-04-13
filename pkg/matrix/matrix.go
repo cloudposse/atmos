@@ -30,11 +30,16 @@ type Entry struct {
 }
 
 // Marshal serializes matrix entries to compact JSON.
+// Nil entries are normalized to an empty slice to produce {"include":[]} instead of {"include":null}.
 func Marshal(entries []Entry) ([]byte, error) {
 	defer perf.Track(nil, "matrix.Marshal")()
 
+	include := entries
+	if include == nil {
+		include = []Entry{}
+	}
 	output := Output{
-		Include: entries,
+		Include: include,
 	}
 	return json.Marshal(output)
 }
@@ -55,7 +60,9 @@ func WriteOutput(entries []Entry, outputFile string) error {
 	}
 
 	// Write to stdout.
-	_ = data.Writeln(string(matrixJSON))
+	if err := data.Writeln(string(matrixJSON)); err != nil {
+		return fmt.Errorf("failed to write matrix output to stdout: %w", err)
+	}
 	return nil
 }
 

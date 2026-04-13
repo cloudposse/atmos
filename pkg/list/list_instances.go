@@ -14,6 +14,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/git"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
@@ -560,6 +561,7 @@ func sanitizeForJSON(v any) any {
 
 // executeMatrixFormat handles the matrix output format for list instances.
 // It produces GitHub Actions-compatible matrix JSON matching describe affected --format=matrix.
+// When ci.enabled is true and no --output-file is provided, automatically writes to $GITHUB_OUTPUT.
 func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions) error {
 	defer perf.Track(nil, "list.executeMatrixFormat")()
 
@@ -571,7 +573,14 @@ func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *Instances
 	}
 
 	entries := extract.StacksMatrixEntries(stacksMap)
-	return matrix.WriteOutput(entries, opts.OutputFile)
+
+	// Resolve output file: explicit flag > CI auto-detect > stdout.
+	outputFile := opts.OutputFile
+	if outputFile == "" && atmosConfig.CI.Enabled {
+		outputFile = ghactions.GetOutputPath()
+	}
+
+	return matrix.WriteOutput(entries, outputFile)
 }
 
 // buildInstanceFilters creates filters from filter specification.
