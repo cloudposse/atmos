@@ -58,6 +58,9 @@ type Terminal interface {
 	// IsTTY returns whether the given stream is a TTY.
 	IsTTY(stream Stream) bool
 
+	// IsPiped returns whether the given stream is piped to/from another process.
+	IsPiped(stream Stream) bool
+
 	// ColorProfile returns the terminal's color capabilities.
 	ColorProfile() ColorProfile
 
@@ -129,6 +132,7 @@ type Config struct {
 	EnvCLIColorForce bool   // CLICOLOR_FORCE
 	EnvTerm          string // TERM
 	EnvColorTerm     string // COLORTERM
+	EnvCI            bool   // CI
 
 	// From atmos.yaml
 	AtmosConfig schema.AtmosConfiguration
@@ -243,6 +247,22 @@ func (t *terminal) IsTTY(stream Stream) bool {
 		return false
 	}
 	return term.IsTerminal(fd)
+}
+
+func (t *terminal) IsPiped(stream Stream) bool {
+	defer perf.Track(nil, "terminal.IsPiped")()
+
+	file := streamToFile(stream)
+	if file == nil {
+		return false
+	}
+
+	stat, err := file.Stat()
+	if err != nil {
+		return false
+	}
+
+	return stat.Mode()&os.ModeNamedPipe != 0
 }
 
 func (t *terminal) ColorProfile() ColorProfile {
@@ -383,6 +403,19 @@ func streamToFd(stream Stream) int {
 	}
 }
 
+func streamToFile(stream Stream) *os.File {
+	switch stream {
+	case Stdin:
+		return os.Stdin
+	case Stdout:
+		return os.Stdout
+	case Stderr:
+		return os.Stderr
+	default:
+		return nil
+	}
+}
+
 // buildConfig constructs Config from all sources.
 func buildConfig() *Config {
 	cfg := &Config{
@@ -398,6 +431,7 @@ func buildConfig() *Config {
 		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "", //nolint:forbidigo // Standard terminal env var
 		EnvTerm:          os.Getenv("TERM"),                 //nolint:forbidigo // Standard terminal env var
 		EnvColorTerm:     os.Getenv("COLORTERM"),            //nolint:forbidigo // Standard terminal env var
+		EnvCI:            os.Getenv("CI") != "",             //nolint:forbidigo // Standard CI env var
 	}
 
 	// Load atmos.yaml config (if available)
@@ -421,7 +455,8 @@ func buildConfig() *Config {
 // 6. --color flag - enables color (only if TTY)
 // 7. Atmos.yaml terminal.no_color (deprecated) - disables color
 // 8. Atmos.yaml terminal.color - enables color (only if TTY)
-// 9. Default (true for TTY, false for non-TTY).
+// 9. CI=true env var - enables color (CI systems support ANSI color)
+// 10. Default (true for TTY, false for non-TTY).
 //
 //nolint:revive // Cyclomatic complexity acceptable for priority-based configuration logic.
 func (c *Config) ShouldUseColor(isTTY bool) bool {
@@ -463,7 +498,12 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 		return true
 	}
 
-	// 9. Default based on TTY
+	// 9. CI environment enables color by default (most CI systems support ANSI color).
+	if c.EnvCI {
+		return true
+	}
+
+	// 10. Default based on TTY.
 	return isTTY
 }
 
@@ -503,8 +543,8 @@ func (c *Config) DetectColorProfile(isTTY bool) ColorProfile {
 		return Color16
 	}
 
-	// Default to 16 colors if TTY and color enabled
-	if isTTY {
+	// Default to 16 colors if TTY or CI environment.
+	if isTTY || c.EnvCI {
 		return Color16
 	}
 

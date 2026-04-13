@@ -537,7 +537,21 @@ var (
 	ErrTokenRefreshFailed           = errors.New("failed to refresh API token")
 	ErrFailedToUnmarshalAPIResponse = errors.New("failed to unmarshal API response")
 	ErrNilRequestDTO                = errors.New("nil request DTO")
-	ErrAPIResponseError             = errors.New("API response error")
+
+	// Pro commit errors.
+	ErrCommitMessageRequired = errors.New("commit message is required")
+	ErrCommitMessageTooLong  = errors.New("commit message exceeds 500 characters")
+	ErrCommentTooLong        = errors.New("comment exceeds 2000 characters")
+	ErrBranchRequired        = errors.New("GITHUB_HEAD_REF is required (this command only runs in PR workflows)")
+	ErrBranchInvalid         = errors.New("branch name contains invalid characters")
+	ErrTooManyChanges        = errors.New("too many changed files (max 200)")
+	ErrCommitInvalidFilePath = errors.New("invalid file path for commit")
+	ErrFileTooLarge          = errors.New("file exceeds 2 MiB size limit")
+	ErrFailedToStageChanges  = errors.New("failed to stage changes")
+	ErrFailedToDetectChanges = errors.New("failed to detect git changes")
+	ErrFailedToCreateCommit  = errors.New("failed to create commit via Atmos Pro")
+	ErrStagingFlagConflict   = errors.New("--add and --all are mutually exclusive")
+	ErrAPIResponseError      = errors.New("API response error")
 
 	// Exec package errors.
 	ErrComponentAndStackRequired     = errors.New("component and stack are both required")
@@ -676,6 +690,7 @@ var (
 	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
 	ErrInvalidProviderKind          = errors.New("invalid provider kind")
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
+	ErrInvalidBrowserExecutable     = errors.New("invalid browser executable")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
 	ErrInvalidADCContent            = errors.New("invalid ADC content")
 	ErrWriteADCFile                 = errors.New("failed to write ADC file")
@@ -700,6 +715,25 @@ var (
 	ErrSSORoleListFailed      = errors.New("failed to list aws sso roles")
 	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
 	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
+
+	// AWS browser webflow errors.
+	ErrWebflowAuthFailed     = errors.New("browser authentication failed")
+	ErrWebflowDisabled       = errors.New("browser authentication is disabled")
+	ErrWebflowTokenExchange  = errors.New("failed to exchange authorization code for credentials")
+	ErrWebflowCallbackServer = errors.New("failed to start local callback server")
+	ErrWebflowTimeout        = errors.New("browser authentication timed out")
+	ErrWebflowRefreshFailed  = errors.New("failed to refresh browser credentials")
+	// ErrWebflowRefreshTokenRevoked indicates the refresh token has been definitively
+	// rejected by the AWS signin service (e.g. HTTP 400 invalid_grant/invalid_token).
+	// This is the only condition under which the cached refresh token should be deleted;
+	// transient failures (HTTP 5xx, 429, network errors) must preserve the cache.
+	ErrWebflowRefreshTokenRevoked = errors.New("browser refresh token has been revoked")
+	ErrWebflowCodeRequired        = errors.New("authorization code is required")
+	ErrWebflowReadAuthCodeFailed  = errors.New("failed to read authorization code")
+	ErrWebflowAuthorizationError  = errors.New("authorization error")
+	ErrWebflowMissingCallbackCode = errors.New("missing authorization code in callback")
+	ErrWebflowStateMismatch       = errors.New("state mismatch: possible CSRF attack")
+	ErrWebflowEmptyCachedToken    = errors.New("cached refresh token is empty")
 
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")

@@ -289,6 +289,7 @@ func TestSplitLines(t *testing.T) {
 }
 
 func TestRenderInlineMarkdown(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name     string
 		input    string

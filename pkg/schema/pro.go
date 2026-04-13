@@ -8,6 +8,7 @@ type ProSettings struct {
 	WorkspaceID     string             `yaml:"workspace_id,omitempty" json:"workspace_id,omitempty" mapstructure:"workspace_id"`
 	GithubOIDC      GithubOIDCSettings `yaml:"github_oidc,omitempty" json:"github_oidc,omitempty" mapstructure:"github_oidc"`
 	MaxPayloadBytes int                `yaml:"max_payload_bytes,omitempty" json:"max_payload_bytes,omitempty" mapstructure:"max_payload_bytes"`
+	GitHubHeadRef   string             `yaml:"-" json:"-" mapstructure:"github_head_ref"`
 }
 
 // GithubOIDCSettings contains GitHub OIDC token configuration.

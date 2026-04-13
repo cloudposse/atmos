@@ -62,7 +62,9 @@ func getRunnableDescribeDependentsCmd(
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
 		if describe.ProcessYamlFunctions || identityExplicit {
-			authManager, authErr := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &atmosConfig.Auth, &atmosConfig)
+			// Category B: describe dependents has no single target (component, stack) pair.
+			// Use the SCAN wrapper to discover stack-level defaults.
+			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &atmosConfig.Auth, &atmosConfig)
 			if authErr != nil {
 				return authErr
 			}

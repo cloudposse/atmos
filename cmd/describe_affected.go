@@ -84,7 +84,11 @@ func getRunnableDescribeAffectedCmd(
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
 		if props.ProcessYamlFunctions || identityExplicit {
-			authManager, authErr := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
+			// Category B: describe affected operates on multiple affected components across stacks
+			// with no single target (component, stack) pair. Use the SCAN wrapper to discover
+			// stack-level defaults (including imported _defaults.yaml). See
+			// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &props.CLIConfig.Auth, props.CLIConfig)
 			if authErr != nil {
 				return authErr
 			}

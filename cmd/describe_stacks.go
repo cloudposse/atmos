@@ -77,7 +77,11 @@ func getRunnableDescribeStacksCmd(
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
 		if describe.ProcessYamlFunctions || identityExplicit {
-			authManager, authErr := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &atmosConfig.Auth, &atmosConfig)
+			// Category B: describe stacks operates on multiple stacks/components with no single
+			// target (component, stack) pair. Use the SCAN wrapper so stack-level default identities
+			// (including those declared in imported _defaults.yaml files) are discovered. See
+			// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &atmosConfig.Auth, &atmosConfig)
 			if authErr != nil {
 				return authErr
 			}

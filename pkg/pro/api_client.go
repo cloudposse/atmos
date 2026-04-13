@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -17,6 +18,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 const (
@@ -162,6 +164,11 @@ func NewAtmosProAPIClientFromEnv(atmosConfig *schema.AtmosConfiguration) (*Atmos
 	return client, nil
 }
 
+// userAgent returns the User-Agent string for Atmos Pro API requests.
+func userAgent() string {
+	return fmt.Sprintf("atmos/%s (%s; %s)", version.Version, runtime.GOOS, runtime.GOARCH)
+}
+
 func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -170,6 +177,7 @@ func getAuthenticatedRequest(c *AtmosProAPIClient, method, url string, body io.R
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIToken))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent())
 
 	return req, nil
 }
@@ -573,6 +581,7 @@ func exchangeOIDCTokenForAtmosToken(baseURL, baseAPIEndpoint, oidcToken, workspa
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent())
 
 	client := getHTTPClientWithTimeout()
 	resp, err := client.Do(req)

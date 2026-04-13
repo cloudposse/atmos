@@ -113,6 +113,7 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 
 		// Set CI=true environment variable.
 		cmd.Env = append(os.Environ(), "CI=true")
+		cmd.Env = append(cmd.Env, "NO_COLOR=1")
 
 		var stdout strings.Builder
 		var stderr strings.Builder
@@ -245,6 +246,7 @@ func TestCIEnvironmentDetection(t *testing.T) {
 				envVars = append(envVars, key+"="+value)
 			}
 			cmd.Env = envVars
+			cmd.Env = append(cmd.Env, "NO_COLOR=1")
 
 			var stdout strings.Builder
 			var stderr strings.Builder
