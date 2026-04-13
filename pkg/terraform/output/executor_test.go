@@ -1513,7 +1513,7 @@ func TestExecutor_GetOutputWithOptions_SkipInit(t *testing.T) {
 
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
-	stackSlug := "skip-init-stack-skip-init-component"
+	stackSlug := stackComponentKey("skip-init-stack", "skip-init-component")
 	terraformOutputsCache.Delete(stackSlug)
 
 	atmosConfig := validAtmosConfig()
@@ -1546,4 +1546,135 @@ func TestExecutor_GetOutputWithOptions_SkipInit(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists)
 	assert.Equal(t, "eg-test-override", value)
+}
+
+// TestExecutor_GetOutputWithOptions_CacheHit verifies that a pre-populated cache
+// is returned without calling DescribeComponent.
+func TestExecutor_GetOutputWithOptions_CacheHit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig()
+
+	stackSlug := stackComponentKey("opts-cache-stack", "opts-cache-component")
+	terraformOutputsCache.Store(stackSlug, map[string]any{"cached_out": "hit-value"})
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	// No DescribeComponent expected — cache hit short-circuits.
+	value, exists, err := exec.GetOutputWithOptions(
+		atmosConfig, "opts-cache-stack", "opts-cache-component", "cached_out",
+		false, nil, nil, nil,
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "hit-value", value)
+}
+
+// TestExecutor_GetOutputWithOptions_InvalidAuthManager verifies that an invalid
+// authManager type returns an error immediately.
+func TestExecutor_GetOutputWithOptions_InvalidAuthManager(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig()
+
+	_, _, err := exec.GetOutputWithOptions(
+		atmosConfig, "stack", "component", "output",
+		true, nil, "not-an-auth-manager", nil,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthManagerType)
+}
+
+// TestExecutor_GetOutputWithOptions_DescribeError verifies that a DescribeComponent
+// failure is propagated correctly.
+func TestExecutor_GetOutputWithOptions_DescribeError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	stackSlug := stackComponentKey("derr-stack", "derr-component")
+	terraformOutputsCache.Delete(stackSlug)
+
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(nil, errors.New("describe failed"))
+
+	_, _, err := exec.GetOutputWithOptions(
+		atmosConfig, "derr-stack", "derr-component", "out",
+		true, nil, nil, nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "describe failed")
+}
+
+// TestExecutor_GetOutputWithOptions_ExecuteError verifies that an execution failure
+// is propagated correctly.
+func TestExecutor_GetOutputWithOptions_ExecuteError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(func(_, _ string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}))
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	stackSlug := stackComponentKey("eerr-stack", "eerr-component")
+	terraformOutputsCache.Delete(stackSlug)
+
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(validSections(), nil)
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(errors.New("init failed"))
+
+	_, _, err := exec.GetOutputWithOptions(
+		atmosConfig, "eerr-stack", "eerr-component", "out",
+		true, nil, nil, nil,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
+}
+
+// TestExecutor_GetOutputWithOptions_StaticRemoteState verifies the static remote
+// state happy path returns the correct value without running terraform.
+func TestExecutor_GetOutputWithOptions_StaticRemoteState(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockGetter := NewMockStaticRemoteStateGetter(ctrl)
+
+	exec := NewExecutor(mockDescriber, WithStaticRemoteStateGetter(mockGetter))
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	stackSlug := stackComponentKey("srs-stack", "srs-component")
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	staticOutputs := map[string]any{"srs_key": "srs-value"}
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(validSections(), nil)
+	mockGetter.EXPECT().GetStaticRemoteStateOutputs(gomock.Any()).Return(staticOutputs)
+
+	value, exists, err := exec.GetOutputWithOptions(
+		atmosConfig, "srs-stack", "srs-component", "srs_key",
+		true, nil, nil, nil,
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "srs-value", value)
 }
