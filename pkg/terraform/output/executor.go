@@ -39,7 +39,7 @@ func wrapDescribeError(component, stack string, err error) error {
 	return errUtils.WrapComponentDescribeError(component, stack, err, "component")
 }
 
-// terraformOutputsCache caches terraform outputs by stack-component slug.
+// terraformOutputsCache caches terraform outputs by stack-component key.
 var terraformOutputsCache = sync.Map{}
 
 // ResetOutputsCache clears the terraform outputs cache.
@@ -51,6 +51,14 @@ func ResetOutputsCache() {
 		terraformOutputsCache.Delete(key)
 		return true
 	})
+}
+
+// stackComponentKey builds an unambiguous cache key from stack and component names.
+// A null byte separator prevents collisions when either name contains hyphens
+// (e.g. stack "us-east-1-dev" + component "vpc" must not collide with
+// stack "us-east-1" + component "dev-vpc").
+func stackComponentKey(stack, component string) string {
+	return stack + "\x00" + component
 }
 
 // TerraformRunner abstracts terraform-exec operations for testability.
@@ -203,7 +211,7 @@ func (e *Executor) GetAllOutputs(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetAllOutputs")()
 
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	stackSlug := stackComponentKey(stack, component)
 	if outputs := checkOutputsCache(stackSlug, component, stack); outputs != nil {
 		return outputs, nil
 	}
@@ -245,7 +253,7 @@ func (e *Executor) GetOutput(
 		}
 	}
 
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	stackSlug := stackComponentKey(stack, component)
 
 	// Check cache first.
 	if !skipCache {
@@ -337,7 +345,7 @@ func (e *Executor) GetOutputWithOptions(
 		}
 	}
 
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	stackSlug := stackComponentKey(stack, component)
 
 	// Check cache first.
 	if !skipCache {
