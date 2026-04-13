@@ -496,7 +496,10 @@ func (e *Executor) fetchAndCacheOutputs(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute terraform output for component %s in stack %s: %w", component, stack, err)
+		return nil, errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
+			Err()
 	}
 
 	terraformOutputsCache.Store(stackSlug, outputs)
