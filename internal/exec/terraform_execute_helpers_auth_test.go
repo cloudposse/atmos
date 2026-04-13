@@ -23,6 +23,7 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	mockTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
 // TestSetupTerraformAuth_EmptyConfig_NoProviders verifies that with an empty
@@ -149,6 +150,79 @@ func TestSetupTerraformAuth_MergedConfigError_WrapsWithInvalidAuthConfig(t *test
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "expected ErrInvalidAuthConfig, got: %v", err)
 	assert.False(t, errors.Is(err, errUtils.ErrInvalidComponent))
+}
+
+// mockComponentDescriber implements tfoutput.ComponentDescriber for testing ExecuteTerraformOutput.
+type mockComponentDescriber struct {
+	capturedAuthManager any
+}
+
+func (m *mockComponentDescriber) DescribeComponent(params *tfoutput.DescribeComponentParams) (map[string]any, error) {
+	m.capturedAuthManager = params.AuthManager
+	// Return a disabled component so no real terraform execution happens.
+	return map[string]any{
+		"vars": map[string]any{
+			"enabled": false,
+		},
+	}, nil
+}
+
+// TestExecuteTerraformOutput_PassesAuthManager verifies that ExecuteTerraformOutput
+// sets up auth and passes the auth manager through to GetComponentOutputs.
+func TestExecuteTerraformOutput_PassesAuthManager(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockMgr := mockTypes.NewMockAuthManager(ctrl)
+	mockMgr.EXPECT().GetChain().Return([]string{"test-identity"})
+
+	origCreator := defaultAuthManagerCreator
+	t.Cleanup(func() { defaultAuthManagerCreator = origCreator })
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return mockMgr, nil
+	}
+
+	// Set up a mock executor to capture the authManager.
+	origExecutor := tfoutput.GetDefaultExecutor()
+	t.Cleanup(func() { tfoutput.SetDefaultExecutor(origExecutor) })
+
+	describer := &mockComponentDescriber{}
+	executor := tfoutput.NewExecutor(describer)
+	tfoutput.SetDefaultExecutor(executor)
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "test-component",
+		Stack:            "test-stack",
+	}
+
+	_, err := ExecuteTerraformOutput(&atmosConfig, &info, OutputOptions{SkipInit: true})
+	require.NoError(t, err)
+
+	// Verify the authManager was passed through to DescribeComponent.
+	assert.Equal(t, mockMgr, describer.capturedAuthManager,
+		"authManager should be passed through to DescribeComponent via GetComponentOutputs")
+	assert.Equal(t, "test-identity", info.Identity)
+	assert.Equal(t, mockMgr, info.AuthManager)
+}
+
+// TestExecuteTerraformOutput_AuthError verifies that ExecuteTerraformOutput propagates
+// auth errors without calling GetComponentOutputs.
+func TestExecuteTerraformOutput_AuthError(t *testing.T) {
+	origGetter := defaultMergedAuthConfigGetter
+	t.Cleanup(func() { defaultMergedAuthConfigGetter = origGetter })
+	defaultMergedAuthConfigGetter = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+		return nil, errors.New("auth config failure")
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "test-component",
+		Stack:            "test-stack",
+	}
+
+	outputs, err := ExecuteTerraformOutput(&atmosConfig, &info, OutputOptions{})
+	require.Error(t, err)
+	assert.Nil(t, outputs)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
 }
 
 // TestStoreAutoDetectedIdentity_ExistingIdentity_NotOverwritten verifies that when

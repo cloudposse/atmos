@@ -42,18 +42,49 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 
 	stack := "nonprod"
 
-	defer func() {
-		// Delete the generated files and folders after the test
-		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
-		assert.NoError(t, err)
+	// Compute the absolute path to the mock component before any directory changes so that
+	// both the pre-test cleanup and the deferred cleanup use a stable path on all platforms.
+	mockComponentPath, pathErr := filepath.Abs("../../tests/fixtures/components/terraform/mock")
+	if pathErr != nil {
+		t.Fatalf("Failed to compute absolute mock component path: %v", pathErr)
+	}
 
-		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
-		assert.NoError(t, err)
+	defer func() {
+		// Delete the generated files and folders after the test.
+		// Log warnings instead of failing — cleanup errors should not mask test results.
+		if err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform")); err != nil {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
+		if err := os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d")); err != nil {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
+		if err := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate")); err != nil && !os.IsNotExist(err) {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
+		if err := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup")); err != nil && !os.IsNotExist(err) {
+			t.Logf("deferred cleanup warning (may flake on Windows): %v", err)
+		}
 	}()
 
-	// Define the working directory
+	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-output-yaml-function"
 	t.Chdir(workDir)
+
+	// Pre-test cleanup: remove any stale terraform state left by previously-run tests that
+	// share the same mock component directory.  On Windows, file-locking can prevent prior
+	// test teardowns from completing, so we proactively clean here before touching any state.
+	if err := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform")); err != nil {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d")); err != nil {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", err)
+	}
+	if err := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate")); err != nil && !os.IsNotExist(err) {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", err)
+	}
+	if err := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup")); err != nil && !os.IsNotExist(err) {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", err)
+	}
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",

@@ -10,8 +10,39 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
+
+// initTestIO initializes the I/O context for tests that use data package functions.
+func initTestIO(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+}
+
+// TestFormatAndWriteOutput_JSON verifies that formatAndWriteOutput correctly
+// formats outputs as JSON and writes to stdout.
+func TestFormatAndWriteOutput_JSON(t *testing.T) {
+	initTestIO(t)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Logs: schema.Logs{Level: "debug"},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "test-component",
+		Stack:            "test-stack",
+	}
+	outputs := map[string]any{
+		"vpc_id": "vpc-12345",
+	}
+
+	err := formatAndWriteOutput(atmosConfig, info, "json", outputs)
+	require.NoError(t, err)
+}
 
 // TestOutputCommandSetup verifies that the output command is properly configured.
 func TestOutputCommandSetup(t *testing.T) {

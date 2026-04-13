@@ -10,6 +10,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/xdg"
 
 	// Import backend provisioner to register S3 provisioner.
@@ -115,6 +116,26 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, WithEnvironment(info.SanitizedEnv))
 	return executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
+}
+
+// OutputOptions configures ExecuteTerraformOutput behavior.
+type OutputOptions struct {
+	SkipInit bool
+}
+
+// ExecuteTerraformOutput retrieves terraform outputs for a component/stack
+// with proper auth setup. This is the entry point for the --format code path,
+// paralleling ExecuteTerraform but diverging after auth to fetch outputs
+// programmatically instead of running a terraform subprocess.
+func ExecuteTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts OutputOptions) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformOutput")()
+
+	authManager, err := setupTerraformAuth(atmosConfig, info)
+	if err != nil {
+		return nil, err
+	}
+
+	return tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, opts.SkipInit, authManager)
 }
 
 // configurePluginCache returns environment variables for Terraform plugin caching.

@@ -180,6 +180,22 @@ func TestWorkspacesDisabledStateLocation(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function-workspaces-disabled"
 	t.Chdir(workDir)
 
+	// Pre-test cleanup: remove any stale terraform state left by previously-run tests that
+	// share the same mock component directory.  On Windows, file-locking can prevent prior
+	// test teardowns from completing, so we proactively clean here before touching any state.
+	if cleanErr := os.RemoveAll(filepath.Join(mockComponentPath, ".terraform")); cleanErr != nil {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", cleanErr)
+	}
+	if cleanErr := os.RemoveAll(filepath.Join(mockComponentPath, "terraform.tfstate.d")); cleanErr != nil {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", cleanErr)
+	}
+	if cleanErr := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate")); cleanErr != nil && !os.IsNotExist(cleanErr) {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", cleanErr)
+	}
+	if cleanErr := os.Remove(filepath.Join(mockComponentPath, "terraform.tfstate.backup")); cleanErr != nil && !os.IsNotExist(cleanErr) {
+		t.Logf("pre-test cleanup warning (may flake on Windows): %v", cleanErr)
+	}
+
 	// Deploy component-1.
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
