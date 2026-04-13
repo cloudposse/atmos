@@ -164,7 +164,7 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 	// (built from basePath + componentType + stack + instance name) so we can
 	// reconstruct it here even when _workdir_path is absent from freshly-described
 	// sections (e.g. during hook execution where DescribeComponent is called fresh).
-	if isWorkdirEnabled(sections) {
+	if provWorkdir.IsWorkdirEnabled(sections) {
 		basePath := atmosConfig.BasePath
 		if basePath == "" {
 			basePath = "."
@@ -179,20 +179,6 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 	}
 
 	return componentPath, nil
-}
-
-// isWorkdirEnabled reports whether provision.workdir.enabled is set to true in sections.
-func isWorkdirEnabled(sections map[string]any) bool {
-	provisionConfig, ok := sections["provision"].(map[string]any)
-	if !ok {
-		return false
-	}
-	workdirConfig, ok := provisionConfig["workdir"].(map[string]any)
-	if !ok {
-		return false
-	}
-	enabled, ok := workdirConfig["enabled"].(bool)
-	return ok && enabled
 }
 
 // extractOptionalFields extracts optional fields from sections into config.

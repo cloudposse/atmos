@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -492,7 +493,7 @@ func TestIsWorkdirEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, isWorkdirEnabled(tt.sections))
+			assert.Equal(t, tt.want, provWorkdir.IsWorkdirEnabled(tt.sections))
 		})
 	}
 }

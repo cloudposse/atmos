@@ -392,7 +392,7 @@ func TestExecutor_GetOutput_StaticRemoteState(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithStaticRemoteStateGetter(mockGetter))
 
 	// Clear any cached outputs for this test.
-	terraformOutputsCache.Delete("test-stack-test-component")
+	terraformOutputsCache.Delete(stackComponentKey("test-stack", "test-component"))
 
 	atmosConfig := validAtmosConfig()
 
@@ -420,7 +420,7 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 
 	// Pre-populate cache.
-	stackSlug := "cached-stack-cached-component"
+	stackSlug := stackComponentKey("cached-stack", "cached-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"cached_value": "from-cache",
 	})
@@ -443,7 +443,7 @@ func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 
 	// Pre-populate cache.
-	stackSlug := "nonexistent-stack-nonexistent-component"
+	stackSlug := stackComponentKey("nonexistent-stack", "nonexistent-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"existing_key": "value",
 	})
@@ -771,7 +771,7 @@ func TestExecutor_GetOutput_FullExecutionPath(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache to force full execution.
-	stackSlug := "full-exec-stack-full-exec-component"
+	stackSlug := stackComponentKey("full-exec-stack", "full-exec-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -807,7 +807,7 @@ func TestExecutor_GetOutput_DescribeError(t *testing.T) {
 	exec := NewExecutor(mockDescriber)
 
 	// Clear cache to force describe call.
-	stackSlug := "describe-err-stack-describe-err-component"
+	stackSlug := stackComponentKey("describe-err-stack", "describe-err-component")
 	terraformOutputsCache.Delete(stackSlug)
 
 	atmosConfig := validAtmosConfig()
@@ -835,7 +835,7 @@ func TestExecutor_GetAllOutputs_Success(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "all-outputs-stack-all-outputs-component"
+	stackSlug := stackComponentKey("all-outputs-stack", "all-outputs-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -872,7 +872,7 @@ func TestExecutor_GetAllOutputs_CacheHit(t *testing.T) {
 	exec := NewExecutor(mockDescriber)
 
 	// Pre-populate cache.
-	stackSlug := "cache-hit-stack-cache-hit-component"
+	stackSlug := stackComponentKey("cache-hit-stack", "cache-hit-component")
 	cachedOutputs := map[string]any{"cached_key": "cached_value"}
 	terraformOutputsCache.Store(stackSlug, cachedOutputs)
 	defer terraformOutputsCache.Delete(stackSlug)
@@ -894,7 +894,7 @@ func TestExecutor_GetAllOutputs_Error(t *testing.T) {
 	exec := NewExecutor(mockDescriber)
 
 	// Clear cache.
-	stackSlug := "error-stack-error-component"
+	stackSlug := stackComponentKey("error-stack", "error-component")
 	terraformOutputsCache.Delete(stackSlug)
 
 	atmosConfig := validAtmosConfig()
@@ -944,7 +944,7 @@ func TestExecutor_GetAllOutputs_StaticRemoteState(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithStaticRemoteStateGetter(mockGetter))
 
 	// Clear cache.
-	stackSlug := "static-stack-static-component"
+	stackSlug := stackComponentKey("static-stack", "static-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -1031,7 +1031,7 @@ func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "exec-err-stack-exec-err-component"
+	stackSlug := stackComponentKey("exec-err-stack", "exec-err-component")
 	terraformOutputsCache.Delete(stackSlug)
 
 	atmosConfig := validAtmosConfig()
@@ -1223,7 +1223,7 @@ func TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "skipinit-stack-skipinit-component"
+	stackSlug := stackComponentKey("skipinit-stack", "skipinit-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -1274,7 +1274,7 @@ func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "noskip-stack-noskip-component"
+	stackSlug := stackComponentKey("noskip-stack", "noskip-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 

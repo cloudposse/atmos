@@ -80,7 +80,7 @@ func (s *Service) Provision(
 	defer perf.Track(atmosConfig, "workdir.Service.Provision")()
 
 	// Check activation condition.
-	if !isWorkdirEnabled(componentConfig) {
+	if !IsWorkdirEnabled(componentConfig) {
 		// No workdir needed - terraform runs in original directory.
 		return nil
 	}
@@ -317,9 +317,9 @@ func buildLocalMetadata(params *localMetadataParams) *WorkdirMetadata {
 	return metadata
 }
 
-// isWorkdirEnabled checks if provision.workdir.enabled is set to true.
-func isWorkdirEnabled(componentConfig map[string]any) bool {
-	defer perf.Track(nil, "workdir.isWorkdirEnabled")()
+// IsWorkdirEnabled checks if provision.workdir.enabled is set to true.
+func IsWorkdirEnabled(componentConfig map[string]any) bool {
+	defer perf.Track(nil, "workdir.IsWorkdirEnabled")()
 
 	provisionConfig, ok := componentConfig["provision"].(map[string]any)
 	if !ok {
