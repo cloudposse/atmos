@@ -887,8 +887,11 @@ func isCompletionCommand(cmd *cobra.Command) bool {
 func findExperimentalParent(cmd *cobra.Command) string {
 	// First pass: Look for registry-based experimental commands.
 	// These are top-level commands like devcontainer, toolchain.
+	// Only match commands that are direct children of the root command,
+	// so custom commands that happen to share a name (e.g., "atmos utils ai")
+	// are not mistakenly flagged as experimental.
 	for c := cmd; c != nil; c = c.Parent() {
-		if internal.IsCommandExperimental(c.Name()) {
+		if internal.IsCommandExperimental(c.Name()) && isTopLevelCommand(c) {
 			return c.Name()
 		}
 	}
@@ -902,6 +905,15 @@ func findExperimentalParent(cmd *cobra.Command) string {
 	}
 
 	return ""
+}
+
+// isTopLevelCommand returns true if cmd is a direct child of the root command.
+// This is used to distinguish built-in registered commands (e.g., "atmos ai")
+// from custom commands that share the same name (e.g., "atmos utils ai").
+func isTopLevelCommand(cmd *cobra.Command) bool {
+	parent := cmd.Parent()
+	// A top-level command's parent is root (whose own parent is nil).
+	return parent != nil && parent.Parent() == nil
 }
 
 // flagStyles holds the lipgloss styles for flag rendering.
