@@ -80,7 +80,7 @@ func TestWriteOutput_File(t *testing.T) {
 		lines := strings.Split(strings.TrimSpace(string(content)), "\n")
 		require.Len(t, lines, 2)
 		assert.True(t, strings.HasPrefix(lines[0], "matrix="))
-		assert.Equal(t, "affected_count=1", lines[1])
+		assert.Equal(t, "count=1", lines[1])
 
 		// Verify JSON is valid.
 		matrixJSON := strings.TrimPrefix(lines[0], "matrix=")
@@ -99,7 +99,7 @@ func TestWriteOutput_File(t *testing.T) {
 		content, err := os.ReadFile(outputFile)
 		require.NoError(t, err)
 		assert.Contains(t, string(content), `"include":[]`)
-		assert.Contains(t, string(content), "affected_count=0")
+		assert.Contains(t, string(content), "count=0")
 	})
 
 	t.Run("file open error", func(t *testing.T) {

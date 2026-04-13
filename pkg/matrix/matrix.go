@@ -10,11 +10,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-const (
-	// defaultFilePermissions is used for output files.
-	// Matrix output contains only stack/component names, not secrets.
-	defaultFilePermissions = 0o644
-)
+// File permissions for matrix output files.
+// Matrix output contains only stack/component names, not secrets.
+const defaultFilePermissions = 0o644
 
 // Output represents the GitHub Actions matrix strategy format.
 type Output struct {
@@ -80,8 +78,9 @@ func writeToFile(matrixJSON []byte, count int, outputFile string) error {
 	if _, err := fmt.Fprintf(f, "matrix=%s\n", string(matrixJSON)); err != nil {
 		return fmt.Errorf("failed to write to output file %s: %w", outputFile, err)
 	}
-	// Also write count for convenience.
-	if _, err := fmt.Fprintf(f, "affected_count=%d\n", count); err != nil {
+	// Also write count for convenience (generic name since this is shared by both
+	// describe affected and list instances).
+	if _, err := fmt.Fprintf(f, "count=%d\n", count); err != nil {
 		return fmt.Errorf("failed to write count to output file %s: %w", outputFile, err)
 	}
 	log.Debug("Wrote matrix output to file", "file", outputFile, "count", count)

@@ -33,7 +33,7 @@ The `atmos list instances` command displays all component instances defined acro
 
 <dl>
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree` (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`, `matrix` (default: `table`)</dd>
 
   <dt>`--delimiter`</dt>
   <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
@@ -58,6 +58,9 @@ The `atmos list instances` command displays all component instances defined acro
 
   <dt>`--upload`</dt>
   <dd>Upload instances to Atmos Pro API (requires Pro configuration)</dd>
+
+  <dt>`--output-file` / `-o`</dt>
+  <dd>Write output to file in `key=value` format (for `$GITHUB_OUTPUT`). Only supported with `--format=matrix`.</dd>
 </dl>
 
 ## Examples
@@ -120,6 +123,15 @@ atmos list instances --format tree
 atmos list instances --format tree --provenance
 ```
 
+Output as GitHub Actions matrix JSON:
+```shell
+# Print matrix JSON to stdout
+atmos list instances --format matrix
+
+# Write to $GITHUB_OUTPUT for use in GitHub Actions
+atmos list instances --format matrix --output-file=$GITHUB_OUTPUT
+```
+
 ## Tree Format with Import Provenance
 
 The `tree` format provides a hierarchical view of your component instances organized by stack. When combined with the `--provenance` flag, it shows the complete import chain for each component, making it easy to understand configuration inheritance.
@@ -156,6 +168,60 @@ Component Instances
 ```
 
 The import chain is shown from most specific (top) to most general (bottom), reflecting how Atmos merges configurations.
+
+## Matrix Format for CI/CD
+
+The `matrix` format produces GitHub Actions-compatible JSON for driving parallel CI/CD jobs. It outputs the same `{"include":[...]}` structure as [`atmos describe affected --format=matrix`](/cli/commands/describe/affected), but includes all instances rather than only changed ones.
+
+Each entry contains `stack`, `component`, `component_path`, and `component_type`:
+
+```shell
+atmos list instances --format matrix
+```
+
+```json
+{"include":[{"stack":"ue1-dev","component":"vpc","component_path":"components/terraform/vpc","component_type":"terraform"}]}
+```
+
+### Writing to `$GITHUB_OUTPUT`
+
+Use `--output-file` to write results in `key=value` format for GitHub Actions:
+
+```shell
+atmos list instances --format matrix --output-file=$GITHUB_OUTPUT
+```
+
+This writes two keys to the file:
+
+```
+matrix={"include":[...]}
+count=42
+```
+
+When `ci.enabled` is true in `atmos.yaml` and `--output-file` is not provided, the output is automatically written to `$GITHUB_OUTPUT`.
+
+### GitHub Actions Example
+
+```yaml
+jobs:
+  enumerate:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.instances.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: List all instances
+        id: instances
+        run: atmos list instances --format=matrix --output-file=$GITHUB_OUTPUT
+
+  deploy:
+    needs: enumerate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.enumerate.outputs.matrix) }}
+    steps:
+      - run: echo "Deploying ${{ matrix.component }} to ${{ matrix.stack }}"
+```
 
 ## Custom Columns Configuration
 

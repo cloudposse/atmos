@@ -20,121 +20,71 @@ func StacksMatrixEntries(stacksMap map[string]any) []matrix.Entry {
 	componentTypes := getComponentTypes()
 	var entries []matrix.Entry
 
-	// Sort stack names for deterministic output.
-	stackNames := make([]string, 0, len(stacksMap))
-	for stackName := range stacksMap {
-		stackNames = append(stackNames, stackName)
-	}
-	sort.Strings(stackNames)
-
-	for _, stackName := range stackNames {
-		stackData := stacksMap[stackName]
-		stackMap, ok := stackData.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		componentsMap, ok := stackMap["components"].(map[string]any)
-		if !ok {
-			continue
-		}
-
-		for _, componentType := range componentTypes {
-			typeComponents, ok := componentsMap[componentType].(map[string]any)
-			if !ok {
-				continue
-			}
-
-			// Sort component names for deterministic output.
-			componentNames := make([]string, 0, len(typeComponents))
-			for name := range typeComponents {
-				componentNames = append(componentNames, name)
-			}
-			sort.Strings(componentNames)
-
-			for _, componentName := range componentNames {
-				componentData, ok := typeComponents[componentName].(map[string]any)
-				if !ok {
-					continue
-				}
-
-				entry := matrix.Entry{
-					Stack:         stackName,
-					Component:     componentName,
-					ComponentType: componentType,
-				}
-
-				// Extract component_path from component_info.
-				if componentInfo, ok := componentData["component_info"].(map[string]any); ok {
-					if path, ok := componentInfo["component_path"].(string); ok {
-						entry.ComponentPath = path
-					}
-				}
-
-				entries = append(entries, entry)
-			}
-		}
+	for _, stackName := range sortedKeys(stacksMap) {
+		stackEntries := stackMatrixEntries(stackName, stacksMap[stackName], componentTypes)
+		entries = append(entries, stackEntries...)
 	}
 
 	return entries
 }
 
-// StacksMatrixEntriesForComponent extracts matrix entries filtered by a specific component name.
-func StacksMatrixEntriesForComponent(componentName string, stacksMap map[string]any) []matrix.Entry {
-	defer perf.Track(nil, "extract.StacksMatrixEntriesForComponent")()
-
-	if stacksMap == nil {
+// stackMatrixEntries extracts matrix entries for a single stack.
+func stackMatrixEntries(stackName string, stackData any, componentTypes []string) []matrix.Entry {
+	stackMap, ok := stackData.(map[string]any)
+	if !ok {
 		return nil
 	}
 
-	componentTypes := getComponentTypes()
+	componentsMap, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
 	var entries []matrix.Entry
-
-	// Sort stack names for deterministic output.
-	stackNames := make([]string, 0, len(stacksMap))
-	for stackName := range stacksMap {
-		stackNames = append(stackNames, stackName)
-	}
-	sort.Strings(stackNames)
-
-	for _, stackName := range stackNames {
-		stackData := stacksMap[stackName]
-		stackMap, ok := stackData.(map[string]any)
+	for _, componentType := range componentTypes {
+		typeComponents, ok := componentsMap[componentType].(map[string]any)
 		if !ok {
 			continue
 		}
-
-		componentsMap, ok := stackMap["components"].(map[string]any)
-		if !ok {
-			continue
-		}
-
-		for _, componentType := range componentTypes {
-			typeComponents, ok := componentsMap[componentType].(map[string]any)
-			if !ok {
-				continue
-			}
-
-			componentData, ok := typeComponents[componentName].(map[string]any)
-			if !ok {
-				continue
-			}
-
-			entry := matrix.Entry{
-				Stack:         stackName,
-				Component:     componentName,
-				ComponentType: componentType,
-			}
-
-			if componentInfo, ok := componentData["component_info"].(map[string]any); ok {
-				if path, ok := componentInfo["component_path"].(string); ok {
-					entry.ComponentPath = path
-				}
-			}
-
-			entries = append(entries, entry)
-		}
+		entries = append(entries, componentTypeEntries(stackName, componentType, typeComponents)...)
 	}
-
 	return entries
+}
+
+// componentTypeEntries extracts matrix entries for all components of a single type within a stack.
+func componentTypeEntries(stackName, componentType string, typeComponents map[string]any) []matrix.Entry {
+	entries := make([]matrix.Entry, 0, len(typeComponents))
+	for _, componentName := range sortedKeys(typeComponents) {
+		componentData, ok := typeComponents[componentName].(map[string]any)
+		if !ok {
+			continue
+		}
+		entries = append(entries, matrix.Entry{
+			Stack:         stackName,
+			Component:     componentName,
+			ComponentType: componentType,
+			ComponentPath: extractComponentPath(componentData),
+		})
+	}
+	return entries
+}
+
+// extractComponentPath reads component_info.component_path from a component data map.
+func extractComponentPath(componentData map[string]any) string {
+	componentInfo, ok := componentData["component_info"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	path, _ := componentInfo["component_path"].(string)
+	return path
+}
+
+// sortedKeys returns the keys of a map[string]any sorted alphabetically.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

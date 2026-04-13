@@ -1866,7 +1866,7 @@ func TestExecute_MatrixFormat(t *testing.T) {
 		content, err := os.ReadFile(outputFile)
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "matrix=")
-		assert.Contains(t, string(content), "affected_count=1")
+		assert.Contains(t, string(content), "count=1")
 	})
 }
 
