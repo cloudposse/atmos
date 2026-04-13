@@ -17,8 +17,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/terminal"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -224,11 +223,13 @@ func (e *Executor) GetAllOutputs(
 	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
 	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts, authManager)
 	if err != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, err
 	}
 
-	u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+	ui.ClearLine()
+	ui.Success(message)
 	return outputs, nil
 }
 
@@ -277,7 +278,8 @@ func (e *Executor) GetOutput(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -287,10 +289,12 @@ func (e *Executor) GetOutput(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+				ui.ClearLine()
+		ui.Error(message)
 				return nil, false, resultErr
 			}
-			u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+			ui.ClearLine()
+	ui.Success(message)
 			return value, exists, nil
 		}
 	}
@@ -301,7 +305,8 @@ func (e *Executor) GetOutput(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil)
 	if err != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
 			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
@@ -313,11 +318,13 @@ func (e *Executor) GetOutput(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, false, resultErr
 	}
 
-	u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+	ui.ClearLine()
+	ui.Success(message)
 	return value, exists, nil
 }
 
@@ -377,7 +384,8 @@ func (e *Executor) GetOutputWithOptions(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -387,10 +395,12 @@ func (e *Executor) GetOutputWithOptions(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+				ui.ClearLine()
+		ui.Error(message)
 				return nil, false, resultErr
 			}
-			u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+			ui.ClearLine()
+	ui.Success(message)
 			return value, exists, nil
 		}
 	}
@@ -401,7 +411,8 @@ func (e *Executor) GetOutputWithOptions(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts)
 	if err != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
 			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
@@ -413,11 +424,13 @@ func (e *Executor) GetOutputWithOptions(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, false, resultErr
 	}
 
-	u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+	ui.ClearLine()
+	ui.Success(message)
 	return value, exists, nil
 }
 
