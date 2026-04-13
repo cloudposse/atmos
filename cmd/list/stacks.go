@@ -393,4 +393,3 @@ func buildStackSorters(sortSpec string) ([]*listSort.Sorter, error) {
 
 	return listSort.ParseSortSpec(sortSpec)
 }
-
