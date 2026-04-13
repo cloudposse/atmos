@@ -66,13 +66,14 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 	}
 
 	// Set backend-specific defaults.
+	separator := getWorkspacePrefixSeparator(cfg.atmosConfig)
 	switch finalComponentBackendType {
 	case "s3":
-		setS3BackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata)
+		setS3BackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, separator)
 	case "gcs":
-		setGCSBackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata)
+		setGCSBackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, separator)
 	case azurermBackendName:
-		err := setAzureBackendKey(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, cfg.componentBackendSection, cfg.globalBackendSection)
+		err := setAzureBackendKey(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, cfg.componentBackendSection, cfg.globalBackendSection, separator)
 		if err != nil {
 			return "", nil, err
 		}
@@ -83,7 +84,7 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 
 // setS3BackendDefaults sets AWS S3 backend defaults.
 // Priority for workspace_key_prefix: explicit config > metadata.name > metadata.component > Atmos component name.
-func setS3BackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any) {
+func setS3BackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any, separator string) {
 	if p, ok := backend["workspace_key_prefix"].(string); !ok || p == "" {
 		workspaceKeyPrefix := component
 		// Priority: metadata.name > metadata.component (baseComponentName) > Atmos component name.
@@ -92,13 +93,13 @@ func setS3BackendDefaults(backend map[string]any, component string, baseComponen
 		} else if baseComponentName != "" {
 			workspaceKeyPrefix = baseComponentName
 		}
-		backend["workspace_key_prefix"] = strings.ReplaceAll(workspaceKeyPrefix, "/", "-")
+		backend["workspace_key_prefix"] = applyPrefixSeparator(workspaceKeyPrefix, separator)
 	}
 }
 
 // setGCSBackendDefaults sets Google GCS backend defaults.
 // Priority for prefix: explicit config > metadata.name > metadata.component > Atmos component name.
-func setGCSBackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any) {
+func setGCSBackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any, separator string) {
 	if p, ok := backend["prefix"].(string); !ok || p == "" {
 		prefix := component
 		// Priority: metadata.name > metadata.component (baseComponentName) > Atmos component name.
@@ -107,7 +108,7 @@ func setGCSBackendDefaults(backend map[string]any, component string, baseCompone
 		} else if baseComponentName != "" {
 			prefix = baseComponentName
 		}
-		backend["prefix"] = strings.ReplaceAll(prefix, "/", "-")
+		backend["prefix"] = applyPrefixSeparator(prefix, separator)
 	}
 }
 
@@ -120,6 +121,7 @@ func setAzureBackendKey(
 	metadata map[string]any,
 	componentBackendSection map[string]any,
 	globalBackendSection map[string]any,
+	separator string,
 ) error {
 	defer perf.Track(nil, "exec.setAzureBackendKey")()
 
@@ -155,7 +157,7 @@ func setAzureBackendKey(
 		}
 	}
 
-	componentKeyName := strings.ReplaceAll(azureKeyPrefixComponent, "/", "-")
+	componentKeyName := applyPrefixSeparator(azureKeyPrefixComponent, separator)
 	keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
 	finalComponentBackend[backendKeyName] = strings.Join(keyName, "/")
 
@@ -251,4 +253,23 @@ func processTerraformRemoteStateBackend(cfg *remoteStateBackendConfig) (string, 
 	}
 
 	return finalComponentRemoteStateBackendType, finalComponentRemoteStateBackend, nil
+}
+
+// getWorkspacePrefixSeparator returns the configured separator for auto-generated
+// backend key prefixes. Defaults to "-" for backward compatibility.
+func getWorkspacePrefixSeparator(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig != nil && atmosConfig.Components.Terraform.Workspace.PrefixSeparator != "" {
+		return atmosConfig.Components.Terraform.Workspace.PrefixSeparator
+	}
+	return "-"
+}
+
+// applyPrefixSeparator transforms a component name for use as a backend key prefix.
+// When separator is "/", the name is returned as-is (preserving hierarchy).
+// For any other separator, "/" is replaced with the separator value.
+func applyPrefixSeparator(name, separator string) string {
+	if separator == "/" {
+		return name
+	}
+	return strings.ReplaceAll(name, "/", separator)
 }

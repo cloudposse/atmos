@@ -484,6 +484,19 @@ type Terraform struct {
 	// CI holds terraform-specific CI configuration (e.g., exit code mapping).
 	// Only active when the global ci.enabled is true.
 	CI TerraformCI `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+	// Workspace holds workspace-related configuration for backend key generation.
+	Workspace WorkspaceConfig `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+}
+
+// WorkspaceConfig holds workspace-related configuration.
+type WorkspaceConfig struct {
+	// PrefixSeparator controls how '/' in component names is handled when
+	// auto-generating backend key prefixes (workspace_key_prefix for S3,
+	// prefix for GCS, key for Azure).
+	//
+	// "-" (default): Replace '/' with '-' → services/consul becomes services-consul.
+	// "/": Preserve '/' as-is → services/consul stays services/consul.
+	PrefixSeparator string `yaml:"prefix_separator,omitempty" json:"prefix_separator,omitempty" mapstructure:"prefix_separator"`
 }
 
 // TerraformCI holds CI-specific configuration for terraform components.
