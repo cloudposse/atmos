@@ -420,6 +420,11 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return executeMatrixFormat(&atmosConfig, opts)
 	}
 
+	// Reject --output-file for non-matrix formats — it would be silently ignored.
+	if opts.OutputFile != "" {
+		return fmt.Errorf("%w: --output-file is only supported with --format=matrix", errUtils.ErrInvalidFlag)
+	}
+
 	// Handle tree format specially - branch before calling processInstances to avoid double processing.
 	log.Trace("Checking format flag", "format_flag", formatFlag, "format_tree", format.FormatTree, "match", formatFlag == string(format.FormatTree))
 	if formatFlag == string(format.FormatTree) {

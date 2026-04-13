@@ -553,6 +553,28 @@ func TestExecuteListInstancesCmd_MatrixFormatWithOutputFile(t *testing.T) {
 	assert.Contains(t, string(content), `"include"`)
 }
 
+// TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix tests that --output-file is rejected for non-matrix formats.
+func TestExecuteListInstancesCmd_OutputFileRejectsNonMatrix(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "json", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "../../tests/fixtures/scenarios/complete",
+	}
+
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:       info,
+		Cmd:        cmd,
+		Args:       []string{},
+		OutputFile: "/tmp/some-file",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--output-file is only supported with --format=matrix")
+}
+
 // TestBuildInstanceFilters tests the filter builder placeholder.
 func TestBuildInstanceFilters(t *testing.T) {
 	// Currently buildInstanceFilters is a placeholder that returns nil.

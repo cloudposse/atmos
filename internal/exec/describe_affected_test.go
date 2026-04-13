@@ -1870,6 +1870,24 @@ func TestExecute_MatrixFormat(t *testing.T) {
 	})
 }
 
+// TestView_OutputFileRejectsNonMatrix tests that --output-file is rejected for non-matrix formats.
+func TestView_OutputFileRejectsNonMatrix(t *testing.T) {
+	d := describeAffectedExec{atmosConfig: &schema.AtmosConfiguration{}}
+
+	err := d.view(
+		&DescribeAffectedCmdArgs{
+			Format:           "json",
+			GithubOutputFile: "/tmp/some-file",
+			CLIConfig:        &schema.AtmosConfiguration{},
+		},
+		"", nil, nil, []schema.Affected{},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--output-file is only supported with --format=matrix")
+}
+
 // TestDescribeAffectedDeletedComponentWithDependents tests that deleted components
 // don't crash when IncludeDependents is enabled. Deleted components don't exist in
 // HEAD, so attempting to resolve their dependents causes "invalid component" errors.

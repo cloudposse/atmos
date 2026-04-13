@@ -364,6 +364,11 @@ func (d *describeAffectedExec) view(a *DescribeAffectedCmdArgs, repoUrl string, 
 		return matrix.WriteOutput(entries, a.GithubOutputFile)
 	}
 
+	// Reject --output-file for non-matrix formats — it would be silently ignored.
+	if a.GithubOutputFile != "" {
+		return fmt.Errorf("%w: --output-file is only supported with --format=matrix", errUtils.ErrInvalidFlag)
+	}
+
 	if a.Query == "" {
 		if err := d.uploadableQuery(a, repoUrl, headHead, baseHead, affected); err != nil {
 			return err
