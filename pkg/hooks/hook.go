@@ -24,7 +24,8 @@ type Hook struct {
 // to the canonical Go format (dots, e.g. "after.terraform.apply") before
 // comparing, so both styles are accepted in stack configuration.
 //
-// If the hook has no events configured, it matches all events
+// If the hook has no events configured, it matches all events to preserve
+// backward compatibility with configs written before event filtering existed.
 func (h Hook) MatchesEvent(event HookEvent) bool {
 	if len(h.Events) == 0 {
 		return true

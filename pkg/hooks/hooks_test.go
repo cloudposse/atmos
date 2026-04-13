@@ -347,14 +347,16 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		h := makeHooks([]string{"after-terraform-apply"})
 		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
 		require.NoError(t, err)
-		assert.NotEmpty(t, getStore(h).GetData(), "store must be called when event matches")
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "store must be called when event matches")
 	})
 
 	t.Run("hook with dot-format event matches correctly", func(t *testing.T) {
 		h := makeHooks([]string{"after.terraform.apply"})
 		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
 		require.NoError(t, err)
-		assert.NotEmpty(t, getStore(h).GetData(), "dot-format event must also match")
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "dot-format event must also match")
 	})
 
 	t.Run("hook with multiple events only runs on matching event", func(t *testing.T) {
@@ -369,14 +371,16 @@ func TestRunAll_EventFiltering(t *testing.T) {
 		h := makeHooks([]string{"after-terraform-apply"})
 		err := h.RunAll(AfterTerraformDeploy, h.config, h.info, nil, nil)
 		require.NoError(t, err)
-		assert.NotEmpty(t, getStore(h).GetData(), "apply hook must fire on deploy event")
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "apply hook must fire on deploy event")
 	})
 
 	t.Run("after-terraform-deploy hook fires when apply command runs", func(t *testing.T) {
 		h := makeHooks([]string{"after-terraform-deploy"})
 		err := h.RunAll(AfterTerraformApply, h.config, h.info, nil, nil)
 		require.NoError(t, err)
-		assert.NotEmpty(t, getStore(h).GetData(), "deploy hook must fire on apply event")
+		data := getStore(h).GetData()
+		assert.Equal(t, "literal-value", data["stack/comp/label_id"], "deploy hook must fire on apply event")
 	})
 }
 

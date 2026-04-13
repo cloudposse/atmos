@@ -1515,6 +1515,7 @@ func TestExecutor_GetOutputWithOptions_SkipInit(t *testing.T) {
 
 	stackSlug := stackComponentKey("skip-init-stack", "skip-init-component")
 	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
 
 	atmosConfig := validAtmosConfig()
 	sections := validSections()
