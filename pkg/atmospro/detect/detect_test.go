@@ -169,6 +169,66 @@ func TestAll_ReturnsDeterministicOrder(t *testing.T) {
 	assert.Equal(t, "geodesic", results[2].Name)
 }
 
+func TestAtmosAuth_DiscoversGeodesicConfigPath(t *testing.T) {
+	// Geodesic-hosted repos store atmos.yaml at rootfs/usr/local/etc/atmos/ and
+	// reference it via ATMOS_CLI_CONFIG_PATH in workflows. The probe must detect
+	// auth: declared at that location even when no atmos.yaml exists at repo root.
+	fsys := fstest.MapFS{
+		"rootfs/usr/local/etc/atmos/atmos.yaml": &fstest.MapFile{
+			Data: []byte("auth:\n  providers:\n    sso: {}\n"),
+		},
+	}
+	r, err := detect.AtmosAuth(fsys)
+	require.NoError(t, err)
+	assert.True(t, r.Detected, "Geodesic-path atmos.yaml must be discovered")
+	assert.Equal(t, []string{"rootfs/usr/local/etc/atmos/atmos.yaml"}, r.Evidence)
+}
+
+func TestLocateAtmosYAML_Geodesic(t *testing.T) {
+	fsys := fstest.MapFS{
+		"rootfs/usr/local/etc/atmos/atmos.yaml": &fstest.MapFile{Data: []byte("")},
+	}
+	path, err := detect.LocateAtmosYAML(fsys)
+	require.NoError(t, err)
+	assert.Equal(t, "rootfs/usr/local/etc/atmos/atmos.yaml", path)
+}
+
+func TestLocateAtmosYAML_PrefersGeodesicPathOverRoot(t *testing.T) {
+	// When both exist, the Geodesic path wins because workflows read from there.
+	fsys := fstest.MapFS{
+		"atmos.yaml":                            &fstest.MapFile{Data: []byte("")},
+		"rootfs/usr/local/etc/atmos/atmos.yaml": &fstest.MapFile{Data: []byte("")},
+	}
+	path, err := detect.LocateAtmosYAML(fsys)
+	require.NoError(t, err)
+	assert.Equal(t, "rootfs/usr/local/etc/atmos/atmos.yaml", path,
+		"Geodesic path must win because workflows set ATMOS_CLI_CONFIG_PATH to it")
+}
+
+func TestLocateAtmosYAML_FallsBackToRoot(t *testing.T) {
+	fsys := fstest.MapFS{
+		"atmos.yaml": &fstest.MapFile{Data: []byte("")},
+	}
+	path, err := detect.LocateAtmosYAML(fsys)
+	require.NoError(t, err)
+	assert.Equal(t, "atmos.yaml", path)
+}
+
+func TestLocateAtmosYAML_EmptyWhenAbsent(t *testing.T) {
+	fsys := fstest.MapFS{
+		"Dockerfile": &fstest.MapFile{Data: []byte("")},
+	}
+	path, err := detect.LocateAtmosYAML(fsys)
+	require.NoError(t, err)
+	assert.Empty(t, path)
+}
+
+func TestLocateAtmosYAML_NilFS(t *testing.T) {
+	_, err := detect.LocateAtmosYAML(nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, detect.ErrEmptyFS)
+}
+
 func TestAll_ClassifiesRealisticRepo(t *testing.T) {
 	// A representative "mid-journey" repo: Atmos Auth configured, Spacelift
 	// still enabled in one stack, no Geodesic. The skill must detect all three

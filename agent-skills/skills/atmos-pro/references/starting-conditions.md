@@ -74,11 +74,20 @@ gh api orgs/:org/actions/permissions
 
 Look for `auth:` at the top level of:
 
-- `atmos.yaml`
-- Any file under `atmos.d/`
-- Any file imported via `import:` in `atmos.yaml`
+- `rootfs/usr/local/etc/atmos/atmos.yaml` (Geodesic config path — check this first)
+- `atmos.yaml` / `.atmos.yaml`
+- Any file under `rootfs/usr/local/etc/atmos/atmos.d/` or `atmos.d/`
+- Any file imported via `import:` in the resolved atmos.yaml
 
 A stray `auth:` under `settings:` does not count — it must be the top-level auth config.
+
+**Geodesic note:** In Geodesic-hosted repos (1898-style and other Cloud Posse reference
+stacks), `atmos.yaml` does not live at the repo root. Workflows set
+`ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos` and expect the config there.
+Agents must resolve the actual config path before any probe that reads it — running
+`ls atmos.yaml` at the repo root will fail silently on Geodesic repos. Use
+`detect.LocateAtmosYAML(fsys)` from the Go probe package, or the shell snippet in
+SKILL.md step 2.
 
 ### Spacelift usage
 

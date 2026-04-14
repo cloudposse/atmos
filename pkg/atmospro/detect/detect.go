@@ -44,7 +44,13 @@ type Result struct {
 var ErrEmptyFS = errors.New("atmospro/detect: filesystem is nil or empty")
 
 // atmosYAMLCandidates are the file paths checked for a top-level `auth:` key.
+// The Geodesic path comes first because Geodesic-hosted repos (which share this
+// convention with the 1898 and other Cloud Posse reference stacks) never place
+// atmos.yaml at the repo root — the workflows set
+// ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos.
 var atmosYAMLCandidates = []string{
+	"rootfs/usr/local/etc/atmos/atmos.yaml",
+	"rootfs/usr/local/etc/atmos/atmos.yml",
 	"atmos.yaml",
 	"atmos.yml",
 	".atmos.yaml",
@@ -52,8 +58,10 @@ var atmosYAMLCandidates = []string{
 }
 
 // atmosDirCandidates are directories whose *.yaml files are also scanned for
-// top-level `auth:` keys. Matches the Atmos discovery convention.
+// top-level `auth:` keys. Matches the Atmos discovery convention, plus the
+// Geodesic config-path override.
 var atmosDirCandidates = []string{
+	"rootfs/usr/local/etc/atmos/atmos.d",
 	"atmos.d",
 	".atmos.d",
 }
@@ -210,6 +218,29 @@ func Geodesic(fsys fs.FS) (Result, error) {
 		r.Details = "no Geodesic markers detected"
 	}
 	return r, nil
+}
+
+// LocateAtmosYAML returns the repo-relative path of the first atmos.yaml the
+// probe finds, or an empty string if none is present. Searches the Geodesic
+// path (rootfs/usr/local/etc/atmos/atmos.yaml) before the repo-root candidates,
+// matching the ATMOS_CLI_CONFIG_PATH convention used by the generated workflows.
+//
+// Agents running Path B should call this before any `atmos describe ...` probe
+// that reads atmos.yaml; otherwise a Geodesic repo looks like a missing config.
+func LocateAtmosYAML(fsys fs.FS) (string, error) {
+	defer perf.Track(nil, "atmospro/detect.LocateAtmosYAML")()
+
+	if fsys == nil {
+		return "", ErrEmptyFS
+	}
+	for _, candidate := range atmosYAMLCandidates {
+		if _, err := fs.Stat(fsys, candidate); err == nil {
+			return candidate, nil
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("stat %s: %w", candidate, err)
+		}
+	}
+	return "", nil
 }
 
 // All runs every filesystem probe and returns the results in a deterministic

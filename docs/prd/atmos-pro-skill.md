@@ -896,6 +896,71 @@ EOF
 Any divergence between Path A output, Path B output, and the rendered expectation is a
 skill bug.
 
+## Lessons Learned in Production
+
+Findings from the first live run of the skill against a Geodesic-hosted Atmos repo.
+Each finding produced a skill, probe, or docs fix captured below. Add new entries as
+further live tests surface issues.
+
+### Geodesic repos keep `atmos.yaml` at a non-root path
+
+**What happened.** During Path B manual validation (Claude Code + local marketplace
+install) against a Geodesic-hosted 1898-style repo, the agent ran
+`ls atmos.yaml` at the repo root and got `No such file or directory`. The skill
+recovered by searching other paths and produced a correct detection report, but the
+miss highlighted a design assumption gap.
+
+**Root cause.** Geodesic-hosted repos (the 1898 reference implementation, Cloud
+Posse's internal stacks, and any repo cloned from Cloud Posse `reference-architecture`
+templates) store `atmos.yaml` at `rootfs/usr/local/etc/atmos/atmos.yaml`. Workflows
+export `ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos` so Atmos finds it at
+runtime, but a pre-flight probe that reads the file directly needs the explicit path.
+
+**Fix (shipped in this branch).**
+
+- `pkg/atmospro/detect/detect.go` — `atmosYAMLCandidates` now lists
+  `rootfs/usr/local/etc/atmos/atmos.yaml` ahead of repo-root candidates; `atmosDirCandidates`
+  includes `rootfs/usr/local/etc/atmos/atmos.d`.
+- New exported helper `detect.LocateAtmosYAML(fsys)` returns the first config path
+  that exists, empty string when absent, preferring the Geodesic path.
+- Five new unit tests cover Geodesic-only, root-only, both-exist-Geodesic-wins,
+  fully-absent, and nil-FS cases.
+- `SKILL.md` step 2 now starts with "Locate atmos.yaml first" and prescribes a shell
+  snippet that sets `ATMOS_CONFIG_FILE` before any downstream probe.
+- `references/starting-conditions.md` documents the Geodesic config-path convention
+  alongside the standard Atmos discovery rules.
+- `references/troubleshooting.md` gains a dedicated entry with the symptom
+  (`ls atmos.yaml` failure), the Geodesic cause, and both the Go probe and shell fix.
+
+**Open follow-up.** `ATMOS_CLI_CONFIG_PATH` can be configured per-repo. If a repo
+uses a non-Geodesic, non-root path (e.g., `config/atmos/atmos.yaml`), the probe
+currently misses it. The practical mitigation is to extend `atmosYAMLCandidates` as
+new variants are encountered — there is no authoritative list. Not a blocker.
+
+### `git remote get-url origin` can leak PATs into detection output
+
+**What happened.** During the same run, `git remote get-url origin` returned
+`https://ghp_xxxxxxxxxxxxxxxxxxxx@github.com/aknysh/atmos-pro-skills-1`. The agent
+flagged this as a security finding and told the user to rotate the token — a good
+emergent behavior — but the tokenized URL itself was echoed back to the terminal
+output, briefly exposing the PAT a second time.
+
+**Root cause.** `gh repo clone` embeds the user's PAT in the remote URL. Any command
+that reads the remote (diagnostic probes, plan summaries, PR body generation) has
+access to the token unless explicitly redacted.
+
+**Fix (shipped in this branch).**
+
+- `SKILL.md` safety rails section adds rule 5: "Redact tokens from remote URLs." The
+  rule prescribes extracting `owner/repo` only, never echoing the tokenized URL, and
+  flagging the leaked token as a security finding without blocking the flow.
+- `references/troubleshooting.md` gains an entry with both remediation steps (rotate
+  the PAT, rewrite the remote with `git remote set-url origin https://github.com/owner/repo`).
+
+**Open follow-up.** The skill should eventually ship a lint/redaction helper that
+takes any string destined for user output and strips token-like substrings. Until
+then, the safety rail in SKILL.md is instruction-only and depends on agent compliance.
+
 ## Manual Validation Checklist
 
 The automated test suite validates the deterministic layer (detection, rendering,

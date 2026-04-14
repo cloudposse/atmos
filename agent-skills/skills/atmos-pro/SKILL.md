@@ -91,16 +91,30 @@ Any deviation is a skill bug, not a Claude-Code-specific variation.
 2. **Detect the repo shape.** See `references/starting-conditions.md` for the full probe
    catalog. At minimum, answer:
 
+   - **Locate `atmos.yaml` first.** Many Cloud Posse-style repos are Geodesic-hosted and
+     keep `atmos.yaml` at `rootfs/usr/local/etc/atmos/atmos.yaml`, not at the repo root.
+     Before any probe that reads the config, resolve its actual path:
+     ```bash
+     for p in rootfs/usr/local/etc/atmos/atmos.yaml atmos.yaml atmos.yml .atmos.yaml; do
+       [ -f "$p" ] && { export ATMOS_CONFIG_FILE="$p"; break; }
+     done
+     echo "atmos.yaml at: ${ATMOS_CONFIG_FILE:-<NOT FOUND>}"
+     ```
+     Use `ATMOS_CONFIG_FILE` for every subsequent read. If Atmos needs to resolve it,
+     set `ATMOS_CLI_CONFIG_PATH` to the directory containing it.
    - **Stack hierarchy** — run `atmos list stacks` and `atmos describe stacks --format=json |
      jq 'keys'` to enumerate tenants × stages × regions.
-   - **Atmos Auth present?** — look for `auth:` in `atmos.yaml` or imported files.
+   - **Atmos Auth present?** — look for `auth:` at the top level of `$ATMOS_CONFIG_FILE`
+     and in imported files under `atmos.d/` (both repo-root and under
+     `rootfs/usr/local/etc/atmos/atmos.d/` for Geodesic repos).
    - **Spacelift present?** — grep for `settings.spacelift.workspace_enabled: true` in stacks.
    - **`github-oidc-provider` deployed?** — `atmos describe component github-oidc-provider -s <one-account-stack>`
      must resolve and the account's Terraform state must have `oidc_provider_arn`.
    - **tfstate-backend** — find the component and read its `allowed_principal_arns`.
    - **GitHub Actions enabled on the repo?** — `gh api repos/:owner/:repo/actions/permissions`.
-   - **Running inside Geodesic?** — look for `Dockerfile`, `geodesic.mk`, `.envrc` with
-     `direnv` + `geodesic`.
+   - **Running inside Geodesic?** — look for `Dockerfile` (with `cloudposse/geodesic`),
+     `geodesic.mk`, `.envrc` referencing `geodesic`, or a `rootfs/` overlay directory.
+     Presence of `rootfs/usr/local/etc/atmos/` alone is a strong Geodesic signal.
 
 3. **Select the starting-condition variant.** Use the decision table in
    `references/starting-conditions.md`. If a blocking variant is detected (e.g., GitHub Actions
@@ -165,6 +179,12 @@ These are defaults the skill must enforce. See `references/iam-trust-model.md` f
 4. **No secret values in the mixin or profiles** — `ATMOS_PRO_WORKSPACE_ID` is a GitHub
    repository variable, not a secret. Do not prompt for it as a secret; tell the user to set it
    as a variable.
+5. **Redact tokens from remote URLs.** `git remote get-url origin` on a repo cloned with
+   `gh` often returns a URL of the form `https://ghp_xxx@github.com/owner/repo`. Never
+   display that URL verbatim in plan summaries, PR bodies, worktree paths, or log output.
+   Extract `owner/repo` only. Flag the leaked token to the user as a security finding
+   (rotate the PAT, rewrite the remote with `git remote set-url origin https://github.com/owner/repo`)
+   but do not block the flow — the user can rotate the token in parallel.
 
 ## Starting-condition variants (summary)
 

@@ -275,3 +275,72 @@ trigger a positive detection.
 
 Delete or rename the stale marker file, or edit the generated `docs/atmos-pro.md` to remove
 the Geodesic section. This does not affect the rest of the generated output.
+
+## `ls atmos.yaml` returns "No such file or directory"
+
+### Symptom
+
+An early probe runs `ls atmos.yaml` (or `cat atmos.yaml`) at the repo root and fails
+with `No such file or directory`, even though the repo is clearly an Atmos project.
+
+### Cause
+
+The repo is Geodesic-hosted (1898-style, Cloud Posse reference stacks). `atmos.yaml`
+lives at `rootfs/usr/local/etc/atmos/atmos.yaml`, not at the repo root. Workflows set
+`ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos` so Atmos finds it at runtime —
+but a naive `ls atmos.yaml` probe runs outside that environment and fails.
+
+### Fix
+
+Always resolve the actual `atmos.yaml` path before reading it. Prefer the Go probe:
+
+```go
+path, _ := detect.LocateAtmosYAML(fsys)
+// path is "rootfs/usr/local/etc/atmos/atmos.yaml" for Geodesic repos,
+// "atmos.yaml" for conventional repos, or "" if missing.
+```
+
+Or the shell equivalent:
+
+```bash
+for p in rootfs/usr/local/etc/atmos/atmos.yaml atmos.yaml atmos.yml .atmos.yaml; do
+  [ -f "$p" ] && { export ATMOS_CONFIG_FILE="$p"; break; }
+done
+```
+
+SKILL.md step 2 now prescribes this as the very first probe. Any agent that runs
+`ls atmos.yaml` without this preamble is running an outdated skill version — check
+that `~/.claude/plugins/cache/cloudposse/atmos/<version>/skills/atmos-pro/SKILL.md`
+contains the "Locate atmos.yaml first" bullet.
+
+## `origin` URL contains an embedded GitHub token
+
+### Symptom
+
+`git remote get-url origin` returns something like:
+
+```
+https://ghp_xxxxxxxxxxxxxxxxxxxx@github.com/owner/repo
+```
+
+### Cause
+
+The repo was cloned with `gh repo clone` (or a git config helper that injects the
+Personal Access Token). The token is now part of the filesystem state, visible to any
+process that reads the remote URL.
+
+### Fix
+
+Two actions, in order:
+
+1. **Rotate the PAT immediately.** Go to <https://github.com/settings/tokens>, revoke
+   the compromised token, issue a new one, and update any automation that used it.
+2. **Rewrite the remote URL** to strip the token:
+
+   ```bash
+   git remote set-url origin https://github.com/owner/repo
+   ```
+
+The atmos-pro skill flags this as a security finding in its detection output but does
+not block the onboarding flow. The skill itself must never echo the tokenized URL in
+plan summaries, PR bodies, worktree paths, or log output — extract `owner/repo` only.
