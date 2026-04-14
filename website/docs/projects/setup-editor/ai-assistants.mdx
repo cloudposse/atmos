@@ -92,11 +92,11 @@ The recommended way to install Atmos skills in Claude Code is via the Cloud Poss
 # Step 1: Add the Cloud Posse marketplace (one-time setup)
 /plugin marketplace add cloudposse/atmos
 
-# Step 2: Install the Atmos skills plugin (all 21 skills)
+# Step 2: Install the Atmos skills plugin (all 23+ skills)
 /plugin install atmos@cloudposse
 ```
 
-Skills are available immediately after installation and persist across sessions. One plugin installs all 21 skills -- the AI loads only the relevant skill on demand, so there is no performance overhead.
+Skills are available immediately after installation and persist across sessions. One plugin installs all 23+ skills -- the AI loads only the relevant skill on demand, so there is no performance overhead.
 
 **How it works**: The `cloudposse/atmos` GitHub repository serves as the marketplace. When you add it,
 Claude Code fetches `.claude-plugin/marketplace.json` directly from the repo via the GitHub API. When you

@@ -40,7 +40,7 @@ that skill, and only pulls in reference files when deep detail is needed.
 
 ## Available Skills
 
-Atmos includes 21 skills covering every major subsystem:
+Atmos includes 23+ skills covering every major subsystem:
 
 <dl>
   <dt>`atmos-ansible`</dt>
@@ -109,7 +109,7 @@ Atmos includes 21 skills covering every major subsystem:
 
 ## Folder Structure
 
-All 21 skills live in a single flat directory, packaged as one Claude Code plugin:
+All 23+ skills live in a single flat directory, packaged as one Claude Code plugin:
 
 ```text
 agent-skills/                                  # Single plugin
@@ -131,11 +131,11 @@ agent-skills/                                  # Single plugin
   atmos-terraform -> ../../agent-skills/skills/atmos-terraform
   atmos-config -> ../../agent-skills/skills/atmos-config
   atmos-stacks -> ../../agent-skills/skills/atmos-stacks
-  ...                                          # 21 symlinks total
+  ...                                          # 23+ symlinks total
 ```
 
 `agent-skills/` is the single source of truth. `.claude/skills/` contains symlinks so Claude Code auto-discovers
-skills when working directly in the Atmos repo. Both paths resolve to the same 21 `SKILL.md` files.
+skills when working directly in the Atmos repo. Both paths resolve to the same 23+ `SKILL.md` files.
 
 Each skill folder follows the same pattern: one `SKILL.md` file and a `references/` directory with one or more
 deep-dive reference files.

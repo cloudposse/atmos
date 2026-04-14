@@ -10,7 +10,7 @@
     {
       "name": "atmos",
       "source": "./agent-skills",
-      "description": "Atmos skills for AI coding assistants: Terraform/Helmfile/Packer/Ansible orchestration, stack configuration, components, vendoring, validation, YAML functions, Go templates, authentication, stores, workflows, and design patterns.",
+      "description": "Atmos skills for AI coding assistants: Terraform/Helmfile/Packer/Ansible orchestration, stack configuration, components, vendoring, validation, YAML functions, Go templates, authentication, stores, workflows, design patterns, and Atmos Pro onboarding.",
       "category": "development"
     }
   ]

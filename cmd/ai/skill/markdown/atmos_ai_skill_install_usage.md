@@ -1,4 +1,4 @@
-- Install all Atmos agent skills (21 skills)
+- Install all Atmos agent skills (23+ skills)
 
 ```
 $ atmos ai skill install cloudposse/atmos

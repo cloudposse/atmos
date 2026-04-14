@@ -2,7 +2,7 @@ Install AI skills from a GitHub repository.
 
 Supports both single-skill repos (with SKILL.md at root) and multi-skill
 packages (with skills/*/SKILL.md pattern). The official Atmos skills package
-contains 21 specialized skills for infrastructure orchestration.
+contains 23+ specialized skills for infrastructure orchestration.
 
 Skills will be downloaded, validated, and installed to ~/.atmos/skills/.
 You can then use them in the AI TUI by switching with Ctrl+A.
