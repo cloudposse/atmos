@@ -1,0 +1,52 @@
+{
+  "org": "example",
+  "repo": "infra",
+  "namespace": "ex",
+  "target_org": "ex",
+  "root_account_id": "111111111111",
+  "accounts": [
+    {
+      "tenant": "gov",
+      "stage": "root",
+      "account_id": "111111111111",
+      "is_root": true
+    },
+    {
+      "tenant": "gov",
+      "stage": "iam",
+      "account_id": "222222222222",
+      "is_root": false
+    },
+    {
+      "tenant": "gov",
+      "stage": "dss",
+      "account_id": "333333333333",
+      "is_root": false
+    },
+    {
+      "tenant": "soc",
+      "stage": "clip",
+      "account_id": "444444444444",
+      "is_root": false
+    },
+    {
+      "tenant": "soc",
+      "stage": "siem",
+      "account_id": "555555555555",
+      "is_root": false
+    },
+    {
+      "tenant": "soc",
+      "stage": "wksn",
+      "account_id": "666666666666",
+      "is_root": false
+    }
+  ],
+  "probe_stack": "ex-gov-gbl-iam",
+  "probe_tenant": "gov",
+  "probe_stage": "iam",
+  "probe_account_id": "222222222222",
+  "geodesic_detected": true,
+  "spacelift_was_enabled": true,
+  "no_atmos_auth": false
+}

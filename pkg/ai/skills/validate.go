@@ -9,14 +9,15 @@ import (
 )
 
 // LoadAndValidate loads the skill registry and validates that all specified skills exist.
-// An optional SkillLoader can be provided to load marketplace-installed skills.
+// Any number of SkillLoaders can be provided; each contributes skills to the registry in
+// order, with first-writer-wins precedence. Typical ordering: marketplace, then embedded.
 // Returns the validated skills or a helpful error listing invalid and available skills.
-func LoadAndValidate(atmosConfig *schema.AtmosConfiguration, skillNames []string, loader SkillLoader) ([]*Skill, error) {
+func LoadAndValidate(atmosConfig *schema.AtmosConfiguration, skillNames []string, loaders ...SkillLoader) ([]*Skill, error) {
 	defer perf.Track(nil, "skills.LoadAndValidate")()
 
 	// LoadSkills uses best-effort loading: marketplace and config errors are logged
 	// but do not fail the call. Missing skills are caught by the Get() check below.
-	registry, _ := LoadSkills(atmosConfig, loader)
+	registry, _ := LoadSkills(atmosConfig, loaders...)
 
 	var validSkills []*Skill
 	var invalidNames []string

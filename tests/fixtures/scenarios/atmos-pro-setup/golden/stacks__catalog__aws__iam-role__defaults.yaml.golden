@@ -13,6 +13,6 @@ components:
         enabled: true
         github_oidc_provider_enabled: true
         github_oidc_provider_arn: !terraform.state github-oidc-provider oidc_provider_arn
-        trusted_github_org: <<.org>>
+        trusted_github_org: example
         trusted_github_repos:
-          - "<<.org>>/<<.repo>>:main"
+          - "example/infra:main"

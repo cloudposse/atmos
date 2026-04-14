@@ -10,14 +10,23 @@ type SkillLoader interface {
 	LoadInstalledSkills(registry *Registry) error
 }
 
-// LoadSkills loads all skills (marketplace-installed and custom) from configuration.
-// If a marketplaceLoader is provided, it loads marketplace-installed skills first.
-func LoadSkills(atmosConfig *schema.AtmosConfiguration, marketplaceLoader ...SkillLoader) (*Registry, error) {
+// LoadSkills loads all skills (marketplace-installed, custom-configured, and
+// built-in) into a fresh registry.
+//
+// Loaders are invoked in the order given. The registry's Register() is
+// first-writer-wins, so earlier loaders override later ones. Callers that want
+// marketplace-installed skills to override built-in embedded skills should pass
+// the marketplace loader first and the embedded loader second (see the
+// agent-skills/embedded package).
+func LoadSkills(atmosConfig *schema.AtmosConfiguration, loaders ...SkillLoader) (*Registry, error) {
 	registry := NewRegistry()
 
-	// 1. Load marketplace-installed skills.
-	if len(marketplaceLoader) > 0 && marketplaceLoader[0] != nil {
-		_ = marketplaceLoader[0].LoadInstalledSkills(registry)
+	// 1. Run every loader in order.
+	for _, loader := range loaders {
+		if loader == nil {
+			continue
+		}
+		_ = loader.LoadInstalledSkills(registry)
 	}
 
 	// 2. Load custom skills from configuration if available.

@@ -10,7 +10,7 @@
 # Auth profiles (profiles/github-plan/ and profiles/github-apply/) handle
 # OIDC authentication and per-account identity mapping separately.
 #
-# Usage: Import at the org level (e.g., stacks/orgs/<<.target_org>>/_defaults.yaml)
+# Usage: Import at the org level (e.g., stacks/orgs/ex/_defaults.yaml)
 #   import:
 #     - mixins/atmos-pro
 

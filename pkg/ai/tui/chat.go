@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/skills"
+	"github.com/cloudposse/atmos/pkg/ai/skills/embedded"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	aiTypes "github.com/cloudposse/atmos/pkg/ai/types"
@@ -275,14 +276,16 @@ func getHistoryLimits(atmosConfig *schema.AtmosConfiguration) (int, int) {
 }
 
 // initSkills loads the skill registry and determines the current skill.
+// The marketplace loader runs first so user-installed skills override the
+// built-in embedded versions of the same name.
 func initSkills(atmosConfig *schema.AtmosConfiguration) (*skills.Registry, *skills.Skill, error) {
-	var loader skills.SkillLoader
+	var marketplaceLoader skills.SkillLoader
 	installer, installerErr := marketplace.NewInstaller(version.Version)
 	if installerErr == nil {
-		loader = installer
+		marketplaceLoader = installer
 	}
 
-	skillRegistry, err := skills.LoadSkills(atmosConfig, loader)
+	skillRegistry, err := skills.LoadSkills(atmosConfig, marketplaceLoader, embedded.Loader{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load skills: %w", err)
 	}

@@ -4,6 +4,15 @@ description: "Atmos Pro onboarding: generate GitHub OIDC IAM roles, auth profile
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+references:
+  - references/onboarding-playbook.md
+  - references/starting-conditions.md
+  - references/artifact-catalog.md
+  - references/settings-pro-contract.md
+  - references/iam-trust-model.md
+  - references/auth-profiles.md
+  - references/geodesic-integration.md
+  - references/troubleshooting.md
 ---
 
 # Atmos Pro Onboarding

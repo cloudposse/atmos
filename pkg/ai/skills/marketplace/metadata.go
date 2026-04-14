@@ -60,6 +60,14 @@ func ParseSkillMetadata(path string) (*SkillMetadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read SKILL.md file: %w", err)
 	}
+	return ParseSkillMetadataBytes(data)
+}
+
+// ParseSkillMetadataBytes parses SKILL.md contents already loaded into memory.
+// Used by callers that read the file from an embedded filesystem or other
+// non-disk source.
+func ParseSkillMetadataBytes(data []byte) (*SkillMetadata, error) {
+	defer perf.Track(nil, "marketplace.ParseSkillMetadataBytes")()
 
 	// Extract YAML frontmatter.
 	frontmatter, err := extractFrontmatter(string(data))

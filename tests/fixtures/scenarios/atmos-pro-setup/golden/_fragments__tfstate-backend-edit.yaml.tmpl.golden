@@ -20,4 +20,4 @@ components:
           default:
             # Wildcard trust for Atmos Pro CI roles in every account of this namespace.
             allowed_principal_arns:
-              - "arn:aws:iam::*:role/<<.namespace>>-*-gbl-*-gha-tf-*"
+              - "arn:aws:iam::*:role/ex-*-gbl-*-gha-tf-*"

@@ -396,18 +396,35 @@ template layout is deliberately compatible with it.
 
 ## Delivery Plan
 
-### Phase 1 — Skill scaffold and references (week 1)
+### Phase 1 — Skill scaffold and references (week 1) — ✅ Complete
 
-- Create `agent-skills/skills/atmos-pro/SKILL.md` with frontmatter and the decision tree.
-- Write the seven reference docs listed under "Skill Placement".
-- Commit templates as plain files derived directly from the reference PR. No template
-  parameterization yet.
+- Created `agent-skills/skills/atmos-pro/SKILL.md` with frontmatter and the decision tree.
+- Wrote the eight reference docs under `references/` (onboarding playbook, starting
+  conditions, artifact catalog, `settings.pro` contract, IAM trust model, auth profiles,
+  Geodesic integration, troubleshooting).
+- Committed all templates under `templates/` derived from the known-good reference output.
+- Added `atmos-pro` to `agent-skills/AGENTS.md` skill index.
+- Created the `.claude/skills/atmos-pro` symlink.
+- Updated `agent-skills/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
+  to mention Atmos Pro onboarding.
+- Updated all "N skills" references in CLI markdown and website docs to `23+`.
 
-### Phase 2 — Template parameterization and repo detection (week 2)
+### Phase 2 — Template parameterization and renderer (week 2) — ✅ Complete
 
-- Parameterize templates with Go-template placeholders the agent fills in.
-- Document the detection probes (what files/commands the agent runs to infer repo state).
-- Add the starting-condition branch table to `starting-conditions.md`.
+- Switched templates to Go `text/template` with **custom `<<` / `>>` delimiters** so that
+  native `{{ }}` (Atmos Pro workflow inputs, GitHub Actions expressions, Atmos vendor
+  interpolation) passes through untouched — no backtick escaping required.
+- Documented the placeholder contract in `agent-skills/skills/atmos-pro/templates/README.md`.
+- Shipped the Go renderer at `pkg/ai/skills/atmospro/` with a typed `RenderData` context
+  (accounts, variant flags, probe values), full validation, and a `RenderAll` entry point
+  that walks the templates FS and returns a map of output-path → contents.
+- Shipped the validation fixture at `tests/fixtures/scenarios/atmos-pro-setup/` (6 accounts
+  across 2 tenants, one flagged `is_root`, Geodesic + Spacelift variant flags on).
+- Shipped the golden-snapshot diff test (14 rendered artifacts) with a `-regenerate-snapshots`
+  flag for intentional updates. Golden files live under the fixture's `golden/` directory.
+- Exit criteria verified: scalar substitution, literal `{{ }}` / `${{ }}` pass-through,
+  `<<range>>` iteration with `<<$.topLevel>>`, root-account safety rail pinned to the plan
+  role in the rendered apply profile.
 
 ### Phase 3 — Path A: `atmos ai ask --skill` integration (week 3)
 

@@ -1,0 +1,39 @@
+name: "Atmos Pro - List Instances"
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  list-instances:
+    runs-on: [self-hosted, Ubuntu, Common]
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    env:
+      ATMOS_CLI_CONFIG_PATH: ./rootfs/usr/local/etc/atmos
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: List instances and upload to Atmos Pro
+        env:
+          ATMOS_PRO_WORKSPACE_ID: ${{ vars.ATMOS_PRO_WORKSPACE_ID }}
+          ATMOS_PROFILE: github-plan
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos list instances --upload

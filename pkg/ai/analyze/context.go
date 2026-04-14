@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/skills"
+	"github.com/cloudposse/atmos/pkg/ai/skills/embedded"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -52,9 +53,11 @@ func Setup(atmosConfig *schema.AtmosConfiguration, skillNames []string, commandN
 	}
 
 	// If skills specified, load and validate all skills.
+	// Marketplace loader runs first so user overrides win; embedded loader provides
+	// the built-in skills (atmos-pro, atmos-terraform, etc.) that ship with Atmos.
 	if len(skillNames) > 0 {
-		loader := newSkillLoader()
-		validSkills, err := skills.LoadAndValidate(atmosConfig, skillNames, loader)
+		marketplaceLoader := newSkillLoader()
+		validSkills, err := skills.LoadAndValidate(atmosConfig, skillNames, marketplaceLoader, embedded.Loader{})
 		if err != nil {
 			return nil, err
 		}

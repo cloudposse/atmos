@@ -12,11 +12,10 @@ auth:
   # github-plan uses gha-tf-plan roles for read-only (terraform plan) access.
   # Use the github-apply profile for full (terraform apply) access.
   identities:
-{{- range .accounts }}
-    {{ .tenant }}-{{ .stage }}/gha-tf-plan:
+<<range .accounts>>    <<.tenant>>-<<.stage>>/gha-tf-plan:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-        assume_role: arn:aws:iam::{{ .account_id }}:role/{{ $.namespace }}-{{ .tenant }}-gbl-{{ .stage }}-gha-tf-plan
-{{- end }}
+        assume_role: arn:aws:iam::<<.account_id>>:role/<<$.namespace>>-<<.tenant>>-gbl-<<.stage>>-gha-tf-plan
+<<end>>

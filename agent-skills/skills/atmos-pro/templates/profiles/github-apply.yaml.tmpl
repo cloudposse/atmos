@@ -13,16 +13,12 @@ auth:
   # Root account is pinned to the plan role as a safety rail -- automation
   # must never apply to the root account.
   identities:
-{{- range .accounts }}
-    {{ .tenant }}-{{ .stage }}/gha-tf-apply:
+<<range .accounts>>    <<.tenant>>-<<.stage>>/gha-tf-apply:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-{{- if .is_root }}
-        # Safety: assumes gha-tf-plan (read-only) to prevent automation from applying to the root account.
-        assume_role: arn:aws:iam::{{ .account_id }}:role/{{ $.namespace }}-{{ .tenant }}-gbl-{{ .stage }}-gha-tf-plan
-{{- else }}
-        assume_role: arn:aws:iam::{{ .account_id }}:role/{{ $.namespace }}-{{ .tenant }}-gbl-{{ .stage }}-gha-tf-apply
-{{- end }}
-{{- end }}
+<<if .is_root>>        # Safety: assumes gha-tf-plan (read-only) to prevent automation from applying to the root account.
+        assume_role: arn:aws:iam::<<.account_id>>:role/<<$.namespace>>-<<.tenant>>-gbl-<<.stage>>-gha-tf-plan
+<<else>>        assume_role: arn:aws:iam::<<.account_id>>:role/<<$.namespace>>-<<.tenant>>-gbl-<<.stage>>-gha-tf-apply
+<<end>><<end>>

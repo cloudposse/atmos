@@ -11,6 +11,7 @@ import (
 
 	ai "github.com/cloudposse/atmos/cmd/ai"
 
+	"github.com/cloudposse/atmos/pkg/ai/skills/embedded"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -52,9 +53,26 @@ var listCmd = &cobra.Command{
 		}
 
 		// Get installed skills.
-		skills := installer.List()
+		installed := installer.List()
 
-		if len(skills) == 0 {
+		// Get embedded (built-in) skills shipped with the Atmos binary.
+		embeddedNames, _ := embedded.ListNames()
+
+		// Hide any embedded skill that is also marketplace-installed — the
+		// marketplace version overrides it, so listing both would be confusing.
+		installedNames := make(map[string]struct{}, len(installed))
+		for _, s := range installed {
+			installedNames[s.Name] = struct{}{}
+		}
+		var builtIn []string
+		for _, name := range embeddedNames {
+			if _, overridden := installedNames[name]; overridden {
+				continue
+			}
+			builtIn = append(builtIn, name)
+		}
+
+		if len(installed) == 0 && len(builtIn) == 0 {
 			fmt.Println("No skills installed.")
 			fmt.Println("\nInstall a skill with:")
 			fmt.Println("  atmos ai skill install github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform")
@@ -64,22 +82,51 @@ var listCmd = &cobra.Command{
 			return nil
 		}
 
-		// Print header.
-		fmt.Printf("Installed skills (%d):\n\n", len(skills))
-
-		// Print skills.
-		for _, skill := range skills {
-			if detailed {
-				printSkillDetailed(skill)
-			} else {
-				printSkillSummary(skill)
+		// Print built-in (embedded) skills first — they're always available.
+		if len(builtIn) > 0 {
+			fmt.Printf("Built-in skills (%d):\n\n", len(builtIn))
+			for _, name := range builtIn {
+				printEmbeddedSummary(name, detailed)
 			}
 		}
 
-		fmt.Println("\nUse 'Ctrl+A' in the AI TUI to switch between skills.")
+		// Print marketplace-installed skills.
+		if len(installed) > 0 {
+			fmt.Printf("Installed skills (%d):\n\n", len(installed))
+			for _, skill := range installed {
+				if detailed {
+					printSkillDetailed(skill)
+				} else {
+					printSkillSummary(skill)
+				}
+			}
+		}
+
+		fmt.Println("Use 'Ctrl+A' in the AI TUI to switch between skills.")
 
 		return nil
 	},
+}
+
+// printEmbeddedSummary prints a one-line summary of a built-in (embedded) skill.
+// Uses embedded.Load for the description — keeps the list command source-of-truth.
+func printEmbeddedSummary(name string, detailed bool) {
+	skill, err := embedded.Load(name)
+	if err != nil {
+		// Extremely unlikely (embed is static), but degrade gracefully.
+		fmt.Printf("✓ %s (built-in)\n\n", name)
+		return
+	}
+	if detailed {
+		fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		fmt.Printf("%s (Built-in)\n", skill.DisplayName)
+		fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		fmt.Printf("Name:         %s\n", skill.Name)
+		fmt.Printf("Description:  %s\n", skill.Description)
+		fmt.Printf("Type:         Built-in (embedded in Atmos binary)\n\n")
+		return
+	}
+	fmt.Printf("✓ %s\n  %s\n\n", skill.DisplayName, skill.Description)
 }
 
 func init() {

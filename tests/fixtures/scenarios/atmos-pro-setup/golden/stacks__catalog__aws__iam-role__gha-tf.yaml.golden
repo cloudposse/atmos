@@ -25,8 +25,8 @@ components:
               - "sts:TagSession"
               - "sts:SetSourceIdentity"
             resources:
-              - arn:aws:iam::<<.root_account_id>>:role/<<.namespace>>-gov-gbl-root-tfstate
-              - arn:aws:iam::<<.root_account_id>>:role/<<.namespace>>-gov-gbl-root-tfstate-ro
+              - arn:aws:iam::111111111111:role/ex-gov-gbl-root-tfstate
+              - arn:aws:iam::111111111111:role/ex-gov-gbl-root-tfstate-ro
 
     aws/iam-role/gha-tf-apply:
       metadata:
@@ -81,7 +81,7 @@ components:
         # Plan role must run on PR branches, so it overrides the main-only default.
         # Safe because the role only has ReadOnlyAccess.
         trusted_github_repos:
-          - "<<.org>>/<<.repo>>"
+          - "example/infra"
         managed_policy_arns:
           - arn:aws:iam::aws:policy/ReadOnlyAccess
         policy_statements:

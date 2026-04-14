@@ -920,10 +920,10 @@ func TestListCmd_OutputMessages(t *testing.T) {
 	})
 }
 
-// TestListCmd_EmptySkillsList tests the output when no skills are installed.
-// This test uses a temporary HOME directory to ensure a clean registry.
-func TestListCmd_EmptySkillsList(t *testing.T) {
-	// Save original HOME.
+// TestListCmd_NoMarketplaceSkills tests the output when no marketplace skills are
+// installed. Built-in (embedded) skills are always present and must be shown.
+// This test uses a temporary HOME directory to ensure a clean marketplace registry.
+func TestListCmd_NoMarketplaceSkills(t *testing.T) {
 	// Create a temp directory to use as HOME.
 	tempHome := t.TempDir()
 
@@ -951,7 +951,8 @@ func TestListCmd_EmptySkillsList(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	// Execute the command - should show no skills message.
+	// Execute the command. With no marketplace skills installed, the output
+	// should still list the built-in (embedded) skills that ship with Atmos.
 	err := listCmd.RunE(listCmd, []string{})
 
 	w.Close()
@@ -964,12 +965,13 @@ func TestListCmd_EmptySkillsList(t *testing.T) {
 
 	output := buf.String()
 
-	// Verify the empty skills output message.
-	assert.Contains(t, output, "No skills installed")
-	assert.Contains(t, output, "Install a skill with")
-	assert.Contains(t, output, "atmos ai skill install")
-	assert.Contains(t, output, "github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform")
-	assert.Contains(t, output, "Browse all available skills")
+	// Built-in skills header and at least one representative skill must appear.
+	assert.Contains(t, output, "Built-in skills")
+	assert.Contains(t, output, "atmos-pro")
+	assert.Contains(t, output, "atmos-terraform")
+	// The "Installed skills" header should NOT appear since the marketplace
+	// registry is empty in this test's HOME.
+	assert.NotContains(t, output, "Installed skills")
 }
 
 // TestListCmd_WithInstalledSkills tests listing skills when they are present.
