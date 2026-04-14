@@ -1,0 +1,23 @@
+vars:
+  stage: test
+
+components:
+  terraform:
+    # PRODUCER: has provision.workdir.enabled: true but no source URI.
+    # This is sufficient to exercise the JIT path resolution in !terraform.state.
+    producer:
+      metadata:
+        component: mock
+      vars:
+        foo: "foo-value"
+      provision:
+        workdir:
+          enabled: true
+
+    # CONSUMER: references producer's 'foo' output via !terraform.state.
+    # Three-parameter form: component=producer, stack=test, output=foo.
+    consumer:
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.state producer test foo
