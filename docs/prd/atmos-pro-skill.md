@@ -1,6 +1,6 @@
 # PRD: Atmos Pro Onboarding Skill
 
-## Status: Draft
+## Status: In Progress — Phases 1–5 implemented, manual validation pending
 
 ## Overview
 
@@ -426,46 +426,141 @@ template layout is deliberately compatible with it.
   `<<range>>` iteration with `<<$.topLevel>>`, root-account safety rail pinned to the plan
   role in the rendered apply profile.
 
-### Phase 3 — Path A: `atmos ai ask --skill` integration (week 3)
+### Phase 3 — Path A: `atmos ai ask --skill` integration (week 3) — ✅ Complete
 
-Ship the Atmos-dispatched invocation path end-to-end.
+- Embedded `agent-skills/skills/` into the Atmos binary via `//go:embed` at
+  `agent-skills/agentskills.go`. `atmos ai ask --skill atmos-pro` now works without
+  requiring a prior `atmos ai skill install` — all 23+ skills ship with the binary.
+- New `pkg/ai/skills/embedded/` package exposes `Load`, `LoadAll`, and an
+  `embedded.Loader{}` that implements `skills.SkillLoader`. Marketplace-installed skills
+  override embedded ones of the same name (first-writer-wins).
+- `skills.LoadSkills` and `skills.LoadAndValidate` now accept variadic loaders; call sites
+  in `pkg/ai/tui` and `pkg/ai/analyze` pass both the marketplace and embedded loaders.
+- Added `marketplace.ParseSkillMetadataBytes` so the embedded package can parse SKILL.md
+  from the embedded FS.
+- `atmos ai skill list` now shows a **Built-in skills** section ahead of Installed skills;
+  marketplace overrides are hidden from the built-in section.
+- `atmos-pro/SKILL.md` gained a `references:` frontmatter so the loader concatenates all
+  eight reference docs into the system prompt.
+- 7 unit tests in `pkg/ai/skills/embedded/embedded_test.go` cover loading, registry
+  override precedence, missing skills, and the `SkillLoader` interface contract.
+- **Deferred:** `--non-interactive --approve-all` flags on `atmos ai ask`. The global
+  `--interactive=false` flag already exists and the skill instructs agents to honor it,
+  but a dedicated "approve every tool call" flag is not yet plumbed. Minor follow-up.
 
-- Add `atmos-pro` to `agent-skills/AGENTS.md` skill index.
-- Verify `atmos ai ask "setup atmos pro" --skill atmos-pro` loads `SKILL.md` and executes the
-  full playbook with each configured AI provider (Claude API, OpenAI, Bedrock).
-- Implement non-interactive mode (`--non-interactive --approve-all`) for CI pipelines.
-- Confirm the skill's references (`references/*.md`) are loaded on demand by the Atmos AI
-  dispatcher, not all at once.
-- Write the validation fixture under `tests/fixtures/scenarios/atmos-pro-setup/` and the
-  golden-snapshot diff test.
+### Phase 4 — Path B: Claude Code direct integration (week 4) — ✅ Complete (pending manual validation)
 
-### Phase 4 — Path B: Claude Code direct integration (week 4)
+- `SKILL.md` now has a dedicated **Path A vs Path B** section that maps Claude Code's
+  native tools (Read, Write, Edit, Bash, TodoWrite) to the playbook steps and declares
+  byte-identical output as a contract between the two paths.
+- `pkg/ai/skills/marketplace/manifest_test.go` — `TestMarketplaceManifestShape` and
+  `TestPluginManifestShape` validate the structural invariants of the root-level
+  `marketplace.json` and `agent-skills/.claude-plugin/plugin.json`. Drift in either file
+  (name, license, URLs, Atmos-Pro description) breaks the test loudly before it reaches
+  the Claude Code marketplace.
+- `pkg/ai/skills/embedded/atmospro_test.go` — three self-containment tests:
+  `TestAtmosProSkill_SelfContained` (every reference path resolves inside the skill dir),
+  `TestAtmosProSkill_TemplatesSelfContained` (no symlinks under `templates/`), and
+  `TestAtmosProSkill_ReferencesDeclared` (every on-disk reference is declared in the
+  SKILL.md frontmatter). Together they ensure the skill can be fetched as a standalone
+  subtree without dangling references.
+- `pkg/ai/skills/atmospro/parity_test.go` — two cross-path parity tests:
+  `TestPathParity_AgentSkillsFSMatchesSourceTree` (embed.FS templates are byte-identical
+  to the on-disk source) and `TestPathParity_RenderedOutputMatchesGolden` (rendering the
+  embedded templates against the fixture matches the Phase 2 golden snapshots). Closes
+  the parity contract: whichever path the agent uses, the output matches the golden.
+- **Pending manual validation:** exercising Path B inside Claude Code against a real
+  Atmos repo. The deterministic infrastructure is in place; the remaining work is
+  real-world testing and capturing any friction in `references/troubleshooting.md`.
 
-Ship the Claude-Code-dispatched invocation path end-to-end.
+### Phase 5 — Safety & UX polish (week 5) — ✅ Complete (pending manual validation)
 
-- Verify `agent-skills/.claude-plugin/plugin.json` declares the plugin correctly so Claude Code
-  discovers `atmos-pro` alongside the other 22 skills via the plugin marketplace.
-- Test ad-hoc remote load: inside Claude Code, prompt the agent to load
-  `agent-skills/skills/atmos-pro/` from the Atmos repo and execute. Confirm progressive
-  disclosure works (Claude Code loads `SKILL.md` first, pulls `references/*` only as needed).
-- Confirm Claude Code's native tool calls (Read, Write, Bash, Git) produce output matching
-  the Path A golden snapshot. Both paths must generate identical artifacts for the same repo.
-- Add a Claude-Code-specific section to `SKILL.md` if any tool differences surface (e.g.,
-  how to run `atmos validate stacks` via Bash tool vs subprocess).
-- Exercise against a real Atmos repo with a human operator present; document any friction in
-  `references/troubleshooting.md`.
-
-### Phase 5 — Safety & UX polish (week 5)
-
-- Implement the pre-flight detection (GitHub Actions enabled, `github-oidc-provider` deployed,
-  tfstate backend discoverable).
-- Implement the PR-opening step with the rollout checklist body.
-- Ship `references/troubleshooting.md` populated from real onboarding failures.
+- New `pkg/atmospro/detect/` package with three pure-Go, `fs.FS`-based pre-flight probes:
+  `AtmosAuth(fsys)`, `Spacelift(fsys, stacksDir)`, `Geodesic(fsys)`, plus a
+  `detect.All(fsys, stacksDir)` aggregator returning results in deterministic order.
+- Each `Result` carries `Name`, `Detected`, `Details`, `Hint`, and `Evidence[]` so the
+  skill (or a future `atmos pro init`) can show the user exactly what was detected and
+  why.
+- 14 unit tests covering happy paths, false-positive guards (nested `settings.auth` must
+  not match the top-level probe), disabled Spacelift is ignored, missing stack dirs are
+  not errors, empty FS returns `ErrEmptyFS`, realistic mid-journey repos classify correctly.
+- **Network-dependent probes intentionally stay as shell commands** (GitHub Actions
+  enablement via `gh api`, `github-oidc-provider` deployment via `atmos describe component`,
+  tfstate-backend introspection). They are documented in
+  `references/starting-conditions.md` for the skill's Bash tool to execute — wrapping
+  them in Go would require GitHub-token and AWS-credential plumbing without a proportional
+  payoff at this stage.
+- `references/starting-conditions.md` gains a new "Deterministic probe package" section
+  with a table linking each probe name to its Go function.
+- `references/troubleshooting.md` expands from 7 to 10 entries with probe-specific
+  failure modes: nested-auth false negatives, stale Geodesic marker false positives,
+  Spacelift inheritance blind spots.
+- **PR-body rendering** was already shipped in Phase 1 as the
+  `docs/atmos-pro-pr-body.md.tmpl` template; Phase 2 golden-snapshot tests validate it
+  per-fixture.
+- **Pending manual validation:** running the full skill against a real repo and
+  confirming the pre-flight summary drives useful agent behavior.
 
 ### Phase 6 — Deterministic fallback (future; not in this PRD)
 
 - Optional: an `atmos pro init` Go command that calls the same generators without an AI.
-- Targets users who need reproducible, unattended runs (CI pipelines that bootstrap new orgs).
+- All the building blocks now exist:
+  - `pkg/atmospro/detect` — pre-flight probes (Phase 5)
+  - `pkg/ai/skills/atmospro` — template renderer (Phase 2)
+  - `agent-skills/skills/atmos-pro/templates/` — source templates
+  - Golden-snapshot test suite — regression guard
+- A Phase 6 command would wire these together behind a Cobra command with
+  `--non-interactive --approve-all` flags, matching the AI-dispatched path's invariants.
+  Targets users who need reproducible, unattended runs (CI pipelines that bootstrap new
+  orgs).
+
+## Manual Validation Checklist
+
+The automated test suite validates the deterministic layer (detection, rendering,
+self-containment, parity). Live validation of the AI-driven paths remains a manual
+exercise. Track completion here as each path is exercised against a real repo.
+
+### Path A — `atmos ai ask --skill atmos-pro`
+
+- [ ] Skill is listed in `atmos ai skill list` without prior install
+- [ ] `atmos ai ask "setup atmos pro" --skill atmos-pro` loads the skill from the
+      embedded bundle with a configured AI provider (Claude API)
+- [ ] Agent creates an isolated worktree and does not touch the main checkout
+- [ ] Agent runs the detection probes and reports a plan summary before writing
+- [ ] Generated artifacts match the golden snapshot for the equivalent `RenderData`
+- [ ] `atmos validate stacks` passes on the worktree
+- [ ] `gh pr create` produces a PR with the expected body and rollout checklist
+- [ ] Repeat with OpenAI and Bedrock providers if available
+
+### Path B — Claude Code direct
+
+- [ ] `/plugin marketplace add cloudposse/atmos` succeeds against the current repo
+- [ ] `/plugin install atmos@cloudposse` installs without errors
+- [ ] Claude Code sees `atmos-pro` in the skills list
+- [ ] Prompting "set up Atmos Pro" activates the skill and loads `SKILL.md`
+- [ ] Reference files are loaded on demand (progressive disclosure) rather than all
+      upfront
+- [ ] Generated artifacts match the Path A output byte-for-byte against the same repo
+      state (modulo environment-specific values like account IDs)
+- [ ] `atmos validate stacks` passes on the generated worktree
+
+### Starting-condition variants
+
+Run each variant against a representative fixture and confirm the skill selects the
+documented behavior from `references/starting-conditions.md`:
+
+- [ ] GitHub Actions disabled org-wide — skill stops with the correct URL
+- [ ] No Atmos Auth in repo — skill generates standalone profiles, does not retrofit
+- [ ] Atmos Auth already configured — skill adds github-oidc provider via patch file
+- [ ] Spacelift currently enabled — mixin sets `workspace_enabled: false`
+- [ ] Geodesic-based dev environment — generated docs gain Geodesic section
+- [ ] `github-oidc-provider` not deployed — rollout checklist gains step-0
+
+### Failure-mode validation
+
+For each entry in `references/troubleshooting.md`, reproduce the symptom in a scratch
+environment and confirm the documented fix resolves it. Update the entry if the
+symptom, cause, or fix differs.
 
 ## Alternatives Considered
 
