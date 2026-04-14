@@ -2,10 +2,12 @@ package output
 
 import (
 	"fmt"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -155,6 +157,25 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 			WithCause(err).
 			WithExplanationf("Component '%s' in stack '%s'.", component, stack).
 			Err()
+	}
+
+	// When workdir provisioning is active, all terraform operations must target the
+	// workdir, not the base component directory. The workdir path is deterministic
+	// (built from basePath + componentType + stack + instance name) so we can
+	// reconstruct it here even when _workdir_path is absent from freshly-described
+	// sections (e.g. during hook execution where DescribeComponent is called fresh).
+	if provWorkdir.IsWorkdirEnabled(sections) {
+		basePath := atmosConfig.BasePath
+		if basePath == "" {
+			basePath = "."
+		}
+		workdirPath := provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
+		if !filepath.IsAbs(workdirPath) {
+			if abs, absErr := filepath.Abs(workdirPath); absErr == nil {
+				workdirPath = abs
+			}
+		}
+		return workdirPath, nil
 	}
 
 	return componentPath, nil
