@@ -546,9 +546,9 @@ const config = {
                         label: 'Examples'
                     },
                     {
-                        to: '/gists',
+                        to: '/pro',
                         position: 'left',
-                        label: 'Gists'
+                        label: 'Pro'
                     },
                     {
                         label: 'Community',

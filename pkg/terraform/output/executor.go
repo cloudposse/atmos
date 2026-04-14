@@ -17,8 +17,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/terminal"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -39,7 +38,7 @@ func wrapDescribeError(component, stack string, err error) error {
 	return errUtils.WrapComponentDescribeError(component, stack, err, "component")
 }
 
-// terraformOutputsCache caches terraform outputs by stack-component slug.
+// terraformOutputsCache caches terraform outputs by stack-component key.
 var terraformOutputsCache = sync.Map{}
 
 // ResetOutputsCache clears the terraform outputs cache.
@@ -51,6 +50,14 @@ func ResetOutputsCache() {
 		terraformOutputsCache.Delete(key)
 		return true
 	})
+}
+
+// stackComponentKey builds an unambiguous cache key from stack and component names.
+// A null byte separator prevents collisions when either name contains hyphens
+// (e.g. stack "us-east-1-dev" + component "vpc" must not collide with
+// stack "us-east-1" + component "dev-vpc").
+func stackComponentKey(stack, component string) string {
+	return stack + "\x00" + component
 }
 
 // TerraformRunner abstracts terraform-exec operations for testability.
@@ -203,7 +210,7 @@ func (e *Executor) GetAllOutputs(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetAllOutputs")()
 
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	stackSlug := stackComponentKey(stack, component)
 	if outputs := checkOutputsCache(stackSlug, component, stack); outputs != nil {
 		return outputs, nil
 	}
@@ -216,11 +223,13 @@ func (e *Executor) GetAllOutputs(
 	opts := &OutputOptions{QuietMode: true, SkipInit: skipInit}
 	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts, authManager)
 	if err != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, err
 	}
 
-	u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+	ui.ClearLine()
+	ui.Success(message)
 	return outputs, nil
 }
 
@@ -245,7 +254,7 @@ func (e *Executor) GetOutput(
 		}
 	}
 
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	stackSlug := stackComponentKey(stack, component)
 
 	// Check cache first.
 	if !skipCache {
@@ -269,7 +278,8 @@ func (e *Executor) GetOutput(
 		AuthManager:          authManager,
 	})
 	if err != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
@@ -279,10 +289,12 @@ func (e *Executor) GetOutput(
 			terraformOutputsCache.Store(stackSlug, staticOutputs)
 			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
 			if resultErr != nil {
-				u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+				ui.ClearLine()
+				ui.Error(message)
 				return nil, false, resultErr
 			}
-			u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+			ui.ClearLine()
+			ui.Success(message)
 			return value, exists, nil
 		}
 	}
@@ -293,8 +305,12 @@ func (e *Executor) GetOutput(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil)
 	if err != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
-		return nil, false, fmt.Errorf("failed to execute terraform output for component %s in stack %s: %w", component, stack, err)
+		ui.ClearLine()
+		ui.Error(message)
+		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
+			Err()
 	}
 
 	// Cache the result.
@@ -302,11 +318,119 @@ func (e *Executor) GetOutput(
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
 	if resultErr != nil {
-		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
+		ui.ClearLine()
+		ui.Error(message)
 		return nil, false, resultErr
 	}
 
-	u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.Checkmark, message)
+	ui.ClearLine()
+	ui.Success(message)
+	return value, exists, nil
+}
+
+// GetOutputWithOptions retrieves a specific terraform output with explicit execution options.
+// Unlike GetOutput, this method accepts OutputOptions so callers can pass SkipInit: true
+// when the workdir is already initialised (e.g. after-terraform-apply hooks).
+//
+//nolint:revive // argument-limit: matches GetOutput signature plus opts.
+func (e *Executor) GetOutputWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+	component string,
+	output string,
+	skipCache bool,
+	authContext *schema.AuthContext,
+	authManager any,
+	opts *OutputOptions,
+) (any, bool, error) {
+	defer perf.Track(atmosConfig, "output.Executor.GetOutputWithOptions")()
+
+	// Validate authManager type if provided.
+	if authManager != nil {
+		if _, ok := authManager.(auth.AuthManager); !ok {
+			return nil, false, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
+		}
+	}
+
+	stackSlug := stackComponentKey(stack, component)
+
+	// Check cache first.
+	if !skipCache {
+		if cachedOutputs, found := terraformOutputsCache.Load(stackSlug); found && cachedOutputs != nil {
+			log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
+			return getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
+		}
+	}
+
+	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+	stopSpinner := startSpinnerOrLog(atmosConfig, message, component, stack)
+	defer stopSpinner()
+
+	// Describe the component to get its configuration.
+	// When SkipInit is set and no authManager is provided, skip YAML function
+	// processing to avoid failures on auth-backed functions (e.g. !terraform.state)
+	// that need credentials which may not be available in post-hook context.
+	processYamlFunctions := true
+	if opts != nil && opts.SkipInit && authManager == nil {
+		processYamlFunctions = false
+	}
+
+	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: processYamlFunctions,
+		AuthManager:          authManager,
+	})
+	if err != nil {
+		ui.ClearLine()
+		ui.Error(message)
+		return nil, false, wrapDescribeError(component, stack, err)
+	}
+
+	// Check for static remote state backend.
+	if e.staticRemoteStateGetter != nil {
+		if staticOutputs := e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(&sections); staticOutputs != nil {
+			terraformOutputsCache.Store(stackSlug, staticOutputs)
+			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
+			if resultErr != nil {
+				ui.ClearLine()
+				ui.Error(message)
+				return nil, false, resultErr
+			}
+			ui.ClearLine()
+			ui.Success(message)
+			return value, exists, nil
+		}
+	}
+
+	// Execute terraform output with caller-supplied options.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
+
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts)
+	if err != nil {
+		ui.ClearLine()
+		ui.Error(message)
+		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
+			Err()
+	}
+
+	// Cache the result.
+	terraformOutputsCache.Store(stackSlug, outputs)
+
+	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
+	if resultErr != nil {
+		ui.ClearLine()
+		ui.Error(message)
+		return nil, false, resultErr
+	}
+
+	ui.ClearLine()
+	ui.Success(message)
 	return value, exists, nil
 }
 
@@ -372,7 +496,10 @@ func (e *Executor) fetchAndCacheOutputs(
 
 	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute terraform output for component %s in stack %s: %w", component, stack, err)
+		return nil, errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanationf("failed to execute terraform output for component %s in stack %s", component, stack).
+			Err()
 	}
 
 	terraformOutputsCache.Store(stackSlug, outputs)

@@ -86,6 +86,7 @@ func TestListInstancesOptions(t *testing.T) {
 		Stack:      "prod-*",
 		Query:      ".component",
 		Upload:     false,
+		OutputFile: "",
 	}
 
 	assert.Equal(t, "json", opts.Format)
@@ -94,6 +95,18 @@ func TestListInstancesOptions(t *testing.T) {
 	assert.Equal(t, "prod-*", opts.Stack)
 	assert.Equal(t, ".component", opts.Query)
 	assert.False(t, opts.Upload)
+	assert.Empty(t, opts.OutputFile)
+}
+
+// TestListInstancesOptions_MatrixFormat tests matrix format with output-file option.
+func TestListInstancesOptions_MatrixFormat(t *testing.T) {
+	opts := &InstancesOptions{
+		Format:     "matrix",
+		OutputFile: "/tmp/github_output",
+	}
+
+	assert.Equal(t, "matrix", opts.Format)
+	assert.Equal(t, "/tmp/github_output", opts.OutputFile)
 }
 
 // TestListInstancesOptions_Upload tests the upload flag behavior.
@@ -269,4 +282,18 @@ func TestInstancesParserInit(t *testing.T) {
 	}
 	// Note: If the flag is not found, that's not necessarily an error - it may be registered
 	// lazily or through a different mechanism. The important test is that the parser exists.
+}
+
+// TestInstancesOutputFileFlag tests that the output-file flag is registered.
+func TestInstancesOutputFileFlag(t *testing.T) {
+	// The output-file flag should be registered on the instances command.
+	outputFileFlag := instancesCmd.Flags().Lookup("output-file")
+	if outputFileFlag == nil {
+		outputFileFlag = instancesCmd.PersistentFlags().Lookup("output-file")
+	}
+
+	assert.NotNil(t, outputFileFlag, "output-file flag should be registered on instances command")
+	if outputFileFlag != nil {
+		assert.Equal(t, "", outputFileFlag.DefValue, "output-file flag default should be empty")
+	}
 }

@@ -204,6 +204,7 @@ module.exports = {
                 {type: 'doc', id: 'cli/versioning', label: 'Versioning'},
                 {type: 'doc', id: 'projects/layout', label: 'Folder Structure'},
                 {type: 'doc', id: 'ai/ai', label: 'Atmos AI'},
+                {type: 'doc', id: 'pro/pro', label: 'Atmos Pro'},
                 {
                     type: 'category',
                     label: 'Native CI',

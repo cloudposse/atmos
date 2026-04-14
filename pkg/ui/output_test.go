@@ -309,6 +309,7 @@ func TestWriteln(t *testing.T) {
 }
 
 func TestSuccess(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -333,6 +334,7 @@ func TestSuccess(t *testing.T) {
 }
 
 func TestSuccessf(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -354,6 +356,7 @@ func TestSuccessf(t *testing.T) {
 }
 
 func TestError(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -375,6 +378,7 @@ func TestError(t *testing.T) {
 }
 
 func TestErrorf(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -396,6 +400,7 @@ func TestErrorf(t *testing.T) {
 }
 
 func TestWarning(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -417,6 +422,7 @@ func TestWarning(t *testing.T) {
 }
 
 func TestWarningf(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -438,6 +444,7 @@ func TestWarningf(t *testing.T) {
 }
 
 func TestInfo(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
@@ -459,6 +466,7 @@ func TestInfo(t *testing.T) {
 }
 
 func TestInfof(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 

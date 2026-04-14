@@ -87,7 +87,12 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	log.Debug("Running hooks", "count", len(h.items))
 
-	for _, hook := range h.items {
+	for name, hook := range h.items {
+		if !hook.MatchesEvent(event) {
+			log.Debug("Skipping hook, event not in hook events list", "hook", name, "event", event, "hook_events", hook.Events)
+			continue
+		}
+
 		var hookCmd Command
 		var err error
 

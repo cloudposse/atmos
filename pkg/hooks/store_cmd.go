@@ -40,9 +40,11 @@ type StoreCommand struct {
 
 func NewStoreCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*StoreCommand, error) {
 	return &StoreCommand{
-		Name:         "store",
-		atmosConfig:  atmosConfig,
-		info:         info,
+		Name:        "store",
+		atmosConfig: atmosConfig,
+		info:        info,
+		// outputGetter is resolved per-event in RunE: after-events skip init (workdir
+		// already initialized by apply/plan); before-events run init normally.
 		outputGetter: tfoutput.GetOutput,
 	}, nil
 }
@@ -51,15 +53,15 @@ func (c *StoreCommand) GetName() string {
 	return c.Name
 }
 
-func (c *StoreCommand) processStoreCommand(hook *Hook) error {
+func (c *StoreCommand) processStoreCommand(hook *Hook, event HookEvent) error {
 	if len(hook.Outputs) == 0 {
 		log.Info("Skipping hook. No outputs configured", "hook", hook.Name, "outputs", hook.Outputs)
 		return nil
 	}
 
-	log.Debug("Executing 'after-terraform-apply' hook", "hook", hook.Name, "command", hook.Command)
+	log.Debug("Executing store hook", "hook", hook.Name, "command", hook.Command)
 	for key, value := range hook.Outputs {
-		outputKey, outputValue, err := c.getOutputValue(value)
+		outputKey, outputValue, err := c.getOutputValue(hook.Name, event, value)
 		if err != nil {
 			return err
 		}
@@ -73,7 +75,9 @@ func (c *StoreCommand) processStoreCommand(hook *Hook) error {
 }
 
 // getOutputValue gets an output from terraform or returns a literal value.
-func (c *StoreCommand) getOutputValue(value string) (string, any, error) {
+// hookName and event are included in error messages so the user can identify
+// which hook triggered the failure.
+func (c *StoreCommand) getOutputValue(hookName string, event HookEvent, value string) (string, any, error) {
 	outputKey := strings.TrimPrefix(value, ".")
 	var outputValue any
 
@@ -83,13 +87,15 @@ func (c *StoreCommand) getOutputValue(value string) (string, any, error) {
 		outputValue, exists, err = c.outputGetter(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true, c.info.AuthContext, c.info.AuthManager)
 		// Handle errors from terraform output retrieval (SDK errors, network issues, etc.).
 		if err != nil {
-			return "", nil, fmt.Errorf("%w: failed to get terraform output for key %s: %w", errUtils.ErrNilTerraformOutput, outputKey, err)
+			return "", nil, fmt.Errorf("%w: hook %q (event %q) failed to get terraform output %q for component %q in stack %q: %w",
+				errUtils.ErrTerraformOutputFailed, hookName, event, outputKey, c.info.ComponentFromArg, c.info.Stack, err)
 		}
 
 		// Handle missing outputs (key doesn't exist).
 		// This is different from a legitimate null value.
 		if !exists {
-			return "", nil, fmt.Errorf("%w: terraform output key %s does not exist", errUtils.ErrNilTerraformOutput, outputKey)
+			return "", nil, fmt.Errorf("%w: hook %q (event %q) could not find terraform output %q for component %q in stack %q",
+				errUtils.ErrTerraformOutputNotFound, hookName, event, outputKey, c.info.ComponentFromArg, c.info.Stack)
 		}
 
 		// At this point, exists==true, but outputValue may be nil.
@@ -115,7 +121,15 @@ func (c *StoreCommand) storeOutput(hook *Hook, key string, outputKey string, out
 	return store.Set(c.info.Stack, c.info.ComponentFromArg, key, outputValue)
 }
 
-// RunE is the entrypoint for the store command
+// RunE is the entrypoint for the store command.
+// It selects the appropriate terraform output getter based on the event: after-events
+// (e.g. after-terraform-apply) skip terraform init because the workdir is already
+// initialized; before-events run init normally since the workdir may not exist yet.
 func (c *StoreCommand) RunE(hook *Hook, event HookEvent, cmd *cobra.Command, args []string) error {
-	return c.processStoreCommand(hook)
+	if event.IsPostExecution() {
+		c.outputGetter = tfoutput.GetOutputSkipInit
+	} else {
+		c.outputGetter = tfoutput.GetOutput
+	}
+	return c.processStoreCommand(hook, event)
 }

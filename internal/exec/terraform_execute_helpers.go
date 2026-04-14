@@ -138,12 +138,16 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 		return "", fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
-	if err = autoGenerateComponentFiles(atmosConfig, info, componentPath); err != nil {
+	// Provision source BEFORE generating files so that generated files are written to
+	// the correct (possibly JIT workdir) path. When provision.workdir.enabled is true,
+	// provisionComponentSource returns the workdir path; autoGenerateComponentFiles must
+	// write to that path, not the base component directory.
+	componentPath, componentPathExists, err := provisionComponentSource(atmosConfig, info, componentPath)
+	if err != nil {
 		return "", err
 	}
 
-	componentPath, componentPathExists, err := provisionComponentSource(atmosConfig, info, componentPath)
-	if err != nil {
+	if err = autoGenerateComponentFiles(atmosConfig, info, componentPath); err != nil {
 		return "", err
 	}
 
@@ -431,10 +435,34 @@ func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema
 }
 
 // buildInitArgs constructs the argument list for `terraform init`.
-// It adds -reconfigure when the component uses the workspace subcommand or when
-// InitRunReconfigure is enabled, and appends the varfile flag when PassVars is set.
+//
+// For non-workdir components, -reconfigure is added when:
+//   - the component uses the workspace subcommand, or
+//   - InitRunReconfigure is explicitly enabled in atmos.yaml.
+//
+// For workdir components, InitRunReconfigure is intentionally ignored when the workdir
+// was not re-provisioned this invocation. The backend configuration for workdir
+// components is always generated deterministically from the same stack config, so it
+// never changes between runs of a preserved workdir. When -reconfigure is combined
+// with existing workspace state directories (terraform.tfstate.d/), OpenTofu treats
+// init as a fresh backend initialization and prompts "Do you want to migrate all
+// workspaces?" — even when the backend is unchanged. The correct signal to add
+// -reconfigure for workdir components is WorkdirReprovisionedKey, which is set only
+// when the workdir was actually wiped and re-downloaded (TTL expired or TTL=0s).
 func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, varFile string) []string {
-	if info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure {
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
+
+	var useReconfigure bool
+	if hasWorkdir {
+		// Workdir component: only reconfigure when the workdir was actually wiped.
+		useReconfigure = wasReprovisioned || info.SubCommand == subcommandWorkspace
+	} else {
+		// Non-workdir component: honour global InitRunReconfigure setting.
+		useReconfigure = info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure
+	}
+
+	if useReconfigure {
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			return []string{subcommandInit, "-reconfigure", varFileFlag, varFile}
 		}
@@ -447,11 +475,25 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 // prepareInitExecution performs the pre-init housekeeping:
-//  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection.
+//  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection
+//     (skipped for workdir-enabled components — see note below).
 //  2. Executes all provisioners registered for the before.terraform.init hook event.
 //  3. Returns the effective component path (which may be overridden by a workdir provisioner).
+//
+// NOTE on cleanTerraformWorkspace and workdir components:
+// cleanTerraformWorkspace was designed to prevent workspace-selection prompts when different
+// backends are used for the same component across runs.  For workdir-enabled components the
+// backend configuration is always consistent (generated fresh from the same stack config),
+// so deleting .terraform/environment is not only unnecessary — it is actively harmful:
+// when -reconfigure or init_run_reconfigure is also used, OpenTofu sees workspace state
+// directories (terraform.tfstate.d/) but no .terraform/environment file and interprets the
+// situation as a backend migration, producing the "Do you want to migrate all workspaces?"
+// prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
-	cleanTerraformWorkspace(*atmosConfig, componentPath)
+	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if !isWorkdir {
+		cleanTerraformWorkspace(*atmosConfig, componentPath)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()

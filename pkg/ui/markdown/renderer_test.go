@@ -80,6 +80,7 @@ func TestRenderer(t *testing.T) {
 }
 
 func TestRenderErrorf(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name     string
 		input    string
@@ -171,6 +172,7 @@ func TestTrimTrailingSpaces(t *testing.T) {
 }
 
 func TestRenderer_NonTTY_ASCII(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	r, _ := NewRenderer(schema.AtmosConfiguration{})
 	r.isTTYSupportForStdout = func() bool { return false }
 	defer func() {

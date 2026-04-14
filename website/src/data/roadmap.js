@@ -165,6 +165,17 @@ export const roadmapConfig = {
       pr: 2251,
       changelog: 'chunked-stack-uploads',
     },
+    {
+      id: 'pro-commit',
+      icon: 'RiGitCommitLine',
+      title: 'Server-Side Commits via GitHub App',
+      tagline: 'Commits that trigger CI, without write tokens',
+      description: 'New `atmos pro commit` command sends changes to Atmos Pro, which creates the commit server-side using its GitHub App. Commits trigger CI workflows unlike GITHUB_TOKEN commits.',
+      benefits: 'Replaces autofix.ci for autocommit workflows. The workflow never receives a write token — Atmos Pro controls exactly what gets committed.',
+      status: 'shipped',
+      quarter: 'q2-2026',
+      changelog: 'pro-commit',
+    },
   ],
 
   initiatives: [
@@ -258,6 +269,7 @@ export const roadmapConfig = {
         { label: 'Command aliases for vendor and workflow list', status: 'shipped', quarter: 'q1-2026', changelog: 'vendor-workflow-list-aliases', description: 'Added `atmos vendor list` and `atmos workflow list` as aliases for their `atmos list` counterparts for intuitive command discovery.', benefits: 'Users can use either command form. Natural command structure regardless of preference.' },
         { label: 'Packer directory-based templates', status: 'shipped', quarter: 'q1-2026', pr: 1982, changelog: 'packer-directory-based-templates', description: 'Packer commands now default to directory mode, loading all *.pkr.hcl files from the component directory. Aligns with HashiCorp best practices for multi-file configurations.', benefits: 'Organize Packer configurations across multiple files without explicit template configuration. Just run atmos packer build and it works.' },
         { label: 'AI Agent Skills (19 domain skills)', status: 'shipped', quarter: 'q1-2026', changelog: 'ai-agent-skills', docs: '/ai/agent-skills', description: 'Atmos ships 19 domain-specific agent skills covering stacks, components, vendoring, terraform, helmfile, packer, ansible, workflows, custom-commands, auth, stores, schemas, gitops, validation, templates, design-patterns, toolchain, introspection, and devcontainers. Compatible with Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and more.', benefits: 'AI coding assistants get deep knowledge of Atmos conventions and patterns. Contributors and users get AI assistance that understands Atmos stack configuration, orchestration, and best practices.' },
+        { label: '`terraform.workspace.prefix_separator` setting for backend key prefixes', status: 'shipped', quarter: 'q2-2026', pr: 2313, changelog: 'workspace-prefix-separator', description: 'New `prefix_separator` setting in `atmos.yaml` under `components.terraform.workspace` controls the character used when Atmos builds workspace key prefixes for S3 (`workspace_key_prefix`), GCS (`prefix`), and Azure (`key`) backends. Set `prefix_separator: "/"` to preserve the component directory hierarchy in state bucket paths instead of flattening with hyphens.', benefits: 'Large component libraries can keep state buckets organized to match their directory structure. Teams that use nested component paths (e.g., vpc/subnets) get a matching state path without manual backend configuration.' },
       ],
       issues: [],
       prs: [
@@ -282,6 +294,7 @@ export const roadmapConfig = {
         { label: 'Customizable list columns for tailored views', status: 'shipped', quarter: 'q4-2025', changelog: 'customizable-list-command-output', version: 'v1.201.0', description: 'Configure which columns appear in list output to show the data relevant to your workflow.', category: 'featured', priority: 'high', benefits: 'Show exactly the information you need—environment, region, component status—without noise.' },
         { label: 'Easy filter output using jq-like queries (`--query`)', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/stacks', description: 'Filter and transform list output with familiar jq-style expressions (powered by JMESPath) for precise data extraction.', codeExample: 'atmos list stacks --query "[?components.terraform.vpc]"', category: 'featured', priority: 'high', benefits: 'Query your infrastructure like a database. Find stacks with specific components or configurations instantly.' },
         { label: '`atmos list aliases` shows built-in and configured aliases', status: 'shipped', quarter: 'q1-2026', pr: 1954, changelog: 'list-and-toolchain-enhancements', description: 'List all command aliases including built-in shortcuts (tf→terraform, hf→helmfile) and user-configured aliases from atmos.yaml.', codeExample: 'atmos list aliases --format json', benefits: 'Discover all available shortcuts without reading docs. See both built-in and custom aliases in one place.' },
+        { label: '`atmos list instances --format=matrix` for GitHub Actions CI/CD', status: 'shipped', quarter: 'q2-2026', pr: 2322, changelog: 'list-instances-matrix', description: 'Generate GitHub Actions-compatible matrix JSON from list instances, with --output-file support for $GITHUB_OUTPUT.', codeExample: 'atmos list instances --format=matrix --output-file=$GITHUB_OUTPUT', benefits: 'Drive parallel CI/CD jobs from the full instance list without scripting. Same matrix format as describe affected.' },
       ],
       issues: [],
       prs: [

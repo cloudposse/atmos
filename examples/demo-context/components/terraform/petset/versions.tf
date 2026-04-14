@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     context = {
-      source = "cloudposse/context"
+      source  = "cloudposse/context"
       version = "0.4.0"
     }
   }

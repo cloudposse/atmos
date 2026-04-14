@@ -101,6 +101,14 @@ const (
 	// This is set by the workdir provisioner and checked by terraform execution to override
 	// the component path with the workdir path.
 	WorkdirPathKey = "_workdir_path"
+
+	// WorkdirReprovisionedKey is set in componentConfig when the workdir was actually wiped
+	// and re-provisioned during this command invocation (i.e. the source provisioner ran
+	// vendorToTarget, not just touched LastAccessed). This is the correct signal to use when
+	// deciding whether to pass -reconfigure to terraform init: a re-provisioned workdir has
+	// no .terraform/ cache, so -reconfigure is safe; a preserved workdir has a valid cache
+	// and -reconfigure causes a spurious "migrate all workspaces?" prompt.
+	WorkdirReprovisionedKey = "_workdir_reprovisioned"
 )
 
 // BuildPath constructs the canonical workdir path for a component instance.
