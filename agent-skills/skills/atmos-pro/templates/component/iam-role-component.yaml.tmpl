@@ -1,0 +1,24 @@
+# components/terraform/aws/iam-role/component.yaml
+#
+# Vendor manifest for the aws/iam-role component.
+# Creates IAM roles with GitHub OIDC support for Atmos Pro CI/CD.
+# Lives under components/terraform/aws/ to avoid collision with the legacy
+# components/terraform/iam-role/ component.
+
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+spec:
+  source:
+    uri: github.com/cloudposse-terraform-components/aws-iam-role.git//src?ref={{ `{{ .Version }}` }}
+    version: v1.537.0
+    included_paths:
+      - "**/**"
+    excluded_paths:
+      - "**/providers.tf"
+  mixins:
+    - uri: https://raw.githubusercontent.com/cloudposse-terraform-components/mixins/{{ `{{ .Version }}` }}/src/mixins/provider-without-account-map.tf
+      version: v0.3.0
+      filename: providers.tf
+    - uri: https://raw.githubusercontent.com/cloudposse-terraform-components/mixins/{{ `{{ .Version }}` }}/src/mixins/account-verification.mixin.tf
+      version: v0.3.0
+      filename: account-verification.mixin.tf

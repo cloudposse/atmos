@@ -66,6 +66,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/skills/atmos-stores/SKILL.md`          |
 | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation                     | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
 | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                                   | `atmos-gitops`          | `agent-skills/skills/atmos-gitops/SKILL.md`          |
+| Atmos Pro onboarding: OIDC IAM roles, auth profiles, CI workflows, `settings.pro`, open a PR                          | `atmos-pro`             | `agent-skills/skills/atmos-pro/SKILL.md`             |
 | OPA/Rego policies, JSON Schema validation, `atmos validate component/stacks`                                          | `atmos-validation`      | `agent-skills/skills/atmos-validation/SKILL.md`      |
 | YAML functions: !terraform.state, !terraform.output, !store, !store.get, !env, !exec, !include, !aws.*, !literal     | `atmos-yaml-functions`  | `agent-skills/skills/atmos-yaml-functions/SKILL.md`  |
 | Go templates, Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, template configuration            | `atmos-templates`       | `agent-skills/skills/atmos-templates/SKILL.md`       |

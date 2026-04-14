@@ -1,0 +1,109 @@
+# stacks/catalog/aws/iam-role/gha-tf.yaml
+#
+# Concrete OIDC roles for Atmos Pro CI/CD:
+#   - gha-tf-plan  (ReadOnly, any ref)   -- used for terraform plan
+#   - gha-tf-apply (Administrator, main) -- used for terraform apply
+#
+# Both roles include sts:AssumeRole on the tfstate backend roles so Terraform
+# can read/write state. The tfstate backend must reciprocally trust the new
+# role ARNs via stacks/catalog/tfstate-backend/defaults.yaml allowed_principal_arns.
+
+import:
+  - catalog/aws/iam-role/defaults
+
+components:
+  terraform:
+    aws/iam-role/gha-tf/defaults:
+      metadata:
+        type: abstract
+      vars:
+        policy_statements:
+          TerraformStateBackendAssumeRole:
+            effect: "Allow"
+            actions:
+              - "sts:AssumeRole"
+              - "sts:TagSession"
+              - "sts:SetSourceIdentity"
+            resources:
+              - arn:aws:iam::{{ .root_account_id }}:role/{{ .namespace }}-gov-gbl-root-tfstate
+              - arn:aws:iam::{{ .root_account_id }}:role/{{ .namespace }}-gov-gbl-root-tfstate-ro
+
+    aws/iam-role/gha-tf-apply:
+      metadata:
+        component: aws/iam-role
+        inherits:
+          - aws/iam-role/defaults
+          - aws/iam-role/gha-tf/defaults
+      vars:
+        name: gha-tf-apply
+        role_description: "Role for Tofu/Terraform apply via Atmos Pro automation"
+        managed_policy_arns:
+          - arn:aws:iam::aws:policy/AdministratorAccess
+        policy_statements:
+          SSMParameterWriteAccess:
+            effect: "Allow"
+            actions:
+              - "ssm:PutParameter"
+              - "ssm:DeleteParameter"
+              - "ssm:GetParameter"
+              - "ssm:GetParameters"
+              - "ssm:GetParameterHistory"
+              - "ssm:GetParametersByPath"
+              - "ssm:DescribeParameters"
+              - "ssm:AddTagsToResource"
+              - "ssm:RemoveTagsFromResource"
+              - "ssm:ListTagsForResource"
+            resources:
+              - "*"
+          KMSDecryptForSSM:
+            effect: "Allow"
+            actions:
+              - "kms:Decrypt"
+              - "kms:Encrypt"
+              - "kms:GenerateDataKey"
+              - "kms:DescribeKey"
+            resources:
+              - "*"
+            condition:
+              StringEquals:
+                "kms:ViaService":
+                  - "ssm.*.amazonaws.com"
+
+    aws/iam-role/gha-tf-plan:
+      metadata:
+        component: aws/iam-role
+        inherits:
+          - aws/iam-role/defaults
+          - aws/iam-role/gha-tf/defaults
+      vars:
+        name: gha-tf-plan
+        role_description: "Role for Tofu/Terraform plan via Atmos Pro automation (read-only)"
+        # Plan role must run on PR branches, so it overrides the main-only default.
+        # Safe because the role only has ReadOnlyAccess.
+        trusted_github_repos:
+          - "{{ .org }}/{{ .repo }}"
+        managed_policy_arns:
+          - arn:aws:iam::aws:policy/ReadOnlyAccess
+        policy_statements:
+          SSMParameterReadAccess:
+            effect: "Allow"
+            actions:
+              - "ssm:GetParameter"
+              - "ssm:GetParameters"
+              - "ssm:GetParameterHistory"
+              - "ssm:GetParametersByPath"
+              - "ssm:DescribeParameters"
+              - "ssm:ListTagsForResource"
+            resources:
+              - "*"
+          KMSDecryptForSSM:
+            effect: "Allow"
+            actions:
+              - "kms:Decrypt"
+              - "kms:DescribeKey"
+            resources:
+              - "*"
+            condition:
+              StringEquals:
+                "kms:ViaService":
+                  - "ssm.*.amazonaws.com"

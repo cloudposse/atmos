@@ -32,7 +32,7 @@ with Atmos and Atmos Pro versions.
 - GitHub Actions was disabled organization-wide for security reasons.
 - The customer was not using Atmos Auth at all.
 - The customer used federated IAM roles with Okta (not AWS Identity Center + Okta), so
-  Atmos Pro works but Atmos Auth local-dev benefits do not automatically apply.
+  Atmos Pro works, but Atmos Auth local-dev benefits do not automatically apply.
 - Engineers used Geodesic shells with Atmos; Atmos Pro onboarding via Geodesic had never
   been exercised.
 
@@ -274,21 +274,110 @@ The skill's `references/auth-profiles.md` names the resolution rule explicitly:
 Identity names are not configurable in v1 — matching the naming used by the reference
 implementation is more important than supporting variants.
 
-## Invocation Options
+## Invocation Paths
 
-The skill supports three invocation modes, in order of preference:
+The skill supports two primary invocation paths with meaningfully different ergonomics, plus a
+direct-load fallback for tools outside our control. All three paths execute the same skill and
+produce the same output; the difference is *who dispatches the agent and where the AI provider
+lives*.
 
-1. **Interactive AI** (primary): `atmos ai ask "setup atmos pro" --skill atmos-pro`.
-   The agent asks clarifying questions; user approves the plan; agent generates and validates.
-2. **Non-interactive AI** (CI or scripts): `atmos ai ask "setup atmos pro" --skill atmos-pro
-   --non-interactive --approve-all`. All detected defaults are accepted; only fatal detection
-   failures stop the run.
-3. **Direct skill load** (other AI tools): external tools load `agent-skills/skills/atmos-pro/`
-   via the Agent Skills standard and drive the flow themselves. No Atmos-specific CLI needed.
+### Path A — `atmos ai ask --skill` (Atmos-dispatched)
 
-A future `atmos pro init` command (deterministic, no AI) may wrap the same generators for users
-who want reproducible non-AI runs. That is out of scope for this PRD but the skill's template
-layout is deliberately compatible with it.
+```shell
+atmos ai ask "setup atmos pro" --skill atmos-pro
+```
+
+The Atmos binary reads the skill, routes the prompt to the AI provider configured in
+`atmos.yaml` (`ai.providers.*`), and streams the session. The user does not need Claude Code,
+Codex, or any other AI tool installed — Atmos itself is the AI client.
+
+**Properties:**
+
+- **Self-contained** — a user with just `atmos` installed can run the setup. No separate AI CLI.
+- **Provider-agnostic** — works with whichever provider the repo has configured (Claude API,
+  OpenAI, Bedrock, etc.). The skill text is plain Markdown; any capable LLM can follow it.
+- **Versioned with Atmos** — the skill loaded is the one shipped with the user's Atmos binary.
+  No network dependency on a remote repo.
+- **Non-interactive mode** — `atmos ai ask --skill atmos-pro --non-interactive --approve-all`
+  for CI/automation. Detected defaults are accepted; fatal detections still stop the run.
+
+**When to pick this path:**
+
+- The user is already using Atmos and has an AI provider configured.
+- The user wants a command they can run in a pipeline.
+- The user does not have Claude Code installed (or uses a different AI tool).
+
+### Path B — Claude Code loads the skill directly (Claude-Code-dispatched)
+
+The user, inside Claude Code, says:
+
+> Load the `atmos-pro` skill from the Atmos repo and set up Atmos Pro for this repository.
+
+Claude Code fetches `agent-skills/skills/atmos-pro/` from the remote Atmos repository (via the
+Claude Code plugin marketplace or a direct repo reference), loads `SKILL.md` and any referenced
+files on demand via progressive disclosure, and executes the playbook using Claude Code's
+native tool use (Read, Write, Bash, Git).
+
+**Properties:**
+
+- **Best agentic experience** — Claude Code's native tools (file editing, shell, git worktrees,
+  diff review) produce the tightest loop. No subprocess boundary between the agent and the
+  repo.
+- **Always-latest skill** — the user gets whatever is on the Atmos repo's default branch, so
+  skill updates propagate without updating the local Atmos binary.
+- **Progressive disclosure** — Claude Code loads `SKILL.md` first, then pulls in `references/*`
+  only when the task needs them. Cheaper context, better focus.
+- **No Atmos binary AI config needed** — the user doesn't configure an AI provider in
+  `atmos.yaml`; Claude Code has its own authentication.
+
+**When to pick this path:**
+
+- The user is already working in Claude Code.
+- The user wants to review every file edit inline before accepting (Claude Code's permission
+  prompts).
+- The user wants the latest skill version without bumping Atmos.
+
+**Discovery:**
+
+Two ways the skill becomes known to Claude Code:
+
+1. **Plugin marketplace** — Cloud Posse's `agent-skills/.claude-plugin/plugin.json` declares
+   the `atmos` plugin. Users install it once; all 23 skills (22 existing + `atmos-pro`) become
+   available via `/skill atmos-pro`.
+2. **Direct remote load** — the user tells Claude Code the skill path:
+   `use the atmos-pro skill at github.com/cloudposse/atmos/agent-skills/skills/atmos-pro`.
+   Claude Code fetches it ad-hoc. Useful for evaluating before committing to the plugin.
+
+### Path C — Other AI tools (direct skill load)
+
+External tools that implement the Agent Skills open standard (Copilot, Codex, Gemini, Grok)
+reference `agent-skills/skills/atmos-pro/` directly. No Atmos CLI involved. The skill text is
+identical across all tools — the Agent Skills standard guarantees portability.
+
+### Comparison
+
+| Aspect                 | Path A: `atmos ai ask`           | Path B: Claude Code direct       | Path C: other AI tools   |
+|------------------------|----------------------------------|----------------------------------|--------------------------|
+| Dispatcher             | Atmos binary                     | Claude Code                      | External AI tool         |
+| AI provider            | Configured in `atmos.yaml`       | Claude Code's own auth           | Tool's own auth          |
+| Skill source           | Shipped with Atmos               | Remote repo (always-latest)      | Remote repo              |
+| Best for               | Pipelines, self-contained setups | Interactive dev sessions         | Tool-specific workflows  |
+| Requires Atmos CLI     | Yes                              | No                               | No                       |
+| Requires Claude Code   | No                               | Yes                              | No                       |
+| Progressive disclosure | Partial (agent reads as needed)  | Full (native)                    | Depends on tool          |
+
+### Why both Paths A and B exist
+
+Path A is what a user types in a terminal or a CI step. Path B is what a user does inside their
+AI IDE. They are not redundant — they serve different moments in the user's day.
+
+Shipping only Path A forces users to leave Claude Code to invoke the skill, losing the context
+of their current session. Shipping only Path B forces users who don't use Claude Code to
+install it just to onboard to Atmos Pro. Both are real user needs.
+
+A future `atmos pro init` Go command (deterministic, no AI) may wrap the same generators for
+users who want reproducible non-AI runs. That is out of scope for this PRD but the skill's
+template layout is deliberately compatible with it.
 
 ## Validation & Testing
 
@@ -320,21 +409,43 @@ layout is deliberately compatible with it.
 - Document the detection probes (what files/commands the agent runs to infer repo state).
 - Add the starting-condition branch table to `starting-conditions.md`.
 
-### Phase 3 — Integration with `atmos ai ask` and the Skill index (week 3)
+### Phase 3 — Path A: `atmos ai ask --skill` integration (week 3)
+
+Ship the Atmos-dispatched invocation path end-to-end.
 
 - Add `atmos-pro` to `agent-skills/AGENTS.md` skill index.
-- Verify `atmos ai ask ... --skill atmos-pro` loads and runs the skill end-to-end with Claude
-  Code and Codex.
-- Write the validation fixture and golden snapshot.
+- Verify `atmos ai ask "setup atmos pro" --skill atmos-pro` loads `SKILL.md` and executes the
+  full playbook with each configured AI provider (Claude API, OpenAI, Bedrock).
+- Implement non-interactive mode (`--non-interactive --approve-all`) for CI pipelines.
+- Confirm the skill's references (`references/*.md`) are loaded on demand by the Atmos AI
+  dispatcher, not all at once.
+- Write the validation fixture under `tests/fixtures/scenarios/atmos-pro-setup/` and the
+  golden-snapshot diff test.
 
-### Phase 4 — Safety & UX (week 4)
+### Phase 4 — Path B: Claude Code direct integration (week 4)
+
+Ship the Claude-Code-dispatched invocation path end-to-end.
+
+- Verify `agent-skills/.claude-plugin/plugin.json` declares the plugin correctly so Claude Code
+  discovers `atmos-pro` alongside the other 22 skills via the plugin marketplace.
+- Test ad-hoc remote load: inside Claude Code, prompt the agent to load
+  `agent-skills/skills/atmos-pro/` from the Atmos repo and execute. Confirm progressive
+  disclosure works (Claude Code loads `SKILL.md` first, pulls `references/*` only as needed).
+- Confirm Claude Code's native tool calls (Read, Write, Bash, Git) produce output matching
+  the Path A golden snapshot. Both paths must generate identical artifacts for the same repo.
+- Add a Claude-Code-specific section to `SKILL.md` if any tool differences surface (e.g.,
+  how to run `atmos validate stacks` via Bash tool vs subprocess).
+- Exercise against a real Atmos repo with a human operator present; document any friction in
+  `references/troubleshooting.md`.
+
+### Phase 5 — Safety & UX polish (week 5)
 
 - Implement the pre-flight detection (GitHub Actions enabled, `github-oidc-provider` deployed,
   tfstate backend discoverable).
 - Implement the PR-opening step with the rollout checklist body.
 - Ship `references/troubleshooting.md` populated from real onboarding failures.
 
-### Phase 5 — Deterministic fallback (future; not in this PRD)
+### Phase 6 — Deterministic fallback (future; not in this PRD)
 
 - Optional: an `atmos pro init` Go command that calls the same generators without an AI.
 - Targets users who need reproducible, unattended runs (CI pipelines that bootstrap new orgs).
@@ -344,7 +455,7 @@ layout is deliberately compatible with it.
 ### A Go command (`atmos pro init`) as the primary entry point
 
 A deterministic command is simpler to reason about and does not require an AI. We still intend
-to ship one eventually (Phase 5). But the onboarding *pain* is not "I want a wizard"; it is
+to ship one eventually (Phase 6). But the onboarding *pain* is not "I want a wizard"; it is
 "I don't know what my repo already looks like and I don't know what to change." An AI agent
 is the correct tool for the detection and branching problem. The Go command is the right tool
 for the generation problem — and both can share the same templates.

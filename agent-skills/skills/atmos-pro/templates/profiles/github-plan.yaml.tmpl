@@ -1,0 +1,22 @@
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1
+      spec:
+        audience: sts.amazonaws.com
+
+  # The name of each identity matches the pattern <tenant>-<stage>/<role>.
+  # Atmos resolves these names per-stack at plan/apply time.
+  #
+  # github-plan uses gha-tf-plan roles for read-only (terraform plan) access.
+  # Use the github-apply profile for full (terraform apply) access.
+  identities:
+{{- range .accounts }}
+    {{ .tenant }}-{{ .stage }}/gha-tf-plan:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::{{ .account_id }}:role/{{ $.namespace }}-{{ .tenant }}-gbl-{{ .stage }}-gha-tf-plan
+{{- end }}

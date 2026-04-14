@@ -1,0 +1,23 @@
+name: "Test AWS OIDC"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Verify OIDC Authentication
+    runs-on: [self-hosted, Ubuntu, Common]
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: arn:aws:iam::{{ .probe_account_id }}:role/{{ .namespace }}-{{ .probe_tenant }}-gbl-{{ .probe_stage }}-gha-tf-plan
+          aws-region: us-east-1
+
+      - name: Verify Identity
+        run: aws sts get-caller-identity

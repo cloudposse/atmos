@@ -1,0 +1,55 @@
+# stacks/mixins/atmos-pro.yaml
+#
+# Import this mixin to enable Atmos Pro and disable Spacelift for an organization.
+#
+# This mixin:
+#   1. Imports the aws/iam-role catalog (gha-tf-plan + gha-tf-apply OIDC roles)
+#   2. Disables Spacelift workspace management
+#   3. Configures Atmos Pro settings (workflow dispatch, drift detection)
+#
+# Auth profiles (profiles/github-plan/ and profiles/github-apply/) handle
+# OIDC authentication and per-account identity mapping separately.
+#
+# Usage: Import at the org level (e.g., stacks/orgs/{{ .target_org }}/_defaults.yaml)
+#   import:
+#     - mixins/atmos-pro
+
+import:
+  - catalog/aws/iam-role/gha-tf
+
+settings:
+  spacelift:
+    workspace_enabled: false
+  pro:
+    enabled: true
+    drift_detection:
+      enabled: true
+      detect:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ `{{ .atmos_component }}` }}"
+              stack: "{{ `{{ .atmos_stack }}` }}"
+              upload: "true"
+      remediate:
+        workflows:
+          atmos-terraform-apply.yaml:
+            inputs:
+              component: "{{ `{{ .atmos_component }}` }}"
+              stack: "{{ `{{ .atmos_stack }}` }}"
+    pull_request:
+      opened: &plan-workflow
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ `{{ .atmos_component }}` }}"
+              stack: "{{ `{{ .atmos_stack }}` }}"
+      synchronize: *plan-workflow
+      reopened: *plan-workflow
+      merged:
+        workflows:
+          atmos-terraform-apply.yaml:
+            inputs:
+              component: "{{ `{{ .atmos_component }}` }}"
+              stack: "{{ `{{ .atmos_stack }}` }}"
+              github_environment: "{{ `{{ .vars.tenant }}-{{ .vars.stage }}` }}"

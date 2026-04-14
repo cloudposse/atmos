@@ -1,0 +1,23 @@
+# Additive edit to stacks/catalog/tfstate-backend/defaults.yaml
+#
+# The skill MERGES these keys into the existing file -- it does not overwrite.
+# Specifically:
+#   - `access_roles.default.allowed_principal_arns` gets the wildcard pattern
+#     appended (de-duplicated).
+#   - `team_permission_sets_enabled: false` is set only if the current trust
+#     policy is near the 2048-char IAM size limit.
+
+components:
+  terraform:
+    tfstate-backend:
+      vars:
+        # Suppress auto-generated SSO PermissionSet ARNs from allowed_roles team names
+        # to keep the trust policy under the 2048-char IAM limit. Explicit
+        # allowed_permission_sets still work.
+        team_permission_sets_enabled: false
+
+        access_roles:
+          default:
+            # Wildcard trust for Atmos Pro CI roles in every account of this namespace.
+            allowed_principal_arns:
+              - "arn:aws:iam::*:role/{{ .namespace }}-*-gbl-*-gha-tf-*"
