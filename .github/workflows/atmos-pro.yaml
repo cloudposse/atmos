@@ -76,4 +76,6 @@ jobs:
         run: atmos docs generate readme
 
       - name: Commit fixes via Atmos Pro
+        env:
+          ATMOS_PRO_WORKSPACE_ID: ${{ vars.ATMOS_PRO_WORKSPACE_ID }}
         run: atmos pro commit -m "[autocommit] formatting fixes" --all
