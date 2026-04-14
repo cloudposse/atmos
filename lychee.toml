@@ -68,6 +68,10 @@ exclude = [
   "atmos-pro\\.com",
   # LF AI Foundation blog links (may change or be unavailable)
   "lfaidata\\.foundation",
+  # Taskfile.dev (connection resets in CI)
+  "taskfile\\.dev",
+  # regex101.com (intermittent timeouts in CI)
+  "regex101\\.com",
   # Test data placeholder URLs (intentional)
   "github\\.com/test/",
   # Taskfile.dev homepage (intermittent connection resets from CI runner IP ranges)
@@ -77,4 +81,6 @@ exclude = [
   "file://.*/ai/skill-marketplace",
   # Example/placeholder URLs in usage documentation
   "github\\.com/user/repo",
+  # regex101.com (intermittent 504 Gateway Timeout in CI)
+  "regex101\\.com",
 ]

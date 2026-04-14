@@ -16,6 +16,17 @@ import (
 
 var terraformStateCache = sync.Map{}
 
+// ResetStateCache clears the terraform state cache.
+// This is exported for use in tests to ensure cache isolation between test functions.
+func ResetStateCache() {
+	defer perf.Track(nil, "exec.ResetStateCache")()
+
+	terraformStateCache.Range(func(key, _ any) bool {
+		terraformStateCache.Delete(key)
+		return true
+	})
+}
+
 // GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.
 // It optionally uses a cache to avoid redundant state retrievals and supports both static and dynamic backends.
 // Parameters:

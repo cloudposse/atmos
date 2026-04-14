@@ -50,7 +50,7 @@ func TestTemplateRendering(t *testing.T) {
 				},
 			},
 			wantContains: []string{
-				"Changes Found",
+				"Resource Changes Found",
 				"PLAN-CREATE-success",
 				"vpc",
 				"dev-us-east-1",
@@ -202,6 +202,37 @@ func TestTemplateRendering(t *testing.T) {
 			wantContains: []string{
 				"<= aws_instance.imported",
 				"Import",
+			},
+		},
+
+		{
+			name:         "plan with output-only changes",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "config",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{},
+				HasOutputChanges: true,
+			},
+			wantContains: []string{
+				"Output Changes Found",
+				"OUTPUT_CHANGE-blue",
+				"Output values will change. No infrastructure changes.",
+			},
+			wantNotContains: []string{
+				"NO_CHANGE",
+				"CREATE",
+				"DESTROY",
+				"Resource Changes Found",
 			},
 		},
 
@@ -445,7 +476,7 @@ func TestTemplateWithCIContext(t *testing.T) {
 	// Verify basic rendering works with CI context present.
 	assert.Contains(t, rendered, "vpc")
 	assert.Contains(t, rendered, "dev")
-	assert.Contains(t, rendered, "Changes Found")
+	assert.Contains(t, rendered, "Resource Changes Found")
 }
 
 // TestTerraformTemplateContextHelpers tests helper methods.
@@ -477,22 +508,47 @@ func TestTerraformTemplateContextHelpers(t *testing.T) {
 
 	t.Run("HasChanges", func(t *testing.T) {
 		tests := []struct {
+			name             string
+			resources        plugin.ResourceCounts
+			hasOutputChanges bool
+			want             bool
+		}{
+			{"no changes", plugin.ResourceCounts{}, false, false},
+			{"create only", plugin.ResourceCounts{Create: 1}, false, true},
+			{"change only", plugin.ResourceCounts{Change: 1}, false, true},
+			{"replace only", plugin.ResourceCounts{Replace: 1}, false, true},
+			{"destroy only", plugin.ResourceCounts{Destroy: 1}, false, true},
+			{"mixed", plugin.ResourceCounts{Create: 1, Destroy: 1}, false, true},
+			{"output changes only", plugin.ResourceCounts{}, true, true},
+			{"resource and output changes", plugin.ResourceCounts{Create: 1}, true, true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				ctx := &TerraformTemplateContext{
+					Resources:        tt.resources,
+					HasOutputChanges: tt.hasOutputChanges,
+				}
+				assert.Equal(t, tt.want, ctx.HasChanges())
+			})
+		}
+	})
+
+	t.Run("HasResourceChanges", func(t *testing.T) {
+		tests := []struct {
 			name      string
 			resources plugin.ResourceCounts
 			want      bool
 		}{
 			{"no changes", plugin.ResourceCounts{}, false},
 			{"create only", plugin.ResourceCounts{Create: 1}, true},
-			{"change only", plugin.ResourceCounts{Change: 1}, true},
-			{"replace only", plugin.ResourceCounts{Replace: 1}, true},
-			{"destroy only", plugin.ResourceCounts{Destroy: 1}, true},
-			{"mixed", plugin.ResourceCounts{Create: 1, Destroy: 1}, true},
+			{"output changes only does not count", plugin.ResourceCounts{}, false},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				ctx := &TerraformTemplateContext{Resources: tt.resources}
-				assert.Equal(t, tt.want, ctx.HasChanges())
+				assert.Equal(t, tt.want, ctx.HasResourceChanges())
 			})
 		}
 	})

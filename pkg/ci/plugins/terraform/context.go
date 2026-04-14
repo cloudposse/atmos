@@ -43,6 +43,9 @@ type TerraformTemplateContext struct {
 	// HasDestroy indicates if there are resources to be destroyed.
 	HasDestroy bool
 
+	// HasOutputChanges indicates if there are terraform output value changes (without resource changes).
+	HasOutputChanges bool
+
 	// Warnings contains full warning block text extracted from terraform output.
 	Warnings []string
 }
@@ -66,6 +69,7 @@ func NewTemplateContext(base *plugin.TemplateContext, data *plugin.TerraformOutp
 		ctx.Outputs = data.Outputs
 		ctx.ChangedResult = data.ChangedResult
 		ctx.HasDestroy = data.ResourceCounts.Destroy > 0
+		ctx.HasOutputChanges = len(data.Outputs) > 0
 		ctx.Warnings = blockquoteWarnings(data.Warnings)
 	}
 
@@ -85,9 +89,16 @@ func (c *TerraformTemplateContext) Target() string {
 	return c.Stack + "-" + sanitized
 }
 
-// HasChanges returns true if there are any resource changes.
+// HasChanges returns true if there are any resource or output changes.
 func (c *TerraformTemplateContext) HasChanges() bool {
 	defer perf.Track(nil, "terraform.TerraformTemplateContext.HasChanges")()
+
+	return c.HasResourceChanges() || c.HasOutputChanges
+}
+
+// HasResourceChanges returns true if there are any resource changes (create, change, replace, destroy).
+func (c *TerraformTemplateContext) HasResourceChanges() bool {
+	defer perf.Track(nil, "terraform.TerraformTemplateContext.HasResourceChanges")()
 
 	return c.Resources.Create > 0 ||
 		c.Resources.Change > 0 ||

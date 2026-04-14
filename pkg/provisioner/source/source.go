@@ -140,7 +140,7 @@ func DetermineTargetDirectory(
 	}
 
 	// Check if workdir is enabled - if so, use workdir path.
-	if isWorkdirEnabled(componentConfig) {
+	if workdir.IsWorkdirEnabled(componentConfig) {
 		return buildWorkdirPath(atmosConfig, componentType, component, componentConfig)
 	}
 

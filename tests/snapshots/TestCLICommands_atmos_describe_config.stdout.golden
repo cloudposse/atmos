@@ -23,7 +23,8 @@
         "default": ""
       },
       "plugin_cache": true,
-      "ci": {}
+      "ci": {},
+      "workspace": {}
     },
     "helmfile": {
       "base_path": "",
@@ -284,6 +285,12 @@
     "instructions": {},
     "web_search": {},
     "context": {}
+  },
+  "aws": {
+    "security": {
+      "sources": {},
+      "tag_mapping": {}
+    }
   },
   "mcp": {
     "routing": {}

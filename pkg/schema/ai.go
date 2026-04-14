@@ -20,6 +20,7 @@ type AISettings struct {
 	Instructions       AIInstructionsSettings       `yaml:"instructions,omitempty" json:"instructions,omitempty" mapstructure:"instructions"`
 	WebSearch          AIWebSearchSettings          `yaml:"web_search,omitempty" json:"web_search,omitempty" mapstructure:"web_search"`
 	Context            AIContextSettings            `yaml:"context,omitempty" json:"context,omitempty" mapstructure:"context"`
+	// Security settings have been moved to AWS.Security (see aws.go).
 }
 
 // AIProviderConfig contains configuration for a specific AI provider.
@@ -29,6 +30,13 @@ type AIProviderConfig struct {
 	MaxTokens int              `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
 	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"` // For Ollama or custom endpoints
 	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"`   // Token caching settings
+
+	// CLI provider fields (for claude-code, codex-cli, gemini-cli).
+	Binary       string   `yaml:"binary,omitempty" json:"binary,omitempty" mapstructure:"binary"`
+	MaxTurns     int      `yaml:"max_turns,omitempty" json:"max_turns,omitempty" mapstructure:"max_turns"`
+	MaxBudgetUSD float64  `yaml:"max_budget_usd,omitempty" json:"max_budget_usd,omitempty" mapstructure:"max_budget_usd"`
+	AllowedTools []string `yaml:"allowed_tools,omitempty" json:"allowed_tools,omitempty" mapstructure:"allowed_tools"`
+	FullAuto     bool     `yaml:"full_auto,omitempty" json:"full_auto,omitempty" mapstructure:"full_auto"`
 }
 
 // AICacheSettings contains token caching configuration.
