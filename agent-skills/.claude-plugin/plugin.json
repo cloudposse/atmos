@@ -4,7 +4,7 @@
   "description": "Atmos skills for AI coding assistants: Terraform/Helmfile/Packer/Ansible orchestration, stack configuration, components, vendoring, validation, YAML functions, Go templates, authentication, stores, workflows, design patterns, and Atmos Pro onboarding.",
   "author": {
     "name": "Cloud Posse",
-    "url": "https://github.com/cloudposse"
+    "email": "opensource@cloudposse.com"
   },
   "homepage": "https://atmos.tools/ai/agent-skills",
   "repository": "https://github.com/cloudposse/atmos",

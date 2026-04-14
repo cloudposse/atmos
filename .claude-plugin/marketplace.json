@@ -1,17 +1,28 @@
 {
   "name": "cloudposse",
-  "version": "1.0.0",
-  "description": "Official Atmos plugins and skills for Claude Code",
   "owner": {
     "name": "Cloud Posse",
     "email": "opensource@cloudposse.com"
+  },
+  "metadata": {
+    "description": "Official Atmos plugins and skills for Claude Code",
+    "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "atmos",
       "source": "./agent-skills",
       "description": "Atmos skills for AI coding assistants: Terraform/Helmfile/Packer/Ansible orchestration, stack configuration, components, vendoring, validation, YAML functions, Go templates, authentication, stores, workflows, design patterns, and Atmos Pro onboarding.",
-      "category": "development"
+      "version": "1.0.0",
+      "category": "development",
+      "keywords": ["atmos", "terraform", "infrastructure", "iac", "devops", "cloud"],
+      "homepage": "https://atmos.tools/ai/agent-skills",
+      "repository": "https://github.com/cloudposse/atmos",
+      "license": "Apache-2.0",
+      "author": {
+        "name": "Cloud Posse",
+        "email": "opensource@cloudposse.com"
+      }
     }
   ]
 }

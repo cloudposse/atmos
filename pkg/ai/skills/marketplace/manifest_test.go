@@ -34,10 +34,12 @@ func TestMarketplaceManifestShape(t *testing.T) {
 	require.NoError(t, err, "marketplace.json must exist at repo root")
 
 	var m struct {
-		Name        string `json:"name"`
-		Version     string `json:"version"`
-		Description string `json:"description"`
-		Owner       struct {
+		Name     string `json:"name"`
+		Metadata struct {
+			Description string `json:"description"`
+			Version     string `json:"version"`
+		} `json:"metadata"`
+		Owner struct {
 			Name  string `json:"name"`
 			Email string `json:"email"`
 		} `json:"owner"`
@@ -51,8 +53,8 @@ func TestMarketplaceManifestShape(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &m))
 
 	assert.Equal(t, "cloudposse", m.Name)
-	assert.NotEmpty(t, m.Version)
-	assert.NotEmpty(t, m.Description)
+	assert.NotEmpty(t, m.Metadata.Version, "version must be declared under metadata.version per Claude Code marketplace schema")
+	assert.NotEmpty(t, m.Metadata.Description, "description must be declared under metadata.description per Claude Code marketplace schema")
 	assert.NotEmpty(t, m.Owner.Name)
 
 	// At least the atmos plugin must be declared, pointing at ./agent-skills.

@@ -591,14 +591,39 @@ Point Claude Code's plugin marketplace at the local Atmos checkout. Inside Claud
 ```
 
 Claude Code reads `/path/to/atmos/.claude-plugin/marketplace.json`, resolves the `atmos`
-plugin to `./agent-skills`, and installs every skill under the bundled skills directory
-— including `atmos-pro` from the unmerged branch. This mirrors the production install
-flow exactly.
+plugin to `./agent-skills` (relative paths resolve from the marketplace root, which is
+the directory containing `.claude-plugin/`), and installs every skill under the bundled
+skills directory — including `atmos-pro` from the unmerged branch. This mirrors the
+production install flow exactly.
+
+If the install fails with "Plugin 'atmos' not found in any marketplace", run the
+marketplace validator to surface schema errors:
+
+```
+/plugin validate /path/to/atmos
+```
+
+Common failure modes:
+
+- **Non-standard fields** — Claude Code's marketplace schema requires `metadata.version`
+  and `metadata.description` (not top-level `version` / `description`). The author
+  object accepts `name` and optional `email`, not `url`. Both manifests in this repo
+  have been corrected.
+- **Relative paths require Git-backed marketplace** — adding a marketplace by a direct
+  URL to `marketplace.json` skips cloning, so `./agent-skills` never resolves. Use a
+  local filesystem path (`/plugin marketplace add /path/to/atmos`) or a Git source.
+- **Duplicate installs** — if a previous attempt cached a partial install, remove and
+  re-add:
+  ```
+  /plugin marketplace remove cloudposse
+  /plugin marketplace add /path/to/atmos
+  /plugin install atmos@cloudposse
+  ```
 
 When the feature branch merges, switch to the remote marketplace:
 
 ```
-/plugin marketplace remove /path/to/atmos
+/plugin marketplace remove cloudposse
 /plugin marketplace add cloudposse/atmos
 /plugin install atmos@cloudposse
 ```
