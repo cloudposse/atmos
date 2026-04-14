@@ -81,12 +81,17 @@ Any deviation is a skill bug, not a Claude-Code-specific variation.
 
 1. **Create an isolated worktree.** Never touch the user's main checkout.
    ```shell
-   git worktree add .conductor/atmos-pro-setup feat/atmos-pro
-   cd .conductor/atmos-pro-setup
+   git worktree add .worktrees/atmos-pro-setup feat/atmos-pro
+   cd .worktrees/atmos-pro-setup
    ```
-   If `.conductor/` is not conventional for the user's repo, use `.worktrees/` or another
-   sibling path. Always work in a branch named `feat/atmos-pro` (or `feat/atmos-pro-<org>` for
-   follow-up invocations).
+   `.worktrees/` is the default because it is tool-agnostic and common in open-source
+   Git workflows. If the repo already uses a different convention (e.g., `.conductor/`
+   for Conductor-managed worktrees, or a `../`-sibling layout), match it. Always work
+   in a branch named `feat/atmos-pro` (or `feat/atmos-pro-<org>` for follow-up
+   invocations).
+
+   Make sure `.worktrees/` is in the repo's `.gitignore` (or `.git/info/exclude`) so
+   the worktree directory is never accidentally committed. Add it if missing.
 
 2. **Detect the repo shape.** See `references/starting-conditions.md` for the full probe
    catalog. At minimum, answer:
@@ -130,14 +135,87 @@ Any deviation is a skill bug, not a Claude-Code-specific variation.
    Wait for user approval in interactive mode. In `--approve-all` mode, proceed.
 
 5. **Generate artifacts.** Copy files from `templates/` into the worktree, filling in:
-   - `{{ .org }}`, `{{ .repo }}` — from `git remote get-url origin`
-   - `{{ .accounts }}` — from the detected tenant/stage matrix
+   - `{{ .org }}`, `{{ .repo }}` — from `git remote get-url origin` (with token redaction)
+   - `{{ .accounts }}` — from the **account-ID resolution chain** below
    - `{{ .root_account_id }}` — from the root stack, for the root-account safety rail
    - `{{ .tfstate_role_arns }}` — from the tfstate-backend component
    - `{{ .atmos_version }}` — from `atmos version` (major.minor.patch)
 
+   **Account-ID resolution chain.** Account IDs must come from a deterministic source —
+   never fabricate `<MISSING>` placeholders. Try sources in order, stopping at the first
+   that produces a complete map:
+
+   1. **`atmos describe component account-map`** (deterministic, structured). Run inside
+      the user's Geodesic shell if available:
+      ```bash
+      atmos describe component account-map -s <one-account-stack> --format=json \
+        | jq '.outputs.account_info_map // .vars.account_map'
+      ```
+      If `atmos` is not on PATH (most Path-B Claude Code runs), skip to step 2.
+   2. **Static account-map files** in `stacks/catalog/account-map/` or
+      `stacks/catalog/account-map.yaml` — grep for top-level `account_map:` keys with
+      12-digit values.
+   3. **Repo documentation tables.** Many Cloud Posse-style repos document account IDs
+      in the README, often as a table with `{tenant}-{stage}` row labels and per-org
+      column headers. Search:
+      ```bash
+      grep -lE '\| *[0-9]{12} *\|' README.md docs/**/*.md _shared/**/*.md 2>/dev/null
+      ```
+      Parse any matching tables: row label → `{tenant}-{stage}`; numeric cells per
+      column header → `{org}` account IDs.
+   4. **Cross-account ARN references in stacks** — grep `stacks/` for
+      `arn:aws:iam::<12-digit>:role/...` patterns to recover individual account IDs.
+      This is partial coverage; only use as supplementary data, not as the primary
+      source.
+   5. **User prompt** — if the chain produces an incomplete map, stop and ask the user
+      to paste the missing entries. Do NOT proceed with placeholders.
+
+   Always report which source(s) were used and the confidence level. Cache the resolved
+   map at `.git/atmos-pro/account-map.json` (inside `.git/` is never tracked by Git, so
+   the cache file can never accidentally end up in the PR). Do **not** write the cache
+   under the worktree root — `git add -A` will pick it up.
+
+   Re-runs and follow-up invocations read this cache before re-running the resolution
+   chain.
+
    The artifact list and why each exists is in `references/artifact-catalog.md`. The templates
    directory mirrors that catalog.
+
+5.5. **Vendor pull the IAM role component sources.** The skill writes only the
+   vendor manifest (`components/terraform/aws/iam-role/component.yaml`); the actual
+   Terraform sources are pulled from upstream. Some Cloud Posse refarch repos
+   commit vendored sources for deterministic deploys; others vendor on-demand at
+   apply time. Detect the convention:
+
+   ```shell
+   # If the existing iam-role/ component (or any other vendored component)
+   # has its .tf sources committed, the repo's convention is "commit vendored".
+   ls components/terraform/iam-role/*.tf 2>/dev/null && CONV=commit || CONV=ondemand
+   ```
+
+   - If the repo commits vendored sources: run `atmos vendor pull -c aws/iam-role`
+     and stage the resulting `.tf` files (8 files: `main.tf`, `variables.tf`,
+     `outputs.tf`, `versions.tf`, `providers.tf`, `context.tf`,
+     `github-assume-role-policy.tf`, `account-verification.mixin.tf`).
+   - If the repo vendors on-demand: do nothing here, but add a step-1 to the
+     rollout checklist: "Run `atmos vendor pull -c aws/iam-role` before deploying
+     IAM roles".
+
+   Either way, also detect whether the underlying `tfstate-backend` and
+   `account-map/modules/team-assume-role-policy` modules support the
+   `team_permission_sets_enabled` variable (the stack-level setting in step 5
+   is silently ignored if they don't):
+
+   ```shell
+   grep -q "team_permission_sets_enabled" \
+     components/terraform/tfstate-backend/variables.tf \
+     components/terraform/account-map/modules/team-assume-role-policy/variables.tf \
+     2>/dev/null && echo "OK" || echo "MISSING — patch required"
+   ```
+
+   If MISSING, emit the four patches documented in
+   [`references/iam-trust-model.md`](references/iam-trust-model.md) under
+   `team_permission_sets_enabled` requires module-level support.
 
 6. **Self-validate.** Inside the worktree:
    ```shell
@@ -145,25 +223,79 @@ Any deviation is a skill bug, not a Claude-Code-specific variation.
    atmos describe component aws/iam-role/gha-tf-plan -s <one-stack>
    atmos describe component aws/iam-role/gha-tf-apply -s <one-stack>
    ```
-   If any fail, print the error and stop. Do not open a PR with a broken configuration.
 
-7. **Open a PR (optional).** If `gh` is authenticated:
+   **Always baseline against `main` before flagging failures.** Some Atmos repos have
+   pre-existing `atmos validate stacks` errors (duplicate component declarations,
+   abandoned imports, etc.) that have nothing to do with the skill's changes. To
+   avoid false-positive blocking, capture the baseline first:
+
    ```shell
-   gh pr create --title "feat(atmos-pro): bootstrap CI/CD integration" --body "$(cat <<'EOF'
-   ## Summary
-   Generated by the `atmos-pro` skill.
-
-   ## Rollout checklist
-   - [ ] Review generated workflows and mixin
-   - [ ] Deploy `github-oidc-provider` to all target accounts (if not already)
-   - [ ] Deploy IAM roles: `atmos terraform apply aws/iam-role/gha-tf-plan -s <stack>` per account
-   - [ ] Deploy IAM roles: `atmos terraform apply aws/iam-role/gha-tf-apply -s <stack>` per non-root account
-   - [ ] Deploy the tfstate-backend trust update
-   - [ ] Run `oidc-test.yaml` workflow manually to verify OIDC
-   - [ ] Open a test PR to exercise the Atmos Pro dispatch flow
-   EOF
-   )"
+   # In a temporary checkout of main (or with `git stash`)
+   atmos validate stacks > /tmp/atmos-pro-baseline.txt 2>&1 || true
+   # Then in the worktree
+   atmos validate stacks > /tmp/atmos-pro-after.txt 2>&1 || true
+   diff /tmp/atmos-pro-baseline.txt /tmp/atmos-pro-after.txt
    ```
+
+   If the diff is empty (or only adds lines about the new components), the skill's
+   changes did not introduce new validation errors — proceed. If the diff shows
+   *new* errors that mention paths the skill wrote (`stacks/mixins/atmos-pro.yaml`,
+   `stacks/catalog/aws/iam-role/*`, `profiles/github-*`, etc.), stop and report.
+
+   Pre-existing failures must be surfaced to the user (so they know the repo has
+   them) but must not block PR creation.
+
+   `atmos` may not be on PATH if the run is outside Geodesic. Check first:
+   ```shell
+   command -v atmos && atmos version
+   ```
+   If not found, skip the self-validation and document the gap in the PR body
+   ("Skill could not run `atmos validate stacks` — Geodesic-only binary not on
+   host PATH. Please run `atmos validate stacks` inside Geodesic before merging.").
+
+7. **Open a PR (optional).** If `gh` is authenticated, follow the repo's PR template
+   convention:
+
+   **a) Detect the repo's PR template** (case-insensitive, both common locations):
+
+   ```shell
+   for p in .github/PULL_REQUEST_TEMPLATE.md .github/pull_request_template.md \
+            PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md; do
+     [ -f "$p" ] && { TEMPLATE="$p"; break; }
+   done
+   echo "PR template: ${TEMPLATE:-<none — using skill default>}"
+   ```
+
+   **b) If the repo has a template,** populate **its** sections with rollout content
+   instead of the skill's default body. Common section names map as follows:
+
+   | Template section          | Skill content to put in it                                   |
+   |---------------------------|--------------------------------------------------------------|
+   | `## what` / `## What`     | "What this adds" list from the artifact catalog              |
+   | `## why` / `## Why`       | One paragraph: enable Atmos Pro CI/CD, replace Spacelift, etc. |
+   | `## references`           | Link to https://atmos-pro.com and the skill source           |
+   | `## Usage`                | The "Identity Naming" or "Adding more repos" mini-section    |
+   | `## Testing` / Test plan  | The rollout checklist (the same numbered steps from `docs/atmos-pro.md`) |
+
+   Preserve any HTML comments (`<!-- ... -->`) the template uses as section
+   instructions — leave them in place; the rendered PR keeps them as hidden author
+   guidance.
+
+   **c) If no template exists,** fall back to `templates/docs/atmos-pro-pr-body.md.tmpl`
+   from the skill (the "Summary / What this adds / Accounts / Rollout checklist /
+   Security notes" format).
+
+   Then create the PR:
+
+   ```shell
+   gh pr create --draft \
+     --title "feat(atmos-pro): bootstrap CI/CD integration" \
+     --body-file .git/atmos-pro/pr-body.md \
+     --base main --head feat/atmos-pro
+   ```
+
+   Use `.git/atmos-pro/pr-body.md` (inside `.git/`, untracked) for the body file so
+   it does not appear in `git status` or get accidentally committed.
 
 ## Safety rails (non-negotiable)
 

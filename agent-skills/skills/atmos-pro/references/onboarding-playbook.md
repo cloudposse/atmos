@@ -18,12 +18,14 @@ If any of these are missing, stop and report exactly what's needed.
 ## Step 1: Isolated worktree
 
 ```shell
-git worktree add .conductor/atmos-pro-setup feat/atmos-pro
-cd .conductor/atmos-pro-setup
+git worktree add .worktrees/atmos-pro-setup feat/atmos-pro
+cd .worktrees/atmos-pro-setup
 ```
 
-If `.conductor/` doesn't exist and the repo uses a different convention (`.worktrees/`, sibling
-directory), use that. The worktree isolates generated changes from the user's main checkout.
+`.worktrees/` is the default (tool-agnostic, common in open-source Git workflows). If the repo
+already uses a different convention — `.conductor/` for Conductor-managed worktrees, a sibling
+`../atmos-pro-setup` layout, or something else — match that instead. Ensure the chosen path is
+in `.gitignore` (or `.git/info/exclude`) so it never gets committed; add the entry if missing.
 
 ## Step 2: Repo detection
 
@@ -66,10 +68,10 @@ Print a human-readable summary. Example:
 ```text
 Atmos Pro setup plan:
 
-  Target org: e98d
+  Target org: dev
   Accounts to enable (13):
-    gov: root, iam, dss, art, dns, log, net, sec
-    soc: accs, clip, siem, svcs, wksn
+    core: root, identity, audit, network, dns, security, artifacts
+    plat: dev, staging, prod, sandbox
 
   Branch scope (trusted_github_repos):
     Plan role: any ref (required for PRs)
@@ -90,7 +92,7 @@ Atmos Pro setup plan:
 
   Files to edit (2):
     stacks/catalog/tfstate-backend/defaults.yaml
-    stacks/orgs/e98d/_defaults.yaml  (add "mixins/atmos-pro" to imports)
+    stacks/orgs/dev/_defaults.yaml  (add "mixins/atmos-pro" to imports)
 
   Detected conditions:
     - Spacelift enabled  => will set workspace_enabled: false
@@ -102,6 +104,80 @@ Proceed? [y/N]
 ```
 
 In `--approve-all` mode, skip the prompt and proceed.
+
+## Step 4.5: Resolve the account-ID map
+
+Account IDs must come from a deterministic source — never fabricate `<MISSING>`
+placeholders. Try sources in order, stop at the first complete map:
+
+1. **`atmos describe component account-map`** — only works if `atmos` is on PATH (typically
+   not the case for Path B Claude Code runs outside Geodesic):
+   ```bash
+   atmos describe component account-map -s <one-account-stack> --format=json \
+     | jq '.outputs.account_info_map // .vars.account_map'
+   ```
+2. **Static account-map files** in the catalog:
+   ```bash
+   grep -rE '^\s+[a-z0-9-]+:\s+"?[0-9]{12}"?' stacks/catalog/account-map* 2>/dev/null
+   ```
+3. **Repo documentation tables** — common Cloud Posse pattern; account IDs documented in
+   the repo README or under `docs/`:
+   ```bash
+   grep -lE '\| *[0-9]{12} *\|' README.md docs/**/*.md _shared/**/*.md 2>/dev/null
+   ```
+   Parse matched tables: row label = `{tenant}-{stage}`; numeric cells per column header
+   = `{org}` account IDs. Markdown section dividers (`**Governance**`, etc.) are skipped
+   because they don't contain 12-digit numbers.
+4. **Cross-account ARN references in stacks** (supplementary only):
+   ```bash
+   grep -rEho 'arn:aws:iam::[0-9]{12}' stacks/ | sort -u
+   ```
+5. **User prompt** — if any account is still missing, stop and ask. Do not generate
+   profile files with placeholder ARNs.
+
+Cache the resolved map to **`.git/atmos-pro/account-map.json`** (NOT under the worktree
+root). `.git/` is never tracked by Git, so the cache cannot accidentally end up in the
+PR. Re-runs and follow-up invocations check this cache before re-running the chain.
+
+If a previous skill run accidentally left `.account-map.json` in the worktree root,
+remove it before staging:
+
+```bash
+rm -f .account-map.json
+git rm --cached .account-map.json 2>/dev/null || true
+```
+
+## Step 4.6: Locate the tfstate-backend tenant
+
+The `gha-tf.yaml` template assumes the `tfstate-backend` component lives in the
+`core` tenant (Cloud Posse standard convention). If the target repo uses a
+different tenant for tfstate (some refarchs use `gov`, `shared`, `infra`, etc.),
+the agent must override the literal `core` in the rendered
+`stacks/catalog/aws/iam-role/gha-tf.yaml` to match.
+
+Detect the actual tenant by inspecting where the `tfstate-backend` component is
+deployed:
+
+```bash
+atmos describe component tfstate-backend -s "$(atmos list stacks | head -1)" \
+  --format=json | jq -r '.vars.tenant // "core"'
+```
+
+Or, when `atmos` is unavailable, grep for the component's stack manifest:
+
+```bash
+grep -rEl 'component:\s*tfstate-backend' stacks/ 2>/dev/null \
+  | head -1 \
+  | xargs dirname \
+  | sed -E 's|.*orgs/[^/]+/([^/]+)/.*|\1|'
+```
+
+If the detected tenant is anything other than `core`, edit the rendered
+`gha-tf.yaml` and replace `-core-gbl-root-tfstate` with
+`-{detected-tenant}-gbl-root-tfstate` (and the matching `-tfstate-ro` line).
+Group entries by namespace with comments so future readers can tell which is
+which (see `references/iam-trust-model.md` "Multi-namespace repo" for the
+expected structure).
 
 ## Step 5: Generate artifacts
 
@@ -144,19 +220,57 @@ Non-zero exit → print the output, stop, do not open a PR.
 
 ## Step 7: PR creation
 
+### 7a. Build the PR body
+
+Detect the repo's PR template first (case-insensitive, common locations):
+
 ```shell
+for p in .github/PULL_REQUEST_TEMPLATE.md .github/pull_request_template.md \
+         PULL_REQUEST_TEMPLATE.md docs/PULL_REQUEST_TEMPLATE.md; do
+  [ -f "$p" ] && { TEMPLATE_PATH="$p"; break; }
+done
+```
+
+**If a template exists:** copy its structure into `.git/atmos-pro/pr-body.md` and fill
+in the sections with skill content. Map the common section names as follows:
+
+| Template section          | Fill with                                                    |
+|---------------------------|--------------------------------------------------------------|
+| `## what` / `## What`     | "What this adds" list from the artifact catalog              |
+| `## why` / `## Why`       | One paragraph: enable Atmos Pro CI/CD, replace Spacelift     |
+| `## references`           | https://atmos-pro.com + skill source URL                     |
+| `## Usage`                | Identity Naming and Adding More Repos mini-sections          |
+| `## Testing` / Test plan  | The rollout checklist from the skill's default template      |
+
+Preserve `<!-- ... -->` comments — they are author hints intended to stay in place.
+
+**If no template exists:** copy `templates/docs/atmos-pro-pr-body.md.tmpl` rendered
+output to `.git/atmos-pro/pr-body.md`.
+
+### 7b. Stage, commit, push
+
+```shell
+# Sanity check: never commit the account-map cache
+test -f .account-map.json && rm -f .account-map.json && git rm --cached .account-map.json 2>/dev/null
 git add -A
 git commit -m "feat(atmos-pro): bootstrap CI/CD integration
 
 Generated by the atmos-pro skill."
 
 git push -u origin feat/atmos-pro
-
-gh pr create --title "feat(atmos-pro): bootstrap CI/CD integration" --body-file .github/atmos-pro-pr-body.md
 ```
 
-The PR body is derived from `templates/docs/atmos-pro-pr-body.md.tmpl` and includes the
-rollout checklist.
+### 7c. Create the PR
+
+```shell
+gh pr create --draft \
+  --title "feat(atmos-pro): bootstrap CI/CD integration" \
+  --body-file .git/atmos-pro/pr-body.md \
+  --base main --head feat/atmos-pro
+```
+
+Both the body file and the account-map cache live under `.git/atmos-pro/` — `.git/`
+is never tracked by Git, so neither file can leak into the PR.
 
 ## Post-PR: rollout checklist (user actions)
 

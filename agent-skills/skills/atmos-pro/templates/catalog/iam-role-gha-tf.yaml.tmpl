@@ -25,8 +25,8 @@ components:
               - "sts:TagSession"
               - "sts:SetSourceIdentity"
             resources:
-              - arn:aws:iam::<<.root_account_id>>:role/<<.namespace>>-gov-gbl-root-tfstate
-              - arn:aws:iam::<<.root_account_id>>:role/<<.namespace>>-gov-gbl-root-tfstate-ro
+              - arn:aws:iam::<<.root_account_id>>:role/<<.namespace>>-core-gbl-root-tfstate
+              - arn:aws:iam::<<.root_account_id>>:role/<<.namespace>>-core-gbl-root-tfstate-ro
 
     aws/iam-role/gha-tf-apply:
       metadata:

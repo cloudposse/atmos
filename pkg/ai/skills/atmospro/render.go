@@ -193,6 +193,7 @@ var templateToOutputPath = map[string]string{
 	"component/iam-role-component.yaml.tmpl":       "components/terraform/aws/iam-role/component.yaml",
 	"profiles/github-plan.yaml.tmpl":               "profiles/github-plan/atmos.yaml",
 	"profiles/github-apply.yaml.tmpl":              "profiles/github-apply/atmos.yaml",
+	"profiles/README.md.tmpl":                      "profiles/README.md",
 	"workflows/atmos-pro.yaml.tmpl":                ".github/workflows/atmos-pro.yaml",
 	"workflows/atmos-pro-list-instances.yaml.tmpl": ".github/workflows/atmos-pro-list-instances.yaml",
 	"workflows/atmos-terraform-plan.yaml.tmpl":     ".github/workflows/atmos-terraform-plan.yaml",

@@ -48,6 +48,13 @@ The component is vendored into `components/terraform/aws/iam-role/`, keeping the
 at the account's `*-gha-tf-plan` role ARN. Used when `ATMOS_PROFILE=github-plan` is set in the
 plan workflow.
 
+## `profiles/README.md`
+
+**Always.** Explainer doc for the `profiles/` directory: which profile each workflow uses,
+how `ATMOS_PROFILE` deep-merge works, how to add a new account. Source template:
+`templates/profiles/README.md.tmpl`. Helps future maintainers understand the directory
+without reading the SKILL or the Atmos docs.
+
 ## `profiles/github-apply/atmos.yaml`
 
 **Always.** One `identities:` entry per detected `{tenant}-{stage}` pair.

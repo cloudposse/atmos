@@ -25,8 +25,8 @@ entry script):
 ```shell
 # Inside the Geodesic shell
 cd /path/to/repo
-git worktree add .conductor/atmos-pro-setup feat/atmos-pro
-cd .conductor/atmos-pro-setup
+git worktree add .worktrees/atmos-pro-setup feat/atmos-pro
+cd .worktrees/atmos-pro-setup
 atmos ai ask "setup atmos pro" --skill atmos-pro
 ```
 

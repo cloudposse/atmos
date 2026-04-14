@@ -5,16 +5,43 @@ deep-merge into the base `atmos.yaml` when `ATMOS_PROFILE=<name>` is set.
 
 ## Identity resolution rule
 
-For a stack named `{org}-{tenant}-{region}-{stage}` (e.g., `e98d-gov-gbl-iam`), Atmos looks
-up identities under the name `{tenant}-{stage}/<role>` (e.g., `gov-iam/gha-tf-plan`).
+Stack names follow the Cloud Posse convention
+`{namespace}-{tenant}-{environment}-{stage}` (e.g., `eg-core-ue1-auto`). The
+identity name Atmos resolves depends on whether the repo contains a single
+namespace or multiple.
 
-The skill generates one `identities:` block per `{tenant}-{stage}` pair discovered in the stack
-hierarchy. The role suffix distinguishes the profile:
+### Single-namespace repo
+
+Identity name: `{tenant}-{stage}/<role>` (e.g., `core-auto/gha-tf-plan`).
+
+The skill generates one `identities:` block per `{tenant}-{stage}` pair. The role
+suffix distinguishes the profile:
 
 - `github-plan` profile → `<tenant>-<stage>/gha-tf-plan`
 - `github-apply` profile → `<tenant>-<stage>/gha-tf-apply`
 
-Identity names are not configurable in v1. The skill always emits this exact pattern.
+### Multi-namespace repo (separate namespaces for dev / staging / prod)
+
+Some repos place each environment in its own namespace — for example, namespaces
+`dev`, `stg`, `prd` each containing a `core` tenant. Multiple namespaces share the
+same `{tenant}-{stage}` keyspace — `core-auto` would exist in all three. Without
+disambiguation, all three would collide on the same identity key.
+
+Identity names MUST be prefixed with the namespace:
+
+- `github-plan` → `<namespace>-<tenant>-<stage>/gha-tf-plan`
+- `github-apply` → `<namespace>-<tenant>-<stage>/gha-tf-apply`
+
+For a 3-namespace × 13-(tenant,stage) repo, each profile contains 39 entries
+(`dev-core-auto/gha-tf-plan`, `stg-core-auto/gha-tf-plan`,
+`prd-core-auto/gha-tf-plan`, etc.).
+
+The skill detects multi-org by counting unique namespaces in the resolved
+account-map. If `len(unique(namespaces)) > 1`, it switches to the prefixed
+naming. The mixin and IAM role catalog are unchanged — only the profile keys.
+
+Identity names are not user-configurable. The skill always emits one of these
+two patterns.
 
 ## Deep-merge mechanics
 
@@ -47,12 +74,12 @@ auth:
         audience: sts.amazonaws.com
 
   identities:
-    gov-iam/gha-tf-plan:
+    core-iam/gha-tf-plan:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-        assume_role: arn:aws:iam::662021896431:role/e98d-gov-gbl-iam-gha-tf-plan
+        assume_role: arn:aws:iam::111111111111:role/eg-core-gbl-iam-gha-tf-plan
     # ... one entry per {tenant}-{stage}
 ```
 
@@ -103,7 +130,7 @@ gov-new-account/gha-tf-plan:
   via:
     provider: github-oidc
   principal:
-    assume_role: arn:aws:iam::123456789012:role/e98d-gov-gbl-new-account-gha-tf-plan
+    assume_role: arn:aws:iam::123456789012:role/dev-core-gbl-new-account-gha-tf-plan
 ```
 
 And the matching entry in `profiles/github-apply/atmos.yaml`. No other file changes are

@@ -25,8 +25,8 @@ components:
               - "sts:TagSession"
               - "sts:SetSourceIdentity"
             resources:
-              - arn:aws:iam::111111111111:role/ex-gov-gbl-root-tfstate
-              - arn:aws:iam::111111111111:role/ex-gov-gbl-root-tfstate-ro
+              - arn:aws:iam::111111111111:role/ex-core-gbl-root-tfstate
+              - arn:aws:iam::111111111111:role/ex-core-gbl-root-tfstate-ro
 
     aws/iam-role/gha-tf-apply:
       metadata:

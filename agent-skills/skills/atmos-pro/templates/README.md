@@ -18,10 +18,10 @@ All native `{{ }}` in template output passes through untouched — no escaping n
 ```
 <<.org>>              → "cloudposse"
 <<.repo>>             → "atmos"
-<<.namespace>>        → "e98d"
-<<.target_org>>       → "e98d"
-<<.root_account_id>>  → "399520444934"
-<<.probe_stack>>      → "e98d-gov-gbl-iam"
+<<.namespace>>        → "dev"
+<<.target_org>>       → "dev"
+<<.root_account_id>>  → "111111111111"
+<<.probe_stack>>      → "dev-core-gbl-iam"
 ```
 
 ### Iteration (`range`)

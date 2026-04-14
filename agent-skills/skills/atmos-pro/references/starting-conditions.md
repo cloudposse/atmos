@@ -81,7 +81,7 @@ Look for `auth:` at the top level of:
 
 A stray `auth:` under `settings:` does not count — it must be the top-level auth config.
 
-**Geodesic note:** In Geodesic-hosted repos (1898-style and other Cloud Posse reference
+**Geodesic note:** In Geodesic-hosted repos (Cloud Posse reference-architecture-style and other Cloud Posse reference
 stacks), `atmos.yaml` does not live at the repo root. Workflows set
 `ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos` and expect the config there.
 Agents must resolve the actual config path before any probe that reads it — running

@@ -77,21 +77,121 @@ policy_statements:
       - "sts:TagSession"
       - "sts:SetSourceIdentity"
     resources:
-      - arn:aws:iam::{{ .root_account_id }}:role/{{ .namespace }}-gov-gbl-root-tfstate
-      - arn:aws:iam::{{ .root_account_id }}:role/{{ .namespace }}-gov-gbl-root-tfstate-ro
+      - arn:aws:iam::{{ .root_account_id }}:role/{{ .namespace }}-core-gbl-root-tfstate
+      - arn:aws:iam::{{ .root_account_id }}:role/{{ .namespace }}-core-gbl-root-tfstate-ro
 ```
 
 Both plan and apply roles inherit this via `aws/iam-role/gha-tf/defaults` inheritance.
 
+### Multi-namespace repo
+
+If multiple namespaces (e.g., separate `dev` / `stg` / `prd` namespaces) live in the
+same repo, the `resources:` list expands to include each namespace's tfstate-backend
+ARNs. Group them by namespace with comments so future readers can tell which is which:
+
+```yaml
+resources:
+  # dev namespace tfstate roles
+  - arn:aws:iam::111111111111:role/dev-core-gbl-root-tfstate
+  - arn:aws:iam::111111111111:role/dev-core-gbl-root-tfstate-ro
+  # stg namespace tfstate roles
+  - arn:aws:iam::222222222222:role/stg-core-gbl-root-tfstate
+  - arn:aws:iam::222222222222:role/stg-core-gbl-root-tfstate-ro
+  # prd namespace tfstate roles
+  - arn:aws:iam::333333333333:role/prd-core-gbl-root-tfstate
+  - arn:aws:iam::333333333333:role/prd-core-gbl-root-tfstate-ro
+```
+
+Over-listing is harmless: the actual `sts:AssumeRole` call still requires the trust
+policy on the target tfstate role to allow the calling principal. Per-account
+isolation is enforced on the tfstate side, not by the IAM role's resource list.
+
 ### tfstate-backend side
 
 In `stacks/catalog/tfstate-backend/defaults.yaml`, `access_roles.default.allowed_principal_arns`
-is extended additively with a wildcard matching the new role names:
+is extended additively with a wildcard per namespace:
 
 ```yaml
+# Single-namespace repo:
 allowed_principal_arns:
   - "arn:aws:iam::*:role/{{ .namespace }}-*-gbl-*-gha-tf-*"
+
+# Multi-namespace repo (one wildcard per namespace):
+allowed_principal_arns:
+  - "arn:aws:iam::*:role/dev-*-gbl-*-gha-tf-*"
+  - "arn:aws:iam::*:role/stg-*-gbl-*-gha-tf-*"
+  - "arn:aws:iam::*:role/prd-*-gbl-*-gha-tf-*"
 ```
+
+For multi-namespace setups, also set `team_permission_sets_enabled: false` on the
+tfstate-backend component to prevent SSO PermissionSet auto-generation from pushing
+the trust policy past the IAM 2048-char size limit. Three namespace wildcards plus
+auto-generated PermissionSet ARNs (one per team per namespace) routinely exceed the
+limit; the explicit `allowed_permission_sets` entries below the wildcards still take
+effect.
+
+### `team_permission_sets_enabled` requires module-level support
+
+The variable is **silently ignored** unless the underlying Terraform code declares
+and plumbs it through. Older vendored copies of `tfstate-backend` and
+`account-map/modules/team-assume-role-policy` do not declare it. Before relying on
+the stack-level setting, verify support — and patch if missing:
+
+```bash
+# Detect module support
+grep -q "team_permission_sets_enabled" \
+  components/terraform/tfstate-backend/variables.tf \
+  components/terraform/account-map/modules/team-assume-role-policy/variables.tf \
+  2>/dev/null && echo "OK" || echo "MISSING — patch required"
+```
+
+When the check reports MISSING, the skill must emit four patches:
+
+1. **`components/terraform/account-map/modules/team-assume-role-policy/variables.tf`**
+   — add the variable declaration:
+
+   ```hcl
+   variable "team_permission_sets_enabled" {
+     type        = bool
+     description = <<-EOT
+       When true, team roles in the identity account will also generate corresponding
+       AWS SSO PermissionSet ARN patterns in the trust policy. Set to false when trust
+       policies are exceeding IAM size limits and SSO access is not needed.
+       EOT
+     default     = true
+   }
+   ```
+
+2. **`components/terraform/account-map/modules/team-assume-role-policy/main.tf`**
+   — pass the variable to both `roles-to-principals` module calls:
+
+   ```hcl
+   module "allowed_role_map" {
+     # ... existing inputs ...
+     overridable_team_permission_sets_enabled = var.team_permission_sets_enabled
+   }
+   module "denied_role_map" {
+     # ... existing inputs ...
+     overridable_team_permission_sets_enabled = var.team_permission_sets_enabled
+   }
+   ```
+
+3. **`components/terraform/tfstate-backend/variables.tf`** — same variable declaration
+   as in step 1.
+
+4. **`components/terraform/tfstate-backend/iam.tf`** — pass the variable to the
+   `assume_role` module:
+
+   ```hcl
+   module "assume_role" {
+     # ... existing inputs ...
+     team_permission_sets_enabled = var.team_permission_sets_enabled
+   }
+   ```
+
+Without these four patches, the trust policy will silently exceed 2048 chars on
+multi-namespace tfstate-backend deployments and the apply will fail with
+`InvalidParameter: LimitExceeded: Cannot exceed quota for PolicySize: 2048`.
 
 ### Why both sides
 
@@ -115,13 +215,13 @@ role's ARN, not the apply role's:
 
 ```yaml
 identities:
-  gov-root/gha-tf-apply:
+  core-root/gha-tf-apply:
     kind: aws/assume-role
     via:
       provider: github-oidc
     principal:
       # Safety: assumes gha-tf-plan (read-only) to prevent automation from applying to root account.
-      assume_role: arn:aws:iam::{{ .root_account_id }}:role/{{ .namespace }}-gov-gbl-root-gha-tf-plan
+      assume_role: arn:aws:iam::{{ .root_account_id }}:role/{{ .namespace }}-core-gbl-root-gha-tf-plan
 ```
 
 The skill must emit this comment verbatim so future contributors understand why the apply

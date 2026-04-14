@@ -28,7 +28,7 @@ atmos describe component github-oidc-provider -s <stack>
 atmos terraform plan github-oidc-provider -s <stack>
 
 # 2. Check trust policy
-aws iam get-role --role-name e98d-gov-gbl-iam-gha-tf-plan \
+aws iam get-role --role-name dev-core-gbl-iam-gha-tf-plan \
   --query 'Role.AssumeRolePolicyDocument.Statement[?Sid==`OidcProviderAssume`].Condition' \
   --profile <operator-profile>
 
@@ -67,7 +67,7 @@ atmos describe component <component> -s <stack> --format=json | jq '.auth'
 ```
 Error loading state: AccessDenied: User: arn:aws:sts::...:assumed-role/.../...-gha-tf-plan
 is not authorized to perform: sts:AssumeRole on resource:
-arn:aws:iam::<root>:role/e98d-gov-gbl-root-tfstate
+arn:aws:iam::<root>:role/dev-core-gbl-root-tfstate
 ```
 
 ### Cause
@@ -163,7 +163,7 @@ opt in manually.
 The apply workflow fails immediately with:
 
 ```
-Error: Environment 'e98d-gov-iam' could not be found.
+Error: Environment 'dev-core-iam' could not be found.
 ```
 
 ### Cause
@@ -285,7 +285,7 @@ with `No such file or directory`, even though the repo is clearly an Atmos proje
 
 ### Cause
 
-The repo is Geodesic-hosted (1898-style, Cloud Posse reference stacks). `atmos.yaml`
+The repo is Geodesic-hosted (Cloud Posse reference-architecture-style, Cloud Posse reference stacks). `atmos.yaml`
 lives at `rootfs/usr/local/etc/atmos/atmos.yaml`, not at the repo root. Workflows set
 `ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos` so Atmos finds it at runtime —
 but a naive `ls atmos.yaml` probe runs outside that environment and fails.
@@ -344,3 +344,90 @@ Two actions, in order:
 The atmos-pro skill flags this as a security finding in its detection output but does
 not block the onboarding flow. The skill itself must never echo the tokenized URL in
 plan summaries, PR bodies, worktree paths, or log output — extract `owner/repo` only.
+
+## Account-ID resolution missed accounts the README has
+
+### Symptom
+
+The skill stops at step 4.5 (account-map resolution) reporting an incomplete map even
+though the repo's README clearly documents every account ID in a table.
+
+### Cause
+
+The agent ran sources 1, 2, and 4 of the resolution chain (atmos, static catalog,
+cross-account ARN grep) but skipped source 3 (documentation grep). This happens when
+the agent assumes "no `atmos` binary + no `account-map` catalog file = nothing else
+to try" and moves straight to prompting the user.
+
+### Fix
+
+Tell the agent to scan the README explicitly:
+
+> Re-run account-map resolution. Check the repo's README.md for an account-ID table
+> (the format is `| {tenant}-{stage} | <12-digit-id> | <12-digit-id> | <12-digit-id> |`
+> with one column per org). Use the table values to populate `RenderData.Accounts`
+> and continue.
+
+The grep that the source-3 fallback runs:
+
+```bash
+grep -lE '\| *[0-9]{12} *\|' README.md docs/**/*.md _shared/**/*.md 2>/dev/null
+```
+
+Section divider rows with `**` markers (`**Governance**`, `**Operations**`) are skipped
+because they don't contain 12-digit numbers — no special-casing needed.
+
+## `.account-map.json` shows up in the PR
+
+### Symptom
+
+The Atmos Pro skill PR includes a `.account-map.json` file at the repo root with all
+production account IDs. Reviewers correctly flag this as inappropriate to commit.
+
+### Cause
+
+A previous skill version (≤ first live test) wrote the account-map cache to
+`.account-map.json` at the worktree root. The agent's `git add -A` then staged it.
+Account IDs are sensitive (not secrets, but typically kept out of source control).
+
+### Fix
+
+Updated skill writes the cache to `.git/atmos-pro/account-map.json` instead. `.git/`
+is special to Git and never tracked, so the cache cannot accidentally land in a PR.
+
+To clean up an existing PR that already includes the file:
+
+```bash
+# In the worktree
+git rm .account-map.json
+mkdir -p .git/atmos-pro
+mv "$(git rev-parse --show-toplevel)/.account-map.json" .git/atmos-pro/account-map.json 2>/dev/null || true
+git commit -m "chore(atmos-pro): move account-map cache out of repo tree"
+git push
+```
+
+## PR body ignores the repo's `PULL_REQUEST_TEMPLATE.md`
+
+### Symptom
+
+The repo has a `.github/PULL_REQUEST_TEMPLATE.md` with specific sections (e.g.,
+"Why / What / Usage / Testing"), but the Atmos Pro skill opened a PR with its own
+"Summary / Accounts / Rollout checklist" body that ignores the template.
+
+### Cause
+
+A previous skill version always rendered `templates/docs/atmos-pro-pr-body.md.tmpl`
+without first checking whether the repo had its own template.
+
+### Fix
+
+Updated skill detects the repo's template before building the PR body, populates
+the template's sections with skill content, and only falls back to the skill's own
+template when none exists. See SKILL.md step 7a and onboarding-playbook.md step 7a.
+
+To rewrite an already-opened PR's body to match the repo's template:
+
+```bash
+# Build a new body following the repo's template, save to .git/atmos-pro/pr-body.md
+gh pr edit <pr-number> --body-file .git/atmos-pro/pr-body.md
+```

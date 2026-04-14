@@ -83,7 +83,7 @@ at dispatch time:
 | Variable                   | What it resolves to                                    |
 |----------------------------|--------------------------------------------------------|
 | `{{ .atmos_component }}`   | The component name (e.g., `vpc`, `aws/iam-role/gha-tf-plan`) |
-| `{{ .atmos_stack }}`       | The full stack name (e.g., `e98d-gov-gbl-iam`)         |
+| `{{ .atmos_stack }}`       | The full stack name (e.g., `dev-core-gbl-iam`)         |
 | `{{ .vars.tenant }}`       | The `vars.tenant` of the affected stack                |
 | `{{ .vars.stage }}`        | The `vars.stage` of the affected stack                 |
 | `{{ .sha }}`               | The commit SHA that triggered the dispatch             |
