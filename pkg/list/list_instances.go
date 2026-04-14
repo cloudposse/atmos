@@ -14,6 +14,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/git"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
@@ -22,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
@@ -48,6 +50,7 @@ type InstancesCommandOptions struct {
 	Delimiter   string
 	Query       string
 	AuthManager auth.AuthManager
+	OutputFile  string
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -409,6 +412,19 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return errors.Join(errUtils.ErrParseFlag, err)
 	}
 
+	// Handle matrix format specially - it bypasses the normal rendering pipeline.
+	if formatFlag == string(format.FormatMatrix) {
+		if upload {
+			return fmt.Errorf("%w: --upload is not supported with --format=matrix", errUtils.ErrInvalidFlag)
+		}
+		return executeMatrixFormat(&atmosConfig, opts)
+	}
+
+	// Reject --output-file for non-matrix formats — it would be silently ignored.
+	if opts.OutputFile != "" {
+		return fmt.Errorf("%w: --output-file is only supported with --format=matrix", errUtils.ErrInvalidFlag)
+	}
+
 	// Handle tree format specially - branch before calling processInstances to avoid double processing.
 	log.Trace("Checking format flag", "format_flag", formatFlag, "format_tree", format.FormatTree, "match", formatFlag == string(format.FormatTree))
 	if formatFlag == string(format.FormatTree) {
@@ -546,6 +562,30 @@ func sanitizeForJSON(v any) any {
 	default:
 		return v
 	}
+}
+
+// executeMatrixFormat handles the matrix output format for list instances.
+// It produces GitHub Actions-compatible matrix JSON matching describe affected --format=matrix.
+// When ci.enabled is true and no --output-file is provided, automatically writes to $GITHUB_OUTPUT.
+func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions) error {
+	defer perf.Track(nil, "list.executeMatrixFormat")()
+
+	// Get stacksMap to extract component_path from component_info.
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, opts.AuthManager)
+	if err != nil {
+		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
+		return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	entries := extract.StacksMatrixEntries(stacksMap)
+
+	// Resolve output file: explicit flag > CI auto-detect > stdout.
+	outputFile := opts.OutputFile
+	if outputFile == "" && atmosConfig.CI.Enabled {
+		outputFile = ghactions.GetOutputPath()
+	}
+
+	return matrix.WriteOutput(entries, outputFile)
 }
 
 // buildInstanceFilters creates filters from filter specification.
