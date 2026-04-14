@@ -588,6 +588,7 @@ Point Claude Code's plugin marketplace at the local Atmos checkout. Inside Claud
 ```
 /plugin marketplace add /path/to/atmos
 /plugin install atmos@cloudposse
+/reload-plugins
 ```
 
 Claude Code reads `/path/to/atmos/.claude-plugin/marketplace.json`, resolves the `atmos`
@@ -596,29 +597,248 @@ the directory containing `.claude-plugin/`), and installs every skill under the 
 skills directory — including `atmos-pro` from the unmerged branch. This mirrors the
 production install flow exactly.
 
-If the install fails with "Plugin 'atmos' not found in any marketplace", run the
-marketplace validator to surface schema errors:
+##### Manifest schema (must match Claude Code spec)
+
+The Claude Code marketplace validator rejects or silently ignores non-standard top-level
+fields. The corrected manifests in this repo follow the
+[official schema](https://code.claude.com/docs/en/plugin-marketplaces):
+
+`.claude-plugin/marketplace.json`:
+
+```json
+{
+  "name": "cloudposse",
+  "owner": {
+    "name": "Cloud Posse",
+    "email": "opensource@cloudposse.com"
+  },
+  "metadata": {
+    "description": "Official Atmos plugins and skills for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "atmos",
+      "source": "./agent-skills",
+      "description": "...",
+      "version": "1.0.0",
+      "category": "development",
+      "keywords": ["atmos", "terraform", "infrastructure", "iac", "devops", "cloud"],
+      "homepage": "https://atmos.tools/ai/agent-skills",
+      "repository": "https://github.com/cloudposse/atmos",
+      "license": "Apache-2.0",
+      "author": { "name": "Cloud Posse", "email": "opensource@cloudposse.com" }
+    }
+  ]
+}
+```
+
+`agent-skills/.claude-plugin/plugin.json`:
+
+```json
+{
+  "name": "atmos",
+  "version": "1.0.0",
+  "description": "...",
+  "author": { "name": "Cloud Posse", "email": "opensource@cloudposse.com" },
+  "homepage": "https://atmos.tools/ai/agent-skills",
+  "repository": "https://github.com/cloudposse/atmos",
+  "license": "Apache-2.0",
+  "keywords": ["atmos", "terraform", "infrastructure", "iac", "devops", "cloud"]
+}
+```
+
+Key rules: `version` and `description` on the marketplace go under `metadata.*`. The
+`author` object takes `name` + optional `email` (not `url`).
+
+Validate both files at any time with:
+
+```bash
+claude plugin validate /path/to/atmos
+```
+
+Expected output: `✔ Validation passed`.
+
+##### Verifying the install worked
+
+The `/plugin install` and `/reload-plugins` output can be misleading. A typical
+successful sequence looks like:
 
 ```
-/plugin validate /path/to/atmos
+/plugin marketplace add /path/to/atmos
+   → Successfully added marketplace: cloudposse
+
+/plugin install atmos@cloudposse
+   → ✓ Installed atmos. Run /reload-plugins to apply.
+
+/reload-plugins
+   → Reloaded: 1 plugin · 0 skills · 5 agents · 0 hooks · 0 plugin MCP servers · 0 plugin LSP servers
 ```
 
-Common failure modes:
+The reload count `0 skills` does **not** mean skills failed to load. Plugin-bundled
+skills are not included in that count — it reports user-scope and project-scope
+non-plugin skills only. To confirm the plugin skills are live, run `/skills` in
+Claude Code:
 
-- **Non-standard fields** — Claude Code's marketplace schema requires `metadata.version`
-  and `metadata.description` (not top-level `version` / `description`). The author
-  object accepts `name` and optional `email`, not `url`. Both manifests in this repo
-  have been corrected.
-- **Relative paths require Git-backed marketplace** — adding a marketplace by a direct
-  URL to `marketplace.json` skips cloning, so `./agent-skills` never resolves. Use a
-  local filesystem path (`/plugin marketplace add /path/to/atmos`) or a Git source.
-- **Duplicate installs** — if a previous attempt cached a partial install, remove and
-  re-add:
-  ```
-  /plugin marketplace remove cloudposse
-  /plugin marketplace add /path/to/atmos
-  /plugin install atmos@cloudposse
-  ```
+```
+/skills
+   → 47 skills · Esc to close
+
+     🔒 on   atmos:atmos-ansible · plugin · ~39 tok · locked by plugin
+     🔒 on   atmos:atmos-auth · plugin · ~42 tok · locked by plugin
+     🔒 on   atmos:atmos-aws-security · plugin · ~47 tok · locked by plugin
+     🔒 on   atmos:atmos-pro · plugin · ~XX tok · locked by plugin
+     ... (all 23 atmos skills, plus Claude Code's bundled skills)
+```
+
+All 23 skills appear under the `atmos:` namespace (e.g., `atmos:atmos-pro`) since
+Claude Code namespaces plugin skills as `<plugin-name>:<skill-name>`. The `🔒` icon
+means the plugin owns the skill's on/off state (you manage it via `/plugin` rather
+than individually in `/skills`).
+
+Agent Skills open-standard frontmatter fields that Claude Code does **not** document
+(nested `metadata:` object, `references:` array) are ignored gracefully — skills
+still load and the fields remain available to any consumer that knows to read them
+(the Atmos binary uses `references:` for eager concatenation when Path A dispatches
+the skill).
+
+The 5 agents shown in the reload count come from the caller's `.claude/agents/`
+directory in the working repo, not from the plugin cache (which has no `agents/`
+subdirectory).
+
+##### Invoking the skill in Claude Code
+
+Once installed, either ask in natural language or invoke explicitly. See the
+**Prompts catalog** below for a full set of tested prompts covering cold-start,
+step-by-step, variant simulation, diagnostic, and follow-up scenarios.
+
+### Prompts catalog
+
+Prompts tested against the live `atmos:atmos-pro` skill. Run from inside Claude Code
+while `cd`'d into the target Atmos repo. Always mention `atmos:atmos-pro` explicitly
+on the first prompt so Claude Code disambiguates against less specific skills.
+
+#### Cold start — full end-to-end
+
+Use this when the skill should do everything: detect, plan, confirm, generate,
+validate, open a PR.
+
+> Use the `atmos:atmos-pro` skill to set up Atmos Pro in this repository. Detect the
+> repo shape first, print a plan, wait for my approval, then generate all artifacts in
+> an isolated worktree and self-validate with `atmos validate stacks`.
+
+Model-picks-skill variant (for testing automatic skill selection):
+
+> Set up Atmos Pro onboarding for this repo. Use the atmos-pro skill.
+
+#### Explicit skill invocation
+
+Load the skill into context without starting the flow:
+
+```
+/atmos:atmos-pro
+```
+
+Tab-completion lists every `atmos:*` skill. Follow up with:
+
+> Begin the 7-step flow. Start with step 1 (isolated worktree) and stop after step 3
+> (plan confirmation) so I can review.
+
+#### Step-by-step (recommended for the first run)
+
+Each prompt runs a single phase so you can inspect output at the boundary.
+
+**Detection only** — no writes:
+
+> Using the `atmos:atmos-pro` skill, run only the detection phase (step 2 of the
+> playbook). Report the stack hierarchy, whether Atmos Auth is configured, whether
+> Spacelift is enabled, whether `github-oidc-provider` is deployed, whether this is a
+> Geodesic repo, and whether GitHub Actions is enabled. Do not create a worktree or
+> write any files.
+
+**Plan preview** — diff-before-write:
+
+> Using the `atmos:atmos-pro` skill, show me the plan summary: target org, accounts,
+> branch scope, files to create, files to edit, and which starting-condition variants
+> apply. Do not write files yet.
+
+**Execute with approval** — after the plan is acceptable:
+
+> Proceed with the `atmos:atmos-pro` flow from step 4 onward: create the worktree at
+> `.conductor/atmos-pro-setup feat/atmos-pro`, generate all artifacts, run
+> `atmos validate stacks`, and stop before opening a PR. Show me a git diff of the
+> worktree when done.
+
+**Open the PR** — the last step:
+
+> Open a PR from the atmos-pro worktree using `gh pr create` with the rollout
+> checklist body from `templates/docs/atmos-pro-pr-body.md.tmpl`. Do not merge.
+
+#### Variant simulations
+
+Useful for exercising branches of the starting-condition decision table without
+staging artificial fixtures.
+
+> Using `atmos:atmos-pro`, pretend this repo has GitHub Actions disabled org-wide.
+> Walk me through exactly what the skill would output and stop before generating any
+> files.
+
+> Using `atmos:atmos-pro`, treat this repo as Geodesic-hosted. Show me the Geodesic
+> section that would be added to `docs/atmos-pro.md`.
+
+> Using `atmos:atmos-pro`, simulate a repo where Spacelift is currently enabled on 3
+> stacks. Show me how the mixin and PR body differ from the no-Spacelift case.
+
+#### Follow-up onboarding (adding orgs or accounts)
+
+After the first PR has merged and you want to extend the setup:
+
+> Using `atmos:atmos-pro`, I want to add the e98s org to the existing Atmos Pro setup.
+> Update `profiles/github-plan/atmos.yaml` and `profiles/github-apply/atmos.yaml` with
+> the e98s accounts, update the trusted role ARNs, and open a follow-up PR.
+
+#### Diagnostic / recovery
+
+Use when a prior run is misbehaving:
+
+> Using `atmos:atmos-pro`, diagnose why my first atmos-pro PR's plan workflow is
+> failing with `AssumeRoleWithWebIdentity`. Check the entries in
+> `references/troubleshooting.md` and tell me which one matches. Do not edit any
+> files yet.
+
+#### Prompting best practices
+
+- **Always mention `atmos:atmos-pro` explicitly on the first prompt** — the namespace
+  prefix disambiguates against less-specific skills.
+- **Tell the skill where to stop.** The default flow runs to completion including PR
+  opening; adding "stop before opening a PR" or "stop after step 3" keeps the loop
+  short while iterating.
+- **Always run inside the target repo** — `cd` into the target infra repo before
+  launching Claude Code so `git worktree add`, `atmos describe component`, and
+  `gh pr create` resolve correctly.
+- **Inspect the worktree when done** — `git worktree list` should show
+  `.conductor/atmos-pro-setup`; `git -C .conductor/atmos-pro-setup status` should
+  show the generated files staged.
+
+##### Duplicate or stale install recovery
+
+If `/plugin install` has been run against a partially-broken manifest version, remove
+and re-add to clear the cached state:
+
+```
+/plugin marketplace remove cloudposse
+/plugin marketplace add /path/to/atmos
+/plugin install atmos@cloudposse
+/reload-plugins
+```
+
+To wipe the on-disk cache between attempts:
+
+```bash
+rm -rf ~/.claude/plugins/cache/cloudposse
+```
+
+##### Post-merge switch
 
 When the feature branch merges, switch to the remote marketplace:
 
@@ -626,6 +846,7 @@ When the feature branch merges, switch to the remote marketplace:
 /plugin marketplace remove cloudposse
 /plugin marketplace add cloudposse/atmos
 /plugin install atmos@cloudposse
+/reload-plugins
 ```
 
 #### Option 3 — inline skill load (no install)
@@ -699,12 +920,14 @@ Until the feature branch is merged, use one of the local-testing options from th
 **Local Testing** section above (symlink, local marketplace, or inline load). After the
 merge, switch to the production marketplace flow.
 
-- [ ] Local testing option chosen (symlink / local marketplace / inline) discovers the
-      skill inside Claude Code running from the target repo
+- [x] Local marketplace install works: `/plugin marketplace add /path/to/atmos` +
+      `/plugin install atmos@cloudposse` succeeds (confirmed manually)
+- [x] All 23 atmos skills appear in `/skills` under the `atmos:` namespace (confirmed
+      manually — the `/reload-plugins` summary shows `0 skills` but that count excludes
+      plugin-bundled skills; `/skills` is the source of truth)
 - [ ] *(post-merge)* `/plugin marketplace add cloudposse/atmos` succeeds
 - [ ] *(post-merge)* `/plugin install atmos@cloudposse` installs without errors
-- [ ] Claude Code sees `atmos-pro` in the skills list
-- [ ] Prompting "set up Atmos Pro" activates the skill and loads `SKILL.md`
+- [ ] Prompting "set up Atmos Pro" activates `atmos:atmos-pro` and loads `SKILL.md`
 - [ ] Reference files are loaded on demand (progressive disclosure) rather than all
       upfront
 - [ ] Generated artifacts match the Path A output byte-for-byte against the same repo
