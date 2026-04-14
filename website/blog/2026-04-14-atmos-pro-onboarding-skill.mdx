@@ -1,6 +1,6 @@
 ---
 slug: atmos-pro-onboarding-skill
-title: "One Command to Bootstrap Atmos Pro in Any Repo"
+title: "From Zero to Atmos Pro: One Skill, One PR"
 authors: [aknysh]
 tags: [feature, atmos-pro, experimental]
 ---
@@ -8,19 +8,19 @@ tags: [feature, atmos-pro, experimental]
 Setting up Atmos Pro in an existing repo means assembling GitHub OIDC trust, two auth
 profiles, four GitHub workflows, an IAM role catalog, a `settings.pro` mixin, and reciprocal
 tfstate-backend trust — across every target account. Until now, that was a hand-written,
-multi-day project. The new `atmos-pro` agent skill turns it into a single command.
+multi-day project. The new `atmos-pro` agent skill turns it into a handful of prompts.
 
 <!--truncate-->
 
 ## Why This Matters
 
-A recent guided onboarding session made no progress in a working afternoon. The blockers were
-not the docs — they were the starting conditions: GitHub Actions disabled org-wide, no Atmos
-Auth yet, federated IAM via Okta (not Identity Center), Geodesic-based dev shells. Every one
-of those variants changes the right thing to generate.
+Every repo starts from a different place: some have Atmos Auth, some don't; some use
+Spacelift, some use Geodesic; GitHub Actions may or may not be enabled; federated IAM
+may come from Identity Center or an external IdP. Each variant changes what needs to
+be generated.
 
-The `atmos-pro` skill encodes the full contract — detection, generation, validation, PR
-creation — and supports every way a user might invoke an AI agent today.
+The `atmos-pro` skill encodes the full contract — detection, generation, validation,
+PR creation — and produces a deploy-ready PR regardless of the starting shape.
 
 ## One Skill, Two Invocation Paths
 
@@ -32,13 +32,13 @@ atmos ai ask "setup atmos pro" --skill atmos-pro
 
 Atmos loads the skill from its embedded bundle and runs the playbook through the AI provider
 configured in `atmos.yaml`. No prior `atmos ai skill install` required — the skill ships with
-the binary.
+the binary. This path requires [Atmos AI](/ai) to be configured.
 
 ### Path B — Claude Code direct
 
 Install the marketplace plugin once, then ask Claude Code to run the skill:
 
-```
+```text
 /plugin marketplace add cloudposse/atmos
 /plugin install atmos@cloudposse
 ```
@@ -51,7 +51,7 @@ templates and golden-snapshot contract.
 
 ## What the Skill Does
 
-The 7-step flow is strict:
+The flow is strict:
 
 1. **Creates an isolated worktree** so your main checkout is never touched.
 2. **Detects the repo shape** — stack hierarchy, Atmos Auth presence, Spacelift usage,
@@ -102,16 +102,17 @@ the plan role's ARN, with a comment explaining why. Automation never applies to 
 - **Reciprocal trust ships together** — the IAM role changes and the tfstate-backend edit
 appear in the same PR. The skill refuses to generate one without the other.
 - **No secrets in manifests** — `ATMOS_PRO_WORKSPACE_ID` is a repo **variable**, not a
-secret. The skill tells you so.
+secret.
 
 ## Built-In, Not Installable
 
-Every Atmos skill ships embedded in the binary:
+The `atmos-pro` skill ships embedded in the Atmos binary alongside the other
+built-in skills — no separate install step:
 
 ```bash
 $ atmos ai skill list
 
-Built-in skills (23):
+Built-in skills:
 ✓ atmos-pro
   Atmos Pro onboarding: generate GitHub OIDC IAM roles, auth profiles, CI workflows,
   mixins, and open a PR that wires an Atmos repo to Atmos Pro
@@ -127,24 +128,21 @@ precedence for the same skill name.
 The skill is backed by testable Go packages so the output is deterministic regardless of
 which AI drives it:
 
-- **`pkg/atmospro/detect`** — filesystem-based pre-flight probes (Atmos Auth, Spacelift,
+- Filesystem-based pre-flight probes (Atmos Auth, Spacelift,
 Geodesic). Pure Go, `fs.FS`-based, no external binaries.
-- **`pkg/ai/skills/atmospro`** — template renderer with a typed `RenderData` context and
+- Template renderer with a typed context and
 custom `<<...>>` delimiters so `{{ }}` and `${{ }}` in the output pass through untouched.
-- **`pkg/ai/skills/embedded`** — exposes every built-in skill to the registry.
-- **14 golden snapshots** at `tests/fixtures/scenarios/atmos-pro-setup/golden/` guarantee
-rendering is byte-stable across refactors.
-- **Cross-path parity tests** prove the on-disk templates (what Path B fetches) and the
-embedded templates (what Path A renders from) are byte-identical.
+- Exposes every built-in skill to the registry.
+- **Golden-snapshot fixtures** guarantee rendering is byte-stable across refactors.
+- **Cross-path parity tests** prove the on-disk and embedded templates are byte-identical.
 
-## Real-World Run — 5 Prompts From Zero to Deploy-Ready PR
+## Real-World Run — 4 Prompts From Zero to Deploy-Ready PR Using Claude Code
 
-We ran the skill end-to-end against a multi-org, Geodesic-hosted Atmos refarch
-(3 namespaces × 13 accounts = 39 AWS accounts).
+We ran the skill end-to-end against a multi-org, Geodesic-hosted Atmos refarch.
 
 **Install the skill (one-time):**
 
-```
+```text
 /plugin marketplace add cloudposse/atmos
 /plugin install atmos@cloudposse
 /reload-plugins
@@ -166,11 +164,11 @@ variants, and open policy questions for approval.
 
 **Run 3 — generate:**
 
-> Proceed: resolve the account map, enable all three orgs, pin prod to plan-only,
+> Proceed: resolve the account map, enable all orgs, pin prod to plan-only,
 > create the worktree, generate, validate.
 
-→ Worktree at `.worktrees/atmos-pro-setup`, 18 files staged. All safety rails
-applied.
+→ Worktree at `.worktrees/atmos-pro-setup`, all artifacts staged and validated.
+All safety rails applied.
 
 **Run 4 — open the PR:**
 
@@ -179,19 +177,10 @@ applied.
 
 → Draft PR opened with body mapped to the repo's template.
 
-**Run 5 — deploy-time correctness patch:**
-
-> Apply the module-level `team_permission_sets_enabled` patches if the probe
-> reports MISSING. Push and comment on the PR.
-
-→ Four patches emitted across `account-map` and `tfstate-backend` modules,
-committed, and the PR updated.
-
 ### The result
 
-A draft PR with **21 files**, body matching the repo's template, all
-safety rails honored — functionally equivalent to a hand-authored reference
-implementation for the same use case.
+A draft PR with the full artifact set, body matching the repo's template, and
+every safety rail honored — ready for review and rollout.
 
 ## Get Started
 
@@ -199,7 +188,7 @@ implementation for the same use case.
 
 ```bash
 gh variable set ATMOS_PRO_WORKSPACE_ID --body "<your-workspace-id>"
-gh variable set ATMOS_VERSION --body "1.163.0"
+gh variable set ATMOS_VERSION --body "<atmos-version>"
    ```
 
 2. Run the skill:
@@ -212,6 +201,7 @@ atmos ai ask "setup atmos pro" --skill atmos-pro
 
 ## Learn More
 
+- [Atmos AI](/ai)
 - [Atmos Pro](https://atmos-pro.com)
 - [Agent Skills open standard](https://agentskills.io)
 - [Skill source](https://github.com/cloudposse/atmos/tree/main/agent-skills/skills/atmos-pro)
