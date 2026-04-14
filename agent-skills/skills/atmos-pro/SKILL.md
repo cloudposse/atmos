@@ -39,15 +39,43 @@ skill instead.
 
 ## Invocation
 
+This skill supports two invocation paths. The generation output must be **byte-identical**
+between them — both paths use the same templates and the same safety rails.
+
+### Path A — `atmos ai ask --skill` (Atmos-dispatched)
+
 ```shell
 atmos ai ask "setup atmos pro" --skill atmos-pro
 ```
 
-The command loads this skill; the agent follows the flow below. Non-interactive runs:
+The Atmos binary loads the skill (from its embedded bundle) and sends the system prompt to
+the configured AI provider. The provider must execute the flow below using its own tool-use
+primitives. Non-interactive mode:
 
 ```shell
 atmos ai ask "setup atmos pro" --skill atmos-pro --non-interactive --approve-all
 ```
+
+### Path B — Claude Code direct (loaded from the repo)
+
+The user tells Claude Code to load this skill. Claude Code fetches
+`agent-skills/skills/atmos-pro/` (via the plugin marketplace or a direct repo reference) and
+executes the flow using its native tools: Read, Write, Bash, Edit, Glob, Grep, and
+the TodoWrite plan tracker.
+
+When running under Path B, the agent should:
+
+- Use the **Read** tool to open reference files from `references/` on demand (progressive
+  disclosure) — do not load all references upfront unless a specific task requires them.
+- Use **Bash** for all `atmos`, `git`, and `gh` commands described in the playbook.
+- Use **Write** / **Edit** to place generated files under the worktree. Prefer **Edit** over
+  **Write** when the file already exists (e.g., the tfstate-backend merge fragment applied to
+  an existing `defaults.yaml`).
+- Use **TodoWrite** to track the 7-step flow and report progress to the user.
+
+Output written by Path B must match the golden-snapshot contract at
+`tests/fixtures/scenarios/atmos-pro-setup/golden/` when the same fixture inputs are used.
+Any deviation is a skill bug, not a Claude-Code-specific variation.
 
 ## The flow (strict order)
 
