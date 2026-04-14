@@ -71,11 +71,9 @@ require (
 	github.com/googleapis/gax-go/v2 v2.21.0
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
 	github.com/hairyhenderson/gomplate/v4 v4.3.3
-	github.com/hashicorp/go-getter v1.8.5
-	github.com/hashicorp/go-version v1.8.0
-	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/go-getter v1.8.6
 	github.com/hashicorp/go-version v1.9.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/hcl v1.0.1-vault-7
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20260224005459-813a97530220

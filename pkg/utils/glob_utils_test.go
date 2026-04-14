@@ -343,18 +343,37 @@ func TestPathMatch_CaseSensitivity(t *testing.T) {
 
 // TestGetGlobMatches_Basic tests basic glob matching functionality.
 func TestGetGlobMatches_Basic(t *testing.T) {
-	// This test requires actual files to exist, so we'll test with a pattern that should work.
-	// In the Atmos repository structure.
+	ResetGlobMatchesCache()
+	t.Cleanup(ResetGlobMatchesCache)
+
+	// "*.go" matches all Go source files in the current package directory.
+	// go test sets the working directory to the package under test, so this
+	// returns the .go files of pkg/utils itself.
 	pattern := "*.go"
 
 	matches, err := GetGlobMatches(pattern)
 	require.NoError(t, err)
-	// pkg/utils.GetGlobMatches returns non-nil only when matches are found (unlike
-	// pkg/filesystem.GetGlobMatches which always returns a non-nil slice). For a "*.go"
-	// pattern in a Go package directory there must be at least one match.
-	assert.NotEmpty(t, matches)
-	// We can't assert exact matches since it depends on the directory contents.
-	// But we can verify the function completes without error.
+	// pkg/utils.GetGlobMatches returns non-nil only when matches are found.
+	require.NotEmpty(t, matches, "expected at least one .go file in pkg/utils")
+
+	// Every returned element must end with ".go".
+	for _, m := range matches {
+		assert.True(t, strings.HasSuffix(m, ".go"),
+			"expected every match to end with .go, got %q", m)
+	}
+
+	// The test file itself must always be present.
+	assert.Contains(t, matches, "glob_utils_test.go",
+		"expected glob_utils_test.go to be in the matches")
+
+	// Verify sort order is deterministic: assert first and last element by
+	// their known alphabetical position within pkg/utils.
+	// "component_path_absolute_test.go" sorts before all other .go files in
+	// this package; "yq_utils_test.go" sorts after all others.
+	assert.Equal(t, "component_path_absolute_test.go", matches[0],
+		"first element should be component_path_absolute_test.go (alphabetically first)")
+	assert.Equal(t, "yq_utils_test.go", matches[len(matches)-1],
+		"last element should be yq_utils_test.go (alphabetically last)")
 }
 
 // TestGetGlobMatches_ConsistentResults tests that multiple calls return consistent results.
