@@ -55,54 +55,54 @@ The 7-step flow is strict:
 
 1. **Creates an isolated worktree** so your main checkout is never touched.
 2. **Detects the repo shape** — stack hierarchy, Atmos Auth presence, Spacelift usage,
-   Geodesic environment, `github-oidc-provider` deployment, tfstate backend trust.
+Geodesic environment, `github-oidc-provider` deployment, tfstate backend trust.
 3. **Confirms the plan** — prints which org, which accounts, which files will change, and
-   which starting-condition variants apply. You approve before anything is written.
+which starting-condition variants apply. You approve before anything is written.
 4. **Generates artifacts** from templates, filled in from the detected values:
-   - `stacks/mixins/atmos-pro.yaml` — single import point, disables Spacelift, declares
-     `settings.pro`
-   - `stacks/catalog/aws/iam-role/{defaults,gha-tf}.yaml` — abstract base plus two
-     OIDC-trusted concrete roles
-   - `components/terraform/aws/iam-role/component.yaml` — vendor manifest
-   - `profiles/github-plan/atmos.yaml`, `profiles/github-apply/atmos.yaml` —
-     per-account identities (root account pinned to the plan role for safety)
-   - `.github/workflows/` — four workflows (affected stacks, list instances, plan, apply)
-     plus an optional OIDC smoke test
-   - Additive edit to `stacks/catalog/tfstate-backend/defaults.yaml` — wildcard
-     `allowed_principal_arns`
-   - `docs/atmos-pro.md` — generated README with your rollout procedure
+- `stacks/mixins/atmos-pro.yaml` — single import point, disables Spacelift, declares
+`settings.pro`
+- `stacks/catalog/aws/iam-role/{defaults,gha-tf}.yaml` — abstract base plus two
+OIDC-trusted concrete roles
+- `components/terraform/aws/iam-role/component.yaml` — vendor manifest
+- `profiles/github-plan/atmos.yaml`, `profiles/github-apply/atmos.yaml` —
+per-account identities (root account pinned to the plan role for safety)
+- `.github/workflows/` — four workflows (affected stacks, list instances, plan, apply)
+plus an optional OIDC smoke test
+- Additive edit to `stacks/catalog/tfstate-backend/defaults.yaml` — wildcard
+`allowed_principal_arns`
+- `docs/atmos-pro.md` — generated README with your rollout procedure
 5. **Self-validates** — runs `atmos validate stacks` and `atmos describe component` on the
-   generated config. Stops on failure. No PR opened with a broken worktree.
+generated config. Stops on failure. No PR opened with a broken worktree.
 6. **Opens a PR** with a rollout checklist body (deploy IAM roles per account, deploy the
-   tfstate trust update, run the OIDC test workflow, merge).
+tfstate trust update, run the OIDC test workflow, merge).
 
 ## Starting-Condition Awareness
 
 The skill branches on every variant we've seen onboarding fail on:
 
-| Variant                                      | What the skill does                                                |
-|----------------------------------------------|--------------------------------------------------------------------|
-| GitHub Actions disabled org-wide             | Stops, prints the exact settings URL to enable it                   |
-| No Atmos Auth in the repo                    | Generates standalone profiles, does not retrofit `auth:` into `atmos.yaml` |
-| Atmos Auth already configured                | Adds the `github-oidc` provider via a patch file, preserves existing config |
+| Variant                                      | What the skill does                                                           |
+|----------------------------------------------|-------------------------------------------------------------------------------|
+| GitHub Actions disabled org-wide             | Stops, prints the exact settings URL to enable it                             |
+| No Atmos Auth in the repo                    | Generates standalone profiles, does not retrofit `auth:` into `atmos.yaml`    |
+| Atmos Auth already configured                | Adds the `github-oidc` provider via a patch file, preserves existing config   |
 | Federated IAM via Okta (not Identity Center) | Generates CI-side profiles only, documents that local dev continues with Okta |
 | Geodesic-based dev environment               | Adds a Geodesic section to the generated docs with `GITHUB_TOKEN` passthrough |
-| Spacelift currently enabled                  | Disables Spacelift in the mixin, flags the migration in the PR body |
-| `github-oidc-provider` not deployed          | Adds a step-0 to the rollout checklist                              |
-| Custom tfstate `allowed_principal_arns`      | Merges additively — never overwrites your existing principals       |
+| Spacelift currently enabled                  | Disables Spacelift in the mixin, flags the migration in the PR body           |
+| `github-oidc-provider` not deployed          | Adds a step-0 to the rollout checklist                                        |
+| Custom tfstate `allowed_principal_arns`      | Merges additively — never overwrites your existing principals                 |
 
 ## Safety Rails You Can Trust
 
 These are non-negotiable defaults baked into the templates:
 
 - **Default-restrictive branch scoping** — `trusted_github_repos` defaults to `main`-only.
-  The planner role explicitly opts out (needs PR branches); the apply role never does.
+The planner role explicitly opts out (needs PR branches); the apply role never does.
 - **Root account always-plan** — the apply profile points the root account's identity at
-  the plan role's ARN, with a comment explaining why. Automation never applies to root.
+the plan role's ARN, with a comment explaining why. Automation never applies to root.
 - **Reciprocal trust ships together** — the IAM role changes and the tfstate-backend edit
-  appear in the same PR. The skill refuses to generate one without the other.
+appear in the same PR. The skill refuses to generate one without the other.
 - **No secrets in manifests** — `ATMOS_PRO_WORKSPACE_ID` is a repo **variable**, not a
-  secret. The skill tells you so.
+secret. The skill tells you so.
 
 ## Built-In, Not Installable
 
@@ -117,7 +117,6 @@ Built-in skills (23):
   mixins, and open a PR that wires an Atmos repo to Atmos Pro
 ✓ atmos-terraform
   Terraform orchestration: plan/apply/deploy, workspace management, backend config, ...
-...
 ```
 
 You can still override a built-in with a marketplace install — marketplace versions take
@@ -129,28 +128,28 @@ The skill is backed by testable Go packages so the output is deterministic regar
 which AI drives it:
 
 - **`pkg/atmospro/detect`** — filesystem-based pre-flight probes (Atmos Auth, Spacelift,
-  Geodesic). Pure Go, `fs.FS`-based, no external binaries.
+Geodesic). Pure Go, `fs.FS`-based, no external binaries.
 - **`pkg/ai/skills/atmospro`** — template renderer with a typed `RenderData` context and
-  custom `<<...>>` delimiters so `{{ }}` and `${{ }}` in the output pass through untouched.
+custom `<<...>>` delimiters so `{{ }}` and `${{ }}` in the output pass through untouched.
 - **`pkg/ai/skills/embedded`** — exposes every built-in skill to the registry.
 - **14 golden snapshots** at `tests/fixtures/scenarios/atmos-pro-setup/golden/` guarantee
-  rendering is byte-stable across refactors.
+rendering is byte-stable across refactors.
 - **Cross-path parity tests** prove the on-disk templates (what Path B fetches) and the
-  embedded templates (what Path A renders from) are byte-identical.
+embedded templates (what Path A renders from) are byte-identical.
 
 ## Get Started
 
 1. Set your Atmos Pro workspace ID as a GitHub repo variable:
 
-   ```bash
-   gh variable set ATMOS_PRO_WORKSPACE_ID --body "<your-workspace-id>"
-   gh variable set ATMOS_VERSION --body "1.163.0"
+```bash
+gh variable set ATMOS_PRO_WORKSPACE_ID --body "<your-workspace-id>"
+gh variable set ATMOS_VERSION --body "1.163.0"
    ```
 
 2. Run the skill:
 
-   ```bash
-   atmos ai ask "setup atmos pro" --skill atmos-pro
+```bash
+atmos ai ask "setup atmos pro" --skill atmos-pro
    ```
 
 3. Review the generated PR and follow the rollout checklist.
