@@ -199,3 +199,79 @@ Likely one of:
 Re-run the skill with `--verbose` to see the detected values and template output. If the
 issue is naming convention, pass `--stack-pattern` to override the default (future option;
 v1 does not support overrides — file an issue).
+
+## Detector says "no auth" but my repo has an auth block
+
+### Symptom
+
+The skill generates standalone profiles when you expected it to retrofit the existing
+`auth:` block, even though the repo clearly has one.
+
+### Cause
+
+The `atmos-auth` probe matches a **top-level** `auth:` key only. A stray `auth:` nested under
+`settings:` or inside a component's vars does not count — by design, to avoid false positives
+from component-level auth config.
+
+The probe scans:
+
+- The primary `atmos.yaml` / `.atmos.yaml` (and `.yml` variants)
+- Every `*.yaml` / `*.yml` file under `atmos.d/` or `.atmos.d/`
+
+### Fix
+
+If your repo configures Atmos Auth from an unusual location (e.g., a user-configured
+`import:` path the probe does not walk), either:
+
+1. Move or add a small auth import under `atmos.d/` so the probe picks it up, or
+2. Tell the skill to skip standalone-profile generation and wire OIDC into your existing auth
+   block manually. Document the path you took in this file.
+
+## Detector missed a Spacelift-enabled stack
+
+### Symptom
+
+After the skill runs, one or two stacks still try to run through Spacelift and report
+`settings.spacelift.workspace_enabled: true` when resolved.
+
+### Cause
+
+The `spacelift` probe does a **conservative text scan** for `workspace_enabled: true` — it
+does not resolve inherited stack config. If a stack inherits `workspace_enabled: true` from a
+parent `_defaults.yaml` and the override never appears literally in a descendant file, the
+probe cannot see it.
+
+### Fix
+
+1. After the skill completes, spot-check the suspect stacks with:
+
+   ```shell
+   atmos describe component <component> -s <stack> --format=json | jq '.settings.spacelift.workspace_enabled'
+   ```
+
+2. If any still resolve to `true`, the mixin is not imported in that org's `_defaults.yaml`.
+   Add the import manually or re-run the skill with the correct target org.
+
+## Detector false-positive on Geodesic
+
+### Symptom
+
+The skill adds the Geodesic section to `docs/atmos-pro.md` even though your team does not use
+Geodesic.
+
+### Cause
+
+The `geodesic` probe matches any of:
+
+- `Dockerfile` containing `cloudposse/geodesic`
+- `geodesic.mk` existing (any contents)
+- `.envrc` containing `geodesic`
+- `Makefile` containing `cloudposse/geodesic`
+
+A forgotten example Dockerfile or a `.envrc` in a sibling repo vendored under `vendor/` can
+trigger a positive detection.
+
+### Fix
+
+Delete or rename the stale marker file, or edit the generated `docs/atmos-pro.md` to remove
+the Geodesic section. This does not affect the rest of the generated output.

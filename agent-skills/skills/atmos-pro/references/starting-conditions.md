@@ -28,7 +28,29 @@ Multiple variants can apply at once. Apply the union of behaviors.
 | Branch protection on `main` already strict | `gh api repos/:owner/:repo/branches/main/protection` returns 200 with required reviews | Mention in the PR body: "Atmos Pro will push commits via OIDC; ensure the apply role ARN is allowed to bypass or is excluded from required-signature rules." |
 | Required GitHub environments missing | Apply flow uses `github_environment` input but no matching env exists | Warn. Explain that environments are created manually in Settings → Environments; the skill cannot create them via API without admin scope. |
 
-## Probes in detail
+## Deterministic probe package
+
+Filesystem probes are implemented in Go at `pkg/atmospro/detect` and are
+invokable from either the skill (via Bash wrapping a future `atmos pro detect`
+subcommand) or directly from a Go caller. They cover the three probes that do
+not need network access:
+
+| Probe                 | Go function                       | Returns                                           |
+|-----------------------|-----------------------------------|---------------------------------------------------|
+| Atmos Auth            | `detect.AtmosAuth(fsys)`          | `Result{Detected, Evidence[], Hint}`              |
+| Spacelift             | `detect.Spacelift(fsys, dir)`     | `Result{Detected, Evidence[stacks], Hint}`        |
+| Geodesic              | `detect.Geodesic(fsys)`           | `Result{Detected, Evidence[markers], Hint}`       |
+
+`detect.All(fsys, "stacks")` runs all three and returns results in deterministic
+order. The skill and the future `atmos pro init` command share these probes so
+that Path A, Path B, and the deterministic CLI all agree on what a repo looks
+like.
+
+Network-dependent probes (GitHub Actions enablement, `github-oidc-provider`
+deployment, tfstate-backend introspection) remain shell commands documented
+below — the skill's Bash tool runs them directly.
+
+## Shell probes in detail
 
 ### GitHub Actions permissions
 
