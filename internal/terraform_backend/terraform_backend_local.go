@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -29,10 +30,7 @@ func ReadTerraformBackendLocal(
 	defer perf.Track(atmosConfig, "terraform_backend.ReadTerraformBackendLocal")()
 
 	workspace := GetTerraformWorkspace(componentSections)
-	componentPath := filepath.Join(
-		atmosConfig.TerraformDirAbsolutePath,
-		GetTerraformComponent(componentSections),
-	)
+	componentPath := resolveLocalBackendComponentPath(atmosConfig, componentSections)
 
 	var tfStateFilePath string
 	if workspace == "" || workspace == "default" {
@@ -62,4 +60,53 @@ func ReadTerraformBackendLocal(
 	}
 
 	return content, nil
+}
+
+// resolveLocalBackendComponentPath returns the directory that contains the local
+// state file for a component. Resolution order:
+//
+//  1. If the provisioner already set _workdir_path in sections (e.g. during an
+//     active apply), use it directly.
+//  2. If provision.workdir.enabled is true, derive the canonical workdir path via
+//     BuildPath (same formula the provisioner uses).
+//  3. Fall back to the static terraform base path for non-JIT components.
+//
+// BasePath is used (not BasePathAbsolute) for consistency with the source and
+// workdir provisioners, which use the same field when calling BuildPath.
+func resolveLocalBackendComponentPath(
+	atmosConfig *schema.AtmosConfiguration,
+	sections *map[string]any,
+) string {
+	// Fast path: provisioner already stored the concrete workdir path.
+	if p, ok := (*sections)[provWorkdir.WorkdirPathKey].(string); ok && p != "" {
+		return p
+	}
+	// Workdir-enabled component: derive the canonical path using the same
+	// formula the provisioner uses.
+	if provWorkdir.IsWorkdirEnabled(*sections) {
+		stack := getAtmosStackFromSections(sections)
+		component := getAtmosComponentInstanceFromSections(sections)
+		if stack != "" && component != "" {
+			return provWorkdir.BuildPath(
+				atmosConfig.BasePath, "terraform", component, stack, *sections,
+			)
+		}
+	}
+	// Default: static components/terraform/<component> path.
+	return filepath.Join(
+		atmosConfig.TerraformDirAbsolutePath,
+		GetTerraformComponent(sections),
+	)
+}
+
+func getAtmosStackFromSections(sections *map[string]any) string {
+	s, _ := (*sections)["atmos_stack"].(string)
+	return s
+}
+
+func getAtmosComponentInstanceFromSections(sections *map[string]any) string {
+	if ac, ok := (*sections)["atmos_component"].(string); ok && ac != "" {
+		return ac
+	}
+	return GetTerraformComponent(sections)
 }

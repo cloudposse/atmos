@@ -215,3 +215,127 @@ func TestReadTerraformBackendLocal_DefaultWorkspace_WrongLocation(t *testing.T) 
 	require.NoError(t, err)
 	assert.Nil(t, content, "Should not find state file in terraform.tfstate.d/default/ for default workspace")
 }
+
+// TestReadTerraformBackendLocal_JITWorkdir verifies that ReadTerraformBackendLocal
+// resolves the correct path for components with provision.workdir.enabled: true.
+// Regression test for https://github.com/cloudposse/atmos/issues/2167.
+func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
+	const stateJSON = `{
+		"version": 4,
+		"terraform_version": "1.0.0",
+		"outputs": {
+			"id": {
+				"value": "eg-test-demo",
+				"type": "string"
+			}
+		}
+	}`
+
+	t.Run("state exists, no _workdir_path (describe path — provisioner not yet run)", func(t *testing.T) {
+		tempDir := t.TempDir()
+		// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label
+		// workspace "demo" → terraform.tfstate.d/demo/terraform.tfstate
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label", "terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(stateDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			"atmos_stack":     "demo",
+			"atmos_component": "null-label",
+			"component":       "null-label", // base component (metadata.component); also used by static fallback
+			"workspace":       "demo",
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content, "expected state file to be found at JIT workdir path")
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "eg-test-demo", result["id"])
+	})
+
+	t.Run("_workdir_path set (apply path — provisioner already ran)", func(t *testing.T) {
+		tempDir := t.TempDir()
+		workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label")
+		stateDir := filepath.Join(workdirPath, "terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(stateDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			"atmos_stack":     "demo",
+			"atmos_component": "null-label",
+			"component":       "null-label", // base component (metadata.component)
+			"workspace":       "demo",
+			"_workdir_path":   workdirPath, // set by provisioner during apply
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content, "expected state file found via _workdir_path fast path")
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "eg-test-demo", result["id"])
+	})
+
+	t.Run("workdir absent (fresh CI runner / not yet applied)", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			"atmos_stack":     "demo",
+			"atmos_component": "null-label",
+			"component":       "null-label",
+			"workspace":       "demo",
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		assert.Nil(t, content, "expected nil when JIT workdir is absent (not provisioned)")
+	})
+
+	t.Run("non-JIT component: regression — static path unchanged", func(t *testing.T) {
+		tempDir := t.TempDir()
+		componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+		stateDir := filepath.Join(componentDir, "terraform.tfstate.d", "prod")
+		require.NoError(t, os.MkdirAll(stateDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"component": "vpc",
+			"workspace": "prod",
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content, "expected state file at static path for non-JIT component")
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "eg-test-demo", result["id"])
+	})
+}
