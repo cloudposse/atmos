@@ -137,6 +137,62 @@ rendering is byte-stable across refactors.
 - **Cross-path parity tests** prove the on-disk templates (what Path B fetches) and the
 embedded templates (what Path A renders from) are byte-identical.
 
+## Real-World Run — 5 Prompts From Zero to Deploy-Ready PR
+
+We ran the skill end-to-end against a multi-org, Geodesic-hosted Atmos refarch
+(3 namespaces × 13 accounts = 39 AWS accounts).
+
+**Install the skill (one-time):**
+
+```
+/plugin marketplace add cloudposse/atmos
+/plugin install atmos@cloudposse
+/reload-plugins
+```
+
+**Run 1 — detect:**
+
+> Using `atmos:atmos-pro`, run the detection phase. Report stack hierarchy,
+> Atmos Auth, Spacelift, github-oidc-provider, Geodesic, GitHub Actions.
+
+→ Full inventory returned as a structured table.
+
+**Run 2 — plan:**
+
+> Using `atmos:atmos-pro`, show the plan summary. Do not write.
+
+→ Target scope, accounts table, file-create / file-edit lists, starting-condition
+variants, and open policy questions for approval.
+
+**Run 3 — generate:**
+
+> Proceed: resolve the account map, enable all three orgs, pin prod to plan-only,
+> create the worktree, generate, validate.
+
+→ Worktree at `.worktrees/atmos-pro-setup`, 18 files staged. All safety rails
+applied.
+
+**Run 4 — open the PR:**
+
+> Open the PR with `gh pr create --draft`, using the repo's
+> `PULL_REQUEST_TEMPLATE.md` sections.
+
+→ Draft PR opened with body mapped to the repo's template.
+
+**Run 5 — deploy-time correctness patch:**
+
+> Apply the module-level `team_permission_sets_enabled` patches if the probe
+> reports MISSING. Push and comment on the PR.
+
+→ Four patches emitted across `account-map` and `tfstate-backend` modules,
+committed, and the PR updated.
+
+### The result
+
+A draft PR with **21 files**, body matching the repo's template, all
+safety rails honored — functionally equivalent to a hand-authored reference
+implementation for the same use case.
+
 ## Get Started
 
 1. Set your Atmos Pro workspace ID as a GitHub repo variable:
