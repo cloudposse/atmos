@@ -514,6 +514,142 @@ template layout is deliberately compatible with it.
   Targets users who need reproducible, unattended runs (CI pipelines that bootstrap new
   orgs).
 
+## Local Testing (Before the Skill Is Merged)
+
+Both invocation paths can be tested against an unmerged branch of the Atmos repo, so a
+target infrastructure repo can exercise the skill before it reaches `main`.
+
+Assume two working directories on the tester's machine:
+
+- **Atmos source repo** (the branch under test): `/path/to/atmos` — e.g.
+  `/Users/andriyknysh/Documents/Projects/Go/src/github.com/cloudposse/atmos` on the
+  `aknysh/atmos-pro-init` branch
+- **Target infra repo** (a real Atmos-managed infra repo): `/path/to/target-repo`
+
+### Path A — local Atmos binary (embedded skill)
+
+The `atmos-pro` skill is `//go:embed`-ed into the Atmos binary at build time. Build Atmos
+from the feature branch and invoke it from the target repo:
+
+```bash
+# From the Atmos source repo
+cd /path/to/atmos
+git checkout aknysh/atmos-pro-init
+make build                     # produces ./build/atmos
+
+# Verify the skill is bundled
+./build/atmos ai skill list | grep atmos-pro
+
+# Run from the target repo using the locally built binary
+cd /path/to/target-repo
+/path/to/atmos/build/atmos ai ask "setup atmos pro" --skill atmos-pro
+```
+
+Because the skill is embedded, no marketplace install, symlink, or path hack is needed —
+the binary's own embedded FS is authoritative.
+
+### Path B — Claude Code loading the unmerged skill
+
+Claude Code has no awareness of unmerged branches by default; the marketplace resolves
+`cloudposse/atmos` to the repository's default branch. Three options let Claude Code use
+the local branch's skill instead.
+
+#### Option 1 — user-global skill symlink (simplest)
+
+Symlink the local skill into Claude Code's user-global skills directory. Claude Code
+auto-discovers any skill under `~/.claude/skills/<name>/SKILL.md`:
+
+```bash
+mkdir -p ~/.claude/skills
+ln -sfn /path/to/atmos/agent-skills/skills/atmos-pro ~/.claude/skills/atmos-pro
+
+# Verify
+ls -la ~/.claude/skills/atmos-pro
+```
+
+Open Claude Code inside `/path/to/target-repo` and prompt:
+
+> "Load the atmos-pro skill and set up Atmos Pro for this repository."
+
+Claude Code reads the symlinked `SKILL.md`, loads reference files on demand, and executes
+the playbook using its native Read/Write/Edit/Bash/TodoWrite tools.
+
+When testing is done, remove the symlink so the production marketplace install can take
+over:
+
+```bash
+rm ~/.claude/skills/atmos-pro
+```
+
+#### Option 2 — local marketplace registration
+
+Point Claude Code's plugin marketplace at the local Atmos checkout. Inside Claude Code:
+
+```
+/plugin marketplace add /path/to/atmos
+/plugin install atmos@cloudposse
+```
+
+Claude Code reads `/path/to/atmos/.claude-plugin/marketplace.json`, resolves the `atmos`
+plugin to `./agent-skills`, and installs every skill under the bundled skills directory
+— including `atmos-pro` from the unmerged branch. This mirrors the production install
+flow exactly.
+
+When the feature branch merges, switch to the remote marketplace:
+
+```
+/plugin marketplace remove /path/to/atmos
+/plugin marketplace add cloudposse/atmos
+/plugin install atmos@cloudposse
+```
+
+#### Option 3 — inline skill load (no install)
+
+When neither a symlink nor a marketplace install is desirable, ask Claude Code to read
+the skill directly:
+
+> "Read `/path/to/atmos/agent-skills/skills/atmos-pro/SKILL.md` and execute the playbook
+> it describes. Load reference files from the `references/` subdirectory on demand. Use
+> the templates in `templates/` to generate artifacts."
+
+This is the least ceremonious path — useful for quick iteration — but it relies on
+Claude Code's ability to follow an instruction-style prompt rather than a registered
+skill. Behavior is equivalent in practice; the skill text is the same in all three
+options.
+
+### Verifying both paths produce the same output
+
+After a run (either path), diff the generated worktree against the expected golden:
+
+```bash
+# Generate the expected RenderData for your target repo
+cd /path/to/atmos
+cat > /tmp/target-fixture.json <<'EOF'
+{
+  "org": "YOUR_GITHUB_ORG",
+  "repo": "YOUR_REPO",
+  "namespace": "YOUR_NAMESPACE",
+  "target_org": "YOUR_TARGET_ORG",
+  "root_account_id": "123456789012",
+  "accounts": [ ... ],
+  "probe_stack": "YOUR_STACK",
+  "probe_tenant": "YOUR_TENANT",
+  "probe_stage": "YOUR_STAGE",
+  "probe_account_id": "123456789012",
+  "geodesic_detected": false,
+  "spacelift_was_enabled": false,
+  "no_atmos_auth": false
+}
+EOF
+
+# (future) `atmos pro init --dry-run --data /tmp/target-fixture.json` will render the
+# expected output deterministically. Until Phase 6 ships, the equivalent is calling
+# atmospro.RenderAll() from a small Go harness that reads the fixture.
+```
+
+Any divergence between Path A output, Path B output, and the rendered expectation is a
+skill bug.
+
 ## Manual Validation Checklist
 
 The automated test suite validates the deterministic layer (detection, rendering,
@@ -534,8 +670,14 @@ exercise. Track completion here as each path is exercised against a real repo.
 
 ### Path B — Claude Code direct
 
-- [ ] `/plugin marketplace add cloudposse/atmos` succeeds against the current repo
-- [ ] `/plugin install atmos@cloudposse` installs without errors
+Until the feature branch is merged, use one of the local-testing options from the
+**Local Testing** section above (symlink, local marketplace, or inline load). After the
+merge, switch to the production marketplace flow.
+
+- [ ] Local testing option chosen (symlink / local marketplace / inline) discovers the
+      skill inside Claude Code running from the target repo
+- [ ] *(post-merge)* `/plugin marketplace add cloudposse/atmos` succeeds
+- [ ] *(post-merge)* `/plugin install atmos@cloudposse` installs without errors
 - [ ] Claude Code sees `atmos-pro` in the skills list
 - [ ] Prompting "set up Atmos Pro" activates the skill and loads `SKILL.md`
 - [ ] Reference files are loaded on demand (progressive disclosure) rather than all
