@@ -24,6 +24,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1603,8 +1604,19 @@ func TestConvertAffectedToMatrix(t *testing.T) {
 		}
 		entries := convertAffectedToMatrix(affected)
 		require.Len(t, entries, 2)
-		assert.Equal(t, "ue1-dev", entries[0].Stack)
-		assert.Equal(t, "eks", entries[1].Component)
+		// Assert full first and last entries by value to catch regressions that drop or corrupt fields.
+		assert.Equal(t, matrix.Entry{
+			Stack:         "ue1-dev",
+			Component:     "vpc",
+			ComponentPath: filepath.Join("components", "terraform", "vpc"),
+			ComponentType: "terraform",
+		}, entries[0])
+		assert.Equal(t, matrix.Entry{
+			Stack:         "ue1-staging",
+			Component:     "eks",
+			ComponentPath: filepath.Join("components", "terraform", "eks"),
+			ComponentType: "terraform",
+		}, entries[1])
 	})
 }
 

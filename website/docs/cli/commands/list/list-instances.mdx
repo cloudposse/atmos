@@ -198,7 +198,7 @@ matrix={"include":[...]}
 count=42
 ```
 
-When `ci.enabled` is true in `atmos.yaml` and `--output-file` is not provided, the output is automatically written to `$GITHUB_OUTPUT`.
+When `ci.enabled` is true in `atmos.yaml`, `--output-file` is not provided, and `GITHUB_OUTPUT` is available (for example, in GitHub Actions), the output is written to `$GITHUB_OUTPUT` automatically. Outside of GitHub Actions, or when `GITHUB_OUTPUT` is unset, output falls back to stdout.
 
 ### GitHub Actions Example
 

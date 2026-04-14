@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -50,7 +51,7 @@ func WriteOutput(entries []Entry, outputFile string) error {
 
 	matrixJSON, err := Marshal(entries)
 	if err != nil {
-		return fmt.Errorf("failed to marshal matrix output: %w", err)
+		return fmt.Errorf("%w: matrix output: %w", errUtils.ErrFailedToMarshalPayload, err)
 	}
 
 	if outputFile != "" {
@@ -59,7 +60,7 @@ func WriteOutput(entries []Entry, outputFile string) error {
 
 	// Write to stdout.
 	if err := data.Writeln(string(matrixJSON)); err != nil {
-		return fmt.Errorf("failed to write matrix output to stdout: %w", err)
+		return fmt.Errorf("%w: matrix output to stdout: %w", errUtils.ErrWriteOutput, err)
 	}
 	return nil
 }
@@ -70,18 +71,18 @@ func writeToFile(matrixJSON []byte, count int, outputFile string) error {
 
 	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
 	if err != nil {
-		return fmt.Errorf("failed to open output file %s: %w", outputFile, err)
+		return fmt.Errorf("%w: output file %s: %w", errUtils.ErrOpenFile, outputFile, err)
 	}
 	defer f.Close()
 
 	// Write matrix=<json> format.
 	if _, err := fmt.Fprintf(f, "matrix=%s\n", string(matrixJSON)); err != nil {
-		return fmt.Errorf("failed to write to output file %s: %w", outputFile, err)
+		return fmt.Errorf("%w: output file %s: %w", errUtils.ErrWriteFile, outputFile, err)
 	}
 	// Also write count for convenience (generic name since this is shared by both
 	// describe affected and list instances).
 	if _, err := fmt.Fprintf(f, "count=%d\n", count); err != nil {
-		return fmt.Errorf("failed to write count to output file %s: %w", outputFile, err)
+		return fmt.Errorf("%w: count to output file %s: %w", errUtils.ErrWriteFile, outputFile, err)
 	}
 	log.Debug("Wrote matrix output to file", "file", outputFile, "count", count)
 	return nil

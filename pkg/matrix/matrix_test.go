@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
@@ -105,7 +106,7 @@ func TestWriteOutput_File(t *testing.T) {
 	t.Run("file open error", func(t *testing.T) {
 		err := WriteOutput([]Entry{}, filepath.Join(t.TempDir(), "nonexistent", "file"))
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to open output file")
+		assert.ErrorIs(t, err, errUtils.ErrOpenFile)
 	})
 }
 
