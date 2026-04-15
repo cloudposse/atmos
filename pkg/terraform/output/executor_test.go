@@ -1771,17 +1771,18 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T
 	defer ctrl.Finish()
 
 	// gate controls when Provision returns.
-	// entered counts how many goroutines are inside Provision (waiting on gate).
+	// entered is closed by the leader once it is inside Provision, making the
+	// main goroutine's <-entered unblock deterministically (no busy-spin).
 	gate := make(chan struct{})
+	entered := make(chan struct{})
 	var provisionCallCount atomic.Int32
-	var entered atomic.Int32
 
 	mockProvisioner := NewMockWorkdirProvisioner(ctrl)
 	mockProvisioner.EXPECT().
 		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext) error {
 			provisionCallCount.Add(1)
-			entered.Add(1)
+			close(entered)
 			<-gate // Block until gate is released.
 			return nil
 		}).
@@ -1805,11 +1806,9 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T
 		}(i)
 	}
 
-	// Wait until the leader goroutine is inside Provision (entered == 1).
-	// The second goroutine is blocked in singleflight.Do waiting for the leader.
-	for entered.Load() < 1 {
-		runtime.Gosched()
-	}
+	// Wait until the leader goroutine is inside Provision; the second goroutine
+	// is blocked in singleflight.Do waiting for the leader.
+	<-entered
 	close(gate)
 	wg.Wait()
 
@@ -1817,6 +1816,61 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T
 	require.NoError(t, errs[1])
 	assert.Equal(t, int32(1), provisionCallCount.Load(),
 		"Provision must be called exactly once despite concurrent callers")
+}
+
+func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	defer ResetWorkdirProvisionCache()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	gate := make(chan struct{})
+	entered := make(chan struct{})
+
+	mockProvisioner := NewMockWorkdirProvisioner(ctrl)
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *schema.AtmosConfiguration, componentConfig map[string]any, _ *schema.AuthContext) error {
+			// Signal fresh provision so WorkdirReprovisionedKey is present.
+			componentConfig[provWorkdir.WorkdirReprovisionedKey] = struct{}{}
+			close(entered)
+			<-gate
+			return nil
+		}).
+		Times(1)
+
+	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
+	cfg := &schema.AtmosConfiguration{}
+	sections := jitSections()
+
+	var wg sync.WaitGroup
+	configs := [2]*ComponentConfig{
+		{AutoProvisionWorkdirForOutputs: true},
+		{AutoProvisionWorkdirForOutputs: true},
+	}
+	errs := make([]error, 2)
+
+	for i := range 2 {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			errs[idx] = executor.ensureWorkdirProvisioned(
+				context.Background(), cfg, sections, nil, "vpc", "dev", configs[idx],
+			)
+		}(i)
+	}
+
+	<-entered
+	close(gate)
+	wg.Wait()
+
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	assert.True(t, configs[0].InitRunReconfigure,
+		"goroutine 0 config must have InitRunReconfigure=true after fresh provision")
+	assert.True(t, configs[1].InitRunReconfigure,
+		"goroutine 1 config must have InitRunReconfigure=true after fresh provision")
 }
 
 func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {

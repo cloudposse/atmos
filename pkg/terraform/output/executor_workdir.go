@@ -32,10 +32,7 @@ var workdirProvisionCache sync.Map
 func ResetWorkdirProvisionCache() {
 	defer perf.Track(nil, "output.ResetWorkdirProvisionCache")()
 
-	workdirProvisionCache.Range(func(key, _ any) bool {
-		workdirProvisionCache.Delete(key)
-		return true
-	})
+	workdirProvisionCache = sync.Map{}
 }
 
 // WorkdirProvisioner provisions a JIT working directory before terraform operations.
@@ -88,10 +85,10 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 	cacheKey := stackComponentKey(stack, component)
 
-	_, sfErr, _ := workdirProvisionGroup.Do(cacheKey, func() (any, error) {
+	result, sfErr, _ := workdirProvisionGroup.Do(cacheKey, func() (any, error) {
 		// Short-circuit: a previous in-flight call completed successfully.
 		if _, done := workdirProvisionCache.Load(cacheKey); done {
-			return nil, nil
+			return false, nil
 		}
 
 		log.Debug("Auto-provisioning JIT workdir for output fetch", "component", component, "stack", stack)
@@ -99,7 +96,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 		if err := e.workdirProvisioner.Provision(ctx, atmosConfig, sections, authContext); err != nil {
 			// Do NOT store cacheKey on failure. singleflight does not cache errors,
 			// so the next call will re-enter this closure and retry provisioning.
-			return nil, errUtils.Build(errUtils.ErrWorkdirProvision).
+			return false, errUtils.Build(errUtils.ErrWorkdirProvision).
 				WithCause(fmt.Errorf("component '%s' in stack '%s': %w", component, stack, err)).
 				Err()
 		}
@@ -107,12 +104,9 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// If the provisioner freshly synced files, it sets WorkdirReprovisionedKey.
 		// A new workdir has no .terraform/ directory — terraform init must run with -reconfigure
 		// to avoid an interactive "migrate workspaces?" prompt that would hang the process.
-		// Only the leading goroutine's config is updated here. Waiting goroutines share
-		// the same workdir after singleflight.Do returns and do not need reconfiguration:
-		// the workdir was already fully provisioned before they proceeded.
-		if _, freshlyProvisioned := sections[provWorkdir.WorkdirReprovisionedKey]; freshlyProvisioned {
-			config.InitRunReconfigure = true
-		}
+		// Return the bool so every waiting goroutine (not just the leader) can apply it
+		// to its own config pointer after Do returns.
+		_, freshlyProvisioned := sections[provWorkdir.WorkdirReprovisionedKey]
 
 		// Only store on success. workdirProvisionCache handles post-completion
 		// short-circuiting for calls after the in-flight group completes.
@@ -122,8 +116,14 @@ func (e *Executor) ensureWorkdirProvisioned(
 		log.Info("Consider using !terraform.state for workdir-independent output access (no terraform init required)",
 			"component", component, "stack", stack)
 
-		return nil, nil
+		return freshlyProvisioned, nil
 	})
+
+	if sfErr == nil {
+		if reconfigure, _ := result.(bool); reconfigure {
+			config.InitRunReconfigure = true
+		}
+	}
 
 	return sfErr
 }
