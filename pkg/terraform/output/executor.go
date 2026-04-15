@@ -697,7 +697,7 @@ func (e *Executor) execute(
 		}
 	}
 
-	// Step 8: Clean workspace and run terraform init (skipped when SkipInit is set).
+	// Step 9: Clean workspace and run terraform init (skipped when SkipInit is set).
 	// SkipInit is used when the component was just applied and .terraform/ state
 	// is already correct — re-initializing would require auth credentials that
 	// may not be available in PostRunE context.
@@ -710,7 +710,7 @@ func (e *Executor) execute(
 			return nil, err
 		}
 
-		// Step 9: Ensure workspace exists and is selected.
+		// Step 10: Ensure workspace exists and is selected.
 		if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
 			return nil, err
 		}

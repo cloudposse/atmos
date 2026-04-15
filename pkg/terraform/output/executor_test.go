@@ -1778,6 +1778,27 @@ func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {
 	assert.True(t, errors.Is(err, provisionErr), "provision error should be unwrappable via errors.Is")
 }
 
+func TestEnsureWorkdirProvisioned_CacheEvictedOnFailureAllowsRetry(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	provisionErr := errors.New("disk full")
+	// First call fails; second call succeeds.
+	// Cache must be evicted after failure to allow the retry.
+	gomock.InOrder(
+		mockProvisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(provisionErr),
+		mockProvisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
+	)
+
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.Error(t, err)
+
+	// Cache was evicted on failure — retry must reach the provisioner.
+	err = executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.NoError(t, err)
+}
+
 func TestEnsureWorkdirProvisioned_SetsReconfigureWhenFreshlyProvisioned(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
