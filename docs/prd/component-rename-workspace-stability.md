@@ -1,6 +1,6 @@
 # PRD: Component Rename Workspace Stability
 
-**Version:** 3.0  
+**Version:** 4.0  
 **Last Updated:** 2026-04-15  
 **Issue:** [#2244](https://github.com/cloudposse/atmos/issues/2244)
 
@@ -195,6 +195,66 @@ Computing workspace names for all components...
 
 ---
 
+### Option G — Remote object store lock backend (S3 / GCS / Azure Blob)
+
+**What:** Store the workspace lock registry as a single YAML object in a remote object store — most commonly the same S3 bucket (and prefix) already used for Terraform backend state. Atmos reads the lock on every `plan`/`apply`, writes new entries back using atomic conditional-write semantics, and never touches the repo or any Git branch.
+
+```yaml
+# atmos.yaml — configure the lock backend
+workspace_locks:
+  backend: s3                           # or: local (default), git-branch
+  s3:
+    bucket: "my-terraform-state-bucket"
+    key: ".atmos/workspace-locks.yaml"  # or derive from existing backend config
+    region: "us-east-1"
+    # dynamodb_table: "terraform-locks"  # optional: reuse existing DynamoDB lock table
+```
+
+```yaml
+# s3://my-terraform-state-bucket/.atmos/workspace-locks.yaml
+locks:
+  rds/hello-world-service@ue1-dev: "ue1-dev-rds-hello-world-service"
+  rds/hello-world-service@ue2-dev: "ue2-dev-rds-hello-world-service"
+  rds-primary@ue1-dev: "ue1-dev-rds-primary"
+  rds-replica@ue1-dev: "ue1-dev-rds-replica"
+```
+
+**Synergy with Terraform state bucket:** Teams using S3-backend Terraform already have:
+- An S3 bucket with versioning enabled.
+- IAM roles/credentials for CI with read/write access to the bucket.
+- Optionally, a DynamoDB table for Terraform state locking.
+
+The workspace lock file can live alongside Terraform state at a well-known key derived from the existing `atmos.yaml` backend configuration. No new bucket, no new IAM policy, no new credentials.
+
+**Concurrent-write safety:** Unlike the git-branch option (Option D), S3 supports atomic conditional writes:
+- **ETag-based optimistic locking:** Read the current object + ETag. Write with `If-Match: <etag>`. If another process wrote between read and write, the `PreconditionFailed` error triggers a read-retry loop. Typical lock contention is milliseconds, not git-rebase seconds.
+- **DynamoDB lock table (optional):** If a DynamoDB table is already configured, Atmos can acquire a lock row before writing, matching Terraform's own locking strategy exactly.
+- **S3 conditional creates (`If-None-Match: *`):** For bootstrapping, ensures the initial write only succeeds once.
+
+**Catalogue pattern:** Same as Option C — the lock file keys on `{yaml_key}@{stack}`, so multi-instance stacks are handled automatically. No `metadata.name` required.
+
+**Bootstrap:** `atmos workspace lock generate [--backend=s3]` scans all stacks, computes current workspace names, and writes the initial lock object. No Terraform runs needed.
+
+**Devil's advocate:**
+- Invisible in PRs: workspace assignment changes cannot be reviewed or approved before they take effect. A bad rename can propagate silently until the next `plan`.
+- Requires S3 (or equivalent) credentials from every CI job that runs `plan` or `apply`. For some teams, plan jobs are intentionally read-only and adding write permissions is a policy violation.
+- The lock is outside the repo. If the bucket is deleted, versioning is off, or the key is accidentally overwritten, all workspace assignments are lost. Recovery requires re-running the bootstrap command, which re-derives from the _current_ YAML keys — defeating the purpose if renaming already happened.
+- Multi-cloud teams need GCS or Azure Blob support, not just S3. Abstractions help, but each backend adds implementation and test surface.
+- Bootstrapping from a completely fresh environment (new CI runner with no prior lock state) re-derives workspace names from YAML keys, which is correct for new components but silently wrong for already-renamed components.
+
+**Mitigation for the visibility problem:** An `atmos workspace lock diff` command can compare the remote lock state against the current YAML configuration and show what would change. CI can run this as a read-only check in plan jobs and post the diff as a PR comment — providing review visibility without writing to S3.
+
+**Verdict:** The best option for teams that:
+1. Already use S3 backend and have the bucket + credentials in place.
+2. Run concurrent CI pipelines that cannot commit back to the repo.
+3. Have multi-instance catalogue patterns (so Option A+F are insufficient).
+
+This is strictly better than Option D (git-branch) on all axes: atomic writes, no git race, no repo write access required, durable storage. The main trade-off vs. Option C (in-repo) is visibility: workspace assignment changes are not in the PR diff.
+
+**Recommended as the default Phase 2 backend for AWS-native teams.** Option C (in-repo) remains the better choice for teams that prioritise reviewability over operational simplicity.
+
+---
+
 ## The catalogue / multi-instance problem in full
 
 This is the central tension. The options split into two camps:
@@ -206,30 +266,33 @@ This is the central tension. The options split into two camps:
 They break down when:
 - The **same abstract component is instantiated more than once in the same stack** under different YAML keys (e.g., `rds-primary` and `rds-replica`, both inheriting from `rds`). Each instance needs its own `metadata.name`; inheritance cannot provide different values. This forces per-instance overrides in concrete stack files.
 
-**Lock-file-based options (C + D)** handle all patterns natively:
+**Lock-file-based options (C, D, and G)** handle all patterns natively:
 - The lock file keys on `{yaml_key}@{stack}`, so two instances of the same abstract component automatically get independent entries.
 - No `metadata.name` required at all. No per-instance config. No catalogue changes.
-- The cost is the commit discipline and the new Atmos-managed file.
+- Option C cost: commit discipline + new Atmos-managed file in the repo.
+- Option D cost: repo write access from CI + race conditions on concurrent pushes.
+- Option G cost: S3 credentials from CI + workspace changes invisible in PRs.
 
-**Recommendation given catalogue concern:** Teams with multi-instance patterns should adopt Option C (lock file) for Phase 2. Option F (init subcommand) is the right migration tool for teams adopting Option A with single-instance patterns.
+**Recommendation given catalogue concern:** Teams with multi-instance patterns should adopt either Option C (in-repo lock, best visibility) or Option G (S3 lock, best for concurrent CI / AWS-native teams). Option F (init subcommand) is the right migration tool for teams adopting Option A with single-instance patterns.
 
 ---
 
 ## Comparison
 
-| | A — `metadata.name` | B — Rename cmd | C — Lock file | D — `atmos-state` branch | E — GUID in YAML | F — Init subcommand |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Zero proactive setup | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ (one-time run) |
-| Survives component rename | ✅ if set | ✅ migrates | ✅ locked | ✅ locked | ✅ | ✅ after migration |
-| Survives stack/account rename | ❌ prefix changes | ✅ migrates | ✅ full name locked | ✅ full name locked | ✅ | ❌ prefix changes |
-| Catalogue single-instance | ✅ inherit | n/a | ✅ auto | ✅ auto | ❌ | ✅ writes once |
-| Catalogue multi-instance | ❌ per-instance override | n/a | ✅ auto | ✅ auto | ❌ | ❌ per-instance override |
-| Collision detection | ❌ | ✅ pre-check | ✅ on write | ✅ on write | ❌ | ❌ (validate stacks) |
-| Reviewable in PRs | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
-| No CI write-back required | ✅ | ✅ | ❌ must commit | ❌ must push | ❌ | ✅ (one-time only) |
-| Human-readable workspaces | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (default format) |
-| Backwards compatible | ✅ fully | ✅ | ⚠️ bootstrap | ⚠️ bootstrap | ❌ breaking | ✅ one-time opt-in |
-| Implementation effort | Trivial | High | Medium | High | Medium | Medium |
+| | A — `metadata.name` | B — Rename cmd | C — Lock file (repo) | D — `atmos-state` branch | E — GUID in YAML | F — Init subcommand | G — S3 lock backend |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Zero proactive setup | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ (one-time run) | ✅ |
+| Survives component rename | ✅ if set | ✅ migrates | ✅ locked | ✅ locked | ✅ | ✅ after migration | ✅ locked |
+| Survives stack/account rename | ❌ prefix changes | ✅ migrates | ✅ full name locked | ✅ full name locked | ✅ | ❌ prefix changes | ✅ full name locked |
+| Catalogue single-instance | ✅ inherit | n/a | ✅ auto | ✅ auto | ❌ | ✅ writes once | ✅ auto |
+| Catalogue multi-instance | ❌ per-instance override | n/a | ✅ auto | ✅ auto | ❌ | ❌ per-instance override | ✅ auto |
+| Collision detection | ❌ | ✅ pre-check | ✅ on write | ✅ on write | ❌ | ❌ (validate stacks) | ✅ on write |
+| Reviewable in PRs | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| No CI write-back required | ✅ | ✅ | ❌ must commit | ❌ must push | ❌ | ✅ (one-time only) | ❌ must write S3 |
+| Concurrent-safe writes | n/a | n/a | ❌ merge conflicts | ❌ push races | n/a | n/a | ✅ ETag CAS |
+| Human-readable workspaces | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (default format) | ✅ |
+| Backwards compatible | ✅ fully | ✅ | ⚠️ bootstrap | ⚠️ bootstrap | ❌ breaking | ✅ one-time opt-in | ⚠️ bootstrap |
+| Implementation effort | Trivial | High | Medium | High | Medium | Medium | Medium |
 
 ---
 
@@ -247,13 +310,35 @@ This gives every project a concrete migration path:
 - **Existing single-instance projects:** run `atmos workspace init`, review the diff, commit.
 - **Existing multi-instance projects:** use the init command for single-instance components; accept that multi-instance stacks need per-instance overrides OR wait for Phase 2.
 
-### Phase 2 — Follow-up: in-repo workspace lock file
+### Phase 2 — Follow-up: workspace lock backends
 
-Option C (in-repo lock file) eliminates the proactive-setup requirement, handles all catalogue patterns (including multi-instance), and provides collision detection. It is the right long-term solution for teams that cannot or do not want to predefine `metadata.name` for every instance.
+**Option C (in-repo lock file)** is the right default for teams that prioritise PR reviewability and want workspace assignment changes to be explicit, diffable, and approvable. The operational cost is commit discipline and merge conflicts on concurrent component additions — manageable with GitOps practices.
 
-Option D (`atmos-state` branch) as an opt-in alternative storage backend, configurable via `workspace_locks.backend: git-branch` in `atmos.yaml`.
+**Option G (S3/remote object store lock)** is the right choice for teams that:
+- Already use S3 backend (bucket + credentials already in CI).
+- Run concurrent pipelines that cannot commit back to the main branch.
+- Have multi-instance catalogue patterns.
 
-Option B (`atmos rename component`) as a convenience tool for planned renames, after the lock file is stable.
+Option G is strictly better than Option D (git-branch) on every axis. Option D should not be implemented as a standalone backend.
+
+**Configuration design:** Both C and G should be implemented as backends for a single `workspace_locks` subsystem, configured in `atmos.yaml`:
+
+```yaml
+workspace_locks:
+  backend: local        # or: s3, git-branch (opt-in, not recommended)
+  local:
+    path: .atmos/workspace-locks.yaml
+  s3:
+    bucket: "${ATMOS_STATE_BUCKET}"
+    key: ".atmos/workspace-locks.yaml"
+    region: "${AWS_REGION}"
+    dynamodb_table: "${ATMOS_LOCK_TABLE}"  # optional
+  # gcs / azure-blob: future backends, same interface
+```
+
+This reuses the same multi-provider registry pattern already established in `pkg/store/`.
+
+Option B (`atmos rename component`) as a convenience tool for planned renames, after the lock subsystem is stable.
 
 ### Answers to new questions
 
@@ -270,7 +355,10 @@ The canonical component name (the YAML key segment that uniquely identifies the 
 Option A requires per-instance `metadata.name` overrides in the concrete stack files. Option C (lock file) handles it automatically — each `{yaml_key}@{stack}` is a separate lock entry. If the multi-instance pattern is common in your repo, adopt the lock file (Phase 2) instead of fighting with per-instance overrides.
 
 **Q: Can workspace identity persist dynamically without predefining it for every instance?**  
-Yes — the lock file (Option C) is precisely this mechanism. The workspace is computed from the YAML key the first time any `plan`/`apply` runs, written to the lock file, and reused on every future run regardless of YAML changes. No predefinition is required. The lock file is the "dynamic discovery + persistence" solution.
+Yes — any lock-file backend (Option C, G) is precisely this mechanism. The workspace is computed from the YAML key the first time any `plan`/`apply` runs, written to the lock backend, and reused on every future run regardless of YAML changes. No predefinition is required. Choose Option C for in-repo visibility or Option G for concurrent-safe remote storage.
+
+**Q: Should the lock file live in S3 alongside Terraform state?**  
+Yes, for AWS-native teams. The S3 backend (Option G) reuses the existing state bucket, IAM roles, and optionally the DynamoDB lock table. CI jobs already have the credentials; no new permissions policy needed. Concurrent writes are handled via ETag-based conditional writes (`If-Match`), which are atomic and much simpler than a git rebase loop. The main trade-off is that workspace assignment changes are not visible in pull requests — mitigated by an `atmos workspace lock diff` command that CI can run and post as a PR comment.
 
 **Q: How are collisions detected in Phase 1 (before the lock file exists)?**  
 `atmos validate stacks` computes the resolved workspace name for every component+stack pair and reports duplicates. The init subcommand also performs a pre-write collision check before modifying any files.
