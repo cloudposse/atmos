@@ -365,6 +365,7 @@ func setEnv(v *viper.Viper) {
 	// Terraform plugin cache configuration.
 	bindEnv(v, "components.terraform.plugin_cache", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE")
 	bindEnv(v, "components.terraform.plugin_cache_dir", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR")
+	bindEnv(v, "components.terraform.auto_provision_workdir_for_outputs", "ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS")
 
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")

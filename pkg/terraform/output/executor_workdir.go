@@ -32,7 +32,10 @@ var workdirProvisionCache sync.Map
 func ResetWorkdirProvisionCache() {
 	defer perf.Track(nil, "output.ResetWorkdirProvisionCache")()
 
-	workdirProvisionCache = sync.Map{}
+	workdirProvisionCache.Range(func(key, _ any) bool {
+		workdirProvisionCache.Delete(key)
+		return true
+	})
 }
 
 // WorkdirProvisioner provisions a JIT working directory before terraform operations.

@@ -1327,7 +1327,7 @@ func TestExecutor_GetAllOutputs_SkipInit_WithAuthManager_ProcessesYamlFunctions(
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "skipauth-stack-skipauth-component"
+	stackSlug := stackComponentKey("skipauth-stack", "skipauth-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -1965,4 +1965,39 @@ func TestEnsureWorkdirProvisioned_ExecuteWithSectionsPath(t *testing.T) {
 
 	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, sections, nil, "my-vpc", "prod", config)
 	require.NoError(t, err)
+}
+
+func TestExecuteWithSections_ReturnsErrWhenProvisionFails(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	defer ResetWorkdirProvisionCache()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	provErr := errors.New("provision failed: disk full")
+	mockProvisioner := NewMockWorkdirProvisioner(ctrl)
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(provErr).
+		AnyTimes()
+
+	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
+	atmosCfg := validAtmosConfig()
+	atmosCfg.Components.Terraform.AutoProvisionWorkdirForOutputs = true
+
+	// Use validSections() so ExtractComponentConfig passes Step 2,
+	// then add JIT provision fields so ensureWorkdirProvisioned fires.
+	sections := validSections()
+	sections["provision"] = map[string]any{
+		"workdir": map[string]any{"enabled": true},
+	}
+
+	stackSlug := stackComponentKey("dev", "vpc")
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	_, err := executor.ExecuteWithSections(atmosCfg, "vpc", "dev", sections, nil)
+	require.Error(t, err, "ExecuteWithSections must surface provisioner errors to the caller")
+	require.True(t, errors.Is(err, errUtils.ErrWorkdirProvision),
+		"error must wrap ErrWorkdirProvision, got: %v", err)
 }

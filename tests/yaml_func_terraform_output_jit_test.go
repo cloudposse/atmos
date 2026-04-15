@@ -60,7 +60,7 @@ func TestTerraformOutputJITWorkdir(t *testing.T) {
 
 	// Primary assertion: workdir was created by auto-provision.
 	_, statErr = os.Stat(workdirPath)
-	assert.NoError(t, statErr, "workdir should have been auto-provisioned before terraform init (issue #2167)")
+	require.NoError(t, statErr, "workdir should have been auto-provisioned before terraform init (issue #2167)")
 
 	// Secondary: if describe succeeded, verify the section is non-nil.
 	if describeErr == nil {
