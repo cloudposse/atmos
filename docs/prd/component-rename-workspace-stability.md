@@ -1,608 +1,260 @@
 # PRD: Component Rename Workspace Stability
 
-**Version:** 1.1
-**Last Updated:** 2026-04-14
+**Version:** 2.0  
+**Last Updated:** 2026-04-15  
 **Issue:** [#2244](https://github.com/cloudposse/atmos/issues/2244)
 
 ---
 
-## Executive Summary
+## Problem
 
-Renaming an Atmos component (changing its YAML key) silently changes the
-Terraform workspace name, causing Terraform to treat the renamed component as
-a brand-new workspace. Existing infrastructure in the old workspace is
-effectively "lost" from Terraform's perspective: resources will be recreated
-in the new workspace while the old workspace remains orphaned with stale state.
+Renaming an Atmos component (changing its YAML key, or renaming the stack/account it belongs to) silently changes the Terraform workspace name. Terraform treats the new workspace as empty and plans to recreate all resources, while the old workspace retains orphaned state.
 
-This PRD analyses four approaches for workspace-identity stability and recommends
-a two-phase solution:
+### How workspace names are derived today
 
-1. **Phase 1 (immediate):** Extend the existing `metadata.name` mechanism — already
-   used to stabilise backend key prefixes — to also control the Terraform
-   workspace name, giving users a simple, declarative way to pin workspace
-   identity independently of the YAML key.
-2. **Phase 2 (follow-up):** Introduce either an `atmos rename component` interactive
-   migration command or a workspace identity lock file so that workspace names
-   are _automatically_ stabilised without requiring any user action.
-
----
-
-## Problem Statement
-
-### How Workspace Names Are Computed Today
-
-`BuildTerraformWorkspace` in `internal/exec/stack_utils.go` builds the workspace
-name using the following priority chain:
+`BuildTerraformWorkspace` (`internal/exec/stack_utils.go`) uses this priority chain:
 
 | Priority | Source | Example |
 |----------|--------|---------|
-| 1 | `metadata.terraform_workspace_template` | Go template string |
-| 2 | `metadata.terraform_workspace_pattern` | Token-substitution pattern |
+| 1 | `metadata.terraform_workspace_template` | Go template |
+| 2 | `metadata.terraform_workspace_pattern` | Token pattern |
 | 3 | `metadata.terraform_workspace` | Static string |
 | 4 | Stack prefix only (no base component) | `ue1-dev` |
-| 5 | `{stack_prefix}-{component_name}` | `ue1-dev-rds-hello-world-service` |
+| 5 | `{stack_prefix}-{yaml_key}` | `ue1-dev-rds-hello-world-service` |
 
-For priority 5, `component_name` is the raw Atmos YAML key with `/` replaced by
-`-`. This means the workspace name is **tightly coupled to the YAML key**.
+Priority 5 couples the workspace name to the YAML key. Renaming `rds/hello-world-service` to `hello-world-service/rds` changes the workspace from `ue1-dev-rds-hello-world-service` to `ue1-dev-hello-world-service-rds`. The current workaround (`metadata.terraform_workspace: "ue1-dev-rds-hello-world-service"`) hard-codes the stack name, breaks inheritance, and must be set proactively — before the rename happens.
 
-### The Rename Problem
+### The collision problem
 
-When a component is renamed in the YAML stack manifest:
-
-```diff
- components:
-   terraform:
--    rds/hello-world-service:
-+    hello-world-service/rds:
-```
-
-The workspace name changes from `ue1-dev-rds-hello-world-service` to
-`ue1-dev-hello-world-service-rds`. Terraform finds no resources in the new
-workspace and plans to create all of them from scratch, while the old workspace
-retains orphaned state.
-
-### Why the Current Workaround Is Insufficient
-
-The current escape hatch is to set a static workspace name:
-
-```yaml
-hello-world-service/rds:
-  metadata:
-    terraform_workspace: "ue1-dev-rds-hello-world-service"
-```
-
-This works but has several problems:
-
-1. **Must be set proactively.** Users who rename _without_ setting
-   `terraform_workspace` first will trigger a plan with full resource
-   recreation. There is no warning.
-2. **Hard-codes the stack name.** The workspace value embeds `ue1-dev`, so the
-   same component definition cannot be reused across stacks via inheritance.
-3. **Disconnected from identity.** `metadata.name` is already the recommended
-   field for expressing stable component identity (see `workspace-key-prefixes.md`),
-   yet it has no effect on the workspace _name_.
-4. **Scales poorly.** In a large mono-repo a component may be deployed in dozens
-   of stacks. Setting a static workspace override in every stack manifest is
-   error-prone.
+Beyond rename-triggered breakage, a second hazard exists: **workspace name collision**. If component A is renamed to a YAML key that produces the same workspace name as component B, both components will operate against the same Terraform state. Without a registry that maps workspace names to their owning components, this collision is undetectable until state corruption occurs.
 
 ---
 
-## Analysed Options
+## Options
 
-### Option A — Extend `metadata.name` to Stabilise Workspace Names (Recommended for Phase 1)
+### Option A — `metadata.name` controls the workspace name
 
-#### Description
+**What:** Extend `BuildTerraformWorkspace` to use `metadata.name` (already used for backend key prefix stability) as the component segment in the fallback workspace name. Add `metadata.name` as a new priority between the static override (3) and the stack-prefix-only case (4).
 
-`metadata.name` was introduced to give a component a stable logical identity
-for backend key prefix generation (see `workspace-key-prefixes.md`). Extend
-`BuildTerraformWorkspace` to use `metadata.name` as the component segment of
-the workspace name when it is set.
+**New priority table:**
 
-**New logic (pseudocode):**
+| Priority | Source | Notes |
+|----------|--------|-------|
+| … | (1–3 unchanged) | |
+| 4 | Stack prefix only (no base component) | Unchanged |
+| **5** | **`{stack_prefix}-{metadata.name}`** | **New** |
+| 6 | `{stack_prefix}-{yaml_key}` | Current behaviour |
 
-```go
-// Resolve the "component identity" used in the workspace name.
-// Priority: metadata.name > Atmos component YAML key.
-componentIdentity := component  // YAML key (current behavior)
-if name, ok := componentMetadata["name"].(string); ok && name != "" {
-    componentIdentity = name
-}
-
-// Build workspace (existing priority chain is unchanged above this).
-if configAndStacksInfo.Context.BaseComponent == "" {
-    workspace = contextPrefix
-} else {
-    workspace = fmt.Sprintf("%s-%s", contextPrefix, componentIdentity)
-}
-return strings.Replace(workspace, "/", "-", -1), nil
-```
-
-#### Before / After
-
+**Usage:**
 ```yaml
-# BEFORE (rename causes workspace change):
-rds/hello-world-service:          # Workspace: ue1-dev-rds-hello-world-service
-  vars:
-    name: hello-world-service-rds
-```
-
-```yaml
-# AFTER rename, without metadata.name — workspace BREAKS:
-hello-world-service/rds:         # Workspace: ue1-dev-hello-world-service-rds ← CHANGED
-  vars:
-    name: hello-world-service-rds
-```
-
-```yaml
-# AFTER rename, with metadata.name — workspace is STABLE:
-hello-world-service/rds:         # Workspace: ue1-dev-rds-hello-world-service ← SAME
+hello-world-service/rds:         # YAML key (can change freely)
   metadata:
-    name: rds/hello-world-service  # Pins logical identity
-  vars:
-    name: hello-world-service-rds
+    name: rds/hello-world-service # Stable identity → workspace: ue1-dev-rds-hello-world-service
 ```
 
-#### Trade-offs
+**Devil's advocate:**
+- This doesn't help users who didn't set `metadata.name` before renaming — it's still opt-in. Existing projects get nothing.
+- `metadata.name` becomes an immutable commitment. Changing it recreates the problem.
+- It only stabilises the _component segment_. If the stack is renamed (`ue1-dev` → `us-east-1-dev`), the workspace prefix still changes.
+- No collision detection: two components can accidentally share the same `metadata.name` value, silently pointing at the same workspace. Nothing warns you.
 
-| | |
-|-|--|
-| ✅ Backwards compatible | Only active when `metadata.name` is set. Existing configs are unchanged. |
-| ✅ No new state management | Identity stored in YAML, no external registry required. |
-| ✅ Consistent | Aligns workspace name with workspace_key_prefix identity (same field). |
-| ✅ Inheritable | `metadata.name` can be defined once in a base/abstract component and inherited everywhere. |
-| ✅ DRY | Rename once in YAML; all stacks that inherit pick up the stable identity automatically. |
-| ⚠️ Requires proactive setup | Users must set `metadata.name` _before_ renaming, or perform a manual workspace migration. |
-| ⚠️ Naming discipline | The value of `metadata.name` becomes an immutable commitment. Changing it causes the same workspace churn the feature aims to prevent. |
+**Verdict:** Excellent for new projects and deliberate migrations. Insufficient as a standalone solution for large existing repos or stack renames.
 
 ---
 
-### Option B — `atmos rename component` Migration Command (Phase 2)
+### Option B — `atmos rename component` migration command
 
-#### Description
-
-An interactive CLI command that:
-
-1. Finds every stack where the component is deployed.
-2. Prompts the user to confirm which stacks to migrate.
-3. For each selected stack, renames the Terraform workspace (selects old workspace → renames via `terraform workspace new` + state pull/push, or `terraform workspace delete` of old).
-4. Updates YAML manifests to reflect the new name.
+**What:** An interactive CLI command that discovers every stack where a component is deployed, migrates Terraform workspace state (pull/push via backend API), and updates YAML manifests.
 
 ```
 > atmos rename component rds/hello-world-service hello-world-service/rds
 
-Found 2 stacks where rds/hello-world-service is deployed:
-  1. ue1-dev
-  2. ue2-dev
-
-Rename component and migrate workspaces? [y/N]: y
-
-  [ue1-dev] Migrating workspace ue1-dev-rds-hello-world-service
-             → ue1-dev-hello-world-service-rds ... ✓
-  [ue2-dev] Migrating workspace ue2-dev-rds-hello-world-service
-             → ue2-dev-hello-world-service-rds ... ✓
-
-Updated 2 stack manifests. Run `atmos terraform plan` to verify.
+Found 2 stacks: ue1-dev, ue2-dev
+Rename and migrate workspaces? [y/N]: y
+  [ue1-dev] ue1-dev-rds-hello-world-service → ue1-dev-hello-world-service-rds ✓
+  [ue2-dev] ue2-dev-rds-hello-world-service → ue2-dev-hello-world-service-rds ✓
 ```
 
-#### Trade-offs
+**Devil's advocate:**
+- Only helps users who _know_ they are renaming. Does nothing for stack/account renames.
+- Requires Terraform execution: needs credentials for every backend across every stack. In multi-account environments this is a non-trivial orchestration problem.
+- YAML rewriting risks destroying anchors, comments, and formatting.
+- Not atomic: a partial failure mid-run leaves some stacks migrated and others not. Rollback is complex.
+- High implementation cost; no immediate value for the most common case (accidental/unplanned rename).
 
-| | |
-|-|--|
-| ✅ Full automation | No manual workspace migration step. |
-| ✅ Discoverable | Users learn about the safe rename path via the command itself. |
-| ✅ Self-documenting | The command makes the consequences of a rename explicit. |
-| ⚠️ Complex implementation | Requires Terraform execution, workspace state pull/push, error recovery, dry-run mode. |
-| ⚠️ Multi-stack serialisation | Workspaces in separate stacks may use different backends requiring distinct credentials. |
-| ⚠️ Scope of YAML mutation | Programmatic YAML rewrites risk destroying formatting, comments, and anchors. |
-| ⚠️ Not atomic | A partial failure mid-migration leaves some stacks migrated and others not. |
+**Verdict:** High value as a convenience tool for planned renames. Not a primary safety mechanism. Should come after Option A is stable.
 
 ---
 
-### Option C — Workspace Identity Lock File (Sticky Auto-Assigned Name)
+### Option C — Workspace identity lock file (in-repo)
 
-#### Description
-
-The root cause of the rename problem is that users must *proactively* set
-`metadata.name` before renaming. Option C removes that requirement by having
-Atmos automatically record the computed workspace name the first time a
-component is provisioned — similar to how package managers write a `go.sum` or
-`package-lock.json`.
-
-**How it works:**
-
-1. On the first `atmos terraform plan/apply` for `rds/hello-world-service -s ue1-dev`,
-   Atmos computes the workspace name (`ue1-dev-rds-hello-world-service`) and
-   writes it to a lock file: `.atmos/workspace-locks.yaml`:
-
-   ```yaml
-   # .atmos/workspace-locks.yaml
-   # Auto-generated by Atmos. Commit this file to your repository.
-   locks:
-     rds/hello-world-service@ue1-dev: "ue1-dev-rds-hello-world-service"
-     rds/hello-world-service@ue2-dev: "ue2-dev-rds-hello-world-service"
-   ```
-
-2. When the component is renamed to `hello-world-service/rds` in the YAML, the
-   lock file still contains the old key `rds/hello-world-service@ue1-dev`.
-   Atmos emits a warning:
-
-   ```
-   WARNING: Component 'hello-world-service/rds' has no workspace lock entry.
-            Former name 'rds/hello-world-service' has a lock entry.
-            Run `atmos workspace lock migrate rds/hello-world-service hello-world-service/rds`
-            to transfer the lock, or add metadata.name to pin the workspace explicitly.
-   ```
-
-3. The lock file is committed to Git and shared across the team. All engineers
-   and CI pipelines use the same frozen workspace names.
-
-**Workspace name for lock key:** The lock key is the component's YAML key (not
-`metadata.name`), so the lock persists even if `metadata.name` changes.
-
-**Alternative sub-variant — GUID in lock file:** Instead of storing the computed
-human-readable name, Atmos could generate a UUID and use that as the workspace
-name. The trade-off analysis below covers both variants.
-
-#### Trade-offs
-
-| | Human-readable lock | UUID lock |
-|--|---|---|
-| ✅ No proactive setup | Workspace is frozen automatically on first provision. | Same. |
-| ✅ Survives YAML key rename | Lock is keyed on old YAML key; migration command transfers it. | Same. |
-| ✅ Survives stack rename | Lock value is the frozen workspace name, not derived from current stack name. | Same. |
-| ✅ Git-committable | Lock file lives in the repo, reviewed in PRs. | Same. |
-| ✅ Escape hatch | Lock file is plain YAML; users can edit it if needed. | Same, but UUID is opaque. |
-| ✅ Human-readable | Workspace names remain meaningful (`ue1-dev-rds-hello-world-service`). | ❌ UUIDs are opaque. |
-| ⚠️ Atmos must write files | Atmos writes/updates the lock file during `plan`/`apply`, which may surprise users. | Same. |
-| ⚠️ Lock file is new state | A new file that must be committed, kept in sync, and merged carefully in PRs. | Same. |
-| ⚠️ Merge conflicts | Two PRs that each provision a new component will conflict in the lock file. | Same. |
-| ⚠️ Breaking change | Existing components have no lock entry. Atmos must decide: warn and compute normally, or require migration. | Same. |
-| ⚠️ Lock key is YAML key | If the YAML key has never been locked, renaming without migrating first silently breaks the workspace. | Same. |
-
-**Conclusion:** The lock file approach is significantly more viable than the
-raw GUID approach and solves the "zero proactive effort" requirement. The main
-cost is the new Atmos-managed file and the Git workflow discipline it demands.
-It is a good candidate for Phase 2 alongside or instead of the migration
-command. The UUID sub-variant offers no advantages over the human-readable
-variant and is not recommended.
-
----
-
-### Option D — GUID Written Directly into the Stack YAML
-
-#### Description
-
-Generate a UUID when a component is first provisioned. Write it into the
-component's `metadata` block within the stack YAML file itself:
+**What:** Atmos automatically writes a lock file (`.atmos/workspace-locks.yaml`) on the first `plan`/`apply` for a given component+stack pair, recording the computed workspace name. Future runs use the locked name regardless of YAML key changes. The lock file is committed to the main branch and shared across the team — similar to `go.sum` or `package-lock.json`.
 
 ```yaml
-# ue1-dev.yaml  (auto-modified by Atmos)
-components:
-  terraform:
-    rds/hello-world-service:
-      metadata:
-        workspace_id: "a3f2c891-7d1b-4e6a-b3d9-0f8c2e5a1b7d"  # frozen by Atmos
+# .atmos/workspace-locks.yaml — auto-generated by Atmos; commit to repo
+locks:
+  rds/hello-world-service@ue1-dev: "ue1-dev-rds-hello-world-service"
+  rds/hello-world-service@ue2-dev: "ue2-dev-rds-hello-world-service"
 ```
 
-#### Trade-offs
+When a component is renamed and has no lock entry, Atmos warns and falls back to the normal derivation. A `atmos workspace lock migrate <old> <new>` command transfers the lock entry.
 
-| | |
-|-|--|
-| ✅ Truly immutable per-component-per-file | UUID is frozen inside the file that defines the component. |
-| ✅ No separate state file | Identity lives alongside the configuration that needs it. |
-| ❌ Atmos mutates user YAML | Writing to user-managed stack files is unexpected and fragile; risks destroying formatting, anchors, and comments. |
-| ❌ UUID is opaque | Workspace names become meaningless strings; debugging is hard. |
-| ❌ Breaking change | All existing components need UUIDs generated and committed before the feature becomes effective. |
-| ❌ Git noise on first run | Every newly-added component triggers a YAML write and a dirty working tree. |
-| ❌ CI pipeline friction | A read-only CI run would fail to write the UUID; a two-phase workflow (write UUID, then plan) adds complexity. |
+**Collision detection:** Before writing a new lock entry, Atmos scans for duplicate workspace values. If the target workspace name is already claimed by a different component, it fails with a clear error:
+```
+ERROR: Workspace 'ue1-dev-db' is already locked by component 'db@ue1-dev'.
+       Cannot assign it to 'database@ue1-dev'. Resolve the conflict first.
+```
 
-**Conclusion:** Option D is the least viable. Atmos mutating user YAML is
-the core objection raised by @osterman ("b) atmos dynamically updating the YAML
-to persist that state"). The lock file in Option C is a much safer alternative
-for auto-assigned identity because it is a Atmos-owned file distinct from the
-user's configuration.
+**Devil's advocate:**
+- Atmos writing files during `plan`/`apply` is unexpected. CI pipelines are often read-only and cannot commit back to the repo. If the lock file is not committed, the workspace name is re-derived on the next run.
+- Concurrent CI runs (e.g., two PRs each adding a new component) will produce merge conflicts in the lock file.
+- Bootstrapping an existing repo requires either running `plan` for every component or a separate `atmos workspace lock generate --all` command.
+- The lock file is a new piece of Atmos-managed state that operators must understand and maintain.
+
+**Verdict:** Solves the zero-proactive-effort requirement and provides collision detection. The main operational cost is the commit discipline. The right choice for Phase 2.
 
 ---
 
-## Options Comparison
+### Option D — `atmos-state` branch (remote auto-committed lock)
 
-| | A — `metadata.name` | B — Rename Command | C — Lock File | D — GUID in YAML |
-|-|---|---|---|---|
-| Requires proactive user action | ⚠️ Yes — before rename | ✅ No — migrate after | ✅ No — auto on first provision | ✅ No — auto on first provision |
-| Human-readable workspace names | ✅ Yes | ✅ Yes | ✅ Yes (human-readable variant) | ❌ No |
-| Survives component YAML rename | ✅ Yes (if set) | ✅ Yes (migrates name) | ✅ Yes (lock key migrated) | ✅ Yes |
-| Survives stack/account rename | ⚠️ No — workspace prefix changes | ✅ Yes (migrates name) | ✅ Yes (lock stores frozen value) | ✅ Yes |
-| Atmos writes files | ✅ No | ⚠️ YAML rewrite | ⚠️ Lock file (Atmos-owned) | ❌ User YAML rewrite |
-| Backwards compatible | ✅ Fully | ✅ Fully | ⚠️ Requires migration for existing components | ❌ Breaking |
-| Implementation complexity | ✅ Minimal (< 10 LOC) | ⚠️ High | ⚠️ Medium | ❌ High |
-| Phase | 1 (immediate) | 2 (follow-up) | 2 (follow-up) | Not recommended |
+**What:** Store the workspace lock registry in a dedicated, non-protected Git branch (e.g., `atmos-state`), analogous to how GitHub Pages uses `gh-pages`. Atmos pushes updated lock entries to this branch after every `plan`/`apply`. No files are added to the main branch.
 
-### Note on "Survives stack/account rename"
+```
+main branch:          stacks/*.yaml  (user-managed, no lock file)
+atmos-state branch:   workspace-locks.yaml  (Atmos-managed, auto-committed)
+```
 
-Option A (`metadata.name`) stabilises the _component segment_ of the workspace
-name, but not the _stack prefix_. If the stack is renamed from `ue1-dev` to
-`us-east-1-dev`, the workspace name changes from `ue1-dev-rds-hello-world-service`
-to `us-east-1-dev-rds-hello-world-service` even with `metadata.name` set.
+**Devil's advocate:**
+- Concurrent `plan`/`apply` runs will race to push to `atmos-state`, causing push conflicts. Atmos would need a fetch-rebase-retry loop, adding latency and fragility.
+- Write access to the repo is required from every CI runner that runs `plan` or `apply` — including read-only plan jobs that currently need no push permission.
+- The lock registry is invisible in PRs (it's on another branch). Reviewers cannot see or approve workspace assignment changes.
+- If the `atmos-state` branch is force-pushed, deleted, or corrupted, all workspace assignments are lost with no recovery path.
+- Non-standard Git usage makes the system harder to understand for new team members.
+- This solves the "merge conflict in main" problem from Option C but introduces worse problems (race conditions, invisible state, access requirements).
 
-The full workspace name can be pinned by using `metadata.terraform_workspace`
-(a static string, already supported) or `metadata.terraform_workspace_template`
-(a Go template, already supported). Neither Option A nor the lock file (Option C)
-can independently stabilise a workspace name that is derived from the stack
-prefix — that requires an explicit override or a lock file that stores the full
-computed name (not just the component segment).
+**Verdict:** Clever but operationally fragile. The in-repo lock file (Option C) is strictly better for most teams. Consider only if the main-branch commit requirement is an absolute blocker.
 
 ---
 
-## Recommended Approach
+### Option E — GUID written into stack YAML (auto-mutate user files)
 
-### Phase 1 — `metadata.name` Controls Workspace Name
+**What:** On first provision, Atmos generates a UUID and writes it into the component's `metadata` block within the stack YAML file itself.
 
-Extend `BuildTerraformWorkspace` to honour `metadata.name` as the component
-segment of the workspace name. The workspace name derivation priority becomes:
+```yaml
+rds/hello-world-service:
+  metadata:
+    workspace_id: "a3f2c891-7d1b-4e6a-b3d9-0f8c2e5a1b7d"  # written by Atmos
+```
 
-| Priority | Source | Notes |
-|----------|--------|-------|
-| 1 | `metadata.terraform_workspace_template` | Unchanged |
-| 2 | `metadata.terraform_workspace_pattern` | Unchanged |
-| 3 | `metadata.terraform_workspace` | Unchanged |
-| 4 | Stack prefix only (no base component) | Unchanged |
-| 5 | `{stack_prefix}-{metadata.name}` | **New** — when `metadata.name` is set |
-| 6 | `{stack_prefix}-{component_yaml_key}` | Current fallback (unchanged) |
+**Devil's advocate:**
+- Atmos mutating user-managed YAML files is the worst possible approach: it destroys formatting, anchors, and comments. This was explicitly rejected in the original issue discussion.
+- UUIDs are opaque. Debugging which workspace belongs to which component requires a lookup table.
+- Read-only CI runs cannot write UUIDs, creating a two-phase bootstrap problem.
+- Every new component in every new stack triggers a dirty working tree, polluting Git history.
 
-This keeps all existing behaviour intact while offering a clean opt-in path.
-
-### Phase 2 — Workspace Identity Lock File or Rename Command
-
-For Phase 2, two alternatives are available. They address different user
-segments and can coexist:
-
-**2a — `atmos rename component` command** *(targeted at users who know a rename is happening)*
-
-Implement an interactive command that finds all stacks where the component is
-deployed, migrates workspaces, and updates YAML manifests. This is the best
-option for deliberate, planned renames.
-
-**2b — Workspace identity lock file** *(targeted at users who want zero-effort permanence)*
-
-Implement a `.atmos/workspace-locks.yaml` lock file that is automatically
-written on first provision. Workspace names are frozen from that point forward,
-surviving any future rename without any user action. This is the best option
-for teams that want "set it and forget it" stability.
-
-Both options should be tracked in separate follow-up issues. The lock file (2b)
-is likely higher-value for large organizations managing many components across
-many stacks.
+**Verdict:** Not viable. Included only for completeness.
 
 ---
 
-## Implementation
+## Comparison
 
-### Phase 1 — Code Changes
+| | A — `metadata.name` | B — Rename cmd | C — Lock file (repo) | D — `atmos-state` branch | E — GUID in YAML |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Zero proactive setup required | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Survives component rename | ✅ if set | ✅ migrates | ✅ locked | ✅ locked | ✅ |
+| Survives stack/account rename | ❌ prefix changes | ✅ migrates | ✅ full name locked | ✅ full name locked | ✅ |
+| Collision detection | ❌ | ✅ pre-check | ✅ on write | ✅ on write | ❌ |
+| Reviewable in PRs | ✅ | ✅ | ✅ | ❌ separate branch | ✅ |
+| No CI write-back required | ✅ | ✅ plan-only | ❌ must commit | ❌ must push | ❌ must commit |
+| Human-readable workspaces | ✅ | ✅ | ✅ | ✅ | ❌ UUIDs |
+| Backwards compatible | ✅ fully | ✅ | ⚠️ bootstrap needed | ⚠️ bootstrap needed | ❌ breaking |
+| Implementation effort | Trivial | High | Medium | High | Medium |
 
-#### `internal/exec/stack_utils.go`
+---
 
-Update `BuildTerraformWorkspace` to extract `metadata.name` and use it in the
-fallback workspace construction:
+## Recommendation
+
+### Phase 1 — Ship now: `metadata.name` controls workspace name
+
+This is a **< 10-line code change** that is fully backwards-compatible and immediately useful. It gives new projects a solid foundation and gives existing projects a safe rename path.
+
+**Shipping Phase 1 alone is acceptable.** Teams with existing infrastructure can adopt `metadata.name` proactively. Stack/account renames remain handled by the existing `metadata.terraform_workspace_template` escape hatch (already supported).
+
+### Phase 2 — Follow-up: in-repo workspace lock file
+
+Option C (in-repo lock file) is the right long-term solution. It eliminates the proactive-setup requirement, survives all renames, and provides collision detection. The operational cost (commit discipline, concurrent-run conflicts) is manageable with standard GitOps practices.
+
+Option D (`atmos-state` branch) should be offered as an **opt-in alternative storage backend** for the same lock data, configurable in `atmos.yaml`. This lets teams choose based on their CI topology — but the in-repo lock file should be the default.
+
+Option B (`atmos rename component`) should also be built eventually as a convenience tool, but it is not a safety mechanism and should not be prioritised over the lock file.
+
+Option E (GUID in YAML) is not viable and should not be implemented.
+
+### Answered open questions
+
+**Q1: Should `metadata.name` affect the workspace when there is no base component?**  
+No. Priority 4 (stack prefix only, no base component) is unchanged. `metadata.name` only affects the component-suffix case (current priority 5).
+
+**Q2: Should Atmos warn when a component has a base component but no `metadata.name`?**  
+Yes, but as an opt-in lint rule (`atmos lint stacks --rule workspace-identity`), not a runtime warning. A lint rule is surfaced at review time, not during every `plan`.
+
+**Q3: What is the priority when `metadata.name` and a lock file entry both exist?**  
+`metadata.name` (explicit) takes priority over the lock file (implicit). A user who explicitly sets `metadata.name` is expressing intent. The lock file is a fallback.
+
+**Q4: How do existing repos bootstrap the lock file?**  
+A `atmos workspace lock generate` command scans all stacks and writes lock entries for every deployed component based on the _current_ computed workspace name. No Terraform runs are needed. This is a pure read operation over the YAML configuration.
+
+**Q5: How are workspace name collisions prevented?**  
+At lock-write time (Phase 2), Atmos verifies the resolved workspace name does not already appear in the lock file under a different key. For Phase 1 (`metadata.name` only), `atmos validate stacks` will detect duplicate workspace names within a stack and fail with a descriptive error.
+
+**Q6: What about the `atmos-state` branch option?**  
+Viable as an opt-in storage backend but not recommended as the default. The in-repo lock file is strictly better for visibility and reliability. Configure with `workspace_locks.backend: git-branch` in `atmos.yaml` if desired.
+
+---
+
+## Implementation (Phase 1)
+
+### `internal/exec/stack_utils.go` — ~8 lines changed
 
 ```go
-func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
-    defer perf.Track(atmosConfig, "exec.BuildTerraformWorkspace")()
-
-    if !isWorkspacesEnabled(atmosConfig, &configAndStacksInfo) {
-        return cfg.TerraformDefaultWorkspace, nil
-    }
-
-    // ... existing contextPrefix resolution unchanged ...
-
-    var workspace string
-    componentMetadata := configAndStacksInfo.ComponentMetadataSection
-
-    // Priority 1-3: explicit workspace overrides (unchanged)
-    if terraformWorkspaceTemplate, ok := componentMetadata["terraform_workspace_template"].(string); ok {
-        // ... unchanged ...
-    } else if terraformWorkspacePattern, ok := componentMetadata["terraform_workspace_pattern"].(string); ok {
-        // ... unchanged ...
-    } else if terraformWorkspace, ok := componentMetadata["terraform_workspace"].(string); ok {
-        workspace = terraformWorkspace
-    } else if configAndStacksInfo.Context.BaseComponent == "" {
-        // Priority 4: stack prefix only (no base component, unchanged)
-        workspace = contextPrefix
-    } else {
-        // Priority 5/6: component identity.
-        // Use metadata.name if set; otherwise fall back to the YAML key.
-        componentIdentity := configAndStacksInfo.Context.Component
-        if name, ok := componentMetadata["name"].(string); ok && name != "" {
-            componentIdentity = name
-        }
-        workspace = fmt.Sprintf("%s-%s", contextPrefix, componentIdentity)
-    }
-
-    return strings.Replace(workspace, "/", "-", -1), nil
+// In the Priority 5/6 fallback block:
+componentIdentity := configAndStacksInfo.Context.Component  // current behaviour
+if name, ok := componentMetadata["name"].(string); ok && name != "" {
+    componentIdentity = name  // metadata.name takes precedence
 }
+workspace = fmt.Sprintf("%s-%s", contextPrefix, componentIdentity)
 ```
 
-#### `pkg/schema/schema.go`
+No schema changes required — `metadata.name` already exists.
 
-`metadata.name` already exists on `ComponentMetadata` (used for workspace key
-prefix). No schema change is required — the same field now also influences the
-workspace name.
-
-#### JSON Schema
-
-No change to `pkg/datafetcher/schema/` is required because `metadata.name` is
-already documented in the schema (added by `workspace-key-prefixes.md`).
-
-### Phase 1 — Test Plan
-
-**Unit tests** (`internal/exec/stack_utils_test.go`):
+### Unit tests (`internal/exec/stack_utils_test.go`)
 
 | Scenario | `metadata.name` | YAML key | Expected workspace |
 |----------|-----------------|----------|--------------------|
 | Name set, component renamed | `rds/hello-world-service` | `hello-world-service/rds` | `ue1-dev-rds-hello-world-service` |
 | Name not set | — | `rds/hello-world-service` | `ue1-dev-rds-hello-world-service` |
 | Name not set, component renamed | — | `hello-world-service/rds` | `ue1-dev-hello-world-service-rds` |
-| Static override takes precedence | `rds/hello-world-service` | any | value from `metadata.terraform_workspace` |
-| Template override takes precedence | `rds/hello-world-service` | any | result of `metadata.terraform_workspace_template` |
-| No base component | `rds/hello-world-service` | any | stack prefix only (unchanged) |
+| Static override wins | `rds/hws` | any | value of `metadata.terraform_workspace` |
+| Template override wins | `rds/hws` | any | result of `metadata.terraform_workspace_template` |
+| No base component | `rds/hws` | any | stack prefix only (unchanged) |
 
-### Phase 2a — `atmos rename component` Scope (Future Issue)
+### Migration guide
 
-The `atmos rename component` command will be tracked in a separate issue and
-PRD. It is mentioned here for completeness. Key design points to address in
-that PRD:
+**New projects:** Set `metadata.name` on every component from day one. The name is a permanent commitment.
 
-- Dry-run mode (`--dry-run`).
-- Per-stack filtering (`--stack`).
-- Backend-aware workspace migration (S3, GCS, Azure, HTTP).
-- Transactional safety (rollback on partial failure).
-- YAML rewrite strategy (preserve comments/anchors).
-- Credential handling for multi-account environments.
+**Existing projects — safe rename:**
+1. Set `metadata.name` to the current YAML key. Plan → confirm zero diff.
+2. Rename the YAML key. Plan → confirm zero diff.
 
-### Phase 2b — Workspace Identity Lock File Scope (Future Issue)
-
-Key design points to address in a separate PRD:
-
-- Lock file location (`{stacks-base-path}/../.atmos/workspace-locks.yaml` or
-  configurable via `atmos.yaml`).
-- Lock file format: keyed by `{component-yaml-key}@{stack}` → frozen workspace name.
-- Behaviour when no lock entry exists: warn + compute normally (least-surprise
-  default).
-- Behaviour when the YAML key is renamed: warn and suggest
-  `atmos workspace lock migrate <old> <new>`.
-- Migration command for bootstrapping existing repos:
-  `atmos workspace lock generate --all` to snapshot current workspace names.
-- CI/CD considerations: lock file must be committed; read-only CI should not
-  write the lock file by default (opt-in with `--update-lock`).
+**Existing projects — emergency recovery (rename already happened):**  
+Revert the YAML rename, follow the safe procedure above, then re-apply the rename.
 
 ---
 
-## Migration Guide
-
-### New Projects
-
-Add `metadata.name` to every component from the start. The name is the stable
-identity of the component regardless of how the YAML key evolves:
-
-```yaml
-components:
-  terraform:
-    rds/hello-world-service:
-      metadata:
-        name: rds/hello-world-service   # Stable identity
-        component: rds                   # Terraform source directory
-```
-
-### Existing Projects — Safe Rename Procedure
-
-Follow these steps to rename a component without changing its workspace:
-
-**Step 1** — Add `metadata.name` with the _current_ component name:
-
-```diff
- components:
-   terraform:
-     rds/hello-world-service:
-+      metadata:
-+        name: rds/hello-world-service
-```
-
-**Step 2** — Commit, apply, and verify. Run `atmos terraform plan` to confirm
-zero changes (the workspace name is identical to before `metadata.name` was
-set). This step is critical: it proves the name is stable.
-
-**Step 3** — Rename the YAML key:
-
-```diff
- components:
-   terraform:
--    rds/hello-world-service:
-+    hello-world-service/rds:
-       metadata:
-         name: rds/hello-world-service   # Unchanged — workspace stays stable
-```
-
-**Step 4** — Commit and run `atmos terraform plan` again. Confirm zero changes.
-
-### Existing Projects — Emergency Recovery (Rename Already Happened)
-
-If a component was already renamed without `metadata.name`, the old workspace
-is orphaned and a new workspace was created. To recover:
-
-**Option 1 — Revert and follow safe procedure.** Revert the YAML rename,
-follow Steps 1–4 above.
-
-**Option 2 — Migrate Terraform state.** Select the old workspace, pull state,
-select/create the new workspace, push state, then delete the old workspace.
-Consult Terraform's state migration documentation for backend-specific
-instructions.
-
----
-
-## Backwards Compatibility
-
-This change is **fully backwards compatible**:
-
-- `metadata.name` is an opt-in field.
-- Components that do not set `metadata.name` behave exactly as today.
-- All existing workspace overrides (`terraform_workspace`, `terraform_workspace_pattern`,
-  `terraform_workspace_template`) continue to take higher priority.
-
-No configuration flag or feature toggle is required.
-
----
-
-## Relationship to Related PRDs
+## Related PRDs
 
 | PRD | Relationship |
 |-----|-------------|
-| `workspace-key-prefixes.md` | Introduced `metadata.name` for backend key prefix stability. This PRD extends the same field to workspace name stability. |
-| `terraform-workspace-key-prefix-slash-preservation.md` | Controls `/`→`-` substitution in backend key prefixes. The same slash-replacement logic applies to workspace names and is unchanged. |
-| `metadata-inheritance.md` | `metadata.name` can be inherited from abstract/base components, allowing a single catalog entry to pin the workspace identity for all derived components. |
-
----
-
-## Open Questions
-
-1. **Should `metadata.name` in Phase 1 also affect the workspace when there is
-   no base component?** Currently, priority 4 returns the stack prefix alone when
-   `BaseComponent == ""`. Should `metadata.name` add a suffix in that case? The
-   conservative choice (do not change priority 4 behaviour) is proposed here.
-
-2. **Should a deprecation warning be emitted when a component has a base
-   component but no `metadata.name`?** A warning could help users adopt the
-   stable identity pattern proactively, but may be too noisy. A `--strict` lint
-   rule would be less intrusive.
-
-3. **Phase 2 prioritisation: rename command vs. lock file?** The lock file
-   (Option C) is lower-friction for users but requires Atmos to own a new file.
-   The rename command (Option B) is more surgical but only helps when a rename
-   is consciously happening. Both should be tracked as separate issues; the lock
-   file may provide higher aggregate value.
-
-4. **Lock file bootstrap for existing repos.** If a lock file is adopted, large
-   existing repos with hundreds of components need a way to snapshot current
-   workspace names in bulk without running `atmos terraform plan` for every
-   component. A `atmos workspace lock generate --all` command (dry-run aware)
-   would address this.
-
-5. **Lock file + `metadata.name` interaction.** If both are set, which takes
-   priority? Proposed: `metadata.name` takes priority (explicit > implicit), so
-   users can override the auto-frozen name when needed.
-
----
-
-## Success Criteria
-
-1. `BuildTerraformWorkspace` uses `metadata.name` as the component identity when
-   set, and the YAML key otherwise (no change for existing configurations).
-2. A component renamed from `rds/hello-world-service` to
-   `hello-world-service/rds` with `metadata.name: rds/hello-world-service` set
-   produces the identical workspace name in both cases.
-3. All existing workspace override mechanisms (`terraform_workspace`,
-   `terraform_workspace_pattern`, `terraform_workspace_template`) continue to
-   take priority over `metadata.name`.
-4. Unit tests cover all scenarios in the test plan above.
-5. Documentation is updated to recommend `metadata.name` as part of the
-   component definition best practice.
-6. Follow-up issues are created for the workspace identity lock file (Phase 2b)
-   and the `atmos rename component` command (Phase 2a).
+| `workspace-key-prefixes.md` | Introduced `metadata.name` for backend key prefix stability. This PRD extends it to workspace name stability. |
+| `terraform-workspace-key-prefix-slash-preservation.md` | `/`→`-` substitution applies equally to workspace names. |
+| `metadata-inheritance.md` | `metadata.name` can be inherited from abstract components, pinning workspace identity for all derived components in one place. |
