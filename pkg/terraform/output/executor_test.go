@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
@@ -1678,4 +1679,138 @@ func TestExecutor_GetOutputWithOptions_StaticRemoteState(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists)
 	assert.Equal(t, "srs-value", value)
+}
+
+// --- ensureWorkdirProvisioned tests ---
+
+func setupEnsureWorkdirTest(t *testing.T) (*gomock.Controller, *MockWorkdirProvisioner, *Executor, *ComponentConfig) {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+	mockProvisioner := NewMockWorkdirProvisioner(ctrl)
+	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
+	config := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
+	return ctrl, mockProvisioner, executor, config
+}
+
+func jitSections() map[string]any {
+	return map[string]any{
+		"provision": map[string]any{
+			"workdir": map[string]any{"enabled": true},
+		},
+		"atmos_component": "vpc",
+		"atmos_stack":     "dev",
+	}
+}
+
+func TestEnsureWorkdirProvisioned_CallsProvisionerWhenEnabled(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).
+		Times(1)
+
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.NoError(t, err)
+}
+
+func TestEnsureWorkdirProvisioned_SkipsWhenWorkdirDisabled(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	// No workdir enabled.
+	sections := map[string]any{
+		"atmos_component": "vpc",
+		"atmos_stack":     "dev",
+	}
+	mockProvisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, sections, nil, "vpc", "dev", config)
+	require.NoError(t, err)
+}
+
+func TestEnsureWorkdirProvisioned_SkipsWhenConfigDisabled(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, _ := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	config := &ComponentConfig{AutoProvisionWorkdirForOutputs: false}
+	mockProvisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.NoError(t, err)
+}
+
+func TestEnsureWorkdirProvisioned_CachePreventsDoubleProvision(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).
+		Times(1) // Must be called exactly once despite two invocations.
+
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.NoError(t, err)
+
+	err = executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.NoError(t, err)
+}
+
+func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	provisionErr := errors.New("disk full")
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(provisionErr)
+
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "vpc")
+	assert.Contains(t, err.Error(), "dev")
+}
+
+func TestEnsureWorkdirProvisioned_SetsReconfigureWhenFreshlyProvisioned(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	// Provision side-effect: set WorkdirReprovisionedKey to signal fresh provision.
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *schema.AtmosConfiguration, componentConfig map[string]any, _ *schema.AuthContext) error {
+			componentConfig[provWorkdir.WorkdirReprovisionedKey] = struct{}{}
+			return nil
+		})
+
+	require.False(t, config.InitRunReconfigure, "should be false before provision")
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.NoError(t, err)
+	assert.True(t, config.InitRunReconfigure, "should be true after fresh provision")
+}
+
+func TestEnsureWorkdirProvisioned_ExecuteWithSectionsPath(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, _ := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	config := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).
+		Times(1)
+
+	sections := jitSections()
+	sections["atmos_component"] = "my-vpc"
+	sections["atmos_stack"] = "prod"
+
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, sections, nil, "my-vpc", "prod", config)
+	require.NoError(t, err)
 }
