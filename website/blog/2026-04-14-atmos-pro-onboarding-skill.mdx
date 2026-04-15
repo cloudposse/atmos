@@ -182,6 +182,21 @@ All safety rails applied.
 A draft PR with the full artifact set, body matching the repo's template, and
 every safety rail honored — ready for review and rollout.
 
+### Prefer one prompt?
+
+The four-prompt walkthrough above lets you inspect detection and the plan
+before anything is written. If you'd rather hand the whole flow to the agent,
+one prompt is enough:
+
+> Using `atmos:atmos-pro`, run the full onboarding end-to-end: detect the repo
+> shape, show me the plan for approval, then generate everything in a worktree,
+> validate, and open a draft PR using the repo's `PULL_REQUEST_TEMPLATE.md`.
+> Pause only at the plan-approval step and for any policy questions.
+
+The agent still stops for your explicit approval before writing files and for
+any open policy questions (e.g., "should prod be plan-only?"), so safety rails
+remain intact. The only difference is you don't re-prompt between phases.
+
 ## Get Started
 
 1. Set your Atmos Pro workspace ID as a GitHub repo variable:

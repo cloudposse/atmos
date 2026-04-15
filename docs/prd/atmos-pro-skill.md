@@ -63,6 +63,23 @@ A single skill, `atmos-pro`, invocable two ways:
 Both paths share the same templates and produce byte-identical output (enforced by
 cross-path parity tests).
 
+### Invocation styles (Claude Code)
+
+The skill supports two invocation styles under Path B:
+
+- **Step-by-step** — one prompt per phase (`detect` → `plan` → `generate` → `open PR`).
+  Lets the operator inspect detection and the generated plan before any writes.
+- **One-shot** — a single prompt asks the agent to run the full flow end-to-end,
+  pausing only at the plan-approval step and for any open policy questions. Example:
+
+  > Using `atmos:atmos-pro`, run the full onboarding end-to-end: detect the repo
+  > shape, show me the plan for approval, then generate everything in a worktree,
+  > validate, and open a draft PR using the repo's `PULL_REQUEST_TEMPLATE.md`.
+  > Pause only at the plan-approval step and for any policy questions.
+
+Both styles execute the same six-step flow; safety rails (explicit plan approval,
+policy-question prompts) remain intact in the one-shot style.
+
 ### The flow the skill prescribes
 
 1. **Create an isolated worktree** (`.worktrees/atmos-pro-setup`) so the main checkout
