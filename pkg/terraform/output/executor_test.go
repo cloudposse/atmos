@@ -8,7 +8,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/stretchr/testify/assert"
@@ -1761,6 +1764,56 @@ func TestEnsureWorkdirProvisioned_CachePreventsDoubleProvision(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	defer ResetWorkdirProvisionCache()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Gate controls when Provision returns.
+	gate := make(chan struct{})
+	var provisionCallCount atomic.Int32
+
+	mockProvisioner := NewMockWorkdirProvisioner(ctrl)
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext) error {
+			provisionCallCount.Add(1)
+			<-gate // Block until gate is released.
+			return nil
+		}).
+		Times(1)
+
+	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
+	cfg := &schema.AtmosConfiguration{}
+	sections := jitSections()
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+
+	for i := range 2 {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			config := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
+			errs[idx] = executor.ensureWorkdirProvisioned(
+				context.Background(), cfg, sections, nil, "vpc", "dev", config,
+			)
+		}(i)
+	}
+
+	// Give both goroutines time to enter singleflight.Do before releasing.
+	time.Sleep(20 * time.Millisecond)
+	close(gate)
+	wg.Wait()
+
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	assert.Equal(t, int32(1), provisionCallCount.Load(),
+		"Provision must be called exactly once despite concurrent callers")
+}
+
 func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
@@ -1785,7 +1838,8 @@ func TestEnsureWorkdirProvisioned_CacheEvictedOnFailureAllowsRetry(t *testing.T)
 
 	provisionErr := errors.New("disk full")
 	// First call fails; second call succeeds.
-	// Cache must be evicted after failure to allow the retry.
+	// On failure, no cache entry is stored. singleflight does not cache errors,
+	// so the next sequential call re-enters the closure and retries provisioning.
 	gomock.InOrder(
 		mockProvisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(provisionErr),
 		mockProvisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil),
