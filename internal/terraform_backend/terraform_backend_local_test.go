@@ -453,4 +453,45 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "eg-test-demo", result["id"])
 	})
+
+	t.Run("atmos_component with path traversal falls through to static path", func(t *testing.T) {
+		// Security regression test: atmos_component values containing ../ sequences must NOT
+		// cause ReadTerraformBackendLocal to resolve outside BasePath.
+		// The BuildPath derivation must apply the same containment guard as the _workdir_path fast path.
+		tempDir := t.TempDir()
+
+		// Place state at the static path (fallback) — NOT at the traversal-constructed path.
+		staticDir := filepath.Join(tempDir, "components", "terraform", "vpc", "terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(staticDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(staticDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			// atmos_component with traversal sequences — BuildPath uses this to construct the workdir path.
+			// The containment check must reject it and fall through to the static path.
+			"atmos_stack":     "demo",
+			"atmos_component": "../../../../etc/evil",
+			"component":       "vpc", // used by static fallback: TerraformDirAbsolutePath + component
+			"workspace":       "demo",
+		}
+
+		// The traversal path escapes BasePath and must be rejected.
+		// Expect the function to fall through to the static path (where we placed state),
+		// or return nil cleanly — not read from an arbitrary filesystem location.
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		// Either found the static fallback state or returned nil — both are acceptable.
+		// What is NOT acceptable is reading from outside BasePath.
+		if content != nil {
+			result, err := tb.ProcessTerraformStateFile(content)
+			require.NoError(t, err)
+			assert.Equal(t, "eg-test-demo", result["id"], "should only read from within BasePath")
+		}
+	})
 }

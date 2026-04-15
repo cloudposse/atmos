@@ -110,7 +110,22 @@ func resolveLocalBackendComponentPath(
 					workdirPath = abs
 				}
 			}
-			return workdirPath
+			// Containment guard: reject derived paths that escape the project directory.
+			// atmos_component and atmos_stack come from user-controlled YAML; a value
+			// containing ../ sequences (e.g. "../../../../etc/evil") could otherwise
+			// escape BasePath via filepath.Join resolution.
+			// Note: symlinks are not resolved — same best-effort scope as the fast path above.
+			absBase, errBase := filepath.Abs(atmosConfig.BasePath)
+			if errBase == nil {
+				sep := string(filepath.Separator)
+				if strings.HasPrefix(workdirPath, absBase+sep) || workdirPath == absBase {
+					return workdirPath
+				}
+				log.Debug("Derived workdir path escapes project directory; falling through to static path",
+					"derived_path", workdirPath, "base_path", atmosConfig.BasePath)
+			} else {
+				return workdirPath
+			}
 		}
 	}
 	// Default: static components/terraform/<component> path.
