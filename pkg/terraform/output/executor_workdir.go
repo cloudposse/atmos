@@ -8,8 +8,10 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -45,7 +47,7 @@ type WorkdirProvisioner interface {
 	Provision(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error
 }
 
-// defaultWorkdirProvisioner delegates to workdir.ProvisionWorkdir.
+// defaultWorkdirProvisioner delegates to the source and workdir provisioners.
 type defaultWorkdirProvisioner struct{}
 
 func (d *defaultWorkdirProvisioner) Provision(
@@ -54,6 +56,29 @@ func (d *defaultWorkdirProvisioner) Provision(
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
 ) error {
+	// For source-provisioned components (source.uri + provision.workdir.enabled),
+	// run the source provisioner first to create and hydrate the workdir from the
+	// source URI before terraform init runs.
+	//
+	// In the ExecuteTerraform path, source provisioning is handled by the
+	// before.terraform.init hook registered in pkg/provisioner/source. The output
+	// executor has its own runInit that calls tfexec directly and never fires that
+	// hook system. Without this call, !terraform.output on a source-provisioned
+	// component with no existing workdir always fails — nothing creates the
+	// directory before init runs.
+	//
+	// Trade-off: remote source URIs (GitHub, S3) will now trigger a network fetch
+	// during !terraform.output evaluation. TTL caching limits this to the first
+	// call per TTL window, but callers should be aware that output reads may
+	// require source credentials and network access when the workdir is cold.
+	if err := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext); err != nil {
+		return err
+	}
+
+	// For local components with no source, ProvisionWorkdir copies component files
+	// to the workdir. For source-provisioned components where AutoProvisionSource
+	// already set WorkdirPathKey, ProvisionWorkdir detects the key and returns
+	// immediately without duplicating the copy.
 	return provWorkdir.ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext)
 }
 
