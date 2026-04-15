@@ -9,6 +9,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -81,13 +82,18 @@ func resolveLocalBackendComponentPath(
 	if p, ok := (*sections)[provWorkdir.WorkdirPathKey].(string); ok && p != "" {
 		absP, errP := filepath.Abs(p)
 		absBase, errBase := filepath.Abs(atmosConfig.BasePath)
-		if errP == nil && errBase == nil {
+		if errP != nil || errBase != nil {
+			log.Debug("Could not absolutize _workdir_path or BasePath; falling through to derived path",
+				"workdir_path", p, "base_path", atmosConfig.BasePath)
+		} else {
+			// Note: symlinks are not resolved; this is a best-effort guard against
+			// literal path traversal in _workdir_path values from stack config.
 			sep := string(filepath.Separator)
 			if strings.HasPrefix(absP, absBase+sep) || absP == absBase {
 				return absP
 			}
+			// Path escapes project directory — fall through to derived path.
 		}
-		// Path escapes project directory — fall through to derived path.
 	}
 	// Workdir-enabled component: derive the canonical path using the same
 	// formula the provisioner uses. Absolutize for CWD-independence (mirrors
