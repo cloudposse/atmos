@@ -366,6 +366,27 @@ func TestGetComponentInfo(t *testing.T) {
 	assert.Equal(t, "component 'database' in stack 'prod-eu-central-1'", result)
 }
 
+func TestExtractComponentConfig_ReadsAutoProvisionWorkdirForOutputs(t *testing.T) {
+	sections := validSections()
+	sections[cfg.ComponentSectionName] = "mock"
+	sections["component_info"] = map[string]any{
+		"component_type": "terraform",
+		"component_path": "/tmp/mock",
+	}
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs = false
+
+	config, err := ExtractComponentConfig(atmosConfig, sections, "mock", "test")
+	require.NoError(t, err)
+	assert.False(t, config.AutoProvisionWorkdirForOutputs)
+
+	atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs = true
+	config, err = ExtractComponentConfig(atmosConfig, sections, "mock", "test")
+	require.NoError(t, err)
+	assert.True(t, config.AutoProvisionWorkdirForOutputs)
+}
+
 func TestExtractOptionalFields(t *testing.T) {
 	sections := map[string]any{
 		cfg.BackendTypeSectionName: "gcs",

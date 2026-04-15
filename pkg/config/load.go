@@ -431,6 +431,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	// Plugin cache enabled by default for zero-config performance.
 	v.SetDefault("components.terraform.plugin_cache", true)
+	v.SetDefault("components.terraform.auto_provision_workdir_for_outputs", true)
 
 	// Token injection defaults for all supported Git hosting providers.
 	v.SetDefault("settings.inject_github_token", true)

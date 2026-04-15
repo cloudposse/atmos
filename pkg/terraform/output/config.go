@@ -32,6 +32,9 @@ type ComponentConfig struct {
 	AutoGenerateBackend bool
 	// InitRunReconfigure indicates whether to run init with -reconfigure.
 	InitRunReconfigure bool
+	// AutoProvisionWorkdirForOutputs controls whether the executor auto-provisions
+	// JIT working directories before terraform init.
+	AutoProvisionWorkdirForOutputs bool
 }
 
 // IsComponentProcessable determines if a component should be processed for terraform output.
@@ -204,8 +207,9 @@ func ExtractComponentConfig(atmosConfig *schema.AtmosConfiguration, sections map
 	defer perf.Track(atmosConfig, "output.ExtractComponentConfig")()
 
 	config := &ComponentConfig{
-		AutoGenerateBackend: atmosConfig.Components.Terraform.AutoGenerateBackendFile,
-		InitRunReconfigure:  atmosConfig.Components.Terraform.InitRunReconfigure,
+		AutoGenerateBackend:            atmosConfig.Components.Terraform.AutoGenerateBackendFile,
+		InitRunReconfigure:             atmosConfig.Components.Terraform.InitRunReconfigure,
+		AutoProvisionWorkdirForOutputs: atmosConfig.Components.Terraform.AutoProvisionWorkdirForOutputs,
 	}
 
 	if err := extractRequiredFields(atmosConfig, sections, component, stack, config); err != nil {
