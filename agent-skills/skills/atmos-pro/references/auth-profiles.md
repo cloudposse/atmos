@@ -125,12 +125,12 @@ profile:
 
 ```yaml
 # In profiles/github-plan/atmos.yaml
-gov-new-account/gha-tf-plan:
+plat-new-account/gha-tf-plan:
   kind: aws/assume-role
   via:
     provider: github-oidc
   principal:
-    assume_role: arn:aws:iam::123456789012:role/dev-core-gbl-new-account-gha-tf-plan
+    assume_role: arn:aws:iam::123456789012:role/ex-plat-gbl-new-account-gha-tf-plan
 ```
 
 And the matching entry in `profiles/github-apply/atmos.yaml`. No other file changes are

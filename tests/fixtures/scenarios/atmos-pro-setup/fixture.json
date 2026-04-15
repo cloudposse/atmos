@@ -6,45 +6,45 @@
   "root_account_id": "111111111111",
   "accounts": [
     {
-      "tenant": "gov",
+      "tenant": "core",
       "stage": "root",
       "account_id": "111111111111",
       "is_root": true
     },
     {
-      "tenant": "gov",
-      "stage": "iam",
+      "tenant": "core",
+      "stage": "identity",
       "account_id": "222222222222",
       "is_root": false
     },
     {
-      "tenant": "gov",
-      "stage": "dss",
+      "tenant": "core",
+      "stage": "audit",
       "account_id": "333333333333",
       "is_root": false
     },
     {
-      "tenant": "soc",
-      "stage": "clip",
+      "tenant": "plat",
+      "stage": "dev",
       "account_id": "444444444444",
       "is_root": false
     },
     {
-      "tenant": "soc",
-      "stage": "siem",
+      "tenant": "plat",
+      "stage": "staging",
       "account_id": "555555555555",
       "is_root": false
     },
     {
-      "tenant": "soc",
-      "stage": "wksn",
+      "tenant": "plat",
+      "stage": "prod",
       "account_id": "666666666666",
       "is_root": false
     }
   ],
-  "probe_stack": "ex-gov-gbl-iam",
-  "probe_tenant": "gov",
-  "probe_stage": "iam",
+  "probe_stack": "ex-core-gbl-identity",
+  "probe_tenant": "core",
+  "probe_stage": "identity",
   "probe_account_id": "222222222222",
   "geodesic_detected": true,
   "spacelift_was_enabled": true,

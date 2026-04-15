@@ -75,8 +75,8 @@ func TestRenderData_Validate(t *testing.T) {
 			name: "multiple roots",
 			mutate: func(d *atmospro.RenderData) {
 				d.Accounts = []atmospro.Account{
-					{Tenant: "gov", Stage: "root", AccountID: "1", IsRoot: true},
-					{Tenant: "soc", Stage: "root", AccountID: "2", IsRoot: true},
+					{Tenant: "core", Stage: "root", AccountID: "1", IsRoot: true},
+					{Tenant: "plat", Stage: "root", AccountID: "2", IsRoot: true},
 				}
 			},
 			wantErr: atmospro.ErrMultipleRoots,
@@ -125,7 +125,7 @@ func TestRender_Range(t *testing.T) {
 	out, err := atmospro.Render("t.tmpl", src, d)
 	require.NoError(t, err)
 	// Accounts in fixture order.
-	assert.Equal(t, "gov-root,gov-iam,gov-dss,soc-clip,soc-siem,soc-wksn,\n", out)
+	assert.Equal(t, "core-root,core-identity,core-audit,plat-dev,plat-staging,plat-prod,\n", out)
 }
 
 func TestRender_RootPinnedToPlanRole(t *testing.T) {
@@ -163,8 +163,8 @@ func TestRender_TopLevelContextInRange(t *testing.T) {
 	src := "<<range .accounts>><<$.namespace>>/<<.tenant>> <<end>>"
 	out, err := atmospro.Render("t.tmpl", src, d)
 	require.NoError(t, err)
-	assert.Contains(t, out, "ex/gov")
-	assert.Contains(t, out, "ex/soc")
+	assert.Contains(t, out, "ex/core")
+	assert.Contains(t, out, "ex/plat")
 }
 
 // TestRenderAll_GoldenSnapshot renders every template against the fixture and diffs each

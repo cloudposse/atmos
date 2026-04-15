@@ -16,7 +16,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
-          role-to-assume: arn:aws:iam::222222222222:role/ex-gov-gbl-iam-gha-tf-plan
+          role-to-assume: arn:aws:iam::222222222222:role/ex-core-gbl-identity-gha-tf-plan
           aws-region: us-east-1
 
       - name: Verify Identity

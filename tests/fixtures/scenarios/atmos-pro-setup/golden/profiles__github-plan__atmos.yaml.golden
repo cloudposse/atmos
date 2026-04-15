@@ -12,39 +12,39 @@ auth:
   # github-plan uses gha-tf-plan roles for read-only (terraform plan) access.
   # Use the github-apply profile for full (terraform apply) access.
   identities:
-    gov-root/gha-tf-plan:
+    core-root/gha-tf-plan:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-        assume_role: arn:aws:iam::111111111111:role/ex-gov-gbl-root-gha-tf-plan
-    gov-iam/gha-tf-plan:
+        assume_role: arn:aws:iam::111111111111:role/ex-core-gbl-root-gha-tf-plan
+    core-identity/gha-tf-plan:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-        assume_role: arn:aws:iam::222222222222:role/ex-gov-gbl-iam-gha-tf-plan
-    gov-dss/gha-tf-plan:
+        assume_role: arn:aws:iam::222222222222:role/ex-core-gbl-identity-gha-tf-plan
+    core-audit/gha-tf-plan:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-        assume_role: arn:aws:iam::333333333333:role/ex-gov-gbl-dss-gha-tf-plan
-    soc-clip/gha-tf-plan:
+        assume_role: arn:aws:iam::333333333333:role/ex-core-gbl-audit-gha-tf-plan
+    plat-dev/gha-tf-plan:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-        assume_role: arn:aws:iam::444444444444:role/ex-soc-gbl-clip-gha-tf-plan
-    soc-siem/gha-tf-plan:
+        assume_role: arn:aws:iam::444444444444:role/ex-plat-gbl-dev-gha-tf-plan
+    plat-staging/gha-tf-plan:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-        assume_role: arn:aws:iam::555555555555:role/ex-soc-gbl-siem-gha-tf-plan
-    soc-wksn/gha-tf-plan:
+        assume_role: arn:aws:iam::555555555555:role/ex-plat-gbl-staging-gha-tf-plan
+    plat-prod/gha-tf-plan:
       kind: aws/assume-role
       via:
         provider: github-oidc
       principal:
-        assume_role: arn:aws:iam::666666666666:role/ex-soc-gbl-wksn-gha-tf-plan
+        assume_role: arn:aws:iam::666666666666:role/ex-plat-gbl-prod-gha-tf-plan

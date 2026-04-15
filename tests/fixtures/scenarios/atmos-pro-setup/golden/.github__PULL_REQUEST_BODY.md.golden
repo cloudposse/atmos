@@ -16,12 +16,12 @@ skill from a fresh repo analysis — no manual edits.
 
 **Accounts enabled (6):**
 
-- `gov-root` (`111111111111`) — root account, apply pinned to plan role
-- `gov-iam` (`222222222222`)
-- `gov-dss` (`333333333333`)
-- `soc-clip` (`444444444444`)
-- `soc-siem` (`555555555555`)
-- `soc-wksn` (`666666666666`)
+- `core-root` (`111111111111`) — root account, apply pinned to plan role
+- `core-identity` (`222222222222`)
+- `core-audit` (`333333333333`)
+- `plat-dev` (`444444444444`)
+- `plat-staging` (`555555555555`)
+- `plat-prod` (`666666666666`)
 
 ## Rollout checklist
 
