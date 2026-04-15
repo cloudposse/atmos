@@ -14,6 +14,7 @@ import (
 	io "io"
 	reflect "reflect"
 
+	schema "github.com/cloudposse/atmos/pkg/schema"
 	tfexec "github.com/hashicorp/terraform-exec/tfexec"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -155,6 +156,44 @@ func (mr *MockTerraformRunnerMockRecorder) WorkspaceSelect(ctx, workspace any, o
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, workspace}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkspaceSelect", reflect.TypeOf((*MockTerraformRunner)(nil).WorkspaceSelect), varargs...)
+}
+
+// MockWorkdirProvisioner is a mock of WorkdirProvisioner interface.
+type MockWorkdirProvisioner struct {
+	ctrl     *gomock.Controller
+	recorder *MockWorkdirProvisionerMockRecorder
+	isgomock struct{}
+}
+
+// MockWorkdirProvisionerMockRecorder is the mock recorder for MockWorkdirProvisioner.
+type MockWorkdirProvisionerMockRecorder struct {
+	mock *MockWorkdirProvisioner
+}
+
+// NewMockWorkdirProvisioner creates a new mock instance.
+func NewMockWorkdirProvisioner(ctrl *gomock.Controller) *MockWorkdirProvisioner {
+	mock := &MockWorkdirProvisioner{ctrl: ctrl}
+	mock.recorder = &MockWorkdirProvisionerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockWorkdirProvisioner) EXPECT() *MockWorkdirProvisionerMockRecorder {
+	return m.recorder
+}
+
+// Provision mocks base method.
+func (m *MockWorkdirProvisioner) Provision(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Provision", ctx, atmosConfig, componentConfig, authContext)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Provision indicates an expected call of Provision.
+func (mr *MockWorkdirProvisionerMockRecorder) Provision(ctx, atmosConfig, componentConfig, authContext any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Provision", reflect.TypeOf((*MockWorkdirProvisioner)(nil).Provision), ctx, atmosConfig, componentConfig, authContext)
 }
 
 // MockComponentDescriber is a mock of ComponentDescriber interface.

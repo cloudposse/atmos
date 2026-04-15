@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -76,6 +77,25 @@ type TerraformRunner interface {
 	SetStderr(w io.Writer)
 	// SetEnv sets environment variables for terraform commands.
 	SetEnv(env map[string]string) error
+}
+
+// WorkdirProvisioner provisions a JIT working directory before terraform operations.
+type WorkdirProvisioner interface {
+	// Provision ensures the JIT working directory exists and is populated
+	// with component files before terraform init runs.
+	Provision(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error
+}
+
+// defaultWorkdirProvisioner delegates to workdir.ProvisionWorkdir.
+type defaultWorkdirProvisioner struct{}
+
+func (d *defaultWorkdirProvisioner) Provision(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	componentConfig map[string]any,
+	authContext *schema.AuthContext,
+) error {
+	return provWorkdir.ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext)
 }
 
 // RunnerFactory creates TerraformRunner instances.
@@ -162,6 +182,7 @@ type Executor struct {
 	runnerFactory           RunnerFactory
 	componentDescriber      ComponentDescriber
 	staticRemoteStateGetter StaticRemoteStateGetter
+	workdirProvisioner      WorkdirProvisioner
 }
 
 // ExecutorOption configures the Executor.
@@ -185,6 +206,15 @@ func WithStaticRemoteStateGetter(getter StaticRemoteStateGetter) ExecutorOption 
 	}
 }
 
+// WithWorkdirProvisioner sets a custom workdir provisioner (for testing).
+func WithWorkdirProvisioner(p WorkdirProvisioner) ExecutorOption {
+	defer perf.Track(nil, "output.WithWorkdirProvisioner")()
+
+	return func(e *Executor) {
+		e.workdirProvisioner = p
+	}
+}
+
 // NewExecutor creates an Executor with the required ComponentDescriber and optional configurations.
 func NewExecutor(describer ComponentDescriber, opts ...ExecutorOption) *Executor {
 	defer perf.Track(nil, "output.NewExecutor")()
@@ -192,6 +222,7 @@ func NewExecutor(describer ComponentDescriber, opts ...ExecutorOption) *Executor
 	e := &Executor{
 		runnerFactory:      defaultRunnerFactory,
 		componentDescriber: describer,
+		workdirProvisioner: &defaultWorkdirProvisioner{},
 	}
 	for _, opt := range opts {
 		opt(e)
