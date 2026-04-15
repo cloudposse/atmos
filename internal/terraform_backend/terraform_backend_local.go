@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -66,30 +67,44 @@ func ReadTerraformBackendLocal(
 // state file for a component. Resolution order:
 //
 //  1. If the provisioner already set _workdir_path in sections (e.g. during an
-//     active apply), use it directly.
+//     active apply), validate it is contained within BasePath and use it.
+//     If it escapes BasePath, fall through to derivation (path traversal guard).
 //  2. If provision.workdir.enabled is true, derive the canonical workdir path via
-//     BuildPath (same formula the provisioner uses).
+//     BuildPath (same formula the provisioner uses), then absolutize.
 //  3. Fall back to the static terraform base path for non-JIT components.
-//
-// BasePath is used (not BasePathAbsolute) for consistency with the source and
-// workdir provisioners, which use the same field when calling BuildPath.
 func resolveLocalBackendComponentPath(
 	atmosConfig *schema.AtmosConfiguration,
 	sections *map[string]any,
 ) string {
 	// Fast path: provisioner already stored the concrete workdir path.
+	// Validate that the path stays within the project directory (path traversal guard).
 	if p, ok := (*sections)[provWorkdir.WorkdirPathKey].(string); ok && p != "" {
-		return p
+		absP, errP := filepath.Abs(p)
+		absBase, errBase := filepath.Abs(atmosConfig.BasePath)
+		if errP == nil && errBase == nil {
+			sep := string(filepath.Separator)
+			if strings.HasPrefix(absP, absBase+sep) || absP == absBase {
+				return absP
+			}
+		}
+		// Path escapes project directory — fall through to derived path.
 	}
 	// Workdir-enabled component: derive the canonical path using the same
-	// formula the provisioner uses.
+	// formula the provisioner uses. Absolutize for CWD-independence (mirrors
+	// config.go:extractComponentPath lines 176-180).
 	if provWorkdir.IsWorkdirEnabled(*sections) {
 		stack := getAtmosStackFromSections(sections)
 		component := getAtmosComponentInstanceFromSections(sections)
 		if stack != "" && component != "" {
-			return provWorkdir.BuildPath(
+			workdirPath := provWorkdir.BuildPath(
 				atmosConfig.BasePath, "terraform", component, stack, *sections,
 			)
+			if !filepath.IsAbs(workdirPath) {
+				if abs, absErr := filepath.Abs(workdirPath); absErr == nil {
+					workdirPath = abs
+				}
+			}
+			return workdirPath
 		}
 	}
 	// Default: static components/terraform/<component> path.

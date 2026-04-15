@@ -381,4 +381,76 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "eg-test-demo", result["id"])
 	})
+
+	t.Run("_workdir_path escaping BasePath falls through to derived path", func(t *testing.T) {
+		tempDir := t.TempDir()
+		// Create state at the DERIVED workdir path (not the escaping path).
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label",
+			"terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(stateDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"),
+			[]byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			"atmos_stack":     "demo",
+			"atmos_component": "null-label",
+			"component":       "null-label",
+			"workspace":       "demo",
+			// Path that escapes BasePath via ../.. traversal.
+			"_workdir_path": filepath.Join(tempDir, "..", "..", "etc", "shadow"),
+		}
+
+		// Must fall through to BuildPath-derived path and still find the state file.
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content, "expected fallthrough to derived path when _workdir_path escapes BasePath")
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "eg-test-demo", result["id"])
+	})
+
+	t.Run("relative BasePath produces absolute result path", func(t *testing.T) {
+		tempDir := t.TempDir()
+		// Change CWD to tempDir so relative BasePath "." resolves there.
+		origDir, err := os.Getwd()
+		require.NoError(t, err)
+		require.NoError(t, os.Chdir(tempDir))
+		defer func() { _ = os.Chdir(origDir) }()
+
+		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label",
+			"terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(stateDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"),
+			[]byte(stateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 ".", // relative BasePath
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			"atmos_stack":     "demo",
+			"atmos_component": "null-label",
+			"component":       "null-label",
+			"workspace":       "demo",
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content, "expected state file found with relative BasePath")
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		assert.Equal(t, "eg-test-demo", result["id"])
+	})
 }
