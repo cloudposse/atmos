@@ -315,6 +315,49 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 		assert.Nil(t, content, "expected nil when JIT workdir is absent (not provisioned)")
 	})
 
+	t.Run("_workdir_path takes precedence over BuildPath when both are present", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Place state at the _workdir_path location.
+		workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label")
+		stateDir := filepath.Join(workdirPath, "terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(stateDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
+
+		// Also create a state file at the BuildPath location to confirm it is NOT used.
+		buildPathDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label-buildpath")
+		altStateDir := filepath.Join(buildPathDir, "terraform.tfstate.d", "demo")
+		require.NoError(t, os.MkdirAll(altStateDir, 0o755))
+		altStateJSON := `{"version":4,"terraform_version":"1.0.0","outputs":{"id":{"value":"wrong-path","type":"string"}}}`
+		require.NoError(t, os.WriteFile(filepath.Join(altStateDir, "terraform.tfstate"), []byte(altStateJSON), 0o644))
+
+		config := &schema.AtmosConfiguration{
+			BasePath:                 tempDir,
+			TerraformDirAbsolutePath: filepath.Join(tempDir, "components", "terraform"),
+		}
+		// Both _workdir_path and provision.workdir.enabled are set.
+		sections := map[string]any{
+			"provision": map[string]any{
+				"workdir": map[string]any{"enabled": true},
+			},
+			"atmos_stack":     "demo",
+			"atmos_component": "null-label",
+			"component":       "null-label",
+			"workspace":       "demo",
+			"_workdir_path":   workdirPath, // explicit path set by provisioner
+		}
+
+		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
+		require.NoError(t, err)
+		require.NotNil(t, content, "expected state file found via _workdir_path fast path")
+
+		result, err := tb.ProcessTerraformStateFile(content)
+		require.NoError(t, err)
+		// Must use the _workdir_path value, not the BuildPath value.
+		assert.Equal(t, "eg-test-demo", result["id"],
+			"_workdir_path must take precedence over BuildPath when both are present")
+	})
+
 	t.Run("non-JIT component: regression — static path unchanged", func(t *testing.T) {
 		tempDir := t.TempDir()
 		componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")

@@ -1818,6 +1818,23 @@ func TestEnsureWorkdirProvisioned_SetsReconfigureWhenFreshlyProvisioned(t *testi
 	assert.True(t, config.InitRunReconfigure, "should be true after fresh provision")
 }
 
+func TestEnsureWorkdirProvisioned_ReconfigureNotSetWhenNotFreshlyProvisioned(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	// Provision succeeds but does NOT set WorkdirReprovisionedKey.
+	// InitRunReconfigure must remain false.
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	require.False(t, config.InitRunReconfigure, "should be false before provision")
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.NoError(t, err)
+	assert.False(t, config.InitRunReconfigure, "should remain false when provisioner does not set WorkdirReprovisionedKey")
+}
+
 func TestEnsureWorkdirProvisioned_ExecuteWithSectionsPath(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	ctrl, mockProvisioner, executor, _ := setupEnsureWorkdirTest(t)

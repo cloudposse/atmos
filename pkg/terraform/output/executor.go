@@ -275,7 +275,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 		return nil
 	}
 
-	cacheKey := stackComponentKey(stack, component)
+	cacheKey := stackComponentKey(stack, component) // only allocate after early-return guards
 	if _, alreadyProvisioned := workdirProvisionCache.LoadOrStore(cacheKey, struct{}{}); alreadyProvisioned {
 		log.Debug("JIT workdir already provisioned this run, skipping", "component", component, "stack", stack)
 		return nil
@@ -285,7 +285,9 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 	if err := e.workdirProvisioner.Provision(ctx, atmosConfig, sections, authContext); err != nil {
 		workdirProvisionCache.Delete(cacheKey)
-		return fmt.Errorf("failed to auto-provision workdir for component '%s' in stack '%s': %w", component, stack, err)
+		return errUtils.Build(errUtils.ErrWorkdirProvision).
+			WithCause(fmt.Errorf("component '%s' in stack '%s': %w", component, stack, err)).
+			Err()
 	}
 
 	// If the provisioner freshly synced files, it sets WorkdirReprovisionedKey.
@@ -296,7 +298,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 	}
 
 	ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
-	log.Debug("Consider using !terraform.state for workdir-independent output access (no terraform init required)",
+	log.Info("Consider using !terraform.state for workdir-independent output access (no terraform init required)",
 		"component", component, "stack", stack)
 
 	return nil
