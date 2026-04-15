@@ -1,0 +1,19 @@
+vars:
+  stage: test
+
+components:
+  terraform:
+    producer:
+      metadata:
+        component: mock
+      vars:
+        foo: "foo-from-jit"
+      provision:
+        workdir:
+          enabled: true
+
+    consumer:
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.output producer test foo
