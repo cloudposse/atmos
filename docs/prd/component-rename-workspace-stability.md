@@ -1,6 +1,6 @@
 # PRD: Component Rename Workspace Stability
 
-**Version:** 4.0  
+**Version:** 5.0  
 **Last Updated:** 2026-04-15  
 **Issue:** [#2244](https://github.com/cloudposse/atmos/issues/2244)
 
@@ -255,6 +255,48 @@ This is strictly better than Option D (git-branch) on all axes: atomic writes, n
 
 ---
 
+### Option H — Pre-generated GUID pool in S3
+
+**What:** Generate 10k–100k UUIDs upfront, store them as a queue in S3 (or DynamoDB). When a new component instance is first deployed, Atmos atomically claims the next available GUID and uses it as the workspace name suffix. No user action required; the first `plan` on a new component auto-assigns a stable, unique name.
+
+```
+s3://state-bucket/.atmos/guid-pool.yaml  (pre-populated: [uuid-001, uuid-002, ...])
+s3://state-bucket/.atmos/workspace-locks.yaml  (populated at claim time)
+```
+
+**Devil's advocate — why this is Option G with unnecessary complexity:**
+
+1. **The pool solves a problem that doesn't exist.** GUIDs are not scarce resources that need pre-allocation. A UUID can be generated in nanoseconds at claim time. Pre-generating 100k of them and managing a queue adds operational overhead — pool exhaustion monitoring, refill tooling, queue drain state — for zero benefit over generating one UUID on-demand.
+
+2. **The pool is still just a lock registry.** After claiming a GUID, Atmos must persist `{yaml_key}@{stack}` → GUID somewhere so future runs can look it up. That persistence store is Option G's lock file. The pool doesn't replace the registry; it adds a layer on top of it. You are implementing Option G plus a queue.
+
+3. **Claiming "the next GUID" serialises all concurrent component instantiations.** Every new component across every stack must wait its turn to atomically dequeue one GUID. In a large monorepo with parallel CI, this is a write-serialisation bottleneck. Option G writes a single entry per component independently; the pool requires a global queue operation for every new component.
+
+4. **GUIDs make workspace names opaque permanently.** A workspace named `ue1-dev-a3f2c891-7d1b-4e6a` tells an operator nothing. Today's human-readable names (`ue1-dev-rds-hello-world-service`) make it trivially easy to find the right Terraform workspace, read plan output, or search CloudTrail logs. Once you move to GUIDs, that searchability is gone forever — even if the pool lookup table is intact.
+
+5. **The pool doesn't eliminate the bootstrap problem.** Existing components already have workspace names. Migrating them to pool-assigned GUIDs changes their workspace names — which is exactly the disruption users are trying to prevent. The pool only helps new components that have never been deployed. For existing infrastructure, you still need a migration command.
+
+6. **Pool corruption is catastrophic.** If the pool queue loses its "next pointer" or is partially overwritten, some GUIDs may be assigned twice. Two components sharing one workspace is silent state corruption. Option G's registry has the same risk, but doesn't have the additional dequeue-pointer state to corrupt.
+
+7. **The uniqueness guarantee is already free.** The collision problem in Option G is solved by the ETag conditional write: if two components race to claim the same workspace name, the second write fails and retries. GUIDs add uniqueness without needing any conditional write, but they sacrifice readability. The right trade-off is: use human-readable names + collision detection, not GUIDs + pre-allocation.
+
+**Verdict:** Not viable as designed. The pre-generation step is pure overhead. The actual useful kernel — "auto-assign a stable unique identifier on first deployment and persist it" — is exactly Option G, which already works without a pool. If UUIDs are truly desired as workspace suffixes, implement Option G and generate one UUID per new component at claim time (no pool needed). But strongly prefer human-readable names: the debuggability cost of GUIDs is permanent and high.
+
+---
+
+## Full devil's advocate sweep
+
+| Option | Strongest objection | Fatal? |
+|--------|--------------------|----|
+| A — `metadata.name` | Opt-in; multi-instance catalogue still needs per-instance overrides | No — excellent for single-instance patterns |
+| B — Rename cmd | Partial failure mid-run corrupts state; multi-account credential complexity | No — Phase 2 convenience tool |
+| C — In-repo lock | CI must commit back; concurrent component additions get merge conflicts | No — right default for visibility-first teams |
+| D — `atmos-state` branch | Push races; invisible in PRs; branch deletion destroys all assignments | Near-fatal — don't implement as default |
+| E — GUID in YAML | Mutates user files; destroys anchors/comments; opaque names | **Fatal** — do not implement |
+| F — Init subcommand | One-time only; future new components need manual work or Option C/G | No — right migration tool |
+| G — S3 lock | Invisible in PRs; S3 write credentials required from all CI jobs | No — right choice for concurrent AWS-native CI |
+| H — GUID pool | Pool is Option G + queue overhead; GUIDs permanently opaque; serialises all new deployments | **Fatal as designed** — the pool adds nothing; use Option G directly |
+
 ## The catalogue / multi-instance problem in full
 
 This is the central tension. The options split into two camps:
@@ -279,20 +321,21 @@ They break down when:
 
 ## Comparison
 
-| | A — `metadata.name` | B — Rename cmd | C — Lock file (repo) | D — `atmos-state` branch | E — GUID in YAML | F — Init subcommand | G — S3 lock backend |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Zero proactive setup | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ (one-time run) | ✅ |
-| Survives component rename | ✅ if set | ✅ migrates | ✅ locked | ✅ locked | ✅ | ✅ after migration | ✅ locked |
-| Survives stack/account rename | ❌ prefix changes | ✅ migrates | ✅ full name locked | ✅ full name locked | ✅ | ❌ prefix changes | ✅ full name locked |
-| Catalogue single-instance | ✅ inherit | n/a | ✅ auto | ✅ auto | ❌ | ✅ writes once | ✅ auto |
-| Catalogue multi-instance | ❌ per-instance override | n/a | ✅ auto | ✅ auto | ❌ | ❌ per-instance override | ✅ auto |
-| Collision detection | ❌ | ✅ pre-check | ✅ on write | ✅ on write | ❌ | ❌ (validate stacks) | ✅ on write |
-| Reviewable in PRs | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
-| No CI write-back required | ✅ | ✅ | ❌ must commit | ❌ must push | ❌ | ✅ (one-time only) | ❌ must write S3 |
-| Concurrent-safe writes | n/a | n/a | ❌ merge conflicts | ❌ push races | n/a | n/a | ✅ ETag CAS |
-| Human-readable workspaces | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (default format) | ✅ |
-| Backwards compatible | ✅ fully | ✅ | ⚠️ bootstrap | ⚠️ bootstrap | ❌ breaking | ✅ one-time opt-in | ⚠️ bootstrap |
-| Implementation effort | Trivial | High | Medium | High | Medium | Medium | Medium |
+| | A — `metadata.name` | B — Rename cmd | C — Lock file (repo) | D — `atmos-state` branch | E — GUID in YAML | F — Init subcommand | G — S3 lock | H — GUID pool |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Zero proactive setup | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ (one-time run) | ✅ | ✅ |
+| Survives component rename | ✅ if set | ✅ migrates | ✅ locked | ✅ locked | ✅ | ✅ after migration | ✅ locked | ✅ locked |
+| Survives stack/account rename | ❌ prefix changes | ✅ migrates | ✅ full name locked | ✅ full name locked | ✅ | ❌ prefix changes | ✅ full name locked | ✅ full name locked |
+| Catalogue single-instance | ✅ inherit | n/a | ✅ auto | ✅ auto | ❌ | ✅ writes once | ✅ auto | ✅ auto |
+| Catalogue multi-instance | ❌ per-instance override | n/a | ✅ auto | ✅ auto | ❌ | ❌ per-instance override | ✅ auto | ✅ auto |
+| Collision detection | ❌ | ✅ pre-check | ✅ on write | ✅ on write | ❌ | ❌ (validate stacks) | ✅ on write | ✅ (GUIDs unique) |
+| Reviewable in PRs | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| No CI write-back required | ✅ | ✅ | ❌ must commit | ❌ must push | ❌ | ✅ (one-time only) | ❌ must write S3 | ❌ must write S3 |
+| Concurrent-safe writes | n/a | n/a | ❌ merge conflicts | ❌ push races | n/a | n/a | ✅ ETag CAS | ⚠️ queue + CAS |
+| Human-readable workspaces | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (default format) | ✅ | ❌ opaque GUIDs |
+| Backwards compatible | ✅ fully | ✅ | ⚠️ bootstrap | ⚠️ bootstrap | ❌ breaking | ✅ one-time opt-in | ⚠️ bootstrap | ❌ changes names |
+| Implementation effort | Trivial | High | Medium | High | Medium | Medium | Medium | High |
+| **Recommended** | ✅ Phase 1 | Phase 3 | ✅ Phase 2 (default) | ❌ skip | ❌ skip | ✅ Phase 1 | ✅ Phase 2 (AWS) | ❌ skip |
 
 ---
 
@@ -359,6 +402,9 @@ Yes — any lock-file backend (Option C, G) is precisely this mechanism. The wor
 
 **Q: Should the lock file live in S3 alongside Terraform state?**  
 Yes, for AWS-native teams. The S3 backend (Option G) reuses the existing state bucket, IAM roles, and optionally the DynamoDB lock table. CI jobs already have the credentials; no new permissions policy needed. Concurrent writes are handled via ETag-based conditional writes (`If-Match`), which are atomic and much simpler than a git rebase loop. The main trade-off is that workspace assignment changes are not visible in pull requests — mitigated by an `atmos workspace lock diff` command that CI can run and post as a PR comment.
+
+**Q: What about pre-generating a pool of 10k–100k GUIDs in S3?**  
+This solves the wrong problem. GUIDs are not scarce — one can be generated on-demand in nanoseconds. A pool adds queue-drain state, pool-exhaustion risk, and global write serialisation (all concurrent component instantiations must take turns dequeuing). After claiming a GUID you still need to write `{yaml_key}@{stack}` → GUID to a registry — which is exactly Option G. The pool is Option G plus a queue. Worse, GUIDs make workspace names permanently opaque; `ue1-dev-a3f2c891` is unsearchable in CloudTrail, plan output, and cost reports. If you want Option G with UUID values instead of human-readable names, just generate one UUID at claim time — no pool needed. But human-readable names + collision detection (standard Option G) are strictly better.
 
 **Q: How are collisions detected in Phase 1 (before the lock file exists)?**  
 `atmos validate stacks` computes the resolved workspace name for every component+stack pair and reports duplicates. The init subcommand also performs a pre-write collision check before modifying any files.
