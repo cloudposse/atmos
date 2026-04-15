@@ -11,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/stretchr/testify/assert"
@@ -1771,15 +1770,18 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	// Gate controls when Provision returns.
+	// gate controls when Provision returns.
+	// entered counts how many goroutines are inside Provision (waiting on gate).
 	gate := make(chan struct{})
 	var provisionCallCount atomic.Int32
+	var entered atomic.Int32
 
 	mockProvisioner := NewMockWorkdirProvisioner(ctrl)
 	mockProvisioner.EXPECT().
 		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext) error {
 			provisionCallCount.Add(1)
+			entered.Add(1)
 			<-gate // Block until gate is released.
 			return nil
 		}).
@@ -1803,8 +1805,11 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T
 		}(i)
 	}
 
-	// Give both goroutines time to enter singleflight.Do before releasing.
-	time.Sleep(20 * time.Millisecond)
+	// Wait until the leader goroutine is inside Provision (entered == 1).
+	// The second goroutine is blocked in singleflight.Do waiting for the leader.
+	for entered.Load() < 1 {
+		runtime.Gosched()
+	}
 	close(gate)
 	wg.Wait()
 

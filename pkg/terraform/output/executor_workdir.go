@@ -107,6 +107,9 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// If the provisioner freshly synced files, it sets WorkdirReprovisionedKey.
 		// A new workdir has no .terraform/ directory — terraform init must run with -reconfigure
 		// to avoid an interactive "migrate workspaces?" prompt that would hang the process.
+		// Only the leading goroutine's config is updated here. Waiting goroutines share
+		// the same workdir after singleflight.Do returns and do not need reconfiguration:
+		// the workdir was already fully provisioned before they proceeded.
 		if _, freshlyProvisioned := sections[provWorkdir.WorkdirReprovisionedKey]; freshlyProvisioned {
 			config.InitRunReconfigure = true
 		}
