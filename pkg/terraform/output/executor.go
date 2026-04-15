@@ -1,28 +1,23 @@
 package output
 
+//go:generate go run go.uber.org/mock/mockgen@latest -destination=mock_executor_test.go -package=output github.com/cloudposse/atmos/pkg/terraform/output TerraformRunner,WorkdirProvisioner,ComponentDescriber,StaticRemoteStateGetter
+
 import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
-	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
-
-//go:generate go run go.uber.org/mock/mockgen@latest -source=executor.go -destination=mock_executor_test.go -package=output
 
 // String constants for logging.
 const (
@@ -33,49 +28,6 @@ const (
 	// MaxLogValueLen is the maximum length of a value to log before truncating.
 	maxLogValueLen = 100
 )
-
-// wrapDescribeError wraps an error from DescribeComponent using the shared helper.
-func wrapDescribeError(component, stack string, err error) error {
-	return errUtils.WrapComponentDescribeError(component, stack, err, "component")
-}
-
-// terraformOutputsCache caches terraform outputs by stack-component key.
-var terraformOutputsCache = sync.Map{}
-
-// ResetOutputsCache clears the terraform outputs cache.
-// This is exported for use in tests to ensure cache isolation between test functions.
-func ResetOutputsCache() {
-	defer perf.Track(nil, "output.ResetOutputsCache")()
-
-	terraformOutputsCache.Range(func(key, _ any) bool {
-		terraformOutputsCache.Delete(key)
-		return true
-	})
-}
-
-// workdirProvisionCache caches provisioned JIT workdirs by stack-component key.
-// Prevents redundant provisioning when multiple components reference the same
-// JIT component during a parallel describe-stacks run.
-var workdirProvisionCache sync.Map
-
-// ResetWorkdirProvisionCache clears the workdir provision cache.
-// Exported for use in tests to ensure cache isolation between test functions.
-func ResetWorkdirProvisionCache() {
-	defer perf.Track(nil, "output.ResetWorkdirProvisionCache")()
-
-	workdirProvisionCache.Range(func(key, _ any) bool {
-		workdirProvisionCache.Delete(key)
-		return true
-	})
-}
-
-// stackComponentKey builds an unambiguous cache key from stack and component names.
-// A null byte separator prevents collisions when either name contains hyphens
-// (e.g. stack "us-east-1-dev" + component "vpc" must not collide with
-// stack "us-east-1" + component "dev-vpc").
-func stackComponentKey(stack, component string) string {
-	return stack + "\x00" + component
-}
 
 // TerraformRunner abstracts terraform-exec operations for testability.
 type TerraformRunner interface {
@@ -95,32 +47,8 @@ type TerraformRunner interface {
 	SetEnv(env map[string]string) error
 }
 
-// WorkdirProvisioner provisions a JIT working directory before terraform operations.
-type WorkdirProvisioner interface {
-	// Provision ensures the JIT working directory exists and is populated
-	// with component files before terraform init runs.
-	Provision(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error
-}
-
-// defaultWorkdirProvisioner delegates to workdir.ProvisionWorkdir.
-type defaultWorkdirProvisioner struct{}
-
-func (d *defaultWorkdirProvisioner) Provision(
-	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
-	componentConfig map[string]any,
-	authContext *schema.AuthContext,
-) error {
-	return provWorkdir.ProvisionWorkdir(ctx, atmosConfig, componentConfig, authContext)
-}
-
 // RunnerFactory creates TerraformRunner instances.
 type RunnerFactory func(workdir, executable string) (TerraformRunner, error)
-
-// defaultRunnerFactory creates a real terraform runner using tfexec.
-func defaultRunnerFactory(workdir, executable string) (TerraformRunner, error) {
-	return tfexec.NewTerraform(workdir, executable)
-}
 
 // DescribeComponentParams contains parameters for describing a component.
 type DescribeComponentParams struct {
@@ -155,42 +83,6 @@ type OutputOptions struct {
 	// Use this when the component was just applied and .terraform/ state is already correct.
 	// Only terraform output is executed.
 	SkipInit bool
-}
-
-// quietModeWriter captures output during quiet mode operations.
-// On success, output is discarded. On failure, captured stderr is included in errors.
-type quietModeWriter struct {
-	buffer *strings.Builder
-}
-
-func newQuietModeWriter() *quietModeWriter {
-	return &quietModeWriter{buffer: &strings.Builder{}}
-}
-
-// Write implements io.Writer interface.
-func (w *quietModeWriter) Write(p []byte) (n int, err error) {
-	defer perf.Track(nil, "output.quietModeWriter.Write")()
-
-	return w.buffer.Write(p)
-}
-
-// String returns the captured output.
-func (w *quietModeWriter) String() string {
-	defer perf.Track(nil, "output.quietModeWriter.String")()
-
-	return w.buffer.String()
-}
-
-// wrapErrorWithStderr wraps an error with captured stderr output if available.
-// Used in quiet mode to include terraform output in error messages on failure.
-func wrapErrorWithStderr(err error, capture *quietModeWriter) error {
-	if capture == nil || capture.String() == "" {
-		return err
-	}
-	return errUtils.Build(errUtils.ErrTerraformOutputFailed).
-		WithCause(err).
-		WithExplanation(strings.TrimSpace(capture.String())).
-		Err()
 }
 
 // Executor orchestrates terraform output retrieval with dependency injection.
@@ -244,64 +136,6 @@ func NewExecutor(describer ComponentDescriber, opts ...ExecutorOption) *Executor
 		opt(e)
 	}
 	return e
-}
-
-// ensureWorkdirProvisioned provisions a JIT working directory if the component
-// has provision.workdir.enabled: true and auto-provisioning is enabled.
-//
-// This is called in execute() before terraform init so that the workdir exists
-// and contains component files when init runs. Without this, !terraform.output
-// and atmos.Component calls against JIT components fail with an empty-directory
-// error from terraform init.
-//
-// config must be passed by pointer — this function may set config.InitRunReconfigure
-// to true when a fresh provision occurs, which must be visible to the subsequent
-// runInit call.
-func (e *Executor) ensureWorkdirProvisioned(
-	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
-	sections map[string]any,
-	authContext *schema.AuthContext,
-	component, stack string,
-	config *ComponentConfig,
-) error {
-	defer perf.Track(atmosConfig, "output.Executor.ensureWorkdirProvisioned")()
-
-	if !config.AutoProvisionWorkdirForOutputs {
-		return nil
-	}
-
-	if !provWorkdir.IsWorkdirEnabled(sections) {
-		return nil
-	}
-
-	cacheKey := stackComponentKey(stack, component) // only allocate after early-return guards
-	if _, alreadyProvisioned := workdirProvisionCache.LoadOrStore(cacheKey, struct{}{}); alreadyProvisioned {
-		log.Debug("JIT workdir already provisioned this run, skipping", "component", component, "stack", stack)
-		return nil
-	}
-
-	log.Debug("Auto-provisioning JIT workdir for output fetch", "component", component, "stack", stack)
-
-	if err := e.workdirProvisioner.Provision(ctx, atmosConfig, sections, authContext); err != nil {
-		workdirProvisionCache.Delete(cacheKey)
-		return errUtils.Build(errUtils.ErrWorkdirProvision).
-			WithCause(fmt.Errorf("component '%s' in stack '%s': %w", component, stack, err)).
-			Err()
-	}
-
-	// If the provisioner freshly synced files, it sets WorkdirReprovisionedKey.
-	// A new workdir has no .terraform/ directory — terraform init must run with -reconfigure
-	// to avoid an interactive "migrate workspaces?" prompt that would hang the process.
-	if _, freshlyProvisioned := sections[provWorkdir.WorkdirReprovisionedKey]; freshlyProvisioned {
-		config.InitRunReconfigure = true
-	}
-
-	ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
-	log.Info("Consider using !terraform.state for workdir-independent output access (no terraform init required)",
-		"component", component, "stack", stack)
-
-	return nil
 }
 
 // GetAllOutputs retrieves all terraform outputs for a component in a stack.
@@ -726,186 +560,4 @@ func (e *Executor) execute(
 
 	// Step 12: Process and convert output values.
 	return processOutputs(outputMeta, atmosConfig), nil
-}
-
-// handleDisabledComponent returns empty outputs for disabled or abstract components.
-func handleDisabledComponent(component, stack string, _, abstract bool) map[string]any {
-	status := "disabled"
-	if abstract {
-		status = "abstract"
-	}
-	log.Debug("Skipping terraform output due to component status", "component", component, "stack", stack, "status", status)
-	return map[string]any{}
-}
-
-// runInit executes terraform init with appropriate options.
-//
-//nolint:revive // argument-limit: internal function passing through execution context.
-func (e *Executor) runInit(ctx context.Context, runner TerraformRunner, config *ComponentConfig, component, stack string, stderrCapture *quietModeWriter) error {
-	defer perf.Track(nil, "output.Executor.runInit")()
-
-	log.Debug("Executing terraform init", "component", component, "stack", stack)
-
-	var initOptions []tfexec.InitOption
-	initOptions = append(initOptions, tfexec.Upgrade(false))
-	if config.InitRunReconfigure {
-		initOptions = append(initOptions, tfexec.Reconfigure(true))
-	}
-
-	if err := runner.Init(ctx, initOptions...); err != nil {
-		return wrapErrorWithStderr(
-			errUtils.Build(errUtils.ErrTerraformInit).WithCause(err).Err(),
-			stderrCapture,
-		)
-	}
-
-	log.Debug("Completed terraform init", "component", component, "stack", stack)
-	return nil
-}
-
-// runOutput executes terraform output with retry logic.
-func (e *Executor) runOutput(ctx context.Context, runner TerraformRunner, component, stack string, stderrCapture *quietModeWriter) (map[string]tfexec.OutputMeta, error) {
-	defer perf.Track(nil, "output.Executor.runOutput")()
-
-	log.Debug("Executing terraform output", "component", component, "stack", stack)
-
-	// Add small delay on Windows to prevent file locking issues.
-	windowsFileDelay()
-
-	var outputMeta map[string]tfexec.OutputMeta
-	err := retryOnWindows(func() error {
-		var outputErr error
-		outputMeta, outputErr = runner.Output(ctx)
-		return outputErr
-	})
-	if err != nil {
-		return nil, wrapErrorWithStderr(err, stderrCapture)
-	}
-
-	log.Debug("Completed terraform output", "component", component, "stack", stack)
-	return outputMeta, nil
-}
-
-// processOutputs converts tfexec.OutputMeta to map[string]any.
-func processOutputs(outputMeta map[string]tfexec.OutputMeta, atmosConfig *schema.AtmosConfiguration) map[string]any {
-	defer perf.Track(atmosConfig, "output.processOutputs")()
-
-	return lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
-		s := string(v.Value)
-
-		// Log summary to avoid multiline value formatting issues.
-		valueSummary := summarizeValue(s)
-		log.Debug("Converting output from JSON to Go data type", "key", k, "value_summary", valueSummary)
-
-		d, err := u.ConvertFromJSON(s)
-		if err != nil {
-			log.Error("Failed to convert output", "key", k, "error", err)
-			return k, nil
-		}
-
-		return k, d
-	})
-}
-
-// summarizeValue creates a summary for logging long or multiline values.
-func summarizeValue(s string) string {
-	if strings.Contains(s, "\n") {
-		lineCount := strings.Count(s, "\n") + 1
-		return fmt.Sprintf("<multiline: %d lines, %d bytes>", lineCount, len(s))
-	}
-	if len(s) > maxLogValueLen {
-		return s[:maxLogValueLen] + "..."
-	}
-	return s
-}
-
-// checkOutputsCache checks if terraform outputs are already cached for the given stack/component.
-func checkOutputsCache(stackSlug, component, stack string) map[string]any {
-	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
-	if found && cachedOutputs != nil {
-		log.Debug("Cache hit for terraform outputs", "stack", stack, "component", component)
-		return cachedOutputs.(map[string]any)
-	}
-	return nil
-}
-
-// startSpinnerOrLog starts a spinner in normal mode or logs in debug mode, returns a stop function.
-func startSpinnerOrLog(atmosConfig *schema.AtmosConfiguration, message, _, _ string) func() {
-	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		log.Debug(message)
-		return func() {}
-	}
-	p := NewSpinner(message)
-	spinnerDone := make(chan struct{})
-	RunSpinner(p, spinnerDone, message)
-	return func() { StopSpinner(p, spinnerDone) }
-}
-
-// extractYqValue extracts a value from a map using yq expression.
-// It returns the extracted value, whether the key exists, and any error.
-func extractYqValue(
-	atmosConfig *schema.AtmosConfiguration,
-	data map[string]any,
-	output string,
-	errContext string,
-) (any, bool, error) {
-	// Use yq to extract the value (handles nested paths, alternative operators, etc.).
-	val := output
-	if !strings.HasPrefix(output, dotSeparator) {
-		val = dotSeparator + val
-	}
-
-	res, err := u.EvaluateYqExpression(atmosConfig, data, val)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to evaluate %s: %w", errContext, err)
-	}
-
-	// Check if this is a simple key lookup (no yq operators).
-	hasYqOperators := strings.Contains(output, "//") ||
-		strings.Contains(output, "|") ||
-		strings.Contains(output, "=") ||
-		strings.Contains(output, "[") ||
-		strings.Contains(output, "]")
-
-	if !hasYqOperators {
-		outputKey := strings.TrimPrefix(output, dotSeparator)
-		if !strings.Contains(outputKey, dotSeparator) {
-			_, exists := data[outputKey]
-			if !exists {
-				return nil, false, nil
-			}
-		}
-	}
-
-	return res, true, nil
-}
-
-// getOutputVariable extracts a specific output variable using yq expression.
-func getOutputVariable(
-	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	stack string,
-	outputs map[string]any,
-	output string,
-) (any, bool, error) {
-	defer perf.Track(atmosConfig, "output.getOutputVariable")()
-
-	errContext := fmt.Sprintf("terraform output for component %s in stack %s", component, stack)
-	return extractYqValue(atmosConfig, outputs, output, errContext)
-}
-
-// GetStaticRemoteStateOutput extracts a specific output from static remote state.
-// This is exported for use by terraform_state_utils.go and other callers that need
-// to extract values from static remote state sections.
-func GetStaticRemoteStateOutput(
-	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	stack string,
-	remoteStateSection map[string]any,
-	output string,
-) (any, bool, error) {
-	defer perf.Track(atmosConfig, "output.GetStaticRemoteStateOutput")()
-
-	errContext := fmt.Sprintf("static remote state for component %s in stack %s", component, stack)
-	return extractYqValue(atmosConfig, remoteStateSection, output, errContext)
 }
