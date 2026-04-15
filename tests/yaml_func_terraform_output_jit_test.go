@@ -24,8 +24,8 @@ import (
 //
 // Regression test for https://github.com/cloudposse/atmos/issues/2167.
 func TestTerraformOutputJITWorkdir(t *testing.T) {
-	// Skip if terraform is not available (respects ATMOS_TEST_SKIP_PRECONDITION_CHECKS).
-	RequireTerraform(t)
+	// Skip if neither terraform nor tofu is available.
+	RequireTerraformOrTofu(t)
 
 	t.Chdir("./fixtures/scenarios/terraform-output-jit-workdir")
 

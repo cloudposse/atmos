@@ -3,6 +3,7 @@ base_path: "./"
 components:
   terraform:
     base_path: "components/terraform"
+    command: tofu
     apply_auto_approve: false
     deploy_run_init: true
     init_run_reconfigure: true
@@ -20,3 +21,12 @@ stacks:
 logs:
   file: "/dev/stderr"
   level: Info
+
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true

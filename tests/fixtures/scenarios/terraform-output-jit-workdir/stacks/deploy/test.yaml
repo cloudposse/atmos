@@ -17,3 +17,27 @@ components:
         component: mock
       vars:
         foo: !terraform.output producer test foo
+
+    # Producer hydrated from a local source directory instead of components/terraform/.
+    # source.uri uses file:// with the absolute path set via ATMOS_SOURCE_DIR env var.
+    # No version: needed — version appends ?ref= which is git-specific.
+    producer-from-source:
+      source:
+        uri: '{{ env "ATMOS_SOURCE_DIR" }}'
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        foo: "foo-from-source-module"
+
+    consumer-from-source:
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.output producer-from-source test foo
+
+    consumer-from-source-state:
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.state producer-from-source test foo
