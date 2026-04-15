@@ -638,6 +638,12 @@ func (e *Executor) execute(
 		return nil, err
 	}
 
+	// Step 2.5: Auto-provision JIT workdir if needed before toolchain resolution and init.
+	// Must run first so the workdir directory exists when backend files are written into it.
+	if err := e.ensureWorkdirProvisioned(ctx, atmosConfig, sections, authContext, component, stack, config); err != nil {
+		return nil, err
+	}
+
 	// Step 3: Resolve toolchain dependencies and executable path.
 	// This ensures that toolchain-installed executables (e.g., tofu via `atmos toolchain install`)
 	// are found even when they are not on the system PATH. Without this, template functions like
