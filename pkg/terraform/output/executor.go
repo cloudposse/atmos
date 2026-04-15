@@ -284,6 +284,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 	log.Debug("Auto-provisioning JIT workdir for output fetch", "component", component, "stack", stack)
 
 	if err := e.workdirProvisioner.Provision(ctx, atmosConfig, sections, authContext); err != nil {
+		workdirProvisionCache.Delete(cacheKey)
 		return fmt.Errorf("failed to auto-provision workdir for component '%s' in stack '%s': %w", component, stack, err)
 	}
 

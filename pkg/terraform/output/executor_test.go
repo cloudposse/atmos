@@ -1775,6 +1775,7 @@ func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "vpc")
 	assert.Contains(t, err.Error(), "dev")
+	assert.True(t, errors.Is(err, provisionErr), "provision error should be unwrappable via errors.Is")
 }
 
 func TestEnsureWorkdirProvisioned_SetsReconfigureWhenFreshlyProvisioned(t *testing.T) {
