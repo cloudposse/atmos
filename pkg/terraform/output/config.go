@@ -194,7 +194,7 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 			if strings.HasPrefix(workdirPath, absBase+sep) || workdirPath == absBase {
 				return workdirPath, nil
 			}
-			log.Debug("Derived workdir path escapes project directory; using component path.",
+			log.Debug("Derived workdir path escapes project directory; using component path",
 				"derived_path", workdirPath, "base_path", basePath)
 		} else {
 			return workdirPath, nil
