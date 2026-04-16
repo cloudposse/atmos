@@ -3,6 +3,7 @@ package output
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -364,6 +365,41 @@ func TestGetComponentInfo(t *testing.T) {
 
 	result = GetComponentInfo("database", "prod-eu-central-1")
 	assert.Equal(t, "component 'database' in stack 'prod-eu-central-1'", result)
+}
+
+func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	// Craft sections that enable JIT workdir so BuildPath is called.
+	traversalSections := map[string]any{
+		cfg.CommandSectionName:   "/usr/local/bin/terraform",
+		cfg.WorkspaceSectionName: "test",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{"enabled": true},
+		},
+	}
+	// Inject path traversal via the component argument (incorporated into BuildPath).
+	// Use enough ".." repetitions to escape any reasonable t.TempDir() depth.
+	traversalComponent := "../../../../../../../../../../evil"
+
+	path, err := extractComponentPath(atmosConfig, traversalSections, traversalComponent, "dev")
+	require.NoError(t, err, "containment guard must not return an error — it falls back to componentPath")
+
+	// The returned path must not escape BasePath.
+	absBase, _ := filepath.Abs(atmosConfig.BasePath)
+	sep := string(filepath.Separator)
+	escaped := !strings.HasPrefix(path, absBase+sep) && path != absBase
+	assert.False(t, escaped,
+		"extractComponentPath must not return a path outside BasePath; got %q, base %q", path, absBase)
 }
 
 func TestExtractComponentConfig_ReadsAutoProvisionWorkdirForOutputs(t *testing.T) {

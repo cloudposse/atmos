@@ -3,9 +3,11 @@ package output
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -178,7 +180,25 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 				workdirPath = abs
 			}
 		}
-		return workdirPath, nil
+		// Containment guard: reject derived paths that escape the project directory.
+		// atmos_component and atmos_stack come from user-controlled YAML; a value
+		// containing ../ sequences (e.g. "../../../../etc/evil") could otherwise
+		// escape BasePath via filepath.Join resolution inside BuildPath.
+		// Note: symlinks are not resolved — same best-effort scope as the mirror
+		// guard in terraform_backend_local.go:resolveLocalBackendComponentPath.
+		// Uses the already-resolved basePath local (not atmosConfig.BasePath which
+		// may be "") to avoid Abs("") vs Abs(".") inconsistency.
+		absBase, errBase := filepath.Abs(basePath)
+		if errBase == nil {
+			sep := string(filepath.Separator)
+			if strings.HasPrefix(workdirPath, absBase+sep) || workdirPath == absBase {
+				return workdirPath, nil
+			}
+			log.Debug("Derived workdir path escapes project directory; using component path.",
+				"derived_path", workdirPath, "base_path", basePath)
+		} else {
+			return workdirPath, nil
+		}
 	}
 
 	return componentPath, nil
