@@ -169,7 +169,7 @@
     "BitbucketUsername": "",
     "InjectGitlabToken": true,
     "AtmosGitlabToken": "",
-    "GitlabToken": "<MASKED>",
+    "GitlabToken": "",
     "pro": {
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",

@@ -16,6 +16,18 @@ import (
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
+// toFileURI builds a cross-platform file:// URI that go-getter understands.
+// On Unix the absolute path already starts with "/", yielding "file:///tmp/...".
+// On Windows the slashified path is "D:/...", so a leading "/" is prepended
+// to produce "file:///D:/..." (RFC 8089 form that go-getter parses correctly).
+func toFileURI(absPath string) string {
+	p := filepath.ToSlash(absPath)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return "file://" + p
+}
+
 // seedStateFile writes the hermetic pre-seeded state file for producer-from-source.
 // This ensures test isolation — if a prior test (e.g. TestTerraformOutputJITWorkdirFromSource)
 // deleted or replaced the workdir, the state test still has its file.
@@ -72,7 +84,7 @@ func TestTerraformStateJITWorkdirFromSource(t *testing.T) {
 	// The value does not affect !terraform.state resolution (which only needs
 	// IsWorkdirEnabled + BuildPath), but an unresolvable template would cause
 	// stack processing to fail before we reach the state lookup.
-	srcDir := "file://" + filepath.ToSlash(filepath.Join(cwd, "source-modules", "mock-alt"))
+	srcDir := toFileURI(filepath.Join(cwd, "source-modules", "mock-alt"))
 	t.Setenv("ATMOS_SOURCE_DIR", srcDir)
 
 	e.ResetStateCache()
@@ -122,7 +134,7 @@ func TestTerraformOutputJITWorkdirFromSource(t *testing.T) {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 
-	srcDir := "file://" + filepath.ToSlash(filepath.Join(cwd, "source-modules", "mock-alt"))
+	srcDir := toFileURI(filepath.Join(cwd, "source-modules", "mock-alt"))
 	t.Setenv("ATMOS_SOURCE_DIR", srcDir)
 
 	// Reset caches for test isolation.

@@ -65,7 +65,6 @@ settings:
   github_token: <MASKED>
   inject_bitbucket_token: true
   inject_gitlab_token: true
-  gitlab_token: <MASKED>
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
