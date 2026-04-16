@@ -177,11 +177,13 @@ components:
     This enables cross-component output references to work on any machine, including
     fresh CI runners where the workdir has not been created yet.
 
-    Set to `false` to disable auto-provisioning. `terraform init` will still run
-    against whatever files are already in the workdir.
+    Set to `false` to disable auto-provisioning. `terraform init` will still run,
+    but only if the workdir has already been created by a prior deploy; on a fresh
+    machine with no prior workdir it will fail.
 
     For state-only reads, prefer `!terraform.state` — it reads the state file
-    directly with no `terraform init`, no workdir, and no binary required.
+    directly with no `terraform init`, no workdir provisioning step, and no
+    terraform binary required.
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS`
     **Default:** `true`
