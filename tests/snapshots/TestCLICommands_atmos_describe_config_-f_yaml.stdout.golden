@@ -16,6 +16,7 @@ components:
     plan:
       skip_planfile: false
     plugin_cache: true
+    auto_provision_workdir_for_outputs: true
   helmfile:
     base_path: ""
     use_eks: true
@@ -62,8 +63,10 @@ settings:
     no_color: false
   experimental: warn
   inject_github_token: true
+  github_token: <MASKED>
   inject_bitbucket_token: true
   inject_gitlab_token: true
+  gitlab_token: <MASKED>
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
