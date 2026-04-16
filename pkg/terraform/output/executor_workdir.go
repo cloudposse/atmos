@@ -121,12 +121,6 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 		log.Debug("Auto-provisioning JIT workdir for output fetch", "component", component, "stack", stack)
 
-		// Clear the spinner's current frame before the provisioner writes its own
-		// status messages. Without this, the provisioner's ui.Info/ui.Success calls
-		// interleave with the live bubbletea spinner on the same stderr stream,
-		// producing spurious leading whitespace equal to the spinner frame width.
-		ui.ClearLine()
-
 		if err := e.workdirProvisioner.Provision(ctx, atmosConfig, sections, authContext); err != nil {
 			// Do NOT store cacheKey on failure. singleflight does not cache errors,
 			// so the next call will re-enter this closure and retry provisioning.
@@ -146,9 +140,6 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// short-circuiting for calls after the in-flight group completes.
 		workdirProvisionCache.Store(cacheKey, struct{}{})
 
-		// Clear any spinner frame the provisioner may have left behind before
-		// writing the final status line.
-		ui.ClearLine()
 		ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
 		log.Debug("Consider using !terraform.state for workdir-independent output access (no terraform init required)",
 			"component", component, "stack", stack)
