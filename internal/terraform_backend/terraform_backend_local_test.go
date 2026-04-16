@@ -481,9 +481,10 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 			"workspace":       "demo",
 		}
 
-		// The traversal path escapes BasePath and must be rejected.
-		// Expect the function to fall through to the static path (where we placed state),
-		// or return nil cleanly — not read from an arbitrary filesystem location.
+		// The traversal path may or may not escape BasePath depending on depth
+		// of traversal vs. depth of basePath. The invariant that MUST hold is:
+		// the function never reads from outside BasePath.
+		// If it falls through to the static path, the result must contain the correct state.
 		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
 		require.NoError(t, err)
 		// Either found the static fallback state or returned nil — both are acceptable.

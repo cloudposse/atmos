@@ -124,7 +124,10 @@ func resolveLocalBackendComponentPath(
 				log.Debug("Derived workdir path escapes project directory; falling through to static path",
 					"derived_path", workdirPath, "base_path", atmosConfig.BasePath)
 			} else {
-				return workdirPath
+				// Cannot absolutize BasePath for containment check; fall through to the
+				// static path rather than returning an unverified derived path.
+				log.Debug("Could not absolutize BasePath; falling through to static path",
+					"derived_path", workdirPath, "base_path", atmosConfig.BasePath)
 			}
 		}
 	}

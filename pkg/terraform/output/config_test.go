@@ -436,16 +436,17 @@ func TestExtractComponentPath_ContainmentGuard_AcceptsLegitimate(t *testing.T) {
 	sep := string(filepath.Separator)
 	assert.True(t, strings.HasPrefix(path, absBase+sep) || path == absBase,
 		"legitimate workdir component must return a path within BasePath; got %q, base %q", path, absBase)
-	assert.NotContains(t, path, "components/terraform",
+	assert.NotContains(t, filepath.ToSlash(path), filepath.ToSlash(filepath.Join("components", "terraform")),
 		"workdir path must not point at the static component directory")
 }
 
 func TestExtractComponentConfig_ReadsAutoProvisionWorkdirForOutputs(t *testing.T) {
 	sections := validSections()
 	sections[cfg.ComponentSectionName] = "mock"
+	mockPath := filepath.Join(t.TempDir(), "mock")
 	sections["component_info"] = map[string]any{
 		"component_type": "terraform",
-		"component_path": "/tmp/mock",
+		"component_path": mockPath,
 	}
 
 	atmosConfig := validAtmosConfig()

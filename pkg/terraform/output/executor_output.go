@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -30,9 +31,8 @@ func processOutputs(outputMeta map[string]tfexec.OutputMeta, atmosConfig *schema
 	return lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
 		s := string(v.Value)
 
-		// Log summary to avoid multiline value formatting issues.
-		valueSummary := summarizeValue(s)
-		log.Debug("Converting output from JSON to Go data type", "key", k, "value_summary", valueSummary)
+		// Log only structural metadata; never log value content to avoid leaking secrets.
+		log.Debug("Converting output from JSON to Go data type", "key", k, "value_size_bytes", len(s))
 
 		d, err := u.ConvertFromJSON(s)
 		if err != nil {
@@ -72,7 +72,7 @@ func extractYqValue(
 
 	res, err := u.EvaluateYqExpression(atmosConfig, data, val)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to evaluate %s: %w", errContext, err)
+		return nil, false, fmt.Errorf("%w for %s: %w", errUtils.ErrEvaluateOutput, errContext, err)
 	}
 
 	// Check if this is a simple key lookup (no yq operators).
