@@ -140,9 +140,9 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// short-circuiting for calls after the in-flight group completes.
 		workdirProvisionCache.Store(cacheKey, struct{}{})
 
+		ui.ClearLine()
 		ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
-		log.Debug("Consider using !terraform.state for workdir-independent output access (no terraform init required)",
-			"component", component, "stack", stack)
+		ui.Hint("Tip: use `!terraform.state` instead of `!terraform.output` to read outputs without terraform init")
 
 		return freshlyProvisioned, nil
 	})
