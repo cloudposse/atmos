@@ -134,7 +134,12 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 		log.Debug("Auto-provisioning JIT workdir for output fetch", "component", component, "stack", stack)
 
-		if err := e.workdirProvisioner.Provision(ctx, atmosConfig, sections, authContext); err != nil {
+		// Detach from the caller's per-request context so that a leader whose context
+		// is cancelled mid-provisioning does not abort work that all waiters depend on.
+		// Each waiter can still exit early via its own ctx.Done() branch in the select below;
+		// this only insulates the shared provisioning run from the leader's deadline.
+		provCtx := context.WithoutCancel(ctx)
+		if err := e.workdirProvisioner.Provision(provCtx, atmosConfig, sections, authContext); err != nil {
 			// Provision failed: remove the key so the next caller can retry.
 			workdirProvisionCache.Delete(cacheKey)
 			return false, errUtils.Build(errUtils.ErrWorkdirProvision).

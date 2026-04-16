@@ -1967,6 +1967,14 @@ func TestEnsureWorkdirProvisioned_ContextCancellationUnblocksWaiter(t *testing.T
 	// Release the leader and verify it completes cleanly.
 	close(leaderRelease)
 	require.NoError(t, <-leaderDone, "leader must complete without error")
+
+	// After the leader completes, the cache key must be set so a third caller
+	// short-circuits without calling Provision again (mock Times(1) enforces this).
+	config3 := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
+	err3 := executor.ensureWorkdirProvisioned(
+		context.Background(), atmosCfg, jitSections(), nil, "vpc", "dev", config3,
+	)
+	require.NoError(t, err3, "post-completion call must hit cache without calling Provision again")
 }
 
 func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {
