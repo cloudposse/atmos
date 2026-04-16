@@ -344,7 +344,7 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 			"atmos_component": "null-label",
 			"component":       "null-label",
 			"workspace":       "demo",
-			"_workdir_path":   workdirPath, // explicit path set by provisioner
+			"_workdir_path":   workdirPath, // explicit path set by provisioner.
 		}
 
 		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
