@@ -1,6 +1,7 @@
 package output
 
 import (
+	"maps"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -146,19 +147,21 @@ func generateProviderOverrides(providerOverrides map[string]any, _ *schema.AuthC
 // ProcessProviderAliases groups providers that use dot notation (e.g., "aws.alias") into arrays.
 // This converts the Atmos shorthand notation into the Terraform JSON provider format.
 // For example, {"aws": {...}, "aws.use1": {...}} becomes {"aws": [{...}, {...}]}.
+//
+// When an aliased entry (e.g., "aws.use1") does not explicitly set the `alias` field
+// inside its configuration block, Atmos automatically derives it from the portion of
+// the key after the first dot. An explicit `alias` value always wins — Atmos will not
+// overwrite it. Non-map configuration values are passed through unchanged.
+//
+// The input map is not mutated; aliased blocks are cloned before being modified.
 func ProcessProviderAliases(providerOverrides map[string]any) map[string]any {
+	defer perf.Track(nil, "output.ProcessProviderAliases")()
+
 	if len(providerOverrides) == 0 {
 		return providerOverrides
 	}
 
-	// Find all base names that have aliased configurations (with dot notation).
-	baseNamesWithAliases := make(map[string]bool)
-	for key := range providerOverrides {
-		if idx := strings.Index(key, "."); idx > 0 {
-			baseName := key[:idx]
-			baseNamesWithAliases[baseName] = true
-		}
-	}
+	baseNamesWithAliases := collectAliasedBaseNames(providerOverrides)
 
 	// If no aliased providers, return as-is.
 	if len(baseNamesWithAliases) == 0 {
@@ -169,40 +172,87 @@ func ProcessProviderAliases(providerOverrides map[string]any) map[string]any {
 
 	// Build arrays for base providers that have aliases.
 	for baseName := range baseNamesWithAliases {
-		var configs []any
-
-		// Add the base config first (if it exists).
-		if config, exists := providerOverrides[baseName]; exists {
-			configs = append(configs, config)
-		}
-
-		// Add aliased configs in sorted order for determinism.
-		var aliasedKeys []string
-		for key := range providerOverrides {
-			if strings.HasPrefix(key, baseName+".") {
-				aliasedKeys = append(aliasedKeys, key)
-			}
-		}
-		sort.Strings(aliasedKeys)
-		for _, key := range aliasedKeys {
-			configs = append(configs, providerOverrides[key])
-		}
-
-		result[baseName] = configs
+		result[baseName] = buildAliasedProviderConfigs(baseName, providerOverrides)
 	}
 
-	// Copy over providers that don't have aliases.
-	for key, config := range providerOverrides {
-		// Skip dot-notation keys (already processed above).
+	// Copy over providers that are neither dot-notation keys nor bases with aliases.
+	copyNonAliasedProviders(result, providerOverrides, baseNamesWithAliases)
+
+	return result
+}
+
+// collectAliasedBaseNames returns the set of base provider names (prefix before
+// the first dot) that have at least one dot-notation aliased entry.
+func collectAliasedBaseNames(providerOverrides map[string]any) map[string]bool {
+	baseNames := make(map[string]bool)
+	for key := range providerOverrides {
+		if idx := strings.Index(key, "."); idx > 0 {
+			baseNames[key[:idx]] = true
+		}
+	}
+	return baseNames
+}
+
+// buildAliasedProviderConfigs returns the ordered slice of provider blocks for
+// a base provider that has aliases: the bare base block first (if present),
+// followed by alias blocks in sorted key order. Each alias block has its
+// `alias` field auto-derived from the key suffix when not set explicitly.
+func buildAliasedProviderConfigs(baseName string, providerOverrides map[string]any) []any {
+	var configs []any
+
+	// Add the base config first (if it exists).
+	if config, exists := providerOverrides[baseName]; exists {
+		configs = append(configs, config)
+	}
+
+	// Collect aliased keys for this base provider and sort for deterministic output.
+	var aliasedKeys []string
+	prefix := baseName + "."
+	for key := range providerOverrides {
+		if strings.HasPrefix(key, prefix) {
+			aliasedKeys = append(aliasedKeys, key)
+		}
+	}
+	sort.Strings(aliasedKeys)
+
+	for _, key := range aliasedKeys {
+		// Derive alias from the suffix after the first dot (e.g., "aws.use1" -> "use1").
+		aliasName := key[len(prefix):]
+		configs = append(configs, withDerivedAlias(providerOverrides[key], aliasName))
+	}
+
+	return configs
+}
+
+// copyNonAliasedProviders copies every provider from src into dst that is not
+// a dot-notation key and is not a base name of an aliased group (those are
+// handled separately by buildAliasedProviderConfigs).
+func copyNonAliasedProviders(dst, src map[string]any, baseNamesWithAliases map[string]bool) {
+	for key, config := range src {
 		if strings.Contains(key, ".") {
 			continue
 		}
-		// Skip base providers that have aliases (already processed above).
 		if baseNamesWithAliases[key] {
 			continue
 		}
-		result[key] = config
+		dst[key] = config
+	}
+}
+
+// withDerivedAlias returns the provider block with `alias` set to aliasName when
+// the block is a map and does not already define `alias`. An explicit alias value
+// (including an empty string) always wins. Non-map blocks are returned unchanged.
+// The input block is never mutated — a shallow copy is returned when a change is made.
+func withDerivedAlias(block any, aliasName string) any {
+	cfg, ok := block.(map[string]any)
+	if !ok {
+		return block
+	}
+	if _, hasAlias := cfg["alias"]; hasAlias {
+		return block
 	}
 
-	return result
+	cloned := maps.Clone(cfg)
+	cloned["alias"] = aliasName
+	return cloned
 }

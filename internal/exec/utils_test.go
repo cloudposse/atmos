@@ -233,6 +233,45 @@ func TestGenerateComponentProviderOverrides(t *testing.T) {
 				},
 			},
 		},
+		{
+			// Regression test for issue #2208: alias is auto-derived from the
+			// dot suffix when the provider block does not set it explicitly.
+			name: "alias-auto-derived",
+			providerOverrides: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			// An explicit alias set inside the block must not be overwritten
+			// by the value derived from the dot suffix.
+			name: "explicit-alias-preserved",
+			providerOverrides: map[string]any{
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "primary",
+				},
+			},
+			expected: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1", "alias": "primary"},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
