@@ -114,16 +114,29 @@ func (e *Executor) ensureWorkdirProvisioned(
 	cacheKey := stackComponentKey(stack, component)
 
 	result, sfErr, _ := workdirProvisionGroup.Do(cacheKey, func() (any, error) {
-		// Short-circuit: a previous in-flight call completed successfully.
-		if _, done := workdirProvisionCache.Load(cacheKey); done {
-			return false, nil
+		// LoadOrStore at the TOP of the closure: atomically claim the key before
+		// Provision runs. This closes the TOCTOU window — any goroutine arriving
+		// after Do returns will find the key already present and short-circuit.
+		// NOTE: must be inside Do (not outside) so that concurrent callers still
+		// wait via singleflight rather than returning nil before provisioning completes.
+		//
+		// We store a bool placeholder (false) now and update it to the actual
+		// freshlyProvisioned value after Provision succeeds. Late-arriving goroutines
+		// that call Do after the leader's Do returns will read the final stored value
+		// (not the placeholder) because the leader's closure completes — including
+		// the Store below — before singleflight releases any waiting callers, and
+		// before any new Do call can observe the key.
+		if actual, loaded := workdirProvisionCache.LoadOrStore(cacheKey, false); loaded {
+			// Key was already present: return the stored freshness value so every
+			// goroutine (including late arrivals) can set InitRunReconfigure correctly.
+			return actual, nil
 		}
 
 		log.Debug("Auto-provisioning JIT workdir for output fetch", "component", component, "stack", stack)
 
 		if err := e.workdirProvisioner.Provision(ctx, atmosConfig, sections, authContext); err != nil {
-			// Do NOT store cacheKey on failure. singleflight does not cache errors,
-			// so the next call will re-enter this closure and retry provisioning.
+			// Provision failed: remove the key so the next caller can retry.
+			workdirProvisionCache.Delete(cacheKey)
 			return false, errUtils.Build(errUtils.ErrWorkdirProvision).
 				WithCause(fmt.Errorf("component '%s' in stack '%s': %w", component, stack, err)).
 				Err()
@@ -136,9 +149,10 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// to its own config pointer after Do returns.
 		_, freshlyProvisioned := sections[provWorkdir.WorkdirReprovisionedKey]
 
-		// Only store on success. workdirProvisionCache handles post-completion
-		// short-circuiting for calls after the in-flight group completes.
-		workdirProvisionCache.Store(cacheKey, struct{}{})
+		// Update the cache entry from the placeholder (false) to the actual freshness
+		// value. Late-arriving goroutines that start a new Do after this Store will
+		// read freshlyProvisioned from the cache and set InitRunReconfigure correctly.
+		workdirProvisionCache.Store(cacheKey, freshlyProvisioned)
 
 		ui.ClearLine()
 		ui.Info(fmt.Sprintf("Auto-provisioned JIT workdir for component '%s' in stack '%s'", component, stack))
