@@ -28,8 +28,8 @@ func TestTerraformStateJITWorkdir(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, atmosConfig.Initialized, "atmos config should be initialized")
 
-	// consumer has: vars.foo: !terraform.state producer test foo
-	// This resolves producer's state file from .workdir/terraform/test-producer/
+	// consumer has: vars.foo: !terraform.state producer test foo.
+	// This resolves producer's state file from .workdir/terraform/test-producer/.
 	componentSection, err := e.ExecuteDescribeComponent(
 		&e.ExecuteDescribeComponentParams{
 			Component:            "consumer",

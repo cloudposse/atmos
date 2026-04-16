@@ -1790,7 +1790,6 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T
 
 	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
 	cfg := &schema.AtmosConfiguration{}
-	sections := jitSections()
 
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
@@ -1799,9 +1798,13 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			// Each goroutine gets its own sections map to avoid a data race between
+			// the goroutine blocked in IsWorkdirEnabled and the singleflight leader's
+			// Provision call writing WorkdirPathKey / WorkdirReprovisionedKey.
+			localSections := jitSections()
 			config := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
 			errs[idx] = executor.ensureWorkdirProvisioned(
-				context.Background(), cfg, sections, nil, "vpc", "dev", config,
+				context.Background(), cfg, localSections, nil, "vpc", "dev", config,
 			)
 		}(i)
 	}
@@ -1842,7 +1845,6 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 
 	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
 	cfg := &schema.AtmosConfiguration{}
-	sections := jitSections()
 
 	var wg sync.WaitGroup
 	configs := [2]*ComponentConfig{
@@ -1855,8 +1857,14 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			// Each goroutine gets its own sections map to avoid a data race between
+			// IsWorkdirEnabled reads and the singleflight leader writing
+			// WorkdirReprovisionedKey into the map via Provision.
+			// InitRunReconfigure is propagated via the singleflight return value,
+			// not via the sections map, so per-goroutine maps are correct.
+			localSections := jitSections()
 			errs[idx] = executor.ensureWorkdirProvisioned(
-				context.Background(), cfg, sections, nil, "vpc", "dev", configs[idx],
+				context.Background(), cfg, localSections, nil, "vpc", "dev", configs[idx],
 			)
 		}(i)
 	}

@@ -233,8 +233,8 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 
 	t.Run("state exists, no _workdir_path (describe path — provisioner not yet run)", func(t *testing.T) {
 		tempDir := t.TempDir()
-		// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label
-		// workspace "demo" → terraform.tfstate.d/demo/terraform.tfstate
+		// BuildPath("tempDir", "terraform", "null-label", "demo", sections) → tempDir/.workdir/terraform/demo-null-label.
+		// workspace "demo" → terraform.tfstate.d/demo/terraform.tfstate.
 		stateDir := filepath.Join(tempDir, ".workdir", "terraform", "demo-null-label", "terraform.tfstate.d", "demo")
 		require.NoError(t, os.MkdirAll(stateDir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(stateJSON), 0o644))
@@ -249,7 +249,7 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 			},
 			"atmos_stack":     "demo",
 			"atmos_component": "null-label",
-			"component":       "null-label", // base component (metadata.component); also used by static fallback
+			"component":       "null-label", // base component (metadata.component); also used by static fallback.
 			"workspace":       "demo",
 		}
 
@@ -279,9 +279,9 @@ func TestReadTerraformBackendLocal_JITWorkdir(t *testing.T) {
 			},
 			"atmos_stack":     "demo",
 			"atmos_component": "null-label",
-			"component":       "null-label", // base component (metadata.component)
+			"component":       "null-label", // base component (metadata.component).
 			"workspace":       "demo",
-			"_workdir_path":   workdirPath, // set by provisioner during apply
+			"_workdir_path":   workdirPath, // set by provisioner during apply.
 		}
 
 		content, err := tb.ReadTerraformBackendLocal(config, &sections, nil)
