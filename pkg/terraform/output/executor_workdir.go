@@ -139,6 +139,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 			workdirProvisionCache.Delete(cacheKey)
 			return false, errUtils.Build(errUtils.ErrWorkdirProvision).
 				WithCause(fmt.Errorf("component '%s' in stack '%s': %w", component, stack, err)).
+				WithHint("Set auto_provision_workdir_for_outputs: false in atmos.yaml (or ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS=false) to disable. For source.uri components, check that source credentials are available.").
 				Err()
 		}
 

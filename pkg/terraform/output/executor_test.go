@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1930,6 +1931,24 @@ func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "vpc")
 	assert.Contains(t, err.Error(), "dev")
 	assert.True(t, errors.Is(err, provisionErr), "provision error should be unwrappable via errors.Is")
+}
+
+func TestEnsureWorkdirProvisioned_ErrorIncludesHint(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(errors.New("auth failure"))
+
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config)
+	require.Error(t, err)
+
+	hints := cockroachErrors.GetAllHints(err)
+	require.NotEmpty(t, hints, "error must carry at least one hint")
+	assert.Contains(t, strings.Join(hints, " "), "auto_provision_workdir_for_outputs",
+		"hint should mention the config key to disable auto-provisioning")
 }
 
 func TestEnsureWorkdirProvisioned_CacheEvictedOnFailureAllowsRetry(t *testing.T) {
