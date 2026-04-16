@@ -184,34 +184,25 @@ func createInstance(stackName, componentName, componentType string, componentCon
 	return instance
 }
 
-// isProDriftDetectionEnabled checks if an instance has Atmos Pro drift detection enabled.
-// Returns true if settings.pro.drift_detection.enabled == true and settings.pro.enabled != false.
-func isProDriftDetectionEnabled(instance *schema.Instance) bool {
+// isProEnabled checks if an instance has Atmos Pro enabled.
+// Returns true only if settings.pro.enabled is the boolean true.
+// Non-boolean values (e.g., the string "true") and missing values return false.
+func isProEnabled(instance *schema.Instance) bool {
 	proSettings, ok := instance.Settings["pro"].(map[string]any)
 	if !ok {
 		return false
 	}
 
-	// Skip if pro is explicitly disabled
-	if proEnabled, ok := proSettings["enabled"].(bool); ok && !proEnabled {
-		return false
-	}
-
-	driftDetection, ok := proSettings["drift_detection"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	enabled, ok := driftDetection["enabled"].(bool)
+	enabled, ok := proSettings["enabled"].(bool)
 	return ok && enabled
 }
 
-// filterProEnabledInstances returns only instances that have Atmos Pro drift detection explicitly enabled
-// via settings.pro.drift_detection.enabled == true, but excludes instances where settings.pro.enabled == false.
+// filterProEnabledInstances returns only instances that have Atmos Pro enabled
+// via settings.pro.enabled == true (strict boolean).
 func filterProEnabledInstances(instances []schema.Instance) []schema.Instance {
 	filtered := make([]schema.Instance, 0, len(instances))
 	for i := range instances {
-		if isProDriftDetectionEnabled(&instances[i]) {
+		if isProEnabled(&instances[i]) {
 			filtered = append(filtered, instances[i])
 		}
 	}

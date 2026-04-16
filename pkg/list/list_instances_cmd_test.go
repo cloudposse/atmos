@@ -39,7 +39,7 @@ func TestListInstancesCommandLogic(t *testing.T) {
 					"vpc": map[string]interface{}{
 						"settings": map[string]interface{}{
 							"pro": map[string]interface{}{
-								"drift_detection": map[string]interface{}{"enabled": true},
+								"enabled": true,
 							},
 						},
 						"metadata": map[string]interface{}{"type": "real"},
@@ -49,7 +49,7 @@ func TestListInstancesCommandLogic(t *testing.T) {
 					"app": map[string]interface{}{
 						"settings": map[string]interface{}{
 							"pro": map[string]interface{}{
-								"drift_detection": map[string]interface{}{"enabled": false},
+								"enabled": false,
 							},
 						},
 						"metadata": map[string]interface{}{"type": "real"},
@@ -153,9 +153,7 @@ func TestCreateInstanceWithTemplateRendering(t *testing.T) {
 	componentConfigMap := map[string]any{
 		"settings": map[string]any{
 			"pro": map[string]any{
-				"drift_detection": map[string]any{
-					"enabled": true,
-				},
+				"enabled": true,
 				"pull_request": map[string]any{
 					"merged": map[string]any{
 						"workflows": map[string]any{

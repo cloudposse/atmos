@@ -36,7 +36,7 @@ func TestProcessComponentConfig(t *testing.T) {
 
 	t.Run("valid component config", func(t *testing.T) {
 		config := map[string]any{
-			"settings": map[string]any{"pro": map[string]any{"drift_detection": map[string]any{"enabled": true}}},
+			"settings": map[string]any{"pro": map[string]any{"enabled": true}},
 			"vars":     map[string]any{"key": "value"},
 		}
 		result := processComponentConfig("stack1", "comp1", "terraform", config)
@@ -193,7 +193,7 @@ func TestFilterProEnabledInstancesEdgeCases(t *testing.T) {
 				Stack:     "stack1",
 				Settings: map[string]interface{}{
 					"pro": map[string]interface{}{
-						"drift_detection": "invalid", // Not a map.
+						"enabled": "true", // Not a bool.
 					},
 				},
 			},
@@ -202,9 +202,7 @@ func TestFilterProEnabledInstancesEdgeCases(t *testing.T) {
 				Stack:     "stack1",
 				Settings: map[string]interface{}{
 					"pro": map[string]interface{}{
-						"drift_detection": map[string]interface{}{
-							"enabled": "invalid", // Not a bool.
-						},
+						"enabled": 1, // Not a bool.
 					},
 				},
 			},
@@ -234,7 +232,7 @@ func TestFilterProEnabledInstancesEdgeCases(t *testing.T) {
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("instances with pro settings but missing drift_detection", func(t *testing.T) {
+	t.Run("instances with pro settings but missing enabled key", func(t *testing.T) {
 		instances := []schema.Instance{
 			{
 				Component: "vpc",
@@ -251,16 +249,14 @@ func TestFilterProEnabledInstancesEdgeCases(t *testing.T) {
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("instances with pro settings and drift_detection.enabled is true", func(t *testing.T) {
+	t.Run("instances with pro.enabled is true", func(t *testing.T) {
 		instances := []schema.Instance{
 			{
 				Component: "vpc",
 				Stack:     "stack1",
 				Settings: map[string]interface{}{
 					"pro": map[string]interface{}{
-						"drift_detection": map[string]interface{}{
-							"enabled": true,
-						},
+						"enabled": true,
 					},
 				},
 			},

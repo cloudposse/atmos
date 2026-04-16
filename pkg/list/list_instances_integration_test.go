@@ -159,7 +159,7 @@ func TestFilterProEnabledInstancesAdditionalEdgeCases(t *testing.T) {
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("instances with pro settings but missing drift_detection", func(t *testing.T) {
+	t.Run("instances with pro settings but no enabled key", func(t *testing.T) {
 		instances := []schema.Instance{
 			{
 				Component: "vpc",
@@ -176,45 +176,8 @@ func TestFilterProEnabledInstancesAdditionalEdgeCases(t *testing.T) {
 		assert.Empty(t, filtered)
 	})
 
-	t.Run("instances with pro settings but missing enabled key in drift_detection", func(t *testing.T) {
-		instances := []schema.Instance{
-			{
-				Component: "vpc",
-				Stack:     "stack1",
-				Settings: map[string]interface{}{
-					"pro": map[string]interface{}{
-						"drift_detection": map[string]interface{}{
-							"other": "value",
-						},
-					},
-				},
-			},
-		}
-
-		filtered := filterProEnabledInstances(instances)
-		assert.Empty(t, filtered)
-	})
-
-	t.Run("instances with pro settings but drift_detection.enabled is false", func(t *testing.T) {
-		instances := []schema.Instance{
-			{
-				Component: "vpc",
-				Stack:     "stack1",
-				Settings: map[string]interface{}{
-					"pro": map[string]interface{}{
-						"drift_detection": map[string]interface{}{
-							"enabled": false,
-						},
-					},
-				},
-			},
-		}
-
-		filtered := filterProEnabledInstances(instances)
-		assert.Empty(t, filtered)
-	})
-
-	t.Run("instances with pro settings and drift_detection.enabled is true", func(t *testing.T) {
+	t.Run("instances with drift_detection.enabled but no pro.enabled", func(t *testing.T) {
+		// drift_detection alone no longer qualifies; pro.enabled is required.
 		instances := []schema.Instance{
 			{
 				Component: "vpc",
@@ -224,6 +187,40 @@ func TestFilterProEnabledInstancesAdditionalEdgeCases(t *testing.T) {
 						"drift_detection": map[string]interface{}{
 							"enabled": true,
 						},
+					},
+				},
+			},
+		}
+
+		filtered := filterProEnabledInstances(instances)
+		assert.Empty(t, filtered)
+	})
+
+	t.Run("instances with pro.enabled false", func(t *testing.T) {
+		instances := []schema.Instance{
+			{
+				Component: "vpc",
+				Stack:     "stack1",
+				Settings: map[string]interface{}{
+					"pro": map[string]interface{}{
+						"enabled": false,
+					},
+				},
+			},
+		}
+
+		filtered := filterProEnabledInstances(instances)
+		assert.Empty(t, filtered)
+	})
+
+	t.Run("instances with pro.enabled true", func(t *testing.T) {
+		instances := []schema.Instance{
+			{
+				Component: "vpc",
+				Stack:     "stack1",
+				Settings: map[string]interface{}{
+					"pro": map[string]interface{}{
+						"enabled": true,
 					},
 				},
 			},
@@ -249,7 +246,7 @@ func TestFilterProEnabledInstancesAdditionalEdgeCases(t *testing.T) {
 				Stack:     "stack1",
 				Settings: map[string]interface{}{
 					"pro": map[string]interface{}{
-						"drift_detection": "invalid", // Not a map.
+						"enabled": "true", // Not a bool.
 					},
 				},
 			},
@@ -258,9 +255,7 @@ func TestFilterProEnabledInstancesAdditionalEdgeCases(t *testing.T) {
 				Stack:     "stack1",
 				Settings: map[string]interface{}{
 					"pro": map[string]interface{}{
-						"drift_detection": map[string]interface{}{
-							"enabled": "invalid", // Not a bool.
-						},
+						"enabled": 1, // Not a bool.
 					},
 				},
 			},
