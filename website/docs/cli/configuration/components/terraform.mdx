@@ -169,6 +169,24 @@ components:
     **Default:** `""` (uses XDG cache directory)
   </dd>
 
+  <dt>`auto_provision_workdir_for_outputs`</dt>
+  <dd>
+    When `true` (default), Atmos automatically provisions the JIT working directory
+    for components with `provision.workdir.enabled: true` before running
+    `terraform init` during `!terraform.output` or `atmos.Component` evaluation.
+    This enables cross-component output references to work on any machine, including
+    fresh CI runners where the workdir has not been created yet.
+
+    Set to `false` to disable auto-provisioning. `terraform init` will still run
+    against whatever files are already in the workdir.
+
+    For state-only reads, prefer `!terraform.state` — it reads the state file
+    directly with no `terraform init`, no workdir, and no binary required.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS`
+    **Default:** `true`
+  </dd>
+
   <dt>`shell.prompt`</dt>
   <dd>
     Custom prompt to display when running [`atmos terraform shell`](/cli/commands/terraform/shell).
