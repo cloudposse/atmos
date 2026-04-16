@@ -113,19 +113,19 @@ func (e *Executor) ensureWorkdirProvisioned(
 
 	cacheKey := stackComponentKey(stack, component)
 
-	result, sfErr, _ := workdirProvisionGroup.Do(cacheKey, func() (any, error) {
+	resultCh := workdirProvisionGroup.DoChan(cacheKey, func() (any, error) {
 		// LoadOrStore at the TOP of the closure: atomically claim the key before
 		// Provision runs. This closes the TOCTOU window — any goroutine arriving
-		// after Do returns will find the key already present and short-circuit.
-		// NOTE: must be inside Do (not outside) so that concurrent callers still
+		// after DoChan returns will find the key already present and short-circuit.
+		// NOTE: must be inside DoChan (not outside) so that concurrent callers still
 		// wait via singleflight rather than returning nil before provisioning completes.
 		//
 		// We store a bool placeholder (false) now and update it to the actual
 		// freshlyProvisioned value after Provision succeeds. Late-arriving goroutines
-		// that call Do after the leader's Do returns will read the final stored value
-		// (not the placeholder) because the leader's closure completes — including
+		// that call DoChan after the leader's call completes will read the final stored
+		// value (not the placeholder) because the leader's closure completes — including
 		// the Store below — before singleflight releases any waiting callers, and
-		// before any new Do call can observe the key.
+		// before any new DoChan call can observe the key.
 		if actual, loaded := workdirProvisionCache.LoadOrStore(cacheKey, false); loaded {
 			// Key was already present: return the stored freshness value so every
 			// goroutine (including late arrivals) can set InitRunReconfigure correctly.
@@ -147,11 +147,11 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// A new workdir has no .terraform/ directory — terraform init must run with -reconfigure
 		// to avoid an interactive "migrate workspaces?" prompt that would hang the process.
 		// Return the bool so every waiting goroutine (not just the leader) can apply it
-		// to its own config pointer after Do returns.
+		// to its own config pointer after DoChan returns.
 		_, freshlyProvisioned := sections[provWorkdir.WorkdirReprovisionedKey]
 
 		// Update the cache entry from the placeholder (false) to the actual freshness
-		// value. Late-arriving goroutines that start a new Do after this Store will
+		// value. Late-arriving goroutines that start a new DoChan after this Store will
 		// read freshlyProvisioned from the cache and set InitRunReconfigure correctly.
 		workdirProvisionCache.Store(cacheKey, freshlyProvisioned)
 
@@ -162,11 +162,20 @@ func (e *Executor) ensureWorkdirProvisioned(
 		return freshlyProvisioned, nil
 	})
 
-	if sfErr == nil {
-		if reconfigure, _ := result.(bool); reconfigure {
+	// DoChan returns a buffered channel (capacity 1) so the leader's result is
+	// never lost even if this goroutine exits early via ctx.Done(). The select
+	// below allows a waiter whose context has been cancelled to return immediately
+	// without blocking until the leader finishes.
+	select {
+	case res := <-resultCh:
+		if res.Err != nil {
+			return res.Err
+		}
+		if reconfigure, _ := res.Val.(bool); reconfigure {
 			config.InitRunReconfigure = true
 		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-
-	return sfErr
 }

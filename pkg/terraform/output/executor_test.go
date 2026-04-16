@@ -1916,6 +1916,59 @@ func TestEnsureWorkdirProvisioned_ConcurrentCallsAllGetReconfigure(t *testing.T)
 		"goroutine 1 config must have InitRunReconfigure=true after fresh provision")
 }
 
+func TestEnsureWorkdirProvisioned_ContextCancellationUnblocksWaiter(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	defer ResetWorkdirProvisionCache()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// leaderBlocked is closed when the leader enters Provision.
+	// leaderRelease is closed to let the leader finish (after the waiter exits).
+	leaderBlocked := make(chan struct{})
+	leaderRelease := make(chan struct{})
+
+	mockProvisioner := NewMockWorkdirProvisioner(ctrl)
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *schema.AtmosConfiguration, _ map[string]any, _ *schema.AuthContext) error {
+			close(leaderBlocked)
+			<-leaderRelease
+			return nil
+		}).
+		Times(1)
+
+	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	// Leader: background context, will complete after leaderRelease.
+	leaderDone := make(chan error, 1)
+	go func() {
+		leaderDone <- executor.ensureWorkdirProvisioned(
+			context.Background(), atmosCfg, jitSections(), nil, "vpc", "dev",
+			&ComponentConfig{AutoProvisionWorkdirForOutputs: true},
+		)
+	}()
+
+	// Wait for the leader to be inside Provision.
+	<-leaderBlocked
+
+	// Waiter: cancelled context — should return context.Canceled quickly.
+	waiterCtx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+	waiterErr := executor.ensureWorkdirProvisioned(
+		waiterCtx, atmosCfg, jitSections(), nil, "vpc", "dev",
+		&ComponentConfig{AutoProvisionWorkdirForOutputs: true},
+	)
+
+	assert.ErrorIs(t, waiterErr, context.Canceled,
+		"waiter with cancelled context must return context.Canceled")
+
+	// Release the leader and verify it completes cleanly.
+	close(leaderRelease)
+	require.NoError(t, <-leaderDone, "leader must complete without error")
+}
+
 func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
