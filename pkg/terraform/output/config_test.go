@@ -402,6 +402,39 @@ func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
 		"extractComponentPath must not return a path outside BasePath; got %q, base %q", path, absBase)
 }
 
+func TestExtractComponentPath_ContainmentGuard_AcceptsLegitimate(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	legitimateSections := map[string]any{
+		cfg.CommandSectionName:   "/usr/local/bin/terraform",
+		cfg.WorkspaceSectionName: "test",
+		cfg.ComponentSectionName: "vpc",
+		"component_info": map[string]any{
+			"component_type": "terraform",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{"enabled": true},
+		},
+	}
+
+	path, err := extractComponentPath(atmosConfig, legitimateSections, "vpc", "dev")
+	require.NoError(t, err)
+
+	// The ACCEPT branch must return the workdir path (inside BasePath), not componentPath.
+	absBase, _ := filepath.Abs(basePath)
+	sep := string(filepath.Separator)
+	assert.True(t, strings.HasPrefix(path, absBase+sep) || path == absBase,
+		"legitimate workdir component must return a path within BasePath; got %q, base %q", path, absBase)
+	assert.NotContains(t, path, "components/terraform",
+		"workdir path must not point at the static component directory")
+}
+
 func TestExtractComponentConfig_ReadsAutoProvisionWorkdirForOutputs(t *testing.T) {
 	sections := validSections()
 	sections[cfg.ComponentSectionName] = "mock"

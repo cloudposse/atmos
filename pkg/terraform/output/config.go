@@ -197,7 +197,9 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 			log.Debug("Derived workdir path escapes project directory; using component path",
 				"derived_path", workdirPath, "base_path", basePath)
 		} else {
-			return workdirPath, nil
+			// filepath.Abs failure is unreachable in practice, but if it somehow
+			// occurs, return the safe fallback rather than an unverified path.
+			return componentPath, nil
 		}
 	}
 
