@@ -1,0 +1,71 @@
+---
+slug: describe-stacks-complexity-reduction
+title: "98% Complexity Reduction in describe stacks"
+authors: [nitrocode]
+tags: [dx]
+---
+
+`ExecuteDescribeStacks` was the most complex function in the entire Atmos codebase — cyclomatic complexity of **247** and cognitive complexity of **1252**. We broke it apart.
+
+<!--truncate-->
+
+## What Changed
+
+`ExecuteDescribeStacks` in `internal/exec/describe_stacks.go` was a **1,160-line monolith** that repeated nearly identical component-processing logic four times — once for each component type (Terraform, Helmfile, Packer, Ansible). The duplication made it impossible to unit test individual behaviours and extremely difficult to reason about.
+
+We extracted the shared logic into a new `describe_stacks_component_processor.go` file containing:
+
+| Function | Responsibility |
+|---|---|
+| `describeStacksProcessor` | Immutable config + mutable result map |
+| `processStackFile` | Orchestrates one stack file |
+| `processComponentTypeSection` | Iterates over all components of one type |
+| `processComponentEntry` | Processes a single component (shared for all 4 types) |
+| `extractDescribeComponentSections` | Extracts vars, metadata, settings, env, auth, … |
+| `buildConfigAndStacksInfo` | Builds the `ConfigAndStacksInfo` struct |
+| `resolveStackName` | Manifest name → template → pattern → filename |
+| `shouldFilterByStack` | Clean filter predicate |
+| `ensureComponentEntryInMap` | Creates nested map paths safely |
+| `setAtmosComponentMetadata` | Stamps atmos_component/stack/stack_file |
+| `resolveIncludeEmpty` | Reads atmos.yaml IncludeEmpty setting |
+| `addSectionsToComponentEntry` | Writes filtered sections to output map |
+| `processComponentSectionTemplates` | Go template processing |
+| `processComponentSectionYAMLFunctions` | YAML function processing |
+| `applyTerraformMetadataInheritance` | Terraform-specific metadata inheritance |
+| `hasStackExplicitComponents` | Detects stacks with components |
+| `hasStackImports` | Detects stacks with imports |
+| `filterEmptyFinalStacks` | Post-processing pruning |
+| `stackHasNonEmptyComponents` | Checks for meaningful component content |
+
+## Why This Matters
+
+**Before:**
+- `ExecuteDescribeStacks`: cyclomatic complexity **247**, cognitive complexity **1252**
+- 1,160 lines of deeply nested, copy-pasted code
+- Practically untestable at a unit level
+
+**After:**
+- `ExecuteDescribeStacks` orchestrator: cyclomatic complexity **10**
+- Max complexity across all extracted functions: cyclomatic **20**, cognitive **22** (`processComponentEntry`)
+- All pure helper functions covered at **~96%** by unit tests (remaining uncovered lines are unreachable defensive type-assertion guards)
+
+## How to Use It
+
+The public API is **completely unchanged**. `ExecuteDescribeStacks` accepts the same parameters and returns the same `map[string]any`. No migration is required.
+
+## New Unit Tests
+
+80+ unit tests now cover every pure helper function at near-100%:
+
+```go
+// Example: testing shouldFilterByStack in isolation
+func TestShouldFilterByStack(t *testing.T) {
+    assert.False(t, shouldFilterByStack("", "stacks/prod.yaml", "prod"))      // no filter
+    assert.False(t, shouldFilterByStack("prod", "stacks/prod.yaml", "prod"))  // matches name
+    assert.True(t,  shouldFilterByStack("dev", "stacks/prod.yaml", "prod"))   // no match
+}
+```
+
+## Get Involved
+
+We're continuing to reduce complexity across the codebase. If you spot a function with high complexity, open an issue or PR. Check the [contributing guide](https://atmos.tools/community/contributing) to get started.

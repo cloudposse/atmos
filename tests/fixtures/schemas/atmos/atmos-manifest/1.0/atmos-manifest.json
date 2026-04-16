@@ -1220,6 +1220,24 @@
                       },
                       "type": {
                         "type": "string"
+                      },
+                      "retry": {
+                        "$ref": "#/definitions/workflow_retry"
+                      },
+                      "working_directory": {
+                        "type": "string",
+                        "description": "Working directory for the workflow step"
+                      },
+                      "identity": {
+                        "type": "string",
+                        "description": "Identity to use for the workflow step"
+                      },
+                      "env": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Environment variables for the workflow step"
                       }
                     },
                     "required": [
@@ -1397,6 +1415,60 @@
         }
       ]
     },
+    "workflow_retry": {
+      "title": "workflow_retry",
+      "description": "Retry configuration for workflow steps",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of retry attempts"
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "Strategy for increasing delay between retries"
+            },
+            "multiplier": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Multiplier for exponential/linear backoff"
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Random jitter factor (0-1) to add to delays"
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
     "source_retry": {
       "title": "source_retry",
       "description": "Retry configuration for source vendoring operations",
@@ -1498,13 +1570,30 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
+            "needs": {
+              "type": "array",
+              "description": "List of identity names this component requires. The first identity is primary (sets AWS_PROFILE, etc.). Additional identities have their profiles written to the shared credentials file for multi-account components.",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."
+            },
             "providers": {
               "$ref": "#/definitions/auth_providers"
             },
             "identities": {
               "$ref": "#/definitions/auth_identities"
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
             }
           },
           "required": []
@@ -1522,7 +1611,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9-_]+$": {
+            "^[a-zA-Z0-9/_-]+$": {
               "$ref": "#/definitions/auth_provider"
             }
           },
@@ -1595,7 +1684,7 @@
         {
           "type": "object",
           "patternProperties": {
-            "^[a-zA-Z0-9-_]+$": {
+            "^[a-zA-Z0-9/_-]+$": {
               "$ref": "#/definitions/auth_identity"
             }
           },

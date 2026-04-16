@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
+	"github.com/cloudposse/atmos/cmd/terraform/planfile"
 	"github.com/cloudposse/atmos/cmd/terraform/source"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -71,12 +72,20 @@ func init() {
 	// Add workdir subcommand from the workdir subpackage.
 	terraformCmd.AddCommand(workdir.GetWorkdirCommand())
 
+	// Add planfile subcommand from the planfile subpackage.
+	terraformCmd.AddCommand(planfile.PlanfileCmd)
+
 	// Register other completion functions (component args, identity).
 	RegisterTerraformCompletions(terraformCmd)
 
 	// Register global compat flags for terraform command itself (not just subcommands).
 	// This enables the COMPATIBILITY FLAGS section in help output.
 	internal.RegisterCommandCompatFlags("terraform", "terraform", TerraformGlobalCompatFlags())
+
+	// Register the flag registry for NoOptDefVal preprocessing in preprocessCompatibilityFlags.
+	// This enables the existing FlagRegistry.PreprocessNoOptDefValArgs to normalize
+	// flags like --identity before Cobra parsing.
+	internal.RegisterCommandFlagRegistry("terraform", terraformParser.Registry())
 
 	// Register this command with the registry.
 	internal.Register(&TerraformCommandProvider{})

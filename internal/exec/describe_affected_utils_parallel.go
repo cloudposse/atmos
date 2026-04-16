@@ -17,6 +17,8 @@ type stackAffectedResult struct {
 // findAffectedParallel processes stacks in parallel to detect affected components.
 // This is a parallel implementation of findAffected that provides 40-60% performance improvement (P9.1).
 // Combined with changed files indexing (P9.4), this provides 70-85% total improvement.
+// The gitRepoRoot parameter is the absolute path to the git repository root, used to resolve
+// relative file paths from git diff.
 //
 //nolint:funlen,revive // Parallel processing logic requires comprehensive setup and cleanup
 func findAffectedParallel(
@@ -28,12 +30,14 @@ func findAffectedParallel(
 	includeSettings bool,
 	stackToFilter string,
 	excludeLocked bool,
+	gitRepoRoot string,
 ) ([]schema.Affected, error) {
 	defer perf.Track(atmosConfig, "exec.findAffectedParallel")()
 
 	// Create an index of changed files for efficient lookup.
 	// This reduces PathMatch operations by 60-80%.
-	filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+	// Pass gitRepoRoot to resolve relative paths from git diff correctly.
+	filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, gitRepoRoot)
 
 	// Create pattern cache for component paths.
 	// This eliminates repeated pattern construction.
@@ -89,6 +93,18 @@ func findAffectedParallel(
 		}
 		allAffected = append(allAffected, result.affected...)
 	}
+
+	// Detect deleted components (exist in BASE/remote but not in HEAD/current).
+	deletedAffected, err := detectDeletedComponents(
+		remoteStacks,
+		currentStacks,
+		atmosConfig,
+		stackToFilter,
+	)
+	if err != nil {
+		return nil, err
+	}
+	allAffected = append(allAffected, deletedAffected...)
 
 	return allAffected, nil
 }

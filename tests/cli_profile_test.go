@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,7 @@ func TestProfileListCommand(t *testing.T) {
 		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "list")
+		cmd.Env = append(os.Environ(), "NO_COLOR=1")
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -127,6 +129,7 @@ func TestProfileListCommand(t *testing.T) {
 		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("list", "profiles")
+		cmd.Env = append(os.Environ(), "NO_COLOR=1")
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -160,6 +163,7 @@ func TestProfileShowCommand(t *testing.T) {
 		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "show", "developer")
+		cmd.Env = append(os.Environ(), "NO_COLOR=1")
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout

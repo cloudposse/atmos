@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,9 +15,11 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
+	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -31,6 +34,56 @@ const (
 	osWindows             = "windows"
 )
 
+// ShellCommandOption is a functional option for ExecuteShellCommand.
+type ShellCommandOption func(*shellCommandConfig)
+
+// shellCommandConfig holds optional configuration for shell command execution.
+type shellCommandConfig struct {
+	stdoutCapture  io.Writer
+	stderrCapture  io.Writer
+	stdoutOverride io.Writer
+	// processEnv replaces os.Environ() as the process environment.
+	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
+	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
+	processEnv []string
+}
+
+// WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
+// The captured output includes secret masking (post-MaskWriter).
+func WithStdoutCapture(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stdoutCapture = w
+	}
+}
+
+// WithStderrCapture returns a ShellCommandOption that tees stderr to the provided writer.
+// The captured output includes secret masking (post-MaskWriter).
+func WithStderrCapture(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stderrCapture = w
+	}
+}
+
+// WithStdoutOverride returns a ShellCommandOption that replaces the default stdout
+// (os.Stdout) with a different writer. Used to redirect noisy commands (e.g.,
+// workspace select) to stderr so they don't pollute data-producing commands like output.
+func WithStdoutOverride(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stdoutOverride = w
+	}
+}
+
+// WithEnvironment provides a pre-sanitized process environment for subprocess execution.
+// When provided, ExecuteShellCommand uses this instead of re-reading os.Environ().
+// Pass nil to fall back to the default os.Environ() behavior.
+func WithEnvironment(env []string) ShellCommandOption {
+	defer perf.Track(nil, "exec.WithEnvironment")()
+
+	return func(c *shellCommandConfig) {
+		c.processEnv = env
+	}
+}
+
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -40,8 +93,15 @@ func ExecuteShellCommand(
 	env []string,
 	dryRun bool,
 	redirectStdError string,
+	opts ...ShellCommandOption,
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
+
+	// Apply functional options.
+	var cfg shellCommandConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
@@ -49,9 +109,15 @@ func ExecuteShellCommand(
 	}
 
 	cmd := exec.Command(command, args...)
-	// Build environment: os.Environ() + global env (atmos.yaml) + working dir .env + command-specific env.
+	// Build environment: process env + global env (atmos.yaml) + working dir .env + command-specific env.
+	// When auth has sanitized the environment, cfg.processEnv is used instead of
+	// os.Environ() to avoid reintroducing problematic vars (e.g., IRSA credentials).
 	// Global env has lowest priority after system env, command-specific env overrides all.
-	cmdEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.GetCaseSensitiveEnvVars())
+	baseEnv := os.Environ()
+	if cfg.processEnv != nil {
+		baseEnv = cfg.processEnv
+	}
+	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.GetCaseSensitiveEnvVars())
 
 	// Load working directory .env files if enabled.
 	if atmosConfig.Env.Files.Enabled && dir != "" {
@@ -73,21 +139,59 @@ func ExecuteShellCommand(
 
 	cmdEnv = append(cmdEnv, env...)
 	cmdEnv = append(cmdEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+
+	// Propagate TTY state to subprocess.
+	// MaskWriter wraps stderr as a pipe, so the subprocess's TTY detection (e.g., for SSO
+	// device auth) will see a pipe instead of a terminal even when the user is interactive.
+	// When the parent has a real TTY and ATMOS_FORCE_TTY is not already set, inject it so
+	// subprocess commands that depend on TTY detection behave correctly.
+	if xterm.IsTerminal(int(os.Stderr.Fd())) && !envKeyIsSet(cmdEnv, "ATMOS_FORCE_TTY") {
+		cmdEnv = append(cmdEnv, "ATMOS_FORCE_TTY=true")
+	}
+
 	cmd.Env = cmdEnv
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
+
+	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
+	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
+	// for workspace select so it doesn't pollute data-producing commands like output).
+	var stdoutTarget io.Writer = os.Stdout
+	if cfg.stdoutOverride != nil {
+		stdoutTarget = cfg.stdoutOverride
+	}
+	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
+	if cfg.stdoutCapture != nil {
+		cmd.Stdout = io.MultiWriter(maskedStdout, cfg.stdoutCapture)
+	} else {
+		cmd.Stdout = maskedStdout
+	}
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
 	}
 
 	if redirectStdError == "/dev/stderr" {
-		cmd.Stderr = os.Stderr
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else if redirectStdError == "/dev/stdout" {
-		cmd.Stderr = os.Stdout
+		maskedStderr := ioLayer.MaskWriter(os.Stdout)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else if redirectStdError == "" {
-		cmd.Stderr = os.Stderr
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
@@ -102,7 +206,7 @@ func ExecuteShellCommand(
 			}
 		}(f)
 
-		cmd.Stderr = f
+		cmd.Stderr = ioLayer.MaskWriter(f)
 	}
 	log.Debug("Executing", "command", cmd.String())
 
@@ -152,28 +256,8 @@ func ExecuteShell(
 	// was merged rather than replaced.
 	mergedEnv := os.Environ()
 
-	// Merge global env from atmos.yaml if atmosConfig is provided.
-	if atmosConfig != nil {
-		mergedEnv = envpkg.MergeGlobalEnv(mergedEnv, atmosConfig.GetCaseSensitiveEnvVars())
-
-		// Load working directory .env files if enabled.
-		if atmosConfig.Env.Files.Enabled && dir != "" {
-			dirEnv, loadedFiles, err := envpkg.LoadFromDirectory(
-				dir,
-				atmosConfig.Env.Files.Paths,
-				atmosConfig.Env.Files.Parents,
-				atmosConfig.BasePath,
-			)
-			if err != nil {
-				log.Debug("Failed to load .env files from working directory", "dir", dir, "error", err)
-			} else {
-				for _, file := range loadedFiles {
-					ui.Success(fmt.Sprintf("Loaded %s", filepath.Base(file)))
-				}
-				mergedEnv = envpkg.MergeEnvSlices(mergedEnv, envpkg.MapToSlice(dirEnv))
-			}
-		}
-	}
+	// Merge global env from atmos.yaml (and any working-dir .env files) if atmosConfig is provided.
+	mergedEnv = mergeAtmosConfigEnv(mergedEnv, atmosConfig, dir)
 
 	for _, envVar := range envVars {
 		mergedEnv = envpkg.UpdateEnvVar(mergedEnv, parseEnvVarKey(envVar), parseEnvVarValue(envVar))
@@ -187,7 +271,39 @@ func ExecuteShell(
 		return nil
 	}
 
-	return u.ShellRunner(command, name, dir, mergedEnv, os.Stdout)
+	return u.ShellRunner(command, name, dir, mergedEnv, ioLayer.MaskWriter(os.Stdout))
+}
+
+// mergeAtmosConfigEnv merges the global env from atmos.yaml into baseEnv and loads any
+// working-directory .env files if enabled. Returns baseEnv unchanged when atmosConfig is nil.
+func mergeAtmosConfigEnv(baseEnv []string, atmosConfig *schema.AtmosConfiguration, dir string) []string {
+	defer perf.Track(atmosConfig, "exec.mergeAtmosConfigEnv")()
+
+	if atmosConfig == nil {
+		return baseEnv
+	}
+
+	merged := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.GetCaseSensitiveEnvVars())
+
+	if !atmosConfig.Env.Files.Enabled || dir == "" {
+		return merged
+	}
+
+	dirEnv, loadedFiles, err := envpkg.LoadFromDirectory(
+		dir,
+		atmosConfig.Env.Files.Paths,
+		atmosConfig.Env.Files.Parents,
+		atmosConfig.BasePath,
+	)
+	if err != nil {
+		log.Debug("Failed to load .env files from working directory", "dir", dir, "error", err)
+		return merged
+	}
+
+	for _, file := range loadedFiles {
+		ui.Success(fmt.Sprintf("Loaded %s", filepath.Base(file)))
+	}
+	return envpkg.MergeEnvSlices(merged, envpkg.MapToSlice(dirEnv))
 }
 
 // parseEnvVarKey extracts the key from an environment variable string (KEY=value).
@@ -357,12 +473,16 @@ func execTerraformShellCommand(
 }
 
 // ExecAuthShellCommand starts a new interactive shell with the provided authentication environment variables.
-// It increments ATMOS_SHLVL for the session, sets ATMOS_IDENTITY plus the supplied auth env vars into the shell environment (merged with the host environment), prints enter/exit messages, and launches the resolved shell command; returns an error if no suitable shell is found or if the shell process fails.
+// It increments ATMOS_SHLVL for the session, sets ATMOS_IDENTITY plus the supplied auth env vars into the shell environment, prints enter/exit messages, and launches the resolved shell command; returns an error if no suitable shell is found or if the shell process fails.
+//
+// The sanitizedEnv parameter should be a complete, pre-sanitized environment from PrepareShellEnvironment.
+// It is used directly without re-reading os.Environ(), ensuring problematic vars (e.g., IRSA credentials)
+// that were removed during auth preparation are not reintroduced.
 func ExecAuthShellCommand(
 	atmosConfig *schema.AtmosConfiguration,
 	identityName string,
 	providerName string,
-	authEnvVars map[string]string,
+	sanitizedEnv []string,
 	shellOverride string,
 	shellArgs []string,
 ) error {
@@ -376,12 +496,18 @@ func ExecAuthShellCommand(
 	// Decrement the value after exiting the shell.
 	defer decrementAtmosShellLevel()
 
-	// Convert auth env vars map to slice format.
-	authEnvList := envpkg.ConvertMapToSlice(authEnvVars)
+	// Append shell-specific env vars to the sanitized environment.
+	// The sanitizedEnv already includes os.Environ() (sanitized) + auth vars.
+	// Use UpdateEnvVar to replace-or-append each key, because os.StartProcess
+	// does not deduplicate — the first occurrence wins if duplicates exist.
+	shellEnv := append([]string{}, sanitizedEnv...)
+	shellEnv = envpkg.UpdateEnvVar(shellEnv, "ATMOS_IDENTITY", identityName)
+	shellEnv = envpkg.UpdateEnvVar(shellEnv, atmosShellLevelEnvVar, strconv.Itoa(atmosShellVal))
 
-	// Set environment variables to indicate the details of the Atmos auth shell configuration.
-	authEnvList = append(authEnvList, fmt.Sprintf("ATMOS_IDENTITY=%s", identityName))
-	authEnvList = append(authEnvList, fmt.Sprintf("%s=%d", atmosShellLevelEnvVar, atmosShellVal))
+	// Append global env from atmos.yaml.
+	for k, v := range atmosConfig.GetCaseSensitiveEnvVars() {
+		shellEnv = envpkg.UpdateEnvVar(shellEnv, k, v)
+	}
 
 	log.Debug("Starting a new interactive shell with authentication environment variables (type 'exit' to go back)",
 		"identity", identityName)
@@ -397,9 +523,8 @@ func ExecAuthShellCommand(
 	// Print user-facing message about entering the shell.
 	printShellEnterMessage(identityName, providerName)
 
-	// Merge env vars, ensuring authEnvList takes precedence.
-	// Include global env from atmos.yaml (lowest priority after system env).
-	mergedEnv := envpkg.MergeSystemEnvSimpleWithGlobal(authEnvList, atmosConfig.GetCaseSensitiveEnvVars())
+	// Use the sanitized environment directly (no re-reading os.Environ()).
+	mergedEnv := shellEnv
 
 	// Determine shell command and args.
 	shellCommand, shellCommandArgs := determineShell(shellOverride, shellArgs)
@@ -554,11 +679,11 @@ func printShellEnterMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s %s", identityName, providerStyle.Render(fmt.Sprintf("(%s)", providerName)))
 	}
 
-	fmt.Fprintf(os.Stderr, "\n%s %s\n",
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n",
 		headerStyle.Render("→ Entering Atmos shell with identity:"),
 		identityStyle.Render(identityDisplay))
 
-	fmt.Fprintf(os.Stderr, "%s\n\n",
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "%s\n\n",
 		hintStyle.Render("  Type 'exit' to return to your normal shell"))
 }
 
@@ -576,7 +701,32 @@ func printShellExitMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s (%s)", identityName, providerName)
 	}
 
-	fmt.Fprintf(os.Stderr, "\n%s %s\n\n",
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n\n",
 		headerStyle.Render("← Exited Atmos shell for identity:"),
 		identityStyle.Render(identityDisplay))
+}
+
+// envKeyIsSet returns true if any entry in env starts with "KEY=".
+func envKeyIsSet(env []string, key string) bool {
+	prefix := key + "="
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// envVarFromList returns the value of the last "KEY=value" entry in env, or ""
+// if the key is not present.  The last entry wins, matching how exec.Cmd.Env
+// and os.Environ() resolve duplicates.
+func envVarFromList(env []string, key string) string {
+	prefix := key + "="
+	result := ""
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			result = e[len(prefix):]
+		}
+	}
+	return result
 }

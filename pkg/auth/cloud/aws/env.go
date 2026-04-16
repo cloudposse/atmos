@@ -35,6 +35,14 @@ var problematicAWSEnvVars = []string{
 	"AWS_CONFIG_FILE",
 	"AWS_SHARED_CREDENTIALS_FILE",
 
+	// Web identity / IRSA (EKS pod-injected variables).
+	// On EKS pods with IRSA, these are injected by the pod identity webhook.
+	// They must be cleared during Atmos auth to prevent the AWS SDK from using
+	// pod credentials instead of Atmos-managed credentials.
+	"AWS_WEB_IDENTITY_TOKEN_FILE",
+	"AWS_ROLE_ARN",
+	"AWS_ROLE_SESSION_NAME",
+
 	// Note: AWS_REGION is intentionally NOT in this list as it's safe to inherit.
 }
 
@@ -52,6 +60,8 @@ var problematicAWSEnvVars = []string{
 //	    return err
 //	})
 func WithIsolatedAWSEnv(fn func() error) error {
+	defer perf.Track(nil, "pkg/auth/cloud/aws.WithIsolatedAWSEnv")()
+
 	// Save original values and track which variables are being ignored.
 	originalValues := make(map[string]string)
 	ignoredVars := make([]string, 0)
@@ -72,17 +82,16 @@ func WithIsolatedAWSEnv(fn func() error) error {
 		os.Unsetenv(key)
 	}
 
-	// Execute the function.
-	err := fn()
-
-	// Restore original values.
-	for _, key := range problematicAWSEnvVars {
-		if value, exists := originalValues[key]; exists {
-			os.Setenv(key, value)
+	// Restore original values even if fn panics.
+	defer func() {
+		for _, key := range problematicAWSEnvVars {
+			if value, exists := originalValues[key]; exists {
+				os.Setenv(key, value)
+			}
 		}
-	}
+	}()
 
-	return err
+	return fn()
 }
 
 // LoadIsolatedAWSConfig loads AWS configuration with problematic environment variables
@@ -92,19 +101,27 @@ func WithIsolatedAWSEnv(fn func() error) error {
 // environment variables AND shared config files don't interfere with the configuration loading process.
 //
 // The AWS SDK by default loads from ~/.aws/config and ~/.aws/credentials even when
-// AWS_PROFILE is not set. We disable shared config loading to prevent profile-based
-// configuration from interfering with Atmos auth.
+// AWS_PROFILE is not set. We provide empty file lists to completely prevent the SDK from
+// reading any shared config or credentials files from the filesystem.
 //
 // Use this for initial authentication (SSO device flow, etc.) when you want complete isolation.
 // Use LoadAtmosManagedAWSConfig when you want to use Atmos-managed credential files.
 func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
+	defer perf.Track(nil, "pkg/auth/cloud/aws.LoadIsolatedAWSConfig")()
+
 	var cfg aws.Config
 	var err error
 
-	// Prepend config.WithSharedConfigProfile("") to disable loading from shared config files.
-	// This prevents the SDK from loading user's ~/.aws/config and ~/.aws/credentials files.
-	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns)+1)
-	isolatedOptFns = append(isolatedOptFns, config.WithSharedConfigProfile(""))
+	// Prepend isolation options to completely prevent loading from shared config files.
+	// config.WithSharedConfigFiles([]string{}) prevents loading from ~/.aws/config (or AWS_CONFIG_FILE).
+	// config.WithSharedCredentialsFiles([]string{}) prevents loading from ~/.aws/credentials (or AWS_SHARED_CREDENTIALS_FILE).
+	// Note: config.WithSharedConfigProfile("") is NOT sufficient - it means "use the default profile",
+	// which still loads from ~/.aws/config and can conflict with user's [default] profile settings.
+	// The +2 capacity hint is omitted to eliminate the theoretical integer overflow risk flagged by
+	// CodeQL (would only occur if len(optFns) ≈ math.MaxInt); append grows the slice as needed.
+	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns))
+	isolatedOptFns = append(isolatedOptFns, config.WithSharedConfigFiles([]string{}))
+	isolatedOptFns = append(isolatedOptFns, config.WithSharedCredentialsFiles([]string{}))
 	isolatedOptFns = append(isolatedOptFns, optFns...)
 
 	isolateErr := WithIsolatedAWSEnv(func() error {
@@ -114,10 +131,6 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 
 	if isolateErr != nil {
 		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, isolateErr)
-	}
-
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
 	}
 
 	return cfg, nil
@@ -165,6 +178,13 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 		}
 	}
 
+	// Restore credential variables even if LoadDefaultConfig panics.
+	defer func() {
+		for key, value := range originalValues {
+			os.Setenv(key, value)
+		}
+	}()
+
 	if len(clearedVars) > 0 {
 		log.Debug("Cleared credential environment variables", "variables", clearedVars)
 	}
@@ -172,12 +192,6 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 	// Load config (respects AWS_PROFILE, AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE).
 	log.Debug("Loading AWS SDK config with Atmos-managed credentials")
 	cfg, err = config.LoadDefaultConfig(ctx, optFns...)
-
-	// Restore credential variables.
-	for key, value := range originalValues {
-		os.Setenv(key, value)
-	}
-
 	if err != nil {
 		log.Debug("Failed to load AWS SDK config", "error", err)
 		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
@@ -230,7 +244,9 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 	)
 
 	// Create a copy to avoid mutating the input.
-	result := make(map[string]string, len(environ)+6)
+	// The +6 capacity hint is omitted to eliminate the theoretical integer overflow risk
+	// flagged by CodeQL (would only occur if len(environ) ≈ math.MaxInt); Go maps grow dynamically.
+	result := make(map[string]string, len(environ))
 	for k, v := range environ {
 		result[k] = v
 	}
@@ -238,6 +254,11 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 	// Clear problematic credential environment variables.
 	// When using profile-based authentication, these variables would override
 	// the credentials from AWS_SHARED_CREDENTIALS_FILE, causing auth to fail.
+	//
+	// This deletes keys from the map. Callers that pass os.Environ() as input will
+	// get a sanitized result with IRSA/credential vars removed. The sanitized env
+	// should be passed to subprocess execution via WithEnvironment to avoid re-reading
+	// os.Environ() (which would reintroduce the problematic vars).
 	for _, key := range environmentVarsToClear {
 		if _, exists := result[key]; exists {
 			log.Debug("Clearing AWS credential environment variable", "key", key)

@@ -6,15 +6,16 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 var pathParser *flags.StandardParser
 
 var pathCmd = &cobra.Command{
 	Use:   "path",
-	Short: "Print PATH entries for installed tools",
-	Long:  `Print PATH entries for all tools configured in .tool-versions.`,
+	Short: "Print PATH entries for installed tools (alias for 'toolchain env')",
+	Long:  `Print PATH entries for all tools configured in .tool-versions. This is an alias for 'toolchain env'.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Bind flags to Viper for precedence handling.
 		v := viper.GetViper()
@@ -22,11 +23,23 @@ var pathCmd = &cobra.Command{
 			return err
 		}
 
+		// Map path flags to env flags:
+		// --export → --format bash
+		// --json → --format json
+		// --relative → --relative
+		// (no flags) → --format github (one path per line)
 		exportFlag := v.GetBool("export")
 		jsonFlag := v.GetBool("json")
 		relativeFlag := v.GetBool("relative")
 
-		return toolchain.EmitPath(exportFlag, jsonFlag, relativeFlag)
+		format := "github" // Default: just paths, one per line.
+		if jsonFlag {
+			format = "json"
+		} else if exportFlag {
+			format = "bash"
+		}
+
+		return toolchain.EmitEnv(format, relativeFlag, "")
 	},
 }
 

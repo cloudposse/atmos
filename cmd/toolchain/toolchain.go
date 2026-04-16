@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	toolchainpkg "github.com/cloudposse/atmos/toolchain"
+	toolchainpkg "github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (

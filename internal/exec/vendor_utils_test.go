@@ -637,3 +637,287 @@ spec:
 		})
 	}
 }
+
+func TestProcessTargets_BackwardCompatible(t *testing.T) {
+	// Plain string targets (no per-target version) should work exactly as before.
+	atmosConfig := &schema.AtmosConfiguration{}
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}",
+		Version:   "1.398.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/vpc"},
+			{Path: "components/terraform/vpc-backup"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "1.398.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 2)
+
+	// Both packages should use the source-level URI and version.
+	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[0].uri)
+	assert.Equal(t, "1.398.0", pkgs[0].version)
+	assert.Equal(t, "vpc", pkgs[0].name)
+	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
+	assert.False(t, pkgs[0].sourceIsLocalFile)
+	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc")
+
+	assert.Equal(t, "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0", pkgs[1].uri)
+	assert.Equal(t, "1.398.0", pkgs[1].version)
+	assert.Equal(t, pkgTypeRemote, pkgs[1].pkgType)
+	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "components/terraform/vpc-backup")
+}
+
+func TestProcessTargets_PerTargetVersionOverride(t *testing.T) {
+	// Target with its own version should re-resolve the source URI with that version.
+	atmosConfig := &schema.AtmosConfiguration{}
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}",
+		Version:   "1.398.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/vpc/{{.Version}}", Version: "2.0.0"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "1.398.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.398.0",
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+
+	// URI should be re-resolved with the target's version.
+	assert.Contains(t, pkgs[0].uri, "ref=2.0.0")
+	assert.NotContains(t, pkgs[0].uri, "ref=1.398.0")
+	// Version should be the target override.
+	assert.Equal(t, "2.0.0", pkgs[0].version)
+	// Target path should use the target's version.
+	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "vpc/2.0.0")
+	assert.Equal(t, "vpc", pkgs[0].name)
+	// Package type should be recomputed as remote.
+	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
+	assert.False(t, pkgs[0].sourceIsLocalFile)
+}
+
+func TestProcessTargets_MixedTargets(t *testing.T) {
+	// Mix of plain targets and targets with per-target version overrides.
+	atmosConfig := &schema.AtmosConfiguration{}
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/cloudposse/terraform-aws-vpc.git///?ref={{.Version}}",
+		Version:   "2.1.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/vpc"},
+			{Path: "components/terraform/vpc/{{.Version}}", Version: "3.0.0"},
+			{Path: "components/terraform/vpc-legacy"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "2.1.0"}
+	// Pre-resolved URI (what processAtmosVendorSource would produce after normalizeVendorURI).
+	resolvedURI := "github.com/cloudposse/terraform-aws-vpc.git//.?ref=2.1.0"
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  resolvedURI,
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 3)
+
+	// First target: plain string, uses source-level URI and version.
+	assert.Equal(t, resolvedURI, pkgs[0].uri)
+	assert.Equal(t, "2.1.0", pkgs[0].version)
+	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc")
+
+	// Second target: per-target version override, URI re-resolved with 3.0.0.
+	assert.Contains(t, pkgs[1].uri, "ref=3.0.0")
+	assert.NotContains(t, pkgs[1].uri, "ref=2.1.0")
+	assert.Equal(t, "3.0.0", pkgs[1].version)
+	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/3.0.0")
+
+	// Third target: plain string, uses source-level URI and version.
+	assert.Equal(t, resolvedURI, pkgs[2].uri)
+	assert.Equal(t, "2.1.0", pkgs[2].version)
+	assert.Contains(t, filepath.ToSlash(pkgs[2].targetPath), "components/terraform/vpc-legacy")
+}
+
+func TestProcessTargets_TargetPathTemplating(t *testing.T) {
+	// Verify that {{.Component}} and {{.Version}} are expanded in target paths.
+	atmosConfig := &schema.AtmosConfiguration{}
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/org/repo.git//modules/vpc?ref={{.Version}}",
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/{{.Component}}/{{.Version}}"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  "github.com/org/repo.git//modules/vpc?ref=1.0.0",
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+
+	// Path should have templates expanded.
+	assert.Contains(t, filepath.ToSlash(pkgs[0].targetPath), "components/terraform/vpc/1.0.0")
+}
+
+func TestProcessTargets_EmptyComponentFallsBackToURI(t *testing.T) {
+	// When component is empty, package name should fall back to URI.
+	atmosConfig := &schema.AtmosConfiguration{}
+	source := schema.AtmosVendorSource{
+		Source:  "github.com/org/repo.git//modules/vpc?ref=v1.0.0",
+		Version: "v1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/vpc"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"", "v1.0.0"}
+	uri := "github.com/org/repo.git//modules/vpc?ref=v1.0.0"
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  uri,
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+
+	// Name should be the URI since Component is empty.
+	assert.Equal(t, uri, pkgs[0].name)
+}
+
+func TestProcessTargets_LocalFileTarget(t *testing.T) {
+	// Verify that source classification is recomputed per-target when the effective URI
+	// resolves to a local file system path.
+	atmosConfig := &schema.AtmosConfiguration{}
+	tempDir := t.TempDir()
+
+	// Create a local file to serve as the vendor source.
+	localFile := filepath.Join(tempDir, "module.tar.gz")
+	err := os.WriteFile(localFile, []byte("fake-archive"), 0o644)
+	require.NoError(t, err)
+
+	source := schema.AtmosVendorSource{
+		Component: "local-mod",
+		Source:    localFile,
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			{Path: "components/terraform/local-mod"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"local-mod", "1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  localFile,
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeLocal,
+		SourceIsLocalFile:    true,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+
+	// Source classification should detect the local file.
+	assert.Equal(t, pkgTypeLocal, pkgs[0].pkgType)
+	assert.True(t, pkgs[0].sourceIsLocalFile)
+}
+
+func TestProcessTargets_PerTargetVersionRecomputesClassification(t *testing.T) {
+	// When a target has a version override, source classification should be recomputed
+	// from the re-resolved URI. This verifies the fix for the issue where pkgType and
+	// sourceIsLocalFile were only computed once at the source level.
+	atmosConfig := &schema.AtmosConfiguration{}
+	source := schema.AtmosVendorSource{
+		Component: "vpc",
+		Source:    "github.com/org/terraform-aws-vpc.git//modules/vpc?ref={{.Version}}",
+		Version:   "1.0.0",
+		Targets: schema.AtmosVendorTargets{
+			// First target: no override, uses source-level classification.
+			{Path: "components/terraform/vpc"},
+			// Second target: version override, URI should be re-resolved and reclassified.
+			{Path: "components/terraform/vpc/{{.Version}}", Version: "2.0.0"},
+		},
+	}
+	tmplData := struct{ Component, Version string }{"vpc", "1.0.0"}
+
+	pkgs, err := processTargets(&processTargetsParams{
+		AtmosConfig:          atmosConfig,
+		IndexSource:          0,
+		Source:               &source,
+		TemplateData:         tmplData,
+		VendorConfigFilePath: "",
+		URI:                  "github.com/org/terraform-aws-vpc.git//modules/vpc?ref=1.0.0",
+		SourceTemplate:       source.Source,
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, pkgs, 2)
+
+	// First target: uses source-level defaults.
+	assert.Equal(t, pkgTypeRemote, pkgs[0].pkgType)
+	assert.False(t, pkgs[0].sourceIsLocalFile)
+	assert.Equal(t, "1.0.0", pkgs[0].version)
+
+	// Second target: version override, classification recomputed (still remote in this case).
+	assert.Equal(t, pkgTypeRemote, pkgs[1].pkgType)
+	assert.False(t, pkgs[1].sourceIsLocalFile)
+	assert.Equal(t, "2.0.0", pkgs[1].version)
+	assert.Contains(t, pkgs[1].uri, "ref=2.0.0")
+	assert.Contains(t, filepath.ToSlash(pkgs[1].targetPath), "vpc/2.0.0")
+}

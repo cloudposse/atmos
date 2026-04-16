@@ -20,6 +20,14 @@ func init() {
 	integrations.Register(integrations.KindAWSECR, NewECRIntegration)
 }
 
+// ecrGetAuthToken retrieves an ECR authorization token. Overridable in tests.
+var ecrGetAuthToken = awsCloud.GetAuthorizationToken
+
+// ecrDockerConfigFactory creates a Docker config manager. Overridable in tests.
+var ecrDockerConfigFactory = func() (*docker.ConfigManager, error) {
+	return docker.NewConfigManager()
+}
+
 // ECRIntegration implements the aws/ecr integration type.
 type ECRIntegration struct {
 	name     string
@@ -76,7 +84,7 @@ func (e *ECRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	defer perf.Track(nil, "aws.ECRIntegration.Execute")()
 
 	// Create Docker config manager.
-	dockerConfig, err := docker.NewConfigManager()
+	dockerConfig, err := ecrDockerConfigFactory()
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
 	}
@@ -84,7 +92,7 @@ func (e *ECRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	log.Debug("Logging in to ECR registry", "account_id", e.registry.AccountID, "region", e.registry.Region)
 
 	// Get authorization token from ECR.
-	result, err := awsCloud.GetAuthorizationToken(ctx, creds, e.registry.AccountID, e.registry.Region)
+	result, err := ecrGetAuthToken(ctx, creds, e.registry.AccountID, e.registry.Region)
 	if err != nil {
 		return fmt.Errorf("%w: failed to get ECR token for %s: %w", errUtils.ErrECRAuthFailed, e.registry.AccountID, err)
 	}
@@ -99,10 +107,44 @@ func (e *ECRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 
 	// Log success with actual expiration time.
 	expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
-	_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registryURL, expiresIn))
+	ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registryURL, expiresIn))
 	log.Debug("ECR login successful", "registry", registryURL, "expires_at", result.ExpiresAt)
 
 	return nil
+}
+
+// Cleanup removes ECR Docker config entries for this integration's registry.
+func (e *ECRIntegration) Cleanup(_ context.Context) error {
+	defer perf.Track(nil, "aws.ECRIntegration.Cleanup")()
+
+	registryURL := awsCloud.BuildRegistryURL(e.registry.AccountID, e.registry.Region)
+
+	dockerConfig, err := ecrDockerConfigFactory()
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+	}
+
+	if err := dockerConfig.RemoveAuth(registryURL); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+	}
+
+	log.Debug("ECR cleanup: removed Docker auth", "registry", registryURL)
+
+	return nil
+}
+
+// Environment returns environment variables contributed by this ECR integration.
+func (e *ECRIntegration) Environment() (map[string]string, error) {
+	defer perf.Track(nil, "aws.ECRIntegration.Environment")()
+
+	dockerConfig, err := ecrDockerConfigFactory()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+	}
+
+	return map[string]string{
+		"DOCKER_CONFIG": dockerConfig.GetConfigDir(),
+	}, nil
 }
 
 // GetIdentity returns the identity name this integration uses.

@@ -13,6 +13,8 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	providerName := m.getProviderForIdentity(identityName)
 
 	info := &types.WhoamiInfo{
+		Realm:       m.realm.Value,
+		RealmSource: m.realm.Source,
 		Provider:    providerName,
 		Identity:    identityName,
 		LastUpdated: time.Now(),
@@ -39,11 +41,13 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	// Caching session tokens would overwrite the long-lived credentials in keyring,
 	// causing "keyring contains session credentials" errors on subsequent runs.
 	if !isSessionToken(creds) {
-		if err := m.credentialStore.Store(identityName, creds); err == nil {
+		if err := m.credentialStore.Store(identityName, creds, m.realm.Value); err == nil {
 			info.CredentialsRef = identityName
 			// Note: We keep info.Credentials populated for validation purposes.
 			// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
 			// accidental serialization, so there's no security risk in keeping it.
+			// Clean up legacy (pre-realm) keyring entry to prevent realm mismatch warnings.
+			m.deleteLegacyKeyringEntry(identityName)
 		}
 	} else {
 		log.Debug("Skipping keyring cache for session tokens in WhoamiInfo", logKeyIdentity, identityName)
@@ -62,6 +66,8 @@ func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.Who
 	providerName := m.getProviderForIdentity(identityName)
 
 	info := &types.WhoamiInfo{
+		Realm:       m.realm.Value,
+		RealmSource: m.realm.Source,
 		Provider:    providerName,
 		Identity:    identityName,
 		LastUpdated: time.Now(),

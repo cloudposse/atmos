@@ -9,8 +9,38 @@ import (
 
 	"github.com/joho/godotenv"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+const (
+	// DefaultFileMode is the file mode for output files.
+	defaultFileMode = 0o644
+)
+
+// WriteToFile writes content to a file in append mode.
+// Creates the file if it doesn't exist.
+func WriteToFile(path string, content string) error {
+	defer perf.Track(nil, "env.WriteToFile")()
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFileMode)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrOpenFile).
+			WithCause(err).
+			WithContext("path", path).
+			Err()
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(content); err != nil {
+		return errUtils.Build(errUtils.ErrWriteFile).
+			WithCause(err).
+			WithContext("path", path).
+			Err()
+	}
+
+	return nil
+}
 
 // LoadEnvFiles loads .env files matching the given patterns from basePath.
 // Patterns support globs (e.g., ".env.*").
@@ -182,12 +212,8 @@ func collectParentDirs(dir, repoRoot string) ([]string, error) {
 	var dirs []string
 	current := absDir
 
-	for {
-		// Security check: ensure we're still within the repo root.
-		if !isWithinOrEqual(current, absRepoRoot) {
-			break
-		}
-
+	// Security check: loop only while within the repo root.
+	for isWithinOrEqual(current, absRepoRoot) {
 		dirs = append(dirs, current)
 
 		// Stop at repo root.

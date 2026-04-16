@@ -1,0 +1,81 @@
+---
+slug: dependencies-components
+title: "Introducing Structured Component Dependencies"
+authors: [osterman]
+tags: [feature]
+---
+
+import Intro from '@site/src/components/Intro'
+
+Atmos now supports a new `dependencies.components` format for declaring explicit component dependencies with support for cross-type dependencies, file/folder watching, and stack templates.
+
+<Intro>
+Declare component dependencies explicitly with the new structured format that supports cross-type dependencies, file/folder watching, and dynamic stack templates.
+</Intro>
+
+<!--truncate-->
+
+## What Changed
+
+The new `dependencies.components` section provides a structured way to declare component dependencies:
+
+```yaml
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          - component: vpc
+          - component: rds
+            stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"
+          - kind: file
+            path: configs/app.json
+```
+
+### Key Features
+
+- **Cross-type dependencies**: Terraform components can depend on Helmfile components using the `kind` field
+- **File/folder watching**: Trigger rebuilds when config files change with `kind: file` or `kind: folder`
+- **Template support**: Dynamic stack references with Go templates
+- **Inheritance**: Dependencies are replaced during stack inheritance by default, or appended when `list_merge_strategy: append` is configured
+
+### Cross-Type Dependencies
+
+The `kind` field allows you to declare dependencies on components of different types:
+
+```yaml
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          - component: vpc                    # terraform (default)
+          - component: nginx-ingress
+            kind: helmfile                    # helmfile component
+            stack: platform-stack
+```
+
+### File and Folder Dependencies
+
+Track external files and folders that affect your component:
+
+```yaml
+components:
+  terraform:
+    lambda:
+      dependencies:
+        components:
+          - component: vpc
+          - kind: file
+            path: configs/lambda-settings.json
+          - kind: folder
+            path: src/lambda/handler
+```
+
+## Coming Soon
+
+In Q1 2026, we're adding **automatic dependency detection** from YAML functions. Dependencies will be inferred automatically from `!terraform.output` and `!terraform.state` usage—no manual configuration needed.
+
+## Get Started
+
+See the [Component Dependencies documentation](/stacks/dependencies/components) for complete details.

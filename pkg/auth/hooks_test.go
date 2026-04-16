@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -18,7 +19,8 @@ type stubAuthManager struct {
 	defaultIdentity string
 	defaultErr      error
 	whoami          *types.WhoamiInfo
-	envVars         map[string]string // Environment variables to return from GetEnvironmentVariables
+	envVars         map[string]string          // Environment variables to return from GetEnvironmentVariables.
+	identities      map[string]schema.Identity // Identities to return from GetIdentities.
 }
 
 func (s *stubAuthManager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
@@ -53,6 +55,9 @@ func (s *stubAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo {
 }
 func (s *stubAuthManager) ListProviders() []string { return []string{"prov"} }
 func (s *stubAuthManager) GetIdentities() map[string]schema.Identity {
+	if s.identities != nil {
+		return s.identities
+	}
 	return map[string]schema.Identity{}
 }
 
@@ -117,6 +122,18 @@ func (s *stubAuthManager) ExecuteIdentityIntegrations(ctx context.Context, ident
 
 func (s *stubAuthManager) GetIntegration(integrationName string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (s *stubAuthManager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	return nil, false
+}
+
+func (s *stubAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	return nil, false
+}
+
+func (s *stubAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
 }
 
 func TestGetConfigLogLevels(t *testing.T) {

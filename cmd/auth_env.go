@@ -4,21 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
-	"sort"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-var SupportedFormats = []string{"json", "bash", "dotenv"}
+// authEnvParser handles flag parsing with Viper precedence for the auth env command.
+var authEnvParser *flags.StandardParser
 
 // authEnvCmd exports authentication environment variables.
 var authEnvCmd = &cobra.Command{
@@ -28,23 +28,30 @@ var authEnvCmd = &cobra.Command{
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get output format
-		format, _ := cmd.Flags().GetString("format")
-		if !slices.Contains(SupportedFormats, format) {
-			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, format)
+		// Parse flags using Viper (respects precedence: flags > env > config > defaults).
+		v := viper.GetViper()
+		if err := authEnvParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
 		}
 
-		// Get login flag
-		login, _ := cmd.Flags().GetBool("login")
+		// Get output format and file from Viper.
+		formatStr := v.GetString("format")
+		if formatStr == "" {
+			formatStr = "bash"
+		}
+		outputFile := v.GetString("output-file")
 
-		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+		// Get login flag.
+		login := v.GetBool("login")
+
+		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
 			return fmt.Errorf("failed to load atmos config: %w", err)
 		}
 
-		// Create auth manager
-		authManager, err := createAuthManager(&atmosConfig.Auth)
+		// Create auth manager.
+		authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 		if err != nil {
 			return fmt.Errorf("failed to create auth manager: %w", err)
 		}
@@ -101,70 +108,52 @@ var authEnvCmd = &cobra.Command{
 			}
 		}
 
-		switch format {
-		case "json":
-			return outputEnvAsJSON(&atmosConfig, envVars)
-		case "bash":
-			return outputEnvAsExport(envVars)
-		case "dotenv":
-			return outputEnvAsDotenv(envVars)
-		default:
-			return outputEnvAsExport(envVars)
+		// Handle GitHub format special case (requires file output).
+		if formatStr == "github" && outputFile == "" {
+			// Auto-detect GITHUB_ENV in GitHub Actions environment.
+			outputFile = actions.GetEnvPath()
+			if outputFile == "" {
+				return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+					WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output-file to specify a file path.").
+					Err()
+			}
 		}
+
+		// Use unified env.Output() for all format/output combinations.
+		return env.Output(envVars, formatStr, outputFile,
+			env.WithFileMode(env.CredentialFileMode),
+			env.WithAtmosConfig(&atmosConfig),
+		)
 	},
 }
 
-// outputEnvAsJSON outputs environment variables as JSON.
-func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]string) error {
-	return u.PrintAsJSON(atmosConfig, envVars)
-}
-
-// outputEnvAsExport outputs environment variables as shell export statements.
-func outputEnvAsExport(envVars map[string]string) error {
-	keys := make([]string, 0, len(envVars))
-	for k := range envVars {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, key := range keys {
-		value := envVars[key]
-		// Escape single quotes for safe single-quoted shell literals: ' -> '\''
-		safe := strings.ReplaceAll(value, "'", "'\\''")
-		fmt.Printf("export %s='%s'\n", key, safe)
-	}
-	return nil
-}
-
-// outputEnvAsDotenv outputs environment variables in .env format.
-func outputEnvAsDotenv(envVars map[string]string) error {
-	keys := make([]string, 0, len(envVars))
-	for k := range envVars {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, key := range keys {
-		value := envVars[key]
-		// Use the same safe single-quoted escaping as bash output
-		safe := strings.ReplaceAll(value, "'", "'\\''")
-		fmt.Printf("%s='%s'\n", key, safe)
-	}
-	return nil
-}
-
 func init() {
-	authEnvCmd.Flags().StringP("format", "f", "bash", "Output format: bash, json, dotenv.")
-	authEnvCmd.Flags().Bool("login", false, "Trigger authentication if credentials are missing or expired (default: false)")
+	// Create parser with auth-env-specific flags using functional options.
+	authEnvParser = flags.NewStandardParser(
+		flags.WithStringFlag("format", "f", "bash", "Output format: bash, dotenv, env, github, json"),
+		flags.WithStringFlag("output-file", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)"),
+		flags.WithBoolFlag("login", "", false, "Trigger authentication if credentials are missing or expired"),
+		flags.WithEnvVars("format", "ATMOS_AUTH_ENV_FORMAT"),
+		flags.WithEnvVars("output-file", "ATMOS_AUTH_ENV_OUTPUT_FILE"),
+	)
 
-	if err := viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT"); err != nil {
-		log.Trace("Failed to bind auth_env_format environment variable", "error", err)
+	// Register flags using the standard RegisterFlags method.
+	authEnvParser.RegisterFlags(authEnvCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := authEnvParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
 	}
-	if err := viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format")); err != nil {
-		log.Trace("Failed to bind auth_env_format flag", "error", err)
+
+	// Register format completion using pkg/env supported formats plus JSON.
+	// JSON is handled separately in the command, not via pkg/env.
+	formatCompletions := make([]string, 0, len(env.SupportedFormats)+1)
+	formatCompletions = append(formatCompletions, "json")
+	for _, f := range env.SupportedFormats {
+		formatCompletions = append(formatCompletions, string(f))
 	}
 	if err := authEnvCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return SupportedFormats, cobra.ShellCompDirectiveNoFileComp
+		return formatCompletions, cobra.ShellCompDirectiveNoFileComp
 	}); err != nil {
 		log.Trace("Failed to register format flag completion", "error", err)
 	}

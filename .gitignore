@@ -3,7 +3,6 @@
 *.tfstate
 *.tfstate.*
 **/*.tf.json
-**/planfile
 **/*.planfile
 **/*.kubeconfig
 **/terraform.tfvars.json
@@ -17,9 +16,17 @@
 **/nohup.out
 **/kubeconfig.yaml
 **/*.planfile.json
+.atmos/planfiles
+.atmos/planfiles/**
+
+**/.atmos
 
 # Atmos binary (only in root directory)
 /atmos
+
+# Demo binaries and large audio files
+tools/director/director
+demos/audio/
 
 # Module directory
 .terraform
@@ -38,29 +45,38 @@
 /bin
 
 # Nix
-.envrc
 .direnv/
+
+# Environment files (except .envrc which is tracked for Nix)
+.env*
+!.envrc
 
 # Tool version managers
 .tool-versions
 !examples/toolchain/.tool-versions
 
-# Ignore cache files
+# Ignore cache files and sessions
 **/.atmos/cache.yaml
+**/.atmos/sessions/
 **/cache.*.txt
+**/.atmos/ai.settings.local.json
 
-# Conductor workspace uses pnpm, but project uses npm
+# Website lock files (CI manages dependencies)
 website/pnpm-lock.yaml
+website/package-lock.json
 
 # Development configs - track only specific files
 .atmos.d/*
 !.atmos.d/dev.yaml
+!.atmos.d/toolchain.yaml
 !.atmos.d/README.md
 
 # Ignore components vendored during tests
 examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**
 tests/fixtures/scenarios/vendor/components/**
+tests/fixtures/scenarios/vendor-simple-excludes/components/**
+tests/fixtures/scenarios/complete/components/terraform/infra/account-map/context.tf
 internal/exec/output.*
 
 # Coverage files
@@ -88,6 +104,7 @@ TEST_QUALITY_*.md
 /lintroller
 /.lintroller
 tools/lintroller/.lintroller
+.golangci/lintroller/lintroller
 /custom-gcl
 tools/gomodcheck/.gomodcheck
 
@@ -95,6 +112,7 @@ tools/gomodcheck/.gomodcheck
 .claude-flow/
 .hive-mind/
 .claude/plans/
+.claude/settings.local.json
 
 performance-optimization/
 node_modules
@@ -121,6 +139,9 @@ scratch/
 COVERAGE_SUMMARY.md
 TESTABILITY_CHANGES_SUMMARY.md
 
+# Docusaurus build cache
+.docusaurus/
+
 # Conductor scratch/temporary files
 *.log
 *_progress.txt
@@ -128,3 +149,4 @@ TESTABILITY_CHANGES_SUMMARY.md
 reply_to_*.sh
 *.ansi
 .claude-plan.md
+.claude/plans/

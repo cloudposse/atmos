@@ -31,7 +31,7 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 		if err != nil {
 			return err
 		}
-		_ = ui.Success(completedMsg)
+		ui.Success(completedMsg)
 		return nil
 	}
 
@@ -113,7 +113,8 @@ func (m spinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(m.completedMsg) + newline
 	}
 	// Show progress message with spinner.
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
+	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
 }
 
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
@@ -145,9 +146,9 @@ func ExecWithSpinnerDynamic(progressMsg string, operation func() (string, error)
 		}
 		// Show the dynamic completion message if provided, otherwise use progress message.
 		if completedMsg != "" {
-			_ = ui.Success(completedMsg)
+			ui.Success(completedMsg)
 		} else {
-			_ = ui.Success(progressMsg)
+			ui.Success(progressMsg)
 		}
 		return nil
 	}
@@ -236,7 +237,8 @@ func (m dynamicSpinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(displayMsg) + newline
 	}
 	// Show progress message with spinner.
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
+	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
 }
 
 func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
@@ -318,11 +320,11 @@ func (s *Spinner) Stop() {
 // Success is idempotent and safe to call multiple times.
 func (s *Spinner) Success(message string) {
 	if !s.isTTY {
-		_ = ui.Success(message)
+		ui.Success(message)
 		return
 	}
 	if s.program == nil {
-		_ = ui.Success(message)
+		ui.Success(message)
 		return
 	}
 	s.program.Send(manualStopMsg{message: message, success: true})
@@ -334,11 +336,11 @@ func (s *Spinner) Success(message string) {
 // Error is idempotent and safe to call multiple times.
 func (s *Spinner) Error(message string) {
 	if !s.isTTY {
-		_ = ui.Error(message)
+		ui.Error(message)
 		return
 	}
 	if s.program == nil {
-		_ = ui.Error(message)
+		ui.Error(message)
 		return
 	}
 	s.program.Send(manualStopMsg{message: message, success: false})
@@ -408,5 +410,6 @@ func (m manualSpinnerModel) View() string {
 		}
 		return terminal.EscResetLine + ui.FormatError(m.finalMsg) + newline
 	}
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
+	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
 }

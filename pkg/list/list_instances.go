@@ -12,7 +12,9 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/git"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
@@ -21,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/matrix"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
@@ -47,6 +50,7 @@ type InstancesCommandOptions struct {
 	Delimiter   string
 	Query       string
 	AuthManager auth.AuthManager
+	OutputFile  string
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -307,12 +311,25 @@ func uploadInstancesWithDeps(
 		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
+	// Convert schema.Instance to dtos.UploadInstance at the upload boundary.
+	// UploadInstance is an allowlist — only fields Atmos Pro needs are included.
+	// Sensitive data (vars, env, backend) never leaves this boundary.
+	uploadInstances := make([]dtos.UploadInstance, len(instances))
+	for i, inst := range instances {
+		uploadInstances[i] = dtos.UploadInstance{
+			Component:     inst.Component,
+			Stack:         inst.Stack,
+			ComponentType: inst.ComponentType,
+			Settings:      extractProSettings(inst.Settings),
+		}
+	}
+
 	req := dtos.InstancesUploadRequest{
 		RepoURL:   repoInfo.RepoUrl,
 		RepoName:  repoInfo.RepoName,
 		RepoOwner: repoInfo.RepoOwner,
 		RepoHost:  repoInfo.RepoHost,
-		Instances: instances,
+		Instances: uploadInstances,
 	}
 
 	err = apiClient.UploadInstances(&req)
@@ -343,8 +360,11 @@ func processInstancesWithDeps(
 	stacksProcessor e.StacksProcessor,
 	authManager auth.AuthManager,
 ) ([]schema.Instance, error) {
-	// Get all stacks with template processing enabled to render template variables.
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, authManager)
+	// Get all stacks with template processing but without YAML functions.
+	// Templates are needed because they can create additional stacks and components.
+	// YAML functions (e.g., !terraform.output, atmos.Component()) are disabled to avoid
+	// requiring external binaries like tofu/terraform in $PATH.
+	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, authManager)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
@@ -392,6 +412,19 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return errors.Join(errUtils.ErrParseFlag, err)
 	}
 
+	// Handle matrix format specially - it bypasses the normal rendering pipeline.
+	if formatFlag == string(format.FormatMatrix) {
+		if upload {
+			return fmt.Errorf("%w: --upload is not supported with --format=matrix", errUtils.ErrInvalidFlag)
+		}
+		return executeMatrixFormat(&atmosConfig, opts)
+	}
+
+	// Reject --output-file for non-matrix formats — it would be silently ignored.
+	if opts.OutputFile != "" {
+		return fmt.Errorf("%w: --output-file is only supported with --format=matrix", errUtils.ErrInvalidFlag)
+	}
+
 	// Handle tree format specially - branch before calling processInstances to avoid double processing.
 	log.Trace("Checking format flag", "format_flag", formatFlag, "format_tree", format.FormatTree, "match", formatFlag == string(format.FormatTree))
 	if formatFlag == string(format.FormatTree) {
@@ -423,8 +456,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		// Render tree view.
 		// Use showImports parameter from --provenance flag.
 		output := format.RenderInstancesTree(importTrees, opts.ShowImports)
-		fmt.Println(output)
-		return nil
+		return data.Writeln(output)
 	}
 
 	// For non-tree formats, process instances normally.
@@ -475,13 +507,85 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	if upload {
 		proInstances := filterProEnabledInstances(instances)
 		if len(proInstances) == 0 {
-			_ = ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
+			ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
 			return nil
 		}
-		return uploadInstances(proInstances)
+		if uploadErr := uploadInstances(proInstances); uploadErr != nil {
+			return uploadErr
+		}
 	}
 
 	return nil
+}
+
+// extractProSettings extracts only the "pro" key from a settings map for upload.
+// Returns nil if settings is nil or has no "pro" key.
+// Sanitizes nested maps to ensure JSON compatibility (converting
+// map[interface{}]interface{} from YAML to map[string]interface{}).
+func extractProSettings(settings map[string]any) map[string]any {
+	if settings == nil {
+		return nil
+	}
+
+	pro, hasPro := settings["pro"]
+	if !hasPro {
+		return nil
+	}
+
+	return map[string]any{
+		"pro": sanitizeForJSON(pro),
+	}
+}
+
+// sanitizeForJSON recursively converts map[interface{}]interface{} to
+// map[string]interface{} for JSON compatibility.
+func sanitizeForJSON(v any) any {
+	switch val := v.(type) {
+	case map[interface{}]interface{}:
+		m := make(map[string]interface{}, len(val))
+		for k, v := range val {
+			m[fmt.Sprintf("%v", k)] = sanitizeForJSON(v)
+		}
+		return m
+	case map[string]interface{}:
+		m := make(map[string]interface{}, len(val))
+		for k, v := range val {
+			m[k] = sanitizeForJSON(v)
+		}
+		return m
+	case []interface{}:
+		s := make([]interface{}, len(val))
+		for i, v := range val {
+			s[i] = sanitizeForJSON(v)
+		}
+		return s
+	default:
+		return v
+	}
+}
+
+// executeMatrixFormat handles the matrix output format for list instances.
+// It produces GitHub Actions-compatible matrix JSON matching describe affected --format=matrix.
+// When ci.enabled is true and no --output-file is provided, automatically writes to $GITHUB_OUTPUT.
+func executeMatrixFormat(atmosConfig *schema.AtmosConfiguration, opts *InstancesCommandOptions) error {
+	defer perf.Track(nil, "list.executeMatrixFormat")()
+
+	// Get stacksMap to extract component_path from component_info.
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, false, false, nil, opts.AuthManager)
+	if err != nil {
+		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
+		return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	entries := extract.StacksMatrixEntries(stacksMap)
+
+	// Resolve output file: explicit flag > CI auto-detect > stdout.
+	outputFile := opts.OutputFile
+	if outputFile == "" && atmosConfig.CI.Enabled {
+		outputFile = ghactions.GetOutputPath()
+	}
+
+	return matrix.WriteOutput(entries, outputFile)
 }
 
 // buildInstanceFilters creates filters from filter specification.

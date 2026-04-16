@@ -219,6 +219,24 @@ func TestPrintListTable_SingleItem(t *testing.T) {
 	printListTable(workdirs)
 }
 
+func TestPrintListTable_ZeroTimestamps(t *testing.T) {
+	initTestIO(t)
+	// Test that zero timestamps display as "-" instead of "0001-01-01".
+	workdirs := []WorkdirInfo{
+		{
+			Name:      "test-workdir",
+			Component: "test",
+			Stack:     "test",
+			Source:    "components/terraform/test",
+			Path:      "test",
+			// Both LastAccessed and CreatedAt are zero.
+		},
+	}
+
+	// Should not panic and should display "-" for timestamp.
+	printListTable(workdirs)
+}
+
 func TestListCmd_Structure(t *testing.T) {
 	// Verify command structure.
 	assert.Equal(t, "list", listCmd.Use)

@@ -33,9 +33,20 @@ func WithFormatFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithFormatFlag")()
 
 	*options = append(*options,
-		flags.WithStringFlag("format", "f", "", "Output format: table, json, yaml, csv, tsv, tree"),
+		flags.WithStringFlag("format", "f", "", "Output format: table, json, yaml, csv, tsv, tree, matrix"),
 		flags.WithEnvVars("format", "ATMOS_LIST_FORMAT"),
-		flags.WithValidValues("format", "table", "json", "yaml", "csv", "tsv", "tree"),
+		flags.WithValidValues("format", "table", "json", "yaml", "csv", "tsv", "tree", "matrix"),
+	)
+}
+
+// WithOutputFileFlag adds output file flag for writing results in key=value format (for $GITHUB_OUTPUT).
+// Used by: instances (with --format=matrix).
+func WithOutputFileFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithOutputFileFlag")()
+
+	*options = append(*options,
+		flags.WithStringFlag("output-file", "o", "", "Write output to file in key=value format (for $GITHUB_OUTPUT)"),
+		flags.WithEnvVars("output-file", "ATMOS_LIST_OUTPUT_FILE"),
 	)
 }
 
@@ -295,6 +306,17 @@ func WithProvenanceFlag(options *[]flags.Option) {
 // Used by: affected.
 func WithAffectedColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithAffectedColumnsFlag")()
+
+	*options = append(*options,
+		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
+		flags.WithEnvVars(flagColumns, envListColumns),
+	)
+}
+
+// WithAliasesColumnsFlag adds column selection flag for list aliases command.
+// Used by: aliases.
+func WithAliasesColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithAliasesColumnsFlag")()
 
 	*options = append(*options,
 		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),

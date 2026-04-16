@@ -19,7 +19,12 @@
       "plan": {
         "skip_planfile": false
       },
-      "plugin_cache": true
+      "planfiles": {
+        "default": ""
+      },
+      "plugin_cache": true,
+      "ci": {},
+      "workspace": {}
     },
     "helmfile": {
       "base_path": "",
@@ -27,11 +32,20 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
-      "command": ""
+      "cluster_name_template": "",
+      "cluster_name": "",
+      "command": "",
+      "auto_generate_files": false
     },
     "packer": {
       "base_path": "",
-      "command": ""
+      "command": "",
+      "auto_generate_files": false
+    },
+    "ansible": {
+      "base_path": "",
+      "command": "",
+      "auto_generate_files": false
     },
     "list": {
       "format": "",
@@ -165,6 +179,9 @@
       "endpoint": "https://us.i.posthog.com",
       "token": "phc_TEST_TOKEN_PLACEHOLDER",
       "logging": false
+    },
+    "provision": {
+      "workdir": {}
     }
   },
   "describe": {
@@ -189,6 +206,7 @@
   "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
   "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "check": {},
@@ -210,6 +228,7 @@
     }
   },
   "auth": {
+    "realm": "<hash>",
     "logs": {
       "file": "",
       "level": ""
@@ -248,5 +267,33 @@
       "format": "",
       "columns": null
     }
-  }
+  },
+  "ci": {
+    "output": {},
+    "summary": {},
+    "checks": {
+      "statuses": {}
+    },
+    "comments": {},
+    "templates": {}
+  },
+  "ai": {
+    "sessions": {
+      "auto_compact": {}
+    },
+    "tools": {},
+    "instructions": {},
+    "web_search": {},
+    "context": {}
+  },
+  "aws": {
+    "security": {
+      "sources": {},
+      "tag_mapping": {}
+    }
+  },
+  "mcp": {
+    "routing": {}
+  },
+  "lsp": {}
 }

@@ -15,4 +15,4 @@ The `dev.yaml` file defines development workflow commands that help maintain cod
 
 We use Atmos custom commands for our development workflow as a form of "dogfooding" - using our own tool to manage our development process. This ensures we experience the same workflows our users do and helps us identify areas for improvement.
 
-For more information on custom commands, see the [Atmos Custom Commands documentation](https://atmos.tools/core-concepts/custom-commands/).
+For more information on custom commands, see the [Atmos Custom Commands documentation](https://atmos.tools/cli/configuration/commands).

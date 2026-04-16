@@ -71,14 +71,22 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
-		// Get identity from flag and create AuthManager if provided.
-		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
+		// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
+		// When functions are disabled (--process-functions=false), there are no YAML functions
+		// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &atmosConfig.Auth, &atmosConfig)
-		if err != nil {
-			return err
+		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
+		if describe.ProcessYamlFunctions || identityExplicit {
+			// Category B: describe stacks operates on multiple stacks/components with no single
+			// target (component, stack) pair. Use the SCAN wrapper so stack-level default identities
+			// (including those declared in imported _defaults.yaml files) are discovered. See
+			// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &atmosConfig.Auth, &atmosConfig)
+			if authErr != nil {
+				return authErr
+			}
+			describe.AuthManager = authManager
 		}
-		describe.AuthManager = authManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 
@@ -153,7 +161,7 @@ func init() {
 	AddStackCompletion(describeStacksCmd)
 	describeStacksCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific `atmos` components")
 
-	describeStacksCmd.PersistentFlags().StringSlice("component-types", nil, "Filter by specific component types. Supported component types: terraform, helmfile")
+	describeStacksCmd.PersistentFlags().StringSlice("component-types", nil, "Filter by specific component types. Supported component types: terraform, helmfile, packer")
 
 	describeStacksCmd.PersistentFlags().StringSlice("sections", nil, "Output only the specified component sections. Available component sections: `backend`, `backend_type`, `deps`, `env`, `inheritance`, `metadata`, `remote_state_backend`, `remote_state_backend_type`, `settings`, `vars`")
 

@@ -48,25 +48,33 @@ type FormatterConfig struct {
 }
 
 // DefaultFormatterConfig returns default formatting configuration.
+// Checks viper for the --verbose flag to enable verbose mode.
 func DefaultFormatterConfig() FormatterConfig {
+	verbose := viper.GetBool("verbose")
 	return FormatterConfig{
-		Verbose:       false,
+		Verbose:       verbose,
 		MaxLineLength: DefaultMaxLineLength,
 	}
 }
 
 // formatContextTable creates a styled 2-column table for error context.
 // Context is extracted from cockroachdb/errors safe details and displayed
-// as key-value pairs only in verbose mode.
+// as key-value pairs only in verbose mode. Uses GetAllSafeDetails to traverse
+// the entire error chain and collect context from wrapped errors.
 func formatContextTable(err error, useColor bool) string {
-	details := errors.GetSafeDetails(err)
-	if len(details.SafeDetails) == 0 {
+	// Get all safe details from entire error chain, not just top-level.
+	allDetails := errors.GetAllSafeDetails(err)
+	var allSafeDetails []string
+	for _, payload := range allDetails {
+		allSafeDetails = append(allSafeDetails, payload.SafeDetails...)
+	}
+	if len(allSafeDetails) == 0 {
 		return ""
 	}
 
 	// Parse "component=vpc stack=prod" format into key-value pairs.
 	var rows [][]string
-	for _, detail := range details.SafeDetails {
+	for _, detail := range allSafeDetails {
 		str := fmt.Sprintf("%v", detail)
 		pairs := strings.Split(str, " ")
 		for _, pair := range pairs {
@@ -412,15 +420,21 @@ func renderMarkdown(md string, maxLineLength int) string {
 }
 
 // formatContextForMarkdown formats context as a markdown table.
+// Uses GetAllSafeDetails to traverse the entire error chain.
 func formatContextForMarkdown(err error) string {
-	details := errors.GetSafeDetails(err)
-	if len(details.SafeDetails) == 0 {
+	// Get all safe details from entire error chain, not just top-level.
+	allDetails := errors.GetAllSafeDetails(err)
+	var allSafeDetails []string
+	for _, payload := range allDetails {
+		allSafeDetails = append(allSafeDetails, payload.SafeDetails...)
+	}
+	if len(allSafeDetails) == 0 {
 		return ""
 	}
 
 	// Parse "component=vpc stack=prod" format into key-value pairs.
 	var rows []string
-	for _, detail := range details.SafeDetails {
+	for _, detail := range allSafeDetails {
 		str := fmt.Sprintf("%v", detail)
 		pairs := strings.Split(str, " ")
 		for _, pair := range pairs {

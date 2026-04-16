@@ -12,14 +12,18 @@ USAGE
 
 FLAGS
 
-  -f, --format string  Output format: bash, json, dotenv. (default bash)
+  -f, --format string       Output format: bash, dotenv, env, github, json (default bash)
 
-  -h, --help           help for env
+  -h, --help                help for env
 
-      --login          Trigger authentication if credentials are missing or expired (default: false)
+      --login               Trigger authentication if credentials are missing or expired
+
+  -o, --output-file string  Output file path (default: stdout, or $GITHUB_ENV for github format)
 
 
 GLOBAL FLAGS
+
+      --ai                      Enable AI-powered analysis of command output
 
       --base-path string        Base path for Atmos project
 
@@ -76,6 +80,8 @@ GLOBAL FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
 
       --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

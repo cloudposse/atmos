@@ -2,7 +2,7 @@
 title: Using External Stores
 sidebar_position: 4
 sidebar_label: External Stores
-description: Read data from external stores like SSM Parameter Store, Vault, and more
+description: Read data from external stores like SSM Parameter Store, Artifactory, and more
 id: stores
 slug: /stacks/sharing-state/stores
 ---
@@ -13,17 +13,17 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The `!store` YAML function reads data from external key-value stores like AWS SSM Parameter Store, HashiCorp Vault,
+The `!store` YAML function reads data from external key-value stores like AWS SSM Parameter Store,
 Artifactory, Redis, and other backends. Use this when you need to share data that isn't stored in Terraform state.
 </Intro>
 
 :::tip When to Use Stores vs Terraform State
 - Use [`!terraform.state`](/stacks/sharing-state/terraform-state) for reading Terraform outputs (recommended)
-- Use `!store` for reading from external systems like SSM, Vault, or other key-value stores
+- Use `!store` for reading from external systems like SSM, Artifactory, or other key-value stores
 :::
 
 <KeyPoints>
-- Read from external key-value stores (SSM, Vault, Redis, etc.)
+- Read from external key-value stores (SSM, Redis, Artifactory, etc.)
 - Configured in `atmos.yaml` with named store definitions
 - Supports default values for missing keys
 - Works with YQ expressions for complex data
@@ -32,10 +32,10 @@ Artifactory, Redis, and other backends. Use this when you need to share data tha
 ## When to Use Stores
 
 Use `!store` when you need to:
-- Read secrets from HashiCorp Vault or AWS Secrets Manager
 - Access configuration stored in SSM Parameter Store
 - Share data that isn't managed by Terraform
 - Integrate with external configuration management systems
+- Store and retrieve data using Artifactory or Redis
 
 For Terraform outputs, use [`!terraform.state`](/stacks/sharing-state/terraform-state) instead.
 
@@ -48,22 +48,22 @@ Define stores in your `atmos.yaml`:
 stores:
   # AWS SSM Parameter Store
   ssm/prod:
-    backend: aws/ssm
-    config:
+    type: aws-ssm-parameter-store
+    options:
       region: us-east-1
-
-  # HashiCorp Vault
-  vault/secrets:
-    backend: vault
-    config:
-      address: https://vault.example.com
-      auth_method: aws
 
   # Redis
   redis/cache:
-    backend: redis
-    config:
-      address: redis.example.com:6379
+    type: redis
+    options:
+      url: "redis://localhost:6379"
+
+  # Artifactory
+  artifacts:
+    type: artifactory
+    options:
+      url: https://artifactory.example.com
+      repo_name: my-repo
 ```
 </File>
 
@@ -80,8 +80,8 @@ components:
         # Read from SSM Parameter Store
         api_key: !store ssm/prod app api_key
 
-        # Read from Vault
-        db_password: !store vault/secrets database password
+        # Read from Redis
+        cached_config: !store redis/cache app config
 ```
 </File>
 
@@ -143,26 +143,26 @@ db_host: !store ssm/prod database config | query .host
 primary_endpoint: !store ssm/prod cluster endpoints | query .[0]
 
 # Navigate nested structures
-api_key: !store vault/secrets app credentials | query .api.production.key
+api_key: !store ssm/prod app credentials | query .api.production.key
 ```
 
 ## Supported Store Backends
 
 <dl>
-  <dt>`aws/ssm`</dt>
+  <dt>`aws-ssm-parameter-store`</dt>
   <dd>AWS Systems Manager Parameter Store.</dd>
 
-  <dt>`aws/secretsmanager`</dt>
-  <dd>AWS Secrets Manager.</dd>
+  <dt>`azure-key-vault`</dt>
+  <dd>Azure Key Vault for secrets management.</dd>
 
-  <dt>`vault`</dt>
-  <dd>HashiCorp Vault.</dd>
+  <dt>`google-secret-manager` (or `gsm`)</dt>
+  <dd>Google Cloud Secret Manager.</dd>
 
   <dt>`redis`</dt>
   <dd>Redis key-value store.</dd>
 
   <dt>`artifactory`</dt>
-  <dd>JFrog Artifactory.</dd>
+  <dd>JFrog Artifactory. Use a Generic repository type.</dd>
 </dl>
 
 ## Example: Multi-Store Configuration
@@ -172,24 +172,24 @@ api_key: !store vault/secrets app credentials | query .api.production.key
 stores:
   # Production SSM store
   ssm/prod:
-    backend: aws/ssm
-    config:
+    type: aws-ssm-parameter-store
+    options:
       region: us-east-1
       # Optional: assume role for cross-account access
-      assume_role_arn: arn:aws:iam::123456789012:role/ssm-reader
+      read_role_arn: arn:aws:iam::123456789012:role/SSMReader
 
   # Development SSM store
   ssm/dev:
-    backend: aws/ssm
-    config:
+    type: aws-ssm-parameter-store
+    options:
       region: us-west-2
 
-  # Vault for secrets
-  vault/secrets:
-    backend: vault
-    config:
-      address: https://vault.example.com
-      namespace: infrastructure
+  # Artifactory for shared state
+  artifacts:
+    type: artifactory
+    options:
+      url: https://artifactory.example.com
+      repo_name: infra-state
 ```
 </File>
 
@@ -203,9 +203,8 @@ components:
         vpc_id: !store ssm/prod vpc vpc_id
         subnet_ids: !store ssm/prod subnets private_subnet_ids
 
-        # Secrets from Vault
-        database_password: !store vault/secrets app db_password
-        api_secret: !store vault/secrets app api_secret
+        # Shared state from Artifactory
+        network_config: !store artifacts network config
 ```
 </File>
 

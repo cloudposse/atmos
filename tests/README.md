@@ -43,6 +43,25 @@ go test ./...
 make testacc
 ```
 
+## Heavy Integration Tests
+
+Some integration tests download large binaries and are skipped by default to avoid unexpected downloads and long test times.
+
+### Playwright Browser Driver Tests
+
+Tests that download Chromium browser drivers (~140 MB) require explicit opt-in:
+
+```bash
+# Run Playwright integration tests (downloads Chromium)
+RUN_PLAYWRIGHT_INTEGRATION=1 go test -v ./pkg/auth/providers/aws -run TestPlaywrightDriverDownload_Integration
+
+# Without the flag, these tests are skipped
+go test ./pkg/auth/providers/aws
+# Output: SKIP: Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)
+```
+
+These tests validate that SAML browser automation actually downloads and installs the Chromium browser correctly.
+
 ## Understanding Test Skips
 
 When you run tests, you may see output like:
@@ -206,7 +225,7 @@ func TestOCIVendoring(t *testing.T) {
 | `RequireFilePath(t, path, purpose)` | Check file/directory exists | Missing path |
 | `RequireOCIAuthentication(t)` | Check OCI registry auth | GitHub token not set |
 
-See [Testing Strategy PRD](../docs/prd/testing-strategy.md) for the complete design document.
+See [Testability Refactoring Strategy](../docs/prd/testability-refactoring-strategy.md) for the complete design document.
 
 ## Test Cases
 

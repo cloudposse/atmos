@@ -145,7 +145,7 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 		return err
 	}
 	if len(stacks) == 0 {
-		_ = ui.Info("No stacks found")
+		ui.Info("No stacks found")
 		return nil
 	}
 
@@ -248,7 +248,7 @@ func renderStacksTable(atmosConfig *schema.AtmosConfiguration, stacks []map[stri
 
 	outputFormat := format.Format(opts.Format)
 	r := renderer.New(filters, selector, sorters, outputFormat, "")
-	return r.Render(stacks)
+	return renderWithPager(atmosConfig, "List Stacks", r, stacks)
 }
 
 // buildStackFilters creates filters based on command options.

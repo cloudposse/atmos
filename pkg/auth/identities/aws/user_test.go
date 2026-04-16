@@ -2,7 +2,11 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	urlpkg "net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,6 +43,29 @@ func TestNewUserIdentity_And_GetProviderName(t *testing.T) {
 	assert.Equal(t, "aws-user", name)
 }
 
+func TestUserIdentity_SetRealm(t *testing.T) {
+	id, err := NewUserIdentity("me", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*userIdentity)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
+}
+
 func TestUserIdentity_Environment(t *testing.T) {
 	// Environment should include AWS files and pass through additional env from config.
 	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user", Env: []schema.EnvironmentVariable{{Key: "FOO", Value: "BAR"}}})
@@ -53,6 +80,35 @@ func TestUserIdentity_Environment(t *testing.T) {
 	assert.Contains(t, env["AWS_SHARED_CREDENTIALS_FILE"], filepath.Join("atmos", "aws", "aws-user"))
 	assert.Contains(t, env["AWS_CONFIG_FILE"], filepath.Join("atmos", "aws", "aws-user"))
 	assert.Equal(t, "BAR", env["FOO"])
+}
+
+func TestUserIdentity_Environment_WithRegion(t *testing.T) {
+	// When region is explicitly configured, Environment should include AWS_REGION and AWS_DEFAULT_REGION.
+	id, err := NewUserIdentity("dev", &schema.Identity{
+		Kind:        "aws/user",
+		Credentials: map[string]any{"region": "us-west-2"},
+	})
+	require.NoError(t, err)
+	env, err := id.Environment()
+	require.NoError(t, err)
+
+	// Should include region vars when explicitly configured.
+	assert.Equal(t, "us-west-2", env["AWS_REGION"])
+	assert.Equal(t, "us-west-2", env["AWS_DEFAULT_REGION"])
+}
+
+func TestUserIdentity_Environment_WithoutRegion(t *testing.T) {
+	// When region is NOT configured, Environment should NOT include AWS_REGION (no default fallback).
+	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+	env, err := id.Environment()
+	require.NoError(t, err)
+
+	// Should NOT include region vars when not explicitly configured.
+	_, hasRegion := env["AWS_REGION"]
+	_, hasDefaultRegion := env["AWS_DEFAULT_REGION"]
+	assert.False(t, hasRegion, "AWS_REGION should not be set when region is not explicitly configured")
+	assert.False(t, hasDefaultRegion, "AWS_DEFAULT_REGION should not be set when region is not explicitly configured")
 }
 
 func TestIsStandaloneAWSUserChain(t *testing.T) {
@@ -86,6 +142,7 @@ func (s stubUser) LoadCredentials(_ context.Context) (types.ICredentials, error)
 func (s stubUser) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
+func (s stubUser) SetRealm(_ string) {}
 
 func TestAuthenticateStandaloneAWSUser(t *testing.T) {
 	// Not found -> error.
@@ -246,7 +303,7 @@ func TestUser_credentialsFromConfig(t *testing.T) {
 func TestUser_credentialsFromStore(t *testing.T) {
 	// Prime the store for alias "dev".
 	store := atmosCreds.NewCredentialStore()
-	_ = store.Store("dev", &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "SECRET", Region: "us-east-1"})
+	_ = store.Store("dev", &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "SECRET", Region: "us-east-1"}, "")
 
 	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
 	require.NoError(t, err)
@@ -260,14 +317,14 @@ func TestUser_credentialsFromStore(t *testing.T) {
 	assert.Equal(t, "us-east-1", creds.Region)
 
 	// Wrong type stored.
-	_ = store.Store("other", &types.OIDCCredentials{Token: "hdr.payload."})
+	_ = store.Store("other", &types.OIDCCredentials{Token: "hdr.payload."}, "")
 	id, _ = NewUserIdentity("other", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
 	assert.Error(t, err)
 
 	// Incomplete stored.
-	_ = store.Store("incomplete", &types.AWSCredentials{AccessKeyID: "AKIA"})
+	_ = store.Store("incomplete", &types.AWSCredentials{AccessKeyID: "AKIA"}, "")
 	id, _ = NewUserIdentity("incomplete", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
@@ -297,7 +354,7 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	// If config has no access key, fallback to store.
 	// Prime the store.
 	store := atmosCreds.NewCredentialStore()
-	_ = store.Store("dev2", &types.AWSCredentials{AccessKeyID: "AK2", SecretAccessKey: "SEC2"})
+	_ = store.Store("dev2", &types.AWSCredentials{AccessKeyID: "AK2", SecretAccessKey: "SEC2"}, "")
 	id, _ = NewUserIdentity("dev2", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	creds, err = ui.resolveLongLivedCredentials(ctx)
@@ -421,7 +478,7 @@ func TestUser_resolveLongLivedCredentials_DeepMerge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Prime keyring if test provides keystore credentials.
 			if tt.keystoreCreds != nil {
-				err := store.Store(tt.identityName, tt.keystoreCreds)
+				err := store.Store(tt.identityName, tt.keystoreCreds, "")
 				require.NoError(t, err)
 			}
 
@@ -1108,11 +1165,11 @@ func TestUserIdentity_HandleSTSError_InvalidClientTokenId(t *testing.T) {
 		AccessKeyID:     "AKIA_STALE",
 		SecretAccessKey: "SECRET_STALE",
 		Region:          "us-east-1",
-	})
+	}, "")
 	require.NoError(t, err)
 
 	// Verify credentials exist before the test.
-	_, err = store.Retrieve("test-invalid-creds")
+	_, err = store.Retrieve("test-invalid-creds", "")
 	require.NoError(t, err, "Credentials should exist before test")
 
 	// Create identity.
@@ -1143,7 +1200,7 @@ func TestUserIdentity_HandleSTSError_InvalidClientTokenId(t *testing.T) {
 	assert.Contains(t, resultErr.Error(), "credentials are invalid or have been revoked")
 
 	// Verify: Stale credentials should be cleared from keyring.
-	_, err = store.Retrieve("test-invalid-creds")
+	_, err = store.Retrieve("test-invalid-creds", "")
 	assert.Error(t, err, "Stale credentials should be cleared from keyring")
 }
 
@@ -1227,11 +1284,11 @@ func TestUserIdentity_HandleSTSError_WithPromptFunc(t *testing.T) {
 		AccessKeyID:     "AKIA_STALE",
 		SecretAccessKey: "SECRET_STALE",
 		Region:          "us-east-1",
-	})
+	}, "")
 	require.NoError(t, err)
 
 	// Verify credentials exist before the test.
-	_, err = store.Retrieve("test-prompt-creds")
+	_, err = store.Retrieve("test-prompt-creds", "")
 	require.NoError(t, err, "Credentials should exist before test")
 
 	// Create identity with MFA ARN in YAML config.
@@ -1288,7 +1345,7 @@ func TestUserIdentity_HandleSTSError_WithPromptFunc(t *testing.T) {
 	assert.Equal(t, "36h", resultCreds.SessionDuration)
 
 	// Verify: Stale credentials should still be cleared from keyring.
-	_, err = store.Retrieve("test-prompt-creds")
+	_, err = store.Retrieve("test-prompt-creds", "")
 	assert.Error(t, err, "Stale credentials should be cleared from keyring")
 }
 
@@ -1337,7 +1394,7 @@ func TestUser_resolveLongLivedCredentials_SessionDurationPreserved(t *testing.T)
 		SecretAccessKey: "KEYRING_SECRET",
 		MfaArn:          "arn:aws:iam::123456789012:mfa/user",
 		SessionDuration: "36h",
-	})
+	}, "")
 	require.NoError(t, err)
 
 	// Create identity with no YAML credentials (uses keyring).
@@ -1377,13 +1434,14 @@ func TestUser_resolveLongLivedCredentials_DetectsSessionCredentials(t *testing.T
 		SecretAccessKey: "SESSION_SECRET",
 		SessionToken:    "SESSION_TOKEN_SHOULD_NOT_BE_HERE",
 		MfaArn:          "arn:aws:iam::123456789012:mfa/user",
-	})
+	}, "")
 	require.NoError(t, err)
 
 	// Create identity with no YAML credentials (uses keyring).
+	// Disable webflow so prompting is tested (webflow skips prompts).
 	identity, err := NewUserIdentity("test-session-creds-in-keyring", &schema.Identity{
 		Kind:        "aws/user",
-		Credentials: map[string]any{},
+		Credentials: map[string]any{"webflow_enabled": false},
 	})
 	require.NoError(t, err)
 
@@ -1436,9 +1494,10 @@ func TestUser_resolveLongLivedCredentials_PromptWhenMissing(t *testing.T) {
 	ctx := context.Background()
 
 	// Create identity with no YAML credentials and no keyring credentials.
+	// Disable webflow so prompting is tested (webflow skips prompts).
 	identity, err := NewUserIdentity("test-prompt-missing", &schema.Identity{
 		Kind:        "aws/user",
-		Credentials: map[string]any{},
+		Credentials: map[string]any{"webflow_enabled": false},
 	})
 	require.NoError(t, err)
 
@@ -1511,7 +1570,7 @@ func TestUserIdentity_ClearStaleCredentials(t *testing.T) {
 		err := store.Store("test-clear-creds", &types.AWSCredentials{
 			AccessKeyID:     "AKIATEST",
 			SecretAccessKey: "SECRET",
-		})
+		}, "")
 		require.NoError(t, err)
 
 		// Create identity.
@@ -1526,7 +1585,7 @@ func TestUserIdentity_ClearStaleCredentials(t *testing.T) {
 		userIdent.clearStaleCredentials()
 
 		// Verify credentials are gone.
-		_, err = store.Retrieve("test-clear-creds")
+		_, err = store.Retrieve("test-clear-creds", "")
 		assert.Error(t, err, "Credentials should be deleted")
 	})
 
@@ -2272,4 +2331,159 @@ func TestUserIdentity_CredentialsFromConfig(t *testing.T) {
 		assert.Equal(t, "secrettest", creds.SecretAccessKey)
 		assert.Equal(t, "arn:aws:iam::123:mfa/test", creds.MfaArn)
 	})
+}
+
+// TestUserIdentity_Authenticate_WebflowFallbackSuccess verifies the webflow
+// fallback branches added in Authenticate (user.go:99-117). With no YAML
+// credentials and no keyring entry, and webflow enabled, Authenticate must:
+//  1. Fall through to browser webflow
+//  2. Return webflow credentials
+//  3. Write them to the AWS config files
+func TestUserIdentity_Authenticate_WebflowFallbackSuccess(t *testing.T) {
+	blockStdin(t)
+
+	// Isolate XDG dirs so writeAWSFiles + refresh cache land in temp.
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	// Mock the AWS signin token endpoint to return valid credentials.
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"accessToken": map[string]string{
+				"accessKeyId":     "AKID_WF_AUTH",
+				"secretAccessKey": "SECRET_WF_AUTH",
+				"sessionToken":    "TOKEN_WF_AUTH",
+			},
+			"expiresIn": 900,
+		})
+	}))
+	defer tokenServer.Close()
+
+	origClient := defaultHTTPClient
+	defaultHTTPClient = &mockHTTPClient{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			req.URL, _ = urlpkg.Parse(tokenServer.URL + req.URL.Path)
+			return http.DefaultClient.Do(req)
+		},
+	}
+	defer func() { defaultHTTPClient = origClient }()
+
+	// Force non-TTY so browserWebflow routes to the non-interactive branch.
+	origTTY := webflowIsTTYFunc
+	webflowIsTTYFunc = func() bool { return false }
+	defer func() { webflowIsTTYFunc = origTTY }()
+
+	// Intercept the plain-text display to fire the OAuth callback asynchronously.
+	origDisplay := displayWebflowPlainTextFunc
+	displayWebflowPlainTextFunc = func(authURL string) {
+		go func() {
+			time.Sleep(30 * time.Millisecond)
+			parsed, _ := urlpkg.Parse(authURL)
+			redirectURI := parsed.Query().Get("redirect_uri")
+			state := parsed.Query().Get("state")
+			cbURL := redirectURI + "?code=wf-auth-code&state=" + state
+			resp, err := http.Get(cbURL)
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
+	}
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	// Unique identity name + empty keyring → keystoreErr triggers fallback.
+	identity, err := NewUserIdentity("test-wf-auth-"+t.Name(), &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"region": "us-east-2",
+		},
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ctx = types.WithAllowPrompts(ctx, true)
+
+	result, err := identity.Authenticate(ctx, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	awsCreds, ok := result.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "AKID_WF_AUTH", awsCreds.AccessKeyID)
+	assert.Equal(t, "SECRET_WF_AUTH", awsCreds.SecretAccessKey)
+	assert.Equal(t, "TOKEN_WF_AUTH", awsCreds.SessionToken)
+	assert.Equal(t, "us-east-2", awsCreds.Region)
+}
+
+// TestUserIdentity_Authenticate_PartialYAMLCredsSurfacesConfigError verifies
+// the guard that prevents silent principal hijack: partial YAML credentials
+// (only access_key_id, no secret_access_key) must surface ErrInvalidAuthConfig
+// immediately without triggering webflow fallback.
+func TestUserIdentity_Authenticate_PartialYAMLCredsSurfacesConfigError(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	// Set a displayWebflowPlainTextFunc that fails loudly if reached.
+	origDisplay := displayWebflowPlainTextFunc
+	webflowReached := false
+	displayWebflowPlainTextFunc = func(_ string) { webflowReached = true }
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	identity, err := NewUserIdentity("test-partial-yaml-"+t.Name(), &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"access_key_id": "AKIA_ONLY",
+			// secret_access_key intentionally omitted.
+		},
+	})
+	require.NoError(t, err)
+
+	ctx := types.WithAllowPrompts(context.Background(), true)
+	result, err := identity.Authenticate(ctx, nil)
+
+	assert.Nil(t, result)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig,
+		"partial YAML credentials must surface ErrInvalidAuthConfig, not trigger webflow")
+	assert.False(t, webflowReached,
+		"webflow must NOT be reached when YAML credentials are partial")
+}
+
+// TestUserIdentity_Authenticate_WebflowDisabledBypassed verifies that when
+// webflow_enabled is false and no credentials are available, the original
+// "not configured" error is returned (webflow fallback is skipped).
+func TestUserIdentity_Authenticate_WebflowDisabledBypassed(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", tmpDir)
+
+	// Fail loudly if webflow display is reached.
+	origDisplay := displayWebflowPlainTextFunc
+	webflowReached := false
+	displayWebflowPlainTextFunc = func(_ string) { webflowReached = true }
+	defer func() { displayWebflowPlainTextFunc = origDisplay }()
+
+	identity, err := NewUserIdentity("test-wf-disabled-"+t.Name(), &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"webflow_enabled": false,
+		},
+	})
+	require.NoError(t, err)
+
+	// Disable PromptCredentialsFunc so the test doesn't hang.
+	origPrompt := PromptCredentialsFunc
+	PromptCredentialsFunc = nil
+	defer func() { PromptCredentialsFunc = origPrompt }()
+
+	ctx := types.WithAllowPrompts(context.Background(), true)
+	result, err := identity.Authenticate(ctx, nil)
+
+	assert.Nil(t, result)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsUserNotConfigured)
+	assert.False(t, webflowReached, "webflow must not run when webflow_enabled is false")
 }

@@ -12,6 +12,7 @@ import (
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -34,6 +35,13 @@ type DescribeComponentParams struct {
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_describe_component.go -package=$GOPACKAGE
+
+// DescribeComponentCmdExec is the interface for executing describe component commands.
+type DescribeComponentCmdExec interface {
+	ExecuteDescribeComponentCmd(describeComponentParams DescribeComponentParams) error
+}
+
 type DescribeComponentExec struct {
 	pageCreator              pager.PageCreator
 	printOrWriteToFile       func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
@@ -43,7 +51,7 @@ type DescribeComponentExec struct {
 	evaluateYqExpression     func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error)
 }
 
-func NewDescribeComponentExec() *DescribeComponentExec {
+func NewDescribeComponentExec() DescribeComponentCmdExec {
 	defer perf.Track(nil, "exec.NewDescribeComponentExec")()
 
 	return &DescribeComponentExec{
@@ -201,6 +209,7 @@ type DescribeComponentResult struct {
 
 // ExecuteDescribeComponentParams contains parameters for ExecuteDescribeComponent.
 type ExecuteDescribeComponentParams struct {
+	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
 	ProcessTemplates     bool
@@ -211,10 +220,10 @@ type ExecuteDescribeComponentParams struct {
 
 // ExecuteDescribeComponent describes component config.
 func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[string]any, error) {
-	defer perf.Track(nil, "exec.ExecuteDescribeComponent")()
+	defer perf.Track(params.AtmosConfig, "exec.ExecuteDescribeComponent")()
 
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
-		AtmosConfig:          nil,
+		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,
 		ProcessTemplates:     params.ProcessTemplates,
@@ -252,9 +261,8 @@ func (d *DescribeComponentExec) renderProvenance(
 		return writeOutputToFile(file, output)
 	}
 
-	// Print to stdout (pipeable)
-	fmt.Print(output)
-	return nil
+	// Print to stdout (pipeable).
+	return data.Write(output)
 }
 
 // extractImportsList converts imports from any type to []string.
@@ -401,7 +409,7 @@ func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.Con
 	return result, err
 }
 
-// detectComponentType tries to detect component type (Terraform, Helmfile, or Packer).
+// detectComponentType tries to detect component type (Terraform, Helmfile, Packer, or Ansible).
 func detectComponentType(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -443,8 +451,19 @@ func detectComponentType(
 			baseParams.componentType = cfg.PackerComponentType
 			result, err = tryProcessWithComponentType(&baseParams)
 			if err != nil {
-				result.ComponentSection[cfg.ComponentTypeSectionName] = ""
-				return result, err
+				// Same check for Packer errors.
+				if !errors.Is(err, errUtils.ErrInvalidComponent) {
+					return result, err
+				}
+
+				// Try Ansible.
+				baseParams.configAndStacksInfo = result
+				baseParams.componentType = cfg.AnsibleComponentType
+				result, err = tryProcessWithComponentType(&baseParams)
+				if err != nil {
+					result.ComponentSection[cfg.ComponentTypeSectionName] = ""
+					return result, err
+				}
 			}
 		}
 	}

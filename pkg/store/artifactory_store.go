@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -201,6 +202,7 @@ func (s *ArtifactoryStore) Get(stack string, component string, key string) (inte
 	downloadParams.Target = tempDir
 	downloadParams.Recursive = false
 	downloadParams.IncludeDirs = false
+	downloadParams.Flat = true
 
 	totalDownloaded, totalExpected, err := s.rtManager.DownloadFiles(downloadParams)
 	if err != nil {
@@ -306,8 +308,10 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 		filePath += ".json"
 	}
 
-	// Construct the full repository path
-	repoPath := filepath.Join(s.repoName, filePath)
+	// Construct the full repository path.
+	// Use path.Join (not filepath.Join) because this is a URL path for the Artifactory API,
+	// which requires forward slashes on all platforms including Windows.
+	repoPath := path.Join(s.repoName, filePath) //nolint:forbidigo // URL path requires forward slashes
 
 	// Create a temporary directory to download the file
 	tempDir, err := os.MkdirTemp("", "atmos-artifactory-*")
@@ -320,12 +324,19 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 		}
 	}()
 
+	// JFrog SDK requires trailing separator for directory targets.
+	tempDir = filepath.Clean(tempDir)
+	if !strings.HasSuffix(tempDir, string(os.PathSeparator)) {
+		tempDir += string(os.PathSeparator)
+	}
+
 	// Download the file from Artifactory
 	downloadParams := services.NewDownloadParams()
 	downloadParams.Pattern = repoPath
 	downloadParams.Target = tempDir
 	downloadParams.Recursive = false
 	downloadParams.IncludeDirs = false
+	downloadParams.Flat = true
 
 	_, _, err = s.rtManager.DownloadFiles(downloadParams)
 	if err != nil {

@@ -3,15 +3,20 @@
 
 [EXPERIMENTAL]
 
-Install a CLI binary using metadata from the registry.
+Install one or more CLI binaries using metadata from the registry.
 
-The tool should be specified in the format: owner/repo@version
+The tool(s) should be specified in the format: owner/repo@version
+
+Examples: atmos toolchain install hashicorp/terraform@1.5.0
+mailto:hashicorp/terraform@1.5.0 atmos toolchain install opentofu@1.6.0
+mailto:opentofu@1.6.0 tflint@0.50.0 mailto:tflint@0.50.0 kubectl@1.29.0
+mailto:kubectl@1.29.0
 
 USAGE
 
-                                              
-    $ atmos toolchain install [tool] [flags]  
-                                              
+                                                 
+    $ atmos toolchain install [tool...] [flags]  
+                                                 
 
 EXAMPLES
 
@@ -36,6 +41,8 @@ FLAGS
 
 
 GLOBAL FLAGS
+
+      --ai                      Enable AI-powered analysis of command output
 
       --base-path string        Base path for Atmos project
 
@@ -93,6 +100,8 @@ GLOBAL FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
 
       --tool-versions string    Path to tool-versions file (default .tool-versions)
 

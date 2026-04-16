@@ -39,12 +39,16 @@ const TAGS_MAP = {
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'generate-files': ['Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
   dotenv: ['DX'],
+  'stack-names': ['Stacks'],
+  'demo-ansible': ['Automation'],
+  'mcp-with-aws': ['DX', 'Automation'],
 };
 
 // Documentation pages mapping for examples.
@@ -97,11 +101,16 @@ const DOCS_MAP = {
   'demo-custom-command': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
   ],
+  'generate-files': [
+    { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
+  ],
   'config-profiles': [
     { label: 'CLI Configuration', url: '/cli/configuration' },
   ],
   toolchain: [
-    { label: 'Getting Started', url: '/quick-start' },
+    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
+    { label: 'Toolchain Registries', url: '/cli/configuration/toolchain/registries' },
+    { label: 'Toolchain Commands', url: '/cli/commands/toolchain/usage' },
   ],
   devcontainer: [
     { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
@@ -114,6 +123,17 @@ const DOCS_MAP = {
   ],
   dotenv: [
     { label: 'Environment Variables', url: '/cli/configuration/env' },
+  ],
+  'stack-names': [
+    { label: 'Stack Names', url: '/stacks/name' },
+  ],
+  'demo-ansible': [
+    { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
+  ],
+  'mcp-with-aws': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Authentication', url: '/stacks/auth' },
+    { label: 'Toolchain', url: '/cli/configuration/toolchain' },
   ],
 };
 
@@ -458,6 +478,7 @@ module.exports = function fileBrowserPlugin(context, options) {
     githubRepo = '',
     githubBranch = 'main',
     githubPath = '',
+    disclaimer = '',
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
   } = options;
@@ -495,6 +516,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           githubRepo,
           githubBranch,
           githubPath,
+          disclaimer,
         },
       };
     },

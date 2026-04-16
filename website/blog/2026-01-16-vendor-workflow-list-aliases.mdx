@@ -1,0 +1,41 @@
+---
+slug: vendor-workflow-list-aliases
+title: "Command Aliases for Vendor and Workflow List"
+authors: [osterman]
+tags: [enhancement]
+---
+
+Atmos now supports `atmos vendor list` and `atmos workflow list` as aliases for their `atmos list vendor` and `atmos list workflows` counterparts.
+
+<!--truncate-->
+
+## What Changed
+
+Two new command aliases make discoverability more intuitive:
+
+- `atmos vendor list` is now an alias for `atmos list vendor`
+- `atmos workflow list` is now an alias for `atmos list workflows`
+
+Both command forms are equivalent and share the same flags, completions, and output.
+
+## Why This Matters
+
+Users naturally expect list commands under the parent command (e.g., `atmos vendor list`), while Atmos organizes all list commands under `atmos list`. This bidirectional aliasing follows the same pattern as `atmos list themes` and `atmos theme list`.
+
+## How to Use It
+
+Both forms work identically:
+
+```bash
+# These are equivalent
+atmos vendor list
+atmos list vendor
+
+# These are equivalent
+atmos workflow list
+atmos list workflows
+
+# All flags work the same
+atmos vendor list --format json
+atmos workflow list --format csv
+```

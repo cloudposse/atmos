@@ -1,0 +1,70 @@
+# Atmos AI Assistant Example
+#
+# Multi-provider AI configuration with sessions and tool execution.
+# No cloud credentials required — uses mock Terraform components.
+#
+# Quick start:
+#   export ANTHROPIC_API_KEY="your-api-key"
+#   atmos ai ask "What stacks and components do we have?"
+#   atmos ai chat
+
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
+# AI Configuration
+# Docs: https://atmos.tools/cli/configuration/ai
+ai:
+  enabled: true
+  default_provider: "anthropic"
+
+  providers:
+    # Anthropic Claude — requires ANTHROPIC_API_KEY
+    anthropic:
+      model: "claude-sonnet-4-6"
+      api_key: !env "ANTHROPIC_API_KEY"
+      max_tokens: 4096
+
+    # OpenAI GPT — requires OPENAI_API_KEY
+    openai:
+      model: "gpt-5.4"
+      api_key: !env "OPENAI_API_KEY"
+      max_tokens: 4096
+
+    # Ollama — local, no API key needed
+    ollama:
+      model: "llama4"
+      base_url: "http://localhost:11434/v1"
+
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+
+  tools:
+    enabled: true
+    require_confirmation: true
+    allowed_tools:
+      - atmos_describe_component
+      - atmos_list_stacks
+      - atmos_validate_stacks
+      - read_stack_file
+
+  instructions:
+    enabled: true
+    file: "ATMOS.md"

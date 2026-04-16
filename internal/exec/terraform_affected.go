@@ -5,6 +5,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -28,6 +29,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
 		)
 		return affectedList, err
 	case args.CloneTargetRef:
@@ -44,6 +46,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
 		)
 		return affectedList, err
 	default:
@@ -58,6 +61,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
 		)
 		return affectedList, err
 	}
@@ -89,6 +93,7 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 			args.ProcessYamlFunctions,
 			args.Skip,
 			"",
+			args.AuthManager,
 		)
 		if err != nil {
 			return err
@@ -104,6 +109,7 @@ func executeAffectedComponents(affectedList []schema.Affected, info *schema.Conf
 
 	// Early return for empty list - nothing to process.
 	if len(affectedList) == 0 {
+		ui.Success("No components affected")
 		return nil
 	}
 
@@ -121,11 +127,11 @@ func executeAffectedComponents(affectedList []schema.Affected, info *schema.Conf
 			err = executeTerraformAffectedComponentInDepOrder(
 				info,
 				affectedList,
-				affected.Component,
-				affected.Stack,
-				"",
-				"",
-				affected.Dependents,
+				&affectedDepOrderParams{
+					AffectedComponent: affected.Component,
+					AffectedStack:     affected.Stack,
+					Dependents:        affected.Dependents,
+				},
 				args,
 			)
 			if err != nil {

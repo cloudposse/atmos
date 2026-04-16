@@ -121,22 +121,37 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 }
 
 // prepareStepEnvironment prepares environment variables for a workflow step.
-// Starts with system env + global env from atmos.yaml.
-// If identity is specified, it authenticates and adds credentials to the environment.
+// baseEnv should already contain system env + global env + toolchain PATH.
+// This function merges workflow and step env on top, then handles auth if needed.
 // Returns the environment variables to use for the step.
 func prepareStepEnvironment(
+	baseEnv []string,
 	stepIdentity string,
 	stepName string,
 	authManager auth.AuthManager,
-	globalEnv map[string]string,
+	workflowEnvMap map[string]string,
+	stepEnvMap map[string]string,
 ) ([]string, error) {
-	// Prepare base environment: system env + global env from atmos.yaml.
-	// Global env has lowest priority and can be overridden by identity auth env vars.
-	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), globalEnv)
+	// Make a copy of baseEnv to avoid modifying the caller's slice.
+	stepEnv := make([]string, len(baseEnv))
+	copy(stepEnv, baseEnv)
 
-	// No identity specified, use base environment (system + global env).
+	// Merge workflow and step env vars into a single map (step overrides workflow for same key).
+	// This ensures duplicate keys are resolved before adding to the environment.
+	mergedEnv := make(map[string]string, len(workflowEnvMap)+len(stepEnvMap))
+	for k, v := range workflowEnvMap {
+		mergedEnv[k] = v
+	}
+	for k, v := range stepEnvMap {
+		mergedEnv[k] = v
+	}
+	if len(mergedEnv) > 0 {
+		stepEnv = append(stepEnv, envpkg.ConvertMapToSlice(mergedEnv)...)
+	}
+
+	// No identity specified, use base environment (system + global + toolchain + workflow + step env).
 	if stepIdentity == "" {
-		return baseEnv, nil
+		return stepEnv, nil
 	}
 
 	if authManager == nil {
@@ -164,11 +179,12 @@ func prepareStepEnvironment(
 	}
 
 	// Prepare shell environment with authentication credentials.
-	// Start with base environment (system + global) and let PrepareShellEnvironment configure auth.
-	stepEnv, err := authManager.PrepareShellEnvironment(ctx, stepIdentity, baseEnv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, stepName, err)
+	// Pass stepEnv (system + global + toolchain + workflow + step) to let auth configure credentials.
+	authEnv, authErr := authManager.PrepareShellEnvironment(ctx, stepIdentity, stepEnv)
+	if authErr != nil {
+		return nil, fmt.Errorf("%w: failed to prepare shell environment for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, stepName, authErr)
 	}
+	stepEnv = authEnv
 
 	log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", stepName)
 	return stepEnv, nil
@@ -283,7 +299,7 @@ func ExecuteWorkflow(
 	}
 
 	// Ensure toolchain dependencies are installed and build PATH for workflow steps.
-	toolchainPATH, err := ensureWorkflowToolchainDependencies(&atmosConfig, workflowDefinition)
+	tenv, err := dependencies.ForWorkflow(&atmosConfig, workflowDefinition)
 	if err != nil {
 		return err
 	}
@@ -305,11 +321,16 @@ func ExecuteWorkflow(
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
 		var err error
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 		}
 	}
+
+	// Construct base environment once: system env + global env + toolchain PATH.
+	// This is reused for all steps, with workflow/step env vars merged on top per step.
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.GetCaseSensitiveEnvVars())
+	baseEnv = append(baseEnv, tenv.EnvVars()...)
 
 	for stepIdx, step := range steps {
 		command := strings.TrimSpace(step.Command)
@@ -329,22 +350,20 @@ func ExecuteWorkflow(
 			commandType = "atmos"
 		}
 
-		// Prepare environment variables: start with system env + global env from atmos.yaml.
+		// Prepare environment variables: start with baseEnv (system + global + toolchain).
+		// Then merge workflow-level and step-level env vars.
 		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager, atmosConfig.GetCaseSensitiveEnvVars())
+		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, workflowDefinition.Env, step.Env)
 		if err != nil {
 			return err
-		}
-
-		// Add toolchain PATH if dependencies were installed.
-		if toolchainPATH != "" {
-			stepEnv = append(stepEnv, fmt.Sprintf("PATH=%s", toolchainPATH))
 		}
 
 		switch commandType {
 		case "shell":
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(&atmosConfig, command, commandName, ".", stepEnv, dryRun)
+			err = retry.Do(context.Background(), step.Retry, func() error {
+				return ExecuteShell(&atmosConfig, command, commandName, ".", stepEnv, dryRun)
+			})
 		case "atmos":
 			// Parse command using shell.Fields for proper quote handling.
 			// This correctly handles arguments like -var="foo=bar" by stripping quotes.
@@ -384,10 +403,10 @@ func ExecuteWorkflow(
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
-			_ = ui.Infof("Executing command: `atmos %s`", command)
-			err = retry.With7Params(context.Background(), step.Retry,
-				ExecuteShellCommand,
-				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
+			ui.Infof("Executing command: `atmos %s`", command)
+			err = retry.Do(context.Background(), step.Retry, func() error {
+				return ExecuteShellCommand(atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
+			})
 		default:
 			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 				WithTitle(WorkflowErrTitle).
@@ -621,70 +640,6 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 			steps[index].Name = fmt.Sprintf("step%d", index+1)
 		}
 	}
-}
-
-// ensureWorkflowToolchainDependencies loads and installs toolchain dependencies for a workflow.
-// It loads tools from .tool-versions, merges with workflow-specific dependencies, installs missing
-// tools, and returns the PATH string with toolchain binaries prepended.
-func ensureWorkflowToolchainDependencies(
-	atmosConfig *schema.AtmosConfiguration,
-	workflowDefinition *schema.WorkflowDefinition,
-) (string, error) {
-	defer perf.Track(atmosConfig, "exec.ensureWorkflowToolchainDependencies")()
-
-	// Load project-wide tools from .tool-versions.
-	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
-	if err != nil {
-		return "", errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanation("Failed to load .tool-versions file").
-			Err()
-	}
-
-	// Get workflow-specific dependencies.
-	resolver := dependencies.NewResolver(atmosConfig)
-	workflowDeps, err := resolver.ResolveWorkflowDependencies(workflowDefinition)
-	if err != nil {
-		return "", errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanation("Failed to resolve workflow dependencies").
-			Err()
-	}
-
-	// Merge: .tool-versions as base, workflow deps override.
-	deps, err := dependencies.MergeDependencies(toolVersionsDeps, workflowDeps)
-	if err != nil {
-		return "", errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanation("Failed to merge dependencies").
-			Err()
-	}
-
-	if len(deps) == 0 {
-		return "", nil
-	}
-
-	log.Debug("Installing workflow dependencies", "tools", deps)
-
-	// Install missing tools.
-	installer := dependencies.NewInstaller(atmosConfig)
-	if err := installer.EnsureTools(deps); err != nil {
-		return "", errUtils.Build(errUtils.ErrToolInstall).
-			WithCause(err).
-			WithExplanation("Failed to install workflow dependencies").
-			Err()
-	}
-
-	// Build PATH with toolchain binaries.
-	toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
-	if err != nil {
-		return "", errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanation("Failed to build toolchain PATH").
-			Err()
-	}
-
-	return toolchainPATH, nil
 }
 
 func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, string, error) {

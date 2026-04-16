@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,8 +17,11 @@ import (
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+const componentTypePacker = "packer"
 
 // PackerFlags represents Packer command-line flags passed to ExecutePacker and ExecutePackerOutput.
 type PackerFlags struct {
@@ -59,12 +63,16 @@ func ExecutePacker(
 	}
 
 	if info.SubCommand == "version" {
+		tenv, err := dependencies.ForComponent(&atmosConfig, componentTypePacker, nil, nil)
+		if err != nil {
+			return err
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
-			info.Command,
+			tenv.Resolve(info.Command),
 			[]string{info.SubCommand},
 			"",
-			nil,
+			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr,
 		)
@@ -85,9 +93,29 @@ func ExecutePacker(
 	}
 
 	// Check if the component exists as a Packer component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "packer", info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypePacker, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
+	}
+
+	// Auto-generate files BEFORE path validation when the following conditions hold.
+	// 1. auto_generate_files is enabled.
+	// 2. Component has a generate section.
+	// 3. Not in dry-run mode (to avoid filesystem modifications).
+	// This allows generating entire components from stack configuration.
+	if atmosConfig.Components.Packer.AutoGenerateFiles && !info.DryRun { //nolint:nestif
+		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
+		if generateSection != nil {
+			// Ensure component directory exists for file generation.
+			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
+				return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
+			}
+
+			// Generate files before path validation.
+			if genErr := GenerateFilesForComponent(&atmosConfig, info, componentPath); genErr != nil {
+				return errors.Join(errUtils.ErrFileOperation, genErr)
+			}
+		}
 	}
 
 	componentPathExists, err := u.IsDirectory(componentPath)
@@ -116,7 +144,7 @@ func ExecutePacker(
 		// If still doesn't exist, return the error.
 		if err != nil || !componentPathExists {
 			// Get the base path for the error message, respecting the user's actual config.
-			basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypePacker)
 			return fmt.Errorf("%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
 				errUtils.ErrInvalidComponent,
 				info.ComponentFromArg,
@@ -136,7 +164,6 @@ func ExecutePacker(
 	}
 
 	// Check if the component is locked (`metadata.locked` is set to true).
-	// For Packer, only `build` modifies external resources.
 	if info.ComponentIsLocked && info.SubCommand == "build" {
 		return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 			errUtils.ErrLockedComponentCantBeProvisioned,
@@ -144,29 +171,11 @@ func ExecutePacker(
 	}
 
 	// Resolve and install component dependencies.
-	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("packer", info.StackSection, info.ComponentSection)
+	tenv, err := dependencies.ForComponent(&atmosConfig, componentTypePacker, info.StackSection, info.ComponentSection)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		return err
 	}
-
-	if len(deps) > 0 {
-		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-		installer := dependencies.NewInstaller(&atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			return fmt.Errorf("failed to install component dependencies: %w", err)
-		}
-
-		// Build PATH with toolchain binaries and add to component environment.
-		// This does NOT modify the global process environment - only the subprocess environment.
-		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
-		if err != nil {
-			return fmt.Errorf("failed to build toolchain PATH: %w", err)
-		}
-
-		// Propagate toolchain PATH into environment for subprocess.
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
-	}
+	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 
 	// Check if the component 'settings.validation' section is specified and validate the component.
 	valid, err := ValidateComponent(
@@ -280,5 +289,6 @@ func ExecutePacker(
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		WithEnvironment(info.SanitizedEnv),
 	)
 }

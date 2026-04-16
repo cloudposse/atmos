@@ -13,6 +13,7 @@ USAGE
 
 SUBCOMMAND ALIASES
 
+      an               Alias of atmos ansible command
       hf               Alias of atmos helmfile command
       pk               Alias of atmos packer command
       tf               Alias of atmos terraform command
@@ -20,9 +21,12 @@ SUBCOMMAND ALIASES
 AVAILABLE COMMANDS
 
       about                                  Learn about Atmos
+      ai [command] [EXPERIMENTAL]            AI-powered assistant for Atmos operations
+      ansible [command]                      Manage ansible-based automation for infrastructure configuration
       atlantis [command]                     Generate and manage Atlantis configurations
       auth [command]                         Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources
+      ci [command] [EXPERIMENTAL]            CI/CD integration commands
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
       describe [command]                     Show details about Atmos configurations and components
       devcontainer [command] [EXPERIMENTAL]  Manage development containers
@@ -31,6 +35,8 @@ AVAILABLE COMMANDS
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
       list [command]                         List available stacks and components
+      lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
+      mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections
       packer [command]                       Manage packer-based machine images for multiple platforms
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
@@ -41,9 +47,11 @@ AVAILABLE COMMANDS
       validate [command]                     Validate configurations against OPA policies and JSON schemas
       vendor [command]                       Manage external dependencies for components or stacks
       version [command]                      Display the version of Atmos you are running and check for updates
-      workflow                               Run predefined tasks using workflows
+      workflow [command]                     Run predefined tasks using workflows
 
 FLAGS
+
+      --ai                      Enable AI-powered analysis of command output
 
       --base-path string        Base path for Atmos project
 
@@ -103,6 +111,8 @@ FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --skill strings           Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)
 
       --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

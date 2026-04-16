@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -46,9 +47,11 @@ type Renderer struct {
 
 // NewRenderer creates a new Markdown renderer with the given options.
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,                              // default width
+		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
 		atmosConfig:           &atmosConfig,
@@ -101,9 +104,11 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	defer perf.Track(atmosConfig, "markdown.NewHelpRenderer")()
 
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,                              // default width
+		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
 		atmosConfig:           atmosConfig,
@@ -191,7 +196,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		}
 	}
 	result := ""
-	if r.isTTYSupportForStdout() {
+	if r.shouldRenderStyled(r.isTTYSupportForStdout) {
 		result, err = out.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
@@ -210,7 +215,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
-	if r.isTTYSupportForStdout() {
+	if r.shouldRenderStyled(r.isTTYSupportForStdout) {
 		rendered, err = r.renderer.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout.
@@ -228,7 +233,7 @@ func (r *Renderer) Render(content string) (string, error) {
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "$") && term.IsTTYSupportForStdout() {
+		if strings.HasPrefix(trimmed, "$") && r.shouldRenderStyled(r.isTTYSupportForStdout) {
 			// Add custom styling for command examples.
 			styled := purpleStyle.Styled(line)
 			result = append(result, " "+styled)
@@ -250,8 +255,14 @@ func (r *Renderer) Render(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	// Get minimal style with just list indentation (no colors) for ASCII mode.
+	style, err := GetListIndentStyle()
+	if err != nil {
+		return "", err
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithWordWrap(0),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),
@@ -270,8 +281,14 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
+	// Get minimal style with just list indentation (no colors) for ASCII mode.
+	style, err := GetListIndentStyle()
+	if err != nil {
+		return "", err
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithWordWrap(int(r.width)),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),
@@ -322,7 +339,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
 	var result string
 	var err error
-	if r.isTTYSupportForStderr() {
+	if r.shouldRenderStyled(r.isTTYSupportForStderr) {
 		result, err = r.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stderr
@@ -341,6 +358,20 @@ func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	}
 
 	return r.Render(content)
+}
+
+// shouldRenderStyled returns true if the renderer should use styled (colored) output
+// instead of plain ASCII. This is true when either:
+// 1. The target stream is a TTY, OR
+// 2. Running in a CI environment (CI=true) without NO_COLOR set.
+// This mirrors the CI color detection in pkg/terminal/terminal.go:ShouldUseColor().
+func (r *Renderer) shouldRenderStyled(isTTY func() bool) bool {
+	if isTTY() {
+		return true
+	}
+	// CI systems like GitHub Actions support ANSI color but have no TTY.
+	// Respect NO_COLOR standard (https://no-color.org/).
+	return os.Getenv("CI") != "" && os.Getenv("NO_COLOR") == "" //nolint:forbidigo // Standard CI/terminal env vars
 }
 
 // Option is a function that configures the renderer.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -14,8 +15,10 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 func TestAuthConsoleCommand_Registration(t *testing.T) {
@@ -164,7 +167,7 @@ func TestHandleBrowserOpen(t *testing.T) {
 
 			// This function doesn't return an error, just verify it doesn't panic.
 			assert.NotPanics(t, func() {
-				handleBrowserOpen(tt.consoleURL)
+				handleBrowserOpen(tt.consoleURL, nil)
 			})
 		})
 	}
@@ -804,6 +807,18 @@ func (m *mockAuthManagerForProvider) GetIntegration(integrationName string) (*sc
 	return nil, errUtils.ErrNotImplemented
 }
 
+func (m *mockAuthManagerForProvider) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManagerForProvider) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManagerForProvider) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
+}
+
 // mockAuthManagerForIdentity implements minimal AuthManager for testing resolveIdentityName.
 // Only GetDefaultIdentity is implemented - other methods return ErrNotImplemented
 // because they are not needed by TestResolveIdentityName.
@@ -909,6 +924,195 @@ func (m *mockAuthManagerForIdentity) ExecuteIdentityIntegrations(ctx context.Con
 
 func (m *mockAuthManagerForIdentity) GetIntegration(integrationName string) (*schema.Integration, error) {
 	return nil, errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForIdentity) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManagerForIdentity) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManagerForIdentity) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
+}
+
+func TestResolveConsoleIsolated(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		name     string
+		flagSet  bool
+		flagVal  bool
+		config   *schema.AuthConsoleConfig
+		expected bool
+	}{
+		{
+			name:     "flag set to true takes precedence",
+			flagSet:  true,
+			flagVal:  true,
+			config:   &schema.AuthConsoleConfig{Isolated: &falseVal},
+			expected: true,
+		},
+		{
+			name:     "flag set to false takes precedence",
+			flagSet:  true,
+			flagVal:  false,
+			config:   &schema.AuthConsoleConfig{Isolated: &trueVal},
+			expected: false,
+		},
+		{
+			name:     "config isolated true when flag not set",
+			flagSet:  false,
+			config:   &schema.AuthConsoleConfig{Isolated: &trueVal},
+			expected: true,
+		},
+		{
+			name:     "config isolated false when flag not set",
+			flagSet:  false,
+			config:   &schema.AuthConsoleConfig{Isolated: &falseVal},
+			expected: false,
+		},
+		{
+			name:     "config console nil defaults to false",
+			flagSet:  false,
+			config:   nil,
+			expected: false,
+		},
+		{
+			name:     "config isolated nil defaults to false",
+			flagSet:  false,
+			config:   &schema.AuthConsoleConfig{},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().BoolVar(&consoleIsolated, "isolated", false, "isolated flag")
+
+			// Save and restore package-level state.
+			origIsolated := consoleIsolated
+			t.Cleanup(func() { consoleIsolated = origIsolated })
+
+			if tt.flagSet {
+				consoleIsolated = tt.flagVal
+				require.NoError(t, cmd.Flags().Set("isolated", fmt.Sprintf("%t", tt.flagVal)))
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Console: tt.config,
+				},
+			}
+
+			result := resolveConsoleIsolated(cmd, atmosConfig)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestConsoleSessionDir(t *testing.T) {
+	t.Run("returns non-empty path", func(t *testing.T) {
+		dir, err := consoleSessionDir("test-realm", "test-identity")
+		require.NoError(t, err)
+		assert.NotEmpty(t, dir)
+		assert.Contains(t, dir, "console")
+		assert.Contains(t, dir, "sessions")
+	})
+
+	t.Run("deterministic for same inputs", func(t *testing.T) {
+		dir1, err1 := consoleSessionDir("realm-a", "identity-1")
+		require.NoError(t, err1)
+		dir2, err2 := consoleSessionDir("realm-a", "identity-1")
+		require.NoError(t, err2)
+		assert.Equal(t, dir1, dir2)
+	})
+
+	t.Run("different realm produces different dir", func(t *testing.T) {
+		dir1, err1 := consoleSessionDir("realm-a", "identity-1")
+		require.NoError(t, err1)
+		dir2, err2 := consoleSessionDir("realm-b", "identity-1")
+		require.NoError(t, err2)
+		assert.NotEqual(t, dir1, dir2)
+	})
+
+	t.Run("different identity produces different dir", func(t *testing.T) {
+		dir1, err1 := consoleSessionDir("realm-a", "identity-1")
+		require.NoError(t, err1)
+		dir2, err2 := consoleSessionDir("realm-a", "identity-2")
+		require.NoError(t, err2)
+		assert.NotEqual(t, dir1, dir2)
+	})
+}
+
+func TestHandleBrowserOpen_WithOpener(t *testing.T) {
+	t.Run("success path with working opener", func(t *testing.T) {
+		// Save and restore package-level state.
+		origSkipOpen := consoleSkipOpen
+		t.Cleanup(func() { consoleSkipOpen = origSkipOpen })
+		consoleSkipOpen = false
+
+		// Ensure we are not detected as CI by removing all CI env vars.
+		preserved := telemetry.PreserveCIEnvVars()
+		t.Cleanup(func() {
+			for k, v := range preserved {
+				os.Setenv(k, v)
+			}
+		})
+
+		opener := &mockBrowserOpener{err: nil}
+		assert.NotPanics(t, func() {
+			handleBrowserOpen("https://console.aws.amazon.com", opener)
+		})
+		assert.True(t, opener.called, "opener.Open should have been called")
+		assert.Equal(t, "https://console.aws.amazon.com", opener.url)
+	})
+
+	t.Run("error path with failing opener shows fallback URL", func(t *testing.T) {
+		origSkipOpen := consoleSkipOpen
+		t.Cleanup(func() { consoleSkipOpen = origSkipOpen })
+		consoleSkipOpen = false
+
+		preserved := telemetry.PreserveCIEnvVars()
+		t.Cleanup(func() {
+			for k, v := range preserved {
+				os.Setenv(k, v)
+			}
+		})
+
+		opener := &mockBrowserOpener{err: fmt.Errorf("browser not found")}
+		assert.NotPanics(t, func() {
+			handleBrowserOpen("https://console.aws.amazon.com", opener)
+		})
+		assert.True(t, opener.called, "opener.Open should have been called even on error")
+	})
+
+	t.Run("nil opener with skip-open shows URL", func(t *testing.T) {
+		origSkipOpen := consoleSkipOpen
+		t.Cleanup(func() { consoleSkipOpen = origSkipOpen })
+		consoleSkipOpen = true
+
+		assert.NotPanics(t, func() {
+			handleBrowserOpen("https://console.aws.amazon.com", nil)
+		})
+	})
+}
+
+// mockBrowserOpener is a simple mock for browser.Opener.
+type mockBrowserOpener struct {
+	called bool
+	url    string
+	err    error
+}
+
+func (m *mockBrowserOpener) Open(url string) error {
+	m.called = true
+	m.url = url
+	return m.err
 }
 
 func TestResolveConsoleDuration(t *testing.T) {

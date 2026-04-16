@@ -14,55 +14,16 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
-
-// TestGetInvalidCommandName tests extraction of command names from error messages.
-func TestGetInvalidCommandName(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "standard error format",
-			input:    `unknown command "foobar" for "atmos"`,
-			expected: "foobar",
-		},
-		{
-			name:     "command with hyphens",
-			input:    `unknown command "my-custom-cmd" for "atmos"`,
-			expected: "my-custom-cmd",
-		},
-		{
-			name:     "empty quotes",
-			input:    `unknown command "" for "atmos"`,
-			expected: "",
-		},
-		{
-			name:     "no match",
-			input:    "some other error message",
-			expected: "",
-		},
-		{
-			name:     "multiple quoted strings (should extract first)",
-			input:    `unknown command "first" and "second"`,
-			expected: "first",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getInvalidCommandName(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
 
 // TestCleanupLogFile tests log file cleanup functionality.
 func TestCleanupLogFile(t *testing.T) {
@@ -1020,6 +981,109 @@ func TestFindExperimentalParent(t *testing.T) {
 	}
 }
 
+// testExperimentalProvider is a minimal CommandProvider for testing registry-based
+// experimental command detection.
+type testExperimentalProvider struct {
+	name string
+}
+
+func (p *testExperimentalProvider) GetCommand() *cobra.Command {
+	return &cobra.Command{Use: p.name}
+}
+
+func (p *testExperimentalProvider) GetName() string                { return p.name }
+func (p *testExperimentalProvider) GetGroup() string               { return "" }
+func (p *testExperimentalProvider) GetFlagsBuilder() flags.Builder { return nil }
+func (p *testExperimentalProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (p *testExperimentalProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
+}
+func (p *testExperimentalProvider) GetAliases() []internal.CommandAlias { return nil }
+func (p *testExperimentalProvider) IsExperimental() bool                { return true }
+
+// TestFindExperimentalParent_RegistryBased tests that registry-based experimental
+// detection only matches top-level built-in commands, not custom commands that
+// share the same name (issue #2315).
+func TestFindExperimentalParent_RegistryBased(t *testing.T) {
+	// Save and restore only the provider this test overrides.
+	prevProvider, hadPrev := internal.GetProvider("ai")
+	internal.Register(&testExperimentalProvider{name: "ai"})
+	t.Cleanup(func() {
+		if hadPrev {
+			internal.Register(prevProvider)
+		}
+	})
+
+	t.Run("top-level ai command is experimental", func(t *testing.T) {
+		// Simulate: atmos ai (root -> ai).
+		root := &cobra.Command{Use: "atmos"}
+		ai := &cobra.Command{Use: "ai"}
+		root.AddCommand(ai)
+
+		result := findExperimentalParent(ai)
+		assert.Equal(t, "ai", result)
+	})
+
+	t.Run("top-level ai subcommand inherits experimental", func(t *testing.T) {
+		// Simulate: atmos ai chat (root -> ai -> chat).
+		root := &cobra.Command{Use: "atmos"}
+		ai := &cobra.Command{Use: "ai"}
+		chat := &cobra.Command{Use: "chat"}
+		root.AddCommand(ai)
+		ai.AddCommand(chat)
+
+		result := findExperimentalParent(chat)
+		assert.Equal(t, "ai", result)
+	})
+
+	t.Run("custom command named ai under utils is NOT experimental", func(t *testing.T) {
+		// Simulate: atmos utils ai (root -> utils -> ai).
+		// This is the bug from issue #2315.
+		root := &cobra.Command{Use: "atmos"}
+		utils := &cobra.Command{Use: "utils"}
+		ai := &cobra.Command{Use: "ai"}
+		root.AddCommand(utils)
+		utils.AddCommand(ai)
+
+		result := findExperimentalParent(ai)
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("custom command named ai fix under utils is NOT experimental", func(t *testing.T) {
+		// Simulate: atmos utils ai fix (root -> utils -> ai -> fix).
+		root := &cobra.Command{Use: "atmos"}
+		utils := &cobra.Command{Use: "utils"}
+		ai := &cobra.Command{Use: "ai"}
+		fix := &cobra.Command{Use: "fix"}
+		root.AddCommand(utils)
+		utils.AddCommand(ai)
+		ai.AddCommand(fix)
+
+		result := findExperimentalParent(fix)
+		assert.Equal(t, "", result)
+	})
+}
+
+// TestIsTopLevelCommand tests the isTopLevelCommand helper.
+func TestIsTopLevelCommand(t *testing.T) {
+	root := &cobra.Command{Use: "atmos"}
+	topLevel := &cobra.Command{Use: "ai"}
+	nested := &cobra.Command{Use: "chat"}
+	root.AddCommand(topLevel)
+	topLevel.AddCommand(nested)
+
+	assert.True(t, isTopLevelCommand(topLevel), "direct child of root should be top-level")
+	assert.False(t, isTopLevelCommand(nested), "grandchild of root should not be top-level")
+	assert.False(t, isTopLevelCommand(root), "root itself should not be top-level")
+
+	// Command with no parent.
+	orphan := &cobra.Command{Use: "orphan"}
+	assert.False(t, isTopLevelCommand(orphan), "command with no parent should not be top-level")
+}
+
 // TestParseUseVersionFromArgsInternal tests --use-version flag parsing.
 func TestParseUseVersionFromArgsInternal(t *testing.T) {
 	tests := []struct {
@@ -1051,6 +1115,16 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 			name:     "use-version at end without value returns empty",
 			args:     []string{"terraform", "--use-version"},
 			expected: "",
+		},
+		{
+			name:     "use-version after bare -- is ignored",
+			args:     []string{"terraform", "--", "--use-version=1.2.3"},
+			expected: "",
+		},
+		{
+			name:     "use-version before bare -- is found",
+			args:     []string{"terraform", "--use-version=1.2.3", "--", "plan"},
+			expected: "1.2.3",
 		},
 	}
 

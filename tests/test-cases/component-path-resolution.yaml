@@ -10,7 +10,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../../.."
-      ATMOS_BASE_PATH: "."
+      ATMOS_BASE_PATH: "../../.."
     args:
       - "terraform"
       - "plan"
@@ -30,7 +30,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
-      ATMOS_BASE_PATH: "."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "terraform"
       - "plan"
@@ -111,7 +111,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
-      ATMOS_BASE_PATH: "."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "terraform"
       - "plan"
@@ -210,7 +210,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
-      ATMOS_BASE_PATH: "."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "describe"
       - "component"
@@ -250,7 +250,7 @@ tests:
     description: "Test error when path is outside component directories"
     workdir: "fixtures/scenarios/complete"
     env:
-      ATMOS_FORCE_TTY: "true"
+      COLUMNS: "120"
     command: "atmos"
     args:
       - "describe"
@@ -309,7 +309,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
-      ATMOS_BASE_PATH: "."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "validate"
       - "component"

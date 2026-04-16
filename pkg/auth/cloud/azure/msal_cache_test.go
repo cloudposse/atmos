@@ -32,7 +32,7 @@ func TestNewMSALCache(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache, err := NewMSALCache(tt.cachePath)
+			cache, err := NewMSALCache(tt.cachePath, "")
 			require.NoError(t, err)
 			require.NotNil(t, cache)
 
@@ -55,7 +55,7 @@ func TestMSALCache_ReplaceEmpty(t *testing.T) {
 	tempDir := t.TempDir()
 	cachePath := filepath.Join(tempDir, "msal_cache.json")
 
-	cache, err := NewMSALCache(cachePath)
+	cache, err := NewMSALCache(cachePath, "")
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -76,7 +76,7 @@ func TestMSALCache_ReplaceExisting(t *testing.T) {
 	err := os.WriteFile(cachePath, testData, 0o600)
 	require.NoError(t, err)
 
-	cache, err := NewMSALCache(cachePath)
+	cache, err := NewMSALCache(cachePath, "")
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -93,7 +93,7 @@ func TestMSALCache_Export(t *testing.T) {
 	tempDir := t.TempDir()
 	cachePath := filepath.Join(tempDir, "msal_cache.json")
 
-	cache, err := NewMSALCache(cachePath)
+	cache, err := NewMSALCache(cachePath, "")
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -121,7 +121,7 @@ func TestMSALCache_ReplaceWithCancellation(t *testing.T) {
 	tempDir := t.TempDir()
 	cachePath := filepath.Join(tempDir, "msal_cache.json")
 
-	cache, err := NewMSALCache(cachePath)
+	cache, err := NewMSALCache(cachePath, "")
 	require.NoError(t, err)
 
 	// Create cancelled context.
@@ -138,7 +138,7 @@ func TestMSALCache_ExportWithCancellation(t *testing.T) {
 	tempDir := t.TempDir()
 	cachePath := filepath.Join(tempDir, "msal_cache.json")
 
-	cache, err := NewMSALCache(cachePath)
+	cache, err := NewMSALCache(cachePath, "")
 	require.NoError(t, err)
 
 	// Create cancelled context.
@@ -153,7 +153,7 @@ func TestMSALCache_ExportWithCancellation(t *testing.T) {
 
 func TestMSALCache_GetCachePath(t *testing.T) {
 	cachePath := "/tmp/test_cache.json"
-	cache, err := NewMSALCache(cachePath)
+	cache, err := NewMSALCache(cachePath, "")
 	require.NoError(t, err)
 
 	msalCache, ok := cache.(*msalCache)

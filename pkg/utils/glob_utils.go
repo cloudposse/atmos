@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +50,11 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		return nil, fmt.Errorf("%w: '%s'\n('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
+		return nil, errUtils.Build(errUtils.ErrFailedToFindImport).
+			WithHint("Verify that `base_path` and `stacks.base_path` in `atmos.yaml` are correct").
+			WithHintf("If using `ATMOS_BASE_PATH`, ensure the path is correct relative to the working directory").
+			WithContext("pattern", pattern).
+			Err()
 	}
 
 	var fullMatches []string

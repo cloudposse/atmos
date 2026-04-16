@@ -25,6 +25,8 @@ type cliProvider struct {
 	tenantID       string
 	subscriptionID string
 	location       string
+	cloudEnv       *azureCloud.CloudEnvironment // Azure cloud environment (public, usgovernment, china).
+	realm          string                       // Credential isolation realm set by auth manager.
 }
 
 // azureCliTokenResponse represents the response from `az account get-access-token`.
@@ -49,6 +51,7 @@ func NewCLIProvider(name string, config *schema.Provider) (*cliProvider, error) 
 	tenantID := ""
 	subscriptionID := ""
 	location := ""
+	cloudEnvironment := ""
 
 	if config.Spec != nil {
 		if tid, ok := config.Spec["tenant_id"].(string); ok {
@@ -60,11 +63,19 @@ func NewCLIProvider(name string, config *schema.Provider) (*cliProvider, error) 
 		if loc, ok := config.Spec["location"].(string); ok {
 			location = loc
 		}
+		if ce, ok := config.Spec["cloud_environment"].(string); ok {
+			cloudEnvironment = ce
+		}
 	}
 
 	// Tenant ID is required.
 	if tenantID == "" {
 		return nil, fmt.Errorf("%w: tenant_id is required in spec for Azure CLI provider", errUtils.ErrInvalidProviderConfig)
+	}
+
+	// Validate cloud_environment if specified.
+	if err := azureCloud.ValidateCloudEnvironment(cloudEnvironment); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidProviderConfig, err)
 	}
 
 	return &cliProvider{
@@ -73,6 +84,7 @@ func NewCLIProvider(name string, config *schema.Provider) (*cliProvider, error) 
 		tenantID:       tenantID,
 		subscriptionID: subscriptionID,
 		location:       location,
+		cloudEnv:       azureCloud.GetCloudEnvironment(cloudEnvironment),
 	}, nil
 }
 
@@ -84,6 +96,11 @@ func (p *cliProvider) Kind() string {
 // Name returns the configured provider name.
 func (p *cliProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *cliProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for Azure CLI provider.
@@ -124,12 +141,13 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 
 	// Create Azure credentials.
 	creds := &authTypes.AzureCredentials{
-		AccessToken:    tokenResp.AccessToken,
-		TokenType:      tokenResp.TokenType,
-		Expiration:     expiresOn.Format(time.RFC3339),
-		TenantID:       p.tenantID,
-		SubscriptionID: subscriptionID,
-		Location:       p.location,
+		AccessToken:      tokenResp.AccessToken,
+		TokenType:        tokenResp.TokenType,
+		Expiration:       expiresOn.Format(time.RFC3339),
+		TenantID:         p.tenantID,
+		SubscriptionID:   subscriptionID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name,
 	}
 
 	log.Debug("Successfully authenticated with Azure CLI",
@@ -190,6 +208,10 @@ func (p *cliProvider) Environment() (map[string]string, error) {
 	if p.location != "" {
 		env["AZURE_LOCATION"] = p.location
 	}
+	if p.cloudEnv.Name != "" && p.cloudEnv.Name != "public" {
+		env["ARM_ENVIRONMENT"] = p.cloudEnv.Name
+		env["AZURE_ENVIRONMENT"] = p.cloudEnv.Name
+	}
 	return env, nil
 }
 
@@ -198,10 +220,11 @@ func (p *cliProvider) PrepareEnvironment(ctx context.Context, environ map[string
 	// Use shared Azure environment preparation.
 	// Note: access token is set later by SetEnvironmentVariables which loads from credential store.
 	return azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
-		Environ:        environ,
-		SubscriptionID: p.subscriptionID,
-		TenantID:       p.tenantID,
-		Location:       p.location,
+		Environ:          environ,
+		SubscriptionID:   p.subscriptionID,
+		TenantID:         p.tenantID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name,
 	}), nil
 }
 

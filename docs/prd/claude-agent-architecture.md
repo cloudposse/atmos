@@ -471,7 +471,7 @@ Every agent must be aware of relevant PRDs:
 This agent implements patterns from:
 
 - `docs/prd/command-registry-pattern.md` - Command extensibility architecture
-- `docs/prd/testing-strategy.md` - Testing requirements and patterns
+- `docs/prd/testability-refactoring-strategy.md` - Testing requirements and patterns
 - `docs/prd/error-handling-strategy.md` - Error handling conventions
 
 **Before implementing:**
@@ -636,7 +636,7 @@ Before finalizing any agent:
 ### Documentation
 - `CLAUDE.md` - Core development patterns
 - `docs/prd/command-registry-pattern.md` - Registry architecture
-- `docs/prd/testing-strategy.md` - Testing requirements
+- `docs/prd/testability-refactoring-strategy.md` - Testing requirements
 
 ### Tools and Resources
 - Claude Code documentation
