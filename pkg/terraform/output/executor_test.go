@@ -1763,6 +1763,40 @@ func TestEnsureWorkdirProvisioned_CachePreventsDoubleProvision(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEnsureWorkdirProvisioned_LateArrivalGetsReconfigureFromCache(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	defer ResetWorkdirProvisionCache()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockProvisioner := NewMockWorkdirProvisioner(ctrl)
+	mockProvisioner.EXPECT().
+		Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *schema.AtmosConfiguration, sections map[string]any, _ *schema.AuthContext) error {
+			// Signal a fresh provision by setting WorkdirReprovisionedKey.
+			sections[provWorkdir.WorkdirReprovisionedKey] = struct{}{}
+			return nil
+		}).
+		Times(1)
+
+	executor := NewExecutor(nil, WithWorkdirProvisioner(mockProvisioner))
+
+	// First call: fresh provision, must set InitRunReconfigure.
+	config1 := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
+	err := executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config1)
+	require.NoError(t, err)
+	require.True(t, config1.InitRunReconfigure, "first call: fresh provision must set InitRunReconfigure")
+
+	// Late arrival: Provision must NOT be called again (mock expects Times(1)).
+	// The cache must return freshlyProvisioned=true so this caller also sets InitRunReconfigure.
+	config2 := &ComponentConfig{AutoProvisionWorkdirForOutputs: true}
+	err = executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, jitSections(), nil, "vpc", "dev", config2)
+	require.NoError(t, err)
+	assert.True(t, config2.InitRunReconfigure,
+		"late arrival must read freshlyProvisioned=true from cache and set InitRunReconfigure")
+}
+
 func TestEnsureWorkdirProvisioned_ConcurrentCallsBlockUntilComplete(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	defer ResetWorkdirProvisionCache()
