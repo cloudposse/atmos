@@ -400,6 +400,11 @@ func TestExtractComponentPath_ContainmentGuard(t *testing.T) {
 	escaped := !strings.HasPrefix(path, absBase+sep) && path != absBase
 	assert.False(t, escaped,
 		"extractComponentPath must not return a path outside BasePath; got %q, base %q", path, absBase)
+
+	// The guard must have fired and returned the componentPath fallback, not the
+	// workdir path. Workdir paths contain ".workdir"; the component path does not.
+	assert.NotContains(t, filepath.ToSlash(path), ".workdir",
+		"containment guard must return componentPath (not workdirPath) when traversal escapes BasePath")
 }
 
 func TestExtractComponentPath_ContainmentGuard_AcceptsLegitimate(t *testing.T) {

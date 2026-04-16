@@ -1975,6 +1975,10 @@ func TestEnsureWorkdirProvisioned_ContextCancellationUnblocksWaiter(t *testing.T
 		context.Background(), atmosCfg, jitSections(), nil, "vpc", "dev", config3,
 	)
 	require.NoError(t, err3, "post-completion call must hit cache without calling Provision again")
+	// The leader's Provision didn't set WorkdirReprovisionedKey, so freshlyProvisioned=false.
+	// The cache holds false, so the third caller must not get InitRunReconfigure=true.
+	assert.False(t, config3.InitRunReconfigure,
+		"cache hit with freshlyProvisioned=false must not set InitRunReconfigure")
 }
 
 func TestEnsureWorkdirProvisioned_ReturnsErrorOnProvisionFailure(t *testing.T) {

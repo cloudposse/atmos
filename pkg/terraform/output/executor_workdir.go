@@ -170,7 +170,10 @@ func (e *Executor) ensureWorkdirProvisioned(
 	// DoChan returns a buffered channel (capacity 1) so the leader's result is
 	// never lost even if this goroutine exits early via ctx.Done(). The select
 	// below allows a waiter whose context has been cancelled to return immediately
-	// without blocking until the leader finishes.
+	// without blocking until the leader finishes. If both resultCh and ctx.Done()
+	// are ready simultaneously (e.g. the leader just finished and the context was
+	// already cancelled), Go selects non-deterministically; either outcome is safe
+	// since the cache is already populated for subsequent callers.
 	select {
 	case res := <-resultCh:
 		if res.Err != nil {
