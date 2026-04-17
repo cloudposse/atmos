@@ -103,7 +103,7 @@ func TestCheckAndReexecWithConfig_GuardActive(t *testing.T) {
 	installer := &mockVersionInstaller{}
 
 	envVars := map[string]string{
-		ReexecGuardEnvVar: "1.160.0",
+		reexec.DepthEnvVar: "1",
 	}
 
 	cfg := &ReexecConfig{
@@ -118,14 +118,14 @@ func TestCheckAndReexecWithConfig_GuardActive(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{
 		Version: schema.Version{
-			Use: "1.160.0", // Same as guard.
+			Use: "1.160.0",
 		},
 	}
 
 	result := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when guard is active for same version")
-	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
+	assert.False(t, result, "Should return false when depth > 0")
+	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when depth > 0")
 }
 
 func TestCheckAndReexecWithConfig_VersionMatch(t *testing.T) {
@@ -385,15 +385,15 @@ func TestCheckAndReexecWithConfig_GuardIsSet(t *testing.T) {
 	}
 	installer := &mockVersionInstaller{}
 
-	var guardValue string
+	var depthValue string
 	cfg := &ReexecConfig{
 		Finder:    finder,
 		Installer: installer,
 		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
 		GetEnv:    func(key string) string { return "" },
 		SetEnv: func(key, value string) error {
-			if key == ReexecGuardEnvVar {
-				guardValue = value
+			if key == reexec.DepthEnvVar {
+				depthValue = value
 			}
 			return nil
 		},
@@ -409,7 +409,7 @@ func TestCheckAndReexecWithConfig_GuardIsSet(t *testing.T) {
 
 	CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.Equal(t, "1.160.0", guardValue, "Guard should be set to requested version")
+	assert.Equal(t, "1", depthValue, "Depth should be incremented to 1 on first re-exec")
 }
 
 func TestCheckAndReexecWithConfig_EnvVarVersions(t *testing.T) {
@@ -866,68 +866,68 @@ func TestShouldSkipReexec(t *testing.T) {
 	tests := []struct {
 		name             string
 		requestedVersion string
-		guard            string
+		depth            string
 		expected         bool
 	}{
 		{
-			name:             "PR version never skips",
+			name:             "PR version never skips when depth=0",
 			requestedVersion: "pr:2040",
-			guard:            "",
+			depth:            "",
 			expected:         false,
 		},
 		{
-			name:             "SHA version never skips",
+			name:             "SHA version never skips when depth=0",
 			requestedVersion: "sha:ceb7526",
-			guard:            "",
+			depth:            "",
 			expected:         false,
 		},
 		{
-			name:             "auto-detect PR never skips",
+			name:             "auto-detect PR never skips when depth=0",
 			requestedVersion: "2040",
-			guard:            "",
+			depth:            "",
 			expected:         false,
 		},
 		{
-			name:             "auto-detect SHA never skips",
+			name:             "auto-detect SHA never skips when depth=0",
 			requestedVersion: "ceb7526",
-			guard:            "",
+			depth:            "",
 			expected:         false,
 		},
 		{
-			name:             "guard match skips",
+			name:             "depth=1 skips semver switch",
 			requestedVersion: "1.160.0",
-			guard:            "1.160.0",
+			depth:            "1",
 			expected:         true,
 		},
 		{
-			name:             "guard mismatch does not skip",
-			requestedVersion: "1.160.0",
-			guard:            "1.150.0",
-			expected:         false,
+			name:             "depth=1 skips PR version (prevents loop)",
+			requestedVersion: "pr:2040",
+			depth:            "1",
+			expected:         true,
 		},
 		{
-			name:             "same version skips",
+			name:             "depth=1 skips SHA version (prevents loop)",
+			requestedVersion: "sha:ceb7526",
+			depth:            "1",
+			expected:         true,
+		},
+		{
+			name:             "same version skips (no re-exec needed)",
 			requestedVersion: "1.150.0",
-			guard:            "",
+			depth:            "",
 			expected:         true,
 		},
 		{
 			name:             "same version with v prefix skips",
 			requestedVersion: "v1.150.0",
-			guard:            "",
+			depth:            "",
 			expected:         true,
 		},
 		{
 			name:             "different version does not skip",
 			requestedVersion: "1.160.0",
-			guard:            "",
+			depth:            "",
 			expected:         false,
-		},
-		{
-			name:             "guard takes precedence over PR version",
-			requestedVersion: "pr:2040",
-			guard:            "pr:2040",
-			expected:         true,
 		},
 	}
 
@@ -935,8 +935,8 @@ func TestShouldSkipReexec(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &ReexecConfig{
 				GetEnv: func(key string) string {
-					if key == ReexecGuardEnvVar {
-						return tt.guard
+					if key == reexec.DepthEnvVar {
+						return tt.depth
 					}
 					return ""
 				},
@@ -973,66 +973,45 @@ func TestFindOrInstallVersionWithConfig_EmptyBinaryPath(t *testing.T) {
 	assert.Equal(t, 1, installer.callCount, "Should call Install once")
 }
 
-func TestCheckAndReexecWithConfig_PRVersionGuardActive(t *testing.T) {
-	// When guard matches a PR version, re-exec is skipped.
-	finder := &mockVersionFinder{}
-	installer := &mockVersionInstaller{}
-
-	envVars := map[string]string{
-		ReexecGuardEnvVar: "pr:2040",
+// Depth > 0 must prevent re-exec even for PR or SHA versions, which otherwise
+// always trigger a switch. This prevents a re-exec'd child from looping back
+// to install another PR/SHA build.
+func TestCheckAndReexecWithConfig_DepthActiveSkipsPRAndSHA(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+	}{
+		{"PR version skipped when depth > 0", "pr:2040"},
+		{"SHA version skipped when depth > 0", "sha:ceb7526"},
 	}
 
-	cfg := &ReexecConfig{
-		Finder:    finder,
-		Installer: installer,
-		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
-		GetEnv:    func(key string) string { return envVars[key] },
-		SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
-		Args:      []string{"atmos", "version"},
-		Environ:   func() []string { return []string{} },
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			finder := &mockVersionFinder{}
+			installer := &mockVersionInstaller{}
+
+			envVars := map[string]string{reexec.DepthEnvVar: "1"}
+
+			cfg := &ReexecConfig{
+				Finder:    finder,
+				Installer: installer,
+				ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
+				GetEnv:    func(key string) string { return envVars[key] },
+				SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
+				Args:      []string{"atmos", "version"},
+				Environ:   func() []string { return []string{} },
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				Version: schema.Version{Use: tt.version},
+			}
+
+			result := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+			assert.False(t, result, "Should return false when depth > 0")
+			assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when depth > 0")
+		})
 	}
-
-	atmosConfig := &schema.AtmosConfiguration{
-		Version: schema.Version{
-			Use: "pr:2040", // Same as guard.
-		},
-	}
-
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
-
-	assert.False(t, result, "Should return false when guard is active for PR version")
-	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
-}
-
-func TestCheckAndReexecWithConfig_SHAVersionGuardActive(t *testing.T) {
-	// When guard matches a SHA version, re-exec is skipped.
-	finder := &mockVersionFinder{}
-	installer := &mockVersionInstaller{}
-
-	envVars := map[string]string{
-		ReexecGuardEnvVar: "sha:ceb7526",
-	}
-
-	cfg := &ReexecConfig{
-		Finder:    finder,
-		Installer: installer,
-		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
-		GetEnv:    func(key string) string { return envVars[key] },
-		SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
-		Args:      []string{"atmos", "version"},
-		Environ:   func() []string { return []string{} },
-	}
-
-	atmosConfig := &schema.AtmosConfiguration{
-		Version: schema.Version{
-			Use: "sha:ceb7526", // Same as guard.
-		},
-	}
-
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
-
-	assert.False(t, result, "Should return false when guard is active for SHA version")
-	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
 }
 
 func TestCheckAndReexecWithConfig_InvalidVersionFormat(t *testing.T) {

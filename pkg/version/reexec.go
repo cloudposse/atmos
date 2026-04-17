@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -16,9 +17,6 @@ import (
 )
 
 const (
-	// ReexecGuardEnvVar prevents infinite re-exec loops.
-	ReexecGuardEnvVar = "ATMOS_REEXEC_GUARD"
-
 	// VersionEnvVar is the environment variable for specifying the Atmos version to use.
 	// This is a convenience alias that matches common conventions (e.g., tfenv, goenv).
 	VersionEnvVar = "ATMOS_VERSION"
@@ -164,11 +162,11 @@ func resolveRequestedVersion(atmosConfig *schema.AtmosConfiguration, cfg *Reexec
 
 // shouldSkipReexec checks if re-exec should be skipped due to guard or version match.
 func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
-	// Check re-exec guard to prevent infinite loops.
-	if cfg.GetEnv(ReexecGuardEnvVar) == requestedVersion {
-		log.Debug("Re-exec guard active, skipping version switch",
+	// Depth guard — already inside a re-exec'd child, don't loop.
+	if reexec.Depth(cfg.GetEnv(reexec.DepthEnvVar)) > 0 {
+		log.Debug("Re-exec depth > 0, skipping version switch",
 			"requested_version", requestedVersion,
-			"guard_value", cfg.GetEnv(ReexecGuardEnvVar))
+			"depth", cfg.GetEnv(reexec.DepthEnvVar))
 		return true
 	}
 
@@ -241,9 +239,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 		return false
 	}
 
-	// Set re-exec guard to prevent loops.
-	if err := cfg.SetEnv(ReexecGuardEnvVar, requestedVersion); err != nil {
-		log.Warn("Failed to set re-exec guard", "error", err)
+	// Increment re-exec depth so the child knows it's inside a re-exec and
+	// must not attempt another version switch.
+	nextDepth := reexec.Depth(cfg.GetEnv(reexec.DepthEnvVar)) + 1
+	if err := cfg.SetEnv(reexec.DepthEnvVar, strconv.Itoa(nextDepth)); err != nil {
+		log.Warn("Failed to set re-exec depth", "error", err)
 		return false
 	}
 

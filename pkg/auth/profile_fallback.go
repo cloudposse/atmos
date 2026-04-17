@@ -23,13 +23,6 @@ import (
 )
 
 const (
-	// Env var that prevents infinite re-exec loops when an auto-selected
-	// profile also fails to resolve the identity.
-	profileFallbackGuardEnv = "ATMOS_PROFILE_FALLBACK"
-
-	// Value set on the guard env var during re-exec.
-	profileFallbackGuardValue = "1"
-
 	// CLI flag Atmos uses to select a profile.
 	profileFlagName = "--profile"
 
@@ -84,16 +77,17 @@ func (m *manager) buildFallbackAtmosConfig() *schema.AtmosConfiguration {
 //  4. Either (a) the terminal is interactive → prompt + re-exec, or (b) the
 //     terminal is non-interactive → enrich the error with profile hints.
 //
-// The loop guard (ATMOS_PROFILE_FALLBACK=1) is checked first — if set, we
-// skip the fallback entirely and let the original error surface so users
-// don't get trapped in an endless prompt cycle.
+// The re-exec depth guard (ATMOS_REEXEC_DEPTH > 0) is checked first — if
+// we're already inside a re-exec'd child, skip the fallback and let the
+// original error surface so users don't get trapped in an endless prompt
+// cycle.
 func (m *manager) maybeOfferProfileFallback(ctx context.Context, identityName string) error {
 	defer perf.Track(nil, "auth.Manager.maybeOfferProfileFallback")()
 
 	// Loop guard — if we've already re-exec'd once for this identity and still
 	// don't find it, surface the original error instead of prompting again.
-	if os.Getenv(profileFallbackGuardEnv) == profileFallbackGuardValue { //nolint:forbidigo // Loop-guard sentinel, not user-facing config.
-		log.Debug("profile fallback loop guard active, skipping", logKeyIdentity, identityName)
+	if reexec.CurrentDepth() > 0 {
+		log.Debug("re-exec depth > 0, skipping profile fallback", logKeyIdentity, identityName)
 		return nil
 	}
 
@@ -270,8 +264,8 @@ func (m *manager) maybeOfferAnyProfileFallback(ctx context.Context) error {
 
 	// Loop guard — a previous re-exec already picked a profile; surface the
 	// caller's error instead of prompting again.
-	if os.Getenv(profileFallbackGuardEnv) == profileFallbackGuardValue { //nolint:forbidigo // Loop-guard sentinel, not user-facing config.
-		log.Debug("profile fallback loop guard active, skipping generic fallback")
+	if reexec.CurrentDepth() > 0 {
+		log.Debug("re-exec depth > 0, skipping generic profile fallback")
 		return nil
 	}
 
@@ -447,9 +441,9 @@ func reExecWithProfile(profileName string) error {
 	}
 
 	// Propagate environment + loop guard. ATMOS_CHDIR is filtered for the
-	// same reason --chdir is stripped from argv.
-	env := reexec.FilterChdirEnv(os.Environ())
-	env = append(env, profileFallbackGuardEnv+"="+profileFallbackGuardValue)
+	// same reason --chdir is stripped from argv. NextEnv increments
+	// ATMOS_REEXEC_DEPTH so the child can detect it's inside a re-exec.
+	env := reexec.NextEnv(reexec.FilterChdirEnv(os.Environ()))
 
 	log.Debug("re-executing atmos with selected profile",
 		"profile", profileName,

@@ -336,7 +336,7 @@ type AuthManager interface {
 	//   - On successful interactive re-exec, never returns (process is replaced).
 	//
 	// The fallback is suppressed when:
-	//   - ATMOS_PROFILE_FALLBACK=1 loop guard is set (already inside a re-exec).
+	//   - ATMOS_REEXEC_DEPTH > 0 (already inside a re-exec'd child).
 	//   - The user has explicitly set --profile or ATMOS_PROFILE.
 	//   - No profile defines auth config.
 	MaybeOfferAnyProfileFallback(ctx context.Context) error

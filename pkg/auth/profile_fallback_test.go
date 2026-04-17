@@ -76,7 +76,7 @@ func resetGlobalProfileState(t *testing.T) {
 	t.Cleanup(func() { os.Args = origArgs })
 
 	t.Setenv("ATMOS_PROFILE", "")
-	t.Setenv(profileFallbackGuardEnv, "")
+	t.Setenv(reexec.DepthEnvVar, "")
 	viper.Reset()
 	t.Cleanup(viper.Reset)
 
@@ -85,13 +85,13 @@ func resetGlobalProfileState(t *testing.T) {
 	viper.Set("profiles.base_path", "profiles")
 }
 
-// Scenario 10: loop guard — when ATMOS_PROFILE_FALLBACK=1 the fallback must
+// Scenario 10: loop guard — when ATMOS_REEXEC_DEPTH > 0 the fallback must
 // skip everything and return nil so the caller surfaces ErrIdentityNotFound.
 func TestMaybeOfferProfileFallback_LoopGuardSkips(t *testing.T) {
 	resetGlobalProfileState(t)
 	tmpDir := profileFallbackFixture(t)
 
-	t.Setenv(profileFallbackGuardEnv, profileFallbackGuardValue)
+	t.Setenv(reexec.DepthEnvVar, "1")
 
 	m := newFallbackManager(tmpDir)
 	err := m.maybeOfferProfileFallback(context.Background(), "root-admin")
@@ -236,15 +236,15 @@ func TestReExecWithProfile_BuildsArgvAndEnv(t *testing.T) {
 	assert.Equal(t, "--stack", gotArgs[5])
 	assert.Equal(t, "dev", gotArgs[6])
 
-	// Loop guard must be set in the env for the child process.
-	foundGuard := false
+	// Re-exec depth must be incremented in the env for the child process.
+	foundDepth := false
 	for _, e := range gotEnv {
-		if e == profileFallbackGuardEnv+"="+profileFallbackGuardValue {
-			foundGuard = true
+		if e == reexec.DepthEnvVar+"=1" {
+			foundDepth = true
 			break
 		}
 	}
-	assert.True(t, foundGuard, "re-exec must propagate the loop-guard env var")
+	assert.True(t, foundDepth, "re-exec must propagate ATMOS_REEXEC_DEPTH=1")
 }
 
 // reExecWithProfile handles the edge case where os.Args has only the binary name.
@@ -305,12 +305,12 @@ func anyProfileFallbackFixture(t *testing.T) string {
 	return tmpDir
 }
 
-// Loop guard — ATMOS_PROFILE_FALLBACK=1 short-circuits the generic fallback.
+// Loop guard — ATMOS_REEXEC_DEPTH > 0 short-circuits the generic fallback.
 func TestMaybeOfferAnyProfileFallback_LoopGuardSkips(t *testing.T) {
 	resetGlobalProfileState(t)
 	tmpDir := anyProfileFallbackFixture(t)
 
-	t.Setenv(profileFallbackGuardEnv, profileFallbackGuardValue)
+	t.Setenv(reexec.DepthEnvVar, "1")
 
 	m := newFallbackManager(tmpDir)
 	err := m.maybeOfferAnyProfileFallback(context.Background())
