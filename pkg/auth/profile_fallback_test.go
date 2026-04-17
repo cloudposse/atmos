@@ -405,3 +405,133 @@ var errExecMockCalled = errors.New("mock exec called")
 // originalExecFunc preserves the production value of reexec.Exec so tests
 // can swap and restore it without leaking state between test cases.
 var originalExecFunc = reexec.Exec
+
+// newProfileFallbackKeyMap must return a keymap that binds Quit to both
+// ctrl+c and esc — these are the only keys the user can press to abort the
+// fallback prompt and get ErrUserAborted from huh.
+func TestNewProfileFallbackKeyMap(t *testing.T) {
+	keyMap := newProfileFallbackKeyMap()
+	require.NotNil(t, keyMap)
+
+	quitKeys := keyMap.Quit.Keys()
+	assert.Contains(t, quitKeys, "ctrl+c",
+		"Quit binding must accept ctrl+c so users can abort the prompt")
+	assert.Contains(t, quitKeys, "esc",
+		"Quit binding must accept esc so users can abort the prompt")
+}
+
+// MaybeOfferAnyProfileFallback is the exported wrapper around the unexported
+// maybeOfferAnyProfileFallback. It must satisfy the same gating rules — this
+// exercises the thin delegation that would otherwise sit at 0% coverage.
+func TestMaybeOfferAnyProfileFallback_Exported_NoCandidates(t *testing.T) {
+	resetGlobalProfileState(t)
+
+	// Fixture with no profiles at all.
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "profiles"), 0o755))
+
+	m := newFallbackManager(tmpDir)
+	err := m.MaybeOfferAnyProfileFallback(context.Background())
+	assert.NoError(t, err,
+		"exported wrapper must match internal method: no candidates → nil")
+}
+
+// Exported wrapper short-circuits on loop guard, same as the unexported impl.
+func TestMaybeOfferAnyProfileFallback_Exported_LoopGuard(t *testing.T) {
+	resetGlobalProfileState(t)
+	tmpDir := anyProfileFallbackFixture(t)
+	t.Setenv(reexec.DepthEnvVar, "1")
+
+	m := newFallbackManager(tmpDir)
+	err := m.MaybeOfferAnyProfileFallback(context.Background())
+	assert.NoError(t, err,
+		"exported wrapper must respect the loop guard")
+}
+
+// reExecWithProfile must strip --chdir/-C from the child argv so a relative
+// chdir applied to the parent is not re-applied against the already-changed
+// cwd. This is the regression guard for the chdir family of fixes documented
+// in docs/fixes/.
+func TestReExecWithProfile_StripsChdirFromArgv(t *testing.T) {
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
+
+	var gotArgs []string
+	reexec.Exec = func(_ string, argv []string, _ []string) error {
+		gotArgs = argv
+		return errExecMockCalled
+	}
+
+	origArgs := os.Args
+	// Parent had --chdir /tmp; it should NOT appear in the child argv.
+	os.Args = []string{"atmos", "--chdir", "/tmp", "auth", "login"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	err := reExecWithProfile("dev")
+	require.ErrorIs(t, err, errExecMockCalled)
+
+	for i, a := range gotArgs {
+		assert.NotEqual(t, "--chdir", a,
+			"child argv must not contain --chdir (index %d, argv=%v)", i, gotArgs)
+		assert.NotEqual(t, "-C", a,
+			"child argv must not contain -C (index %d, argv=%v)", i, gotArgs)
+	}
+	// --profile <name> must still be inserted.
+	require.GreaterOrEqual(t, len(gotArgs), 3)
+	assert.Equal(t, "--profile", gotArgs[1])
+	assert.Equal(t, "dev", gotArgs[2])
+	// Downstream non-chdir args must survive.
+	assert.Contains(t, gotArgs, "auth")
+	assert.Contains(t, gotArgs, "login")
+}
+
+// reExecWithProfile must also filter ATMOS_CHDIR from the child env for the
+// same reason: a relative chdir already applied to the parent must not be
+// re-applied to the already-changed cwd in the child.
+func TestReExecWithProfile_FiltersChdirFromEnv(t *testing.T) {
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
+
+	var gotEnv []string
+	reexec.Exec = func(_ string, _ []string, envv []string) error {
+		gotEnv = envv
+		return errExecMockCalled
+	}
+
+	// Ensure ATMOS_CHDIR is present in the parent env.
+	t.Setenv("ATMOS_CHDIR", "/tmp")
+
+	origArgs := os.Args
+	os.Args = []string{"atmos", "auth", "login"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	err := reExecWithProfile("dev")
+	require.ErrorIs(t, err, errExecMockCalled)
+
+	// FilterChdirEnv emits "ATMOS_CHDIR=" (empty) as an explicit override so the
+	// child cannot inherit the parent's value. The non-empty "ATMOS_CHDIR=/tmp"
+	// must not survive.
+	sawEmptyOverride := false
+	for _, e := range gotEnv {
+		assert.NotEqual(t, "ATMOS_CHDIR=/tmp", e,
+			"child env must not carry the parent's ATMOS_CHDIR value")
+		if e == "ATMOS_CHDIR=" {
+			sawEmptyOverride = true
+		}
+	}
+	assert.True(t, sawEmptyOverride,
+		"child env must include the explicit ATMOS_CHDIR= override")
+}
+
+// buildFallbackAtmosConfig must thread the manager's cliConfigPath and viper's
+// profiles.base_path into the returned schema so ProfilesWith* helpers can
+// resolve the profile directory layout.
+func TestBuildFallbackAtmosConfig_PopulatesPaths(t *testing.T) {
+	resetGlobalProfileState(t)
+	viper.Set("profiles.base_path", "custom-profiles-dir")
+
+	m := newFallbackManager("/some/cli/config/path")
+	cfg := m.buildFallbackAtmosConfig()
+
+	require.NotNil(t, cfg)
+	assert.Equal(t, "/some/cli/config/path", cfg.CliConfigPath)
+	assert.Equal(t, "custom-profiles-dir", cfg.Profiles.BasePath)
+}
