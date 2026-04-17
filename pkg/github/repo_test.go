@@ -1,0 +1,439 @@
+package github
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+	"time"
+
+	ghclient "github.com/google/go-github/v59/github"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestParseGitHubOwnerRepo(t *testing.T) {
+	tests := []struct {
+		name      string
+		uri       string
+		wantOwner string
+		wantRepo  string
+		wantOK    bool
+	}{
+		// Standard no-scheme GitHub URIs (go-getter style).
+		{
+			name:      "plain github.com URI",
+			uri:       "github.com/cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "github.com URI with subdirectory",
+			uri:       "github.com/cloudposse/terraform-null-label//modules/vpc",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "github.com URI with subdirectory and query params",
+			uri:       "github.com/cloudposse/terraform-null-label//modules/vpc?ref=v1.0.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+
+		// HTTPS URLs.
+		{
+			name:      "https github URL",
+			uri:       "https://github.com/cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "https github URL with .git suffix",
+			uri:       "https://github.com/cloudposse/terraform-null-label.git",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "https github URL with subdirectory",
+			uri:       "https://github.com/cloudposse/terraform-null-label//modules/vpc?ref=v1.0.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+
+		// go-getter force prefix.
+		{
+			name:      "git:: force prefix with https",
+			uri:       "git::https://github.com/cloudposse/terraform-null-label.git",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "git:: force prefix without scheme",
+			uri:       "git::github.com/cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+
+		// SSH scheme (ssh://) — distinct from SCP-style.
+		{
+			name:      "ssh:// URL with .git and subdirectory",
+			uri:       "ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "git:: force prefix with ssh:// URL and subdirectory",
+			uri:       "git::ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "ssh:// URL without subdirectory",
+			uri:       "ssh://git@github.com/cloudposse/terraform-null-label.git",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:   "ssh:// URL to non-GitHub host",
+			uri:    "ssh://git@gitlab.com/owner/repo.git",
+			wantOK: false,
+		},
+
+		// SCP-style Git URLs.
+		{
+			name:      "SCP-style git@github.com",
+			uri:       "git@github.com:cloudposse/terraform-null-label.git",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "SCP-style git@github.com with subdirectory",
+			uri:       "git@github.com:cloudposse/terraform-null-label.git//modules/vpc",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		// SCP-style with '+' in username — validates that [A-Za-z0-9_.+\-] does not
+		// treat '+-' as a character range (which would erroneously match ',' and '.').
+		{
+			name:      "SCP-style user+tag@github.com with plus in username",
+			uri:       "user+tag@github.com:owner/repo.git",
+			wantOwner: "owner",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
+
+		// Non-GitHub URIs (should return ok=false).
+		{
+			name:   "gitlab URI",
+			uri:    "gitlab.com/owner/repo",
+			wantOK: false,
+		},
+		{
+			name:   "s3 URI",
+			uri:    "s3::s3://mybucket/path",
+			wantOK: false,
+		},
+		{
+			name:   "oci URI",
+			uri:    "oci://registry.example.com/org/image:tag",
+			wantOK: false,
+		},
+		{
+			name:   "local path",
+			uri:    "./local/path",
+			wantOK: false,
+		},
+		{
+			name:   "empty URI",
+			uri:    "",
+			wantOK: false,
+		},
+		{
+			name:   "bitbucket URI",
+			uri:    "bitbucket.org/owner/repo",
+			wantOK: false,
+		},
+
+		// github:// scheme.
+		{
+			name:      "github:// scheme bare",
+			uri:       "github://cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "github:// scheme with subdir and ref",
+			uri:       "github://cloudposse/terraform-null-label/modules/vpc@v1.0.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "git:: force prefix with github:// scheme",
+			uri:       "git::github://cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		// github:// with .git suffix — must strip .git to avoid 404.
+		{
+			name:      "github:// scheme with .git suffix",
+			uri:       "github://cloudposse/terraform-null-label.git",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+		{
+			name:      "github:// scheme with .git suffix and subdir",
+			uri:       "github://cloudposse/repo.git/modules/vpc@v1.0.0",
+			wantOwner: "cloudposse",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
+
+		// github:// scheme with fragment — must strip #fragment.
+		{
+			name:      "github:// scheme with fragment",
+			uri:       "github://cloudposse/repo#main",
+			wantOwner: "cloudposse",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
+		// Uppercase github:// scheme — must be handled case-insensitively.
+		{
+			name:      "GITHUB:// uppercase scheme",
+			uri:       "GITHUB://cloudposse/repo",
+			wantOwner: "cloudposse",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
+		// Uppercase scheme/host — url.Parse lowercases the host.
+		{
+			name:      "uppercase scheme and host",
+			uri:       "HTTPS://GITHUB.COM/owner/repo",
+			wantOwner: "owner",
+			wantRepo:  "repo",
+			wantOK:    true,
+		},
+		// Double-slash before owner (template-expansion artifact).
+		{
+			name:      "https with double-slash before owner",
+			uri:       "https://github.com//cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+
+		// Port-qualified hostname.
+		{
+			name:      "https github URL with explicit port 443",
+			uri:       "https://github.com:443/cloudposse/terraform-null-label",
+			wantOwner: "cloudposse",
+			wantRepo:  "terraform-null-label",
+			wantOK:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			owner, repo, ok := ParseGitHubOwnerRepo(tt.uri)
+			assert.Equal(t, tt.wantOK, ok)
+			if tt.wantOK {
+				assert.Equal(t, tt.wantOwner, owner)
+				assert.Equal(t, tt.wantRepo, repo)
+			}
+		})
+	}
+}
+
+func TestIsRepoArchived(t *testing.T) {
+	tests := []struct {
+		name           string
+		responseBody   string
+		responseStatus int
+		wantArchived   bool
+		wantErr        bool
+	}{
+		{
+			name:           "archived repo",
+			responseStatus: 200,
+			responseBody:   `{"archived": true}`,
+			wantArchived:   true,
+		},
+		{
+			name:           "active repo",
+			responseStatus: 200,
+			responseBody:   `{"archived": false}`,
+			wantArchived:   false,
+		},
+		{
+			name:           "repo not found (404)",
+			responseStatus: 404,
+			responseBody:   `{"message": "Not Found"}`,
+			wantErr:        true,
+		},
+		{
+			name:           "unauthorized (401)",
+			responseStatus: 401,
+			responseBody:   `{"message": "Requires authentication"}`,
+			wantErr:        true,
+		},
+		{
+			name:           "forbidden (403)",
+			responseStatus: 403,
+			responseBody:   `{"message": "Forbidden"}`,
+			wantErr:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset cache between sub-tests so each gets a fresh API call.
+			ResetArchivedRepoCache()
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("/repos/owner/repo", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.responseStatus)
+				_, _ = w.Write([]byte(tt.responseBody))
+			})
+			ts := httptest.NewServer(mux)
+			defer ts.Close()
+
+			// Build a GitHub client pointing at the test server.
+			client := ghclient.NewClient(nil)
+			u, err := url.Parse(ts.URL + "/")
+			require.NoError(t, err)
+			client.BaseURL = u
+
+			archived, err := isRepoArchivedWithClient(context.Background(), client.Repositories, "owner", "repo")
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantArchived, archived)
+			}
+		})
+	}
+}
+
+// TestArchivedCheckTimeoutOverride verifies that the archivedCheckTimeout can be
+// overridden at runtime (simulating the ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT env var
+// read during init) and that a zero/negative timeout causes IsRepoArchived to skip
+// the API call entirely (opt-out semantics) rather than blocking.
+func TestArchivedCheckTimeoutOverride(t *testing.T) {
+	t.Run("default timeout is 5s", func(t *testing.T) {
+		reset := SetArchivedCheckTimeoutForTest(defaultArchivedCheckTimeout)
+		t.Cleanup(reset)
+		assert.Equal(t, 5*time.Second, ArchivedCheckTimeoutForTest())
+	})
+
+	t.Run("zero timeout skips API call via IsRepoArchived public API", func(t *testing.T) {
+		t.Cleanup(ResetArchivedRepoCache)
+		reset := SetArchivedCheckTimeoutForTest(0)
+		t.Cleanup(reset)
+
+		// Call the public API with zero timeout. IsRepoArchived must return (false, nil)
+		// without making any network call — zero timeout is the opt-out sentinel.
+		// (If it tried to hit api.github.com, this test would be flaky in CI.)
+		archived, err := IsRepoArchived(context.Background(), "org", "repo-zero-timeout")
+		assert.NoError(t, err, "zero timeout must not return an error")
+		assert.False(t, archived, "zero timeout must return false (skipped)")
+	})
+
+	t.Run("negative timeout also skips API call", func(t *testing.T) {
+		t.Cleanup(ResetArchivedRepoCache)
+		reset := SetArchivedCheckTimeoutForTest(-1 * time.Second)
+		t.Cleanup(reset)
+
+		archived, err := IsRepoArchived(context.Background(), "org", "repo-negative-timeout")
+		assert.NoError(t, err, "negative timeout must not return an error")
+		assert.False(t, archived, "negative timeout must return false (skipped)")
+	})
+
+	t.Run("expired context causes API error via isRepoArchivedWithClient", func(t *testing.T) {
+		t.Cleanup(ResetArchivedRepoCache)
+
+		// A fast server that would respond if reached — we never should reach it.
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"archived": false}`))
+		}))
+		defer ts.Close()
+
+		client := ghclient.NewClient(nil)
+		u, err := url.Parse(ts.URL + "/")
+		require.NoError(t, err)
+		client.BaseURL = u
+
+		// Use a reliably cancelled context to exercise the error-path in isRepoArchivedWithClient.
+		// context.WithTimeout(ctx, 0) is racy — a zero duration creates a deadline of time.Now()
+		// which may not be past yet on fast hardware. context.WithCancel + immediate cancel()
+		// is always-expired before the first select.
+		cancelledCtx, cancel := context.WithCancel(context.Background())
+		cancel() // cancelled immediately — context.Err() == context.Canceled before first use
+		defer cancel()
+
+		_, err = isRepoArchivedWithClient(cancelledCtx, client.Repositories, "org", "repo")
+		assert.Error(t, err, "expected error with already-cancelled context")
+	})
+}
+
+// TestIsRepoArchived_ViaHook exercises the full public IsRepoArchived code path:
+//
+//	IsRepoArchived → newGitHubClientHook → httptest.Server → archived=true
+//
+// This test uses SetNewGitHubClientHookForTest (from export_test.go) to inject a
+// mock HTTP server without going through the real GitHub API. It is the canonical
+// test that validates the hook mechanism added for cross-package test support.
+func TestIsRepoArchived_ViaHook(t *testing.T) {
+	const (
+		owner = "hook-test-owner"
+		repo  = "hook-test-repo"
+	)
+
+	t.Cleanup(ResetArchivedRepoCache)
+
+	// Ensure the timeout is non-zero so IsRepoArchived actually makes the call.
+	reset := SetArchivedCheckTimeoutForTest(5 * time.Second)
+	t.Cleanup(reset)
+
+	// Start a mock GitHub API server that returns {"archived": true}.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/"+owner+"/"+repo, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"archived": true, "full_name": "` + owner + `/` + repo + `"}`))
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	// Inject a GitHub client pointing at the mock server via the test hook.
+	cleanup := SetNewGitHubClientHookForTest(func(ctx context.Context) *ghclient.Client {
+		client := ghclient.NewClient(nil)
+		u, err := url.Parse(ts.URL + "/")
+		require.NoError(t, err)
+		client.BaseURL = u
+		return client
+	})
+	defer cleanup()
+
+	archived, err := IsRepoArchived(context.Background(), owner, repo)
+	require.NoError(t, err, "IsRepoArchived should not error with mock server")
+	assert.True(t, archived, "IsRepoArchived should return true when server responds archived=true")
+}

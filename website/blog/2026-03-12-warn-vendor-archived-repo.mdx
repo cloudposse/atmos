@@ -1,0 +1,57 @@
+---
+slug: warn-vendor-archived-repo
+title: "Warn When Vendoring from an Archived GitHub Repository"
+authors: [nitrocode]
+tags: [enhancement]
+---
+
+Atmos now emits a warning when you vendor a component or stack source from a GitHub repository that has been archived—helping you catch stale dependencies before they cause problems in production.
+
+<!--truncate-->
+
+## What Changed
+
+When `atmos vendor pull` fetches a component or stack source from GitHub, it now calls the GitHub Repositories API to check whether the repository is archived. If it is, Atmos emits a warning:
+
+```
+WARN GitHub repository is archived and no longer actively maintained.
+     Vendoring from an archived repository may include outdated or unsupported code.
+     repository=cloudposse/terraform-null-label component=null-label
+```
+
+The check is **best-effort**: if the GitHub API is unavailable (network error, rate limit, missing token), the check is skipped and a `TRACE`-level message is logged—vendoring proceeds normally. Each unique repository incurs at most one API call per run, bounded by the per-repo timeout (default 5s, configurable via `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT`). In environments with many unique repositories, the total latency is at most `timeout × number_of_unique_repos`.
+
+In air-gapped or offline environments, set `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT=0s` to skip the check entirely (no API call is made, no error is logged). To shorten the per-repo timeout, use a smaller value such as `ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT=2s`.
+
+The warning applies to both vendor manifest sources (`vendor.yaml`) and component vendoring configs (`component.yaml`).
+
+## Why This Matters
+
+GitHub-archived repositories are no longer actively maintained. When you vendor from an archived repo, you may inadvertently pull in code with:
+
+- Known security vulnerabilities that will never be patched
+- Incompatibilities with newer versions of your other dependencies
+- No upstream support if issues are discovered
+
+Without this warning, there's no signal that the repository is in a frozen state. Engineers discovering archived dependencies late in a release cycle—after security scans or compliance reviews—face expensive last-minute changes. The earlier you catch a stale dependency, the cheaper it is to address.
+
+## How It Works
+
+Atmos calls the GitHub REST API (`GET /repos/{owner}/{repo}`) and inspects the `archived` field. The check runs **once per unique owner/repo pair** across all sources and components in a single run — even if multiple vendor entries reference different subdirectories or use different URI formats for the same repository. Results are cached in memory so no duplicate API calls are made.
+
+The URI parser handles all common vendor source formats:
+
+| Format | Example |
+|--------|---------|
+| Plain go-getter | `github.com/org/repo//path?ref=v1` |
+| HTTPS | `https://github.com/org/repo.git//path` |
+| go-getter force prefix | `git::https://github.com/org/repo` |
+| SSH scheme | `ssh://git@github.com/org/repo.git` |
+| SCP-style | `git@github.com:org/repo.git//path` |
+| `github://` scheme | `github://org/repo/subdir@ref` |
+
+Non-GitHub sources (OCI registries, S3, local paths, GitLab, Bitbucket) are silently skipped.
+
+## Get Involved
+
+If you encounter a false positive or have feedback on the warning message, please [open an issue](https://github.com/cloudposse/atmos/issues).

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/charmbracelet/log"
@@ -17,7 +18,7 @@ func TestNewAtmosLogger(t *testing.T) {
 	t.Run("valid logger", func(t *testing.T) {
 		baseLogger := log.New(os.Stderr)
 		assert.NotPanics(t, func() {
-			logger := NewAtmosLogger(baseLogger)
+			logger := NewAtmosLogger(baseLogger, nil)
 			assert.NotNil(t, logger)
 		})
 	})
@@ -25,7 +26,7 @@ func TestNewAtmosLogger(t *testing.T) {
 	// Test with log.Default()
 	t.Run("default logger", func(t *testing.T) {
 		assert.NotPanics(t, func() {
-			logger := NewAtmosLogger(log.Default())
+			logger := NewAtmosLogger(log.Default(), nil)
 			assert.NotNil(t, logger)
 		})
 	})
@@ -34,11 +35,119 @@ func TestNewAtmosLogger(t *testing.T) {
 	t.Run("nil logger", func(t *testing.T) {
 		assert.NotPanics(t, func() {
 			var nilLogger *log.Logger
-			logger := NewAtmosLogger(nilLogger)
+			logger := NewAtmosLogger(nilLogger, nil)
 			assert.NotNil(t, logger)
 			// Should use default logger
 			assert.NotNil(t, logger.charm)
 		})
+	})
+
+	// Test that NewAtmosLogger(nil, &buf) routes charm output to &buf.
+	// When charmLogger is nil and a non-nil writer is provided, charm.Default()
+	// must be redirected to that writer so GetOutput() and charm's output are
+	// consistent immediately after construction.
+	t.Run("nil logger with custom writer routes charm output to writer", func(t *testing.T) {
+		var buf bytes.Buffer
+		var nilLogger *log.Logger
+		logger := NewAtmosLogger(nilLogger, &buf)
+		assert.Equal(t, &buf, logger.GetOutput(), "GetOutput should return the custom writer")
+		logger.Info("hello")
+		assert.NotEmpty(t, buf.String(), "charm should write to the custom writer, not stderr")
+	})
+
+	// Test that GetOutput returns os.Stderr when no writer is provided.
+	t.Run("default writer is os.Stderr", func(t *testing.T) {
+		baseLogger := log.New(os.Stderr)
+		logger := NewAtmosLogger(baseLogger, nil)
+		assert.Equal(t, os.Stderr, logger.GetOutput(), "GetOutput should return os.Stderr by default")
+	})
+
+	// Test that a custom writer passed at construction is returned by GetOutput.
+	t.Run("custom writer passed at construction", func(t *testing.T) {
+		var buf bytes.Buffer
+		baseLogger := log.New(&buf)
+		logger := NewAtmosLogger(baseLogger, &buf)
+		assert.Equal(t, &buf, logger.GetOutput(), "GetOutput should return the writer passed to NewAtmosLogger")
+	})
+
+	// Test that WithPrefix propagates the writer from the parent logger.
+	t.Run("WithPrefix propagates writer", func(t *testing.T) {
+		var buf bytes.Buffer
+		baseLogger := log.New(&buf)
+		parent := NewAtmosLogger(baseLogger, &buf)
+		child := parent.WithPrefix("myprefix")
+		assert.Equal(t, &buf, child.GetOutput(), "WithPrefix child should propagate parent's writer")
+	})
+
+	// Test that With propagates the writer from the parent logger.
+	t.Run("With propagates writer", func(t *testing.T) {
+		var buf bytes.Buffer
+		baseLogger := log.New(&buf)
+		parent := NewAtmosLogger(baseLogger, &buf)
+		child := parent.With("key", "value")
+		assert.Equal(t, &buf, child.GetOutput(), "With child should propagate parent's writer")
+	})
+
+	// Test that a child created by WithPrefix holds a snapshot of the parent's writer at
+	// creation time. A subsequent parent.SetOutput must not change the child's writer.
+	t.Run("WithPrefix writer snapshot is isolated from later parent SetOutput", func(t *testing.T) {
+		var buf1, buf2 bytes.Buffer
+		parent := NewAtmosLogger(log.New(&buf1), &buf1)
+		child := parent.WithPrefix("x")
+		parent.SetOutput(&buf2)
+		assert.Equal(t, &buf1, child.GetOutput(),
+			"child writer must be the snapshot from creation time")
+		assert.Equal(t, &buf2, parent.GetOutput(),
+			"parent writer must reflect the SetOutput call")
+	})
+
+	// Test that a child created by With holds a snapshot of the parent's writer at
+	// creation time. A subsequent parent.SetOutput must not change the child's writer.
+	t.Run("With writer snapshot is isolated from later parent SetOutput", func(t *testing.T) {
+		var buf1, buf2 bytes.Buffer
+		parent := NewAtmosLogger(log.New(&buf1), &buf1)
+		child := parent.With("k", "v")
+		parent.SetOutput(&buf2)
+		assert.Equal(t, &buf1, child.GetOutput(),
+			"child writer must be the snapshot from creation time")
+		assert.Equal(t, &buf2, parent.GetOutput(),
+			"parent writer must reflect the SetOutput call")
+	})
+
+	// Test that SetOutput is consistent: GetOutput returns the new writer immediately,
+	// with no window where the tracked writer is updated but charm's writer is not.
+	t.Run("SetOutput is consistent under concurrent reads", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := New()
+		// Run many concurrent readers to ensure no torn reads.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for range 100 {
+				_ = logger.GetOutput()
+			}
+		}()
+		for range 100 {
+			logger.SetOutput(&buf)
+			logger.SetOutput(os.Stderr)
+		}
+		<-done
+	})
+
+	// Test that SetOutput(nil) is treated as "reset to os.Stderr".
+	t.Run("SetOutput nil resets to os.Stderr", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := New()
+		logger.SetOutput(&buf)
+		assert.Equal(t, &buf, logger.GetOutput(), "writer should be buf before nil reset")
+		logger.SetOutput(nil)
+		assert.Equal(t, os.Stderr, logger.GetOutput(), "SetOutput(nil) should reset writer to os.Stderr")
+	})
+
+	// Test that GetOutput returns os.Stderr when writer is nil (defensive guard).
+	t.Run("GetOutput nil writer returns os.Stderr", func(t *testing.T) {
+		logger := &AtmosLogger{charm: log.Default(), writer: nil}
+		assert.Equal(t, os.Stderr, logger.GetOutput(), "GetOutput on nil writer should return os.Stderr")
 	})
 }
 
@@ -450,12 +559,46 @@ func TestAtmosLogger_Integration(t *testing.T) {
 	baseLogger := log.New(&buf)
 	baseLogger.SetLevel(log.DebugLevel)
 
-	atmosLogger := NewAtmosLogger(baseLogger)
+	atmosLogger := NewAtmosLogger(baseLogger, &buf)
 	require.NotNil(t, atmosLogger)
 
 	// Verify that our wrapper properly delegates
 	atmosLogger.Debug("integration test")
 	assert.Contains(t, buf.String(), "integration test")
+}
+
+// BenchmarkAtmosLogger_Info benchmarks the Info method to ensure performance.
+// TestAtmosLogger_ConcurrentWarnAndSetOutput verifies that concurrent calls to Warn
+// and SetOutput do not trigger a data race detected by the Go race detector.
+func TestAtmosLogger_ConcurrentWarnAndSetOutput(t *testing.T) {
+	var buf1 bytes.Buffer
+	logger := New()
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Goroutine A: emit log messages concurrently.
+	go func() {
+		defer wg.Done()
+		for range iterations {
+			logger.Warn("concurrent message")
+		}
+	}()
+
+	// Goroutine B: alternate the output writer concurrently.
+	go func() {
+		defer wg.Done()
+		for i := range iterations {
+			if i%2 == 0 {
+				logger.SetOutput(&buf1)
+			} else {
+				logger.SetOutput(os.Stderr)
+			}
+		}
+	}()
+
+	wg.Wait()
 }
 
 // BenchmarkAtmosLogger_Info benchmarks the Info method to ensure performance.

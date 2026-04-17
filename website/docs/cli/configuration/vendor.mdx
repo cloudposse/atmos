@@ -163,6 +163,26 @@ vendor:
 
 Atmos processes files in alphabetical order: `aws.yaml`, then `common.yaml`, then `kubernetes.yaml`.
 
+## Environment Variables
+
+The following environment variable controls the behavior of `atmos vendor pull`:
+
+<dl>
+  <dt>`ATMOS_GITHUB_ARCHIVED_CHECK_TIMEOUT`</dt>
+  <dd>
+    Maximum time Atmos waits for the GitHub API archived-status check during `atmos vendor pull`.
+    The check is best-effort: a timeout or network error is logged at `TRACE` level and does not
+    abort vendoring.
+
+    - **Default:** `5s`
+    - **Opt-out:** `0s` — disables the check entirely; recommended for air-gapped or offline environments
+    - **Format:** Any Go duration string, e.g. `2s`, `500ms`, `10s`
+    - **Note:** This is an environment-variable-only setting; it is not a YAML field.
+
+    This value is read once when Atmos starts. Set it in your shell environment before running Atmos.
+  </dd>
+</dl>
+
 ## Related Commands
 
 <DocCardList items={[

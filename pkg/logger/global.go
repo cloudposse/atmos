@@ -25,7 +25,7 @@ func init() {
 		charmLogger.SetColorProfile(termenv.Ascii)
 	}
 
-	defaultLogger.Store(NewAtmosLogger(charmLogger))
+	defaultLogger.Store(NewAtmosLogger(charmLogger, nil))
 }
 
 // Default returns the global default AtmosLogger instance.
@@ -42,5 +42,5 @@ func SetDefault(logger *AtmosLogger) {
 
 // New creates a new AtmosLogger with default settings.
 func New() *AtmosLogger {
-	return NewAtmosLogger(charm.New(os.Stderr))
+	return NewAtmosLogger(charm.New(os.Stderr), os.Stderr)
 }

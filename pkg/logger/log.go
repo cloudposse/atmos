@@ -95,6 +95,11 @@ func SetOutput(w io.Writer) {
 	Default().SetOutput(w)
 }
 
+// GetOutput returns the current output writer from the default logger.
+func GetOutput() io.Writer {
+	return Default().GetOutput()
+}
+
 // SetStyles sets the log styles on the default logger.
 func SetStyles(styles *charm.Styles) {
 	Default().SetStyles(styles)

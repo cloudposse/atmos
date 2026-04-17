@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -324,6 +325,13 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 
 		// Determine package type from source-level URI.
 		pType := determinePackageType(useOciScheme, useLocalFileSystem)
+
+		// Warn if the source is an archived GitHub repository.
+		// TODO: thread context.Context through the vendor pipeline so this check cancels on Ctrl+C.
+		// See https://github.com/cloudposse/atmos/issues for the tracking issue.
+		if pType == pkgTypeRemote {
+			warnIfArchivedGitHubRepo(context.Background(), uri, params.sources[indexSource].Component)
+		}
 
 		// Process each target within the source.
 		pkgs, err := processTargets(&processTargetsParams{

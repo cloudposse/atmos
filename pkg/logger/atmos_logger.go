@@ -3,22 +3,48 @@ package logger
 import (
 	"io"
 	"math"
+	"os"
+	"sync"
 
 	charm "github.com/charmbracelet/log"
 	"github.com/muesli/termenv"
 )
 
 // AtmosLogger wraps the Charm Bracelet logger to provide a consistent interface for Atmos while maintaining full compatibility.
+//
+// Thread safety: AtmosLogger.mu guards only the l.writer field (used by SetOutput,
+// GetOutput, WithPrefix, With). Log-emission methods (Trace, Debug, Info, Warn, Error,
+// Fatal, Log, Print, SetLevel, GetLevel) call charm.Logger directly without holding mu;
+// charm.Logger uses its own internal synchronization for concurrent log calls.
 type AtmosLogger struct {
-	charm *charm.Logger
+	charm  *charm.Logger
+	mu     sync.RWMutex
+	writer io.Writer // tracks the current output writer for GetOutput
 }
 
 // NewAtmosLogger creates a new AtmosLogger instance wrapping the given charm logger.
-func NewAtmosLogger(charmLogger *charm.Logger) *AtmosLogger {
+// Pass the same io.Writer that was used to construct charmLogger so that GetOutput()
+// returns the correct writer immediately after construction. Pass nil to use os.Stderr,
+// which matches the default writer of charm.Default() and charm.New(os.Stderr).
+//
+// If charmLogger was initialized with a non-stderr writer (e.g., charm.New(&buf)),
+// pass that same writer so that GetOutput() returns the correct value immediately
+// without requiring a follow-up SetOutput call.
+//
+// If charmLogger is nil, charm.Default() is used as a fallback. When w is non-nil in
+// that case, charm.Default().SetOutput(w) is called so that the charm logger and the
+// tracked writer (GetOutput) are consistent from the moment of construction.
+func NewAtmosLogger(charmLogger *charm.Logger, w io.Writer) *AtmosLogger {
 	if charmLogger == nil {
 		charmLogger = charm.Default()
+		if w != nil {
+			charmLogger.SetOutput(w) // keep charm and tracked writer in sync
+		}
 	}
-	return &AtmosLogger{charm: charmLogger}
+	if w == nil {
+		w = os.Stderr
+	}
+	return &AtmosLogger{charm: charmLogger, writer: w}
 }
 
 // Trace logs a trace message.
@@ -102,8 +128,31 @@ func (l *AtmosLogger) GetLevel() Level {
 }
 
 // SetOutput sets the output writer.
+// The write lock is held for both the tracked writer update and the underlying
+// charm logger update so that any concurrent GetOutput call always observes a
+// fully consistent pair: l.writer and charm's internal writer are always equal.
+//
+// Passing nil is treated as "reset to os.Stderr": both the tracked writer and
+// charm's output are set to os.Stderr.
 func (l *AtmosLogger) SetOutput(w io.Writer) {
+	if w == nil {
+		w = os.Stderr
+	}
+	l.mu.Lock()
+	l.writer = w
 	l.charm.SetOutput(w)
+	l.mu.Unlock()
+}
+
+// GetOutput returns the current output writer.
+// If the writer has not been set (nil), os.Stderr is returned as the safe default.
+func (l *AtmosLogger) GetOutput() io.Writer {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	if l.writer == nil {
+		return os.Stderr
+	}
+	return l.writer
 }
 
 // SetStyles sets the log styles.
@@ -117,13 +166,32 @@ func (l *AtmosLogger) SetColorProfile(profile termenv.Profile) {
 }
 
 // WithPrefix returns a new logger with the given prefix.
+// The read lock is held for the entire duration of the charm call so that no
+// concurrent SetOutput can update charm's writer between reading l.writer and
+// calling l.charm.WithPrefix(prefix). l.charm is immutable after construction
+// (no method replaces the pointer), so the read lock is sufficient.
+//
+// Writer snapshot: the returned logger captures the parent's output writer at
+// the time of this call. Subsequent SetOutput calls on the parent do not
+// propagate to the child.
 func (l *AtmosLogger) WithPrefix(prefix string) *AtmosLogger {
-	return &AtmosLogger{charm: l.charm.WithPrefix(prefix)}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	child := l.charm.WithPrefix(prefix)
+	return &AtmosLogger{charm: child, writer: l.writer}
 }
 
 // With returns a new logger with the given key-value pairs.
+// The read lock is held for the entire duration of the charm call (see WithPrefix).
+//
+// Writer snapshot: the returned logger captures the parent's output writer at
+// the time of this call. Subsequent SetOutput calls on the parent do not
+// propagate to the child.
 func (l *AtmosLogger) With(keyvals ...interface{}) *AtmosLogger {
-	return &AtmosLogger{charm: l.charm.With(keyvals...)}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	child := l.charm.With(keyvals...)
+	return &AtmosLogger{charm: child, writer: l.writer}
 }
 
 // GetLevelString returns the string representation of the current log level handling our custom levels appropriately.

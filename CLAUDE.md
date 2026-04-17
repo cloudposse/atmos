@@ -220,6 +220,34 @@ ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, 
 ### Follow-up Tracking (MANDATORY)
 When a PR defers work to a follow-up (e.g., migration, cleanup, refactor), **open a GitHub issue and link it by number** in the blog post, roadmap, and/or PR description before merging. Blog posts with "a follow-up issue will..." with no `#number` are incomplete — the work will never be tracked.
 
+### Test-Only Helpers in Production Packages (MANDATORY)
+When a test utility (seed/reset/inject) must be accessible from tests in **multiple packages**
+(e.g., `pkg/foo` and `internal/exec`), Go's `export_test.go` mechanism cannot help because
+`_test.go` files are not visible when another package imports the production package during its
+own tests. In these cases:
+- Export the helper from the production package with a clear doc comment: `// NOTE: test utility`
+- **NEVER** silently export test helpers without documentation
+- Prefer suffixes like `ForTest` or prefix with `Test` to signal intent
+- Document the limitation in both the function comment and in the audit response
+
+### Context Cancellation in Tests (MANDATORY)
+- **NEVER use `context.WithTimeout(ctx, 0)`** for "immediately expired" contexts — a zero
+  duration creates a deadline of `time.Now()` which may not be past on fast hardware.
+- **ALWAYS use `context.WithCancel` + immediate `cancel()`** for reliably cancelled contexts:
+  ```go
+  ctx, cancel := context.WithCancel(context.Background())
+  cancel() // immediately cancelled — safe on all hardware
+  defer cancel()
+  ```
+- For a past deadline: `context.WithDeadline(ctx, time.Now().Add(-time.Second))`
+
+### Global State Synchronization (MANDATORY)
+For any package-level variable mutated by test helpers and read by production functions:
+- Use `sync/atomic` for simple scalars (int64, uint64) — prefer `atomic.Int64` (Go 1.19+)
+- Use `sync.RWMutex` for complex types (structs, slices, maps)
+- Document the synchronization mechanism in the variable's doc comment
+- Test helpers that modify global state must restore it via `t.Cleanup`
+
 ### Mock Generation (MANDATORY)
 Use `go.uber.org/mock/mockgen` with `//go:generate` directives. Never manual mocks.
 
