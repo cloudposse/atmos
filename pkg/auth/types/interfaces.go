@@ -323,6 +323,23 @@ type AuthManager interface {
 	// the specific provider name.
 	// Returns the provider config and true if found, nil and false otherwise.
 	ResolveProviderConfig(identityName string) (*schema.Provider, bool)
+
+	// MaybeOfferAnyProfileFallback offers to switch profiles when the base
+	// configuration has no usable identities or providers. Called by auth
+	// commands (login, exec, shell, env, console, whoami) before returning
+	// their terminal "no identity/provider" error.
+	//
+	// Behavior:
+	//   - Returns nil when no fallback was triggered — caller surfaces the original error.
+	//   - Returns an enriched error (wrapping ErrNoIdentitiesAvailable) when
+	//     non-interactive and at least one profile defines auth config.
+	//   - On successful interactive re-exec, never returns (process is replaced).
+	//
+	// The fallback is suppressed when:
+	//   - ATMOS_PROFILE_FALLBACK=1 loop guard is set (already inside a re-exec).
+	//   - The user has explicitly set --profile or ATMOS_PROFILE.
+	//   - No profile defines auth config.
+	MaybeOfferAnyProfileFallback(ctx context.Context) error
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.

@@ -29,6 +29,7 @@ Configure the profiles system in your `atmos.yaml`:
 ```yaml
 profiles:
   base_path: "custom/profiles"  # Optional: custom directory for profiles
+  default: "dev"                # Optional: profile loaded when no --profile/ATMOS_PROFILE is set
 ```
 
 <dl>
@@ -38,7 +39,24 @@ profiles:
 
     **Default:** Not set (uses standard profile locations)
   </dd>
+  <dt>`profiles.default`</dt>
+  <dd>
+    Name of a profile loaded automatically when neither the `--profile` flag nor the `ATMOS_PROFILE` environment variable is set.
+
+    The default is treated as **implicit** — an explicit `--profile` or `ATMOS_PROFILE` always wins, and a default profile's own `profiles.default` is ignored (no recursion).
+
+    **Default:** Not set
+  </dd>
 </dl>
+
+### Precedence
+
+Atmos resolves the active profile using this precedence (highest first):
+
+1. `--profile` flag
+2. `ATMOS_PROFILE` environment variable
+3. `profiles.default` in the base `atmos.yaml`
+4. No profile
 
 ## Profile Discovery
 
@@ -278,6 +296,32 @@ Store personal profiles in your XDG config directory:
 ```
 
 These won't be committed to version control but are available across all projects.
+
+## Interactive Profile Suggestion
+
+Atmos offers two complementary prompt flows when your profile selection is missing context for auth.
+
+### Identity-specific suggestion
+
+When you run a command with `--identity <name>` but that identity isn't defined in the currently loaded config, Atmos checks whether any available profile defines it.
+
+**Interactive terminal:** Atmos prompts you to switch. If exactly one profile defines the identity, you get a yes/no confirmation; if multiple do, you get a select list. Picking a profile re-executes Atmos with `--profile <picked>` prepended to your original arguments.
+
+**Non-interactive terminal (CI, scripts):** The `identity not found` error is enriched with hints naming the profile(s) and the exact `--profile` flag to re-run.
+
+### Generic fallback for auth commands
+
+When you run an auth command without `--identity` — e.g. `atmos auth login`, `atmos auth exec`, `atmos auth shell`, `atmos auth env`, `atmos auth console`, `atmos auth whoami` — and the base configuration has no usable `auth.identities` or `auth.providers`, Atmos checks whether any profile defines auth config at all.
+
+**Interactive terminal:** You get a select list of every profile whose `atmos.yaml` declares `auth.identities` or `auth.providers`. Picking one re-executes your command with `--profile <picked>` prepended.
+
+**Non-interactive terminal (CI, scripts):** The `no identities available` error is enriched with one hint per candidate profile and a closing hint showing the `--profile` flag to re-run with.
+
+### Shared behavior
+
+The suggestion (either form) is suppressed when you already passed `--profile` or set `ATMOS_PROFILE` — an explicit choice is always respected. A `profiles.default` from config counts as implicit, so the suggestion still fires when the default profile doesn't resolve the identity but another profile does.
+
+A loop guard (`ATMOS_PROFILE_FALLBACK=1`, set automatically during re-exec) prevents infinite prompt cycles if the selected profile also fails to resolve the identity.
 
 ## Related Commands
 

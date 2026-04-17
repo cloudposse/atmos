@@ -47,14 +47,15 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	ctx := context.Background()
+
 	// Determine identity.
 	identityName, err := identityFromFlagOrDefault(cmd, authManager)
 	if err != nil {
-		return err
+		return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
 	}
 
 	// Query whoami.
-	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(addGCPReauthExplanation(err), "", "")

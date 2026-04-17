@@ -30,6 +30,12 @@ type ProfilesConfig struct {
 	// If relative, resolved from atmos.yaml directory.
 	// If absolute, used as-is.
 	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+
+	// Default is the name of a profile loaded automatically when neither the
+	// --profile flag nor the ATMOS_PROFILE environment variable is set.
+	// The default is treated as implicit: an explicit --profile or ATMOS_PROFILE
+	// always wins, and it does not suppress the interactive identity fallback.
+	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 }
 
 // ConfigMetadata contains metadata about a configuration file or profile.

@@ -66,7 +66,8 @@ var authEnvCmd = &cobra.Command{
 		if identityName == "" || forceSelect {
 			defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 			if err != nil {
-				return fmt.Errorf("no default identity configured and no identity specified: %w", err)
+				wrapped := fmt.Errorf("no default identity configured and no identity specified: %w", err)
+				return maybeOfferProfileFallbackOnAuthConfigError(cmd.Context(), authManager, wrapped)
 			}
 			identityName = defaultIdentity
 		}

@@ -185,6 +185,12 @@ func (a *authContextWrapper) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
 
+func (a *authContextWrapper) MaybeOfferAnyProfileFallback(ctx context.Context) error {
+	defer perf.Track(nil, "exec.authContextWrapper.MaybeOfferAnyProfileFallback")()
+
+	panic("authContextWrapper.MaybeOfferAnyProfileFallback should not be called")
+}
+
 // newAuthContextWrapper creates an AuthManager wrapper that returns the given AuthContext.
 func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper {
 	if authContext == nil {

@@ -79,14 +79,14 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 			// This enables seamless first-login with auto_provision_identities.
 			providerName, err = getProviderForFallback(authManager)
 			if err != nil {
-				return err
+				return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
 			}
 			whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 			if err != nil {
 				return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
 			}
 		} else if err != nil {
-			return err
+			return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
 		}
 	}
 
@@ -126,6 +126,11 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 	// Perform identity authentication.
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
+		// User explicitly cancelled (Ctrl+C/ESC) — surface a clean abort
+		// without wrapping in ErrAuthenticationFailed.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			return nil, false, errUtils.ErrUserAborted
+		}
 		return nil, false, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 	}
 

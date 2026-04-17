@@ -88,17 +88,18 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
 
+	ctx := context.Background()
 	if identityName == "" || forceSelect {
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
+			wrapped := fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
+			return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, wrapped)
 		}
 		identityName = defaultIdentity
 	}
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
-	ctx := context.Background()
 	_, err = authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)

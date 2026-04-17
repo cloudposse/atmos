@@ -281,18 +281,28 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	}
 	setEnv(v)
 
-	// Load profiles if specified via --profile flag or ATMOS_PROFILE env var.
+	// Load profiles if specified via --profile flag, ATMOS_PROFILE env var, or
+	// the `profiles.default` field in the base atmos.yaml.
 	// Profiles are loaded after base config but before final unmarshaling.
 	// This allows profiles to override base config settings.
-
-	// If profiles weren't passed via ConfigAndStacksInfo, check if they were
-	// specified via --profile flag or ATMOS_PROFILE env var.
+	//
+	// Resolution precedence (highest to lowest):
+	// 1. --profile flag
+	// 2. ATMOS_PROFILE env var
+	// 3. profiles.default from the base atmos.yaml (implicit default)
+	//
 	// Note: Global flags are bound to viper.GetViper() (global singleton), not the local viper instance.
+	// The `profiles.default` field is read from the LOCAL viper `v`, which has the base
+	// atmos.yaml loaded at this point. A default profile's own `profiles.default` is
+	// ignored to avoid cycles and surprise (see PRD: interactive-profile-suggestion).
 	if len(configAndStacksInfo.ProfilesFromArg) == 0 {
 		profiles, source := getProfilesFromFlagsOrEnv()
 		if len(profiles) > 0 {
 			configAndStacksInfo.ProfilesFromArg = profiles
 			log.Debug("Profiles loaded from CLI "+source, "profiles", profiles)
+		} else if defaultProfile := strings.TrimSpace(v.GetString("profiles.default")); defaultProfile != "" {
+			configAndStacksInfo.ProfilesFromArg = []string{defaultProfile}
+			log.Debug("Profile loaded from profiles.default in atmos.yaml", "profile", defaultProfile)
 		}
 	}
 

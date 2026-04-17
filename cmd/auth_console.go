@@ -74,15 +74,16 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	ctx := context.Background()
+
 	// Get identity name.
 	identityName, err := resolveIdentityName(cmd, authManager)
 	if err != nil {
-		return err
+		return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
 	}
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
-	ctx := context.Background()
 	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)

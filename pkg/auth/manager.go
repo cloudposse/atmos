@@ -88,6 +88,10 @@ type manager struct {
 	credentialStore types.CredentialStore
 	validator       types.Validator
 	stackInfo       *schema.ConfigAndStacksInfo
+	// cliConfigPath is the directory containing the loaded atmos.yaml.
+	// Used to discover profiles for the interactive identity fallback
+	// (see profile_fallback.go).
+	cliConfigPath string
 	// chain holds the most recently constructed authentication chain.
 	// where index 0 is the provider name, followed by identities in order.
 	chain []string
@@ -162,6 +166,7 @@ func NewAuthManager(
 		credentialStore: credentialStore,
 		validator:       validator,
 		stackInfo:       stackInfo,
+		cliConfigPath:   cliConfigPath,
 		realm:           realmInfo,
 	}
 
@@ -219,6 +224,16 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Resolve identity name case-insensitively
 	resolvedName, found := m.resolveIdentityName(identityName)
 	if !found {
+		// If the identity is defined in another profile that hasn't been
+		// loaded, offer to re-exec Atmos with that profile (interactive) or
+		// surface a hint naming the profile (non-interactive). Explicit
+		// --profile / ATMOS_PROFILE selections are never overridden.
+		// See PRD: interactive-profile-suggestion.
+		if !types.SuppressAuthErrors(ctx) {
+			if fbErr := m.maybeOfferProfileFallback(ctx, identityName); fbErr != nil {
+				return nil, fbErr
+			}
+		}
 		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
