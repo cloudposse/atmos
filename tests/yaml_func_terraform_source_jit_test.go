@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -128,6 +129,18 @@ func TestTerraformStateJITWorkdirFromSource(t *testing.T) {
 // Regression test for https://github.com/cloudposse/atmos/issues/2167.
 func TestTerraformOutputJITWorkdirFromSource(t *testing.T) {
 	RequireTerraformOrTofu(t)
+
+	// go-getter's FileGetter creates a symlink at the destination when fetching
+	// file:// URIs. Windows CI runners frequently lack the privilege required to
+	// create symlinks (SeCreateSymbolicLinkPrivilege), causing the fetch to fail
+	// without a visible error message. Real-world source URIs are typically
+	// remote (github.com, s3://) and go-getter copies rather than symlinks for
+	// those, so the JIT-workdir-from-source behavior this test verifies is still
+	// covered by Linux and macOS CI. See pkg/downloader/git_getter_test.go for
+	// the same Windows-symlink skip pattern used elsewhere.
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping file:// source fetch on Windows (go-getter symlink requirement)")
+	}
 
 	t.Chdir("./fixtures/scenarios/terraform-output-jit-workdir")
 
