@@ -1,10 +1,12 @@
 package tests
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -27,6 +29,65 @@ func toFileURI(absPath string) string {
 		p = "/" + p
 	}
 	return "file://" + p
+}
+
+// buildSourceTarball packages the given source directory into a .tar.gz archive
+// inside t.TempDir() and returns its absolute path.
+//
+// Why a tarball instead of pointing go-getter at the source directory directly:
+// go-getter's FileGetter creates a SYMLINK at the destination when the source
+// is a directory. Windows CI runners typically lack SeCreateSymbolicLinkPrivilege,
+// so the symlink creation fails silently. Archive sources take a different code
+// path — go-getter extracts the archive to the destination as real files, which
+// works on every platform regardless of symlink privilege.
+func buildSourceTarball(t *testing.T, srcDir string) string {
+	t.Helper()
+
+	archivePath := filepath.Join(t.TempDir(), "source.tar.gz")
+	f, err := os.Create(archivePath)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, f.Close()) }()
+
+	gz := gzip.NewWriter(f)
+	defer func() { require.NoError(t, gz.Close()) }()
+
+	tw := tar.NewWriter(gz)
+	defer func() { require.NoError(t, tw.Close()) }()
+
+	require.NoError(t, filepath.Walk(srcDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		// Skip the root directory entry itself; write its contents directly.
+		if path == srcDir {
+			return nil
+		}
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		// tar requires forward slashes regardless of host OS.
+		hdr, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		hdr.Name = filepath.ToSlash(rel)
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		src, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+		_, err = io.Copy(tw, src)
+		return err
+	}))
+
+	return archivePath
 }
 
 // seedStateFile writes the hermetic pre-seeded state file for producer-from-source.
@@ -85,7 +146,7 @@ func TestTerraformStateJITWorkdirFromSource(t *testing.T) {
 	// The value does not affect !terraform.state resolution (which only needs
 	// IsWorkdirEnabled + BuildPath), but an unresolvable template would cause
 	// stack processing to fail before we reach the state lookup.
-	srcDir := toFileURI(filepath.Join(cwd, "source-modules", "mock-alt"))
+	srcDir := toFileURI(buildSourceTarball(t, filepath.Join(cwd, "source-modules", "mock-alt")))
 	t.Setenv("ATMOS_SOURCE_DIR", srcDir)
 
 	e.ResetStateCache()
@@ -130,24 +191,16 @@ func TestTerraformStateJITWorkdirFromSource(t *testing.T) {
 func TestTerraformOutputJITWorkdirFromSource(t *testing.T) {
 	RequireTerraformOrTofu(t)
 
-	// go-getter's FileGetter creates a symlink at the destination when fetching
-	// file:// URIs. Windows CI runners frequently lack the privilege required to
-	// create symlinks (SeCreateSymbolicLinkPrivilege), causing the fetch to fail
-	// without a visible error message. Real-world source URIs are typically
-	// remote (github.com, s3://) and go-getter copies rather than symlinks for
-	// those, so the JIT-workdir-from-source behavior this test verifies is still
-	// covered by Linux and macOS CI. See pkg/downloader/git_getter_test.go for
-	// the same Windows-symlink skip pattern used elsewhere.
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping file:// source fetch on Windows (go-getter symlink requirement)")
-	}
-
 	t.Chdir("./fixtures/scenarios/terraform-output-jit-workdir")
 
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 
-	srcDir := toFileURI(filepath.Join(cwd, "source-modules", "mock-alt"))
+	// Package mock-alt into a tarball and point ATMOS_SOURCE_DIR at it.
+	// go-getter extracts archives to the destination as real files, avoiding
+	// the FileGetter symlink path that requires SeCreateSymbolicLinkPrivilege
+	// on Windows.
+	srcDir := toFileURI(buildSourceTarball(t, filepath.Join(cwd, "source-modules", "mock-alt")))
 	t.Setenv("ATMOS_SOURCE_DIR", srcDir)
 
 	// Reset caches for test isolation.
