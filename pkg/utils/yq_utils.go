@@ -61,12 +61,18 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert data to YAML: %w", err)
 	}
 
+	// UnwrapScalar=false preserves YAML type information for scalar values.
+	// When true, yq strips surrounding quotes (e.g. `"true"` becomes bare `true`), causing
+	// the downstream YAML parser to lose the original Go type: a string "true" would be
+	// decoded as bool true, a string "42" as int 42, and so on.
+	// Setting UnwrapScalar=false keeps the yq encoder's quoting intact so that the
+	// YAML round-trip correctly reconstructs the original types.
 	pref := yqlib.YamlPreferences{
 		Indent:                      2,
 		ColorsEnabled:               false,
 		LeadingContentPreProcessing: true,
 		PrintDocSeparators:          true,
-		UnwrapScalar:                true,
+		UnwrapScalar:                false,
 		EvaluateTogether:            false,
 	}
 
@@ -80,10 +86,17 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 
 	trimmedResult := strings.TrimSpace(result)
 
-	// Handle scalar strings that could be misinterpreted by the YAML parser.
-	// When yq returns a scalar with UnwrapScalar=true, special characters like trailing
-	// colons can cause the YAML parser to misinterpret the value as a map.
-	// E.g., "arn:aws:secretsmanager:...::password::" would become {"password:": null}.
+	// isScalarString and isMisinterpretedScalar are safety-net guards that were
+	// necessary when UnwrapScalar=true caused the YAML parser to misinterpret scalar
+	// strings (e.g., ARNs or IPv6 addresses ending with "::").  With UnwrapScalar=false
+	// yq now emits properly quoted scalars so these cases are handled by the standard
+	// YAML round-trip below.
+	//
+	// Important: with PrintDocSeparators=true the output always starts with "---\n",
+	// making trimmedResult a multi-line string for all non-empty results.  Both
+	// isScalarString and isMisinterpretedScalar return false for multi-line input, so
+	// these branches are structurally unreachable under the current configuration.
+	// They are kept as a defensive fallback in case the output format changes.
 	if isScalarString(trimmedResult) {
 		return trimmedResult, nil
 	}
@@ -94,29 +107,50 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to unmarshal result: %w", err)
 	}
 
-	// Check if the YAML parser misinterpreted a scalar string as a map.
-	// This happens when the string contains colons that look like YAML map syntax.
+	// Defensive fallback: detect strings the YAML parser might still misinterpret as maps.
 	if isMisinterpretedScalar(&node, trimmedResult) {
 		return trimmedResult, nil
 	}
 
 	processYAMLNode(&node)
-	resultBytes, err := yaml.Marshal(&node)
-	if err != nil {
-		return nil, fmt.Errorf("EvaluateYqExpression: failed to marshal processed node: %w", err)
+
+	// Thread the caller's atmosConfig through processCustomTags so that custom
+	// Atmos YAML tags embedded in the yq output are resolved with the correct
+	// configuration rather than a zero-value config.  When atmosConfig is nil
+	// (e.g., in unit tests), fall back to an empty config to satisfy the non-nil
+	// contract of processCustomTags.
+	cfg := atmosConfig
+	if cfg == nil {
+		cfg = &schema.AtmosConfiguration{}
 	}
 
-	res, err := UnmarshalYAML[any](string(resultBytes))
-	if err != nil {
-		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert YAML to Go type: %w", err)
+	if err := processCustomTags(cfg, &node, ""); err != nil {
+		return nil, fmt.Errorf("EvaluateYqExpression: failed to process custom tags: %w", err)
+	}
+
+	// Decode directly from the processed yaml.Node, avoiding an unnecessary
+	// intermediate marshal/unmarshal round-trip.
+	var res any
+	if err := node.Decode(&res); err != nil {
+		return nil, fmt.Errorf("EvaluateYqExpression: failed to decode YAML node: %w", err)
 	}
 
 	return res, nil
 }
 
-// isScalarString checks if the yq result appears to be a simple scalar string value
-// that should not be parsed as YAML. This handles edge cases where the YAML parser
-// would misinterpret the string (e.g., strings ending with colons).
+// isScalarString was the primary guard when UnwrapScalar=true was used in
+// EvaluateYqExpression. It detected scalar strings that the downstream YAML
+// parser would misinterpret (e.g., "#comment" stripped as a comment, or
+// "arn:...::password::" misread as a YAML map).
+//
+// Note: with the current configuration (PrintDocSeparators=true,
+// UnwrapScalar=false), yq always emits a document-separator line ("---\n")
+// before the value, so trimmedResult always contains "\n" for non-empty
+// output. Because every isScalarString branch either requires the absence of
+// "\n" (the colon-suffix and "#"-prefix paths) or explicitly rejects
+// multi-line input, this function returns false for all normal yq output
+// under the current settings. It is retained as a defensive fallback in case
+// the yq output format changes or a future caller uses different preferences.
 func isScalarString(s string) bool {
 	// Handle strings starting with # (comments would be stripped by YAML parser).
 	if strings.HasPrefix(s, "#") && !strings.Contains(s, "\n") {
@@ -146,8 +180,10 @@ func isScalarString(s string) bool {
 }
 
 // isYAMLNullValue checks if a YAML node represents a null value.
+// A node is null when it carries the !!null tag, or when its value is empty and
+// the tag is not !!str (an explicit empty string is a valid non-null value).
 func isYAMLNullValue(node *yaml.Node) bool {
-	return node.Kind == yaml.ScalarNode && (node.Value == "" || node.Tag == "!!null")
+	return node.Kind == yaml.ScalarNode && (node.Tag == "!!null" || (node.Value == "" && node.Tag != "!!str"))
 }
 
 // keyMatchesOriginalWithColon checks if the key plus trailing colon(s) matches the original string.
@@ -160,6 +196,11 @@ func keyMatchesOriginalWithColon(key, original string) bool {
 // isMisinterpretedScalar checks if the YAML parser has misinterpreted a scalar string as a map.
 // This happens when a string ends with colons (e.g., "value:" or "value::") which YAML
 // interprets as a map key with a null value.
+//
+// Note: with UnwrapScalar=false, yq quotes colon-suffixed strings (e.g., "arn:...::") so they
+// are parsed as ScalarNodes by yaml.Unmarshal, not MappingNodes.  As a result, this function
+// returns false for all normal yq output under the current configuration.  It is retained as
+// a defensive fallback for unexpected edge cases.
 func isMisinterpretedScalar(node *yaml.Node, originalResult string) bool {
 	// Navigate to document content if this is a document node.
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
@@ -207,6 +248,12 @@ func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration,
 		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to convert data to YAML: %w", err)
 	}
 
+	// UnwrapScalar=true is intentional here: the result is decoded into a strongly-typed
+	// Go struct T (e.g., schema.AtmosConfiguration).  For struct decoding, YAML type
+	// coercion is desirable — the yaml.v3 decoder correctly maps bare `true`/`false` to
+	// bool fields, bare integers to int fields, and so on.  Preserving quotes (as done in
+	// EvaluateYqExpression) is only necessary when the return type is `any`, where the
+	// decoder must infer the Go type from the YAML tag.
 	pref := yqlib.YamlPreferences{
 		Indent:                      2,
 		ColorsEnabled:               false,
