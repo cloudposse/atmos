@@ -7,7 +7,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -18,6 +17,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -48,9 +48,10 @@ func newProfileFallbackKeyMap() *huh.KeyMap {
 	return keyMap
 }
 
-// execFunc is the process-replacement function used by the profile fallback.
-// It is a variable so tests can replace it with a mock.
-var execFunc = syscall.Exec
+// Process replacement goes through pkg/reexec.Exec, which has
+// platform-specific defaults (syscall.Exec on Unix, a spawn-wait-exit shim
+// on Windows). Tests swap reexec.Exec to avoid actually replacing the test
+// process.
 
 // buildFallbackAtmosConfig returns a minimal AtmosConfiguration scoped to the
 // manager's loaded atmos.yaml so the config-layer profile helpers can discover
@@ -432,23 +433,28 @@ func reExecWithProfile(profileName string) error {
 		return fmt.Errorf("failed to locate atmos binary: %w", err)
 	}
 
-	// Build new argv: [atmos, --profile, <name>, <original args...>].
+	// Build new argv: [atmos, --profile, <name>, <original args minus --chdir>].
 	// os.Args[0] is the program name that the re-exec'd process will see.
+	// --chdir / -C was already applied to this process by processEarlyChdirFlag;
+	// stripping it from the child's argv prevents a relative chdir from being
+	// re-applied against the already-changed cwd.
 	origArgs := os.Args
 	newArgs := make([]string, 0, len(origArgs)+2)
 	newArgs = append(newArgs, origArgs[0])
 	newArgs = append(newArgs, profileFlagName, profileName)
 	if len(origArgs) > 1 {
-		newArgs = append(newArgs, origArgs[1:]...)
+		newArgs = append(newArgs, reexec.StripChdirArgs(origArgs[1:])...)
 	}
 
-	// Propagate environment + loop guard.
-	env := append(os.Environ(), profileFallbackGuardEnv+"="+profileFallbackGuardValue)
+	// Propagate environment + loop guard. ATMOS_CHDIR is filtered for the
+	// same reason --chdir is stripped from argv.
+	env := reexec.FilterChdirEnv(os.Environ())
+	env = append(env, profileFallbackGuardEnv+"="+profileFallbackGuardValue)
 
 	log.Debug("re-executing atmos with selected profile",
 		"profile", profileName,
 		"exe", exe,
 		"argv", newArgs)
 
-	return execFunc(exe, newArgs, env)
+	return reexec.Exec(exe, newArgs, env)
 }

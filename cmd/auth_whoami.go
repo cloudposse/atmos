@@ -167,7 +167,7 @@ func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthMan
 
 	defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 	if err != nil {
-		return "", fmt.Errorf("%w: no default identity configured and no identity specified: %v", errUtils.ErrInvalidAuthConfig, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
 	}
 	return defaultIdentity, nil
 }

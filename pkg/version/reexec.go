@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -46,7 +46,10 @@ type VersionInstaller interface {
 }
 
 // ExecFunc is the function signature for syscall.Exec.
-type ExecFunc func(argv0 string, argv []string, envv []string) error
+//
+// Deprecated: use reexec.ExecFunc. Kept here for source compatibility with
+// callers that still reference this alias.
+type ExecFunc = reexec.ExecFunc
 
 // PRCacheChecker checks PR cache status.
 type PRCacheChecker func(prNumber int) (toolchain.PRCacheStatus, string)
@@ -89,7 +92,7 @@ func DefaultReexecConfig() *ReexecConfig {
 	return &ReexecConfig{
 		Finder:         installer,
 		Installer:      &defaultInstaller{},
-		ExecFn:         syscall.Exec,
+		ExecFn:         reexec.Exec,
 		GetEnv:         getEnvWrapper,
 		SetEnv:         os.Setenv,
 		Args:           os.Args,
@@ -248,7 +251,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	ui.Successf("Switching to Atmos version `%s`", requestedVersion)
 
 	// Strip flags that shouldn't be passed to the target version.
-	args := stripChdirFlags(cfg.Args)
+	// --chdir was already applied by the parent; leaving it in argv would
+	// cause the child to re-apply a relative path against the already-changed
+	// cwd. --use-version is dropped so older target binaries don't see an
+	// unknown flag.
+	args := reexec.StripChdirArgs(cfg.Args)
 	args = stripUseVersionFlags(args)
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
@@ -398,40 +405,6 @@ func findOrInstallSHAVersionWithConfig(sha string, cfg *ReexecConfig) (string, e
 	}
 
 	return binaryPath, nil
-}
-
-// stripChdirFlags removes --chdir, -C flags and their values from args.
-// This prevents double directory changes when re-exec'ing after chdir has already been applied.
-func stripChdirFlags(args []string) []string {
-	defer perf.Track(nil, "version.stripChdirFlags")()
-
-	result := make([]string, 0, len(args))
-	skipNext := false
-
-	for i, arg := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-
-		// Handle --chdir=value or -C=value (combined form).
-		if strings.HasPrefix(arg, "--chdir=") || strings.HasPrefix(arg, "-C=") {
-			continue
-		}
-
-		// Handle --chdir value or -C value (separate form).
-		if arg == "--chdir" || arg == "-C" {
-			// Skip this arg and the next one (the value).
-			if i+1 < len(args) {
-				skipNext = true
-			}
-			continue
-		}
-
-		result = append(result, arg)
-	}
-
-	return result
 }
 
 // stripUseVersionFlags removes --use-version flags and their values from args.

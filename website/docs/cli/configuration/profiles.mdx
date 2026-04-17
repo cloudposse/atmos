@@ -183,15 +183,6 @@ export ATMOS_PROFILE="ci,security"
 atmos terraform apply --auto-approve
 ```
 
-### Precedence
-
-When both the flag and environment variable are set, the flag takes precedence:
-
-```bash
-ATMOS_PROFILE=ci atmos --profile developer describe config
-# Uses: developer profile (flag wins)
-```
-
 ## Profile Merging
 
 When multiple profiles are activated, they are merged left-to-right. Later profiles override earlier ones:

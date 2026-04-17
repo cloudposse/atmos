@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -325,6 +326,8 @@ func HasExplicitProfile() bool {
 // nil when the profile exists but does not define the identity. Returns false +
 // error when the profile cannot be located or loaded.
 func ProfileDefinesIdentity(atmosConfig *schema.AtmosConfiguration, profileName, identityName string) (bool, error) {
+	defer perf.Track(atmosConfig, "config.ProfileDefinesIdentity")()
+
 	if atmosConfig == nil {
 		return false, fmt.Errorf("%w: atmosConfig is nil", errUtils.ErrInvalidAuthConfig)
 	}
@@ -370,6 +373,8 @@ func ProfileDefinesIdentity(atmosConfig *schema.AtmosConfiguration, profileName,
 // Errors loading individual profiles are logged at debug level and that profile
 // is skipped — a single broken profile should not hide the others.
 func ProfilesWithIdentity(atmosConfig *schema.AtmosConfiguration, identityName string) ([]string, error) {
+	defer perf.Track(atmosConfig, "config.ProfilesWithIdentity")()
+
 	if atmosConfig == nil || strings.TrimSpace(identityName) == "" {
 		return nil, nil
 	}
@@ -410,6 +415,8 @@ func ProfilesWithIdentity(atmosConfig *schema.AtmosConfiguration, identityName s
 //
 // Uses a scoped Viper instance — does NOT mutate global config.
 func ProfileDefinesAuthConfig(atmosConfig *schema.AtmosConfiguration, profileName string) (bool, error) {
+	defer perf.Track(atmosConfig, "config.ProfileDefinesAuthConfig")()
+
 	if atmosConfig == nil {
 		return false, fmt.Errorf("%w: atmosConfig is nil", errUtils.ErrInvalidAuthConfig)
 	}
@@ -452,6 +459,8 @@ func ProfileDefinesAuthConfig(atmosConfig *schema.AtmosConfiguration, profileNam
 // Errors loading individual profiles are logged at debug level and that profile
 // is skipped — a single broken profile should not hide the others.
 func ProfilesWithAuthConfig(atmosConfig *schema.AtmosConfiguration) ([]string, error) {
+	defer perf.Track(atmosConfig, "config.ProfilesWithAuthConfig")()
+
 	if atmosConfig == nil {
 		return nil, nil
 	}

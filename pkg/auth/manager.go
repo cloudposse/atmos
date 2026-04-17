@@ -229,12 +229,18 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		// surface a hint naming the profile (non-interactive). Explicit
 		// --profile / ATMOS_PROFILE selections are never overridden.
 		// See PRD: interactive-profile-suggestion.
-		if !types.SuppressAuthErrors(ctx) {
-			if fbErr := m.maybeOfferProfileFallback(ctx, identityName); fbErr != nil {
-				return nil, fbErr
-			}
+		//
+		// The fallback itself runs regardless of SuppressAuthErrors: that
+		// flag gates stderr noise from CheckErrorAndPrint, not the feature.
+		// Keeping the fallback gated would also hide profile suggestions
+		// from Whoami(), which always suppresses to keep passive checks
+		// quiet (see pkg/auth/manager.go Whoami).
+		if fbErr := m.maybeOfferProfileFallback(ctx, identityName); fbErr != nil {
+			return nil, fbErr
 		}
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
+		}
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 	// Use the resolved lowercase name for internal lookups

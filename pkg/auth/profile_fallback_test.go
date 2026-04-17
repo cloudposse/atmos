@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/reexec"
 )
 
 // hintsContain reports whether any hint in err contains the given substring.
@@ -198,18 +199,18 @@ func TestJoinQuoted(t *testing.T) {
 	}
 }
 
-// reExecWithProfile builds the correct argv and passes it to execFunc.
-// We swap execFunc with a mock so the test doesn't actually replace the
+// reExecWithProfile builds the correct argv and passes it to reexec.Exec.
+// We swap reexec.Exec with a mock so the test doesn't actually replace the
 // process.
 func TestReExecWithProfile_BuildsArgvAndEnv(t *testing.T) {
-	t.Cleanup(func() { execFunc = originalExecFunc })
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
 
-	// Capture what execFunc was called with.
+	// Capture what reexec.Exec was called with.
 	var gotArgv0 string
 	var gotArgs []string
 	var gotEnv []string
 
-	execFunc = func(argv0 string, argv []string, envv []string) error {
+	reexec.Exec = func(argv0 string, argv []string, envv []string) error {
 		gotArgv0 = argv0
 		gotArgs = argv
 		gotEnv = envv
@@ -248,10 +249,10 @@ func TestReExecWithProfile_BuildsArgvAndEnv(t *testing.T) {
 
 // reExecWithProfile handles the edge case where os.Args has only the binary name.
 func TestReExecWithProfile_NoExtraArgs(t *testing.T) {
-	t.Cleanup(func() { execFunc = originalExecFunc })
+	t.Cleanup(func() { reexec.Exec = originalExecFunc })
 
 	var gotArgs []string
-	execFunc = func(_ string, argv []string, _ []string) error {
+	reexec.Exec = func(_ string, argv []string, _ []string) error {
 		gotArgs = argv
 		return errExecMockCalled
 	}
@@ -397,10 +398,10 @@ func TestBuildAnyProfileSuggestionError_MultipleCandidates(t *testing.T) {
 	assert.True(t, hintsContain(err, "charlie"))
 }
 
-// Shared sentinel used by the execFunc mocks to short-circuit without
+// Shared sentinel used by the reexec.Exec mocks to short-circuit without
 // actually replacing the process.
-var errExecMockCalled = errors.New("mock execFunc called")
+var errExecMockCalled = errors.New("mock exec called")
 
-// originalExecFunc preserves the production value of execFunc so tests can
-// swap and restore it without leaking state between test cases.
-var originalExecFunc = execFunc
+// originalExecFunc preserves the production value of reexec.Exec so tests
+// can swap and restore it without leaking state between test cases.
+var originalExecFunc = reexec.Exec

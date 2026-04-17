@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -20,9 +19,7 @@ func TestLoadConfig_ProfilesDefault_LoadsWhenNoFlagOrEnv(t *testing.T) {
 	absFixture, err := filepath.Abs(fixturePath)
 	require.NoError(t, err)
 
-	if _, statErr := os.Stat(absFixture); os.IsNotExist(statErr) {
-		t.Skipf("fixture not found at %s", absFixture)
-	}
+	require.DirExists(t, absFixture, "required scenario fixture is missing")
 
 	t.Chdir(absFixture)
 
@@ -54,9 +51,7 @@ func TestLoadConfig_ProfilesDefault_OverriddenByExplicitFlag(t *testing.T) {
 	absFixture, err := filepath.Abs(fixturePath)
 	require.NoError(t, err)
 
-	if _, statErr := os.Stat(absFixture); os.IsNotExist(statErr) {
-		t.Skipf("fixture not found at %s", absFixture)
-	}
+	require.DirExists(t, absFixture, "required scenario fixture is missing")
 
 	t.Chdir(absFixture)
 
@@ -86,9 +81,7 @@ func TestLoadConfig_ProfilesDefault_OverriddenByEnvVar(t *testing.T) {
 	absFixture, err := filepath.Abs(fixturePath)
 	require.NoError(t, err)
 
-	if _, statErr := os.Stat(absFixture); os.IsNotExist(statErr) {
-		t.Skipf("fixture not found at %s", absFixture)
-	}
+	require.DirExists(t, absFixture, "required scenario fixture is missing")
 
 	t.Chdir(absFixture)
 
