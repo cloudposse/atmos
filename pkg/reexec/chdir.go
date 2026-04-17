@@ -22,6 +22,11 @@ const AtmosChdirEnvVar = "ATMOS_CHDIR"
 // values removed. It handles all five accepted forms: `--chdir VAL`,
 // `--chdir=VAL`, `-C VAL`, `-C=VAL`, and `-CVAL` (concatenated).
 //
+// The POSIX `--` end-of-flags separator is respected: once encountered,
+// the separator and every token that follows are forwarded verbatim so
+// positional arguments intended for downstream tools (terraform, helmfile,
+// packer, custom commands) are never mistaken for atmos flags.
+//
 // Use this before re-executing Atmos so a chdir that was already applied
 // by the parent is not re-applied by the child against the already-changed
 // working directory.
@@ -31,7 +36,15 @@ func StripChdirArgs(args []string) []string {
 	filtered := make([]string, 0, len(args))
 	skipNext := false
 
-	for _, arg := range args {
+	for i, arg := range args {
+		// Once we hit the POSIX end-of-flags separator, everything
+		// that follows is positional — forward the separator and
+		// all remaining tokens verbatim.
+		if arg == "--" {
+			filtered = append(filtered, args[i:]...)
+			return filtered
+		}
+
 		if skipNext {
 			skipNext = false
 			continue

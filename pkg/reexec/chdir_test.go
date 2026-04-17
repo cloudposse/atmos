@@ -82,6 +82,31 @@ func TestStripChdirArgs(t *testing.T) {
 			args:     []string{"atmos", "-C"},
 			expected: []string{"atmos"},
 		},
+		{
+			name:     "-- passes through -C and --chdir unchanged",
+			args:     []string{"atmos", "terraform", "apply", "--", "-C", "/tmp/workdir"},
+			expected: []string{"atmos", "terraform", "apply", "--", "-C", "/tmp/workdir"},
+		},
+		{
+			name:     "-- passes through --chdir=value unchanged",
+			args:     []string{"atmos", "terraform", "apply", "--", "--chdir=/foo"},
+			expected: []string{"atmos", "terraform", "apply", "--", "--chdir=/foo"},
+		},
+		{
+			name:     "-- passes through concatenated -Cvalue filename",
+			args:     []string{"atmos", "terraform", "apply", "--", "-Creport.txt"},
+			expected: []string{"atmos", "terraform", "apply", "--", "-Creport.txt"},
+		},
+		{
+			name:     "chdir before -- is stripped, tokens after -- preserved",
+			args:     []string{"atmos", "--chdir", "examples/demo", "terraform", "apply", "--", "-C", "/tmp/workdir"},
+			expected: []string{"atmos", "terraform", "apply", "--", "-C", "/tmp/workdir"},
+		},
+		{
+			name:     "bare -- with no trailing args",
+			args:     []string{"atmos", "terraform", "apply", "--"},
+			expected: []string{"atmos", "terraform", "apply", "--"},
+		},
 	}
 
 	for _, tt := range tests {
