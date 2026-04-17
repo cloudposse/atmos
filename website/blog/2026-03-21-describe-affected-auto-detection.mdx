@@ -1,0 +1,65 @@
+---
+slug: describe-affected-auto-detection
+title: "Zero-Config CI with Describe Affected Auto-Detection"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+The `atmos describe affected` command now auto-detects the base commit in CI environments, eliminating the need for verbose flag wiring in your workflows.
+
+<!--truncate-->
+
+## What Changed
+
+We introduced the `--base` flag as a unified replacement for `--ref` and `--sha`, and added automatic base resolution when running in CI with `ci.enabled: true`.
+
+### Before
+
+```yaml
+- name: Describe affected
+  run: |
+    atmos describe affected \
+      --ref ${{ github.event.pull_request.head.sha }} \
+      --sha ${{ github.event.action == 'closed' && steps.get_parent.outputs.parent_commit || github.event.pull_request.base.sha }}
+```
+
+### After
+
+```yaml
+- name: Describe affected
+  run: atmos describe affected
+```
+
+That's it. No flags needed. Atmos reads GitHub Actions environment variables and event payloads to determine the correct base commit for each event type.
+
+## How It Works
+
+When `ci.enabled` is `true` in your `atmos.yaml` and no explicit `--base` flag is provided, each CI provider resolves the base commit automatically:
+
+| GitHub Actions Event | Base Resolution |
+|---------------------|----------------|
+| Pull request (open/sync) | Target branch from `GITHUB_BASE_REF` |
+| Pull request (closed/merged) | PR base SHA from event payload |
+| Push | Previous HEAD from event payload |
+| Force push | Parent commit (`HEAD~1`) |
+| Merge group | Target branch from `GITHUB_BASE_REF` |
+
+## The `--base` Flag
+
+The new `--base` flag replaces both `--ref` and `--sha` with a single, intuitive flag that accepts either format:
+
+```shell
+atmos describe affected --base main
+atmos describe affected --base refs/tags/v1.16.0
+atmos describe affected --base 3a5eafeab90426bd82bf5899896b28cc0bab3073
+```
+
+The old `--ref` and `--sha` flags still work but are now deprecated.
+
+## Provider-Agnostic Architecture
+
+Base resolution is part of the CI provider interface — each provider implements its own `ResolveBase()` method. GitHub Actions is the first implementation, with the architecture ready for GitLab CI, Jenkins, and other providers.
+
+## Get Involved
+
+Try it out in your GitHub Actions workflows and let us know how it works. Open an issue at [github.com/cloudposse/atmos](https://github.com/cloudposse/atmos) with any feedback.

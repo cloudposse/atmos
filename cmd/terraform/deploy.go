@@ -27,6 +27,9 @@ var deployCmd = &cobra.Command{
 	Long: `Deploys infrastructure by running the Terraform apply command with automatic approval.
 
 This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return runHooks(h.BeforeTerraformDeploy, cmd, args)
+	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset captured output for this run.
 		capturedDeployOutput = ""

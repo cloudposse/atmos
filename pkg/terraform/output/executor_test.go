@@ -238,7 +238,7 @@ func TestExecutor_ExecuteWithSections_InitError(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformInit), "expected ErrTerraformInit")
 }
 
-func TestExecutor_ExecuteWithSections_WorkspaceNewError_AlreadyExists(t *testing.T) {
+func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -253,18 +253,18 @@ func TestExecutor_ExecuteWithSections_WorkspaceNewError_AlreadyExists(t *testing
 	atmosConfig := validAtmosConfig()
 	sections := validSections()
 
-	// Setup expectations - workspace already exists, so it falls back to select.
+	// Setup expectations - select fails, then new also fails.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("Workspace test-workspace already exists"))
-	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New("select failed"))
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New(`Workspace "test-workspace" doesn't exist.`))
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("create failed"))
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformWorkspaceOp), "expected ErrTerraformWorkspaceOp")
 }
 
-func TestExecutor_ExecuteWithSections_WorkspaceNewError_Unexpected(t *testing.T) {
+func TestExecutor_ExecuteWithSections_WorkspaceSelectFails_NewSucceeds(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -279,16 +279,15 @@ func TestExecutor_ExecuteWithSections_WorkspaceNewError_Unexpected(t *testing.T)
 	atmosConfig := validAtmosConfig()
 	sections := validSections()
 
-	// Setup expectations - unexpected error (network, permission, etc.) should fail fast.
+	// Setup expectations - select fails (workspace doesn't exist), new succeeds.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("network timeout"))
-	// WorkspaceSelect should NOT be called for unexpected errors.
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New(`Workspace "test-workspace" doesn't exist.`))
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, nil)
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrTerraformWorkspaceOp), "expected ErrTerraformWorkspaceOp")
-	assert.Contains(t, err.Error(), "network timeout")
+	require.NoError(t, err)
 }
 
 func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
@@ -309,7 +308,7 @@ func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
 	// Setup expectations.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	// Use AnyTimes() because retryOnWindows may call Output multiple times on Windows.
 	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, errors.New("output failed")).AnyTimes()
 
@@ -336,7 +335,7 @@ func TestExecutor_ExecuteWithSections_Success(t *testing.T) {
 	// Setup expectations.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id": {
 			Value: []byte(`"vpc-123456"`),
@@ -393,7 +392,7 @@ func TestExecutor_GetOutput_StaticRemoteState(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithStaticRemoteStateGetter(mockGetter))
 
 	// Clear any cached outputs for this test.
-	terraformOutputsCache.Delete("test-stack-test-component")
+	terraformOutputsCache.Delete(stackComponentKey("test-stack", "test-component"))
 
 	atmosConfig := validAtmosConfig()
 
@@ -421,7 +420,7 @@ func TestExecutor_GetOutput_CacheHit(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 
 	// Pre-populate cache.
-	stackSlug := "cached-stack-cached-component"
+	stackSlug := stackComponentKey("cached-stack", "cached-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"cached_value": "from-cache",
 	})
@@ -444,7 +443,7 @@ func TestExecutor_GetOutput_NonexistentKey(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 
 	// Pre-populate cache.
-	stackSlug := "nonexistent-stack-nonexistent-component"
+	stackSlug := stackComponentKey("nonexistent-stack", "nonexistent-component")
 	terraformOutputsCache.Store(stackSlug, map[string]any{
 		"existing_key": "value",
 	})
@@ -617,7 +616,7 @@ func TestExecutor_ExecuteWithSections_QuietMode(t *testing.T) {
 	mockRunner.EXPECT().SetStderr(gomock.Any()).Times(1)
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"result": {
 			Value: []byte(`"quiet_success"`),
@@ -772,7 +771,7 @@ func TestExecutor_GetOutput_FullExecutionPath(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache to force full execution.
-	stackSlug := "full-exec-stack-full-exec-component"
+	stackSlug := stackComponentKey("full-exec-stack", "full-exec-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -785,7 +784,7 @@ func TestExecutor_GetOutput_FullExecutionPath(t *testing.T) {
 	// Setup expectations for terraform operations.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id": {
 			Value: []byte(`"vpc-full-exec"`),
@@ -808,7 +807,7 @@ func TestExecutor_GetOutput_DescribeError(t *testing.T) {
 	exec := NewExecutor(mockDescriber)
 
 	// Clear cache to force describe call.
-	stackSlug := "describe-err-stack-describe-err-component"
+	stackSlug := stackComponentKey("describe-err-stack", "describe-err-component")
 	terraformOutputsCache.Delete(stackSlug)
 
 	atmosConfig := validAtmosConfig()
@@ -836,7 +835,7 @@ func TestExecutor_GetAllOutputs_Success(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "all-outputs-stack-all-outputs-component"
+	stackSlug := stackComponentKey("all-outputs-stack", "all-outputs-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -852,7 +851,7 @@ func TestExecutor_GetAllOutputs_Success(t *testing.T) {
 	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id":  {Value: []byte(`"vpc-all"`)},
 		"enabled": {Value: []byte(`true`)},
@@ -873,7 +872,7 @@ func TestExecutor_GetAllOutputs_CacheHit(t *testing.T) {
 	exec := NewExecutor(mockDescriber)
 
 	// Pre-populate cache.
-	stackSlug := "cache-hit-stack-cache-hit-component"
+	stackSlug := stackComponentKey("cache-hit-stack", "cache-hit-component")
 	cachedOutputs := map[string]any{"cached_key": "cached_value"}
 	terraformOutputsCache.Store(stackSlug, cachedOutputs)
 	defer terraformOutputsCache.Delete(stackSlug)
@@ -895,7 +894,7 @@ func TestExecutor_GetAllOutputs_Error(t *testing.T) {
 	exec := NewExecutor(mockDescriber)
 
 	// Clear cache.
-	stackSlug := "error-stack-error-component"
+	stackSlug := stackComponentKey("error-stack", "error-component")
 	terraformOutputsCache.Delete(stackSlug)
 
 	atmosConfig := validAtmosConfig()
@@ -945,7 +944,7 @@ func TestExecutor_GetAllOutputs_StaticRemoteState(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithStaticRemoteStateGetter(mockGetter))
 
 	// Clear cache.
-	stackSlug := "static-stack-static-component"
+	stackSlug := stackComponentKey("static-stack", "static-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -1007,7 +1006,7 @@ func TestExecutor_ExecuteWithSections_InitWithReconfigure(t *testing.T) {
 	// Setup expectations - init should be called with reconfigure option.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"result": {Value: []byte(`"reconfigure_success"`)},
 	}, nil)
@@ -1032,7 +1031,7 @@ func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "exec-err-stack-exec-err-component"
+	stackSlug := stackComponentKey("exec-err-stack", "exec-err-component")
 	terraformOutputsCache.Delete(stackSlug)
 
 	atmosConfig := validAtmosConfig()
@@ -1045,7 +1044,7 @@ func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
 
 	_, _, err := exec.GetOutput(atmosConfig, "exec-err-stack", "exec-err-component", "output", true, nil, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to execute terraform output")
+	assert.True(t, errors.Is(err, errUtils.ErrTerraformOutputFailed), "expected ErrTerraformOutputFailed")
 }
 
 // TestHighlightValue_NilConfig tests the highlightValue function with nil config.
@@ -1183,7 +1182,7 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 			// Setup expectations.
 			mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 			mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-			mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+			mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 			mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 				"vpc_id": {
 					Value: []byte(`"vpc-123456"`),
@@ -1224,7 +1223,7 @@ func TestExecutor_GetAllOutputs_SkipInit_SkipsInitAndWorkspace(t *testing.T) {
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "skipinit-stack-skipinit-component"
+	stackSlug := stackComponentKey("skipinit-stack", "skipinit-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -1275,7 +1274,7 @@ func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T
 	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
 
 	// Clear cache.
-	stackSlug := "noskip-stack-noskip-component"
+	stackSlug := stackComponentKey("noskip-stack", "noskip-component")
 	terraformOutputsCache.Delete(stackSlug)
 	defer terraformOutputsCache.Delete(stackSlug)
 
@@ -1299,7 +1298,7 @@ func TestExecutor_GetAllOutputs_SkipInit_False_RunsInitAndWorkspace(t *testing.T
 
 	// Init and workspace operations SHOULD be called.
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id": {Value: []byte(`"vpc-noskip"`)},
 	}, nil)
@@ -1480,7 +1479,7 @@ func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) 
 	// Setup mock expectations for the full execution path.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(nil)
 	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
 		"vpc_id": {Value: []byte(`"vpc-123"`)},
 	}, nil)
@@ -1495,4 +1494,188 @@ func TestExecutor_ExecuteWithSections_ToolchainResolvesExecutable(t *testing.T) 
 		"expected executable to be resolved to an absolute path, got %q", capturedExecutable)
 	assert.Equal(t, fakeBinary, capturedExecutable,
 		"expected executable to be resolved to the toolchain binary path")
+}
+
+// TestExecutor_GetOutputWithOptions_SkipInit verifies that GetOutputWithOptions with
+// SkipInit: true does not call terraform init or workspace operations. This is the
+// contract relied on by after-terraform-apply hooks which run in an already-initialized
+// workdir — calling init again causes state migration errors with stdin disabled.
+func TestExecutor_GetOutputWithOptions_SkipInit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	stackSlug := stackComponentKey("skip-init-stack", "skip-init-component")
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// DescribeComponent should be called with ProcessYamlFunctions=false when SkipInit=true and authManager=nil.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).DoAndReturn(
+		func(params *DescribeComponentParams) (map[string]any, error) {
+			assert.False(t, params.ProcessYamlFunctions,
+				"ProcessYamlFunctions should be false when SkipInit=true and authManager=nil")
+			return sections, nil
+		},
+	)
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	// Init and Workspace calls must NOT happen.
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"id": {Value: []byte(`"eg-test-override"`)},
+	}, nil)
+
+	value, exists, err := exec.GetOutputWithOptions(
+		atmosConfig,
+		"skip-init-stack",
+		"skip-init-component",
+		"id",
+		true,
+		nil,
+		nil,
+		&OutputOptions{SkipInit: true},
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "eg-test-override", value)
+}
+
+// TestExecutor_GetOutputWithOptions_CacheHit verifies that a pre-populated cache
+// is returned without calling DescribeComponent.
+func TestExecutor_GetOutputWithOptions_CacheHit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig()
+
+	stackSlug := stackComponentKey("opts-cache-stack", "opts-cache-component")
+	terraformOutputsCache.Store(stackSlug, map[string]any{"cached_out": "hit-value"})
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	// No DescribeComponent expected — cache hit short-circuits.
+	value, exists, err := exec.GetOutputWithOptions(
+		atmosConfig, "opts-cache-stack", "opts-cache-component", "cached_out",
+		false, nil, nil, nil,
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "hit-value", value)
+}
+
+// TestExecutor_GetOutputWithOptions_InvalidAuthManager verifies that an invalid
+// authManager type returns an error immediately.
+func TestExecutor_GetOutputWithOptions_InvalidAuthManager(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig()
+
+	_, _, err := exec.GetOutputWithOptions(
+		atmosConfig, "stack", "component", "output",
+		true, nil, "not-an-auth-manager", nil,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthManagerType)
+}
+
+// TestExecutor_GetOutputWithOptions_DescribeError verifies that a DescribeComponent
+// failure is propagated correctly.
+func TestExecutor_GetOutputWithOptions_DescribeError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	stackSlug := stackComponentKey("derr-stack", "derr-component")
+	terraformOutputsCache.Delete(stackSlug)
+
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(nil, errors.New("describe failed"))
+
+	_, _, err := exec.GetOutputWithOptions(
+		atmosConfig, "derr-stack", "derr-component", "out",
+		true, nil, nil, nil,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "describe failed")
+}
+
+// TestExecutor_GetOutputWithOptions_ExecuteError verifies that an execution failure
+// is propagated correctly.
+func TestExecutor_GetOutputWithOptions_ExecuteError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(func(_, _ string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}))
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	stackSlug := stackComponentKey("eerr-stack", "eerr-component")
+	terraformOutputsCache.Delete(stackSlug)
+
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(validSections(), nil)
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(errors.New("init failed"))
+
+	_, _, err := exec.GetOutputWithOptions(
+		atmosConfig, "eerr-stack", "eerr-component", "out",
+		true, nil, nil, nil,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
+}
+
+// TestExecutor_GetOutputWithOptions_StaticRemoteState verifies the static remote
+// state happy path returns the correct value without running terraform.
+func TestExecutor_GetOutputWithOptions_StaticRemoteState(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockGetter := NewMockStaticRemoteStateGetter(ctrl)
+
+	exec := NewExecutor(mockDescriber, WithStaticRemoteStateGetter(mockGetter))
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	stackSlug := stackComponentKey("srs-stack", "srs-component")
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	staticOutputs := map[string]any{"srs_key": "srs-value"}
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(validSections(), nil)
+	mockGetter.EXPECT().GetStaticRemoteStateOutputs(gomock.Any()).Return(staticOutputs)
+
+	value, exists, err := exec.GetOutputWithOptions(
+		atmosConfig, "srs-stack", "srs-component", "srs_key",
+		true, nil, nil, nil,
+	)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "srs-value", value)
 }

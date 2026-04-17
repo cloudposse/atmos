@@ -141,6 +141,12 @@ func AutoProvisionSource(
 			ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
 		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
+		// Signal that the workdir was wiped and re-provisioned this invocation.
+		// buildInitArgs checks this to decide whether -reconfigure is needed:
+		// a re-provisioned workdir has no .terraform/ cache so -reconfigure is safe;
+		// a preserved workdir (TTL not expired) has a valid cache and -reconfigure
+		// causes a spurious "migrate all workspaces?" prompt from tofu.
+		componentConfig[workdir.WorkdirReprovisionedKey] = struct{}{}
 	}
 	return nil
 }
@@ -239,7 +245,7 @@ func determineSourceTargetDirectory(
 	componentConfig map[string]any,
 ) (string, bool, error) {
 	// Check if workdir is enabled.
-	if isWorkdirEnabled(componentConfig) {
+	if workdir.IsWorkdirEnabled(componentConfig) {
 		// Get stack name for workdir path.
 		stack, _ := componentConfig["atmos_stack"].(string)
 		if stack == "" {
@@ -264,22 +270,6 @@ func determineSourceTargetDirectory(
 		return "", false, err
 	}
 	return targetDir, false, nil
-}
-
-// isWorkdirEnabled checks if provision.workdir.enabled is set to true.
-func isWorkdirEnabled(componentConfig map[string]any) bool {
-	provisionConfig, ok := componentConfig["provision"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	workdirConfig, ok := provisionConfig["workdir"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	enabled, ok := workdirConfig["enabled"].(bool)
-	return ok && enabled
 }
 
 // needsProvisioning checks if the target directory needs provisioning.

@@ -24,8 +24,13 @@ func init() {
 	describeAffectedCmd.DisableFlagParsing = false
 
 	describeAffectedCmd.PersistentFlags().String("repo-path", "", "Filesystem path to the already cloned target repository with which to compare the current branch")
-	describeAffectedCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch. Refer to [10.3 Git Internals Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References) for more details")
+	describeAffectedCmd.PersistentFlags().String("base", "", "The base commit (ref or SHA) to compare against. Auto-detected in CI when ci.enabled is true")
+	describeAffectedCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch")
 	describeAffectedCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch")
+
+	// Deprecate --ref and --sha in favor of --base.
+	_ = describeAffectedCmd.PersistentFlags().MarkDeprecated("ref", "use --base instead")
+	_ = describeAffectedCmd.PersistentFlags().MarkDeprecated("sha", "use --base instead")
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to the file")
 	describeAffectedCmd.PersistentFlags().String("output-file", "", "Write output to file in key=value format (for $GITHUB_OUTPUT)")
 	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: json, yaml, or matrix (for GitHub Actions matrix strategy)")
@@ -79,7 +84,11 @@ func getRunnableDescribeAffectedCmd(
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
 		if props.ProcessYamlFunctions || identityExplicit {
-			authManager, authErr := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
+			// Category B: describe affected operates on multiple affected components across stacks
+			// with no single target (component, stack) pair. Use the SCAN wrapper to discover
+			// stack-level defaults (including imported _defaults.yaml). See
+			// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &props.CLIConfig.Auth, props.CLIConfig)
 			if authErr != nil {
 				return authErr
 			}

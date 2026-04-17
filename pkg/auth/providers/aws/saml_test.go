@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -59,8 +60,16 @@ func TestSAMLProvider_RequestedSessionSeconds(t *testing.T) {
 }
 
 func TestSAMLProvider_GetProviderType(t *testing.T) {
-	// Explicit driver config always wins, regardless of Playwright driver availability.
-	p := &samlProvider{config: &schema.Provider{ProviderType: "Okta"}, url: "https://idp"}
+	// Isolate test environment to ensure no Playwright drivers are detected.
+	// This prevents integration tests from affecting unit test behavior.
+	testHomeDir := t.TempDir()
+	t.Setenv("HOME", testHomeDir)
+	t.Setenv("USERPROFILE", testHomeDir)
+	t.Setenv("LOCALAPPDATA", testHomeDir) // Windows cache directory.
+	homedir.Reset()
+
+	// Explicit driver config always wins.
+	p := &samlProvider{config: &schema.Provider{Driver: "Okta"}, url: "https://idp"}
 	assert.Equal(t, "Okta", p.getDriver())
 
 	p = &samlProvider{config: &schema.Provider{Driver: "GoogleApps"}, url: "https://idp"}
@@ -159,7 +168,7 @@ func (s stubSamlMgr) Validate() error                                           
 func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)                 { return "", nil }
 func (s stubSamlMgr) ListIdentities() []string                                  { return nil }
 func (s stubSamlMgr) GetProviderForIdentity(string) string                      { return "" }
-func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return "~/.aws/atmos" }
+func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return filepath.Join("~", ".aws", "atmos") }
 func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)         { return "", nil }
 func (s stubSamlMgr) GetChain() []string                                        { return s.chain }
 func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 { return nil }
@@ -307,10 +316,97 @@ func TestSAMLProvider_createSAMLConfig_LoginDetails(t *testing.T) {
 	assert.Equal(t, "https://idp.example.com", ld.URL)
 	assert.Equal(t, "user", ld.Username)
 	assert.Equal(t, "pass", ld.Password)
+	assert.True(t, ld.DownloadBrowser, "LoginDetails.DownloadBrowser should be set when DownloadBrowserDriver is true")
+}
+
+func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
+	tests := []struct {
+		name                  string
+		downloadBrowserDriver bool
+		explicitDriver        string
+		expectedDownload      bool
+		setup                 func(t *testing.T) string // Returns home directory.
+	}{
+		{
+			name:                  "explicitly enabled",
+			downloadBrowserDriver: true,
+			expectedDownload:      true,
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+		},
+		{
+			name:                  "disabled when no drivers and download not requested — falls back to non-Browser driver",
+			downloadBrowserDriver: false,
+			expectedDownload:      false, // No drivers + download not requested → getDriver() falls back to GoogleApps → no download.
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+		},
+		{
+			name:                  "disabled when using GoogleApps driver",
+			downloadBrowserDriver: false,
+			explicitDriver:        "GoogleApps",
+			expectedDownload:      false, // Non-Browser drivers don't need Playwright.
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+		},
+		{
+			name:                  "disabled when drivers already installed",
+			downloadBrowserDriver: false,
+			expectedDownload:      false, // Pre-installed drivers → no download needed.
+			setup: func(t *testing.T) string {
+				homeDir := t.TempDir()
+				// Create fake Playwright drivers in the platform-appropriate cache path.
+				var playwrightDir string
+				switch runtime.GOOS {
+				case "darwin":
+					playwrightDir = filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				case "windows":
+					playwrightDir = filepath.Join(homeDir, "AppData", "Local", "ms-playwright", "1.47.2")
+				default: // Linux.
+					playwrightDir = filepath.Join(homeDir, ".cache", "ms-playwright", "1.47.2")
+				}
+				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
+				browserDir := filepath.Join(playwrightDir, "chromium-1234")
+				require.NoError(t, os.MkdirAll(browserDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
+				return homeDir
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			homeDir := tt.setup(t)
+
+			// Override home directory for cross-platform compatibility.
+			t.Setenv("HOME", homeDir)        // Linux/macOS.
+			t.Setenv("USERPROFILE", homeDir) // Windows.
+			homedir.Reset()
+
+			p, err := NewSAMLProvider("p", &schema.Provider{
+				Kind:                  "aws/saml",
+				URL:                   "https://accounts.google.com/saml",
+				Region:                "us-east-1",
+				DownloadBrowserDriver: tt.downloadBrowserDriver,
+				Driver:                tt.explicitDriver,
+			})
+			require.NoError(t, err)
+			sp := p.(*samlProvider)
+
+			ld := sp.createLoginDetails()
+
+			// Assert against the explicit expected value, not the implementation.
+			assert.Equal(t, tt.expectedDownload, ld.DownloadBrowser,
+				"LoginDetails.DownloadBrowser should be %v", tt.expectedDownload)
+		})
+	}
 }
 
 func TestSAMLProvider_authenticateAndGetAssertion_SuccessAndEmpty(t *testing.T) {
-	sp := &samlProvider{name: "p", url: "https://idp", region: "us-east-1"}
+	sp := &samlProvider{name: "p", url: "https://idp", region: "us-east-1", config: &schema.Provider{}}
 
 	// Success.
 	out, err := sp.authenticateAndGetAssertion(stubSAMLClient{assertion: "abc"}, &creds.LoginDetails{})
@@ -494,7 +590,7 @@ func TestSAMLProvider_createSAMLConfig_AllFields(t *testing.T) {
 		Region:                "eu-central-1",
 		Username:              "testuser",
 		Password:              "testpass",
-		ProviderType:          "Okta",
+		Driver:                "Okta",
 		DownloadBrowserDriver: true,
 		Session:               &schema.SessionConfig{Duration: "2h"},
 	})
@@ -513,6 +609,25 @@ func TestSAMLProvider_createSAMLConfig_AllFields(t *testing.T) {
 	assert.Equal(t, "urn:amazon:webservices", cfg.AmazonWebservicesURN)
 	assert.True(t, cfg.DownloadBrowser)
 	assert.False(t, cfg.Headless)
+}
+
+func TestSAMLProvider_createSAMLConfig_BrowserConfiguration(t *testing.T) {
+	p, err := NewSAMLProvider("test-provider", &schema.Provider{
+		Kind:                  "aws/saml",
+		URL:                   "https://idp.example.com/saml",
+		Region:                "us-west-2",
+		Username:              "testuser",
+		Driver:                "Browser",
+		BrowserType:           "msedge",
+		BrowserExecutablePath: filepath.Join("opt", "browsers", "msedge"),
+	})
+	require.NoError(t, err)
+	sp := p.(*samlProvider)
+
+	cfg := sp.createSAMLConfig()
+	assert.Equal(t, "msedge", cfg.BrowserType)
+	assert.Equal(t, filepath.Join("opt", "browsers", "msedge"), cfg.BrowserExecutablePath)
+	assert.Equal(t, "Browser", cfg.Provider)
 }
 
 func TestSAMLProvider_createLoginDetails_WithPassword(t *testing.T) {
@@ -675,6 +790,34 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 			playwrightInstalled: false,
 			expectedResult:      true,
 		},
+		{
+			name: "custom browser_type specified, skips auto-download",
+			config: &schema.Provider{
+				BrowserType: "msedge",
+			},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      false,
+		},
+		{
+			name: "custom browser_executable_path specified, skips auto-download",
+			config: &schema.Provider{
+				BrowserExecutablePath: filepath.Join("opt", "browsers", "chrome"),
+			},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      false,
+		},
+		{
+			name: "both custom browser fields specified, skips auto-download",
+			config: &schema.Provider{
+				BrowserType:           "chrome",
+				BrowserExecutablePath: filepath.Join("opt", "browsers", "chrome"),
+			},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -694,25 +837,36 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				homeDir := tmpDir
 				t.Setenv("HOME", homeDir)
 				t.Setenv("USERPROFILE", homeDir)
+				t.Setenv("LOCALAPPDATA", homeDir) // Windows: playwright checks LOCALAPPDATA.
 
 				// Clear homedir cache to ensure environment variables take effect.
 				t.Cleanup(homedir.Reset)
 				homedir.Reset()
 
-				// Create a mock playwright driver directory with a file inside to pass validation.
-				playwrightPath := filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
-				err := os.MkdirAll(playwrightPath, 0o755)
-				require.NoError(t, err)
+				// Create mock playwright drivers in the platform-appropriate cache path.
+				var playwrightPath string
+				switch runtime.GOOS {
+				case "darwin":
+					playwrightPath = filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "chromium-1084")
+				case "windows":
+					playwrightPath = filepath.Join(homeDir, "ms-playwright", "chromium-1084")
+				default: // Linux.
+					playwrightPath = filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
+				}
+				require.NoError(t, os.MkdirAll(playwrightPath, 0o755))
 
 				// hasValidPlaywrightDrivers checks for files inside version directory.
 				dummyBinary := filepath.Join(playwrightPath, "chrome")
-				err = os.WriteFile(dummyBinary, []byte("dummy"), 0o755)
-				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(dummyBinary, []byte("dummy"), 0o755))
 			} else {
 				// Use empty temp directory (no drivers).
 				tmpDir := t.TempDir()
 				t.Setenv("HOME", tmpDir)
 				t.Setenv("USERPROFILE", tmpDir)
+				// Windows: playwrightDriversInstalled checks LOCALAPPDATA via viper.
+				// Without overriding it, the real LOCALAPPDATA may contain actual
+				// Playwright drivers from the CI runner, causing false detection.
+				t.Setenv("LOCALAPPDATA", tmpDir)
 
 				// Clear homedir cache to ensure environment variables take effect.
 				t.Cleanup(homedir.Reset)
@@ -940,6 +1094,86 @@ func TestSAMLProvider_Environment_AutoDownload(t *testing.T) {
 				_, exists := env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"]
 				assert.False(t, exists)
 			}
+		})
+	}
+}
+
+func TestSAMLProvider_validateBrowserExecutable(t *testing.T) {
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T) string // Returns path to test file.
+		expectError   bool
+		expectWarning bool
+	}{
+		{
+			name: "valid executable file",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				execPath := filepath.Join(tmpDir, "test-browser")
+				require.NoError(t, os.WriteFile(execPath, []byte("#!/bin/sh\necho test"), 0o755))
+				return execPath
+			},
+			expectError: false,
+		},
+		{
+			name: "file exists but not executable",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				execPath := filepath.Join(tmpDir, "test-browser")
+				require.NoError(t, os.WriteFile(execPath, []byte("test"), 0o644))
+				return execPath
+			},
+			expectError:   false,
+			expectWarning: true, // Should warn about missing execute permissions.
+		},
+		{
+			name: "file does not exist",
+			setup: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "nonexistent", "path", "to", "browser")
+			},
+			expectError: true,
+		},
+		{
+			name: "path is a directory",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				dirPath := filepath.Join(tmpDir, "browser-dir")
+				require.NoError(t, os.MkdirAll(dirPath, 0o755))
+				return dirPath
+			},
+			expectError: true,
+		},
+		{
+			name: "empty path",
+			setup: func(t *testing.T) string {
+				return ""
+			},
+			expectError: false, // Should return nil for empty path.
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			path := tc.setup(t)
+
+			p := &samlProvider{
+				name: "test",
+				config: &schema.Provider{
+					BrowserExecutablePath: path,
+				},
+			}
+
+			err := p.validateBrowserExecutable()
+
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Note: Testing for warning logs would require a log capture mechanism.
+			// The expectWarning flag documents expected behavior.
 		})
 	}
 }

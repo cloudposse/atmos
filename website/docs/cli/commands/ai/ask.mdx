@@ -71,7 +71,7 @@ atmos ai ask [question]
 </dl>
 
 :::tip Smart MCP Routing
-When multiple MCP servers are configured, Atmos automatically selects only the servers relevant to your question using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly.
+When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your question using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`, `gemini-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
 :::
 
 ## Examples

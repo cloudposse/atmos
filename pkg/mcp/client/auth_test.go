@@ -101,6 +101,106 @@ func TestWithAuthManager_NilProvider_NoIdentity_Passthrough(t *testing.T) {
 	assert.Equal(t, env, result)
 }
 
+// perServerMockProvider also implements PerServerAuthProvider so we can test
+// the per-server reload path inside WithAuthManager.
+type perServerMockProvider struct {
+	mockAuthProvider
+	forServerCalls   int
+	lastForServerCfg *ParsedConfig
+	scopedProvider   AuthEnvProvider
+	forServerErr     error
+}
+
+func (p *perServerMockProvider) ForServer(_ context.Context, config *ParsedConfig) (AuthEnvProvider, error) {
+	p.forServerCalls++
+	p.lastForServerCfg = config
+	if p.forServerErr != nil {
+		return nil, p.forServerErr
+	}
+	return p.scopedProvider, nil
+}
+
+func TestWithAuthManager_PerServerProvider_UsesScopedProvider(t *testing.T) {
+	scoped := &mockAuthProvider{
+		preparedEnv: []string{"AWS_PROFILE=scoped", "PATH=/usr/bin"},
+	}
+	root := &perServerMockProvider{scopedProvider: scoped}
+
+	opt := WithAuthManager(root)
+	config := &ParsedConfig{
+		Name:     "atmos",
+		Identity: "core-root/terraform",
+		Env:      map[string]string{"ATMOS_PROFILE": "managers"},
+	}
+	env := []string{"PATH=/usr/bin"}
+
+	result, err := opt(context.Background(), config, env)
+	require.NoError(t, err)
+
+	// Per-server factory should have been consulted exactly once.
+	assert.Equal(t, 1, root.forServerCalls)
+	assert.Same(t, config, root.lastForServerCfg)
+
+	// Scoped provider — not the root — should have been called for env preparation.
+	assert.Equal(t, 1, scoped.callCount)
+	assert.Equal(t, 0, root.callCount)
+	assert.Equal(t, "core-root/terraform", scoped.calledWith)
+
+	// Output should come from the scoped provider.
+	assert.Contains(t, result, "AWS_PROFILE=scoped")
+}
+
+func TestWithAuthManager_PerServerProvider_ForServerError(t *testing.T) {
+	root := &perServerMockProvider{forServerErr: assert.AnError}
+
+	opt := WithAuthManager(root)
+	config := &ParsedConfig{
+		Name:     "atmos",
+		Identity: "core-root/terraform",
+	}
+
+	_, err := opt(context.Background(), config, []string{"PATH=/usr/bin"})
+	require.Error(t, err)
+	// Contract: WithAuthManager passes ForServer errors through unchanged.
+	// Higher layers (Session.Start) add ErrMCPServerStartFailed and the
+	// server name; the dispatcher must not duplicate that context.
+	assert.ErrorIs(t, err, assert.AnError)
+	// Scoped provider should never have been built or called.
+	assert.Equal(t, 0, root.callCount)
+}
+
+func TestWithAuthManager_PerServerProvider_NilScoped_ReturnsAuthUnavailable(t *testing.T) {
+	root := &perServerMockProvider{scopedProvider: nil}
+
+	opt := WithAuthManager(root)
+	config := &ParsedConfig{
+		Name:     "atmos",
+		Identity: "core-root/terraform",
+	}
+
+	_, err := opt(context.Background(), config, []string{"PATH=/usr/bin"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMCPServerAuthUnavailable)
+}
+
+func TestWithAuthManager_PerServerProvider_NoIdentity_SkipsForServer(t *testing.T) {
+	root := &perServerMockProvider{scopedProvider: &mockAuthProvider{}}
+	opt := WithAuthManager(root)
+
+	config := &ParsedConfig{
+		Name:     "no-auth",
+		Identity: "",
+		Env:      map[string]string{"ATMOS_PROFILE": "managers"},
+	}
+	env := []string{"PATH=/usr/bin"}
+
+	result, err := opt(context.Background(), config, env)
+	require.NoError(t, err)
+	// No-identity passthrough — neither ForServer nor PrepareShellEnvironment should run.
+	assert.Equal(t, 0, root.forServerCalls)
+	assert.Equal(t, env, result)
+}
+
 func TestWithAuthManager_Error_ReturnsError(t *testing.T) {
 	mock := &mockAuthProvider{err: assert.AnError}
 	opt := WithAuthManager(mock)
