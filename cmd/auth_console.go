@@ -69,7 +69,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
 	// Initialize auth manager.
-	authManager, atmosConfig, err := initializeAuthManager()
+	authManager, atmosConfig, err := initializeAuthManager(cmd)
 	if err != nil {
 		return err
 	}
@@ -251,10 +251,10 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 
 // initializeAuthManager loads config and creates the auth manager.
 // Returns the auth manager and the full atmos config (needed for realm and console settings).
-func initializeAuthManager() (types.AuthManager, *schema.AtmosConfiguration, error) {
+func initializeAuthManager(cmd *cobra.Command) (types.AuthManager, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "cmd.initializeAuthManager")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(newAuthConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}

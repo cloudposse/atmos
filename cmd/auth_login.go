@@ -44,7 +44,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(newAuthConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}

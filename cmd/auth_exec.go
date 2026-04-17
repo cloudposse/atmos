@@ -16,7 +16,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -55,7 +54,7 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(newAuthConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}

@@ -19,7 +19,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -42,7 +41,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
 	// Load atmos config and auth manager.
-	authManager, err := loadAuthManager()
+	authManager, err := loadAuthManager(cmd)
 	if err != nil {
 		return err
 	}
@@ -141,8 +140,8 @@ func populateWhoamiFromValidation(whoami *authTypes.WhoamiInfo, validationInfo *
 	}
 }
 
-func loadAuthManager() (authTypes.AuthManager, error) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+func loadAuthManager(cmd *cobra.Command) (authTypes.AuthManager, error) {
+	atmosConfig, err := cfg.InitCliConfig(newAuthConfigAndStacksInfo(cmd), false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
