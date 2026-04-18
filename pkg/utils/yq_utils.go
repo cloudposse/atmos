@@ -7,44 +7,29 @@ package utils
 
 import (
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
-	"gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-type logBackend struct{}
-
-func (n logBackend) Log(level logging.Level, i int, record *logging.Record) error {
-	return nil
-}
-
-func (n logBackend) GetLevel(s string) logging.Level {
-	return logging.ERROR
-}
-
-func (n logBackend) SetLevel(level logging.Level, s string) {
-}
-
-func (n logBackend) IsEnabledFor(level logging.Level, s string) bool {
-	return false
-}
-
 // configureYqLogger configures the yq logger based on Atmos configuration.
-// If atmosConfig is nil or log level is not Trace, use a no-op logging backend.
+// If atmosConfig is nil or log level is not Trace, route yq's slog output to io.Discard
+// so yq's internal diagnostics never reach the user.
 func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "utils.configureYqLogger")()
 
-	// Only use the default (chatty) logger when atmosConfig is not nil and log level is Trace
-	// In all other cases, use the no-op logging backend
+	// Only use the default (chatty) logger when atmosConfig is not nil and log level is Trace.
+	// In all other cases, silence yq output by pointing its slog logger at io.Discard.
 	if atmosConfig == nil || atmosConfig.Logs.Level != LogLevelTrace {
 		logger := yqlib.GetLogger()
-		backend := logBackend{}
-		logger.SetBackend(backend)
+		discard := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+		logger.SetSlogger(discard)
 	}
 }
 

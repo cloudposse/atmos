@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -652,31 +651,6 @@ func TestEvaluateYqExpression_ErrorPaths(t *testing.T) {
 		result, err := EvaluateYqExpression(atmosConfig, data, `.items[] | select(.name == "b") | .value`)
 		require.NoError(t, err)
 		assert.Equal(t, 2, result)
-	})
-}
-
-// TestLogBackend tests the logBackend struct methods.
-func TestLogBackend(t *testing.T) {
-	backend := logBackend{}
-
-	t.Run("Log returns nil", func(t *testing.T) {
-		err := backend.Log(0, 0, nil)
-		assert.NoError(t, err)
-	})
-
-	t.Run("GetLevel returns ERROR", func(t *testing.T) {
-		level := backend.GetLevel("any")
-		assert.Equal(t, logging.ERROR, level)
-	})
-
-	t.Run("SetLevel does nothing", func(t *testing.T) {
-		// Just verify it doesn't panic.
-		backend.SetLevel(logging.DEBUG, "test")
-	})
-
-	t.Run("IsEnabledFor returns false", func(t *testing.T) {
-		result := backend.IsEnabledFor(logging.DEBUG, "test")
-		assert.False(t, result)
 	})
 }
 
