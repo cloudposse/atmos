@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -305,16 +304,40 @@ func TestRecover_NilExitCodePointer(t *testing.T) {
 	})
 }
 
-// TestRecover_UsesRealDebugStack verifies the real call path captures
-// a real stack (as opposed to the test-injected placeholder used by
-// HandlePanic-only tests).
-func TestRecover_UsesRealDebugStack(t *testing.T) {
-	// Reach into debug.Stack to confirm it returns non-empty bytes
-	// in this environment — guards against a Go runtime regression
-	// that would leave the crash report empty.
-	stack := debug.Stack()
-	assert.NotEmpty(t, stack)
-	assert.Contains(t, string(stack), "goroutine")
+// TestRecover_CapturesRealStackIntoReport exercises the real call
+// path — Recover → debug.Stack() → HandlePanic → writeCrashReport —
+// and asserts the captured stack ends up in the crash-report file.
+// This is the behavior users rely on for bug reports; previously this
+// test just re-asserted that debug.Stack() works, which is a stdlib
+// invariant, not an Atmos-behavior check.
+func TestRecover_CapturesRealStackIntoReport(t *testing.T) {
+	// Recover uses defaultOptions(), which drops the crash report
+	// under os.TempDir(); redirect that so the file lands in a
+	// test-managed directory and we can inspect it. TMPDIR covers
+	// Unix-likes; TMP/TEMP cover Windows.
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
+
+	code := 0
+	assert.NotPanics(t, func() {
+		func() {
+			defer Recover(&code)
+			panic("stack-capture check")
+		}()
+	})
+	assert.Equal(t, PanicExitCode, code)
+
+	// The real debug.Stack() captured by Recover must show up in
+	// the crash report — that's the behavior we actually care about.
+	entries, err := os.ReadDir(tmp)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	body, err := os.ReadFile(filepath.Join(tmp, entries[0].Name()))
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "goroutine", "real runtime stack must appear in the report")
+	assert.Contains(t, string(body), "Panic: stack-capture check", "panic value must be recorded in the report")
 }
 
 // TestStackInlineFromEnv covers the env-gated stack visibility.
