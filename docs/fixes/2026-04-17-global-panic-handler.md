@@ -121,7 +121,7 @@ Per `CLAUDE.md` § "I/O and UI Usage (MANDATORY)":
 pkg/panics/
 ├── panics.go          — Recover(), HandlePanic(), crash report writer
 ├── options.go         — Options struct, defaults, env-var gate
-└── panics_test.go     — unit tests (13 cases, no main, no os.Exit)
+└── panics_test.go     — unit tests (14 cases, no main, no os.Exit)
 ```
 
 `pkg/panics/` is its own package so any goroutine entry point in the
@@ -182,16 +182,18 @@ writer so assertions are deterministic and do not depend on
    NOT re-panic, friendly message still emitted.
 7. `TestHandlePanic_AppliesDefaults` — zero-valued `Options` gets
    defaults filled in (args, now, exitCode).
-8. `TestSummarize_FallsBackToGenericFormat` — non-string, non-error
+8. `TestHandlePanic_NilOptions` — passing a `nil` `*Options` is
+   tolerated; defaults are applied and no panic escapes.
+9. `TestSummarize_FallsBackToGenericFormat` — non-string, non-error
    panic values render via `fmt.Sprintf("%v", ...)`.
-9. `TestRecover_NoPanic` — `defer Recover(&code)` with no panic
-   leaves the code pointer untouched.
-10. `TestRecover_CapturesPanic` — `defer Recover(&code)` around a
+10. `TestRecover_NoPanic` — `defer Recover(&code)` with no panic
+    leaves the code pointer untouched.
+11. `TestRecover_CapturesPanic` — `defer Recover(&code)` around a
     panicking function populates the code and does not re-panic.
-11. `TestRecover_NilExitCodePointer` — passing `nil` is tolerated.
-12. `TestRecover_UsesRealDebugStack` — sanity-check that
+12. `TestRecover_NilExitCodePointer` — passing `nil` is tolerated.
+13. `TestRecover_UsesRealDebugStack` — sanity-check that
     `debug.Stack()` returns non-empty bytes in the test environment.
-13. `TestStackInlineFromEnv` — table-driven coverage of the
+14. `TestStackInlineFromEnv` — table-driven coverage of the
     `ATMOS_LOGS_LEVEL` gate: unset, `Debug`/`Trace` (canonical case),
     lowercase/uppercase variants, `Info`/`Warning`/`Error` (false),
     whitespace-padded values.
@@ -208,7 +210,7 @@ section below. Injection reverted before committing.
 **Default mode** (no `ATMOS_LOGS_LEVEL` or set to `Info`/`Warning`/`Error`):
 
 ```text
- ERRO  atmos panic recovered summary="runtime error: invalid memory address or nil pointer dereference" version=1.215.0 report=/var/folders/.../atmos-crash-20260418-041017-56205.txt
+ ERRO  atmos panic recovered summary="runtime error: invalid memory address or nil pointer dereference" version=1.216.0 report=/var/folders/.../atmos-crash-20260418-041017-56205.txt
 ✗ Atmos crashed unexpectedly
 
 **Summary:** runtime error: invalid memory address or nil pointer dereference
@@ -219,13 +221,13 @@ This is a bug in Atmos. Please report it at:
 
 Please include the following when you file the issue:
 
-• **Version:** 1.215.0
+• **Version:** 1.216.0
 • **OS / Arch:** darwin/arm64
 • **Built with:** go1.26.0
 • **Command:** atmos version
 • **Crash report:** /var/folders/.../atmos-crash-20260418-041017-56205.txt
 
-Re-run with ATMOS_LOGS_LEVEL=Debug (or --logs-level=Debug) to see the full stack
+Re-run with ATMOS_LOGS_LEVEL=Debug to see the full stack
 trace inline.
 ```
 
@@ -267,7 +269,7 @@ written regardless of log level):
 ```text
 Atmos crashed unexpectedly.
 
-Version:    1.215.0
+Version:    1.216.0
 Built with: go1.26.0
 OS/Arch:    darwin/arm64
 Time:       2026-04-18T04:10:17Z

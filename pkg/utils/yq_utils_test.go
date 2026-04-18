@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"log/slog"
 	"testing"
 
+	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v3"
@@ -680,6 +682,32 @@ func TestConfigureYqLogger(t *testing.T) {
 		// Should not panic - this path uses the default yq logger.
 		configureYqLogger(atmosConfig)
 	})
+}
+
+// TestConfigureYqLogger_LevelIsReversible pins the contract introduced
+// by switching from SetSlogger(io.Discard) to SetLevel(): silencing yq
+// in one call and then calling again with Trace must actually restore
+// verbosity. The previous SetSlogger approach was one-way (no getter
+// to recover the original slogger), so this test guards against a
+// regression that reintroduces it.
+func TestConfigureYqLogger_LevelIsReversible(t *testing.T) {
+	logger := yqlib.GetLogger()
+	// Restore the default level at the end so unrelated tests see the
+	// yq package's own initial state.
+	defer logger.SetLevel(slog.LevelWarn)
+
+	nonTrace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}
+	trace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: LogLevelTrace}}
+
+	configureYqLogger(nonTrace)
+	assert.Equal(t, yqSilentLevel, logger.GetLevel(), "non-Trace must silence yq")
+
+	configureYqLogger(trace)
+	assert.Equal(t, slog.LevelDebug, logger.GetLevel(), "Trace must restore verbosity after a previous silencing")
+
+	// And back again to confirm the toggle is not accidentally sticky.
+	configureYqLogger(nil)
+	assert.Equal(t, yqSilentLevel, logger.GetLevel(), "nil config must re-silence")
 }
 
 // TestEvaluateYqExpression_EdgeCases tests additional edge cases.

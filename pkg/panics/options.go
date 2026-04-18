@@ -28,8 +28,10 @@ type Options struct {
 	// exitCode is returned by HandlePanic. Defaults to PanicExitCode.
 	exitCode int
 	// showStackInline is true when the user asked for the stack in
-	// the terminal (ATMOS_LOGS_LEVEL=Debug or Trace, --logs-level=Debug
-	// or Trace, or explicit test override).
+	// the terminal (ATMOS_LOGS_LEVEL=Debug or Trace, or explicit test
+	// override). --logs-level is intentionally NOT consulted: the
+	// panic may fire before Cobra/Viper finish parsing flags, so
+	// honoring only the env var keeps the contract predictable.
 	showStackInline bool
 	// useUI controls whether output goes through pkg/ui (true) or
 	// directly to stderr (false). Tests set useUI=false and inject

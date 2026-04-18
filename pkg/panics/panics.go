@@ -151,6 +151,13 @@ func HandlePanic(panicValue any, stack []byte, opts *Options) int {
 }
 
 // summarize renders a single-line summary of the panic value.
+//
+// The runtime.Error branch currently returns the same string as the
+// error branch (runtime.Error embeds error). It is kept separate as
+// an explicit extension point: classifying runtime panics — nil-deref,
+// index-out-of-range, concurrent map writes — as distinct Sentry
+// breadcrumbs or UI messages will almost certainly want its own branch,
+// and type-switch order means it must come before `case error`.
 func summarize(panicValue any) string {
 	switch v := panicValue.(type) {
 	case runtime.Error:
@@ -190,20 +197,25 @@ func buildFriendlyMessage(summary, reportPath string, opts *Options) string {
 	b.WriteString("\n")
 
 	if !opts.showStackInline {
-		b.WriteString("Re-run with `ATMOS_LOGS_LEVEL=Debug` (or `--logs-level=Debug`) to see the full stack trace inline.\n")
+		// Only ATMOS_LOGS_LEVEL is honored here — the panic may fire
+		// before Cobra/Viper finish parsing CLI flags, so --logs-level
+		// is not guaranteed to reach the handler. Advertise only the
+		// env var to avoid sending users down a path that silently
+		// does nothing on a crash-on-init.
+		b.WriteString("Re-run with `ATMOS_LOGS_LEVEL=Debug` to see the full stack trace inline.\n")
 	}
 	return b.String()
 }
 
 // writeCrashReport writes the panic, stack, and environment to a temp
 // file. Returns the path (empty if the write failed).
+// Caller contract: opts.applyDefaults() must have been invoked (done
+// in HandlePanic) so opts.crashDir and opts.now are populated.
 func writeCrashReport(opts *Options, panicValue any, stack []byte) (string, error) {
-	if opts.crashDir == "" {
-		opts.crashDir = os.TempDir()
-	}
-
-	timestamp := opts.now().UTC().Format("20060102-150405")
-	name := fmt.Sprintf("atmos-crash-%s-%d.txt", timestamp, os.Getpid())
+	// Capture the clock once so the filename and the in-file Time: line
+	// stay in lockstep even if opts.now advances between calls.
+	now := opts.now().UTC()
+	name := fmt.Sprintf("atmos-crash-%s-%d.txt", now.Format("20060102-150405"), os.Getpid())
 	path := filepath.Join(opts.crashDir, name)
 
 	var b strings.Builder
@@ -211,7 +223,7 @@ func writeCrashReport(opts *Options, panicValue any, stack []byte) (string, erro
 	fmt.Fprintf(&b, "Version:    %s\n", version.Version)
 	fmt.Fprintf(&b, "Built with: %s\n", runtime.Version())
 	fmt.Fprintf(&b, "OS/Arch:    %s/%s\n", runtime.GOOS, runtime.GOARCH)
-	fmt.Fprintf(&b, "Time:       %s\n", opts.now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "Time:       %s\n", now.Format(time.RFC3339))
 	fmt.Fprintf(&b, "PID:        %d\n", os.Getpid())
 	if len(opts.args) > 0 {
 		fmt.Fprintf(&b, "Command:    %s\n", strings.Join(opts.args, " "))

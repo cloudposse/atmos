@@ -25,6 +25,10 @@ type ambientStubIdentity struct {
 func (a ambientStubIdentity) Kind() string                     { return "ambient" }
 func (a ambientStubIdentity) GetProviderName() (string, error) { return "ambient", nil }
 func (a ambientStubIdentity) Authenticate(_ context.Context, _ types.ICredentials) (types.ICredentials, error) {
+	// (nil, nil) is the bug's epicenter: the generic ambient kind does
+	// not manage credentials by design. The regression reproduced in
+	// TestManager_Authenticate_Ambient_Standalone depends on this
+	// exact return.
 	return nil, nil
 }
 func (a ambientStubIdentity) Validate() error { return nil }

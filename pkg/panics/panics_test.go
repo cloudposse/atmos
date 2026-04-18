@@ -34,12 +34,13 @@ func testOptions(t *testing.T, debugInline bool) (*bytes.Buffer, *Options) {
 
 // fakeRuntimeError is a minimal runtime.Error to exercise the
 // summarize() case without actually dereferencing a nil pointer.
+// Only RuntimeError() and Error() are required to satisfy
+// runtime.Error; additional Stringer/GoStringer methods would be
+// dead weight.
 type fakeRuntimeError struct{ msg string }
 
-func (f fakeRuntimeError) RuntimeError()    {}
-func (f fakeRuntimeError) Error() string    { return f.msg }
-func (f fakeRuntimeError) String() string   { return f.msg }
-func (f fakeRuntimeError) GoString() string { return f.msg }
+func (f fakeRuntimeError) RuntimeError() {}
+func (f fakeRuntimeError) Error() string { return f.msg }
 
 func TestHandlePanic_StringValue(t *testing.T) {
 	buf, opts := testOptions(t, false)
@@ -151,10 +152,73 @@ func TestHandlePanic_AppliesDefaults(t *testing.T) {
 	assert.Contains(t, buf.String(), "Atmos crashed unexpectedly")
 }
 
+// TestHandlePanic_UIMode_NonDebug exercises the useUI=true happy
+// path — the ui.Error + ui.MarkdownMessage calls in HandlePanic.
+// Note: pkg/ui is not initialized inside this test binary, so ui.*
+// are no-ops, but the branches themselves execute and close the
+// coverage gap for the UI path.
+func TestHandlePanic_UIMode_NonDebug(t *testing.T) {
+	_, opts := testOptions(t, false)
+	opts.useUI = true
+	opts.stderr = nil // ensure nothing falls back to a buffer by accident.
+
+	assert.NotPanics(t, func() {
+		code := HandlePanic("boom", []byte("stk"), opts)
+		assert.Equal(t, PanicExitCode, code)
+	})
+
+	// Crash report is still written regardless of UI mode.
+	entries, err := os.ReadDir(opts.crashDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "crash report should still land in opts.crashDir under useUI=true")
+}
+
+// TestHandlePanic_UIMode_DebugStack pairs with the non-debug variant
+// to cover `if opts.useUI { ui.Write(...) }` inside the
+// showStackInline block — the final uncovered branch in HandlePanic.
+func TestHandlePanic_UIMode_DebugStack(t *testing.T) {
+	_, opts := testOptions(t, true)
+	opts.useUI = true
+	opts.stderr = nil
+
+	assert.NotPanics(t, func() {
+		code := HandlePanic("boom", []byte("goroutine 1 [running]:\nmain.x()\n"), opts)
+		assert.Equal(t, PanicExitCode, code)
+	})
+}
+
+// TestHandlePanic_NilStderrFallback exercises fallbackWrite's nil-w
+// guard via HandlePanic (fallbackWrite is unexported). With useUI=false
+// and stderr=nil, the helper must return silently instead of panicking
+// — the whole point of the guard is that we've already panicked once.
+func TestHandlePanic_NilStderrFallback(t *testing.T) {
+	opts := &Options{
+		crashDir: t.TempDir(),
+		useUI:    false,
+		stderr:   nil,
+	}
+
+	assert.NotPanics(t, func() {
+		code := HandlePanic("boom", []byte("stk"), opts)
+		assert.Equal(t, PanicExitCode, code)
+	})
+}
+
 // TestHandlePanic_NilOptions verifies HandlePanic tolerates a nil
 // options pointer (defensive behavior: zero-valued options are
 // equivalent, but a direct caller passing nil should not panic).
+//
+// Redirect the OS temp dir so the crash-report file that
+// applyDefaults() would drop into the real os.TempDir() lands in a
+// test-managed directory that t.TempDir() cleans up. TMPDIR covers
+// Unix-likes; TMP / TEMP cover Windows. If we don't do this, the
+// test leaks a real atmos-crash-*.txt on every run.
 func TestHandlePanic_NilOptions(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
+
 	assert.NotPanics(t, func() {
 		code := HandlePanic("boom", []byte("stk"), nil)
 		assert.Equal(t, PanicExitCode, code)

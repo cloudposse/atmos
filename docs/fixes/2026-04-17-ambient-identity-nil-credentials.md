@@ -166,7 +166,7 @@ surface even when Atmos is a pure passthrough.
 
 ### Integration — full `Authenticate()` flow
 
-`pkg/auth/manager_test.go::TestManager_Authenticate_Ambient_Standalone`
+`pkg/auth/manager_whoami_test.go::TestManager_Authenticate_Ambient_Standalone`
 
 1. Build a real `manager` via `NewAuthManager` with an ambient identity.
 2. Call `m.Authenticate(ctx, "passthrough")`.

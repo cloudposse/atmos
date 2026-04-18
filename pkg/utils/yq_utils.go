@@ -7,7 +7,6 @@ package utils
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -18,19 +17,28 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// yqSilentLevel sits above any real slog level so yq's internal
+// IsEnabledFor() gate rejects every message. Using a level (rather
+// than swapping the slog.Logger via SetSlogger) keeps the state
+// reversible across repeated configureYqLogger calls — a later
+// Trace-level call can restore verbosity by setting a normal level.
+// SetSlogger has no getter to recover the original, so it would
+// pin the process-wide yq logger at the first level we chose.
+const yqSilentLevel = slog.Level(1000)
+
 // configureYqLogger configures the yq logger based on Atmos configuration.
-// If atmosConfig is nil or log level is not Trace, route yq's slog output to io.Discard
-// so yq's internal diagnostics never reach the user.
+// Non-Trace log levels suppress yq's internal diagnostics; Trace
+// restores yq's default verbosity (Debug) so users asking for
+// everything see everything.
 func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "utils.configureYqLogger")()
 
-	// Only use the default (chatty) logger when atmosConfig is not nil and log level is Trace.
-	// In all other cases, silence yq output by pointing its slog logger at io.Discard.
+	logger := yqlib.GetLogger()
 	if atmosConfig == nil || atmosConfig.Logs.Level != LogLevelTrace {
-		logger := yqlib.GetLogger()
-		discard := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
-		logger.SetSlogger(discard)
+		logger.SetLevel(yqSilentLevel)
+		return
 	}
+	logger.SetLevel(slog.LevelDebug)
 }
 
 func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
