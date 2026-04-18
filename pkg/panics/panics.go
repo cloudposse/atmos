@@ -111,10 +111,9 @@ func HandlePanic(panicValue any, stack []byte, opts *Options) int {
 		log.Warn("failed to write crash report", "error", writeErr)
 	}
 
-	// Send to Sentry (safe no-op if not initialized). Wrap with a
-	// stack so cockroachdb/errors/Sentry have full context.
-	wrapped := cockroachErrors.WithStack(cockroachErrors.Newf("panic: %s", summary))
-	errUtils.CaptureError(wrapped)
+	// Send to Sentry (safe no-op if not initialized). See
+	// buildSentryError for the full rationale.
+	errUtils.CaptureError(buildSentryError(summary, string(stack)))
 
 	// Structured log at Error level so observability pipelines capture
 	// the crash even when the user pipes stderr elsewhere.
@@ -148,6 +147,30 @@ func HandlePanic(panicValue any, stack []byte, opts *Options) int {
 	}
 
 	return opts.exitCode
+}
+
+// buildSentryError wraps a panic summary and the panic-origin stack
+// bytes into a PII-free cockroachdb/errors error for the Sentry
+// pipeline.
+//
+// The panic-origin stack is captured by debug.Stack() inside Recover
+// and threaded through HandlePanic. Attaching it as a safe detail is
+// the whole point: BuildSentryReport (see errors/sentry.go) reads
+// safe details into the Sentry event so the crash surfaces the true
+// origin frames, not HandlePanic's.
+//
+// We deliberately do NOT call cockroachErrors.WithStack here:
+// WithStack would snapshot the stack at THIS call site
+// (HandlePanic → Recover), drowning the Sentry event in handler
+// frames instead of the original panic location.
+//
+// Exposed for testing the safe-detail attachment contract.
+func buildSentryError(summary, stack string) error {
+	return cockroachErrors.WithSafeDetails(
+		cockroachErrors.Newf("panic: %s", summary),
+		"panic stack:\n%s",
+		cockroachErrors.Safe(stack),
+	)
 }
 
 // summarize renders a single-line summary of the panic value.

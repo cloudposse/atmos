@@ -92,5 +92,7 @@ func stackInlineFromEnv() bool {
 // can reference this constant instead of hard-coding the string.
 const LogLevelEnvVar = "ATMOS_LOGS_LEVEL"
 
-// ensure io.Writer satisfies the writer interface at compile time.
+// Compile-time assertion that any io.Writer (io.Discard here) is
+// assignable to the local writer interface. Keeps the two contracts
+// aligned if someone narrows `writer`'s signature in the future.
 var _ writer = io.Discard

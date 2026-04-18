@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -223,6 +224,37 @@ func TestHandlePanic_NilOptions(t *testing.T) {
 		code := HandlePanic("boom", []byte("stk"), nil)
 		assert.Equal(t, PanicExitCode, code)
 	})
+}
+
+// TestBuildSentryError_AttachesPanicStack pins the Sentry-wrapping
+// contract: the panic-origin stack must end up as a safe detail on
+// the error so BuildSentryReport (errors/sentry.go) surfaces the
+// true crash frames. Guards against a regression that swaps back to
+// cockroachErrors.WithStack — which would snapshot HandlePanic's own
+// frames instead of the panic origin.
+func TestBuildSentryError_AttachesPanicStack(t *testing.T) {
+	stack := "goroutine 1 [running]:\nruntime.gopanic(...)\nmain.doStuff(...)\n\t/app/main.go:42"
+	err := buildSentryError("nil deref", stack)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "panic: nil deref",
+		"top-level error message must carry the summary")
+
+	// Flatten every safe-detail payload in the wrap chain and assert
+	// the panic-origin stack is present. This is exactly what
+	// errbase.GetAllSafeDetails feeds into BuildSentryReport.
+	var all strings.Builder
+	for _, p := range cockroachErrors.GetAllSafeDetails(err) {
+		for _, d := range p.SafeDetails {
+			all.WriteString(d)
+			all.WriteByte('\n')
+		}
+	}
+	details := all.String()
+	assert.Contains(t, details, "main.doStuff(...)",
+		"panic-origin stack must be attached as a safe detail so Sentry sees real frames")
+	assert.Contains(t, details, "/app/main.go:42",
+		"file/line of the panic must be preserved")
 }
 
 func TestSummarize_FallsBackToGenericFormat(t *testing.T) {
