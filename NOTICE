@@ -1162,7 +1162,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/anthropics/anthropic-sdk-go
     License: MIT
-    URL: https://github.com/anthropics/anthropic-sdk-go/blob/v1.29.0/LICENSE
+    URL: https://github.com/anthropics/anthropic-sdk-go/blob/v1.30.0/LICENSE
 
   - github.com/apparentlymart/go-cidr/cidr
     License: MIT
