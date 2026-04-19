@@ -924,7 +924,7 @@ BSD LICENSED DEPENDENCIES
 
   - modernc.org/sqlite
     License: BSD-3-Clause
-    URL: https://gitlab.com/cznic/sqlite/blob/v1.48.0/LICENSE
+    URL: https://gitlab.com/cznic/sqlite/blob/v1.48.1/LICENSE
 
   - mvdan.cc/sh/v3
     License: BSD-3-Clause

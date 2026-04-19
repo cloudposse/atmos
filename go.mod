@@ -130,7 +130,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/client-go v0.35.3
-	modernc.org/sqlite v1.48.0
+	modernc.org/sqlite v1.48.1
 	mvdan.cc/sh/v3 v3.13.0
 )
 
