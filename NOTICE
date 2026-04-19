@@ -1570,7 +1570,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mattn/go-runewidth
     License: MIT
-    URL: https://github.com/mattn/go-runewidth/blob/v0.0.21/LICENSE
+    URL: https://github.com/mattn/go-runewidth/blob/v0.0.22/LICENSE
 
   - github.com/mgutz/ansi
     License: MIT
