@@ -1114,7 +1114,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/AzureAD/microsoft-authentication-library-for-go/apps
     License: MIT
-    URL: https://github.com/AzureAD/microsoft-authentication-library-for-go/blob/v1.7.0/LICENSE
+    URL: https://github.com/AzureAD/microsoft-authentication-library-for-go/blob/v1.7.1/LICENSE
 
   - github.com/BurntSushi/toml
     License: MIT
