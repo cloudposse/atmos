@@ -30,6 +30,7 @@ type InstancesOptions struct {
 	Sort       string
 	Upload     bool
 	Provenance bool
+	OutputFile string
 }
 
 // instancesCmd lists atmos instances.
@@ -65,6 +66,7 @@ var instancesCmd = &cobra.Command{
 			Sort:       v.GetString("sort"),
 			Upload:     v.GetBool("upload"),
 			Provenance: v.GetBool("provenance"),
+			OutputFile: v.GetString("output-file"),
 		}
 
 		return executeListInstancesCmd(cmd, args, opts)
@@ -120,6 +122,7 @@ func init() {
 		WithSortFlag,
 		WithUploadFlag,
 		WithProvenanceFlag,
+		WithOutputFileFlag,
 	)
 
 	// Register flags.
@@ -173,5 +176,6 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		Delimiter:   opts.Delimiter,
 		Query:       opts.Query,
 		AuthManager: authManager,
+		OutputFile:  opts.OutputFile,
 	})
 }

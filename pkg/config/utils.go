@@ -54,7 +54,12 @@ func FindAllStackConfigsInPathsForStack(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				return nil, nil, false, err
+				return nil, nil, false, errUtils.Build(err).
+					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
+					WithHint("Check that the stacks directory exists and contains stack configuration files").
+					WithContext("pattern", patterns[0]).
+					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
+					Err()
 			}
 			// If there's no error but still no matches, we continue to the next path
 			// This happens when the pattern is valid but no files match it
@@ -147,7 +152,12 @@ func FindAllStackConfigsInPaths(
 		if len(allMatches) == 0 {
 			_, err := u.GetGlobMatches(patterns[0])
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, errUtils.Build(err).
+					WithHintf("Verify `stacks.base_path` in `atmos.yaml` points to the correct directory").
+					WithHint("Check that the stacks directory exists and contains stack configuration files").
+					WithContext("pattern", patterns[0]).
+					WithContext("stacks_base_path", atmosConfig.StacksBaseAbsolutePath).
+					Err()
 			}
 			// If there's no error but still no matches, we continue to the next path
 			// This happens when the pattern is valid but no files match it
@@ -189,6 +199,7 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	if len(basePath) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_BASE_PATH", basePath)
 		atmosConfig.BasePath = basePath
+		atmosConfig.BasePathSource = basePathSourceRuntime
 	}
 
 	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
@@ -415,6 +426,17 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
+	ciCommentsEnabled := os.Getenv("ATMOS_CI_COMMENTS_ENABLED")
+	if len(ciCommentsEnabled) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
+		enabled, err := strconv.ParseBool(ciCommentsEnabled)
+		if err != nil {
+			log.Warn("Invalid boolean value for ENV variable; using default.", "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
+		} else {
+			atmosConfig.CI.Comments.Enabled = enabled
+		}
+	}
+
 	return nil
 }
 
@@ -563,6 +585,7 @@ func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndSta
 func setBasePaths(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.BasePath) > 0 {
 		atmosConfig.BasePath = configAndStacksInfo.BasePath
+		atmosConfig.BasePathSource = basePathSourceRuntime
 		log.Debug(cmdLineArg, BasePathFlag, configAndStacksInfo.BasePath)
 	}
 	return nil

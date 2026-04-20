@@ -14,16 +14,16 @@ data "context_tags" "this" {
 
 locals {
   instance_types = {
-    "alien"    = "👽"  # Alien
-    "ant"      = "🐜"  # Ant
-    "dog"      = "🐶"  # Dog
-    "cat"      = "🐱"  # Cat
-    "elephant" = "🐘"  # Elephant
-    "tiger"    = "🐯"  # Tiger
-    "fox"      = "🦊"  # Fox
-    "monkey"   = "🐵"  # Monkey
-    "whale"    = "🐳"  # Whale
-    "dragon"   = "🐉"  # Dragon
+    "alien"    = "👽" # Alien
+    "ant"      = "🐜" # Ant
+    "dog"      = "🐶" # Dog
+    "cat"      = "🐱" # Cat
+    "elephant" = "🐘" # Elephant
+    "tiger"    = "🐯" # Tiger
+    "fox"      = "🦊" # Fox
+    "monkey"   = "🐵" # Monkey
+    "whale"    = "🐳" # Whale
+    "dragon"   = "🐉" # Dragon
   }
 
   instance_type = lookup(local.instance_types, var.pet, "❓")

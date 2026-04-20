@@ -70,7 +70,11 @@ linters:
             - "!**/internal/aws_utils/**"
             - "!**/pkg/aws/identity/**"
             - "!**/pkg/aws/organization/**"
+            - "!**/pkg/aws/security/**"
             - "!**/pkg/provisioner/backend/**"
+            - "!**/pkg/ci/github/**"
+            - "!**/pkg/ci/planfile/github/**"
+            - "!**/pkg/ci/planfile/s3/**"
             - "!**/pkg/github/**"
             - "$test"
           deny:
@@ -333,6 +337,17 @@ linters:
           - revive
         path: pkg/schema/schema\.go$
         text: "file-length-limit"
+      # Allow os.Getenv in pkg/ci/ for reading CI platform environment variables at runtime.
+      # These are not Atmos configuration - they are CI platform environment detection.
+      - linters:
+          - forbidigo
+        path: ^pkg/ci/
+        text: "os\\.Getenv"
+      # Allow os.Getenv in cmd/terraform/planfile/ for CI detection.
+      - linters:
+          - forbidigo
+        path: ^cmd/terraform/planfile/
+        text: "os\\.Getenv"
     paths:
       - experiments/.*
       - third_party$

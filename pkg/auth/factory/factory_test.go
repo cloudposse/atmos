@@ -165,6 +165,7 @@ func TestNewIdentity_Factory(t *testing.T) {
 		config       *schema.Identity
 		expectError  bool
 		errorType    error
+		errorMsg     string
 	}{
 		{
 			name:         "aws-permission-set-valid",
@@ -226,6 +227,18 @@ func TestNewIdentity_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "ambient-valid",
+			identityName: "passthrough",
+			config:       &schema.Identity{Kind: "ambient"},
+			expectError:  false,
+		},
+		{
+			name:         "aws-ambient-valid",
+			identityName: "eks-deployer",
+			config:       &schema.Identity{Kind: "aws/ambient"},
+			expectError:  false,
+		},
+		{
 			name:         "mock-identity",
 			identityName: "mock",
 			config:       &schema.Identity{Kind: "mock"},
@@ -257,6 +270,7 @@ func TestNewIdentity_Factory(t *testing.T) {
 			config:       &schema.Identity{Kind: ""},
 			expectError:  true,
 			errorType:    errUtils.ErrInvalidIdentityKind,
+			errorMsg:     "identity is not configured",
 		},
 		{
 			name:         "empty-name-allowed",
@@ -274,6 +288,9 @@ func TestNewIdentity_Factory(t *testing.T) {
 				assert.Error(t, err)
 				if tt.errorType != nil {
 					assert.ErrorIs(t, err, tt.errorType)
+				}
+				if tt.errorMsg != "" && err != nil {
+					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 				assert.Nil(t, identity)
 			} else {

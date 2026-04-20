@@ -71,6 +71,7 @@ func TestFormat_ErrorWithMultipleHints(t *testing.T) {
 }
 
 func TestFormat_LongErrorMessage(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	longMsg := "This is a very long error message that exceeds the maximum line length and should be wrapped to multiple lines for better readability in the terminal output"
 	err := errors.New(longMsg)
 
@@ -307,6 +308,7 @@ func TestFormat_NonVerboseWithContext(t *testing.T) {
 }
 
 func TestFormat_WithExplanation(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("test error")).
 		WithExplanation("This is a detailed explanation of what went wrong.").
 		Err()
@@ -325,6 +327,7 @@ func TestFormat_WithExplanation(t *testing.T) {
 }
 
 func TestFormat_WithExample(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	exampleContent := "```yaml\nworkflows:\n  deploy:\n    steps:\n      - command: terraform apply\n```"
 	err := Build(errors.New("invalid workflow")).
 		WithExampleFile(exampleContent).
@@ -344,6 +347,7 @@ func TestFormat_WithExample(t *testing.T) {
 }
 
 func TestFormat_WithAllSections(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	exampleContent := "```yaml\ntest: example\n```"
 	err := Build(errors.New("test error")).
 		WithExplanation("Detailed explanation of the error.").
@@ -447,6 +451,7 @@ func TestFormat_ExampleAndHintsSeparation(t *testing.T) {
 }
 
 func TestFormat_NoExplanation_NoSection(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("test error")).
 		WithHint("Just a hint").
 		Err()
@@ -476,6 +481,7 @@ func TestFormat_NoExample_NoSection(t *testing.T) {
 }
 
 func TestFormat_NoHints_NoSection(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("test error")).
 		WithExplanation("Just an explanation").
 		Err()
@@ -571,6 +577,7 @@ func TestFormat_NonVerboseNoStackTrace(t *testing.T) {
 }
 
 func TestFormat_CustomTitle_SingleH1(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("test error")).
 		WithTitle("Configuration Error").
 		WithHint("Check your atmos.yaml").
@@ -595,6 +602,7 @@ func TestFormat_CustomTitle_SingleH1(t *testing.T) {
 }
 
 func TestFormat_NoCustomTitle_DefaultH1(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("test error")).
 		WithHint("A hint").
 		Err()
@@ -615,6 +623,7 @@ func TestFormat_NoCustomTitle_DefaultH1(t *testing.T) {
 }
 
 func TestFormat_HintsInSection_NotInErrorMessage(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("component not found")).
 		WithTitle("Component Error").
 		WithHint("Check that all the context variables are correctly defined in the stack manifests").
@@ -653,6 +662,7 @@ func TestFormat_HintsInSection_NotInErrorMessage(t *testing.T) {
 }
 
 func TestFormat_MultipleErrors_NoH1Duplication(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	// Create two separate errors as they might appear in workflow output.
 	err1 := Build(errors.New("component not found")).
 		WithTitle("Component Error").
@@ -692,6 +702,7 @@ func TestFormat_MultipleErrors_NoH1Duplication(t *testing.T) {
 }
 
 func TestFormat_WithTitle_OverridesDefault(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("database connection failed")).
 		WithTitle("Database Error").
 		WithExplanation("The database server is unreachable").
@@ -745,6 +756,7 @@ func TestFormat_MaxLineLength_ControlsWrapping(t *testing.T) {
 }
 
 func TestFormat_UseColor_ThreadedThrough(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	// This test verifies that the useColor parameter is threaded through properly.
 	// Color control is now handled by terminal settings, so we just verify
 	// that the function doesn't panic and produces output.

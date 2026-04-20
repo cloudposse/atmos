@@ -27,7 +27,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/auth
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/auth/v0.18.2/auth/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/auth/v0.20.0/auth/LICENSE
 
   - cloud.google.com/go/auth/oauth2adapt
     License: Apache-2.0
@@ -39,23 +39,23 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/iam
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/iam/v1.5.3/iam/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/iam/v1.9.0/iam/LICENSE
 
   - cloud.google.com/go/monitoring
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/monitoring/v1.24.3/monitoring/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/monitoring/v1.27.0/monitoring/LICENSE
 
   - cloud.google.com/go/secretmanager
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/secretmanager/v1.16.0/secretmanager/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/secretmanager/v1.19.0/secretmanager/LICENSE
 
   - cloud.google.com/go/storage
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.61.3/storage/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.62.1/storage/LICENSE
 
   - cuelang.org/go
     License: Apache-2.0
-    URL: https://github.com/cue-lang/cue/blob/v0.16.0/LICENSE
+    URL: https://github.com/cue-lang/cue/blob/v0.16.1/LICENSE
 
   - github.com/Azure/go-autorest/autorest/to
     License: Apache-2.0
@@ -67,15 +67,15 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp
     License: Apache-2.0
-    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/detectors/gcp/v1.31.0/detectors/gcp/LICENSE
+    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/detectors/gcp/v1.32.0/detectors/gcp/LICENSE
 
   - github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric
     License: Apache-2.0
-    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/exporter/metric/v0.55.0/exporter/metric/LICENSE
+    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/exporter/metric/v0.56.0/exporter/metric/LICENSE
 
   - github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping
     License: Apache-2.0
-    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/internal/resourcemapping/v0.55.0/internal/resourcemapping/LICENSE
+    URL: https://github.com/GoogleCloudPlatform/opentelemetry-operations-go/blob/internal/resourcemapping/v0.56.0/internal/resourcemapping/LICENSE
 
   - github.com/Masterminds/goutils
     License: Apache-2.0
@@ -99,103 +99,111 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.41.4/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.41.6/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/aws/protocol/eventstream/v1.7.7/aws/protocol/eventstream/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/aws/protocol/eventstream/v1.7.9/aws/protocol/eventstream/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/config
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/config/v1.32.12/config/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/config/v1.32.16/config/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/credentials
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/credentials/v1.19.12/credentials/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/credentials/v1.19.15/credentials/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/feature/ec2/imds
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/ec2/imds/v1.18.20/feature/ec2/imds/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/ec2/imds/v1.18.22/feature/ec2/imds/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/feature/s3/manager
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.22.8/feature/s3/manager/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.22.15/feature/s3/manager/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/configsources
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/configsources/v1.4.20/internal/configsources/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/configsources/v1.4.22/internal/configsources/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/endpoints/v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.7.20/internal/endpoints/v2/LICENSE.txt
-
-  - github.com/aws/aws-sdk-go-v2/internal/ini
-    License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/ini/v1.8.6/internal/ini/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.7.22/internal/endpoints/v2/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/v4a
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/v4a/v1.4.21/internal/v4a/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/v4a/v1.4.23/internal/v4a/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/bedrockruntime
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/bedrockruntime/v1.50.2/service/bedrockruntime/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/bedrockruntime/v1.50.5/service/bedrockruntime/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/ecr
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecr/v1.56.1/service/ecr/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ecr/v1.57.1/service/ecr/LICENSE.txt
+
+  - github.com/aws/aws-sdk-go-v2/service/eks
+    License: Apache-2.0
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/eks/v1.82.1/service/eks/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/accept-encoding/v1.13.7/service/internal/accept-encoding/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/accept-encoding/v1.13.8/service/internal/accept-encoding/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/checksum
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/checksum/v1.9.12/service/internal/checksum/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/checksum/v1.9.14/service/internal/checksum/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/presigned-url
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/presigned-url/v1.13.20/service/internal/presigned-url/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/presigned-url/v1.13.22/service/internal/presigned-url/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/internal/s3shared
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/s3shared/v1.19.20/service/internal/s3shared/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/internal/s3shared/v1.19.22/service/internal/s3shared/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/organizations
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/organizations/v1.50.5/service/organizations/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/organizations/v1.51.2/service/organizations/LICENSE.txt
+
+  - github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi
+    License: Apache-2.0
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/resourcegroupstaggingapi/v1.31.11/service/resourcegroupstaggingapi/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/s3
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/s3/v1.97.1/service/s3/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/s3/v1.99.1/service/s3/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/secretsmanager
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/secretsmanager/v1.41.4/service/secretsmanager/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/secretsmanager/v1.41.6/service/secretsmanager/LICENSE.txt
+
+  - github.com/aws/aws-sdk-go-v2/service/securityhub
+    License: Apache-2.0
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/securityhub/v1.69.1/service/securityhub/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/signin
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/signin/v1.0.8/service/signin/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/signin/v1.0.10/service/signin/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/ssm
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ssm/v1.68.3/service/ssm/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ssm/v1.68.5/service/ssm/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/sso
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sso/v1.30.13/service/sso/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sso/v1.30.16/service/sso/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/ssooidc
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ssooidc/v1.35.17/service/ssooidc/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/ssooidc/v1.35.20/service/ssooidc/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/sts
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sts/v1.41.9/service/sts/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/sts/v1.42.0/service/sts/LICENSE.txt
 
   - github.com/aws/smithy-go
     License: Apache-2.0
-    URL: https://github.com/aws/smithy-go/blob/v1.24.2/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.25.0/LICENSE
 
   - github.com/cloudposse/atmos
     License: Apache-2.0
@@ -207,7 +215,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/cockroachdb/apd/v3
     License: Apache-2.0
-    URL: https://github.com/cockroachdb/apd/blob/v3.2.1/LICENSE
+    URL: https://github.com/cockroachdb/apd/blob/v3.2.3/LICENSE
 
   - github.com/cockroachdb/errors
     License: Apache-2.0
@@ -223,7 +231,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/containerd/containerd/v2
     License: Apache-2.0
-    URL: https://github.com/containerd/containerd/blob/v2.2.2/LICENSE
+    URL: https://github.com/containerd/containerd/blob/v2.2.3/LICENSE
 
   - github.com/containerd/errdefs
     License: Apache-2.0
@@ -235,7 +243,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/containerd/platforms
     License: Apache-2.0
-    URL: https://github.com/containerd/platforms/blob/v1.0.0-rc.2/LICENSE
+    URL: https://github.com/containerd/platforms/blob/v1.0.0-rc.4/LICENSE
 
   - github.com/containerd/stargz-snapshotter/estargz
     License: Apache-2.0
@@ -251,11 +259,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/docker/cli/cli/config
     License: Apache-2.0
-    URL: https://github.com/docker/cli/blob/v29.3.0/LICENSE
-
-  - github.com/docker/distribution/registry/client/auth/challenge
-    License: Apache-2.0
-    URL: https://github.com/docker/distribution/blob/v2.8.3/LICENSE
+    URL: https://github.com/docker/cli/blob/v29.4.0/LICENSE
 
   - github.com/docker/libkv
     License: Apache-2.0
@@ -275,7 +279,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-git/go-git/v5
     License: Apache-2.0
-    URL: https://github.com/go-git/go-git/blob/v5.17.0/LICENSE
+    URL: https://github.com/go-git/go-git/blob/v5.18.0/LICENSE
 
   - github.com/go-ini/ini
     License: Apache-2.0
@@ -283,7 +287,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-jose/go-jose/v4
     License: Apache-2.0
-    URL: https://github.com/go-jose/go-jose/blob/v4.1.3/LICENSE
+    URL: https://github.com/go-jose/go-jose/blob/v4.1.4/LICENSE
 
   - github.com/go-logr/logr
     License: Apache-2.0
@@ -299,7 +303,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/google/go-containerregistry
     License: Apache-2.0
-    URL: https://github.com/google/go-containerregistry/blob/v0.21.2/LICENSE
+    URL: https://github.com/google/go-containerregistry/blob/v0.21.5/LICENSE
 
   - github.com/google/renameio/v2
     License: Apache-2.0
@@ -315,7 +319,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/googleapis/enterprise-certificate-proxy/client
     License: Apache-2.0
-    URL: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.14/LICENSE
+    URL: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.15/LICENSE
 
   - github.com/gosimple/unidecode
     License: Apache-2.0
@@ -343,7 +347,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress
     License: Apache-2.0
-    URL: https://github.com/klauspost/compress/blob/v1.18.4/LICENSE
+    URL: https://github.com/klauspost/compress/blob/v1.18.5/LICENSE
 
   - github.com/kubescape/go-git-url
     License: Apache-2.0
@@ -363,7 +367,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/modelcontextprotocol/go-sdk
     License: Apache-2.0
-    URL: https://github.com/modelcontextprotocol/go-sdk/blob/v1.4.1/LICENSE
+    URL: https://github.com/modelcontextprotocol/go-sdk/blob/v1.5.0/LICENSE
 
   - github.com/modern-go/concurrent
     License: Apache-2.0
@@ -375,15 +379,15 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/open-policy-agent/opa
     License: Apache-2.0
-    URL: https://github.com/open-policy-agent/opa/blob/v1.14.1/LICENSE
+    URL: https://github.com/open-policy-agent/opa/blob/v1.15.2/LICENSE
 
   - github.com/open-policy-agent/opa/internal/gojsonschema
     License: Apache-2.0
-    URL: https://github.com/open-policy-agent/opa/blob/v1.14.1/internal/gojsonschema/LICENSE-APACHE-2.0.txt
+    URL: https://github.com/open-policy-agent/opa/blob/v1.15.2/internal/gojsonschema/LICENSE-APACHE-2.0.txt
 
   - github.com/open-policy-agent/opa/internal/semver
     License: Apache-2.0
-    URL: https://github.com/open-policy-agent/opa/blob/v1.14.1/internal/semver/LICENSE
+    URL: https://github.com/open-policy-agent/opa/blob/v1.15.2/internal/semver/LICENSE
 
   - github.com/openai/openai-go
     License: Apache-2.0
@@ -399,7 +403,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/petermattis/goid
     License: Apache-2.0
-    URL: https://github.com/petermattis/goid/blob/17d1149c6ac6/LICENSE
+    URL: https://github.com/petermattis/goid/blob/df67b199bc81/LICENSE
 
   - github.com/pjbgf/sha1cd
     License: Apache-2.0
@@ -431,7 +435,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/sasha-s/go-deadlock
     License: Apache-2.0
-    URL: https://github.com/sasha-s/go-deadlock/blob/v0.3.7/LICENSE
+    URL: https://github.com/sasha-s/go-deadlock/blob/v0.3.9/LICENSE
 
   - github.com/skeema/knownhosts
     License: Apache-2.0
@@ -491,35 +495,35 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.opentelemetry.io/contrib/detectors/gcp
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/detectors/gcp/v1.42.0/detectors/gcp/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/detectors/gcp/v1.43.0/detectors/gcp/LICENSE
 
   - go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/google.golang.org/grpc/otelgrpc/v0.67.0/instrumentation/google.golang.org/grpc/otelgrpc/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/google.golang.org/grpc/otelgrpc/v0.68.0/instrumentation/google.golang.org/grpc/otelgrpc/LICENSE
 
   - go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.67.0/instrumentation/net/http/otelhttp/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.68.0/instrumentation/net/http/otelhttp/LICENSE
 
   - go.opentelemetry.io/otel
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.42.0/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/v1.43.0/LICENSE
 
   - go.opentelemetry.io/otel/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.42.0/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.43.0/metric/LICENSE
 
   - go.opentelemetry.io/otel/sdk
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.42.0/sdk/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/v1.43.0/sdk/LICENSE
 
   - go.opentelemetry.io/otel/sdk/metric
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.42.0/sdk/metric/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/sdk/metric/v1.43.0/sdk/metric/LICENSE
 
   - go.opentelemetry.io/otel/trace
     License: Apache-2.0
-    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.42.0/trace/LICENSE
+    URL: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.43.0/trace/LICENSE
 
   - go.uber.org/mock/gomock
     License: Apache-2.0
@@ -539,23 +543,23 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - google.golang.org/genai
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genai/blob/v1.50.0/LICENSE
+    URL: https://github.com/googleapis/go-genai/blob/v1.54.0/LICENSE
 
   - google.golang.org/genproto/googleapis
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/84a4fc48630c/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/afd174a4e478/LICENSE
 
   - google.golang.org/genproto/googleapis/api
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/84a4fc48630c/googleapis/api/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/afd174a4e478/googleapis/api/LICENSE
 
   - google.golang.org/genproto/googleapis/rpc
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/84a4fc48630c/googleapis/rpc/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/afd174a4e478/googleapis/rpc/LICENSE
 
   - google.golang.org/grpc
     License: Apache-2.0
-    URL: https://github.com/grpc/grpc-go/blob/v1.79.2/LICENSE
+    URL: https://github.com/grpc/grpc-go/blob/v1.80.0/LICENSE
 
   - gopkg.in/ini.v1
     License: Apache-2.0
@@ -565,17 +569,41 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/go-yaml/yaml/blob/v2.4.0/LICENSE
 
-  - k8s.io/client-go/util/jsonpath
+  - k8s.io/apimachinery/pkg
     License: Apache-2.0
-    URL: https://github.com/kubernetes/client-go/blob/v0.35.2/LICENSE
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.35.4/LICENSE
 
-  - k8s.io/utils/strings/slices
+  - k8s.io/client-go
     License: Apache-2.0
-    URL: https://github.com/kubernetes/utils/blob/b8788abfbbc2/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.35.4/LICENSE
+
+  - k8s.io/klog/v2
+    License: Apache-2.0
+    URL: https://github.com/kubernetes/klog/blob/v2.140.0/LICENSE
+
+  - k8s.io/kube-openapi/pkg/util
+    License: Apache-2.0
+    URL: https://github.com/kubernetes/kube-openapi/blob/ec9c827d403f/LICENSE
+
+  - k8s.io/utils
+    License: Apache-2.0
+    URL: https://github.com/kubernetes/utils/blob/28399d86e0b5/LICENSE
 
   - oras.land/oras-go/v2
     License: Apache-2.0
     URL: https://github.com/oras-project/oras-go/blob/v2.6.0/LICENSE
+
+  - sigs.k8s.io/json
+    License: Apache-2.0
+    URL: https://github.com/kubernetes-sigs/json/blob/2d320260d730/LICENSE
+
+  - sigs.k8s.io/randfill
+    License: Apache-2.0
+    URL: https://github.com/kubernetes-sigs/randfill/blob/v1.0.0/LICENSE
+
+  - sigs.k8s.io/structured-merge-diff/v6/value
+    License: Apache-2.0
+    URL: https://github.com/kubernetes-sigs/structured-merge-diff/blob/v6.4.0/LICENSE
 
   - sigs.k8s.io/yaml
     License: Apache-2.0
@@ -592,11 +620,15 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/ProtonMail/go-crypto
     License: BSD-3-Clause
-    URL: https://github.com/ProtonMail/go-crypto/blob/v1.4.0/LICENSE
+    URL: https://github.com/ProtonMail/go-crypto/blob/v1.4.1/LICENSE
 
   - github.com/PuerkitoBio/goquery
     License: BSD-3-Clause
     URL: https://github.com/PuerkitoBio/goquery/blob/v1.12.0/LICENSE
+
+  - github.com/andybalholm/brotli/flate
+    License: BSD-3-Clause
+    URL: https://github.com/andybalholm/brotli/blob/v1.2.1/flate/LICENSE
 
   - github.com/andybalholm/cascadia
     License: BSD-2-Clause
@@ -608,7 +640,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.41.4/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.41.6/internal/sync/singleflight/LICENSE
 
   - github.com/aws/aws-sdk-go/internal/sync/singleflight
     License: BSD-3-Clause
@@ -616,7 +648,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/aws/smithy-go/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/smithy-go/blob/v1.24.2/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.25.0/internal/sync/singleflight/LICENSE
 
   - github.com/bearsh/hid/hidapi
     License: BSD-3-Clause
@@ -652,11 +684,11 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/go-jose/go-jose/v3/json
     License: BSD-3-Clause
-    URL: https://github.com/go-jose/go-jose/blob/v3.0.4/json/LICENSE
+    URL: https://github.com/go-jose/go-jose/blob/v3.0.5/json/LICENSE
 
   - github.com/go-jose/go-jose/v4/json
     License: BSD-3-Clause
-    URL: https://github.com/go-jose/go-jose/blob/v4.1.3/json/LICENSE
+    URL: https://github.com/go-jose/go-jose/blob/v4.1.4/json/LICENSE
 
   - github.com/godbus/dbus
     License: BSD-2-Clause
@@ -696,7 +728,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/googleapis/gax-go/v2
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/gax-go/blob/v2.18.0/v2/LICENSE
+    URL: https://github.com/googleapis/gax-go/blob/v2.22.0/v2/LICENSE
 
   - github.com/gorilla/css/scanner
     License: BSD-3-Clause
@@ -712,7 +744,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress/internal/snapref
     License: BSD-3-Clause
-    URL: https://github.com/klauspost/compress/blob/v1.18.4/internal/snapref/LICENSE
+    URL: https://github.com/klauspost/compress/blob/v1.18.5/internal/snapref/LICENSE
 
   - github.com/magiconair/properties
     License: BSD-2-Clause
@@ -732,7 +764,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/open-policy-agent/opa/internal/edittree/bitvector
     License: BSD-3-Clause
-    URL: https://github.com/open-policy-agent/opa/blob/v1.14.1/internal/edittree/bitvector/license.txt
+    URL: https://github.com/open-policy-agent/opa/blob/v1.15.2/internal/edittree/bitvector/license.txt
 
   - github.com/pierrec/lz4/v4
     License: BSD-3-Clause
@@ -796,19 +828,19 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/crypto
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/crypto/+/v0.49.0:LICENSE
+    URL: https://cs.opensource.google/go/x/crypto/+/v0.50.0:LICENSE
 
   - golang.org/x/exp
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/exp/+/7ab1446f:LICENSE
+    URL: https://cs.opensource.google/go/x/exp/+/746e56fc:LICENSE
 
   - golang.org/x/mod/semver
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/mod/+/v0.34.0:LICENSE
+    URL: https://cs.opensource.google/go/x/mod/+/v0.35.0:LICENSE
 
   - golang.org/x/net
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/net/+/v0.52.0:LICENSE
+    URL: https://cs.opensource.google/go/x/net/+/v0.53.0:LICENSE
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
@@ -820,15 +852,15 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/sys
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/sys/+/v0.42.0:LICENSE
+    URL: https://cs.opensource.google/go/x/sys/+/v0.43.0:LICENSE
 
   - golang.org/x/term
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/term/+/v0.41.0:LICENSE
+    URL: https://cs.opensource.google/go/x/term/+/v0.42.0:LICENSE
 
   - golang.org/x/text
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/text/+/v0.35.0:LICENSE
+    URL: https://cs.opensource.google/go/x/text/+/v0.36.0:LICENSE
 
   - golang.org/x/time/rate
     License: BSD-3-Clause
@@ -840,19 +872,19 @@ BSD LICENSED DEPENDENCIES
 
   - google.golang.org/api
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.271.0/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.276.0/LICENSE
 
   - google.golang.org/api/internal/third_party/uritemplates
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.271.0/internal/third_party/uritemplates/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.276.0/internal/third_party/uritemplates/LICENSE
 
   - google.golang.org/protobuf
     License: BSD-3-Clause
     URL: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.11/LICENSE
 
-  - gopkg.in/op/go-logging.v1
+  - gopkg.in/inf.v0
     License: BSD-3-Clause
-    URL: https://github.com/op/go-logging/blob/b2cb9fa56473/LICENSE
+    URL: https://github.com/go-inf/inf/blob/v0.9.1/LICENSE
 
   - gopkg.in/warnings.v0
     License: BSD-2-Clause
@@ -862,9 +894,17 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: Unknown
 
+  - k8s.io/apimachinery/third_party/forked/golang/reflect
+    License: BSD-3-Clause
+    URL: https://github.com/kubernetes/apimachinery/blob/v0.35.4/third_party/forked/golang/LICENSE
+
   - k8s.io/client-go/third_party/forked/golang/template
     License: BSD-3-Clause
-    URL: https://github.com/kubernetes/client-go/blob/v0.35.2/third_party/forked/golang/LICENSE
+    URL: https://github.com/kubernetes/client-go/blob/v0.35.4/third_party/forked/golang/LICENSE
+
+  - k8s.io/utils/internal/third_party/forked/golang/net
+    License: BSD-3-Clause
+    URL: https://github.com/kubernetes/utils/blob/28399d86e0b5/internal/third_party/forked/golang/LICENSE
 
   - modernc.org/memory
     License: BSD-3-Clause
@@ -872,11 +912,11 @@ BSD LICENSED DEPENDENCIES
 
   - modernc.org/sqlite
     License: BSD-3-Clause
-    URL: https://gitlab.com/cznic/sqlite/blob/v1.46.1/LICENSE
+    URL: https://gitlab.com/cznic/sqlite/blob/v1.49.1/LICENSE
 
   - mvdan.cc/sh/v3
     License: BSD-3-Clause
-    URL: https://github.com/mvdan/sh/blob/v3.13.0/LICENSE
+    URL: https://github.com/mvdan/sh/blob/v3.13.1/LICENSE
 
   - mvdan.cc/xurls/v2
     License: BSD-3-Clause
@@ -897,11 +937,11 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/aws-sdk-go-base/v2/endpoints
     License: MPL-2.0
-    URL: https://github.com/hashicorp/aws-sdk-go-base/blob/v2.0.0-beta.71/LICENSE
+    URL: https://github.com/hashicorp/aws-sdk-go-base/blob/v2.0.0-beta.72/LICENSE
 
   - github.com/hashicorp/consul/api
     License: MPL-2.0
-    URL: https://github.com/hashicorp/consul/blob/api/v1.33.4/api/LICENSE
+    URL: https://github.com/hashicorp/consul/blob/api/v1.34.1/api/LICENSE
 
   - github.com/hashicorp/errwrap
     License: MPL-2.0
@@ -913,7 +953,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/go-getter
     License: MPL-2.0
-    URL: https://github.com/hashicorp/go-getter/blob/v1.8.5/LICENSE
+    URL: https://github.com/hashicorp/go-getter/blob/v1.8.6/LICENSE
 
   - github.com/hashicorp/go-immutable-radix
     License: MPL-2.0
@@ -953,7 +993,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/go-version
     License: MPL-2.0
-    URL: https://github.com/hashicorp/go-version/blob/v1.8.0/LICENSE
+    URL: https://github.com/hashicorp/go-version/blob/v1.9.0/LICENSE
 
   - github.com/hashicorp/golang-lru/simplelru
     License: MPL-2.0
@@ -989,19 +1029,19 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/vault/api
     License: MPL-2.0
-    URL: https://github.com/hashicorp/vault/blob/api/v1.22.0/api/LICENSE
+    URL: https://github.com/hashicorp/vault/blob/api/v1.23.0/api/LICENSE
 
   - github.com/hashicorp/vault/api/auth/approle
     License: MPL-2.0
-    URL: https://github.com/hashicorp/vault/blob/api/auth/approle/v0.11.0/api/auth/approle/LICENSE
+    URL: https://github.com/hashicorp/vault/blob/api/auth/approle/v0.12.0/api/auth/approle/LICENSE
 
   - github.com/hashicorp/vault/api/auth/aws
     License: MPL-2.0
-    URL: https://github.com/hashicorp/vault/blob/api/auth/aws/v0.11.0/api/auth/aws/LICENSE
+    URL: https://github.com/hashicorp/vault/blob/api/auth/aws/v0.12.0/api/auth/aws/LICENSE
 
   - github.com/hashicorp/vault/api/auth/userpass
     License: MPL-2.0
-    URL: https://github.com/hashicorp/vault/blob/api/auth/userpass/v0.11.0/api/auth/userpass/LICENSE
+    URL: https://github.com/hashicorp/vault/blob/api/auth/userpass/v0.12.0/api/auth/userpass/LICENSE
 
   - github.com/terraform-docs/terraform-config-inspect/tfconfig
     License: MPL-2.0
@@ -1030,7 +1070,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/Azure/azure-sdk-for-go/sdk/azcore
     License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azcore/v1.21.0/sdk/azcore/LICENSE.txt
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azcore/v1.21.1/sdk/azcore/LICENSE.txt
 
   - github.com/Azure/azure-sdk-for-go/sdk/azidentity
     License: MIT
@@ -1038,7 +1078,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/Azure/azure-sdk-for-go/sdk/internal
     License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/internal/v1.11.2/sdk/internal/LICENSE.txt
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/internal/v1.12.0/sdk/internal/LICENSE.txt
 
   - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions
     License: MIT
@@ -1062,7 +1102,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/AzureAD/microsoft-authentication-library-for-go/apps
     License: MIT
-    URL: https://github.com/AzureAD/microsoft-authentication-library-for-go/blob/v1.7.0/LICENSE
+    URL: https://github.com/AzureAD/microsoft-authentication-library-for-go/blob/v1.7.1/LICENSE
 
   - github.com/BurntSushi/toml
     License: MIT
@@ -1106,11 +1146,11 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/andybalholm/brotli
     License: MIT
-    URL: https://github.com/andybalholm/brotli/blob/v1.2.0/LICENSE
+    URL: https://github.com/andybalholm/brotli/blob/v1.2.1/LICENSE
 
   - github.com/anthropics/anthropic-sdk-go
     License: MIT
-    URL: https://github.com/anthropics/anthropic-sdk-go/blob/v1.26.0/LICENSE
+    URL: https://github.com/anthropics/anthropic-sdk-go/blob/v1.37.0/LICENSE
 
   - github.com/apparentlymart/go-cidr/cidr
     License: MIT
@@ -1198,7 +1238,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/ansi
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.6/ansi/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.7/ansi/LICENSE
 
   - github.com/charmbracelet/x/cellbuf
     License: MIT
@@ -1206,7 +1246,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/exp/slice
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/bbd79dac4a98/exp/slice/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/6921c759c913/exp/slice/LICENSE
 
   - github.com/charmbracelet/x/exp/strings
     License: MIT
@@ -1290,7 +1330,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/fatih/color
     License: MIT
-    URL: https://github.com/fatih/color/blob/v1.18.0/LICENSE.md
+    URL: https://github.com/fatih/color/blob/v1.19.0/LICENSE.md
 
   - github.com/felixge/httpsnoop
     License: MIT
@@ -1300,13 +1340,17 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/forPelevin/gomoji/blob/v1.4.1/LICENSE
 
+  - github.com/fxamacker/cbor/v2
+    License: MIT
+    URL: https://github.com/fxamacker/cbor/blob/v2.9.1/LICENSE
+
   - github.com/gabriel-vasile/mimetype
     License: MIT
     URL: https://github.com/gabriel-vasile/mimetype/blob/v1.4.13/LICENSE
 
   - github.com/getsentry/sentry-go
     License: MIT
-    URL: https://github.com/getsentry/sentry-go/blob/v0.43.0/LICENSE
+    URL: https://github.com/getsentry/sentry-go/blob/v0.45.1/LICENSE
 
   - github.com/go-logfmt/logfmt
     License: MIT
@@ -1390,7 +1434,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/huandu/go-sqlbuilder
     License: MIT
-    URL: https://github.com/huandu/go-sqlbuilder/blob/v1.39.1/LICENSE
+    URL: https://github.com/huandu/go-sqlbuilder/blob/v1.40.2/LICENSE
 
   - github.com/huandu/xstrings
     License: MIT
@@ -1406,11 +1450,11 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/itchyny/gojq
     License: MIT
-    URL: https://github.com/itchyny/gojq/blob/v0.12.18/LICENSE
+    URL: https://github.com/itchyny/gojq/blob/v0.12.19/LICENSE
 
   - github.com/itchyny/timefmt-go
     License: MIT
-    URL: https://github.com/itchyny/timefmt-go/blob/v0.1.7/LICENSE
+    URL: https://github.com/itchyny/timefmt-go/blob/v0.1.8/LICENSE
 
   - github.com/jbenet/go-context/io
     License: MIT
@@ -1450,7 +1494,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/klauspost/compress/zstd/internal/xxhash
     License: MIT
-    URL: https://github.com/klauspost/compress/blob/v1.18.4/zstd/internal/xxhash/LICENSE.txt
+    URL: https://github.com/klauspost/compress/blob/v1.18.5/zstd/internal/xxhash/LICENSE.txt
 
   - github.com/klauspost/cpuid/v2
     License: MIT
@@ -1474,7 +1518,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/lestrrat-go/dsig
     License: MIT
-    URL: https://github.com/lestrrat-go/dsig/blob/v1.0.0/LICENSE
+    URL: https://github.com/lestrrat-go/dsig/blob/v1.3.0/LICENSE
 
   - github.com/lestrrat-go/httpcc
     License: MIT
@@ -1482,7 +1526,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/lestrrat-go/httprc/v3
     License: MIT
-    URL: https://github.com/lestrrat-go/httprc/blob/v3.0.4/LICENSE
+    URL: https://github.com/lestrrat-go/httprc/blob/v3.0.5/LICENSE
 
   - github.com/lestrrat-go/jwx/v3
     License: MIT
@@ -1498,7 +1542,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/lucasb-eyer/go-colorful
     License: MIT
-    URL: https://github.com/lucasb-eyer/go-colorful/blob/v1.3.0/LICENSE
+    URL: https://github.com/lucasb-eyer/go-colorful/blob/v1.4.0/LICENSE
 
   - github.com/marshallbrekka/go-u2fhost
     License: MIT
@@ -1510,11 +1554,11 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mattn/go-isatty
     License: MIT
-    URL: https://github.com/mattn/go-isatty/blob/v0.0.20/LICENSE
+    URL: https://github.com/mattn/go-isatty/blob/v0.0.21/LICENSE
 
   - github.com/mattn/go-runewidth
     License: MIT
-    URL: https://github.com/mattn/go-runewidth/blob/v0.0.21/LICENSE
+    URL: https://github.com/mattn/go-runewidth/blob/v0.0.23/LICENSE
 
   - github.com/mgutz/ansi
     License: MIT
@@ -1522,7 +1566,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mikefarah/yq/v4/pkg/yqlib
     License: MIT
-    URL: https://github.com/mikefarah/yq/blob/v4.52.4/LICENSE
+    URL: https://github.com/mikefarah/yq/blob/v4.53.2/LICENSE
 
   - github.com/mitchellh/copystructure
     License: MIT
@@ -1574,7 +1618,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/pelletier/go-toml/v2
     License: MIT
-    URL: https://github.com/pelletier/go-toml/blob/v2.2.4/LICENSE
+    URL: https://github.com/pelletier/go-toml/blob/v2.3.0/LICENSE
 
   - github.com/playwright-community/playwright-go
     License: MIT
@@ -1582,7 +1626,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/posthog/posthog-go
     License: MIT
-    URL: https://github.com/posthog/posthog-go/blob/v1.11.1/LICENSE.md
+    URL: https://github.com/posthog/posthog-go/blob/v1.11.3/LICENSE.md
 
   - github.com/rivo/uniseg
     License: MIT
@@ -1590,7 +1634,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/rs/zerolog
     License: MIT
-    URL: https://github.com/rs/zerolog/blob/v1.34.0/LICENSE
+    URL: https://github.com/rs/zerolog/blob/v1.35.0/LICENSE
 
   - github.com/ryanuber/go-glob
     License: MIT
@@ -1654,7 +1698,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/terraform-docs/terraform-docs
     License: MIT
-    URL: https://github.com/terraform-docs/terraform-docs/blob/v0.21.0/LICENSE
+    URL: https://github.com/terraform-docs/terraform-docs/blob/v0.22.0/LICENSE
 
   - github.com/tidwall/gjson
     License: MIT
@@ -1696,13 +1740,17 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/wlynxg/chardet/blob/v1.0.4/LICENSE
 
+  - github.com/x448/float16
+    License: MIT
+    URL: https://github.com/x448/float16/blob/v0.8.4/LICENSE
+
   - github.com/xo/terminfo
     License: MIT
     URL: https://github.com/xo/terminfo/blob/abceb7e1c41e/LICENSE
 
   - github.com/yuin/goldmark
     License: MIT
-    URL: https://github.com/yuin/goldmark/blob/v1.7.16/LICENSE
+    URL: https://github.com/yuin/goldmark/blob/v1.8.2/LICENSE
 
   - github.com/yuin/goldmark-emoji
     License: MIT
@@ -1710,15 +1758,15 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/yuin/gopher-lua
     License: MIT
-    URL: https://github.com/yuin/gopher-lua/blob/v1.1.1/LICENSE
+    URL: https://github.com/yuin/gopher-lua/blob/v1.1.2/LICENSE
 
   - github.com/zalando/go-keyring
     License: MIT
-    URL: https://github.com/zalando/go-keyring/blob/v0.2.6/LICENSE
+    URL: https://github.com/zalando/go-keyring/blob/v0.2.8/LICENSE
 
   - github.com/zclconf/go-cty/cty
     License: MIT
-    URL: https://github.com/zclconf/go-cty/blob/v1.18.0/LICENSE
+    URL: https://github.com/zclconf/go-cty/blob/v1.18.1/LICENSE
 
   - github.com/zealic/xignore
     License: MIT
@@ -1742,7 +1790,7 @@ MIT LICENSED DEPENDENCIES
 
   - modernc.org/libc
     License: MIT
-    URL: https://gitlab.com/cznic/libc/blob/v1.70.0/LICENSE-3RD-PARTY.md
+    URL: https://gitlab.com/cznic/libc/blob/v1.72.0/LICENSE-3RD-PARTY.md
 
 
 ================================================================================

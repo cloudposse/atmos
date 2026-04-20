@@ -182,6 +182,15 @@ These environment variables configure Atmos behavior and can override settings i
     - **YAML Path:** `components.terraform.plugin_cache_dir`
   </dd>
 
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS`</dt>
+  <dd>
+    If set to `false`, disable automatic JIT workdir provisioning before
+    `terraform init` during `!terraform.output` / `atmos.Component` evaluation.
+
+    - **YAML Path:** `components.terraform.auto_provision_workdir_for_outputs`
+    - **Default:** `true`
+  </dd>
+
   <dt>`ATMOS_COMPONENTS_HELMFILE_COMMAND`</dt>
   <dd>
     The executable to be called by `atmos` when running Helmfile commands.
@@ -458,6 +467,63 @@ These environment variables configure Atmos behavior and can override settings i
   <dd>
     Control whether stack configurations are sent to the AI provider for context-aware answers. Default: `false`.
   </dd>
+
+  <dt>`ATMOS_AI_MCP`</dt>
+  <dd>
+    Specify which MCP servers to use (comma-separated). Skips automatic server routing and starts only the specified servers.
+    Equivalent to the `--mcp` flag on `atmos ai ask`, `atmos ai chat`, and `atmos ai exec`.
+
+    - Example: `ATMOS_AI_MCP=aws-iam,aws-billing atmos ai ask "List admin roles and their costs"`
+  </dd>
+
+  <dt>`ATMOS_AI_INCLUDE`</dt>
+  <dd>
+    Add glob patterns to include in AI context (comma-separated). Equivalent to the `--include` flag.
+
+    - Example: `ATMOS_AI_INCLUDE="stacks/**/*.yaml" atmos ai ask "Describe our stacks"`
+  </dd>
+
+  <dt>`ATMOS_AI_EXCLUDE`</dt>
+  <dd>
+    Add glob patterns to exclude from AI context (comma-separated). Equivalent to the `--exclude` flag.
+
+    - Example: `ATMOS_AI_EXCLUDE="**/secrets/**" atmos ai ask "Analyze our config"`
+  </dd>
+
+  <dt>`ATMOS_AI_NO_AUTO_CONTEXT`</dt>
+  <dd>
+    Disable automatic context discovery. Equivalent to the `--no-auto-context` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_NO_TOOLS`</dt>
+  <dd>
+    Disable tool execution for faster, simpler queries. Equivalent to the `--no-tools` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_FORMAT`</dt>
+  <dd>
+    Output format for `atmos ai exec`: `text`, `json`, or `markdown`. Equivalent to the `--format` flag. Default: `text`.
+  </dd>
+
+  <dt>`ATMOS_AI_OUTPUT`</dt>
+  <dd>
+    Output file path for `atmos ai exec`. Equivalent to the `--output` flag. Default: stdout.
+  </dd>
+
+  <dt>`ATMOS_AI_CONTEXT`</dt>
+  <dd>
+    Include stack context in the prompt for `atmos ai exec`. Equivalent to the `--context` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_PROVIDER`</dt>
+  <dd>
+    Override AI provider for `atmos ai exec` (e.g., `anthropic`, `openai`, `gemini`). Equivalent to the `--provider` flag.
+  </dd>
+
+  <dt>`ATMOS_AI_SESSION`</dt>
+  <dd>
+    Session ID for conversation context in `atmos ai exec` and `atmos ai chat`. Equivalent to the `--session` flag.
+  </dd>
 </dl>
 
 ## Processing Flags
@@ -521,14 +587,14 @@ These environment variables configure Atmos behavior and can override settings i
     Atmos Pro API endpoint.
   </dd>
 
-  <dt>`ATMOS_PRO_TOKEN`</dt>
-  <dd>
-    Atmos Pro authentication token.
-  </dd>
-
   <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
   <dd>
-    Atmos Pro workspace identifier.
+    Atmos Pro workspace identifier. Not a secret.
+  </dd>
+
+  <dt>`ATMOS_PRO_TOKEN`</dt>
+  <dd>
+    Bearer token obtained via OIDC token exchange (advanced). See [Pro authentication](/cli/configuration/settings/pro#authentication).
   </dd>
 
   <dt>`ATMOS_UPLOAD_STATUS`</dt>

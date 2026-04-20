@@ -20,7 +20,13 @@
         "plan": {
           "skip_planfile": false
         },
-        "plugin_cache": true
+        "planfiles": {
+          "default": ""
+        },
+        "plugin_cache": true,
+        "auto_provision_workdir_for_outputs": true,
+        "ci": {},
+        "workspace": {}
       },
       "helmfile": {
         "base_path": "",

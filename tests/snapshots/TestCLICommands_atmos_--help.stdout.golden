@@ -26,6 +26,7 @@ AVAILABLE COMMANDS
       atlantis [command]                     Generate and manage Atlantis configurations
       auth [command]                         Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources
+      ci [command] [EXPERIMENTAL]            CI/CD integration commands
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
       describe [command]                     Show details about Atmos configurations and components
       devcontainer [command] [EXPERIMENTAL]  Manage development containers
@@ -35,7 +36,7 @@ AVAILABLE COMMANDS
       help                                   Help about any command
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
-      mcp [command] [EXPERIMENTAL]           Manage Model Context Protocol (MCP) server
+      mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections
       packer [command]                       Manage packer-based machine images for multiple platforms
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
