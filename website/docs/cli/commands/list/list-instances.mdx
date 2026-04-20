@@ -57,7 +57,7 @@ The `atmos list instances` command displays all component instances defined acro
   <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
 
   <dt>`--upload`</dt>
-  <dd>Upload instances to Atmos Pro API (requires Pro configuration)</dd>
+  <dd>Upload instances to Atmos Pro API (requires Pro configuration). Every real (non-abstract) instance is uploaded; `settings.pro.enabled` is preserved verbatim in the payload so Atmos Pro can reconcile enabled vs. disabled state server-side.</dd>
 
   <dt>`--output-file` / `-o`</dt>
   <dd>Write output to file in `key=value` format (for `$GITHUB_OUTPUT`). Only supported with `--format=matrix`.</dd>
@@ -113,6 +113,33 @@ Upload instances to Atmos Pro:
 ```shell
 atmos list instances --upload
 ```
+
+The upload includes **every real (non-abstract) instance**, regardless of whether Atmos Pro is enabled for it. The `settings.pro.enabled` flag is preserved verbatim in the payload, so Atmos Pro can reconcile which instances are active vs. disabled on the server side (e.g., grey out disabled instances in the UI rather than losing track of them):
+
+```yaml
+components:
+  terraform:
+    vpc:
+      settings:
+        pro:
+          enabled: true    # Uploaded as enabled
+    app:
+      settings:
+        pro:
+          enabled: false   # Uploaded as disabled — Atmos Pro keeps it visible but marks it inactive
+    db:
+      # No pro config — uploaded as disabled
+```
+
+On completion, the command reports a tally:
+
+```
+Successfully uploaded 3 instances to Atmos Pro API (1 enabled, 2 disabled, 1 drift enabled).
+```
+
+The `drift enabled` count reflects instances with `settings.pro.drift_detection.enabled: true` and is independent of `pro.enabled` — an instance can have drift detection enabled even if its `pro.enabled` flag is `false`.
+
+If the repository has no instances at all, the command prints `No instances found; nothing to upload.` and exits successfully.
 
 View instances in tree format:
 ```shell
@@ -298,7 +325,7 @@ atmos list instances --columns "stack,component,vars.region,enabled"
 - Use `--format tree --provenance` to visualize component import hierarchies
 - Use the `--filter` flag for complex filtering with YQ syntax
 - Combine `--stack` (glob pattern) with `--filter` (YQ expression) for precise filtering
-- The `--upload` flag sends instance data to Atmos Pro for centralized infrastructure management
+- The `--upload` flag sends every real instance to Atmos Pro; `settings.pro.enabled` is included in the payload so Atmos Pro decides enabled vs. disabled server-side
 - Use `--format json` or `--format yaml` for programmatic processing
 :::
 

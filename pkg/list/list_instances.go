@@ -184,38 +184,50 @@ func createInstance(stackName, componentName, componentType string, componentCon
 	return instance
 }
 
-// isProDriftDetectionEnabled checks if an instance has Atmos Pro drift detection enabled.
-// Returns true if settings.pro.drift_detection.enabled == true and settings.pro.enabled != false.
-func isProDriftDetectionEnabled(instance *schema.Instance) bool {
+// isProEnabled checks if an instance has Atmos Pro enabled.
+// Returns true only if settings.pro.enabled is the boolean true.
+// Non-boolean values (e.g., the string "true") and missing values return false.
+func isProEnabled(instance *schema.Instance) bool {
 	proSettings, ok := instance.Settings["pro"].(map[string]any)
 	if !ok {
 		return false
 	}
 
-	// Skip if pro is explicitly disabled
-	if proEnabled, ok := proSettings["enabled"].(bool); ok && !proEnabled {
-		return false
-	}
-
-	driftDetection, ok := proSettings["drift_detection"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	enabled, ok := driftDetection["enabled"].(bool)
+	enabled, ok := proSettings["enabled"].(bool)
 	return ok && enabled
 }
 
-// filterProEnabledInstances returns only instances that have Atmos Pro drift detection explicitly enabled
-// via settings.pro.drift_detection.enabled == true, but excludes instances where settings.pro.enabled == false.
-func filterProEnabledInstances(instances []schema.Instance) []schema.Instance {
-	filtered := make([]schema.Instance, 0, len(instances))
+// isDriftEnabled checks if an instance has drift detection enabled.
+// Returns true only if settings.pro.drift_detection.enabled is the boolean true.
+func isDriftEnabled(instance *schema.Instance) bool {
+	proSettings, ok := instance.Settings["pro"].(map[string]any)
+	if !ok {
+		return false
+	}
+	drift, ok := proSettings["drift_detection"].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, ok := drift["enabled"].(bool)
+	return ok && enabled
+}
+
+// countEnabledDisabled returns counts of pro-enabled and non-enabled instances,
+// plus the number with drift detection enabled.
+// "Disabled" covers both explicit `settings.pro.enabled: false` and instances
+// with no `pro` config at all.
+func countEnabledDisabled(instances []schema.Instance) (enabled, disabled, drift int) {
 	for i := range instances {
-		if isProDriftDetectionEnabled(&instances[i]) {
-			filtered = append(filtered, instances[i])
+		if isProEnabled(&instances[i]) {
+			enabled++
+		} else {
+			disabled++
+		}
+		if isDriftEnabled(&instances[i]) {
+			drift++
 		}
 	}
-	return filtered
+	return enabled, disabled, drift
 }
 
 // sortInstances sorts instances by stack and component.
@@ -338,7 +350,8 @@ func uploadInstancesWithDeps(
 		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
 
-	u.PrintfMessageToTUI("Successfully uploaded instances to Atmos Pro API.")
+	enabled, disabled, drift := countEnabledDisabled(instances)
+	u.PrintfMessageToTUI("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled, %d drift enabled).", len(instances), enabled, disabled, drift)
 	return nil
 }
 
@@ -505,12 +518,11 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 
 	// Handle upload if requested.
 	if upload {
-		proInstances := filterProEnabledInstances(instances)
-		if len(proInstances) == 0 {
-			ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
+		if len(instances) == 0 {
+			ui.Info("No instances found; nothing to upload.")
 			return nil
 		}
-		if uploadErr := uploadInstances(proInstances); uploadErr != nil {
+		if uploadErr := uploadInstances(instances); uploadErr != nil {
 			return uploadErr
 		}
 	}
