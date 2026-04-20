@@ -334,6 +334,7 @@ func TestDefaultBackendGenerator_GenerateBackendIfNeeded(t *testing.T) {
 		expectedErr         error
 		expectFileCreated   bool
 		expectedBackendType string
+		useNonExistentDir   bool // simulate vendored component missing from temp repo
 	}{
 		{
 			name: "auto-generate disabled - no file created",
@@ -412,12 +413,38 @@ func TestDefaultBackendGenerator_GenerateBackendIfNeeded(t *testing.T) {
 			expectFileCreated:   true,
 			expectedBackendType: "cloud",
 		},
+		{
+			name: "component directory does not exist (vendored component in temp repo)",
+			config: &ComponentConfig{
+				AutoGenerateBackend: true,
+				BackendType:         "s3",
+				Backend: map[string]any{
+					"bucket": "test-bucket",
+					"key":    "state.tfstate",
+				},
+				Workspace: "dev-workspace",
+			},
+			component:           "iam",
+			stack:               "app-name-dev",
+			authContext:         nil,
+			expectError:         false,
+			expectFileCreated:   true,
+			expectedBackendType: "s3",
+			useNonExistentDir:   true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a temp directory for the component path.
-			tempDir := t.TempDir()
+			// useNonExistentDir simulates a temp repo where components/ is missing because
+			// the components are vendored and not committed to git (e.g., describe affected).
+			var tempDir string
+			if tt.useNonExistentDir {
+				tempDir = filepath.Join(t.TempDir(), "components", "terraform", tt.component)
+				// Intentionally do NOT create this directory - the fix should create it.
+			} else {
+				tempDir = t.TempDir()
+			}
 			tt.config.ComponentPath = tempDir
 
 			generator := &defaultBackendGenerator{}
@@ -480,6 +507,7 @@ func TestDefaultBackendGenerator_GenerateProvidersIfNeeded(t *testing.T) {
 		authContext       *schema.AuthContext
 		expectError       bool
 		expectFileCreated bool
+		useNonExistentDir bool // simulate vendored component missing from temp repo
 	}{
 		{
 			name: "no providers - no file created",
@@ -532,12 +560,33 @@ func TestDefaultBackendGenerator_GenerateProvidersIfNeeded(t *testing.T) {
 			expectError:       false,
 			expectFileCreated: true,
 		},
+		{
+			name: "component directory does not exist (vendored component in temp repo)",
+			config: &ComponentConfig{
+				Providers: map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+					},
+				},
+			},
+			authContext:       nil,
+			expectError:       false,
+			expectFileCreated: true,
+			useNonExistentDir: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a temp directory for the component path.
-			tempDir := t.TempDir()
+			// useNonExistentDir simulates a temp repo where components/ is missing because
+			// the components are vendored and not committed to git (e.g., describe affected).
+			var tempDir string
+			if tt.useNonExistentDir {
+				tempDir = filepath.Join(t.TempDir(), "components", "terraform", "iam")
+				// Intentionally do NOT create this directory - the fix should create it.
+			} else {
+				tempDir = t.TempDir()
+			}
 			tt.config.ComponentPath = tempDir
 
 			generator := &defaultBackendGenerator{}
