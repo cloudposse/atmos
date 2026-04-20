@@ -57,7 +57,7 @@ The `atmos list instances` command displays all component instances defined acro
   <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
 
   <dt>`--upload`</dt>
-  <dd>Upload instances to Atmos Pro API (requires Pro configuration). Only instances with `settings.pro.enabled: true` (boolean) are included in the upload; all others are silently skipped.</dd>
+  <dd>Upload instances to Atmos Pro API (requires Pro configuration). Every real (non-abstract) instance is uploaded; `settings.pro.enabled` is preserved verbatim in the payload so Atmos Pro can reconcile enabled vs. disabled state server-side.</dd>
 
   <dt>`--output-file` / `-o`</dt>
   <dd>Write output to file in `key=value` format (for `$GITHUB_OUTPUT`). Only supported with `--format=matrix`.</dd>
@@ -325,7 +325,7 @@ atmos list instances --columns "stack,component,vars.region,enabled"
 - Use `--format tree --provenance` to visualize component import hierarchies
 - Use the `--filter` flag for complex filtering with YQ syntax
 - Combine `--stack` (glob pattern) with `--filter` (YQ expression) for precise filtering
-- The `--upload` flag sends instance data to Atmos Pro for centralized infrastructure management. Only components with `settings.pro.enabled: true` (boolean, not string) are uploaded
+- The `--upload` flag sends every real instance to Atmos Pro; `settings.pro.enabled` is included in the payload so Atmos Pro decides enabled vs. disabled server-side
 - Use `--format json` or `--format yaml` for programmatic processing
 :::
 
