@@ -52,8 +52,8 @@ func BenchmarkSortInstances(b *testing.B) {
 	}
 }
 
-// BenchmarkFilterProEnabledInstances measures performance of filtering Pro-enabled instances.
-func BenchmarkFilterProEnabledInstances(b *testing.B) {
+// BenchmarkCountEnabledDisabled measures performance of the tally helper.
+func BenchmarkCountEnabledDisabled(b *testing.B) {
 	// Create 100 instances, half with Pro enabled, half without.
 	instances := make([]schema.Instance, 100)
 	for i := 0; i < 100; i++ {
@@ -75,7 +75,7 @@ func BenchmarkFilterProEnabledInstances(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = filterProEnabledInstances(instances)
+		_, _ = countEnabledDisabled(instances)
 	}
 }
 

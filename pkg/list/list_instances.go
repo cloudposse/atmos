@@ -197,16 +197,18 @@ func isProEnabled(instance *schema.Instance) bool {
 	return ok && enabled
 }
 
-// filterProEnabledInstances returns only instances that have Atmos Pro enabled
-// via settings.pro.enabled == true (strict boolean).
-func filterProEnabledInstances(instances []schema.Instance) []schema.Instance {
-	filtered := make([]schema.Instance, 0, len(instances))
+// countEnabledDisabled returns counts of pro-enabled and non-enabled instances.
+// "Disabled" covers both explicit `settings.pro.enabled: false` and instances
+// with no `pro` config at all.
+func countEnabledDisabled(instances []schema.Instance) (enabled, disabled int) {
 	for i := range instances {
 		if isProEnabled(&instances[i]) {
-			filtered = append(filtered, instances[i])
+			enabled++
+		} else {
+			disabled++
 		}
 	}
-	return filtered
+	return enabled, disabled
 }
 
 // sortInstances sorts instances by stack and component.
@@ -329,7 +331,8 @@ func uploadInstancesWithDeps(
 		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
 
-	u.PrintfMessageToTUI("Successfully uploaded instances to Atmos Pro API.")
+	enabled, disabled := countEnabledDisabled(instances)
+	u.PrintfMessageToTUI("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled).", len(instances), enabled, disabled)
 	return nil
 }
 
@@ -496,12 +499,11 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 
 	// Handle upload if requested.
 	if upload {
-		proInstances := filterProEnabledInstances(instances)
-		if len(proInstances) == 0 {
-			ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
+		if len(instances) == 0 {
+			ui.Info("No instances found; nothing to upload.")
 			return nil
 		}
-		if uploadErr := uploadInstances(proInstances); uploadErr != nil {
+		if uploadErr := uploadInstances(instances); uploadErr != nil {
 			return uploadErr
 		}
 	}

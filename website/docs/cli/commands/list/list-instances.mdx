@@ -114,7 +114,7 @@ Upload instances to Atmos Pro:
 atmos list instances --upload
 ```
 
-The upload only includes instances where `settings.pro.enabled` is the boolean `true`. For example:
+The upload includes **every real (non-abstract) instance**, regardless of whether Atmos Pro is enabled for it. The `settings.pro.enabled` flag is preserved verbatim in the payload, so Atmos Pro can reconcile which instances are active vs. disabled on the server side (e.g., grey out disabled instances in the UI rather than losing track of them):
 
 ```yaml
 components:
@@ -122,10 +122,22 @@ components:
     vpc:
       settings:
         pro:
-          enabled: true  # Must be a boolean, not the string "true"
+          enabled: true    # Uploaded as enabled
+    app:
+      settings:
+        pro:
+          enabled: false   # Uploaded as disabled — Atmos Pro keeps it visible but marks it inactive
+    db:
+      # No pro config — uploaded as disabled
 ```
 
-If no instances match this criterion, the command prints `No Atmos Pro-enabled instances found; nothing to upload.` and exits successfully.
+On completion, the command reports a tally:
+
+```
+Successfully uploaded 3 instances to Atmos Pro API (1 enabled, 2 disabled).
+```
+
+If the repository has no instances at all, the command prints `No instances found; nothing to upload.` and exits successfully.
 
 View instances in tree format:
 ```shell

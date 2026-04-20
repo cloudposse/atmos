@@ -8,52 +8,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestFilterProEnabledInstances ensures only instances with settings.pro.enabled == true are returned.
-func TestFilterProEnabledInstances(t *testing.T) {
-	instances := []schema.Instance{
-		{
-			Component: "vpc",
-			Stack:     "stack1",
-			Settings: map[string]interface{}{
-				"pro": map[string]interface{}{
-					"enabled": true,
-				},
-			},
-		},
-		{
-			Component: "app",
-			Stack:     "stack1",
-			Settings: map[string]interface{}{
-				"pro": map[string]interface{}{
-					"enabled": false,
-				},
-			},
-		},
-		{
-			Component: "db",
-			Stack:     "stack1",
-			Settings:  map[string]interface{}{},
-		},
-		{
-			// drift_detection.enabled is no longer a gate; only pro.enabled matters.
-			Component: "pro-with-drift-off",
-			Stack:     "stack1",
-			Settings: map[string]interface{}{
-				"pro": map[string]interface{}{
-					"enabled":         true,
-					"drift_detection": map[string]interface{}{"enabled": false},
-				},
-			},
-		},
-	}
-
-	filtered := filterProEnabledInstances(instances)
-
-	assert.Len(t, filtered, 2)
-	assert.Equal(t, "vpc", filtered[0].Component)
-	assert.Equal(t, "pro-with-drift-off", filtered[1].Component)
-}
-
 // TestIsProEnabled tests the Pro-enabled check logic.
 // An instance is Pro-enabled when settings.pro.enabled is the boolean true.
 func TestIsProEnabled(t *testing.T) {
@@ -162,23 +116,71 @@ func TestIsProEnabled(t *testing.T) {
 	}
 }
 
-// TestFilterProEnabledInstancesEmpty tests filtering with no instances.
-func TestFilterProEnabledInstancesEmpty(t *testing.T) {
-	t.Run("empty input returns empty output", func(t *testing.T) {
-		instances := []schema.Instance{}
-		filtered := filterProEnabledInstances(instances)
-		assert.Empty(t, filtered)
-	})
+// TestCountEnabledDisabled verifies the tally used in the success toast.
+// "Disabled" covers both explicit `pro.enabled: false` and instances with no `pro` config.
+func TestCountEnabledDisabled(t *testing.T) {
+	enabledInst := schema.Instance{
+		Settings: map[string]any{"pro": map[string]any{"enabled": true}},
+	}
+	disabledInst := schema.Instance{
+		Settings: map[string]any{"pro": map[string]any{"enabled": false}},
+	}
+	noProInst := schema.Instance{
+		Settings: map[string]any{},
+	}
+	nonBoolEnabledInst := schema.Instance{
+		Settings: map[string]any{"pro": map[string]any{"enabled": "true"}},
+	}
 
-	t.Run("no pro-enabled instances returns empty output", func(t *testing.T) {
-		instances := []schema.Instance{
-			{
-				Component: "vpc",
-				Stack:     "dev",
-				Settings:  map[string]interface{}{},
-			},
-		}
-		filtered := filterProEnabledInstances(instances)
-		assert.Empty(t, filtered)
-	})
+	testCases := []struct {
+		name             string
+		instances        []schema.Instance
+		expectedEnabled  int
+		expectedDisabled int
+	}{
+		{
+			name:             "empty slice",
+			instances:        []schema.Instance{},
+			expectedEnabled:  0,
+			expectedDisabled: 0,
+		},
+		{
+			name:             "all enabled",
+			instances:        []schema.Instance{enabledInst, enabledInst, enabledInst},
+			expectedEnabled:  3,
+			expectedDisabled: 0,
+		},
+		{
+			name:             "all explicitly disabled",
+			instances:        []schema.Instance{disabledInst, disabledInst},
+			expectedEnabled:  0,
+			expectedDisabled: 2,
+		},
+		{
+			name:             "no pro config counts as disabled",
+			instances:        []schema.Instance{noProInst, noProInst},
+			expectedEnabled:  0,
+			expectedDisabled: 2,
+		},
+		{
+			name:             "non-bool enabled counts as disabled (strict bool)",
+			instances:        []schema.Instance{nonBoolEnabledInst},
+			expectedEnabled:  0,
+			expectedDisabled: 1,
+		},
+		{
+			name:             "mixed enabled/disabled/no-pro",
+			instances:        []schema.Instance{enabledInst, disabledInst, noProInst, enabledInst},
+			expectedEnabled:  2,
+			expectedDisabled: 2,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			enabled, disabled := countEnabledDisabled(tc.instances)
+			assert.Equal(t, tc.expectedEnabled, enabled, "enabled count")
+			assert.Equal(t, tc.expectedDisabled, disabled, "disabled count")
+		})
+	}
 }
