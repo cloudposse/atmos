@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -347,6 +348,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		atmosConfig.Templates.Settings.Env = envMap
 	}
 
+	// Fix auth.identities after Viper unmarshal.
+	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
+	// We need to re-parse identities directly from YAML to preserve dots in keys.
+	if err := fixAuthIdentities(v, &atmosConfig); err != nil {
+		return atmosConfig, err
+	}
+
 	// Post-process to preserve case-sensitive map keys.
 	// Viper lowercases all YAML map keys, but we need to preserve original case
 	// for identity names and environment variables.
@@ -375,6 +383,7 @@ func setEnv(v *viper.Viper) {
 	// Terraform plugin cache configuration.
 	bindEnv(v, "components.terraform.plugin_cache", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE")
 	bindEnv(v, "components.terraform.plugin_cache_dir", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR")
+	bindEnv(v, "components.terraform.auto_provision_workdir_for_outputs", "ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS")
 
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")
@@ -441,6 +450,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	// Plugin cache enabled by default for zero-config performance.
 	v.SetDefault("components.terraform.plugin_cache", true)
+	v.SetDefault("components.terraform.auto_provision_workdir_for_outputs", true)
 
 	// Token injection defaults for all supported Git hosting providers.
 	v.SetDefault("settings.inject_github_token", true)
@@ -1369,11 +1379,17 @@ func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *sche
 // - Default viper hooks (StringToTimeDurationHookFunc, StringToSliceHookFunc)
 // - Custom TasksDecodeHook for flexible command steps parsing (strings or structs).
 func atmosDecodeHook() viper.DecoderConfigOption {
-	return viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+	return viper.DecodeHook(getAtmosDecodeHookFunc())
+}
+
+// getAtmosDecodeHookFunc returns the decode hook function used for Atmos config unmarshaling.
+// Extracted as a separate function to allow reuse in both Viper and mapstructure contexts.
+func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
+	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		schema.TasksDecodeHook(),
-	))
+	)
 }
 
 // preserveCaseSensitiveMaps extracts original case for registered paths from raw YAML files.
@@ -1395,4 +1411,86 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
 
 	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
+}
+
+// fixAuthIdentities re-parses auth.identities from raw YAML to fix Viper's dot-splitting behavior.
+// Viper treats dots in map keys as nested paths (e.g., "product.usa" becomes "product" -> "usa"),
+// which breaks identity names containing dots. This function reads the raw YAML files directly
+// to extract identities with their original key names preserved.
+func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "config.fixAuthIdentities")()
+
+	// Get list of all config files that were merged.
+	filesToProcess := collectConfigFilesForCasePreservation(v.ConfigFileUsed())
+	if len(filesToProcess) == 0 {
+		return nil
+	}
+
+	// Parse each file and extract auth.identities directly from YAML.
+	mergedIdentities := make(map[string]schema.Identity)
+
+	for _, configFile := range filesToProcess {
+		rawYAML, err := os.ReadFile(configFile)
+		if err != nil {
+			log.Trace("Skipping identity extraction for unreadable file", "file", configFile, "error", err)
+			continue
+		}
+
+		// Parse raw YAML to get auth.identities without Viper's dot-splitting.
+		var rawConfig map[string]interface{}
+		if err := yaml.Unmarshal(rawYAML, &rawConfig); err != nil {
+			log.Trace("Failed to parse YAML for identity extraction", "file", configFile, "error", err)
+			continue
+		}
+
+		// Navigate to auth.identities.
+		auth, ok := rawConfig["auth"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		identitiesRaw, ok := auth["identities"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Convert each identity to schema.Identity and merge with existing.
+		for identityName, identityDataRaw := range identitiesRaw {
+			identityData, ok := identityDataRaw.(map[string]interface{})
+			if !ok {
+				log.Trace("Skipping invalid identity", "name", identityName, "file", configFile)
+				continue
+			}
+
+			// Convert to schema.Identity using mapstructure.
+			var identity schema.Identity
+			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+				Result:           &identity,
+				WeaklyTypedInput: true,
+				DecodeHook:       getAtmosDecodeHookFunc(),
+			})
+			if err != nil {
+				log.Trace("Failed to create decoder for identity", "name", identityName, "error", err)
+				continue
+			}
+
+			if err := decoder.Decode(identityData); err != nil {
+				log.Trace("Failed to decode identity", "name", identityName, "error", err)
+				continue
+			}
+
+			// Lowercase the identity name for case-insensitive lookup (Viper lowercases all keys).
+			lowercaseName := strings.ToLower(identityName)
+			mergedIdentities[lowercaseName] = identity
+
+			log.Trace("Extracted identity with dots in name", "name", identityName, "lowercaseName", lowercaseName, "file", configFile)
+		}
+	}
+
+	// Replace the incorrectly parsed identities with the correctly parsed ones.
+	if len(mergedIdentities) > 0 {
+		atmosConfig.Auth.Identities = mergedIdentities
+	}
+
+	return nil
 }
