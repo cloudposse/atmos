@@ -13,6 +13,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Empty string is treated identically to "unset" by pkg/config (every
+// consumer checks `os.Getenv(...) != ""` before using the value), so
+// t.Setenv to "" safely isolates the test from the developer's env and
+// gets auto-restored on cleanup.
+
 // TestGenerateProviderOverridesForAliases is an end-to-end integration test that
 // reproduces cloudposse/atmos#2208: provider keys using the `<base>.<alias>`
 // shorthand (e.g. `aws.use1`) must be grouped into a Terraform-JSON array under
@@ -32,9 +37,9 @@ import (
 //   - `eip-derived-alias`:  the user omits `alias:` and Atmos derives `use1`
 //     from the key suffix.
 func TestGenerateProviderOverridesForAliases(t *testing.T) {
-	// Unset env vars that would otherwise point Atmos at a different config.
-	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
-	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+	// Clear env vars that would otherwise point Atmos at a different config.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	fixture := "../../tests/fixtures/scenarios/atmos-providers-aliases"
 	t.Chdir(fixture)

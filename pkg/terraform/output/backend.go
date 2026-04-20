@@ -227,6 +227,12 @@ func buildAliasedProviderConfigs(baseName string, providerOverrides map[string]a
 // copyNonAliasedProviders copies every provider from src into dst that is not
 // a dot-notation key and is not a base name of an aliased group (those are
 // handled separately by buildAliasedProviderConfigs).
+//
+// Convention: any "." in a provider key is treated as the alias shorthand
+// `<base>.<alias>` and is therefore always routed through the alias grouping
+// (never copied verbatim). Terraform provider names don't contain dots in
+// practice, but if a future provider name legitimately did, it would be folded
+// into alias processing rather than surfaced as a top-level key.
 func copyNonAliasedProviders(dst, src map[string]any, baseNamesWithAliases map[string]bool) {
 	for key, config := range src {
 		if strings.Contains(key, ".") {

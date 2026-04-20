@@ -422,6 +422,38 @@ func TestGenerateProviderOverrides(t *testing.T) {
 				},
 			},
 		},
+		{
+			// Standalone non-aliased providers must still pass through verbatim
+			// when an aliased group is also present. Covers the
+			// copyNonAliasedProviders path that forwards providers that are
+			// neither dot-notation nor a base of an aliased group.
+			name: "standalone provider alongside aliased group",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+				"google": map[string]any{
+					"project": "my-project",
+					"region":  "us-central1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+					"google": map[string]any{
+						"project": "my-project",
+						"region":  "us-central1",
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -431,6 +463,41 @@ func TestGenerateProviderOverrides(t *testing.T) {
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
+}
+
+// TestProcessProviderAliases_FirstDotSplit locks the contract that the split
+// between `<base>` and `<alias>` happens at the FIRST dot: a key like
+// `aws.use1.primary` must yield base `aws` and derived alias `use1.primary`,
+// not base `aws.use1` and alias `primary`. The docstring on ProcessProviderAliases
+// commits to this behavior; this test keeps a future refactor from silently
+// changing it to e.g. last-dot semantics.
+func TestProcessProviderAliases_FirstDotSplit(t *testing.T) {
+	input := map[string]any{
+		"aws": map[string]any{
+			"region": "us-east-2",
+		},
+		"aws.use1.primary": map[string]any{
+			"region": "us-east-1",
+		},
+	}
+
+	result := ProcessProviderAliases(input)
+
+	awsEntries, ok := result["aws"].([]any)
+	require.True(t, ok, "aws must be grouped into an array, got %T", result["aws"])
+	require.Len(t, awsEntries, 2)
+
+	aliased, ok := awsEntries[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "use1.primary", aliased["alias"],
+		"alias must be derived from the suffix after the FIRST dot, preserving any remaining dots verbatim")
+
+	// `aws.use1.primary` must not surface as a top-level key, and `aws.use1`
+	// must not appear as a separate base (it's just part of the suffix).
+	_, stillDotKey := result["aws.use1.primary"]
+	assert.False(t, stillDotKey, "deep dot-key must not leak as a top-level result key")
+	_, intermediateBase := result["aws.use1"]
+	assert.False(t, intermediateBase, "intermediate `aws.use1` must not be synthesized as a separate base")
 }
 
 // TestProcessProviderAliases_DoesNotMutateInput guards against accidental mutation
