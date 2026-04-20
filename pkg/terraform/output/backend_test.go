@@ -312,6 +312,148 @@ func TestGenerateProviderOverrides(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "multi-region with provider aliases",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "use1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			name: "multi-region with multiple aliases",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.uswest2": map[string]any{
+					"region": "us-west-2",
+					"alias":  "uswest2",
+				},
+				"aws.euwest1": map[string]any{
+					"region": "eu-west-1",
+					"alias":  "euwest1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1"},
+						map[string]any{"region": "eu-west-1", "alias": "euwest1"},
+						map[string]any{"region": "us-west-2", "alias": "uswest2"},
+					},
+				},
+			},
+		},
+		{
+			// Regression test for issue #2208: alias should be derived from the dot
+			// suffix when the user omits it from the provider block.
+			name: "alias auto-derived from dot-suffix",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+				},
+			},
+		},
+		{
+			// Explicit alias values must be preserved even when they differ from
+			// the dot suffix — user intent wins over Atmos auto-derivation.
+			name: "explicit alias preserved over auto-derive",
+			providers: map[string]any{
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+					"alias":  "primary",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1", "alias": "primary"},
+					},
+				},
+			},
+		},
+		{
+			// Aliased providers without a bare base provider must still produce
+			// an array; aliases are auto-derived when absent.
+			name: "aliased without base with auto-derive",
+			providers: map[string]any{
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+				"aws.use2": map[string]any{
+					"region": "us-east-2",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+						map[string]any{"region": "us-east-2", "alias": "use2"},
+					},
+				},
+			},
+		},
+		{
+			// Standalone non-aliased providers must still pass through verbatim
+			// when an aliased group is also present. Covers the
+			// copyNonAliasedProviders path that forwards providers that are
+			// neither dot-notation nor a base of an aliased group.
+			name: "standalone provider alongside aliased group",
+			providers: map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-2",
+				},
+				"aws.use1": map[string]any{
+					"region": "us-east-1",
+				},
+				"google": map[string]any{
+					"project": "my-project",
+					"region":  "us-central1",
+				},
+			},
+			authContext: nil,
+			expectedResult: map[string]any{
+				"provider": map[string]any{
+					"aws": []any{
+						map[string]any{"region": "us-east-2"},
+						map[string]any{"region": "us-east-1", "alias": "use1"},
+					},
+					"google": map[string]any{
+						"project": "my-project",
+						"region":  "us-central1",
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -321,6 +463,75 @@ func TestGenerateProviderOverrides(t *testing.T) {
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
+}
+
+// TestProcessProviderAliases_FirstDotSplit locks the contract that the split
+// between `<base>` and `<alias>` happens at the FIRST dot: a key like
+// `aws.use1.primary` must yield base `aws` and derived alias `use1.primary`,
+// not base `aws.use1` and alias `primary`. The docstring on ProcessProviderAliases
+// commits to this behavior; this test keeps a future refactor from silently
+// changing it to e.g. last-dot semantics.
+func TestProcessProviderAliases_FirstDotSplit(t *testing.T) {
+	input := map[string]any{
+		"aws": map[string]any{
+			"region": "us-east-2",
+		},
+		"aws.use1.primary": map[string]any{
+			"region": "us-east-1",
+		},
+	}
+
+	result := ProcessProviderAliases(input)
+
+	awsEntries, ok := result["aws"].([]any)
+	require.True(t, ok, "aws must be grouped into an array, got %T", result["aws"])
+	require.Len(t, awsEntries, 2)
+
+	aliased, ok := awsEntries[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "use1.primary", aliased["alias"],
+		"alias must be derived from the suffix after the FIRST dot, preserving any remaining dots verbatim")
+
+	// `aws.use1.primary` must not surface as a top-level key, and `aws.use1`
+	// must not appear as a separate base (it's just part of the suffix).
+	_, stillDotKey := result["aws.use1.primary"]
+	assert.False(t, stillDotKey, "deep dot-key must not leak as a top-level result key")
+	_, intermediateBase := result["aws.use1"]
+	assert.False(t, intermediateBase, "intermediate `aws.use1` must not be synthesized as a separate base")
+}
+
+// TestProcessProviderAliases_DoesNotMutateInput guards against accidental mutation
+// of the input map when auto-deriving the `alias` field — callers expect their
+// provider-overrides map to be unchanged after processing.
+func TestProcessProviderAliases_DoesNotMutateInput(t *testing.T) {
+	input := map[string]any{
+		"aws.use1": map[string]any{
+			"region": "us-east-1",
+		},
+	}
+
+	_ = ProcessProviderAliases(input)
+
+	// The inner block must not have been populated with an `alias` key by the
+	// auto-derive logic — the transformation operates on a clone.
+	innerBlock, ok := input["aws.use1"].(map[string]any)
+	assert.True(t, ok, "inner block should still be a map after processing")
+	_, hasAlias := innerBlock["alias"]
+	assert.False(t, hasAlias, "input block must not be mutated with a derived alias")
+}
+
+// TestProcessProviderAliases_NonMapAliasedBlock verifies that non-map values in
+// aliased keys pass through unchanged instead of panicking the auto-derive logic.
+func TestProcessProviderAliases_NonMapAliasedBlock(t *testing.T) {
+	input := map[string]any{
+		"aws.use1": "not-a-map",
+	}
+
+	result := ProcessProviderAliases(input)
+
+	assert.Equal(t, map[string]any{
+		"aws": []any{"not-a-map"},
+	}, result)
 }
 
 func TestDefaultBackendGenerator_GenerateBackendIfNeeded(t *testing.T) {
