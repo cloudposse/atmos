@@ -457,7 +457,7 @@ func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *sche
 }
 
 // extractComponentName extracts the component name from config.
-// Priority: componentConfig["component"] > componentConfig["metadata"]["component"].
+// Priority: componentConfig["component"] > componentConfig["metadata"]["component"] > componentConfig["atmos_component"].
 func extractComponentName(componentConfig map[string]any) string {
 	// Try component field first (highest priority).
 	if component, ok := componentConfig["component"].(string); ok && component != "" {
@@ -469,6 +469,13 @@ func extractComponentName(componentConfig map[string]any) string {
 		if component, ok := metadata["component"].(string); ok && component != "" {
 			return component
 		}
+	}
+
+	// Fall back to atmos_component (instance name, set by atmos stack processing).
+	// This handles components that have no base component override — the instance name
+	// (e.g. "producer-from-source") is the canonical name for source resolution.
+	if component, ok := componentConfig["atmos_component"].(string); ok && component != "" {
+		return component
 	}
 
 	return ""
