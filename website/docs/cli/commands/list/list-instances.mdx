@@ -134,8 +134,10 @@ components:
 On completion, the command reports a tally:
 
 ```
-Successfully uploaded 3 instances to Atmos Pro API (1 enabled, 2 disabled).
+Successfully uploaded 3 instances to Atmos Pro API (1 enabled, 2 disabled, 1 drift enabled).
 ```
+
+The `drift enabled` count reflects instances with `settings.pro.drift_detection.enabled: true` and is independent of `pro.enabled` — an instance can have drift detection enabled even if its `pro.enabled` flag is `false`.
 
 If the repository has no instances at all, the command prints `No instances found; nothing to upload.` and exits successfully.
 

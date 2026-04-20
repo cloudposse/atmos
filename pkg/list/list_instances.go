@@ -197,18 +197,37 @@ func isProEnabled(instance *schema.Instance) bool {
 	return ok && enabled
 }
 
-// countEnabledDisabled returns counts of pro-enabled and non-enabled instances.
+// isDriftEnabled checks if an instance has drift detection enabled.
+// Returns true only if settings.pro.drift_detection.enabled is the boolean true.
+func isDriftEnabled(instance *schema.Instance) bool {
+	proSettings, ok := instance.Settings["pro"].(map[string]any)
+	if !ok {
+		return false
+	}
+	drift, ok := proSettings["drift_detection"].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, ok := drift["enabled"].(bool)
+	return ok && enabled
+}
+
+// countEnabledDisabled returns counts of pro-enabled and non-enabled instances,
+// plus the number with drift detection enabled.
 // "Disabled" covers both explicit `settings.pro.enabled: false` and instances
 // with no `pro` config at all.
-func countEnabledDisabled(instances []schema.Instance) (enabled, disabled int) {
+func countEnabledDisabled(instances []schema.Instance) (enabled, disabled, drift int) {
 	for i := range instances {
 		if isProEnabled(&instances[i]) {
 			enabled++
 		} else {
 			disabled++
 		}
+		if isDriftEnabled(&instances[i]) {
+			drift++
+		}
 	}
-	return enabled, disabled
+	return enabled, disabled, drift
 }
 
 // sortInstances sorts instances by stack and component.
@@ -331,8 +350,8 @@ func uploadInstancesWithDeps(
 		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
 
-	enabled, disabled := countEnabledDisabled(instances)
-	u.PrintfMessageToTUI("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled).", len(instances), enabled, disabled)
+	enabled, disabled, drift := countEnabledDisabled(instances)
+	u.PrintfMessageToTUI("Successfully uploaded %d instances to Atmos Pro API (%d enabled, %d disabled, %d drift enabled).", len(instances), enabled, disabled, drift)
 	return nil
 }
 

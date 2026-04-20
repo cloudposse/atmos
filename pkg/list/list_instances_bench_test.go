@@ -75,7 +75,7 @@ func BenchmarkCountEnabledDisabled(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = countEnabledDisabled(instances)
+		_, _, _ = countEnabledDisabled(instances)
 	}
 }
 

@@ -118,6 +118,7 @@ func TestIsProEnabled(t *testing.T) {
 
 // TestCountEnabledDisabled verifies the tally used in the success toast.
 // "Disabled" covers both explicit `pro.enabled: false` and instances with no `pro` config.
+// Drift counts instances where `pro.drift_detection.enabled: true`, independent of pro.enabled.
 func TestCountEnabledDisabled(t *testing.T) {
 	enabledInst := schema.Instance{
 		Settings: map[string]any{"pro": map[string]any{"enabled": true}},
@@ -131,56 +132,110 @@ func TestCountEnabledDisabled(t *testing.T) {
 	nonBoolEnabledInst := schema.Instance{
 		Settings: map[string]any{"pro": map[string]any{"enabled": "true"}},
 	}
+	enabledWithDriftInst := schema.Instance{
+		Settings: map[string]any{"pro": map[string]any{
+			"enabled":         true,
+			"drift_detection": map[string]any{"enabled": true},
+		}},
+	}
+	disabledWithDriftInst := schema.Instance{
+		Settings: map[string]any{"pro": map[string]any{
+			"enabled":         false,
+			"drift_detection": map[string]any{"enabled": true},
+		}},
+	}
+	enabledDriftOffInst := schema.Instance{
+		Settings: map[string]any{"pro": map[string]any{
+			"enabled":         true,
+			"drift_detection": map[string]any{"enabled": false},
+		}},
+	}
 
 	testCases := []struct {
 		name             string
 		instances        []schema.Instance
 		expectedEnabled  int
 		expectedDisabled int
+		expectedDrift    int
 	}{
 		{
 			name:             "empty slice",
 			instances:        []schema.Instance{},
 			expectedEnabled:  0,
 			expectedDisabled: 0,
+			expectedDrift:    0,
 		},
 		{
 			name:             "all enabled",
 			instances:        []schema.Instance{enabledInst, enabledInst, enabledInst},
 			expectedEnabled:  3,
 			expectedDisabled: 0,
+			expectedDrift:    0,
 		},
 		{
 			name:             "all explicitly disabled",
 			instances:        []schema.Instance{disabledInst, disabledInst},
 			expectedEnabled:  0,
 			expectedDisabled: 2,
+			expectedDrift:    0,
 		},
 		{
 			name:             "no pro config counts as disabled",
 			instances:        []schema.Instance{noProInst, noProInst},
 			expectedEnabled:  0,
 			expectedDisabled: 2,
+			expectedDrift:    0,
 		},
 		{
 			name:             "non-bool enabled counts as disabled (strict bool)",
 			instances:        []schema.Instance{nonBoolEnabledInst},
 			expectedEnabled:  0,
 			expectedDisabled: 1,
+			expectedDrift:    0,
 		},
 		{
 			name:             "mixed enabled/disabled/no-pro",
 			instances:        []schema.Instance{enabledInst, disabledInst, noProInst, enabledInst},
 			expectedEnabled:  2,
 			expectedDisabled: 2,
+			expectedDrift:    0,
+		},
+		{
+			name:             "drift enabled on pro-enabled instance",
+			instances:        []schema.Instance{enabledWithDriftInst, enabledInst},
+			expectedEnabled:  2,
+			expectedDisabled: 0,
+			expectedDrift:    1,
+		},
+		{
+			name:             "drift counted even when pro disabled",
+			instances:        []schema.Instance{disabledWithDriftInst},
+			expectedEnabled:  0,
+			expectedDisabled: 1,
+			expectedDrift:    1,
+		},
+		{
+			name:             "drift_detection.enabled false not counted",
+			instances:        []schema.Instance{enabledDriftOffInst},
+			expectedEnabled:  1,
+			expectedDisabled: 0,
+			expectedDrift:    0,
+		},
+		{
+			name:             "mixed with drift",
+			instances:        []schema.Instance{enabledWithDriftInst, disabledWithDriftInst, enabledInst, noProInst},
+			expectedEnabled:  2,
+			expectedDisabled: 2,
+			expectedDrift:    2,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			enabled, disabled := countEnabledDisabled(tc.instances)
+			enabled, disabled, drift := countEnabledDisabled(tc.instances)
 			assert.Equal(t, tc.expectedEnabled, enabled, "enabled count")
 			assert.Equal(t, tc.expectedDisabled, disabled, "disabled count")
+			assert.Equal(t, tc.expectedDrift, drift, "drift count")
 		})
 	}
 }
