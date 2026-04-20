@@ -479,6 +479,11 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	// AutoProvisionWorkdirForOutputs controls whether Atmos automatically provisions
+	// JIT working directories before running terraform output.
+	// When true (default), output fetching transparently provisions the workdir
+	// if provision.workdir.enabled is set on the referenced component.
+	AutoProvisionWorkdirForOutputs bool `yaml:"auto_provision_workdir_for_outputs" json:"auto_provision_workdir_for_outputs" mapstructure:"auto_provision_workdir_for_outputs"`
 	// Source holds global source configuration defaults for JIT-vendored components.
 	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 	// CI holds terraform-specific CI configuration (e.g., exit code mapping).

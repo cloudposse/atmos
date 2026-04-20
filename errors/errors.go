@@ -119,6 +119,7 @@ var (
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
+	ErrEvaluateOutput                   = errors.New("failed to evaluate output expression")
 
 	// Recoverable YAML function errors - use YQ default if available.
 	// These errors indicate the data is not available but do not represent API failures.
