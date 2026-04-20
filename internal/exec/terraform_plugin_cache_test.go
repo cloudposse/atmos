@@ -100,10 +100,10 @@ func TestGetValidUserPluginCacheDir(t *testing.T) {
 
 			// Set up atmosConfig with global env.
 			atmosConfig := &schema.AtmosConfiguration{
-				Env: make(map[string]string),
+				Env: schema.EnvConfig{Vars: make(map[string]string)},
 			}
 			if tt.globalEnvDir != "" {
-				atmosConfig.Env["TF_PLUGIN_CACHE_DIR"] = tt.globalEnvDir
+				atmosConfig.Env.Vars["TF_PLUGIN_CACHE_DIR"] = tt.globalEnvDir
 			}
 
 			result := getValidUserPluginCacheDir(atmosConfig)
@@ -228,12 +228,12 @@ func TestConfigurePluginCache(t *testing.T) {
 						PluginCacheDir: tt.pluginCacheDir,
 					},
 				},
-				Env: make(map[string]string),
+				Env: schema.EnvConfig{Vars: make(map[string]string)},
 			}
 			if tt.globalEnvDir == "SET_BUT_EMPTY" {
-				atmosConfig.Env["TF_PLUGIN_CACHE_DIR"] = ""
+				atmosConfig.Env.Vars["TF_PLUGIN_CACHE_DIR"] = ""
 			} else if tt.globalEnvDir != "" {
-				atmosConfig.Env["TF_PLUGIN_CACHE_DIR"] = tt.globalEnvDir
+				atmosConfig.Env.Vars["TF_PLUGIN_CACHE_DIR"] = tt.globalEnvDir
 			}
 
 			result := configurePluginCache(atmosConfig)

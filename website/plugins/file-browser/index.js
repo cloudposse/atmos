@@ -45,6 +45,7 @@ const TAGS_MAP = {
   'devcontainer-build': ['DX'],
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
+  dotenv: ['DX'],
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
   'mcp-with-aws': ['DX', 'Automation'],
@@ -119,6 +120,9 @@ const DOCS_MAP = {
   ],
   'demo-helmfile': [
     { label: 'Helmfile', url: '/stacks/components/helmfile' },
+  ],
+  dotenv: [
+    { label: 'Environment Variables', url: '/cli/configuration/env' },
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },

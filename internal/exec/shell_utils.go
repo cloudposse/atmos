@@ -23,6 +23,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -108,14 +109,34 @@ func ExecuteShellCommand(
 	}
 
 	cmd := exec.Command(command, args...)
-	// Build environment: process env + global env (atmos.yaml) + command-specific env.
+	// Build environment: process env + global env (atmos.yaml) + working dir .env + command-specific env.
 	// When auth has sanitized the environment, cfg.processEnv is used instead of
 	// os.Environ() to avoid reintroducing problematic vars (e.g., IRSA credentials).
+	// Global env has lowest priority after system env, command-specific env overrides all.
 	baseEnv := os.Environ()
 	if cfg.processEnv != nil {
 		baseEnv = cfg.processEnv
 	}
-	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.Env)
+	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.GetCaseSensitiveEnvVars())
+
+	// Load working directory .env files if enabled.
+	if atmosConfig.Env.Files.Enabled && dir != "" {
+		dirEnv, loadedFiles, err := envpkg.LoadFromDirectory(
+			dir,
+			atmosConfig.Env.Files.Paths,
+			atmosConfig.Env.Files.Parents,
+			atmosConfig.BasePath,
+		)
+		if err != nil {
+			log.Debug("Failed to load .env files from working directory", "dir", dir, "error", err)
+		} else {
+			for _, file := range loadedFiles {
+				ui.Success(fmt.Sprintf("Loaded %s", filepath.Base(file)))
+			}
+			cmdEnv = envpkg.MergeEnvSlices(cmdEnv, envpkg.MapToSlice(dirEnv))
+		}
+	}
+
 	cmdEnv = append(cmdEnv, env...)
 	cmdEnv = append(cmdEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
@@ -214,13 +235,14 @@ func ExecuteShellCommand(
 
 // ExecuteShell runs a shell script.
 func ExecuteShell(
+	atmosConfig *schema.AtmosConfiguration,
 	command string,
 	name string,
 	dir string,
 	envVars []string,
 	dryRun bool,
 ) error {
-	defer perf.Track(nil, "exec.ExecuteShell")()
+	defer perf.Track(atmosConfig, "exec.ExecuteShell")()
 
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
@@ -233,6 +255,10 @@ func ExecuteShell(
 	// This matches the behavior before commit 9fd7d156a where the environment
 	// was merged rather than replaced.
 	mergedEnv := os.Environ()
+
+	// Merge global env from atmos.yaml (and any working-dir .env files) if atmosConfig is provided.
+	mergedEnv = mergeAtmosConfigEnv(mergedEnv, atmosConfig, dir)
+
 	for _, envVar := range envVars {
 		mergedEnv = envpkg.UpdateEnvVar(mergedEnv, parseEnvVarKey(envVar), parseEnvVarValue(envVar))
 	}
@@ -246,6 +272,38 @@ func ExecuteShell(
 	}
 
 	return u.ShellRunner(command, name, dir, mergedEnv, ioLayer.MaskWriter(os.Stdout))
+}
+
+// mergeAtmosConfigEnv merges the global env from atmos.yaml into baseEnv and loads any
+// working-directory .env files if enabled. Returns baseEnv unchanged when atmosConfig is nil.
+func mergeAtmosConfigEnv(baseEnv []string, atmosConfig *schema.AtmosConfiguration, dir string) []string {
+	defer perf.Track(atmosConfig, "exec.mergeAtmosConfigEnv")()
+
+	if atmosConfig == nil {
+		return baseEnv
+	}
+
+	merged := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.GetCaseSensitiveEnvVars())
+
+	if !atmosConfig.Env.Files.Enabled || dir == "" {
+		return merged
+	}
+
+	dirEnv, loadedFiles, err := envpkg.LoadFromDirectory(
+		dir,
+		atmosConfig.Env.Files.Paths,
+		atmosConfig.Env.Files.Parents,
+		atmosConfig.BasePath,
+	)
+	if err != nil {
+		log.Debug("Failed to load .env files from working directory", "dir", dir, "error", err)
+		return merged
+	}
+
+	for _, file := range loadedFiles {
+		ui.Success(fmt.Sprintf("Loaded %s", filepath.Base(file)))
+	}
+	return envpkg.MergeEnvSlices(merged, envpkg.MapToSlice(dirEnv))
 }
 
 // parseEnvVarKey extracts the key from an environment variable string (KEY=value).
@@ -352,7 +410,7 @@ func execTerraformShellCommand(
 
 	// Merge env vars, ensuring componentEnvList takes precedence.
 	// Include global env from atmos.yaml (lowest priority after system env).
-	mergedEnv := envpkg.MergeSystemEnvWithGlobal(componentEnvList, atmosConfig.Env)
+	mergedEnv := envpkg.MergeSystemEnvWithGlobal(componentEnvList, atmosConfig.GetCaseSensitiveEnvVars())
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
 	pa := os.ProcAttr{
@@ -447,7 +505,7 @@ func ExecAuthShellCommand(
 	shellEnv = envpkg.UpdateEnvVar(shellEnv, atmosShellLevelEnvVar, strconv.Itoa(atmosShellVal))
 
 	// Append global env from atmos.yaml.
-	for k, v := range atmosConfig.Env {
+	for k, v := range atmosConfig.GetCaseSensitiveEnvVars() {
 		shellEnv = envpkg.UpdateEnvVar(shellEnv, k, v)
 	}
 

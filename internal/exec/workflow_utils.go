@@ -329,7 +329,7 @@ func ExecuteWorkflow(
 
 	// Construct base environment once: system env + global env + toolchain PATH.
 	// This is reused for all steps, with workflow/step env vars merged on top per step.
-	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.GetCaseSensitiveEnvVars())
 	baseEnv = append(baseEnv, tenv.EnvVars()...)
 
 	for stepIdx, step := range steps {
@@ -362,7 +362,7 @@ func ExecuteWorkflow(
 		case "shell":
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = retry.Do(context.Background(), step.Retry, func() error {
-				return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+				return ExecuteShell(&atmosConfig, command, commandName, ".", stepEnv, dryRun)
 			})
 		case "atmos":
 			// Parse command using shell.Fields for proper quote handling.
