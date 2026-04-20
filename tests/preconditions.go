@@ -383,6 +383,22 @@ func RequireTerraform(t *testing.T) {
 	RequireExecutable(t, "terraform", "terraform operations")
 }
 
+// RequireTerraformOrTofu checks if terraform or tofu is installed and available in PATH.
+// Use this for tests whose fixture atmos.yaml sets command: tofu, or that work with either binary.
+func RequireTerraformOrTofu(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	_, terraformErr := exec.LookPath("terraform")
+	_, tofuErr := exec.LookPath("tofu")
+	if terraformErr != nil && tofuErr != nil {
+		t.Skipf("Neither 'terraform' nor 'tofu' found in PATH: required for terraform operations. Install one or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+}
+
 // RequirePacker checks if packer is installed and available in PATH.
 // This is a convenience function that uses RequireExecutable specifically for packer.
 func RequirePacker(t *testing.T) {

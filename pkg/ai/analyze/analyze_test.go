@@ -220,7 +220,7 @@ func TestBuildAnalysisPrompt_BothStreams(t *testing.T) {
 }
 
 func TestBuildAnalysisPrompt_ContainsSystemPrompt(t *testing.T) {
-	prompt := buildAnalysisPrompt(newInput("atmos version", "1.215.0", "", nil, ""))
+	prompt := buildAnalysisPrompt(newInput("atmos version", "1.216.0", "", nil, ""))
 
 	assert.Contains(t, prompt, "Atmos AI")
 	assert.Contains(t, prompt, "infrastructure-as-code")
