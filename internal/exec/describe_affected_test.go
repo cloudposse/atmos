@@ -1741,6 +1741,91 @@ func TestResolveBaseFromCI(t *testing.T) {
 	})
 }
 
+// TestResolveCIUploadMetadataFromCI exercises the partial CI resolver used on
+// the --repo-path + --upload path. Mirrors TestResolveBaseFromCI for the
+// sibling helper, but asserts the sibling's contract: populate
+// HeadSHAOverride + CIEventType WITHOUT populating Ref or SHA.
+func TestResolveCIUploadMetadataFromCI(t *testing.T) {
+	t.Run("no CI provider detected", func(t *testing.T) {
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+
+		t.Setenv("GITHUB_ACTIONS", "")
+		t.Setenv("CI", "")
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveCIUploadMetadataFromCI(describe)
+
+		// All four auto-populated fields stay empty — no provider, no change.
+		assert.Empty(t, describe.Ref)
+		assert.Empty(t, describe.SHA)
+		assert.Empty(t, describe.HeadSHAOverride)
+		assert.Empty(t, describe.CIEventType)
+	})
+
+	t.Run("ResolveBase returns error logs warning and leaves fields empty", func(t *testing.T) {
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "push")
+		// Missing GITHUB_EVENT_PATH causes ResolveBase to error for push events.
+		t.Setenv("GITHUB_EVENT_PATH", "")
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveCIUploadMetadataFromCI(describe)
+
+		// Error path: warning logged, fields stay empty, no panic.
+		assert.Empty(t, describe.Ref, "error path must not populate Ref")
+		assert.Empty(t, describe.SHA, "error path must not populate SHA")
+		assert.Empty(t, describe.HeadSHAOverride, "error path must not populate HeadSHAOverride")
+		assert.Empty(t, describe.CIEventType, "error path must not populate CIEventType")
+	})
+
+	t.Run("GitHub Actions PR event populates only upload metadata", func(t *testing.T) {
+		ci.Reset()
+		t.Cleanup(ci.Reset)
+		ci.Register(githubCI.NewProvider())
+
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+		t.Setenv("GITHUB_BASE_REF", "main")
+
+		eventPayload := `{
+			"action": "synchronize",
+			"pull_request": {
+				"head": {"sha": "headsha123456789012345678901234567890ab"},
+				"base": {"ref": "main"}
+			}
+		}`
+		eventPath := filepath.Join(t.TempDir(), "event.json")
+		require.NoError(t, os.WriteFile(eventPath, []byte(eventPayload), 0o644))
+		t.Setenv("GITHUB_EVENT_PATH", eventPath)
+
+		describe := &DescribeAffectedCmdArgs{
+			CLIConfig: &schema.AtmosConfiguration{},
+		}
+		resolveCIUploadMetadataFromCI(describe)
+
+		// Upload metadata populated from the event payload…
+		assert.Equal(t, "headsha123456789012345678901234567890ab", describe.HeadSHAOverride,
+			"HeadSHAOverride must be populated from pull_request.head.sha")
+		assert.Equal(t, "pull_request", describe.CIEventType,
+			"CIEventType must be populated from GITHUB_EVENT_NAME")
+
+		// …but base fields (Ref/SHA) stay empty — this is the entire point of
+		// the partial resolver. If these become non-empty, downstream
+		// ErrRepoPathConflict would fire and the fix regresses.
+		assert.Empty(t, describe.Ref, "partial resolver must NOT populate Ref")
+		assert.Empty(t, describe.SHA, "partial resolver must NOT populate SHA")
+	})
+}
+
 // newDescribeAffectedFlagSet creates a pflag.FlagSet with all flags used by SetDescribeAffectedFlagValueInCliArgs.
 func newDescribeAffectedFlagSet() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
